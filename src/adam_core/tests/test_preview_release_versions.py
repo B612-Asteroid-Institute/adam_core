@@ -32,6 +32,7 @@ SPEC.loader.exec_module(MODULE)
         ("0.5.7", "0.5.7"),
         ("0.5.8", "0.5.8"),
         ("0.6.0", "0.6.0"),
+        ("0.6.1", "0.6.1"),
     ],
 )
 def test_cargo_version_to_pep440(cargo: str, python: str) -> None:
@@ -48,17 +49,17 @@ def test_cargo_version_to_pep440_rejects_unsupported_forms(version: str) -> None
 
 
 def test_python_tag_validation_uses_the_python_release_line() -> None:
-    assert MODULE._python_version_tag_glob("0.6.0") == "v0.6.*"
+    assert MODULE._python_version_tag_glob("0.6.1") == "v0.6.*"
 
 
 def test_stable_release_versions_align_python_and_public_rust_crates() -> None:
-    verify_preview_versions.verify(ROOT, "0.6.0", "0.6.0", "stable")
+    verify_preview_versions.verify(ROOT, "0.6.1", "0.6.1", "stable")
     with pytest.raises(ValueError, match="not a prerelease"):
-        verify_preview_versions.verify(ROOT, "0.6.0", "0.6.0", "preview")
+        verify_preview_versions.verify(ROOT, "0.6.1", "0.6.1", "preview")
 
 
 def test_runtime_versions_must_match_distribution_metadata() -> None:
-    versions = {"adam-core": "0.6.0", "adam-assist": "0.5.0"}
+    versions = {"adam-core": "0.6.1", "adam-assist": "0.5.0"}
     assert _validate_runtime_versions(versions, versions.copy()) == versions
 
     with pytest.raises(AssertionError, match="runtime package version mismatch"):
@@ -79,7 +80,7 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert workflow.index(writer) < workflow.index(builder) < workflow.index(inspector)
     assert "adam_assist_ref:" in workflow
     assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in workflow
-    assert 'PYTHON_PREVIEW_VERSION: "0.6.0"' in workflow
+    assert 'PYTHON_PREVIEW_VERSION: "0.6.1"' in workflow
 
     extended_coverage = workflow.split("  extended-coverage:", 1)[1]
     assert "adam-assist" not in extended_coverage
@@ -100,12 +101,20 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
         "icu_provider",
     ):
         assert dependencies[name] == expected
+    assert dependencies["rawzip"] == "=0.5.2"
+    assert "zip" not in dependencies
+    assert dependencies["flate2"] == {
+        "version": "1",
+        "default-features": False,
+        "features": ["rust_backend"],
+    }
 
     workflow = (ROOT / ".github/workflows/rust-crate-release-candidate.yml").read_text()
     assert "Verify clean no-lock Rust 1.87 consumer resolution" in workflow
     assert 'test ! -e "$consumer/Cargo.lock"' in workflow
     assert 'rustc --version | grep -F "rustc 1.87.0"' in workflow
-    assert "clean Rust 1.87 consumer resolved ICU4X 2.2.0 exactly" in workflow
+    assert "clean Rust 1.87 consumer resolved ICU4X 2.2.0 and rawzip 0.5.2" in workflow
+    assert 'if package["name"] in {"zip", "zopfli"}' in workflow
     assert 'cargo package -p "$crate" --locked' in workflow
     assert 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps' in workflow
     assert "Latest-stable Rust compatibility (non-authoritative)" in workflow
@@ -130,8 +139,8 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     )
 
     publisher = (ROOT / ".github/workflows/publish-crates.yml").read_text()
-    assert "default: 0.6.0" in publisher
-    assert 'PYTHON_SOURCE_VERSION: "0.6.0"' in publisher
+    assert "default: 0.6.1" in publisher
+    assert 'PYTHON_SOURCE_VERSION: "0.6.1"' in publisher
     assert "environment: crates-io" in publisher
     assert "--channel stable" in publisher
     assert (
@@ -213,7 +222,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "Verify Core test environment candidate installations" in tier1
     assert 'test_python="$(pdm info --python)"' in tier1
     assert (
-        tier1.count('assert version("adam-core") == adam_core.__version__ == "0.6.0"')
+        tier1.count('assert version("adam-core") == adam_core.__version__ == "0.6.1"')
         == 2
     )
     assert (
@@ -249,7 +258,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     ):
         assert crate in downstream_builder
     assert "refusing to replace downstream Cargo config" in downstream_builder
-    assert 'version("adam-core") == adam_core.__version__ == "0.6.0"' in tier1
+    assert 'version("adam-core") == adam_core.__version__ == "0.6.1"' in tier1
     assert 'version("adam-assist") == assist_version == "0.5.0"' in tier1
 
     for workflow in workflows.glob("*.yml"):
