@@ -40,14 +40,10 @@ jobs:
         env:
           ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/dependent
         run: pdm run assist-rust-develop
-      - name: Patch unpublished Core crates into the dependent
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from migration.scripts.develop_downstream_adam_assist import _write_core_patch
-
-          _write_core_patch(Path("dependent").resolve())
-          PY
+      - name: Prepare compatible ASSIST lock for dependent install
+        env:
+          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/dependent
+        run: python migration/scripts/develop_downstream_adam_assist.py --prepare-only
       - name: Install dependent and adam_core wheel
         run: |
           python -m pip install --upgrade pip
