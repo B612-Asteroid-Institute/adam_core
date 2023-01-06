@@ -1,0 +1,27 @@
+name: Lint and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-lint-test:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Checkout git repo
+        uses: actions/checkout@v2
+      - uses: jpribyl/action-docker-layer-caching@v0.1.0
+        # Ignore the failure of a step and avoid terminating the job.
+        continue-on-error: true
+      - name: Build Precovery in Docker
+        run: docker build -t adam-core:$IMAGE_TAG .
+      - name: isort check
+        run:  docker run -i adam-core:$IMAGE_TAG isort --check-only .
+      - name: black format check
+        run:  docker run -i adam-core:$IMAGE_TAG black --check --diff .
+      - name: flake8
+        run:  docker run -i adam-core:$IMAGE_TAG flake8

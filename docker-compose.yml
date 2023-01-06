@@ -1,0 +1,10 @@
+version: '3.7'
+
+services:
+  adam_core:
+    container_name: adam_core
+    build: .
+    volumes:
+      - ".ipython:/root/.ipython/"
+      - '.:/code'
+      - ".docker_bash_history.txt:/root/.bash_history"
