@@ -130,3 +130,30 @@ def test_Indexable_iteration_time():
         tester.assert_equal(indexable_i.values[0], tester.values[i])
 
     return
+
+def test_Indexable_deletion_array():
+
+    tester = NumpyArrayTester()
+    indexable = TestIndexable(values=tester.values)
+    del indexable[0]
+    tester.assert_equal(indexable.values[0], tester.values[1])
+
+    return
+
+def test_Indexable_deletion_marray():
+
+    tester = NumpyMaskedArrayTester()
+    indexable = TestIndexable(values=tester.values)
+    del indexable[0]
+    tester.assert_equal(indexable.values[0], tester.values[1])
+
+    return
+
+def test_Indexable_deletion_time():
+
+    tester = NumpyMaskedArrayTester()
+    indexable = TestIndexable(values=tester.values)
+    del indexable[0]
+    tester.assert_equal(indexable.values[0], tester.values[1])
+
+    return
