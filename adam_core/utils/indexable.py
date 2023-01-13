@@ -324,55 +324,75 @@ class Indexable:
                 )
             ]
 
-    def __getitem__(self, i: Union[int, slice, tuple, list, np.ndarray, pd.MultiIndex]):
-        ind = self._handle_index(i)
-        copy = deepcopy(self)
+    def __len__(self):
+        return len(self._member_index)
+
+    def __getitem__(self, class_ind: Union[int, slice, list, np.ndarray]):
+        member_ind = self._query_index(class_ind)
+        copy_self = copy(self)
+
+        for k, v in copy_self.__dict__.items():
+            if k != "_class_index":
+                if isinstance(v, (np.ndarray, np.ma.masked_array, Time, Indexable)):
+                    copy_self.__dict__[k] = v[member_ind]
+                elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
+                    copy_self.__dict__[k] = v
+                elif v is None:
+                    pass
+                else:
+                    err = f"{type(v)} are not supported."
+                    raise NotImplementedError(err)
+            else:
+                copy_self.__dict__[k] = v[np.s_[class_ind]]
+
+        return copy_self
+
+    def __delitem__(self, class_ind: Union[int, slice, tuple, list, np.ndarray]):
+        member_ind = self._query_index(class_ind)
 
         for k, v in self.__dict__.items():
-            if isinstance(
-                v,
-                (np.ndarray, np.ma.masked_array, list, Time, Indexable, pd.MultiIndex),
-            ):
-                copy.__dict__[k] = v[ind]
-            elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
-                copy.__dict__[k] = v
-            elif v is None:
-                pass
+            # Everything but the class index is sliced as normal
+            if k != "_class_index":
+                if isinstance(v, np.ma.masked_array):
+                    self.__dict__[k] = np.delete(v, member_ind, axis=0)
+                    self.__dict__[k].mask = np.delete(v.mask, member_ind, axis=0)
+                elif isinstance(v, np.ndarray):
+                    self.__dict__[k] = np.delete(v, member_ind, axis=0)
+                elif isinstance(v, Time):
+                    self.__dict__[k] = Time(
+                        np.delete(v.mjd, member_ind, axis=0),
+                        scale=v.scale,
+                        format="mjd",
+                    )
+                elif isinstance(v, (list, Indexable)):
+                    del v[member_ind]
+                elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
+                    self.__dict__[k] = v
+                elif v is None:
+                    pass
+                else:
+                    err = f"{type(v)} are not supported."
+                    raise NotImplementedError(err)
+
             else:
-                err = f"{type(v)} are not supported."
-                raise NotImplementedError(err)
+                self.__dict__[k] = np.delete(v, np.s_[class_ind], axis=0)
 
-        return copy
-
-    def __delitem__(self, i: Union[int, slice, tuple, list, np.ndarray, pd.MultiIndex]):
-        ind = self._handle_index(i)
-
-        for k, v in self.__dict__.items():
-            if isinstance(v, np.ma.masked_array):
-                self.__dict__[k] = np.delete(v, np.s_[ind], axis=0)
-                self.__dict__[k].mask = np.delete(v.mask, np.s_[ind], axis=0)
-            elif isinstance(v, np.ndarray):
-                self.__dict__[k] = np.delete(v, np.s_[ind], axis=0)
-            elif isinstance(v, Time):
-                self.__dict__[k] = Time(
-                    np.delete(v.mjd, np.s_[ind], axis=0), scale=v.scale, format="mjd"
-                )
-            elif isinstance(v, (list, Indexable)):
-                del v[ind]
-            elif isinstance(v, pd.MultiIndex):
-                self.__dict__[k] = v.delete(ind)
-            elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
-                self.__dict__[k] = v
-            elif v is None:
-                pass
-            else:
-                err = f"{type(v)} are not supported."
-                raise NotImplementedError(err)
         return
 
+    def __next__(self):
+        try:
+            self._class_index[self.idx]
+        except IndexError:
+            self.idx = 0
+            raise StopIteration
+        else:
+            next = self[self.idx]
+            self.idx += 1
+            return next
+
     def __iter__(self):
-        for i in range(len(self)):
-            yield self[i]
+        self.idx = 0
+        return self
 
     def yield_chunks(self, chunk_size):
         for c in range(0, len(self), chunk_size):
