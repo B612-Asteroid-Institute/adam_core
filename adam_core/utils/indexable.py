@@ -243,40 +243,86 @@ class Indexable:
 
         return
 
-        unique_ind = self.index.unique(level="class_index")
-        return self.index.get_locs([unique_ind[ind], slice(None)])
+    def _query_index(
+        self, class_ind: Union[int, slice, list, np.ndarray]
+    ) -> np.ndarray:
+        """
+        Given a integer, slice, list, or `~numpy.ndarray`, appropriately slice
+        the class index and return the correct index or indices for this class's underlying
+        members.
 
-    def __len__(self):
-        if self.index is not None:
-            return len(self.index.unique(level="class_index"))
+        Parameters
+        ----------
+        class_ind : Union[int, slice, list, np.ndarray]
+            Slice of the class index.
+
+        Returns
+        -------
+        member_ind : np.ndarray
+            Slice into this class's members.
+        """
+        ### Integer Slice
+        # If the index is an integer then we need to convert it to a slice so that
+        # we do not change the dimensionality of the member arrays (or in the cases
+        # of a 1D array we need to avoid returning just a single value)
+        if isinstance(class_ind, int):
+
+            ind = slice(class_ind, class_ind + 1)
+
+        ### Slices, Arrays, and Lists
+        elif isinstance(class_ind, (slice, np.ndarray, list)):
+            ind = class_ind
+
         else:
-            err = "Length is not defined for this class."
-            raise NotImplementedError(err)
+            raise TypeError(
+                "class_ind should be one of {int, slice, np.ndarray, list}."
+            )
 
-    @property
-    def index(self):
-        return self._index
+        ### Check boundaries on the slice
+        if isinstance(ind, slice) and ind.start is not None and ind.start >= len(self):
+            raise IndexError(f"Index {ind.start} is out of bounds.")
 
-    def set_index(self, index: Union[str, np.ndarray]):
-        if isinstance(index, str):
-            class_index = getattr(self, index)
-            self._index_attribute = index
-            array_index = np.arange(0, len(class_index), dtype=int)
+        elif isinstance(ind, slice) and self._class_index_to_members_is_slice:
 
-        elif isinstance(index, np.ndarray):
-            class_index = index
-            self._index_attribute = None
-            array_index = np.arange(0, len(index), dtype=int)
+            # Check if the array of slices are consecutive and share
+            # the same step size. If so, create a single slice that
+            # combines all of the slices.
+            slices = self._class_index_to_members[ind]
+            is_consecutive = True
+            for i, s_i in enumerate(slices[:-1]):
+                if s_i.stop != slices[i + 1].start:
+                    is_consecutive = False
+                    break
+                if s_i.step is not None and (s_i.step != slices[i + 1].step):
+                    is_consecutive = False
+                    break
 
+            if is_consecutive:
+                logger.debug(
+                    "Slices are consecutive and share the same step. "
+                    f"Combining slices a single slice with start {slices[0].start}, end {slices[-1].stop} and step {slices[0].step}."
+                )
+                return slice(slices[0].start, slices[-1].stop, slices[0].step)
+            else:
+                logger.debug(
+                    "Slices are not consecutive. "
+                    f"Combining slices a concatenating the members index for each slice."
+                )
+                return np.concatenate([self._class_index[s] for s in slices])
+
+        elif np.all(self._class_index == self._member_index):
+            logger.debug("Using class index to index member arrays.")
+            return self._class_index[ind]
         else:
-            err = "index must be a str, numpy.ndarray"
-            raise ValueError(err)
-
-        self._index = pd.MultiIndex.from_arrays(
-            [class_index, array_index], names=["class_index", "array_index"]
-        )
-
-        return
+            logger.debug(
+                "Using unique class index to index member arrays with np.isin."
+            )
+            return self._member_index[
+                np.isin(
+                    self._class_index_to_members,
+                    self._class_index[ind],
+                )
+            ]
 
     def __getitem__(self, i: Union[int, slice, tuple, list, np.ndarray, pd.MultiIndex]):
         ind = self._handle_index(i)
