@@ -6,8 +6,10 @@ from ..indexable import Indexable
 
 class TestIndexable(Indexable):
 
-    def __init__(self, values):
-        self.values = values
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
         Indexable.__init__(self)
 
 SLICES = [
@@ -24,9 +26,9 @@ def test_Indexable_slicing_array():
 
     array = np.arange(0, 10)
 
-    indexable = TestIndexable(array)
+    indexable = TestIndexable(array=array)
     for s in SLICES:
-        np.testing.assert_equal(indexable[s].values, indexable.values[s])
+        np.testing.assert_equal(indexable[s].array, indexable.array[s])
 
     return
 
@@ -36,10 +38,10 @@ def test_Indexable_slicing_marray():
     masked_array.mask = np.zeros(len(masked_array))
     masked_array.mask[0:10:2] = 1
 
-    indexable = TestIndexable(masked_array)
+    indexable = TestIndexable(masked_array=masked_array)
     for s in SLICES:
-        np.testing.assert_equal(indexable[s].values.data, indexable.values[s].data)
-        np.testing.assert_equal(indexable[s].values.mask, indexable.values[s].mask)
+        np.testing.assert_equal(indexable[s].masked_array.data, indexable.masked_array[s].data)
+        np.testing.assert_equal(indexable[s].masked_array.mask, indexable.masked_array[s].mask)
 
     return
 
@@ -47,10 +49,11 @@ def test_Indexable_slicing_time():
 
     times = Time(np.arange(59000, 59010), scale="utc", format="mjd")
 
-    indexable = TestIndexable(times)
+    indexable = TestIndexable(times=times)
     for s in SLICES:
-        np.testing.assert_equal(indexable[s].values.mjd, indexable.values[s].mjd)
-        assert indexable[s].values.scale == indexable.values[s].scale
-        assert indexable[s].values.format == indexable.values[s].format
+        np.testing.assert_equal(indexable[s].times.mjd, indexable.times[s].mjd)
+        assert indexable[s].times.scale == indexable.times[s].scale
+        assert indexable[s].times.format == indexable.times[s].format
 
     return
+
