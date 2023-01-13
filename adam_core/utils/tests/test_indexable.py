@@ -57,3 +57,36 @@ def test_Indexable_slicing_time():
 
     return
 
+def test_Indexable_iteration_array():
+
+    array = np.arange(0, 10)
+
+    indexable = TestIndexable(array=array)
+    for i, indexable_i in enumerate(indexable):
+        np.testing.assert_equal(indexable_i.array[0], array[i])
+
+    return
+
+def test_Indexable_iteration_marray():
+
+    masked_array = np.ma.arange(0, 10)
+    masked_array.mask = np.zeros(len(masked_array))
+    masked_array.mask[0:10:2] = 1
+
+    indexable = TestIndexable(masked_array=masked_array)
+    for i, ind in enumerate(indexable):
+        np.testing.assert_equal(ind.masked_array.data[0], masked_array.data[i])
+        np.testing.assert_equal(ind.masked_array.mask[0], masked_array.mask[i])
+
+    return
+
+def test_Indexable_iteration_time():
+
+    times = Time(np.arange(59000, 59010), scale="utc", format="mjd")
+
+    indexable = TestIndexable(times=times)
+    for i, ind in enumerate(indexable):
+        np.testing.assert_equal(ind.times.mjd[0], times.mjd[i])
+
+    return
+
