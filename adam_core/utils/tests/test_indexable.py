@@ -6,13 +6,16 @@ from astropy.time import Time
 from ..indexable import Indexable
 
 SLICES = [
-    slice(0, 1, 1),  # 0
-    slice(1, 2, 1),  # 1
-    slice(8, 9, 1),  # -1
-    slice(7, 8, 1),  # -2
+    slice(0, 1, 1),
+    slice(1, 2, 1),
+    slice(8, 9, 1),
+    slice(7, 8, 1),
     slice(0, 10, 1),
     slice(0, 5, 1),
     slice(5, 10, 1),
+    slice(50, 60, 2),
+    slice(50, 60, 2),
+    slice(99, 10, -2),
 ]
 
 ATTRIBUTES = ["array", "masked_array", "times"]
@@ -94,7 +97,30 @@ def test_Indexable_deletion():
     for attribute_i in ATTRIBUTES:
         assert_equal(
             indexable_mod.__dict__[attribute_i],
-            indexable.__dict__[attribute_i][1 : N - 9],
+            indexable.__dict__[attribute_i][1 : N - 10],
+        )
+
+    # Delete the first 20 elements of the indexable and check that this operation
+    # is equivalent to deleting the first 20 elements of the individual attributes
+    del indexable_mod[:20]
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable_mod.__dict__[attribute_i],
+            # We've removed the first 1 element in the first test, and now
+            # we remove the next 20
+            indexable.__dict__[attribute_i][21 : N - 10],
+        )
+
+    # Delete the first and last element and check that this operation is equivalent to
+    # deleting the first and last element of the individual attributes
+    array_slice = np.array([0, -1])
+    del indexable_mod[array_slice]
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable_mod.__dict__[attribute_i],
+            # We've removed the first 21 elements in test 1 and 3, and now
+            # we remove the next one and the last element
+            indexable.__dict__[attribute_i][22 : N - 11],
         )
 
     return

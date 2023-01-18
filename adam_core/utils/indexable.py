@@ -333,7 +333,9 @@ class Indexable:
 
         for k, v in copy_self.__dict__.items():
             if k != "_class_index":
-                if isinstance(v, (list, np.ndarray, np.ma.masked_array, Time, Indexable)):
+                if isinstance(
+                    v, (list, np.ndarray, np.ma.masked_array, Time, Indexable)
+                ):
                     copy_self.__dict__[k] = v[member_ind]
                 elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
                     copy_self.__dict__[k] = v
@@ -376,6 +378,8 @@ class Indexable:
 
             else:
                 self.__dict__[k] = np.delete(v, np.s_[class_ind], axis=0)
+
+        self.set_index(self._class_index_attribute)
 
         return
 
