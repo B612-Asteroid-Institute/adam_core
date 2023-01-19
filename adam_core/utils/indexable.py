@@ -204,10 +204,9 @@ class Indexable:
         # If the index is to be set using an array that has a non-integer dtype
         # then we map the unique values of the index to integers. This will make querying the
         # index significantly faster.
-        if isinstance(class_index_values, np.ndarray) and class_index_values.dtype in [
-            object,
-            float,
-        ]:
+        if isinstance(class_index_values, np.ndarray) and class_index_values.dtype.type != int:
+            logger.debug("Mapping class index values to integers.")
+            # We use pandas since numpy unique is slower for object dtypes
             df = pd.DataFrame({"class_index_values": class_index_values})
             df_unique = df.drop_duplicates(keep="first").copy()
             df_unique["class_index_values_mapped"] = np.arange(0, len(df_unique))
@@ -223,7 +222,7 @@ class Indexable:
 
         # If the class index values are monotonically increasing then we can convert the class index
         # into an array of slices. This will make __getitem__ significantly faster.
-        is_sorted = np.all((class_index_values[1:] - class_index_values[:-1]) >= 1)
+        is_sorted = np.all((class_index_values[1:] - class_index_values[:-1]) >= 0)
         if is_sorted:
             logger.debug(
                 "Class index is sorted. Converting class index to an array of slices."

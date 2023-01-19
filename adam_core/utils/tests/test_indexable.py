@@ -18,13 +18,16 @@ SLICES = [
     slice(99, 10, -2),
 ]
 
-ATTRIBUTES = ["array", "masked_array", "times"]
+ATTRIBUTES = ["array", "array_2d", "array_3d", "masked_array", "times"]
 N = 100
 
-
 class TestIndexable(Indexable):
-    def __init__(self, N: int = 100):
+    def __init__(self):
+        self.index_array_int = np.concatenate([np.arange(10, dtype=int) for i in range(10)])
+        self.index_array_str = np.concatenate([np.arange(10, dtype=int).astype(str) for i in range(10)])
         self.array = np.arange(0, N)
+        self.array_2d = np.random.random((N, 6))
+        self.array_3d = np.random.random((N, 6, 6))
         self.masked_array = np.ma.arange(0, N)
         self.masked_array.mask = np.zeros(N)
         self.masked_array.mask[0:N:2] = 1
@@ -74,7 +77,8 @@ def test_Indexable_iteration():
     for i, indexable_i in enumerate(indexable):
         for attribute_i in ATTRIBUTES:
             assert_equal(
-                indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][i]
+                indexable_i.__dict__[attribute_i],
+                indexable.__dict__[attribute_i][i : i + 1],
             )
 
 
@@ -124,3 +128,114 @@ def test_Indexable_deletion():
         )
 
     return
+
+
+def test_Indexable_yield_chunks():
+    # Create test indexable
+    indexable = TestIndexable()
+
+    # Iterate through the indexable and check that this operation
+    # is equivalent to iterating through the individual attributes
+    for i, indexable_i in enumerate(indexable.yield_chunks(10)):
+        for attribute_i in ATTRIBUTES:
+            assert_equal(
+                indexable_i.__dict__[attribute_i],
+                indexable.__dict__[attribute_i][i * 10 : (i + 1) * 10],
+            )
+
+    return
+
+def test_Indexable_set_index_int_unsorted():
+    # Create test indexable
+    indexable = TestIndexable()
+    indexable.set_index("index_array_int")
+
+    # The index is unsorted with the numbers 0-9 repeated 10 times
+    assert indexable._class_index_attribute == "index_array_int"
+    np.testing.assert_equal(indexable._class_index, np.unique(indexable.index_array_int))
+
+    # We expect the class index to be the unique values of the index
+    np.testing.assert_equal(indexable._class_index_to_members, indexable.index_array_int)
+    assert indexable._class_index_to_members_is_slice == False
+
+    # If we grab the first element of the class now we expect each member array to the every 10th element
+    # in the original members
+    indexable_i = indexable[0]
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][::10]
+        )
+
+    return
+
+def test_Indexable_set_index_int_sorted():
+    # Create test indexable
+    indexable = TestIndexable()
+    indexable.index_array_int.sort()
+    indexable.set_index("index_array_int")
+
+    # The index is sorted with the with the numbers 0-9 repeated 10 times in order
+    assert indexable._class_index_attribute == "index_array_int"
+    np.testing.assert_equal(indexable._class_index, np.unique(indexable.index_array_int))
+
+    # Because the class index is sorted we now expect the class index to members mapping to be
+    # an array of slices
+    np.testing.assert_equal(indexable._class_index_to_members, np.array([slice(10*i, 10*(i + 1)) for i in range(10)]))
+    assert indexable._class_index_to_members_is_slice == True
+
+    # If we grab the first element of the class now we expect each member array to the every 10th element
+    # in the original members
+    indexable_i = indexable[0]
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][:10]
+        )
+
+def test_Indexable_set_index_str_unsorted():
+    # Create test indexable
+    indexable = TestIndexable()
+    indexable.set_index("index_array_str")
+
+    # The index is unsorted with the numbers 0-9 repeated 10 times
+    assert indexable._class_index_attribute == "index_array_str"
+    np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
+    
+    # We expect the class index to be the unique values of the index
+    np.testing.assert_equal(indexable._class_index_to_members, indexable.index_array_int)
+    assert indexable._class_index_to_members_is_slice == False
+
+    # If we grab the first element of the class now we expect each member array to the every 10th element
+    # in the original members
+    indexable_i = indexable[0]
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][::10]
+        )
+
+    return
+
+def test_Indexable_set_index_str_sorted():
+    # Create test indexable
+    indexable = TestIndexable()
+    indexable.index_array_str.sort()
+    indexable.set_index("index_array_str")
+
+    # The index is unsorted with the numbers 0-9 repeated 10 times
+    assert indexable._class_index_attribute == "index_array_str"
+    np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
+    
+
+    # We expect the class index to be the unique values of the index
+    np.testing.assert_equal(indexable._class_index_to_members, np.array([slice(10*i, 10*(i + 1)) for i in range(10)]))
+    assert indexable._class_index_to_members_is_slice == True
+
+    # If we grab the first element of the class now we expect each member array to the every 10th element
+    # in the original members
+    indexable_i = indexable[0]
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][:10]
+        )
+
+    return
+
