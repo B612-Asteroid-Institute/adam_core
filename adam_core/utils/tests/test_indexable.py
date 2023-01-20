@@ -3,7 +3,7 @@ from copy import deepcopy
 import numpy as np
 from astropy.time import Time
 
-from ..indexable import Indexable
+from ..indexable import Indexable, concatenate
 
 SLICES = [
     slice(0, 1, 1),
@@ -18,13 +18,26 @@ SLICES = [
     slice(99, 10, -2),
 ]
 
-ATTRIBUTES = ["array", "array_2d", "array_3d", "masked_array", "times"]
+ATTRIBUTES = [
+    "index_array_int",
+    "index_array_str",
+    "array",
+    "array_2d",
+    "array_3d",
+    "masked_array",
+    "times",
+]
 N = 100
+
 
 class TestIndexable(Indexable):
     def __init__(self):
-        self.index_array_int = np.concatenate([np.arange(10, dtype=int) for i in range(10)])
-        self.index_array_str = np.concatenate([np.arange(10, dtype=int).astype(str) for i in range(10)])
+        self.index_array_int = np.concatenate(
+            [np.arange(10, dtype=int) for i in range(10)]
+        )
+        self.index_array_str = np.concatenate(
+            [np.arange(10, dtype=int).astype(str) for i in range(10)]
+        )
         self.array = np.arange(0, N)
         self.array_2d = np.random.random((N, 6))
         self.array_3d = np.random.random((N, 6, 6))
@@ -145,6 +158,7 @@ def test_Indexable_yield_chunks():
 
     return
 
+
 def test_Indexable_set_index_int_unsorted():
     # Create test indexable
     indexable = TestIndexable()
@@ -152,10 +166,14 @@ def test_Indexable_set_index_int_unsorted():
 
     # The index is unsorted with the numbers 0-9 repeated 10 times
     assert indexable._class_index_attribute == "index_array_int"
-    np.testing.assert_equal(indexable._class_index, np.unique(indexable.index_array_int))
+    np.testing.assert_equal(
+        indexable._class_index, np.unique(indexable.index_array_int)
+    )
 
     # We expect the class index to be the unique values of the index
-    np.testing.assert_equal(indexable._class_index_to_members, indexable.index_array_int)
+    np.testing.assert_equal(
+        indexable._class_index_to_members, indexable.index_array_int
+    )
     assert indexable._class_index_to_members_is_slice == False
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
@@ -168,6 +186,7 @@ def test_Indexable_set_index_int_unsorted():
 
     return
 
+
 def test_Indexable_set_index_int_sorted():
     # Create test indexable
     indexable = TestIndexable()
@@ -176,11 +195,16 @@ def test_Indexable_set_index_int_sorted():
 
     # The index is sorted with the with the numbers 0-9 repeated 10 times in order
     assert indexable._class_index_attribute == "index_array_int"
-    np.testing.assert_equal(indexable._class_index, np.unique(indexable.index_array_int))
+    np.testing.assert_equal(
+        indexable._class_index, np.unique(indexable.index_array_int)
+    )
 
     # Because the class index is sorted we now expect the class index to members mapping to be
     # an array of slices
-    np.testing.assert_equal(indexable._class_index_to_members, np.array([slice(10*i, 10*(i + 1)) for i in range(10)]))
+    np.testing.assert_equal(
+        indexable._class_index_to_members,
+        np.array([slice(10 * i, 10 * (i + 1)) for i in range(10)]),
+    )
     assert indexable._class_index_to_members_is_slice == True
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
@@ -191,6 +215,7 @@ def test_Indexable_set_index_int_sorted():
             indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][:10]
         )
 
+
 def test_Indexable_set_index_str_unsorted():
     # Create test indexable
     indexable = TestIndexable()
@@ -199,9 +224,11 @@ def test_Indexable_set_index_str_unsorted():
     # The index is unsorted with the numbers 0-9 repeated 10 times
     assert indexable._class_index_attribute == "index_array_str"
     np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
-    
+
     # We expect the class index to be the unique values of the index
-    np.testing.assert_equal(indexable._class_index_to_members, indexable.index_array_int)
+    np.testing.assert_equal(
+        indexable._class_index_to_members, indexable.index_array_int
+    )
     assert indexable._class_index_to_members_is_slice == False
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
@@ -213,6 +240,7 @@ def test_Indexable_set_index_str_unsorted():
         )
 
     return
+
 
 def test_Indexable_set_index_str_sorted():
     # Create test indexable
@@ -223,10 +251,12 @@ def test_Indexable_set_index_str_sorted():
     # The index is unsorted with the numbers 0-9 repeated 10 times
     assert indexable._class_index_attribute == "index_array_str"
     np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
-    
 
     # We expect the class index to be the unique values of the index
-    np.testing.assert_equal(indexable._class_index_to_members, np.array([slice(10*i, 10*(i + 1)) for i in range(10)]))
+    np.testing.assert_equal(
+        indexable._class_index_to_members,
+        np.array([slice(10 * i, 10 * (i + 1)) for i in range(10)]),
+    )
     assert indexable._class_index_to_members_is_slice == True
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
@@ -239,3 +269,30 @@ def test_Indexable_set_index_str_sorted():
 
     return
 
+
+def test_Indexable_concatenate():
+    indexable1 = TestIndexable()
+    indexable2 = TestIndexable()
+    indexable3 = TestIndexable()
+    # Slightly modify the second and third indexable with the exception of the array of strings
+    for attribute_i in ATTRIBUTES:
+        if attribute_i != "index_array_str":
+            indexable2.__dict__[attribute_i] = indexable2.__dict__[attribute_i] + 100
+            indexable3.__dict__[attribute_i] = indexable3.__dict__[attribute_i] + 200
+
+    indexable = concatenate([indexable1, indexable2, indexable3])
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable.__dict__[attribute_i][:100],
+            indexable1.__dict__[attribute_i][:100],
+        )
+        assert_equal(
+            indexable.__dict__[attribute_i][100:200],
+            indexable2.__dict__[attribute_i][:100],
+        )
+        assert_equal(
+            indexable.__dict__[attribute_i][200:300],
+            indexable3.__dict__[attribute_i][:100],
+        )
+
+    return

@@ -12,7 +12,7 @@ __all__ = ["Indexable", "concatenate"]
 
 logger = logging.getLogger(__name__)
 
-SLICEABLE_DATA_STRUCTURES = (np.ndarray, np.ma.masked_array, list, Time)
+SLICEABLE_DATA_STRUCTURES = (np.ndarray, np.ma.masked_array, Time)
 UNSLICEABLE_DATA_STRUCTURES = (str, int, float, dict, bool, set, OrderedDict)
 
 
@@ -333,7 +333,7 @@ class Indexable:
         for k, v in copy_self.__dict__.items():
             if k != "_class_index":
                 if isinstance(
-                    v, (list, np.ndarray, np.ma.masked_array, Time, Indexable)
+                    v, (np.ndarray, np.ma.masked_array, Time, Indexable)
                 ):
                     copy_self.__dict__[k] = v[member_ind]
                 elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
@@ -365,7 +365,7 @@ class Indexable:
                         scale=v.scale,
                         format="mjd",
                     )
-                elif isinstance(v, (list, Indexable)):
+                elif isinstance(v, (Indexable)):
                     del v[member_ind]
                 elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
                     self.__dict__[k] = v
@@ -400,42 +400,6 @@ class Indexable:
     def yield_chunks(self, chunk_size):
         for c in range(0, len(self), chunk_size):
             yield self[c : c + chunk_size]
-
-    def append(self, other):
-        assert type(self) == type(other)
-
-        for k, v in other.__dict__.items():
-            self_v = self.__dict__[k]
-
-            if isinstance(v, np.ma.masked_array):
-                self.__dict__[k] = np.ma.concatenate([self_v, v])
-                self.__dict__[k].mask = np.concatenate([self_v.mask, v.mask])
-                self.__dict__[k].fill_value = self_v.fill_value
-
-            elif isinstance(v, np.ndarray):
-                self.__dict__[k] = np.concatenate([self_v, v])
-
-            elif isinstance(v, Time):
-                self.__dict__[k] = Time(
-                    np.concatenate([self_v.mjd, v.mjd]), scale=v.scale, format="mjd"
-                )
-
-            elif isinstance(v, (list, Indexable)):
-                self_v.append(v)
-
-            elif isinstance(v, pd.MultiIndex):
-                self.set_index(index=self._index_attribute)
-
-            elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
-                assert v == self_v
-
-            elif v is None:
-                self.__dict__[k] = None
-
-            else:
-                err = f"{type(v)} are not supported."
-                raise NotImplementedError(err)
-        return
 
     def sort_values(
         self,
@@ -544,7 +508,7 @@ class Indexable:
 
 def concatenate(
     indexables: List[Indexable],
-) -> Indexable:
+) -> "Indexable":
     """
     Concatenate a list of Indexables.
 
@@ -573,7 +537,7 @@ def concatenate(
     time_scales = {}
     time_formats = {}
     for k, v in indexables[0].__dict__.items():
-        if isinstance(v, (np.ndarray, np.ma.masked_array, list, Indexable)):
+        if isinstance(v, (np.ndarray, np.ma.masked_array, Indexable)):
             data[k] = [deepcopy(v)]
         elif isinstance(v, Time):
             time_attributes.append(k)
@@ -592,7 +556,7 @@ def concatenate(
     for indexable_i in indexables[1:]:
         for k, v in indexable_i.__dict__.items():
             if (
-                isinstance(v, (np.ndarray, np.ma.masked_array, list, Indexable))
+                isinstance(v, (np.ndarray, np.ma.masked_array, Indexable))
                 and k not in time_attributes
             ):
                 data[k].append(v)
@@ -604,33 +568,23 @@ def concatenate(
             else:
                 pass
 
-    N = 0
     for k, v in data.items():
         if isinstance(v, list):
             if isinstance(v[0], np.ma.masked_array):
                 copy.__dict__[k] = np.ma.concatenate(v)
-                copy.__dict__[k].fill_value = np.NaN
-                N = len(copy.__dict__[k])
             elif isinstance(v[0], np.ndarray) and k not in time_attributes:
                 copy.__dict__[k] = np.concatenate(v)
-                N = len(copy.__dict__[k])
             elif isinstance(v[0], Indexable):
                 copy.__dict__[k] = concatenate(v)
-                N = len(copy.__dict__[k])
             elif k in time_attributes:
                 copy.__dict__[k] = Time(
                     np.concatenate(v), scale=time_scales[k], format="mjd"
                 )
-                N = len(copy.__dict__[k])
-        elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
-            pass
-        else:
-            pass
 
-    if "_index" in copy.__dict__.keys():
-        if copy._index_attribute is not None:
-            copy.set_index(copy._index_attribute)
+    if "_class_index" in copy.__dict__.keys():
+        if copy._class_index_attribute is not None:
+            copy.set_index(copy._class_index_attribute)
         else:
-            copy.set_index(np.arange(0, N, 1))
+            copy.set_index()
 
     return copy
