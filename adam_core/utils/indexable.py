@@ -87,46 +87,19 @@ class Indexable:
         return
 
     @property
-    def class_index(self):
+    def index(self):
         """
-        Externally facing index.
+        The externally facing index of the class.
         """
         return self._class_index
 
-    @property
-    def class_index_to_members(self):
-        """
-        Mapping from externally facing index to class members.
-        """
-        return self._class_index_to_members
+    @index.setter
+    def index(self, value):
+        self.set_index(value)
 
-    @property
-    def class_index_to_members_is_slice(self):
-        """
-        Whether the mapping from externally facing index to class members is a slice.
-        """
-        return self._class_index_to_members_is_slice
-
-    @property
-    def class_index_attribute(self):
-        """
-        Attribute on which the class index was set.
-        """
-        return self._class_index_attribute
-
-    @property
-    def member_index(self):
-        """
-        Index of the class members.
-        """
-        return self._member_index
-
-    @property
-    def member_length(self):
-        """
-        Length of the class members.
-        """
-        return self._member_length
+    @index.deleter
+    def index(self):
+        self.set_index()
 
     def set_index(self, index_values: Optional[Union[str, npt.ArrayLike]] = None):
         """
@@ -204,7 +177,10 @@ class Indexable:
         # If the index is to be set using an array that has a non-integer dtype
         # then we map the unique values of the index to integers. This will make querying the
         # index significantly faster.
-        if isinstance(class_index_values, np.ndarray) and class_index_values.dtype.type != int:
+        if (
+            isinstance(class_index_values, np.ndarray)
+            and class_index_values.dtype.type != int
+        ):
             logger.debug("Mapping class index values to integers.")
             # We use pandas since numpy unique is slower for object dtypes
             df = pd.DataFrame({"class_index_values": class_index_values})
@@ -332,9 +308,7 @@ class Indexable:
 
         for k, v in copy_self.__dict__.items():
             if k != "_class_index":
-                if isinstance(
-                    v, (np.ndarray, np.ma.masked_array, Time, Indexable)
-                ):
+                if isinstance(v, (np.ndarray, np.ma.masked_array, Time, Indexable)):
                     copy_self.__dict__[k] = v[member_ind]
                 elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
                     copy_self.__dict__[k] = v

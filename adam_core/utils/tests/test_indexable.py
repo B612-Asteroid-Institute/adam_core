@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 import numpy as np
+import pytest
 from astropy.time import Time
 
 from ..indexable import Indexable, concatenate
