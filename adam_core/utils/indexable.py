@@ -20,12 +20,14 @@ class Indexable:
     """
     Class that enables indexing and slicing of itself and its members.
     If an Indexable subclass has members that are `~numpy.ndarray`s, `~numpy.ma.core.MaskedArray`s,
-    lists, or `~astropy.time.core.Time`s then these members are appropriately sliced and indexed along their first axis.
-    Any members that are dicts, OrderedDicts, floats, integers or strings are not indexed and left unchanged.
+    lists, or `~astropy.time.core.Time`s then these members are appropriately sliced and
+    indexed along their first axis. Any members that are dicts, OrderedDicts, floats,
+    integers or strings are not indexed and left unchanged.
 
     Indexable maintains two array indexes:
         - class: the externally facing index (ie. the index into the class itself)
-        - members: the index of the members of the class (ie. the index into the data structures carried by the class)
+        - members: the index of the members of the class (ie. the index into
+            the data structures carried by the class)
 
 
     Class Index:
@@ -133,7 +135,7 @@ class Indexable:
         ------
         ValueError: If all sliceable members do not have the same length.
         """
-        ### Part 1: Determine the validity of this instance's members
+        # --- Part 1: Determine the validity of this instance's members
 
         # Scan members and if they are of a type that is sliceable
         # then store the length. All sliceable members should have the same length
@@ -153,9 +155,9 @@ class Indexable:
         self._member_length = member_length
         self._member_index = np.arange(0, member_length, dtype=int)
 
-        ### Part 2: Figure out the values that are going to be mapped to an index
-        ### If the values are strings or floats, map their unique values to integers
-        ### to make future queries faster.
+        # --- Part 2: Figure out the values that are going to be mapped to an index
+        # If the values are strings or floats, map their unique values to integers
+        # to make future queries faster.
 
         # If no index values are given then we set the class index
         # to be the range of the member lengths
@@ -190,8 +192,8 @@ class Indexable:
                 df_unique, on="class_index_values", how="left"
             )["class_index_values_mapped"].values
 
-        ### Part 3: Now that we have the values that are going to be mapped to an index
-        ### we can create the index.
+        # --- Part 3: Now that we have the values that are going to be mapped to an index
+        # we can create the index.
 
         # Extract unique values to act as the externally facing index.
         self._class_index = pd.unique(class_index_values)
@@ -236,7 +238,7 @@ class Indexable:
         member_ind : np.ndarray
             Slice into this class's members.
         """
-        ### Integer Slice
+        # --- Integer Slice
         # If the index is an integer then we need to convert it to a slice so that
         # we do not change the dimensionality of the member arrays (or in the cases
         # of a 1D array we need to avoid returning just a single value)
@@ -244,7 +246,7 @@ class Indexable:
 
             ind = slice(class_ind, class_ind + 1)
 
-        ### Slices, Arrays, and Lists
+        # --- Slices, Arrays, and Lists
         elif isinstance(class_ind, (slice, np.ndarray, list)):
             ind = class_ind
 
@@ -253,7 +255,7 @@ class Indexable:
                 "class_ind should be one of {int, slice, np.ndarray, list}."
             )
 
-        ### Check boundaries on the slice
+        # --- Check boundaries on the slice
         if isinstance(ind, slice) and ind.start is not None and ind.start >= len(self):
             raise IndexError(f"Index {ind.start} is out of bounds.")
 
@@ -275,13 +277,14 @@ class Indexable:
             if is_consecutive:
                 logger.debug(
                     "Slices are consecutive and share the same step. "
-                    f"Combining slices a single slice with start {slices[0].start}, end {slices[-1].stop} and step {slices[0].step}."
+                    f"Combining slices a single slice with start {slices[0].start}, "
+                    f"end {slices[-1].stop} and step {slices[0].step}."
                 )
                 return slice(slices[0].start, slices[-1].stop, slices[0].step)
             else:
                 logger.debug(
                     "Slices are not consecutive. "
-                    f"Combining slices a concatenating the members index for each slice."
+                    "Combining slices a concatenating the members index for each slice."
                 )
                 return np.concatenate([self._class_index[s] for s in slices])
 
@@ -300,7 +303,7 @@ class Indexable:
             ]
 
     def __len__(self):
-        return len(self._member_index)
+        return len(self._class_index)
 
     def __getitem__(self, class_ind: Union[int, slice, list, np.ndarray]):
         member_ind = self._query_index(class_ind)
@@ -425,11 +428,16 @@ class Indexable:
 
         attributes = []
         for by_i in by_:
+            # Search this class for the attribute
+            # and append it to the list of attributes
             found = False
             try:
                 attribute_i = getattr(self, by_i)
                 attributes.append(attribute_i)
                 found = True
+
+            # If the attribute is not found in this class
+            # then search all Indexable attributes for the attribute
             except AttributeError:
                 for k, v in self.__dict__.items():
                     if isinstance(v, Indexable):
@@ -438,6 +446,7 @@ class Indexable:
                             attributes.append(attribute_i)
                             found = True
                         except AttributeError:
+                            # Defer assert until the end
                             pass
 
                 if not found:
@@ -453,26 +462,38 @@ class Indexable:
             else:
                 data[by_i] = deepcopy(attribute_i)
 
+        # We use pandas to do sorting because of its built-in support
+        # for mixed-type sorting, particularly for strings. np.lexsort
+        # requires a little bit more time and effort to get working as
+        # well as the pandas sort_values function.
         df = pd.DataFrame(data)
         df_sorted = df.sort_values(
-            by=by_, ascending=ascending_, inplace=False, ignore_index=False
+            by=by_,
+            ascending=ascending_,
+            inplace=False,
+            ignore_index=False,
+            kind="stable",
         )
-
         sorted_indices = df_sorted.index.values
-        index_attribute = deepcopy(self._index_attribute)
-        # Reset index to integer values so that sorted can be cleanly
-        # achieved
-        index = np.arange(0, len(self.index), 1)
-        self.set_index(index)
+
+        # Store the index attribute if there was one
+        index_attribute = deepcopy(self._class_index_attribute)
+
+        # Reset index to be equal to the range of integers corresponding to the
+        # length of the class's members.
+        self.set_index()
 
         copy = deepcopy(self[sorted_indices])
+        # Reset the index attribute if there was one
         if index_attribute is not None:
             copy.set_index(index_attribute)
             self.set_index(index_attribute)
         else:
-            copy.set_index(index)
-            self.set_index(index)
+            copy.set_index()
 
+        # If inplace is True then update the class's attributes
+        # with the sorted attributes. If inplace is False then
+        # return the sorted copy.
         if inplace:
             self.__dict__.update(copy.__dict__)
         else:

@@ -175,7 +175,7 @@ def test_Indexable_set_index_int_unsorted():
     np.testing.assert_equal(
         indexable._class_index_to_members, indexable.index_array_int
     )
-    assert indexable._class_index_to_members_is_slice == False
+    assert indexable._class_index_to_members_is_slice is False
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -206,7 +206,7 @@ def test_Indexable_set_index_int_sorted():
         indexable._class_index_to_members,
         np.array([slice(10 * i, 10 * (i + 1)) for i in range(10)]),
     )
-    assert indexable._class_index_to_members_is_slice == True
+    assert indexable._class_index_to_members_is_slice is True
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -220,6 +220,11 @@ def test_Indexable_set_index_int_sorted():
 def test_Indexable_set_index_str_unsorted():
     # Create test indexable
     indexable = TestIndexable()
+
+    # Test that the length of the class is the same as the length of the index
+    assert len(indexable) == 100
+
+    # Set the index
     indexable.set_index("index_array_str")
 
     # The index is unsorted with the numbers 0-9 repeated 10 times
@@ -230,7 +235,7 @@ def test_Indexable_set_index_str_unsorted():
     np.testing.assert_equal(
         indexable._class_index_to_members, indexable.index_array_int
     )
-    assert indexable._class_index_to_members_is_slice == False
+    assert indexable._class_index_to_members_is_slice is False
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -240,12 +245,19 @@ def test_Indexable_set_index_str_unsorted():
             indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][::10]
         )
 
+    # Test that the length of the class is the same as the length of the index
+    assert len(indexable) == 10
     return
 
 
 def test_Indexable_set_index_str_sorted():
     # Create test indexable
     indexable = TestIndexable()
+
+    # Test that the length of the class is the same as the length of the index
+    assert len(indexable) == 100
+
+    # Set the index
     indexable.index_array_str.sort()
     indexable.set_index("index_array_str")
 
@@ -258,7 +270,7 @@ def test_Indexable_set_index_str_sorted():
         indexable._class_index_to_members,
         np.array([slice(10 * i, 10 * (i + 1)) for i in range(10)]),
     )
-    assert indexable._class_index_to_members_is_slice == True
+    assert indexable._class_index_to_members_is_slice is True
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -268,6 +280,8 @@ def test_Indexable_set_index_str_sorted():
             indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][:10]
         )
 
+    # Test that the length of the class is the same as the length of the index
+    assert len(indexable) == 10
     return
 
 
@@ -294,6 +308,41 @@ def test_Indexable_concatenate():
         assert_equal(
             indexable.__dict__[attribute_i][200:300],
             indexable3.__dict__[attribute_i][:100],
+        )
+
+    return
+
+
+def test_Indexable_sort_values():
+    # Create test indexable
+    indexable = TestIndexable()
+
+    # Sort the indexable by the index array
+    indexable_sorted = indexable.sort_values("index_array_int", inplace=False)
+
+    # Test that the attributes are correctly sorted
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable_sorted.__dict__[attribute_i][:10],
+            indexable.__dict__[attribute_i][::10],
+        )
+
+    return
+
+
+def test_Indexable_sort_values_inplace():
+    # Create test indexable
+    indexable = TestIndexable()
+    indexable_unsorted = deepcopy(indexable)
+
+    # Sort the indexable by the index array
+    indexable.sort_values("index_array_int", inplace=True)
+
+    # Test that the attributes are correctly sorted
+    for attribute_i in ATTRIBUTES:
+        assert_equal(
+            indexable.__dict__[attribute_i][:10],
+            indexable_unsorted.__dict__[attribute_i][::10],
         )
 
     return
