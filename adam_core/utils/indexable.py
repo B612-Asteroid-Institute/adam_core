@@ -285,7 +285,7 @@ class Indexable:
                 )
                 return np.concatenate([self._class_index[s] for s in slices])
 
-        elif np.all(self._class_index == self._member_index):
+        elif np.array_equal(self._class_index, self._member_index):
             logger.debug("Using class index to index member arrays.")
             return self._class_index[ind]
         else:
