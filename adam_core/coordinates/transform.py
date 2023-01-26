@@ -3,7 +3,7 @@ from typing import Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
-from jax import config, jit
+from jax import config, jit, vmap
 from jax.experimental import loops
 
 from ..constants import Constants as c
@@ -102,7 +102,13 @@ def _cartesian_to_spherical(
     return coords_spherical
 
 
-@jit
+# Vectorization Map: _cartesian_to_spherical
+_cartesian_to_spherical_vmap = vmap(
+    _cartesian_to_spherical,
+    in_axes=(0,),
+)
+
+
 def cartesian_to_spherical(
     coords_cartesian: Union[np.ndarray, jnp.ndarray]
 ) -> jnp.ndarray:
@@ -134,19 +140,7 @@ def cartesian_to_spherical(
         vlat : Latitudinal velocity in degrees per arbitrary unit of time.
             (same unit of time as the x, y, and z velocities).
     """
-    with loops.Scope() as s:
-        N = len(coords_cartesian)
-        s.arr = jnp.zeros((N, 6), dtype=jnp.float64)
-
-        for i in s.range(s.arr.shape[0]):
-            s.arr = s.arr.at[i].set(
-                _cartesian_to_spherical(
-                    coords_cartesian[i],
-                )
-            )
-
-        coords_spherical = s.arr
-
+    coords_spherical = _cartesian_to_spherical_vmap(coords_cartesian)
     return coords_spherical
 
 
