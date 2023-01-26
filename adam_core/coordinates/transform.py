@@ -4,7 +4,6 @@ from typing import Optional, Union
 import jax.numpy as jnp
 import numpy as np
 from jax import config, jit, lax, vmap
-from jax.experimental import loops
 
 from ..constants import Constants as c
 from ..dynamics.kepler import solve_kepler
