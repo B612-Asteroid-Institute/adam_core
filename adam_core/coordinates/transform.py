@@ -6,6 +6,7 @@ import numpy as np
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
+from ..dynamics.barker import solve_barker
 from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
 from .cartesian import CARTESIAN_UNITS, CartesianCoordinates
 from .cometary import COMETARY_UNITS, CometaryCoordinates
@@ -27,7 +28,9 @@ __all__ = [
     "_cartesian_to_keplerian",
     "_cartesian_to_keplerian6",
     "cartesian_to_keplerian",
-    "_keplerian_to_cartesian",
+    "_keplerian_to_cartesian_a",
+    "_keplerian_to_cartesian_p",
+    "_keplerian_to_cartesian_q",
     "_cartesian_to_cometary",
     "cartesian_to_cometary",
     "_cometary_to_cartesian",
@@ -553,14 +556,150 @@ def cartesian_to_keplerian(
 
 
 @jit
-def _keplerian_to_cartesian(
+def _keplerian_to_cartesian_p(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
     mu: float = MU,
-    max_iter: int = 100,
+    max_iter: int = 1000,
     tol: float = 1e-15,
 ) -> jnp.ndarray:
     """
     Convert a single Keplerian coordinate to a Cartesian coordinate.
+
+    Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
+    to Cartesian orbits since their semi-major axes are by definition undefined.
+    Please consider representing the orbits with Cometary elements
+    and using those to convert to Cartesian. See `~thor.coordinates.cometary._cometary_to_cartesian`.
+
+    Parameters
+    ----------
+    coords_keplerian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
+        6D Keplerian coordinate.
+        p : semi-latus rectum in au.
+        e : eccentricity.
+        i : inclination in degrees.
+        raan : Right ascension (longitude) of the ascending node in degrees.
+        ap : argument of periapsis in degrees.
+        M : mean anomaly in degrees.
+    mu : float, optional
+        Gravitational parameter (GM) of the attracting body in units of
+        au**3 / d**2.
+    max_iter : int, optional
+        Maximum number of iterations over which to converge. If number of iterations is
+        exceeded, will use the value of the relevant anomaly at the last iteration.
+    tol : float, optional
+        Numerical tolerance to which to compute anomalies using the Newtown-Raphson
+        method.
+
+    Returns
+    -------
+    coords_cartesian : `~jax.numpy.ndarray` (6)
+        3D Cartesian coordinate including time derivatives.
+        x : x-position in units of au.
+        y : y-position in units of au.
+        z : z-position in units of au.
+        vx : x-velocity in units of au per day.
+        vy : y-velocity in units of au per day.
+        vz : z-velocity in units of au per day.
+    """
+    coords_cartesian = jnp.zeros(6, dtype=jnp.float64)
+
+    p = coords_keplerian[0]
+    e = coords_keplerian[1]
+    i = jnp.radians(coords_keplerian[2])
+    raan = jnp.radians(coords_keplerian[3])
+    ap = jnp.radians(coords_keplerian[4])
+    M = jnp.radians(coords_keplerian[5])
+
+    # Calculate the true anomaly
+    nu = lax.cond(
+        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
+        lambda e_i, M_i: solve_barker(M_i),
+        lambda e_i, M_i: solve_kepler(e_i, M_i, max_iter=max_iter, tol=tol),
+        e,
+        M,
+    )
+
+    # Calculate the perifocal rotation matrices
+    r_PQW = jnp.array(
+        [
+            p * jnp.cos(nu) / (1 + e * jnp.cos(nu)),
+            p * jnp.sin(nu) / (1 + e * jnp.cos(nu)),
+            0,
+        ]
+    )
+    v_PQW = jnp.array(
+        [-jnp.sqrt(mu / p) * jnp.sin(nu), jnp.sqrt(mu / p) * (e + jnp.cos(nu)), 0]
+    )
+
+    cos_raan = jnp.cos(raan)
+    sin_raan = jnp.sin(raan)
+    cos_ap = jnp.cos(ap)
+    sin_ap = jnp.sin(ap)
+    cos_i = jnp.cos(i)
+    sin_i = jnp.sin(i)
+
+    P1 = jnp.array(
+        [
+            [cos_ap, -sin_ap, 0.0],
+            [sin_ap, cos_ap, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=jnp.float64,
+    )
+
+    P2 = jnp.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, cos_i, -sin_i],
+            [0.0, sin_i, cos_i],
+        ],
+        dtype=jnp.float64,
+    )
+
+    P3 = jnp.array(
+        [
+            [cos_raan, -sin_raan, 0.0],
+            [sin_raan, cos_raan, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=jnp.float64,
+    )
+
+    rotation_matrix = P3 @ P2 @ P1
+    r = rotation_matrix @ r_PQW
+    v = rotation_matrix @ v_PQW
+
+    coords_cartesian = coords_cartesian.at[0].set(r[0])
+    coords_cartesian = coords_cartesian.at[1].set(r[1])
+    coords_cartesian = coords_cartesian.at[2].set(r[2])
+    coords_cartesian = coords_cartesian.at[3].set(v[0])
+    coords_cartesian = coords_cartesian.at[4].set(v[1])
+    coords_cartesian = coords_cartesian.at[5].set(v[2])
+
+    return coords_cartesian
+
+
+# Vectorization Map: _keplerian_to_cartesian_p
+_keplerian_to_cartesian_p_vmap = vmap(
+    _keplerian_to_cartesian_p,
+    in_axes=(0, None, None, None),
+)
+
+
+@jit
+def _keplerian_to_cartesian_a(
+    coords_keplerian: Union[np.ndarray, jnp.ndarray],
+    mu: float = MU,
+    max_iter: int = 1000,
+    tol: float = 1e-15,
+) -> jnp.ndarray:
+    """
+    Convert a single Keplerian coordinate to a Cartesian coordinate.
+
+    Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
+    to Cartesian orbits since their semi-major axes are by definition undefined.
+    Please consider representing the orbits with Cometary elements
+    and using those to convert to Cartesian. See `~thor.coordinates.cometary._cometary_to_cartesian`.
 
     Parameters
     ----------
@@ -593,82 +732,122 @@ def _keplerian_to_cartesian(
         vy : y-velocity in units of au per day.
         vz : z-velocity in units of au per day.
     """
-    with loops.Scope() as s:
-        s.arr = jnp.zeros(6, dtype=jnp.float64)
+    coords_keplerian_p = jnp.zeros(6, dtype=jnp.float64)
+    coords_keplerian_p = coords_keplerian_p.at[1].set(coords_keplerian[1])
+    coords_keplerian_p = coords_keplerian_p.at[2].set(coords_keplerian[2])
+    coords_keplerian_p = coords_keplerian_p.at[3].set(coords_keplerian[3])
+    coords_keplerian_p = coords_keplerian_p.at[4].set(coords_keplerian[4])
+    coords_keplerian_p = coords_keplerian_p.at[5].set(coords_keplerian[5])
 
-        a = coords_keplerian[0]
-        e = coords_keplerian[1]
-        i = jnp.radians(coords_keplerian[2])
-        raan = jnp.radians(coords_keplerian[3])
-        ap = jnp.radians(coords_keplerian[4])
-        M = jnp.radians(coords_keplerian[5])
-        p = a * (1 - e**2)
+    # Calculate the semi-latus rectum
+    a = coords_keplerian[0]
+    e = coords_keplerian[1]
+    p = lax.cond(
+        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
+        lambda a, e: jnp.nan,  # 2 * q (not enough information present)
+        lambda a, e: a * (1 - e**2),
+        a,
+        e,
+    )
+    coords_keplerian_p = coords_keplerian_p.at[0].set(p)
 
-        nu = solve_kepler(e, M, max_iter=max_iter, tol=tol)
-
-        r_PQW = jnp.array(
-            [
-                p * jnp.cos(nu) / (1 + e * jnp.cos(nu)),
-                p * jnp.sin(nu) / (1 + e * jnp.cos(nu)),
-                0,
-            ]
-        )
-
-        v_PQW = jnp.array(
-            [-jnp.sqrt(mu / p) * jnp.sin(nu), jnp.sqrt(mu / p) * (e + jnp.cos(nu)), 0]
-        )
-
-        cos_raan = jnp.cos(raan)
-        sin_raan = jnp.sin(raan)
-        cos_ap = jnp.cos(ap)
-        sin_ap = jnp.sin(ap)
-        cos_i = jnp.cos(i)
-        sin_i = jnp.sin(i)
-
-        P1 = jnp.array(
-            [
-                [cos_ap, -sin_ap, 0.0],
-                [sin_ap, cos_ap, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=jnp.float64,
-        )
-
-        P2 = jnp.array(
-            [
-                [1.0, 0.0, 0.0],
-                [0.0, cos_i, -sin_i],
-                [0.0, sin_i, cos_i],
-            ],
-            dtype=jnp.float64,
-        )
-
-        P3 = jnp.array(
-            [
-                [cos_raan, -sin_raan, 0.0],
-                [sin_raan, cos_raan, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=jnp.float64,
-        )
-
-        rotation_matrix = P3 @ P2 @ P1
-        r = rotation_matrix @ r_PQW
-        v = rotation_matrix @ v_PQW
-
-        s.arr = s.arr.at[0].set(r[0])
-        s.arr = s.arr.at[1].set(r[1])
-        s.arr = s.arr.at[2].set(r[2])
-        s.arr = s.arr.at[3].set(v[0])
-        s.arr = s.arr.at[4].set(v[1])
-        s.arr = s.arr.at[5].set(v[2])
-
-        coords_cartesian = s.arr
-
+    coords_cartesian = _keplerian_to_cartesian_p(
+        coords_keplerian_p,
+        mu=mu,
+        max_iter=max_iter,
+        tol=tol,
+    )
     return coords_cartesian
 
 
+# Vectorization Map: _keplerian_to_cartesian_a
+_keplerian_to_cartesian_a_vmap = vmap(
+    _keplerian_to_cartesian_a,
+    in_axes=(0, None, None, None),
+)
+
+
 @jit
+def _keplerian_to_cartesian_q(
+    coords_keplerian: Union[np.ndarray, jnp.ndarray],
+    mu: float = MU,
+    max_iter: int = 1000,
+    tol: float = 1e-15,
+) -> jnp.ndarray:
+    """
+    Convert a single Keplerian coordinate to a Cartesian coordinate.
+
+    Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
+    to Cartesian orbits since their semi-major axes are by definition undefined.
+    Please consider representing the orbits with Cometary elements
+    and using those to convert to Cartesian. See `~thor.coordinates.cometary._cometary_to_cartesian`.
+
+    Parameters
+    ----------
+    coords_keplerian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
+        6D Keplerian coordinate.
+        q : periapsis distance in au.
+        e : eccentricity.
+        i : inclination in degrees.
+        raan : Right ascension (longitude) of the ascending node in degrees.
+        ap : argument of periapsis in degrees.
+        M : mean anomaly in degrees.
+    mu : float, optional
+        Gravitational parameter (GM) of the attracting body in units of
+        au**3 / d**2.
+    max_iter : int, optional
+        Maximum number of iterations over which to converge. If number of iterations is
+        exceeded, will use the value of the relevant anomaly at the last iteration.
+    tol : float, optional
+        Numerical tolerance to which to compute anomalies using the Newtown-Raphson
+        method.
+
+    Returns
+    -------
+    coords_cartesian : `~jax.numpy.ndarray` (6)
+        3D Cartesian coordinate including time derivatives.
+        x : x-position in units of au.
+        y : y-position in units of au.
+        z : z-position in units of au.
+        vx : x-velocity in units of au per day.
+        vy : y-velocity in units of au per day.
+        vz : z-velocity in units of au per day.
+    """
+    coords_keplerian_p = jnp.zeros(6, dtype=jnp.float64)
+    coords_keplerian_p = coords_keplerian_p.at[1].set(coords_keplerian[1])
+    coords_keplerian_p = coords_keplerian_p.at[2].set(coords_keplerian[2])
+    coords_keplerian_p = coords_keplerian_p.at[3].set(coords_keplerian[3])
+    coords_keplerian_p = coords_keplerian_p.at[4].set(coords_keplerian[4])
+    coords_keplerian_p = coords_keplerian_p.at[5].set(coords_keplerian[5])
+
+    # Calculate the semi-latus rectum
+    q = coords_keplerian[0]
+    e = coords_keplerian[1]
+    p = lax.cond(
+        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
+        lambda e, q: 2 * q,
+        lambda e, q: q / (1 - e) * (1 - e**2),  # a = q / (1 - e), p = a / (1 - e**2)
+        e,
+        q,
+    )
+    coords_keplerian_p = coords_keplerian_p.at[0].set(p)
+
+    coords_cartesian = _keplerian_to_cartesian_p(
+        coords_keplerian_p,
+        mu=mu,
+        max_iter=max_iter,
+        tol=tol,
+    )
+    return coords_cartesian
+
+
+# Vectorization Map: _keplerian_to_cartesian_q
+_keplerian_to_cartesian_q_vmap = vmap(
+    _keplerian_to_cartesian_q,
+    in_axes=(0, None, None, None),
+)
+
+
 def keplerian_to_cartesian(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
     mu: float = MU,
@@ -677,6 +856,11 @@ def keplerian_to_cartesian(
 ) -> jnp.ndarray:
     """
     Convert Keplerian coordinates to Cartesian coordinates.
+
+    Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
+    to Cartesian orbits since their semi-major axes are by definition undefined.
+    Please consider representing these orbits with Cometary elements
+    and using those to convert to Cartesian. See `~thor.coordinates.cometary.cometary_to_cartesian`.
 
     Parameters
     ----------
@@ -708,20 +892,45 @@ def keplerian_to_cartesian(
         vx : x-velocity in units of au per day.
         vy : y-velocity in units of au per day.
         vz : z-velocity in units of au per day.
+
+    Raises
+    ------
+    ValueError: When semi-major axis is less than 0 for elliptical orbits or when
+        semi-major axis is greater than 0 for hyperbolic orbits.
     """
-    with loops.Scope() as s:
-        N = len(coords_keplerian)
-        s.arr = jnp.zeros((N, 6), dtype=jnp.float64)
+    a = coords_keplerian[:, 0]
+    e = coords_keplerian[:, 1]
 
-        for i in s.range(s.arr.shape[0]):
-            s.arr = s.arr.at[i].set(
-                _keplerian_to_cartesian(
-                    coords_keplerian[i], mu=mu, max_iter=max_iter, tol=tol
-                )
-            )
+    parabolic = np.where((e < (1.0 + FLOAT_TOLERANCE)) & (e > (1.0 - FLOAT_TOLERANCE)))[
+        0
+    ]
+    if len(parabolic) > 0:
+        msg = (
+            "Parabolic orbits (e = 1.0 +- 1e-15) are best represented using Cometary coordinates.\n"
+            "Conversion to Cartesian coordinates will not yield correct results as semi-major axis\n"
+            "for parabolic orbits is undefined."
+        )
+        logger.critical(msg)
 
-        coords_cartesian = s.arr
+    hyperbolic_invalid = np.where((e > (1.0 + FLOAT_TOLERANCE)) & (a > 0))[0]
+    if len(hyperbolic_invalid) > 0:
+        err = (
+            "Semi-major axis (a) for hyperbolic orbits (e > 1 + 1e-15) should be negative. "
+            f"Instead found a = {a[hyperbolic_invalid][0]} with e = {e[hyperbolic_invalid][0]}."
+        )
+        raise ValueError(err)
 
+    elliptical_invalid = np.where((e < (1.0 - FLOAT_TOLERANCE)) & (a < 0))[0]
+    if len(elliptical_invalid) > 0:
+        err = (
+            "Semi-major axis (a) for elliptical orbits (e < 1 - 1e-15) should be positive. "
+            f"Instead found a = {a[elliptical_invalid][0]} with e = {e[elliptical_invalid][0]}."
+        )
+        raise ValueError(err)
+
+    coords_cartesian = _keplerian_to_cartesian_a_vmap(
+        coords_keplerian, mu, max_iter, tol
+    )
     return coords_cartesian
 
 
@@ -882,7 +1091,7 @@ def _cometary_to_cartesian(
     coords_keplerian = coords_keplerian.at[4].set(ap)
     coords_keplerian = coords_keplerian.at[5].set(M)
 
-    coords_cartesian = _keplerian_to_cartesian(
+    coords_cartesian = _keplerian_to_cartesian_a(
         coords_keplerian, mu=mu, max_iter=max_iter, tol=tol
     )
 
