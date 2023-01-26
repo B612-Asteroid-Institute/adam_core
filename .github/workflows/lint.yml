@@ -17,7 +17,7 @@ jobs:
       - uses: jpribyl/action-docker-layer-caching@v0.1.0
         # Ignore the failure of a step and avoid terminating the job.
         continue-on-error: true
-      - name: Build Precovery in Docker
+      - name: Build adam_core in Docker
         run: docker build -t adam-core:$IMAGE_TAG .
       - name: isort check
         run:  docker run -i adam-core:$IMAGE_TAG isort --check-only .
@@ -25,3 +25,5 @@ jobs:
         run:  docker run -i adam-core:$IMAGE_TAG black --check --diff .
       - name: flake8
         run:  docker run -i adam-core:$IMAGE_TAG flake8
+      - name: tests
+        run: docker run -i adam-core:$IMAGE_TAG pytest . --cov

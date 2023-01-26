@@ -8,5 +8,3 @@ RUN mkdir /code/
 ADD . /code/
 WORKDIR /code/
 RUN pip install -e .[tests]
-
-CMD ["pytest", "."]
