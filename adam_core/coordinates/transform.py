@@ -971,10 +971,16 @@ def _cartesian_to_cometary(
         tp : time of periapse passage in days.
     """
     coords_cometary = _cartesian_to_keplerian(coords_cartesian, t0, mu=mu)
-    return coords_cometary[jnp.array([1, 2, 3, 4, 5, -1])]
+    return coords_cometary[jnp.array([2, 4, 5, 6, 7, 12])]
 
 
-@jit
+# Vectorization Map: _cartesian_to_cometary
+_cartesian_to_cometary_vmap = vmap(
+    _cartesian_to_cometary,
+    in_axes=(0, 0, None),
+)
+
+
 def cartesian_to_cometary(
     coords_cartesian: Union[np.ndarray, jnp.ndarray],
     t0: Union[np.ndarray, jnp.ndarray],
@@ -1010,17 +1016,7 @@ def cartesian_to_cometary(
         ap : argument of periapsis in degrees.
         tp : time of periapse passage in days.
     """
-    with loops.Scope() as s:
-        N = len(coords_cartesian)
-        s.arr = jnp.zeros((N, 6), dtype=jnp.float64)
-
-        for i in s.range(s.arr.shape[0]):
-            s.arr = s.arr.at[i].set(
-                _cartesian_to_cometary(coords_cartesian[i], t0[i], mu=mu)
-            )
-
-        coords_cometary = s.arr
-
+    coords_cometary = _cartesian_to_cometary_vmap(coords_cartesian, t0, mu)
     return coords_cometary
 
 
