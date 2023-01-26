@@ -3,7 +3,7 @@ from typing import Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
-from jax import config, jit, vmap
+from jax import config, jit, lax, vmap
 from jax.experimental import loops
 
 from ..constants import Constants as c
@@ -83,14 +83,34 @@ def _cartesian_to_spherical(
     rho = jnp.sqrt(x**2 + y**2 + z**2)
     lon = jnp.arctan2(y, x)
     lon = jnp.where(lon < 0.0, 2 * jnp.pi + lon, lon)
-    lat = jnp.arcsin(z / rho)
+    lat = lax.cond(
+        rho == 0.0,
+        lambda _: 0.0,
+        lambda _: jnp.arcsin(z / rho),
+        None,
+    )
     lat = jnp.where(
         (lat >= 3 * jnp.pi / 2) & (lat <= 2 * jnp.pi), lat - 2 * jnp.pi, lat
     )
 
-    vrho = (x * vx + y * vy + z * vz) / rho
-    vlon = (vy * x - vx * y) / (x**2 + y**2)
-    vlat = (vz - vrho * z / rho) / jnp.sqrt(x**2 + y**2)
+    vrho = lax.cond(
+        rho == 0.0,
+        lambda _: 0.0,
+        lambda _: (x * vx + y * vy + z * vz) / rho,
+        None,
+    )
+    vlon = lax.cond(
+        (x == 0.0) & (y == 0.0),
+        lambda _: 0.0,
+        lambda _: (vy * x - vx * y) / (x**2 + y**2),
+        None,
+    )
+    vlat = lax.cond(
+        ((x == 0.0) & (y == 0.0)) | (rho == 0.0),
+        lambda _: 0.0,
+        lambda _: (vz - vrho * z / rho) / jnp.sqrt(x**2 + y**2),
+        None,
+    )
 
     coords_spherical = coords_spherical.at[0].set(rho)
     coords_spherical = coords_spherical.at[1].set(jnp.degrees(lon))
