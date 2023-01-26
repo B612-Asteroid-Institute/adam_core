@@ -215,7 +215,13 @@ def _spherical_to_cartesian(
     return coords_cartesian
 
 
-@jit
+# Vectorization Map: _spherical_to_cartesian
+_spherical_to_cartesian_vmap = vmap(
+    _spherical_to_cartesian,
+    in_axes=(0,),
+)
+
+
 def spherical_to_cartesian(
     coords_spherical: Union[np.ndarray, jnp.ndarray]
 ) -> jnp.ndarray:
@@ -247,19 +253,7 @@ def spherical_to_cartesian(
         vy : y-velocity in the same units of y per arbitrary unit of time.
         vz : z-velocity in the same units of z per arbitrary unit of time.
     """
-    with loops.Scope() as s:
-        N = len(coords_spherical)
-        s.arr = jnp.zeros((N, 6), dtype=jnp.float64)
-
-        for i in s.range(s.arr.shape[0]):
-            s.arr = s.arr.at[i].set(
-                _spherical_to_cartesian(
-                    coords_spherical[i],
-                )
-            )
-
-        coords_cartesian = s.arr
-
+    coords_cartesian = _spherical_to_cartesian_vmap(coords_spherical)
     return coords_cartesian
 
 
