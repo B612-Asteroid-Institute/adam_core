@@ -6,8 +6,6 @@ import numpy as np
 
 from .coordinates import Coordinates
 
-__all__ = ["convert_coordinates"]
-
 
 def _convert_coordinates_units(
     coords: Union[np.ndarray, np.ma.masked_array], units: List, desired_units: List
@@ -37,10 +35,7 @@ def _convert_coordinates_units(
     coords_converted = coords.copy()
 
     if (len(units) != D) or (len(desired_units) != D):
-        err = (
-            "Length of units or desired_units does not match the number of coordinate"
-            f" dimensions (D={D})"
-        )
+        err = f"Length of units or desired_units does not match the number of coordinate dimensions (D={D})"
         raise ValueError(err)
 
     for i in range(D):
@@ -78,10 +73,7 @@ def _convert_covariances_units(
     N, D, D = covariances.shape
 
     if (len(units) != D) or (len(desired_units) != D):
-        err = (
-            "Length of units or desired_units does not match the number of coordinate"
-            f" dimensions (D={D})"
-        )
+        err = f"Length of units or desired_units does not match the number of coordinate dimensions (D={D})"
         raise ValueError(err)
 
     coords_units_2d = units.copy().reshape(1, -1)
@@ -144,8 +136,8 @@ def convert_coordinates(
     elif isinstance(desired_units, (list, np.ndarray)):
         if len(desired_units) != D:
             err = (
-                "Length of units or desired_units does not match the number of"
-                f" coordinate dimensions (D={D})"
+                "Length of units or desired_units does not match the"
+                f" number of coordinate dimensions (D={D})"
             )
             raise ValueError(err)
 
@@ -153,10 +145,7 @@ def convert_coordinates(
             desired_units_[k] = desired_units[i]
 
     else:
-        err = (
-            "desired_units should be one of {list, '~numpy.ndarray`, dict,"
-            " OrderedDict()}"
-        )
+        err = "desired_units should be one of {list, '~numpy.ndarray`, dict, OrderedDict()}"
         raise ValueError(err)
 
     # Make a copy of the input coordinates

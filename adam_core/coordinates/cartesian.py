@@ -8,15 +8,9 @@ import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 
-from ..constants import Constants as c
 from .coordinates import Coordinates
 
 __all__ = ["CartesianCoordinates", "CARTESIAN_COLS", "CARTESIAN_UNITS"]
-
-TRANSFORM_EQ2EC = np.zeros((6, 6))
-TRANSFORM_EQ2EC[0:3, 0:3] = c.TRANSFORM_EQ2EC
-TRANSFORM_EQ2EC[3:6, 3:6] = c.TRANSFORM_EQ2EC
-TRANSFORM_EC2EQ = TRANSFORM_EQ2EC.T
 
 CARTESIAN_COLS = OrderedDict()
 CARTESIAN_UNITS = OrderedDict()
@@ -48,7 +42,7 @@ class CartesianCoordinates(Coordinates):
         sigma_vx: Optional[np.ndarray] = None,
         sigma_vy: Optional[np.ndarray] = None,
         sigma_vz: Optional[np.ndarray] = None,
-        origin: str = "heliocentric",
+        origin: str = "heliocenter",
         frame: str = "ecliptic",
         names: OrderedDict = CARTESIAN_COLS,
         units: OrderedDict = CARTESIAN_UNITS,
@@ -238,32 +232,6 @@ class CartesianCoordinates(Coordinates):
         data["units"] = deepcopy(self.units)
         data["names"] = deepcopy(self.names)
         return CartesianCoordinates(**data)
-
-    def to_frame(self, frame: str) -> "CartesianCoordinates":
-        """
-        Rotate Cartesian coordinates and their covariances to the given frame.
-
-        Parameters
-        ----------
-        frame : {'ecliptic', 'equatorial'}
-            Desired reference frame of the output coordinates.
-
-        Returns
-        -------
-        CartesianCoordinates : `~thor.coordinates.cartesian.CartesianCoordinates`
-            Rotated Cartesian coordinates and their covariances.
-        """
-        if frame == "ecliptic" and self.frame != "ecliptic":
-            return self.rotate(TRANSFORM_EC2EQ, "ecliptic")
-        elif frame == "equatorial" and self.frame != "equatorial":
-            return self.rotate(TRANSFORM_EQ2EC, "equatorial")
-        elif frame == self.frame:
-            return self
-        else:
-            err = "frame should be one of {'ecliptic', 'equatorial'}"
-            raise ValueError(err)
-
-        return
 
     def translate(
         self, vectors: Union[np.ndarray, np.ma.masked_array], origin_out: str

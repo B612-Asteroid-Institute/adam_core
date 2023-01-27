@@ -11,7 +11,7 @@ from .cometary import COMETARY_COLS, CometaryCoordinates
 from .coordinates import Coordinates
 from .keplerian import KEPLERIAN_COLS, KeplerianCoordinates
 from .spherical import SPHERICAL_COLS, SphericalCoordinates
-from .transform import transform_coordinates
+from .transform import cartesian_to_frame, cartesian_to_origin, transform_coordinates
 
 __all__ = ["CoordinateMembers"]
 
@@ -188,14 +188,27 @@ class CoordinateMembers(Indexable):
         frame : {'ecliptic', 'equatorial'}
             Desired reference frame of the output coordinates.
         """
-        self._cartesian = self.cartesian.to_frame(frame)
+        self._cartesian = cartesian_to_frame(self.cartesian, frame)
         self._keplerian = None
         self._cometary = None
         self._spherical = None
-        self._bernstein_khushalani = None
         return
 
-        return self._cometary
+    def to_origin(self, origin: str):
+        """
+        Translate coordinates to a different origin. Translation is applied to the Cartesian coordinates.
+        All other coordinate types are reset to None.
+
+        Parameters
+        ----------
+        origin : {'heliocenter', 'barycenter'}
+            Name of the desired origin.
+        """
+        self._cartesian = cartesian_to_origin(self.cartesian, origin)
+        self._keplerian = None
+        self._cometary = None
+        self._spherical = None
+        return
 
     def to_df(
         self,

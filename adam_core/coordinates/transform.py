@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from typing import Optional, Union
 
 import jax.numpy as jnp
@@ -11,15 +12,17 @@ from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
 from .cartesian import CARTESIAN_UNITS, CartesianCoordinates
 from .cometary import COMETARY_UNITS, CometaryCoordinates
 from .conversions import convert_coordinates
-from .coordinates import Coordinates
+from .coordinates import COORD_FILL_VALUE, Coordinates
 from .keplerian import KEPLERIAN_UNITS, KeplerianCoordinates
 from .spherical import SPHERICAL_UNITS, SphericalCoordinates
 
 config.update("jax_enable_x64", True)
 config.update("jax_platform_name", "cpu")
 
-TRANSFORM_EQ2EC = c.TRANSFORM_EQ2EC
-TRANSFORM_EC2EQ = c.TRANSFORM_EC2EQ
+TRANSFORM_EQ2EC = np.zeros((6, 6))
+TRANSFORM_EQ2EC[0:3, 0:3] = c.TRANSFORM_EQ2EC
+TRANSFORM_EQ2EC[3:6, 3:6] = c.TRANSFORM_EQ2EC
+TRANSFORM_EC2EQ = TRANSFORM_EQ2EC.T
 
 logger = logging.getLogger(__name__)
 
@@ -1173,10 +1176,72 @@ def cometary_to_cartesian(
     return coords_cartesian
 
 
+def cartesian_to_origin(
+    coords: CartesianCoordinates, origin: str
+) -> "CartesianCoordinates":
+    """
+    Translate coordinates to a different origin.
+
+    Parameters
+    ----------
+    coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
+        Cartesian coordinates and optionally their covariances.
+    origin : {'heliocenter', 'barycenter'}
+        Name of the desired origin.
+
+    Returns
+    -------
+    CartesianCoordinates : `~thor.coordinates.cartesian.CartesianCoordinates`
+        Translated Cartesian coordinates and their covariances.
+    """
+    unique_origins = np.unique(coords.origin)
+    vectors = np.zeros(coords.values.shape, dtype=np.float64)
+
+    for origin_in in unique_origins:
+
+        raise NotImplementedError("get_perturber_state not implemented yet")
+        # mask = np.where(coords.origin == origin_in)[0]
+        # vectors[mask] = get_perturber_state(
+        #    origin_in, coords.times[mask], frame=coords.frame, origin=origin
+        # )
+
+    return coords.translate(vectors, origin)
+
+
+def cartesian_to_frame(
+    coords: CartesianCoordinates, frame: str
+) -> "CartesianCoordinates":
+    """
+    Rotate Cartesian coordinates and their covariances to the given frame.
+
+    Parameters
+    ----------
+    coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
+        Cartesian coordinates and optionally their covariances.
+    frame : {'ecliptic', 'equatorial'}
+        Desired reference frame of the output coordinates.
+
+    Returns
+    -------
+    CartesianCoordinates : `~thor.coordinates.cartesian.CartesianCoordinates`
+        Rotated Cartesian coordinates and their covariances.
+    """
+    if frame == "ecliptic" and coords.frame != "ecliptic":
+        return coords.rotate(TRANSFORM_EC2EQ, "ecliptic")
+    elif frame == "equatorial" and coords.frame != "equatorial":
+        return coords.rotate(TRANSFORM_EQ2EC, "equatorial")
+    elif frame == coords.frame:
+        return coords
+    else:
+        err = "frame should be one of {'ecliptic', 'equatorial'}"
+        raise ValueError(err)
+
+
 def transform_coordinates(
     coords: Coordinates,
     representation_out: str,
     frame_out: Optional[str] = None,
+    origin_out: Optional[str] = None,
     unit_sphere: bool = True,
 ) -> Coordinates:
     """
@@ -1191,13 +1256,14 @@ def transform_coordinates(
         Desired coordinate type or representation of the output coordinates.
     frame_out : {'equatorial', 'ecliptic'}
         Desired reference frame of the output coordinates.
+    origin_out : {'heliocenter', 'barycenter'}
+        Desired origin of the output coordinates.
     unit_sphere : bool
-        Assume the coordinates lie on a unit sphere. In many cases, spherical
-        coordinates may not have a value for radial distance or radial velocity but
-        transforms to other representations or frames are still meaningful.
-        If this parameter is set to true, then if radial distance is not defined
-        and/or radial velocity is not defined then they are assumed to be 1.0 au
-        and 0.0 au/d, respectively.
+        Assume the coordinates lie on a unit sphere. In many cases, spherical coordinates
+        may not have a value for radial distance or radial velocity but transforms to other
+        representations or frames are still meaningful. If this parameter is set to true,
+        then if radial distance is not defined and/or radial velocity is not defined
+        then they are assumed to be 1.0 au and 0.0 au/d, respectively.
 
     Returns
     -------
@@ -1243,18 +1309,34 @@ def transform_coordinates(
     else:
         frame_out = coords.frame
 
+    origin_err = ["{} should be one of:\n", "'heliocenter' or 'barycenter'"]
+    if origin_out is not None:
+        if origin_out != "barycenter" and origin_out != "heliocenter":
+            raise ValueError("".join(origin_err).format("origin_out"))
+    else:
+        origin_out = coords.origin
+
     # Check that representation_in and representation_out are one of cartesian
     # or spherical, raise errors otherwise
     representation_err = [
         "{} should be one of:\n",
         "'cartesian', 'spherical', 'keplerian', 'cometary'",
     ]
-    if representation_out not in ("cartesian", "spherical", "keplerian", "cometary"):
+    if representation_out not in (
+        "cartesian",
+        "spherical",
+        "keplerian",
+        "cometary",
+    ):
         raise ValueError("".join(representation_err).format("representation_out"))
 
-    # If coords are already in the desired frame and representation
+    # If coords are already in the desired frame, have the desired origin and representation
     # then return them unaltered
-    if coords.frame == frame_out:
+    if (
+        coords.frame == frame_out
+        and origin_out is None
+        and np.all(coords.origin == origin_out)
+    ):
         if (
             isinstance(coords, CartesianCoordinates)
             and representation_out == "cartesian"
@@ -1277,77 +1359,75 @@ def transform_coordinates(
         else:
             pass
 
-    # At this point, some form of transformation is going to occur so
-    # convert the coords to Cartesian if they aren't already and make sure
+    # At this point, some form of transformation is going to occur so make a
+    # copy of the coords and then convert the coords to Cartesian if they aren't already and make sure
     # the units match the default units assumed for each class
+    coords_ = deepcopy(coords)
+
     set_rho_nan = False
     set_vrho_nan = False
-    if isinstance(coords, CartesianCoordinates):
-        if not coords.has_units(CARTESIAN_UNITS):
+    if isinstance(coords_, CartesianCoordinates):
+        if not coords_.has_units(CARTESIAN_UNITS):
             logger.info(
-                "Cartesian coordinates do not have default units, converting units"
-                " before transforming."
+                "Cartesian coordinates do not have default units, converting units before transforming."
             )
-            coords = convert_coordinates(coords, CARTESIAN_UNITS)
-        cartesian = coords
+            coords_ = convert_coordinates(coords_, CARTESIAN_UNITS)
+        cartesian = coords_
 
-    elif isinstance(coords, SphericalCoordinates):
-        if not coords.has_units(SPHERICAL_UNITS):
+    elif isinstance(coords_, SphericalCoordinates):
+        if not coords_.has_units(SPHERICAL_UNITS):
             logger.info(
-                "Spherical coordinates do not have default units, converting units"
-                " before transforming."
+                "Spherical coordinates do not have default units, converting units before transforming."
             )
-            coords = convert_coordinates(coords, SPHERICAL_UNITS)
+            coords_ = convert_coordinates(coords_, SPHERICAL_UNITS)
 
         if representation_out == "spherical" or representation_out == "cartesian":
             if unit_sphere:
-                if np.all(np.isnan(coords.rho.filled())):
-                    set_rho_nan = True
+                set_rho_nan = True
+                if np.all(np.isnan(coords_.rho.filled())):
                     logger.debug(
                         "Spherical coordinates have no defined radial distance (rho),"
-                        " assuming spherical coordinates lie on unit sphere."
+                        "assuming spherical coordinates lie on unit sphere."
                     )
-                    coords.values[:, 0] = 1.0
+                    coords_.values[:, 0] = 1.0
+                    coords._values.mask[:, 0] = 0
 
-                if np.all(np.isnan(coords.vrho.filled())):
-                    set_vrho_nan = True
+                set_vrho_nan = True
+                if np.all(np.isnan(coords_.vrho.filled())):
                     logger.debug(
                         "Spherical coordinates have no defined radial velocity (vrho),"
-                        " assuming spherical coordinates lie on unit sphere with zero"
-                        " velocity."
+                        " assuming spherical coordinates lie on unit sphere with zero velocity."
                     )
-                    coords.values[:, 3] = 0.0
+                    coords_.covariances[:, 3, :] = 0.0
+                    coords_.covariances[:, :, 3] = 0.0
 
-        cartesian = coords.to_cartesian()
+        cartesian = coords_.to_cartesian()
 
-    elif isinstance(coords, KeplerianCoordinates):
-        if not coords.has_units(KEPLERIAN_UNITS):
+    elif isinstance(coords_, KeplerianCoordinates):
+        if not coords_.has_units(KEPLERIAN_UNITS):
             logger.info(
-                "Keplerian coordinates do not have default units, converting units"
-                " before transforming."
+                "Keplerian coordinates do not have default units, converting units before transforming."
             )
-            coords = convert_coordinates(coords, KEPLERIAN_UNITS)
+            coords_ = convert_coordinates(coords_, KEPLERIAN_UNITS)
 
-        cartesian = coords.to_cartesian()
+        cartesian = coords_.to_cartesian()
 
-    elif isinstance(coords, CometaryCoordinates):
-        if not coords.has_units(COMETARY_UNITS):
+    elif isinstance(coords_, CometaryCoordinates):
+        if not coords_.has_units(COMETARY_UNITS):
             logger.info(
-                "Cometary coordinates do not have default units, converting units"
-                " before transforming."
+                "Cometary coordinates do not have default units, converting units before transforming."
             )
-            coords = convert_coordinates(coords, COMETARY_UNITS)
+            coords_ = convert_coordinates(coords_, COMETARY_UNITS)
 
-        cartesian = coords.to_cartesian()
+        cartesian = coords_.to_cartesian()
 
-    if coords.frame != frame_out:
-        if frame_out == "ecliptic":
-            cartesian = cartesian.to_ecliptic()
-        elif frame_out == "equatorial":
-            cartesian = cartesian.to_equatorial()
-        else:
-            err = "frame should be one of {'ecliptic', 'equatorial'}"
-            raise ValueError(err)
+    # Translate coordinates to new origin (if different from current)
+    if origin_out is not None and np.all(cartesian.origin != origin_out):
+        cartesian = cartesian_to_origin(cartesian, origin_out)
+
+    # Rotate coordinates to new frame (if different from current)
+    if cartesian.frame != frame_out:
+        cartesian = cartesian_to_frame(cartesian, frame_out)
 
     if representation_out == "spherical":
         coords_out = SphericalCoordinates.from_cartesian(cartesian)
@@ -1356,22 +1436,12 @@ def transform_coordinates(
         # rho and vrho values were assumed then make sure the output coordinates
         # and covariances are set back to NaN values and masked
         if set_rho_nan:
-            coords_out.values[:, 0] = np.NaN
-            coords_out.values[:, 0].mask = 1
-            if coords_out.covariances is not None:
-                coords_out.covariances[:, 0] = np.NaN
-                coords_out.covariances[0, :] = np.NaN
-                coords_out.covariances[:, 0].mask = 1
-                coords_out.covariances[0, :].mask = 1
+            coords_out._values[:, 0] = COORD_FILL_VALUE
+            coords_out._values[:, 0].mask = 1
 
         if set_vrho_nan:
-            coords_out.values[:, 3] = np.NaN
-            coords_out.values[:, 3].mask = 1
-            if coords_out.covariances is not None:
-                coords_out.covariances[:, 3] = np.NaN
-                coords_out.covariances[3, :] = np.NaN
-                coords_out.covariances[:, 3].mask = 1
-                coords_out.covariances[3, :].mask = 1
+            coords_out._values[:, 3] = COORD_FILL_VALUE
+            coords_out._values[:, 3].mask = 1
 
     elif representation_out == "keplerian":
         coords_out = KeplerianCoordinates.from_cartesian(cartesian)
