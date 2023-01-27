@@ -71,7 +71,6 @@ class CoordinateMembers(Indexable):
         Indexable.__init__(self, index)
         return
 
-    @property
     def cartesian(self):
 
         if "CartesianCoordinates" not in self.__allowed_coordinate_types:
@@ -98,7 +97,6 @@ class CoordinateMembers(Indexable):
 
         return self._cartesian
 
-    @property
     def spherical(self):
 
         if "SphericalCoordinates" not in self.__allowed_coordinate_types:
@@ -125,7 +123,6 @@ class CoordinateMembers(Indexable):
 
         return self._spherical
 
-    @property
     def keplerian(self):
 
         if "KeplerianCoordinates" not in self.__allowed_coordinate_types:
@@ -152,7 +149,6 @@ class CoordinateMembers(Indexable):
 
         return self._keplerian
 
-    @property
     def cometary(self):
 
         if "CometaryCoordinates" not in self.__allowed_coordinate_types:

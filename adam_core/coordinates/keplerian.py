@@ -79,70 +79,106 @@ class KeplerianCoordinates(Coordinates):
 
         return
 
-    @property
     def a(self):
+        """
+        Semi-major axis
+        """
         return self._values[:, 0]
 
-    @property
     def e(self):
+        """
+        Eccentricity
+        """
         return self._values[:, 1]
 
-    @property
     def i(self):
+        """
+        Inclination
+        """
         return self._values[:, 2]
 
-    @property
     def raan(self):
+        """
+        Right ascension of the ascending node
+        """
         return self._values[:, 3]
 
-    @property
     def ap(self):
+        """
+        Argument of periapsis
+        """
         return self._values[:, 4]
 
-    @property
     def M(self):
+        """
+        Mean anomaly
+        """
         return self._values[:, 5]
 
-    @property
     def sigma_a(self):
+        """
+        1-sigma uncertainty in semi-major axis
+        """
         return self.sigmas[:, 0]
 
-    @property
     def sigma_e(self):
+        """
+        1-sigma uncertainty in eccentricity
+        """
         return self.sigmas[:, 1]
 
-    @property
     def sigma_i(self):
+        """
+        1-sigma uncertainty in inclination
+        """
         return self.sigmas[:, 2]
 
-    @property
     def sigma_raan(self):
+        """
+        1-sigma uncertainty in right ascension of the ascending node
+        """
         return self.sigmas[:, 3]
 
-    @property
     def sigma_ap(self):
+        """
+        1-sigma uncertainty in argument of periapsis
+        """
         return self.sigmas[:, 4]
 
-    @property
     def sigma_M(self):
+        """
+        1-sigma uncertainty in mean anomaly
+        """
         return self.sigmas[:, 5]
 
-    @property
     def q(self):
-        # pericenter distance
+        """
+        Periapsis distance
+        """
         return self.a * (1 - self.e)
 
-    @property
-    def p(self):
-        # apocenter distance
+    def Q(self):
+        """
+        Apoapsis distance
+        """
         return self.a * (1 + self.e)
 
-    @property
+    def p(self):
+        """
+        Semi-latus rectum
+        """
+        return self.a / (1 - self.e**2)
+
     def P(self):
+        """
+        Period
+        """
         return np.sqrt(4 * np.pi**2 * self.a**3 / self.mu)
 
-    @property
     def mu(self):
+        """
+        Gravitational parameter
+        """
         return self._mu
 
     def to_cartesian(self) -> CartesianCoordinates:

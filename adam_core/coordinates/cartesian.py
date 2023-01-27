@@ -83,84 +83,124 @@ class CartesianCoordinates(Coordinates):
         )
         return
 
-    @property
     def x(self):
+        """
+        X-coordinate
+        """
         return self._values[:, 0]
 
-    @property
     def y(self):
+        """
+        Y-coordinate
+        """
         return self._values[:, 1]
 
-    @property
     def z(self):
+        """
+        Z-coordinate
+        """
         return self._values[:, 2]
 
-    @property
     def vx(self):
+        """
+        X-coordinate velocity
+        """
         return self._values[:, 3]
 
-    @property
     def vy(self):
+        """
+        Y-coordinate velocity
+        """
         return self._values[:, 4]
 
-    @property
     def vz(self):
+        """
+        Z-coordinate velocity
+        """
         return self._values[:, 5]
 
-    @property
     def sigma_x(self):
+        """
+        1-sigma uncertainty in the X-coordinate
+        """
         return self.sigmas[:, 0]
 
-    @property
     def sigma_y(self):
+        """
+        1-sigma uncertainty in the Y-coordinate
+        """
         return self.sigmas[:, 1]
 
-    @property
     def sigma_z(self):
+        """
+        1-sigma uncertainty in the Z-coordinate
+        """
         return self.sigmas[:, 2]
 
-    @property
     def sigma_vx(self):
+        """
+        1-sigma uncertainty in the X-coordinate velocity
+        """
         return self.sigmas[:, 3]
 
-    @property
     def sigma_vy(self):
+        """
+        1-sigma uncertainty in the Y-coordinate velocity
+        """
         return self.sigmas[:, 4]
 
-    @property
     def sigma_vz(self):
+        """
+        1-sigma uncertainty in the Z-coordinate velocity
+        """
         return self.sigmas[:, 5]
 
-    @property
     def r(self):
+        """
+        Position vector
+        """
         return self._values[:, 0:3]
 
-    @property
     def v(self):
+        """
+        Velocity vector
+        """
         return self._values[:, 3:6]
 
-    @property
-    def sigma_r(self):
+    def sigma_r_mag(self):
+        """
+        1-sigma uncertainty in the position
+        """
         return np.sqrt(np.sum(self.sigmas.filled()[:, 0:3] ** 2, axis=1))
 
-    @property
-    def sigma_v(self):
+    def sigma_v_mag(self):
+        """
+        1-sigma uncertainty in the velocity
+        """
         return np.sqrt(np.sum(self.sigmas.filled()[:, 3:6] ** 2, axis=1))
 
-    @property
     def r_mag(self):
+        """
+        Magnitude of the position vector
+        """
         return np.linalg.norm(self.r.filled(), axis=1)
 
-    @property
     def v_mag(self):
+        """
+        Magnitude of the velocity vector
+        """
         return np.linalg.norm(self.v.filled(), axis=1)
 
-    @property
     def r_hat(self):
+        """
+        Unit vector in the direction of the position vector
+        """
         return self.r.filled() / self.r_mag.reshape(-1, 1)
 
-    @property
     def v_hat(self):
+        """
+        Unit vector in the direction of the velocity vector
+        """
         return self.v.filled() / self.v_mag.reshape(-1, 1)
 
     def to_cartesian(self):

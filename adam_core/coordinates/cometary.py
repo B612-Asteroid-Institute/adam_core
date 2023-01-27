@@ -81,66 +81,106 @@ class CometaryCoordinates(Coordinates):
 
         return
 
-    @property
     def q(self):
+        """
+        Periapsis distance
+        """
         return self._values[:, 0]
 
-    @property
     def e(self):
+        """
+        Eccentricity
+        """
         return self._values[:, 1]
 
-    @property
     def i(self):
+        """
+        Inclination
+        """
         return self._values[:, 2]
 
-    @property
     def raan(self):
+        """
+        Right ascension of the ascending node
+        """
         return self._values[:, 3]
 
-    @property
     def ap(self):
+        """
+        Argument of periapsis
+        """
         return self._values[:, 4]
 
-    @property
     def tp(self):
+        """
+        Time of periapse passage
+        """
         return self._values[:, 5]
 
-    @property
     def sigma_q(self):
+        """
+        1-sigma uncertainty in periapsis distance
+        """
         return self.sigmas[:, 0]
 
-    @property
     def sigma_e(self):
+        """
+        1-sigma uncertainty in eccentricity
+        """
         return self.sigmas[:, 1]
 
-    @property
     def sigma_i(self):
+        """
+        1-sigma uncertainty in inclination
+        """
         return self.sigmas[:, 2]
 
-    @property
     def sigma_raan(self):
+        """
+        1-sigma uncertainty in right ascension of the ascending node
+        """
         return self.sigmas[:, 3]
 
-    @property
     def sigma_ap(self):
+        """
+        1-sigma uncertainty in argument of periapsis
+        """
         return self.sigmas[:, 4]
 
-    @property
     def sigma_tp(self):
+        """
+        1-sigma uncertainty in time of periapse passage
+        """
         return self.sigmas[:, 5]
 
-    @property
     def a(self):
-        # pericenter distance
+        """
+        Semi-major axis
+        """
         return self.q / (1 - self.e)
 
-    @property
-    def p(self):
-        # apocenter distance
+    def Q(self):
+        """
+        Apoapsis distance
+        """
         return self.a * (1 + self.e)
 
-    @property
+    def p(self):
+        """
+        Semi-latus rectum
+        """
+        return self.a / (1 - self.e**2)
+
+    def P(self):
+        """
+        Period
+        """
+        return np.sqrt(4 * np.pi**2 * self.a**3 / self.mu)
+
     def mu(self):
+        """
+        Gravitational parameter
+        """
         return self._mu
 
     def to_cartesian(self) -> CartesianCoordinates:
