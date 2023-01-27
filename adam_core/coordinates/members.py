@@ -176,6 +176,24 @@ class CoordinateMembers(Indexable):
                 and "SphericalCoordinates" in self.__allowed_coordinate_types
             ):
                 self._cometary = transform_coordinates(self._spherical, "cometary")
+        return self._cometary
+
+    def to_frame(self, frame: str):
+        """
+        Rotate coordinates to desired frame. Rotation is applied to the Cartesian coordinates.
+        All other coordinate types are reset to None.
+
+        Parameters
+        ----------
+        frame : {'ecliptic', 'equatorial'}
+            Desired reference frame of the output coordinates.
+        """
+        self._cartesian = self.cartesian.to_frame(frame)
+        self._keplerian = None
+        self._cometary = None
+        self._spherical = None
+        self._bernstein_khushalani = None
+        return
 
         return self._cometary
 
