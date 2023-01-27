@@ -20,10 +20,10 @@ class CoordinateMembers(Indexable):
     def __init__(
         self,
         coordinates: Optional[Coordinates] = None,
-        cartesian=True,
-        keplerian=True,
-        spherical=True,
-        cometary=True,
+        cartesian: bool = True,
+        keplerian: bool = True,
+        spherical: bool = True,
+        cometary: bool = True,
     ):
         self._cartesian = None
         self._spherical = None
@@ -73,11 +73,13 @@ class CoordinateMembers(Indexable):
 
     @property
     def cartesian(self):
+
         if "CartesianCoordinates" not in self.__allowed_coordinate_types:
             err = "Cartesian coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._cartesian is None and "CartesianCoordinates":
+
             if (
                 self._keplerian is not None
                 and "KeplerianCoordinates" in self.__allowed_coordinate_types
@@ -98,11 +100,13 @@ class CoordinateMembers(Indexable):
 
     @property
     def spherical(self):
+
         if "SphericalCoordinates" not in self.__allowed_coordinate_types:
             err = "Spherical coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._spherical is None:
+
             if (
                 self._cartesian is not None
                 and "CartesianCoordinates" in self.__allowed_coordinate_types
@@ -123,11 +127,13 @@ class CoordinateMembers(Indexable):
 
     @property
     def keplerian(self):
+
         if "KeplerianCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._keplerian is None:
+
             if (
                 self._cartesian is not None
                 and "CartesianCoordinates" in self.__allowed_coordinate_types
@@ -148,11 +154,13 @@ class CoordinateMembers(Indexable):
 
     @property
     def cometary(self):
+
         if "CometaryCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._cometary is None:
+
             if (
                 self._cartesian is not None
                 and "CartesianCoordinates" in self.__allowed_coordinate_types
@@ -173,25 +181,32 @@ class CoordinateMembers(Indexable):
 
     def to_df(
         self,
-        time_scale: str = "tdb",
+        time_scale: Optional[str] = None,
         coordinate_type: Optional[str] = None,
         sigmas: bool = False,
         covariances: bool = False,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
     ) -> pd.DataFrame:
         """
         Represent coordinates as a `~pandas.DataFrame`.
 
         Parameters
         ----------
-        time_scale : {"tdb", "tt", "utc"}
-            Desired timescale of the output MJDs.
-        coordinate_type : {None, "cartesian", "spherical", "keplerian", "cometary"}
+        time_scale : {"tdb", "tt", "utc"}, optional
+            Desired timescale of the output MJDs. If None, will default to the time
+            scale of the current instance.
+        coordinate_type : {None, "cartesian", "spherical", "keplerian", "cometary"}, optional
             Desired output representation of the coordinates. If None, will default
             to coordinate type that was given at class initialization.
         sigmas : bool, optional
             Include 1-sigma uncertainty columns.
         covariances : bool, optional
             Include lower triangular covariance matrix columns.
+        origin_col : str
+            Name of the column to store the origin of each coordinate.
+        frame_col : str
+            Name of the column to store the coordinate frame.
 
         Returns
         -------
@@ -212,6 +227,8 @@ class CoordinateMembers(Indexable):
             "time_scale": time_scale,
             "sigmas": sigmas,
             "covariances": covariances,
+            "origin_col": origin_col,
+            "frame_col": frame_col,
         }
         if coordinate_type_ == "cartesian":
             df = self.cartesian.to_df(**kwargs)
@@ -355,6 +372,9 @@ class CoordinateMembers(Indexable):
         keplerian: bool = True,
         cometary: bool = True,
         spherical: bool = True,
+        coord_cols: Optional[OrderedDict] = None,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
     ) -> "CoordinateMembers":
         """
         Instantiate CoordinateMembers from a `pandas.DataFrame`. If all
@@ -397,5 +417,8 @@ class CoordinateMembers(Indexable):
             keplerian=keplerian,
             cometary=cometary,
             spherical=spherical,
+            coord_cols=coord_cols,
+            origin_col=origin_col,
+            frame_col=frame_col,
         )
         return cls(**data)
