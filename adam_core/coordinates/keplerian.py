@@ -145,19 +145,20 @@ class KeplerianCoordinates(Coordinates):
         return self._mu
 
     def to_cartesian(self) -> CartesianCoordinates:
-        from .transform import _keplerian_to_cartesian, keplerian_to_cartesian
+
+        from .transform import _keplerian_to_cartesian_a, keplerian_to_cartesian
 
         coords_cartesian = keplerian_to_cartesian(
             self.values.filled(),
             mu=MU,
-            max_iter=100,
+            max_iter=1000,
             tol=1e-15,
         )
         coords_cartesian = np.array(coords_cartesian)
 
         if self.covariances is not None:
             covariances_cartesian = transform_covariances_jacobian(
-                self.values, self.covariances, _keplerian_to_cartesian
+                self.values, self.covariances, _keplerian_to_cartesian_a
             )
         else:
             covariances_cartesian = None
@@ -193,6 +194,8 @@ class KeplerianCoordinates(Coordinates):
                 cartesian.values,
                 cartesian.covariances,
                 _cartesian_to_keplerian6,
+                in_axes=(0, 0, None),
+                out_axes=0,
                 t0=cartesian.times.tdb.mjd,
                 mu=mu,
             )
@@ -201,11 +204,11 @@ class KeplerianCoordinates(Coordinates):
 
         coords = cls(
             a=coords_keplerian[:, 0],
-            e=coords_keplerian[:, 2],
-            i=coords_keplerian[:, 3],
-            raan=coords_keplerian[:, 4],
-            ap=coords_keplerian[:, 5],
-            M=coords_keplerian[:, 6],
+            e=coords_keplerian[:, 4],
+            i=coords_keplerian[:, 5],
+            raan=coords_keplerian[:, 6],
+            ap=coords_keplerian[:, 7],
+            M=coords_keplerian[:, 8],
             times=cartesian.times,
             covariances=covariances_keplerian,
             origin=cartesian.origin,
