@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -29,12 +29,12 @@ for i in ["vx", "vy", "vz"]:
 class CartesianCoordinates(Coordinates):
     def __init__(
         self,
-        x: Optional[np.ndarray] = None,
-        y: Optional[np.ndarray] = None,
-        z: Optional[np.ndarray] = None,
-        vx: Optional[np.ndarray] = None,
-        vy: Optional[np.ndarray] = None,
-        vz: Optional[np.ndarray] = None,
+        x: Optional[Union[int, float, np.ndarray]] = None,
+        y: Optional[Union[int, float, np.ndarray]] = None,
+        z: Optional[Union[int, float, np.ndarray]] = None,
+        vx: Optional[Union[int, float, np.ndarray]] = None,
+        vy: Optional[Union[int, float, np.ndarray]] = None,
+        vz: Optional[Union[int, float, np.ndarray]] = None,
         times: Optional[Time] = None,
         covariances: Optional[np.ndarray] = None,
         sigma_x: Optional[np.ndarray] = None,

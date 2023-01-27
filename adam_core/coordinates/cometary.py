@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -40,12 +40,12 @@ Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 class CometaryCoordinates(Coordinates):
     def __init__(
         self,
-        q: Optional[np.ndarray] = None,
-        e: Optional[np.ndarray] = None,
-        i: Optional[np.ndarray] = None,
-        raan: Optional[np.ndarray] = None,
-        ap: Optional[np.ndarray] = None,
-        tp: Optional[np.ndarray] = None,
+        q: Optional[Union[int, float, np.ndarray]] = None,
+        e: Optional[Union[int, float, np.ndarray]] = None,
+        i: Optional[Union[int, float, np.ndarray]] = None,
+        raan: Optional[Union[int, float, np.ndarray]] = None,
+        ap: Optional[Union[int, float, np.ndarray]] = None,
+        tp: Optional[Union[int, float, np.ndarray]] = None,
         times: Optional[Time] = None,
         covariances: Optional[np.ndarray] = None,
         sigma_q: Optional[np.ndarray] = None,

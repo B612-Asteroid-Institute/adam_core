@@ -78,8 +78,8 @@ def _ingest_coordinate(
             N, D = coords.shape
             if N != N_:
                 err = (
-                    "q needs to be the same length as the existing coordinates.\nq has"
-                    f" length {N_} while coords has {N} coordinates in 6 dimensions."
+                    "q needs to be the same length as the existing coordinates.\n"
+                    f"q has length {N_} while coords has {N} coordinates in 6 dimensions."
                 )
                 raise ValueError(err)
 
@@ -179,32 +179,41 @@ class Coordinates(Indexable):
         D = len(kwargs)
         units_ = OrderedDict()
         for d, (name, q) in enumerate(kwargs.items()):
+            if isinstance(q, (int, float)):
+                q_ = np.array([q], dtype=np.float64)
+            else:
+                q_ = q
+
             # If the coordinate dimension has a coresponding unit
             # then use that unit. If it does not look for the unit
             # in the units kwarg.
-            if isinstance(q, Quantity):
-                units_[name] = q.unit
-                q = q.value
+            if isinstance(q_, Quantity):
+                units_[name] = q_.unit
+                q_ = q_.value
             else:
                 logger.debug(
-                    f"Coordinate dimension {name} does not have a corresponding unit,"
-                    f" using unit defined in units kwarg ({units[name]})."
+                    f"Coordinate dimension {name} does not have a corresponding unit, "
+                    f"using unit defined in units kwarg ({units[name]})."
                 )
                 units_[name] = units[name]
 
-            coords = _ingest_coordinate(q, d, coords, D=D)
+            coords = _ingest_coordinate(q_, d, coords, D=D)
 
         self._values = coords
         if isinstance(times, Time):
-            if len(self.values) != len(times):
-                err = (
-                    "coordinates (N = {}) and times (N = {}) do not have the same"
-                    " length.\nIf times are defined, each coordinate must have a"
-                    " corresponding time.\n"
-                )
-                raise ValueError(err.format(len(self._values), len(times)))
+            if isinstance(times.value, (int, float)):
+                times_ = Time([times.value], scale=times.scale, format=times.format)
+            else:
+                times_ = times
 
-            self._times = times
+            if len(self.values) != len(times_):
+                err = (
+                    "coordinates (N = {}) and times (N = {}) do not have the same length.\n"
+                    "If times are defined, each coordinate must have a corresponding time.\n"
+                )
+                raise ValueError(err.format(len(self._values), len(times_)))
+
+            self._times = times_
         else:
             self._times = None
 
@@ -238,10 +247,7 @@ class Coordinates(Indexable):
             not isinstance(sigmas, (tuple, np.ndarray, np.ma.masked_array))
             and sigmas is not None
         ):
-            err = (
-                "sigmas should be one of {None, `~numpy.ndarray`,"
-                " `~numpy.ma.masked_array`, tuple}"
-            )
+            err = "sigmas should be one of {None, `~numpy.ndarray`, `~numpy.ma.masked_array`, tuple}"
             raise TypeError(err)
 
         if covariances is not None:
@@ -249,8 +255,8 @@ class Coordinates(Indexable):
                 sigmas, (np.ndarray, np.ma.masked_array)
             ):
                 logger.info(
-                    "Both covariances and sigmas have been given. Sigmas will be"
-                    " ignored and the covariance matrices will be used instead."
+                    "Both covariances and sigmas have been given. Sigmas will be ignored "
+                    "and the covariance matrices will be used instead."
                 )
             self._covariances = _ingest_covariance(coords, covariances)
 
@@ -299,6 +305,7 @@ class Coordinates(Indexable):
 
     @property
     def sigmas(self):
+
         sigmas = None
         if self._covariances is not None:
             cov_diag = np.diagonal(self._covariances, axis1=1, axis2=2)
@@ -340,8 +347,7 @@ class Coordinates(Indexable):
         for dim, unit in self.units.items():
             if units[dim] != unit:
                 logger.debug(
-                    f"Coordinate dimension {dim} has units in {unit}, not the given"
-                    f" units of {units[dim]}."
+                    f"Coordinate dimension {dim} has units in {unit}, not the given units of {units[dim]}."
                 )
                 return False
         return True
@@ -454,6 +460,8 @@ class Coordinates(Indexable):
         for i, (k, v) in enumerate(coord_cols.items()):
             if v in df.columns:
                 data[k] = df[v].values
+            else:
+                data[k] = None
 
         if origin_col in df.columns:
             data["origin"] = df[origin_col].values
