@@ -2,6 +2,7 @@ from collections import OrderedDict
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 
@@ -162,7 +163,8 @@ class SphericalCoordinates(Coordinates):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates):
+    def from_cartesian(cls, cartesian: CartesianCoordinates) -> "SphericalCoordinates":
+
         from .transform import _cartesian_to_spherical, cartesian_to_spherical
 
         coords_spherical = cartesian_to_spherical(cartesian.values.filled())
@@ -192,8 +194,12 @@ class SphericalCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls, df, coord_cols=SPHERICAL_COLS, origin_col="origin", frame_col="frame"
-    ):
+        cls,
+        df: pd.DataFrame,
+        coord_cols: OrderedDict = SPHERICAL_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "SphericalCoordinates":
         """
         Create a SphericalCoordinates class from a dataframe.
 

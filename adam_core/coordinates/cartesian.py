@@ -2,6 +2,7 @@ from collections import OrderedDict
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 
@@ -167,7 +168,9 @@ class CartesianCoordinates(Coordinates):
         return self
 
     @classmethod
-    def from_cartesian(cls, cartesian):
+    def from_cartesian(
+        cls, cartesian: "CartesianCoordinates"
+    ) -> "CartesianCoordinates":
         return cartesian
 
     def _rotate(self, matrix):
@@ -225,11 +228,11 @@ class CartesianCoordinates(Coordinates):
     @classmethod
     def from_df(
         cls,
-        df,
-        coord_cols=CARTESIAN_COLS,
-        origin_col="origin",
-        frame_col="frame",
-    ):
+        df: pd.DataFrame,
+        coord_cols: OrderedDict = CARTESIAN_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "CartesianCoordinates":
         """
         Create a CartesianCoordinates class from a dataframe.
 

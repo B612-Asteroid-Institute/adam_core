@@ -2,6 +2,7 @@ from collections import OrderedDict
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 from jax import config
@@ -179,7 +180,8 @@ class KeplerianCoordinates(Coordinates):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates, mu=MU):
+    def from_cartesian(cls, cartesian: CartesianCoordinates, mu: float = MU):
+
         from .transform import _cartesian_to_keplerian6, cartesian_to_keplerian
 
         coords_keplerian = cartesian_to_keplerian(
@@ -220,8 +222,12 @@ class KeplerianCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls, df, coord_cols=KEPLERIAN_COLS, origin_col="origin", frame_col="frame"
-    ):
+        cls,
+        df: pd.DataFrame,
+        coord_cols: OrderedDict = KEPLERIAN_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "KeplerianCoordinates":
         """
         Create a KeplerianCoordinates class from a dataframe.
 

@@ -3,6 +3,7 @@ from typing import Optional
 
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 from jax import config
@@ -194,7 +195,10 @@ class CometaryCoordinates(Coordinates):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates, mu=MU):
+    def from_cartesian(
+        cls, cartesian: CartesianCoordinates, mu: float = MU
+    ) -> "CometaryCoordinates":
+
         from .transform import _cartesian_to_cometary, cartesian_to_cometary
 
         if cartesian.times is None:
@@ -241,8 +245,12 @@ class CometaryCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls, df, coord_cols=COMETARY_COLS, origin_col="origin", frame_col="frame"
-    ):
+        cls,
+        df: pd.DataFrame,
+        coord_cols: OrderedDict = COMETARY_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "CometaryCoordinates":
         """
         Create a KeplerianCoordinates class from a dataframe.
 
