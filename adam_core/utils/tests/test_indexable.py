@@ -4,7 +4,12 @@ import numpy as np
 import pytest
 from astropy.time import Time
 
-from ..indexable import Indexable, _convert_grouped_array_to_slices, concatenate
+from ..indexable import (
+    Indexable,
+    _convert_grouped_array_to_slices,
+    _map_values_to_integers,
+    concatenate,
+)
 
 SLICES = [
     slice(0, 1, 1),
@@ -127,6 +132,32 @@ def test__convert_grouped_array_to_slices():
         ]
     )
     np.testing.assert_equal(slices, desired)
+
+
+def test__map_values_to_integers():
+    # Test that the function correctly maps integer values to integers
+    values = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    mapping = _map_values_to_integers(values)
+    desired = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    np.testing.assert_equal(mapping, desired)
+
+    # Test that the function correctly maps string values to integers
+    values = np.array(["a", "a", "b", "c", "d", "e", "e", "e"])
+    mapping = _map_values_to_integers(values)
+    desired = np.array([0, 0, 1, 2, 3, 4, 4, 4])
+    np.testing.assert_equal(mapping, desired)
+
+    # Test that the function correctly maps float values with duplicates to integers
+    values = np.array([0, 1, 0, 1], dtype=float)
+    mapping = _map_values_to_integers(values)
+    desired = np.array([0, 1, 0, 1])
+    np.testing.assert_equal(mapping, desired)
+
+    # Test that the function correctly maps unsorted strings with duplicates to integers
+    values = np.array(["a", "b", "a"])
+    mapping = _map_values_to_integers(values)
+    desired = np.array([0, 1, 0])
+    np.testing.assert_equal(mapping, desired)
 
 
 def test__check_member_validity_raises():

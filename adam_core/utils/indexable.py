@@ -52,6 +52,29 @@ def _convert_grouped_array_to_slices(values: npt.ArrayLike) -> npt.NDArray[slice
     return np.array(slices)
 
 
+def _map_values_to_integers(values: npt.ArrayLike) -> npt.NDArray[int]:
+    """
+    Map the unique values in an array to integers.
+
+    Parameters
+    ----------
+    values : np.ArrayLike
+        The values to be mapped to integers.
+
+    Returns
+    -------
+    values_mapped : np.ndarray[int]
+        The values mapped to integers.
+    """
+    # We use pandas since numpy unique is slower for object dtypes
+    df = pd.DataFrame({"values": values})
+    df_unique = df.drop_duplicates(keep="first")
+    df_unique["values_mapped"] = np.arange(0, len(df_unique))
+    values_mapped = df.merge(df_unique, on="values", how="left")
+
+    return np.array(values_mapped["values_mapped"])
+
+
 class Indexable:
     """
     Class that enables indexing and slicing of itself and its members.
@@ -202,14 +225,12 @@ class Indexable:
         Raises
         ------
         ValueError: If all sliceable members do not have the same length.
+                    If the values are not None, str, or np.ndarray.
         """
         # Check if all the members are valid: have the same length
         self._member_length, self._member_index = self._check_member_validity()
 
-        # --- Part 2: Figure out the values that are going to be mapped to an index
-        # If the values are strings or floats, map their unique values to integers
-        # to make future queries faster.
-
+        # Figure out the values that are going to be mapped to an index
         # If no index values are given then we set the class index
         # to be the range of the member lengths
         if index_values is None:
@@ -235,16 +256,7 @@ class Indexable:
             and class_index_values.dtype.type != int
         ):
             logger.debug("Mapping class index values to integers.")
-            # We use pandas since numpy unique is slower for object dtypes
-            df = pd.DataFrame({"class_index_values": class_index_values})
-            df_unique = df.drop_duplicates(keep="first").copy()
-            df_unique["class_index_values_mapped"] = np.arange(0, len(df_unique))
-            class_index_values = df.merge(
-                df_unique, on="class_index_values", how="left"
-            )["class_index_values_mapped"].values
-
-        # --- Part 3: Now that we have the values that are going to be mapped to an index
-        # we can create the index.
+            class_index_values = _map_values_to_integers(class_index_values)
 
         # Extract unique values to act as the externally facing index.
         self._class_index = pd.unique(class_index_values)
