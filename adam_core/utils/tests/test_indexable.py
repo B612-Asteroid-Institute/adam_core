@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from astropy.time import Time
 
-from ..indexable import Indexable, concatenate
+from ..indexable import Indexable, _convert_grouped_array_to_slices, concatenate
 
 SLICES = [
     slice(0, 1, 1),
@@ -64,6 +64,69 @@ def assert_equal(a, b):
         assert a == b
 
     return
+
+
+def test__convert_grouped_array_to_slices_raises():
+    # Test that the function raises a ValueError if the array is not grouped
+    # (sorted but sort order does not matter)
+    array = np.array([0, 1, 0, 1])
+
+    with pytest.raises(ValueError):
+        _convert_grouped_array_to_slices(array)
+
+
+def test__convert_grouped_array_to_slices():
+    # Test that the function correctly converts a sorted array to slices
+    array = np.arange(0, 10)
+    slices = _convert_grouped_array_to_slices(array)
+    desired = np.array(
+        [
+            slice(0, 1, 1),
+            slice(1, 2, 1),
+            slice(2, 3, 1),
+            slice(3, 4, 1),
+            slice(4, 5, 1),
+            slice(5, 6, 1),
+            slice(6, 7, 1),
+            slice(7, 8, 1),
+            slice(8, 9, 1),
+            slice(9, 10, 1),
+        ]
+    )
+    np.testing.assert_equal(slices, desired)
+
+    # The order of the sorted array should not matter as long as all elements that
+    # are supposed to be in the same slice are grouped together
+    array = np.array([9, 8, 7, 6, 5, 4, 3, 2, 1, 0])
+    slices = _convert_grouped_array_to_slices(array)
+    np.testing.assert_equal(slices, desired)
+
+    # Test that the function correctly converts a sorted array to slices
+    # this time with duplicates in the array
+    array = np.array([0, 0, 1, 1])
+    slices = _convert_grouped_array_to_slices(array)
+    desired = np.array(
+        [
+            slice(0, 2, 1),
+            slice(2, 4, 1),
+        ]
+    )
+    np.testing.assert_equal(slices, desired)
+
+    # Test that the function correctly converts a sorted array to slices
+    # this time with only some duplicates in the array
+    array = np.array([0, 0, 0, 1, 1, 2, 3])
+    array.sort()
+    slices = _convert_grouped_array_to_slices(array)
+    desired = np.array(
+        [
+            slice(0, 3, 1),
+            slice(3, 5, 1),
+            slice(5, 6, 1),
+            slice(6, 7, 1),
+        ]
+    )
+    np.testing.assert_equal(slices, desired)
 
 
 def test__check_member_validity_raises():
@@ -229,7 +292,7 @@ def test_Indexable_set_index_int_sorted():
     # an array of slices
     np.testing.assert_equal(
         indexable._class_index_to_members,
-        np.array([slice(10 * i, 10 * (i + 1)) for i in range(10)]),
+        np.array([slice(10 * i, 10 * (i + 1), 1) for i in range(10)]),
     )
     assert indexable._class_index_to_members_is_slice is True
 
@@ -293,7 +356,7 @@ def test_Indexable_set_index_str_sorted():
     # We expect the class index to be the unique values of the index
     np.testing.assert_equal(
         indexable._class_index_to_members,
-        np.array([slice(10 * i, 10 * (i + 1)) for i in range(10)]),
+        np.array([slice(10 * i, 10 * (i + 1), 1) for i in range(10)]),
     )
     assert indexable._class_index_to_members_is_slice is True
 

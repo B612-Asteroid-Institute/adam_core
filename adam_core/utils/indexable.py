@@ -16,6 +16,42 @@ SLICEABLE_DATA_STRUCTURES = (np.ndarray, np.ma.masked_array, Time)
 UNSLICEABLE_DATA_STRUCTURES = (str, int, float, dict, bool, set, OrderedDict)
 
 
+def _convert_grouped_array_to_slices(values: npt.ArrayLike) -> npt.NDArray[slice]:
+    """
+    Converts an array of grouped values to a list of slices that select each
+    unique value in the array. Sort order doesn't matter.
+
+    Parameters
+    ----------
+    values : np.ArrayLike
+        The values to be converted to slices.
+
+    Returns
+    -------
+    slices : np.ndarray[slice]
+        The slices corresponding to the unique values.
+
+    Raises
+    ------
+    ValueError: If the values are not grouped.
+    """
+    # Pandas unique is faster than numpy unique for object dtypes
+    # and preserves the order of the unique values by default
+    unique_values = pd.unique(values)
+
+    slices = []
+    slice_start = 0
+    for i in unique_values:
+        mask = np.where(values == i)[0]
+        if (len(mask) > 1) and np.all(np.diff(mask) != 1):
+            raise ValueError("The values must be grouped.")
+
+        slices.append(slice(slice_start, slice_start + len(mask), 1))
+        slice_start += len(mask)
+
+    return np.array(slices)
+
+
 class Indexable:
     """
     Class that enables indexing and slicing of itself and its members.
@@ -213,25 +249,19 @@ class Indexable:
         # Extract unique values to act as the externally facing index.
         self._class_index = pd.unique(class_index_values)
 
-        # If the class index values are monotonically increasing then we can convert the class index
-        # into an array of slices. This will make __getitem__ significantly faster.
-        is_sorted = np.all((class_index_values[1:] - class_index_values[:-1]) >= 0)
-        if is_sorted:
-            logger.debug(
-                "Class index is sorted. Converting class index to an array of slices."
+        # See if we can convert the class index to an array of slices.
+        try:
+            self._class_index_to_members = _convert_grouped_array_to_slices(
+                class_index_values
             )
-            slices = []
-            slice_start = 0
-            for i in self._class_index:
-                mask = class_index_values[class_index_values == i]
-                slices.append(slice(slice_start, slice_start + len(mask)))
-                slice_start += len(mask)
-
-            self._class_index_to_members = np.array(slices)
             self._class_index_to_members_is_slice = True
-        else:
+            logger.debug(
+                "Class index values are grouped. Converted class index to an array of slices."
+            )
+        except ValueError:
             self._class_index_to_members = class_index_values
             self._class_index_to_members_is_slice = False
+            logger.debug("Class index values are not grouped.")
 
         return
 
