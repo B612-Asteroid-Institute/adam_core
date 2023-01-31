@@ -66,6 +66,31 @@ def assert_equal(a, b):
     return
 
 
+def test__check_member_validity_raises():
+    # Create invalid test indexable
+    class InvalidTestIndexable(Indexable):
+        def __init__(self):
+            self.index_array_1 = np.arange(11, dtype=int)
+            self.index_array_2 = np.arange(10, dtype=int)
+
+            Indexable.__init__(self)
+
+    # Check that the invalid test indexable raises a ValueError
+    with pytest.raises(ValueError):
+        InvalidTestIndexable()
+
+
+def test__check_member_validity():
+    # Create invalid test indexable
+    indexable = TestIndexable()
+    member_length, member_index = indexable._check_member_validity()
+
+    # Assert that the function correctly computes the length of the member
+    # attributes and sets the according member length and index
+    assert member_length == N
+    np.testing.assert_equal(member_index, np.arange(0, 100))
+
+
 def test_Indexable_slicing():
     # Create test indexable
     indexable = TestIndexable()

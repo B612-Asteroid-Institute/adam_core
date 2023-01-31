@@ -103,6 +103,38 @@ class Indexable:
     def index(self):
         self.set_index()
 
+    def _check_member_validity(self):
+        """
+        Scans the class's sliceable members and raises an error if they are
+        not all of the same length.
+
+        Returns
+        -------
+        member_length : int
+            The length of the members of the class.
+        member_index : `~numpy.ndarray`
+            The index of the members of the class.
+
+        Raises
+        ------
+        ValueError: If the members are not all of the same length.
+        """
+        # Scan members and if they are of a type that is sliceable
+        # then store the length. All sliceable members should have the same length
+        # along their first axis.
+        member_lengths = {
+            len(v)
+            for v in self.__dict__.values()
+            if isinstance(v, SLICEABLE_DATA_STRUCTURES)
+        }
+        if len(member_lengths) != 1:
+            raise ValueError("All sliceable members must have the same length.")
+        member_length = member_lengths.pop()
+
+        member_index = np.arange(0, member_length, dtype=int)
+
+        return member_length, member_index
+
     def set_index(self, index_values: Optional[Union[str, npt.ArrayLike]] = None):
         """
         Set an index on the class for the given values or attribute name.
@@ -135,25 +167,8 @@ class Indexable:
         ------
         ValueError: If all sliceable members do not have the same length.
         """
-        # --- Part 1: Determine the validity of this instance's members
-
-        # Scan members and if they are of a type that is sliceable
-        # then store the length. All sliceable members should have the same length
-        # along their first axis.
-        member_lengths = []
-        member_attributes = []
-        for k, v in self.__dict__.items():
-            if isinstance(v, SLICEABLE_DATA_STRUCTURES):
-                member_lengths.append(len(v))
-                member_attributes.append(k)
-
-        if len(np.unique(member_lengths)) != 1:
-            raise ValueError("All sliceable members must have the same length.")
-        else:
-            member_length = member_lengths[0]
-
-        self._member_length = member_length
-        self._member_index = np.arange(0, member_length, dtype=int)
+        # Check if all the members are valid: have the same length
+        self._member_length, self._member_index = self._check_member_validity()
 
         # --- Part 2: Figure out the values that are going to be mapped to an index
         # If the values are strings or floats, map their unique values to integers
