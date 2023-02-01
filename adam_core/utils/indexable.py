@@ -233,10 +233,12 @@ class Indexable:
         ----
         self._class_index : `~numpy.ndarray`
             The externally facing index of the class.
-        self._class_index_to_members : `~numpy.ndarray`
-            The mapping from the externally facing index to the class members.
-        self._class_index_to_members_is_slice : bool
-            Whether the mapping from the externally facing index to the class members are slices.
+        self._class_index_to_slices : `~numpy.ndarray`, None
+            The mapping from the externally facing index to the class members as slices into the
+            underlying arrays. None if the arrays are not grouped.
+        self._class_index_to_integers : `~numpy.ndarray`, None
+            The mapping from the externally facing index to the class members as integers into the
+            underlying arrays. None if the arrays are grouped and can be represented as slices
         self._class_index_attribute : str, None
             The attribute on which the index was set, if any. None if no attribute was used.
         self._member_index : `~numpy.ndarray`
@@ -286,16 +288,16 @@ class Indexable:
 
         # See if we can convert the class index to an array of slices.
         try:
-            self._class_index_to_members = _convert_grouped_array_to_slices(
+            self._class_index_to_slices = _convert_grouped_array_to_slices(
                 class_index_values
             )
-            self._class_index_to_members_is_slice = True
+            self._class_index_to_integers = None
             logger.debug(
                 "Class index values are grouped. Converted class index to an array of slices."
             )
         except ValueError:
-            self._class_index_to_members = class_index_values
-            self._class_index_to_members_is_slice = False
+            self._class_index_to_slices = None
+            self._class_index_to_integers = class_index_values
             logger.debug("Class index values are not grouped.")
 
         return
@@ -339,9 +341,9 @@ class Indexable:
         if isinstance(ind, slice) and ind.start is not None and ind.start >= len(self):
             raise IndexError(f"Index {ind.start} is out of bounds.")
 
-        elif isinstance(ind, slice) and self._class_index_to_members_is_slice:
+        elif isinstance(ind, slice) and self._class_index_to_slices is not None:
 
-            slices = self._class_index_to_members[ind]
+            slices = self._class_index_to_slices[ind]
 
             # If there is only one slice then we can just return it
             if len(slices) == 1:
@@ -376,7 +378,7 @@ class Indexable:
             )
             return self._member_index[
                 np.isin(
-                    self._class_index_to_members,
+                    self._class_index_to_integers,
                     self._class_index[ind],
                 )
             ]

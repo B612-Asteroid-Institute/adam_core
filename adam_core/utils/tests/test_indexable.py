@@ -305,11 +305,12 @@ def test_Indexable_set_index_int_unsorted():
         indexable._class_index, np.unique(indexable.index_array_int)
     )
 
-    # We expect the class index to be the unique values of the index
+    # The class index to members mapping should be an array of integers
+    # since the index is cannot be represented as slices
     np.testing.assert_equal(
-        indexable._class_index_to_members, indexable.index_array_int
+        indexable._class_index_to_integers, indexable.index_array_int
     )
-    assert indexable._class_index_to_members_is_slice is False
+    assert indexable._class_index_to_slices is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -334,13 +335,13 @@ def test_Indexable_set_index_int_sorted():
         indexable._class_index, np.unique(indexable.index_array_int)
     )
 
-    # Because the class index is sorted we now expect the class index to members mapping to be
-    # an array of slices
+    # The class index to slices mapping should be an array of slices
+    # since the index is can be represented as slices
     np.testing.assert_equal(
-        indexable._class_index_to_members,
+        indexable._class_index_to_slices,
         np.array([slice(10 * i, 10 * (i + 1), 1) for i in range(10)]),
     )
-    assert indexable._class_index_to_members_is_slice is True
+    assert indexable._class_index_to_integers is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -365,11 +366,12 @@ def test_Indexable_set_index_str_unsorted():
     assert indexable._class_index_attribute == "index_array_str"
     np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
 
-    # We expect the class index to be the unique values of the index
+    # The class index to members mapping should be an array of integers
+    # since the index is cannot be represented as slices
     np.testing.assert_equal(
-        indexable._class_index_to_members, indexable.index_array_int
+        indexable._class_index_to_integers, indexable.index_array_int
     )
-    assert indexable._class_index_to_members_is_slice is False
+    assert indexable._class_index_to_slices is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -399,12 +401,13 @@ def test_Indexable_set_index_str_sorted():
     assert indexable._class_index_attribute == "index_array_str"
     np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
 
-    # We expect the class index to be the unique values of the index
+    # The class index to slices mapping should be an array of slices
+    # since the index is can be represented as slices
     np.testing.assert_equal(
-        indexable._class_index_to_members,
+        indexable._class_index_to_slices,
         np.array([slice(10 * i, 10 * (i + 1), 1) for i in range(10)]),
     )
-    assert indexable._class_index_to_members_is_slice is True
+    assert indexable._class_index_to_integers is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
