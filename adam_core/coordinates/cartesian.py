@@ -1,5 +1,4 @@
 import logging
-from collections import OrderedDict
 from copy import deepcopy
 from typing import Optional, Union
 
@@ -12,8 +11,8 @@ from .coordinates import Coordinates
 
 __all__ = ["CartesianCoordinates", "CARTESIAN_COLS", "CARTESIAN_UNITS"]
 
-CARTESIAN_COLS = OrderedDict()
-CARTESIAN_UNITS = OrderedDict()
+CARTESIAN_COLS = {}
+CARTESIAN_UNITS = {}
 for i in ["x", "y", "z"]:
     CARTESIAN_COLS[i] = i
     CARTESIAN_UNITS[i] = u.au
@@ -44,8 +43,8 @@ class CartesianCoordinates(Coordinates):
         sigma_vz: Optional[np.ndarray] = None,
         origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = CARTESIAN_COLS,
-        units: OrderedDict = CARTESIAN_UNITS,
+        names: dict = CARTESIAN_COLS,
+        units: dict = CARTESIAN_UNITS,
     ):
         """
 
@@ -368,7 +367,7 @@ class CartesianCoordinates(Coordinates):
     def from_df(
         cls,
         df: pd.DataFrame,
-        coord_cols: OrderedDict = CARTESIAN_COLS,
+        coord_cols: dict = CARTESIAN_COLS,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> "CartesianCoordinates":
@@ -380,10 +379,10 @@ class CartesianCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing Cartesian coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["x"] = Column name of x distance values
                 coord_cols["y"] = Column name of y distance values
                 coord_cols["z"] = Column name of z distance values

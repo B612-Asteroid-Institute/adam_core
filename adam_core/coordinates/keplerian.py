@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from typing import Optional, Union
 
 import numpy as np
@@ -21,8 +20,8 @@ __all__ = [
     "KEPLERIAN_UNITS",
 ]
 
-KEPLERIAN_COLS = OrderedDict()
-KEPLERIAN_UNITS = OrderedDict()
+KEPLERIAN_COLS = {}
+KEPLERIAN_UNITS = {}
 for i in ["a", "e", "i", "raan", "ap", "M"]:
     KEPLERIAN_COLS[i] = i
 KEPLERIAN_UNITS["a"] = u.au
@@ -54,8 +53,8 @@ class KeplerianCoordinates(Coordinates):
         sigma_M: Optional[np.ndarray] = None,
         origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = KEPLERIAN_COLS,
-        units: OrderedDict = KEPLERIAN_UNITS,
+        names: dict = KEPLERIAN_COLS,
+        units: dict = KEPLERIAN_UNITS,
         mu: float = MU,
     ):
         sigmas = (sigma_a, sigma_e, sigma_i, sigma_raan, sigma_ap, sigma_M)
@@ -182,7 +181,6 @@ class KeplerianCoordinates(Coordinates):
         return self._mu
 
     def to_cartesian(self) -> CartesianCoordinates:
-
         from .transform import _keplerian_to_cartesian_a, keplerian_to_cartesian
 
         coords_cartesian = keplerian_to_cartesian(
@@ -217,7 +215,6 @@ class KeplerianCoordinates(Coordinates):
 
     @classmethod
     def from_cartesian(cls, cartesian: CartesianCoordinates, mu: float = MU):
-
         from .transform import _cartesian_to_keplerian6, cartesian_to_keplerian
 
         coords_keplerian = cartesian_to_keplerian(
@@ -260,7 +257,7 @@ class KeplerianCoordinates(Coordinates):
     def from_df(
         cls,
         df: pd.DataFrame,
-        coord_cols: OrderedDict = KEPLERIAN_COLS,
+        coord_cols: dict = KEPLERIAN_COLS,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> "KeplerianCoordinates":
@@ -272,10 +269,10 @@ class KeplerianCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing Keplerian coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["a"] = Column name of semi-major axis values
                 coord_cols["e"] = Column name of eccentricity values
                 coord_cols["i"] = Column name of inclination values

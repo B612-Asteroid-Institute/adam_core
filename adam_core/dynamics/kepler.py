@@ -103,7 +103,6 @@ def solve_kepler(e: float, M: float, max_iter: int = 100, tol: float = 1e-15) ->
 
     @jit
     def _elliptical_newton_raphson(p):
-
         E = p[0]
         e = p[1]
         M = p[2]
@@ -127,7 +126,6 @@ def solve_kepler(e: float, M: float, max_iter: int = 100, tol: float = 1e-15) ->
 
     @jit
     def _hyperbolic_newton_raphson(p):
-
         F = p[0]
         e = p[1]
         M = p[2]

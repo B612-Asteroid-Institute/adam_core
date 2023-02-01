@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from copy import deepcopy
 from typing import List, Union
 
@@ -93,7 +92,7 @@ def _convert_covariances_units(
 
 
 def convert_coordinates(
-    coords: Coordinates, desired_units: Union[List, dict, OrderedDict]
+    coords: Coordinates, desired_units: Union[List, dict]
 ) -> Coordinates:
     """
     Convert coordinates to desired units.
@@ -102,7 +101,7 @@ def convert_coordinates(
     ----------
     coords : `~thor.coordinates.Coordinates` (N, D)
         Coordinates that need to be converted.
-    desired_units : list, `~numpy.ndarray`, dict, OrderedDict
+    desired_units : list, `~numpy.ndarray`, dict
         Desired units for each coordinate dimension expressed as an array-like
         or a dictionary keyed on coordinate dimensions and with values that represent
         the desired units. If a dictionary is passed, then only the coordinate dimensions
@@ -121,12 +120,12 @@ def convert_coordinates(
     Raises
     ------
     ValueError : If units or desired_units do not have length D.
-    ValueError : If desired_units is not a list, `~numpy.ndarray`, dict or OrderedDict
+    ValueError : If desired_units is not a list, `~numpy.ndarray`, dict
     """
     N, D = coords.values.shape
 
-    desired_units_ = OrderedDict()
-    if isinstance(desired_units, (dict, OrderedDict)):
+    desired_units_ = {}
+    if isinstance(desired_units, dict):
         for k, v in coords.units.items():
             if k not in desired_units:
                 desired_units_[k] = v
@@ -145,7 +144,7 @@ def convert_coordinates(
             desired_units_[k] = desired_units[i]
 
     else:
-        err = "desired_units should be one of {list, '~numpy.ndarray`, dict, OrderedDict()}"
+        err = "desired_units should be one of {list, '~numpy.ndarray`, dict}"
         raise ValueError(err)
 
     # Make a copy of the input coordinates

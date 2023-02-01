@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from copy import deepcopy
 from typing import Optional
 
@@ -72,13 +71,11 @@ class CoordinateMembers(Indexable):
         return
 
     def cartesian(self):
-
         if "CartesianCoordinates" not in self.__allowed_coordinate_types:
             err = "Cartesian coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._cartesian is None and "CartesianCoordinates":
-
             if (
                 self._keplerian is not None
                 and "KeplerianCoordinates" in self.__allowed_coordinate_types
@@ -98,13 +95,11 @@ class CoordinateMembers(Indexable):
         return self._cartesian
 
     def spherical(self):
-
         if "SphericalCoordinates" not in self.__allowed_coordinate_types:
             err = "Spherical coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._spherical is None:
-
             if (
                 self._cartesian is not None
                 and "CartesianCoordinates" in self.__allowed_coordinate_types
@@ -124,13 +119,11 @@ class CoordinateMembers(Indexable):
         return self._spherical
 
     def keplerian(self):
-
         if "KeplerianCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._keplerian is None:
-
             if (
                 self._cartesian is not None
                 and "CartesianCoordinates" in self.__allowed_coordinate_types
@@ -150,13 +143,11 @@ class CoordinateMembers(Indexable):
         return self._keplerian
 
     def cometary(self):
-
         if "CometaryCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
             raise ValueError(err)
 
         if self._cometary is None:
-
             if (
                 self._cartesian is not None
                 and "CartesianCoordinates" in self.__allowed_coordinate_types
@@ -284,7 +275,7 @@ class CoordinateMembers(Indexable):
         keplerian: bool = True,
         cometary: bool = True,
         spherical: bool = True,
-        coord_cols: Optional[OrderedDict] = None,
+        coord_cols: Optional[dict] = None,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> dict:
@@ -306,8 +297,8 @@ class CoordinateMembers(Indexable):
             Look for Cometary coordinates.
         spherical : bool, optional
             Look for Spherical coordinates.
-        coord_cols : OrderedDict, optional
-            Ordered dictionary containing the coordinate dimensions as keys and their equivalent columns
+        coord_cols : dict, optional
+            Dictionary containing the coordinate dimensions as keys and their equivalent columns
             as values. If None, this function will use the default dictionaries for each coordinate class.
             The following coordinate (dictionary) keys are supported:
                 Cartesian columns: x, y, z, vx, vy, vz
@@ -354,7 +345,7 @@ class CoordinateMembers(Indexable):
                     err += f" Spherical columns: {', '.join(SPHERICAL_COLS.keys())}\n"
                 raise ValueError(err)
 
-        elif isinstance(coord_cols, OrderedDict):
+        elif isinstance(coord_cols, dict):
             if cartesian and coord_cols.keys() == CARTESIAN_COLS.keys():
                 coord_class = CartesianCoordinates
             elif keplerian and coord_cols.keys() == KEPLERIAN_COLS.keys():
@@ -381,7 +372,7 @@ class CoordinateMembers(Indexable):
             coord_cols_ = coord_cols
 
         else:
-            err = "coord_cols should be one of {None, OrderedDict}."
+            err = "coord_cols should be one of {None, dict}."
             raise ValueError(err)
 
         coordinates = coord_class.from_df(
@@ -399,7 +390,7 @@ class CoordinateMembers(Indexable):
         keplerian: bool = True,
         cometary: bool = True,
         spherical: bool = True,
-        coord_cols: Optional[OrderedDict] = None,
+        coord_cols: Optional[dict] = None,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> "CoordinateMembers":
@@ -420,8 +411,8 @@ class CoordinateMembers(Indexable):
             Look for Cometary coordinates.
         spherical : bool, optional
             Look for Spherical coordinates.
-        coord_cols : OrderedDict, optional
-            Ordered dictionary containing the coordinate dimensions as keys and their equivalent columns
+        coord_cols : dict, optional
+            Dictionary containing the coordinate dimensions as keys and their equivalent columns
             as values. If None, this function will use the default dictionaries for each coordinate class.
             The following coordinate (dictionary) keys are supported:
                 Cartesian columns: x, y, z, vx, vy, vz

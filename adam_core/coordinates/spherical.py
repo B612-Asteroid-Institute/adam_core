@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from typing import Optional, Union
 
 import numpy as np
@@ -16,8 +15,8 @@ __all__ = [
     "SPHERICAL_UNITS",
 ]
 
-SPHERICAL_COLS = OrderedDict()
-SPHERICAL_UNITS = OrderedDict()
+SPHERICAL_COLS = {}
+SPHERICAL_UNITS = {}
 for i in ["rho", "lon", "lat", "vrho", "vlon", "vlat"]:
     SPHERICAL_COLS[i] = i
 SPHERICAL_UNITS["rho"] = u.au
@@ -47,8 +46,8 @@ class SphericalCoordinates(Coordinates):
         sigma_vlat: Optional[np.ndarray] = None,
         origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = SPHERICAL_COLS,
-        units: OrderedDict = SPHERICAL_UNITS,
+        names: dict = SPHERICAL_COLS,
+        units: dict = SPHERICAL_UNITS,
     ):
         """
 
@@ -160,7 +159,6 @@ class SphericalCoordinates(Coordinates):
         return self.sigmas[:, 5]
 
     def to_cartesian(self) -> CartesianCoordinates:
-
         from .transform import _spherical_to_cartesian, spherical_to_cartesian
 
         coords_cartesian = spherical_to_cartesian(self.values.filled())
@@ -189,7 +187,6 @@ class SphericalCoordinates(Coordinates):
 
     @classmethod
     def from_cartesian(cls, cartesian: CartesianCoordinates) -> "SphericalCoordinates":
-
         from .transform import _cartesian_to_spherical, cartesian_to_spherical
 
         coords_spherical = cartesian_to_spherical(cartesian.values.filled())
@@ -221,7 +218,7 @@ class SphericalCoordinates(Coordinates):
     def from_df(
         cls,
         df: pd.DataFrame,
-        coord_cols: OrderedDict = SPHERICAL_COLS,
+        coord_cols: dict = SPHERICAL_COLS,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> "SphericalCoordinates":
@@ -233,10 +230,10 @@ class SphericalCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing spherical coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["rho"] = Column name of radial distance values
                 coord_cols["lon"] = Column name of longitudinal values
                 coord_cols["rho"] = Column name of latitudinal values

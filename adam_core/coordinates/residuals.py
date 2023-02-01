@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import mahalanobis
@@ -112,7 +110,7 @@ def calc_residuals(observed: Coordinates, predicted: Coordinates):
     if not predicted.has_units(observed.units):
         predicted = convert_coordinates(predicted, observed.units)
 
-    residual_names = OrderedDict()
+    residual_names = {}
     for k, v in observed.names.items():
         residual_names[k] = f"d{v}"
 

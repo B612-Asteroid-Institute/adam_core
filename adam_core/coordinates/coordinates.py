@@ -1,5 +1,4 @@
 import logging
-from collections import OrderedDict
 from typing import List, Optional, Union
 
 import numpy as np
@@ -169,15 +168,15 @@ class Coordinates(Indexable):
         times: Optional[Time] = None,
         origin: Optional[Union[np.ndarray, str]] = "heliocenter",
         frame: Optional[Union[np.ndarray, str]] = "ecliptic",
-        names: OrderedDict = OrderedDict(),
-        units: OrderedDict = OrderedDict(),
+        names: dict = {},
+        units: dict = {},
         **kwargs,
     ):
         coords = None
 
         # Total number of coordinate dimensions
         D = len(kwargs)
-        units_ = OrderedDict()
+        units_ = {}
         for d, (name, q) in enumerate(kwargs.items()):
             if isinstance(q, (int, float)):
                 q_ = np.array([q], dtype=np.float64)
@@ -305,7 +304,6 @@ class Coordinates(Indexable):
 
     @property
     def sigmas(self):
-
         sigmas = None
         if self._covariances is not None:
             cov_diag = np.diagonal(self._covariances, axis1=1, axis2=2)
@@ -329,13 +327,13 @@ class Coordinates(Indexable):
     def units(self):
         return self._units
 
-    def has_units(self, units: OrderedDict) -> bool:
+    def has_units(self, units: dict) -> bool:
         """
         Check if these coordinate have the given units.
 
         Parameters
         ----------
-        units : OrderedDict
+        units : dict
             Dictionary containing coordinate dimension names as keys
             and astropy units as values.
 
@@ -423,7 +421,7 @@ class Coordinates(Indexable):
     @staticmethod
     def _dict_from_df(
         df: pd.DataFrame,
-        coord_cols: OrderedDict,
+        coord_cols: dict,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> dict:
@@ -435,10 +433,10 @@ class Coordinates(Indexable):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing the coordinate dimensions as keys and their equivalent columns
+        coord_cols : dict
+            Dictionary containing the coordinate dimensions as keys and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["a"] = Column name of semi-major axis values
                 coord_cols["e"] = Column name of eccentricity values
                 coord_cols["i"] = Column name of inclination values

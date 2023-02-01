@@ -1198,7 +1198,6 @@ def cartesian_to_origin(
     vectors = np.zeros(coords.values.shape, dtype=np.float64)
 
     for origin_in in unique_origins:
-
         raise NotImplementedError("get_perturber_state not implemented yet")
         # mask = np.where(coords.origin == origin_in)[0]
         # vectors[mask] = get_perturber_state(

@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from typing import Optional, Union
 
 import jax.numpy as jnp
@@ -22,8 +21,8 @@ __all__ = [
     "COMETARY_UNITS",
 ]
 
-COMETARY_COLS = OrderedDict()
-COMETARY_UNITS = OrderedDict()
+COMETARY_COLS = {}
+COMETARY_UNITS = {}
 for i in ["q", "e", "i", "raan", "ap", "tp"]:
     COMETARY_COLS[i] = i
 COMETARY_UNITS["q"] = u.au
@@ -56,8 +55,8 @@ class CometaryCoordinates(Coordinates):
         sigma_tp: Optional[np.ndarray] = None,
         origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = COMETARY_COLS,
-        units: OrderedDict = COMETARY_UNITS,
+        names: dict = COMETARY_COLS,
+        units: dict = COMETARY_UNITS,
         mu: float = MU,
     ):
         sigmas = (sigma_q, sigma_e, sigma_i, sigma_raan, sigma_ap, sigma_tp)
@@ -184,7 +183,6 @@ class CometaryCoordinates(Coordinates):
         return self._mu
 
     def to_cartesian(self) -> CartesianCoordinates:
-
         from .transform import _cometary_to_cartesian, cometary_to_cartesian
 
         if self.times is None:
@@ -238,7 +236,6 @@ class CometaryCoordinates(Coordinates):
     def from_cartesian(
         cls, cartesian: CartesianCoordinates, mu: float = MU
     ) -> "CometaryCoordinates":
-
         from .transform import _cartesian_to_cometary, cartesian_to_cometary
 
         if cartesian.times is None:
@@ -287,7 +284,7 @@ class CometaryCoordinates(Coordinates):
     def from_df(
         cls,
         df: pd.DataFrame,
-        coord_cols: OrderedDict = COMETARY_COLS,
+        coord_cols: dict = COMETARY_COLS,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> "CometaryCoordinates":
@@ -299,10 +296,10 @@ class CometaryCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing Keplerian coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["q"] = Column name of pericenter distance values
                 coord_cols["e"] = Column name of eccentricity values
                 coord_cols["i"] = Column name of inclination values
