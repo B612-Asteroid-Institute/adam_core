@@ -108,8 +108,9 @@ class Indexable:
 
     Indexable maintains two array indexes:
         - class: the externally facing index (ie. the index into the class itself)
-        - members: the index of the members of the class (ie. the index into
-            the data structures carried by the class)
+        - members mapping: the index of the members of the class (ie. the index into
+            the data structures carried by the class which can either an array of
+            integer indices or an array of slices)
 
 
     Class Index:
@@ -122,9 +123,6 @@ class Indexable:
     If, as above, the class to members mapping is sorted (monotonically increasing), then
     it is converted to an array of slices which allows for faster querying.
     [slice(0, 2), slice(2, 5), slice(5, 8)]
-
-    Members Index:
-    [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
     For example, here orbits is a subclass of Indexable and has members that are
     `~numpy.ndarray`s, `~numpy.ma.core.MaskedArray`s, and `~astropy.time.core.Time`s.
@@ -194,8 +192,6 @@ class Indexable:
         -------
         member_length : int
             The length of the members of the class.
-        member_index : `~numpy.ndarray`
-            The index of the members of the class.
 
         Raises
         ------
@@ -213,9 +209,7 @@ class Indexable:
             raise ValueError("All sliceable members must have the same length.")
         member_length = member_lengths.pop()
 
-        member_index = np.arange(0, member_length, dtype=int)
-
-        return member_length, member_index
+        return member_length
 
     def set_index(self, index_values: Optional[Union[str, npt.ArrayLike]] = None):
         """
@@ -241,8 +235,6 @@ class Indexable:
             underlying arrays. None if the arrays are grouped and can be represented as slices
         self._class_index_attribute : str, None
             The attribute on which the index was set, if any. None if no attribute was used.
-        self._member_index : `~numpy.ndarray`
-            The index of the members of the class.
         self._member_length : int
             The length of the members of the class.
 
@@ -253,7 +245,7 @@ class Indexable:
                     If the values are not None, str, or np.ndarray.
         """
         # Check if all the members are valid: have the same length
-        self._member_length, self._member_index = self._check_member_validity()
+        self._member_length = self._check_member_validity()
 
         # Figure out the values that are going to be mapped to an index
         # If no index values are given then we set the class index
@@ -320,12 +312,14 @@ class Indexable:
         member_ind : slice or np.ndarray
             Slice into this class's members.
         """
+        # Create array of all possible indices in the class's members
+        member_indices = np.arange(0, self._member_length)
+
         # --- Integer Slice
         # If the index is an integer then we need to convert it to a slice so that
         # we do not change the dimensionality of the member arrays (or in the cases
         # of a 1D array we need to avoid returning just a single value)
         if isinstance(class_ind, int):
-
             ind = slice(class_ind, class_ind + 1)
 
         # --- Slices, Arrays, and Lists
@@ -341,8 +335,10 @@ class Indexable:
         if isinstance(ind, slice) and ind.start is not None and ind.start >= len(self):
             raise IndexError(f"Index {ind.start} is out of bounds.")
 
-        elif isinstance(ind, slice) and self._class_index_to_slices is not None:
-
+        elif (
+            isinstance(ind, (slice, np.ndarray, list))
+            and self._class_index_to_slices is not None
+        ):
             slices = self._class_index_to_slices[ind]
 
             # If there is only one slice then we can just return it
@@ -367,16 +363,16 @@ class Indexable:
                     "Slices are not consecutive. "
                     "Combining slices and concatenating the members index for each slice."
                 )
-                return np.concatenate([self._member_index[s] for s in slices])
+                return np.concatenate([member_indices[s] for s in slices])
 
-        elif np.array_equal(self._class_index, self._member_index):
+        elif np.array_equal(self._class_index, member_indices):
             logger.debug("Using class index to index member arrays.")
             return self._class_index[ind]
         else:
             logger.debug(
                 "Using unique class index to index member arrays with np.isin."
             )
-            return self._member_index[
+            return member_indices[
                 np.isin(
                     self._class_index_to_integers,
                     self._class_index[ind],

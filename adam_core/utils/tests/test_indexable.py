@@ -56,6 +56,13 @@ class TestIndexable(Indexable):
         Indexable.__init__(self)
 
 
+class DummyIndexable(Indexable):
+    def __init__(self, array):
+        self.array = array
+
+        Indexable.__init__(self)
+
+
 def assert_equal(a, b):
     if isinstance(a, (np.ndarray)) and isinstance(b, (np.ndarray)):
         np.testing.assert_equal(a, b)
@@ -192,12 +199,70 @@ def test__check_member_validity_raises():
 def test__check_member_validity():
     # Create invalid test indexable
     indexable = TestIndexable()
-    member_length, member_index = indexable._check_member_validity()
+    member_length = indexable._check_member_validity()
 
     # Assert that the function correctly computes the length of the member
     # attributes and sets the according member length and index
     assert member_length == N
-    np.testing.assert_equal(member_index, np.arange(0, 100))
+
+
+def test_Indexable__query_index_int():
+    # Array is grouped and can be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
+    indexable.set_index("array")
+    index = indexable._query_index(2)
+    assert index == slice(2, 3, 1)
+
+    # Array is not grouped and can be not be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 0]))
+    indexable.set_index("array")
+    index = indexable._query_index(1)
+    assert index == np.array([1])
+
+
+def test_Indexable__query_index_slice():
+    # Array is grouped and can be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
+    indexable.set_index("array")
+    index = indexable._query_index(slice(0, 2, 1))
+    assert index == slice(0, 2, 1)
+
+    # Array is not grouped and can be not be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 0]))
+    indexable.set_index("array")
+    # I want the first two unique values in array which is the entire array
+    index = indexable._query_index(slice(0, 2, 1))
+    np.testing.assert_equal(index, np.array([0, 1, 2]))
+
+
+def test_Indexable__query_index_array():
+    # Array is grouped and can be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
+    indexable.set_index("array")
+    index = indexable._query_index(np.array([0, 1]))
+    assert index == slice(0, 2, 1)
+
+    # Array is not grouped and can be not be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 0]))
+    indexable.set_index("array")
+    # I want the first two unique values in array which is the entire array
+    index = indexable._query_index(np.array([0, 1]))
+    np.testing.assert_equal(index, np.array([0, 1, 2]))
+
+
+def test_Indexable__query_index_list():
+    # Array is grouped and can be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
+    indexable.set_index("array")
+    index = indexable._query_index([0, 1])
+    assert index == slice(0, 2, 1)
+
+    # Array is not grouped and can be not be represented by slices
+    indexable = DummyIndexable(np.array([0, 1, 0]))
+    indexable.set_index("array")
+    # I want the first two unique values in array which is the entire array
+    index = indexable._query_index([0, 1])
+    np.testing.assert_equal(index, [0, 1, 2])
 
 
 def test_Indexable_slicing():
