@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from copy import deepcopy
 from typing import Optional
 
@@ -11,7 +10,7 @@ from .cometary import COMETARY_COLS, CometaryCoordinates
 from .coordinates import Coordinates
 from .keplerian import KEPLERIAN_COLS, KeplerianCoordinates
 from .spherical import SPHERICAL_COLS, SphericalCoordinates
-from .transform import transform_coordinates
+from .transform import cartesian_to_frame, cartesian_to_origin, transform_coordinates
 
 __all__ = ["CoordinateMembers"]
 
@@ -20,10 +19,10 @@ class CoordinateMembers(Indexable):
     def __init__(
         self,
         coordinates: Optional[Coordinates] = None,
-        cartesian=True,
-        keplerian=True,
-        spherical=True,
-        cometary=True,
+        cartesian: bool = True,
+        keplerian: bool = True,
+        spherical: bool = True,
+        cometary: bool = True,
     ):
         self._cartesian = None
         self._spherical = None
@@ -71,7 +70,6 @@ class CoordinateMembers(Indexable):
         Indexable.__init__(self, index)
         return
 
-    @property
     def cartesian(self):
         if "CartesianCoordinates" not in self.__allowed_coordinate_types:
             err = "Cartesian coordinates are not supported by this class."
@@ -96,7 +94,6 @@ class CoordinateMembers(Indexable):
 
         return self._cartesian
 
-    @property
     def spherical(self):
         if "SphericalCoordinates" not in self.__allowed_coordinate_types:
             err = "Spherical coordinates are not supported by this class."
@@ -121,7 +118,6 @@ class CoordinateMembers(Indexable):
 
         return self._spherical
 
-    @property
     def keplerian(self):
         if "KeplerianCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
@@ -146,7 +142,6 @@ class CoordinateMembers(Indexable):
 
         return self._keplerian
 
-    @property
     def cometary(self):
         if "CometaryCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
@@ -168,30 +163,68 @@ class CoordinateMembers(Indexable):
                 and "SphericalCoordinates" in self.__allowed_coordinate_types
             ):
                 self._cometary = transform_coordinates(self._spherical, "cometary")
-
         return self._cometary
+
+    def to_frame(self, frame: str):
+        """
+        Rotate coordinates to desired frame. Rotation is applied to the Cartesian coordinates.
+        All other coordinate types are reset to None.
+
+        Parameters
+        ----------
+        frame : {'ecliptic', 'equatorial'}
+            Desired reference frame of the output coordinates.
+        """
+        self._cartesian = cartesian_to_frame(self.cartesian, frame)
+        self._keplerian = None
+        self._cometary = None
+        self._spherical = None
+        return
+
+    def to_origin(self, origin: str):
+        """
+        Translate coordinates to a different origin. Translation is applied to the Cartesian coordinates.
+        All other coordinate types are reset to None.
+
+        Parameters
+        ----------
+        origin : {'heliocenter', 'barycenter'}
+            Name of the desired origin.
+        """
+        self._cartesian = cartesian_to_origin(self.cartesian, origin)
+        self._keplerian = None
+        self._cometary = None
+        self._spherical = None
+        return
 
     def to_df(
         self,
-        time_scale: str = "tdb",
+        time_scale: Optional[str] = None,
         coordinate_type: Optional[str] = None,
         sigmas: bool = False,
         covariances: bool = False,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
     ) -> pd.DataFrame:
         """
         Represent coordinates as a `~pandas.DataFrame`.
 
         Parameters
         ----------
-        time_scale : {"tdb", "tt", "utc"}
-            Desired timescale of the output MJDs.
-        coordinate_type : {None, "cartesian", "spherical", "keplerian", "cometary"}
+        time_scale : {"tdb", "tt", "utc"}, optional
+            Desired timescale of the output MJDs. If None, will default to the time
+            scale of the current instance.
+        coordinate_type : {None, "cartesian", "spherical", "keplerian", "cometary"}, optional
             Desired output representation of the coordinates. If None, will default
             to coordinate type that was given at class initialization.
         sigmas : bool, optional
             Include 1-sigma uncertainty columns.
         covariances : bool, optional
             Include lower triangular covariance matrix columns.
+        origin_col : str
+            Name of the column to store the origin of each coordinate.
+        frame_col : str
+            Name of the column to store the coordinate frame.
 
         Returns
         -------
@@ -212,6 +245,8 @@ class CoordinateMembers(Indexable):
             "time_scale": time_scale,
             "sigmas": sigmas,
             "covariances": covariances,
+            "origin_col": origin_col,
+            "frame_col": frame_col,
         }
         if coordinate_type_ == "cartesian":
             df = self.cartesian.to_df(**kwargs)
@@ -240,7 +275,7 @@ class CoordinateMembers(Indexable):
         keplerian: bool = True,
         cometary: bool = True,
         spherical: bool = True,
-        coord_cols: Optional[OrderedDict] = None,
+        coord_cols: Optional[dict] = None,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> dict:
@@ -262,8 +297,8 @@ class CoordinateMembers(Indexable):
             Look for Cometary coordinates.
         spherical : bool, optional
             Look for Spherical coordinates.
-        coord_cols : OrderedDict, optional
-            Ordered dictionary containing the coordinate dimensions as keys and their equivalent columns
+        coord_cols : dict, optional
+            Dictionary containing the coordinate dimensions as keys and their equivalent columns
             as values. If None, this function will use the default dictionaries for each coordinate class.
             The following coordinate (dictionary) keys are supported:
                 Cartesian columns: x, y, z, vx, vy, vz
@@ -310,7 +345,7 @@ class CoordinateMembers(Indexable):
                     err += f" Spherical columns: {', '.join(SPHERICAL_COLS.keys())}\n"
                 raise ValueError(err)
 
-        elif isinstance(coord_cols, OrderedDict):
+        elif isinstance(coord_cols, dict):
             if cartesian and coord_cols.keys() == CARTESIAN_COLS.keys():
                 coord_class = CartesianCoordinates
             elif keplerian and coord_cols.keys() == KEPLERIAN_COLS.keys():
@@ -337,7 +372,7 @@ class CoordinateMembers(Indexable):
             coord_cols_ = coord_cols
 
         else:
-            err = "coord_cols should be one of {None, OrderedDict}."
+            err = "coord_cols should be one of {None, dict}."
             raise ValueError(err)
 
         coordinates = coord_class.from_df(
@@ -355,6 +390,9 @@ class CoordinateMembers(Indexable):
         keplerian: bool = True,
         cometary: bool = True,
         spherical: bool = True,
+        coord_cols: Optional[dict] = None,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
     ) -> "CoordinateMembers":
         """
         Instantiate CoordinateMembers from a `pandas.DataFrame`. If all
@@ -373,8 +411,8 @@ class CoordinateMembers(Indexable):
             Look for Cometary coordinates.
         spherical : bool, optional
             Look for Spherical coordinates.
-        coord_cols : OrderedDict, optional
-            Ordered dictionary containing the coordinate dimensions as keys and their equivalent columns
+        coord_cols : dict, optional
+            Dictionary containing the coordinate dimensions as keys and their equivalent columns
             as values. If None, this function will use the default dictionaries for each coordinate class.
             The following coordinate (dictionary) keys are supported:
                 Cartesian columns: x, y, z, vx, vy, vz
@@ -397,5 +435,8 @@ class CoordinateMembers(Indexable):
             keplerian=keplerian,
             cometary=cometary,
             spherical=spherical,
+            coord_cols=coord_cols,
+            origin_col=origin_col,
+            frame_col=frame_col,
         )
         return cls(**data)

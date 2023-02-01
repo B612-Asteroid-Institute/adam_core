@@ -1,7 +1,7 @@
-from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 
@@ -15,8 +15,8 @@ __all__ = [
     "SPHERICAL_UNITS",
 ]
 
-SPHERICAL_COLS = OrderedDict()
-SPHERICAL_UNITS = OrderedDict()
+SPHERICAL_COLS = {}
+SPHERICAL_UNITS = {}
 for i in ["rho", "lon", "lat", "vrho", "vlon", "vlat"]:
     SPHERICAL_COLS[i] = i
 SPHERICAL_UNITS["rho"] = u.au
@@ -30,12 +30,12 @@ SPHERICAL_UNITS["vlat"] = u.deg / u.d
 class SphericalCoordinates(Coordinates):
     def __init__(
         self,
-        rho: Optional[np.ndarray] = None,
-        lon: Optional[np.ndarray] = None,
-        lat: Optional[np.ndarray] = None,
-        vrho: Optional[np.ndarray] = None,
-        vlon: Optional[np.ndarray] = None,
-        vlat: Optional[np.ndarray] = None,
+        rho: Optional[Union[int, float, np.ndarray]] = None,
+        lon: Optional[Union[int, float, np.ndarray]] = None,
+        lat: Optional[Union[int, float, np.ndarray]] = None,
+        vrho: Optional[Union[int, float, np.ndarray]] = None,
+        vlon: Optional[Union[int, float, np.ndarray]] = None,
+        vlat: Optional[Union[int, float, np.ndarray]] = None,
         times: Optional[Time] = None,
         covariances: Optional[np.ndarray] = None,
         sigma_rho: Optional[np.ndarray] = None,
@@ -44,10 +44,10 @@ class SphericalCoordinates(Coordinates):
         sigma_vrho: Optional[np.ndarray] = None,
         sigma_vlon: Optional[np.ndarray] = None,
         sigma_vlat: Optional[np.ndarray] = None,
-        origin: str = "heliocentric",
+        origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = SPHERICAL_COLS,
-        units: OrderedDict = SPHERICAL_UNITS,
+        names: dict = SPHERICAL_COLS,
+        units: dict = SPHERICAL_UNITS,
     ):
         """
 
@@ -86,52 +86,76 @@ class SphericalCoordinates(Coordinates):
         )
         return
 
-    @property
     def rho(self):
+        """
+        Radial distance
+        """
         return self._values[:, 0]
 
-    @property
     def lon(self):
+        """
+        Longitude
+        """
         return self._values[:, 1]
 
-    @property
     def lat(self):
+        """
+        Latitude
+        """
         return self._values[:, 2]
 
-    @property
     def vrho(self):
+        """
+        Radial velocity
+        """
         return self._values[:, 3]
 
-    @property
     def vlon(self):
+        """
+        Longitudinal velocity
+        """
         return self._values[:, 4]
 
-    @property
     def vlat(self):
+        """
+        Latitudinal velocity
+        """
         return self._values[:, 5]
 
-    @property
     def sigma_rho(self):
+        """
+        1-sigma uncertainty in radial distance
+        """
         return self.sigmas[:, 0]
 
-    @property
     def sigma_lon(self):
+        """
+        1-sigma uncertainty in longitude
+        """
         return self.sigmas[:, 1]
 
-    @property
     def sigma_lat(self):
+        """
+        1-sigma uncertainty in latitude
+        """
         return self.sigmas[:, 2]
 
-    @property
     def sigma_vrho(self):
+        """
+        1-sigma uncertainty in radial velocity
+        """
         return self.sigmas[:, 3]
 
-    @property
     def sigma_vlon(self):
+        """
+        1-sigma uncertainty in longitudinal velocity
+        """
         return self.sigmas[:, 4]
 
-    @property
     def sigma_vlat(self):
+        """
+        1-sigma uncertainty in latitudinal velocity
+        """
         return self.sigmas[:, 5]
 
     def to_cartesian(self) -> CartesianCoordinates:
@@ -162,7 +186,7 @@ class SphericalCoordinates(Coordinates):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates):
+    def from_cartesian(cls, cartesian: CartesianCoordinates) -> "SphericalCoordinates":
         from .transform import _cartesian_to_spherical, cartesian_to_spherical
 
         coords_spherical = cartesian_to_spherical(cartesian.values.filled())
@@ -192,8 +216,12 @@ class SphericalCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls, df, coord_cols=SPHERICAL_COLS, origin_col="origin", frame_col="frame"
-    ):
+        cls,
+        df: pd.DataFrame,
+        coord_cols: dict = SPHERICAL_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "SphericalCoordinates":
         """
         Create a SphericalCoordinates class from a dataframe.
 
@@ -202,10 +230,10 @@ class SphericalCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing spherical coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["rho"] = Column name of radial distance values
                 coord_cols["lon"] = Column name of longitudinal values
                 coord_cols["rho"] = Column name of latitudinal values

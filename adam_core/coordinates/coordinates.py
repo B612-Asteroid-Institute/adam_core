@@ -1,5 +1,4 @@
 import logging
-from collections import OrderedDict
 from typing import List, Optional, Union
 
 import numpy as np
@@ -78,8 +77,8 @@ def _ingest_coordinate(
             N, D = coords.shape
             if N != N_:
                 err = (
-                    "q needs to be the same length as the existing coordinates.\nq has"
-                    f" length {N_} while coords has {N} coordinates in 6 dimensions."
+                    "q needs to be the same length as the existing coordinates.\n"
+                    f"q has length {N_} while coords has {N} coordinates in 6 dimensions."
                 )
                 raise ValueError(err)
 
@@ -169,42 +168,51 @@ class Coordinates(Indexable):
         times: Optional[Time] = None,
         origin: Optional[Union[np.ndarray, str]] = "heliocenter",
         frame: Optional[Union[np.ndarray, str]] = "ecliptic",
-        names: OrderedDict = OrderedDict(),
-        units: OrderedDict = OrderedDict(),
+        names: dict = {},
+        units: dict = {},
         **kwargs,
     ):
         coords = None
 
         # Total number of coordinate dimensions
         D = len(kwargs)
-        units_ = OrderedDict()
+        units_ = {}
         for d, (name, q) in enumerate(kwargs.items()):
+            if isinstance(q, (int, float)):
+                q_ = np.array([q], dtype=np.float64)
+            else:
+                q_ = q
+
             # If the coordinate dimension has a coresponding unit
             # then use that unit. If it does not look for the unit
             # in the units kwarg.
-            if isinstance(q, Quantity):
-                units_[name] = q.unit
-                q = q.value
+            if isinstance(q_, Quantity):
+                units_[name] = q_.unit
+                q_ = q_.value
             else:
                 logger.debug(
-                    f"Coordinate dimension {name} does not have a corresponding unit,"
-                    f" using unit defined in units kwarg ({units[name]})."
+                    f"Coordinate dimension {name} does not have a corresponding unit, "
+                    f"using unit defined in units kwarg ({units[name]})."
                 )
                 units_[name] = units[name]
 
-            coords = _ingest_coordinate(q, d, coords, D=D)
+            coords = _ingest_coordinate(q_, d, coords, D=D)
 
         self._values = coords
         if isinstance(times, Time):
-            if len(self.values) != len(times):
-                err = (
-                    "coordinates (N = {}) and times (N = {}) do not have the same"
-                    " length.\nIf times are defined, each coordinate must have a"
-                    " corresponding time.\n"
-                )
-                raise ValueError(err.format(len(self._values), len(times)))
+            if isinstance(times.value, (int, float)):
+                times_ = Time([times.value], scale=times.scale, format=times.format)
+            else:
+                times_ = times
 
-            self._times = times
+            if len(self.values) != len(times_):
+                err = (
+                    "coordinates (N = {}) and times (N = {}) do not have the same length.\n"
+                    "If times are defined, each coordinate must have a corresponding time.\n"
+                )
+                raise ValueError(err.format(len(self._values), len(times_)))
+
+            self._times = times_
         else:
             self._times = None
 
@@ -238,19 +246,16 @@ class Coordinates(Indexable):
             not isinstance(sigmas, (tuple, np.ndarray, np.ma.masked_array))
             and sigmas is not None
         ):
-            err = (
-                "sigmas should be one of {None, `~numpy.ndarray`,"
-                " `~numpy.ma.masked_array`, tuple}"
-            )
+            err = "sigmas should be one of {None, `~numpy.ndarray`, `~numpy.ma.masked_array`, tuple}"
             raise TypeError(err)
 
         if covariances is not None:
             if (isinstance(sigmas, tuple) and all(sigmas)) or isinstance(
                 sigmas, (np.ndarray, np.ma.masked_array)
             ):
-                logger.info(
-                    "Both covariances and sigmas have been given. Sigmas will be"
-                    " ignored and the covariance matrices will be used instead."
+                logger.warning(
+                    "Both covariances and sigmas have been given. Sigmas will be ignored "
+                    "and the covariance matrices will be used instead."
                 )
             self._covariances = _ingest_covariance(coords, covariances)
 
@@ -322,13 +327,13 @@ class Coordinates(Indexable):
     def units(self):
         return self._units
 
-    def has_units(self, units: OrderedDict) -> bool:
+    def has_units(self, units: dict) -> bool:
         """
         Check if these coordinate have the given units.
 
         Parameters
         ----------
-        units : OrderedDict
+        units : dict
             Dictionary containing coordinate dimension names as keys
             and astropy units as values.
 
@@ -340,8 +345,7 @@ class Coordinates(Indexable):
         for dim, unit in self.units.items():
             if units[dim] != unit:
                 logger.debug(
-                    f"Coordinate dimension {dim} has units in {unit}, not the given"
-                    f" units of {units[dim]}."
+                    f"Coordinate dimension {dim} has units in {unit}, not the given units of {units[dim]}."
                 )
                 return False
         return True
@@ -354,21 +358,28 @@ class Coordinates(Indexable):
 
     def to_df(
         self,
-        time_scale: str = "utc",
+        time_scale: Optional[str] = None,
         sigmas: bool = False,
         covariances: bool = False,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
     ) -> pd.DataFrame:
         """
         Represent Coordinates as a `~pandas.DataFrame`.
 
         Parameters
         ----------
-        time_scale : {"tdb", "tt", "utc"}
-            Desired timescale of the output MJDs.
+        time_scale : {"tdb", "tt", "utc"}, optional
+            Desired timescale of the output MJDs. If None, will default to
+            the time scale of the current instance.
         sigmas : bool, optional
             Include 1-sigma uncertainty columns.
         covariances : bool, optional
             Include lower triangular covariance matrix columns.
+        origin_col : str
+            Name of the column to store the origin of each coordinate.
+        frame_col : str
+            Name of the column to store the coordinate frame.
 
         Returns
         -------
@@ -380,7 +391,11 @@ class Coordinates(Indexable):
         N, D = self.values.shape
 
         if self.times is not None:
-            df = times_to_df(self.times, time_scale=time_scale)
+            if isinstance(time_scale, str):
+                time_scale_ = time_scale
+            else:
+                time_scale_ = self.times.scale
+            df = times_to_df(self.times, time_scale=time_scale_)
         else:
             df = pd.DataFrame(index=np.arange(0, len(self)))
 
@@ -399,14 +414,14 @@ class Coordinates(Indexable):
             )
             df = df.join(df_covariances)
 
-        df.insert(len(df.columns), "origin", self.origin)
-        df.insert(len(df.columns), "frame", self.frame)
+        df.insert(len(df.columns), origin_col, self.origin)
+        df.insert(len(df.columns), frame_col, self.frame)
         return df
 
     @staticmethod
     def _dict_from_df(
         df: pd.DataFrame,
-        coord_cols: OrderedDict,
+        coord_cols: dict,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> dict:
@@ -418,10 +433,10 @@ class Coordinates(Indexable):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing the coordinate dimensions as keys and their equivalent columns
+        coord_cols : dict
+            Dictionary containing the coordinate dimensions as keys and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["a"] = Column name of semi-major axis values
                 coord_cols["e"] = Column name of eccentricity values
                 coord_cols["i"] = Column name of inclination values
@@ -443,6 +458,8 @@ class Coordinates(Indexable):
         for i, (k, v) in enumerate(coord_cols.items()):
             if v in df.columns:
                 data[k] = df[v].values
+            else:
+                data[k] = None
 
         if origin_col in df.columns:
             data["origin"] = df[origin_col].values

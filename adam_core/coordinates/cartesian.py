@@ -1,22 +1,18 @@
-from collections import OrderedDict
-from typing import Optional
+import logging
+from copy import deepcopy
+from typing import Optional, Union
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 
-from ..constants import Constants as c
 from .coordinates import Coordinates
 
 __all__ = ["CartesianCoordinates", "CARTESIAN_COLS", "CARTESIAN_UNITS"]
 
-TRANSFORM_EQ2EC = np.zeros((6, 6))
-TRANSFORM_EQ2EC[0:3, 0:3] = c.TRANSFORM_EQ2EC
-TRANSFORM_EQ2EC[3:6, 3:6] = c.TRANSFORM_EQ2EC
-TRANSFORM_EC2EQ = TRANSFORM_EQ2EC.T
-
-CARTESIAN_COLS = OrderedDict()
-CARTESIAN_UNITS = OrderedDict()
+CARTESIAN_COLS = {}
+CARTESIAN_UNITS = {}
 for i in ["x", "y", "z"]:
     CARTESIAN_COLS[i] = i
     CARTESIAN_UNITS[i] = u.au
@@ -24,16 +20,19 @@ for i in ["vx", "vy", "vz"]:
     CARTESIAN_COLS[i] = i
     CARTESIAN_UNITS[i] = u.au / u.d
 
+COVARIANCE_ROTATION_TOLERANCE = 1e-25
+logger = logging.getLogger(__name__)
+
 
 class CartesianCoordinates(Coordinates):
     def __init__(
         self,
-        x: Optional[np.ndarray] = None,
-        y: Optional[np.ndarray] = None,
-        z: Optional[np.ndarray] = None,
-        vx: Optional[np.ndarray] = None,
-        vy: Optional[np.ndarray] = None,
-        vz: Optional[np.ndarray] = None,
+        x: Optional[Union[int, float, np.ndarray]] = None,
+        y: Optional[Union[int, float, np.ndarray]] = None,
+        z: Optional[Union[int, float, np.ndarray]] = None,
+        vx: Optional[Union[int, float, np.ndarray]] = None,
+        vy: Optional[Union[int, float, np.ndarray]] = None,
+        vz: Optional[Union[int, float, np.ndarray]] = None,
         times: Optional[Time] = None,
         covariances: Optional[np.ndarray] = None,
         sigma_x: Optional[np.ndarray] = None,
@@ -42,10 +41,10 @@ class CartesianCoordinates(Coordinates):
         sigma_vx: Optional[np.ndarray] = None,
         sigma_vy: Optional[np.ndarray] = None,
         sigma_vz: Optional[np.ndarray] = None,
-        origin: str = "heliocentric",
+        origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = CARTESIAN_COLS,
-        units: OrderedDict = CARTESIAN_UNITS,
+        names: dict = CARTESIAN_COLS,
+        units: dict = CARTESIAN_UNITS,
     ):
         """
 
@@ -83,153 +82,295 @@ class CartesianCoordinates(Coordinates):
         )
         return
 
-    @property
     def x(self):
+        """
+        X-coordinate
+        """
         return self._values[:, 0]
 
-    @property
     def y(self):
+        """
+        Y-coordinate
+        """
         return self._values[:, 1]
 
-    @property
     def z(self):
+        """
+        Z-coordinate
+        """
         return self._values[:, 2]
 
-    @property
     def vx(self):
+        """
+        X-coordinate velocity
+        """
         return self._values[:, 3]
 
-    @property
     def vy(self):
+        """
+        Y-coordinate velocity
+        """
         return self._values[:, 4]
 
-    @property
     def vz(self):
+        """
+        Z-coordinate velocity
+        """
         return self._values[:, 5]
 
-    @property
     def sigma_x(self):
+        """
+        1-sigma uncertainty in the X-coordinate
+        """
         return self.sigmas[:, 0]
 
-    @property
     def sigma_y(self):
+        """
+        1-sigma uncertainty in the Y-coordinate
+        """
         return self.sigmas[:, 1]
 
-    @property
     def sigma_z(self):
+        """
+        1-sigma uncertainty in the Z-coordinate
+        """
         return self.sigmas[:, 2]
 
-    @property
     def sigma_vx(self):
+        """
+        1-sigma uncertainty in the X-coordinate velocity
+        """
         return self.sigmas[:, 3]
 
-    @property
     def sigma_vy(self):
+        """
+        1-sigma uncertainty in the Y-coordinate velocity
+        """
         return self.sigmas[:, 4]
 
-    @property
     def sigma_vz(self):
+        """
+        1-sigma uncertainty in the Z-coordinate velocity
+        """
         return self.sigmas[:, 5]
 
-    @property
     def r(self):
+        """
+        Position vector
+        """
         return self._values[:, 0:3]
 
-    @property
     def v(self):
+        """
+        Velocity vector
+        """
         return self._values[:, 3:6]
 
-    @property
-    def sigma_r(self):
+    def sigma_r_mag(self):
+        """
+        1-sigma uncertainty in the position
+        """
         return np.sqrt(np.sum(self.sigmas.filled()[:, 0:3] ** 2, axis=1))
 
-    @property
-    def sigma_v(self):
+    def sigma_v_mag(self):
+        """
+        1-sigma uncertainty in the velocity
+        """
         return np.sqrt(np.sum(self.sigmas.filled()[:, 3:6] ** 2, axis=1))
 
-    @property
     def r_mag(self):
+        """
+        Magnitude of the position vector
+        """
         return np.linalg.norm(self.r.filled(), axis=1)
 
-    @property
     def v_mag(self):
+        """
+        Magnitude of the velocity vector
+        """
         return np.linalg.norm(self.v.filled(), axis=1)
 
-    @property
     def r_hat(self):
+        """
+        Unit vector in the direction of the position vector
+        """
         return self.r.filled() / self.r_mag.reshape(-1, 1)
 
-    @property
     def v_hat(self):
+        """
+        Unit vector in the direction of the velocity vector
+        """
         return self.v.filled() / self.v_mag.reshape(-1, 1)
 
     def to_cartesian(self):
         return self
 
     @classmethod
-    def from_cartesian(cls, cartesian):
+    def from_cartesian(
+        cls, cartesian: "CartesianCoordinates"
+    ) -> "CartesianCoordinates":
         return cartesian
 
-    def _rotate(self, matrix):
-        coords = self._values.dot(matrix.T)
-        coords.mask = self._values.mask
-        coords.fill_value = np.NaN
+    def rotate(self, matrix: np.ndarray, frame_out: str) -> "CartesianCoordinates":
+        """
+        Rotate Cartesian coordinates and their covariances by the
+        given rotation matrix. A copy is made of the coordinates and a new
+        instance of the CartesianCoordinates class is returned.
+
+        Covariance matrices are also rotated. Rotations will sometimes result
+        in covariance matrix elements very near zero but not exactly zero. Any
+        elements that are smaller than +-1e-25 are rounded down to 0.
+
+        Parameters
+        ----------
+        matrix : `~numpy.ndarray` (6, 6)
+            Rotation matrix.
+        frame_out : str
+            Name of the frame to which coordinates are being rotated.
+
+        Returns
+        -------
+        CartesianCoordinates : `~thor.coordinates.cartesian.CartesianCoordinates`
+            Rotated Cartesian coordinates and their covariances.
+        """
+        coords_rotated = deepcopy(np.ma.dot(self._values, matrix.T))
+        coords_rotated[self._values.mask] = np.NaN
 
         if self._covariances is not None:
-            covariances = matrix @ self._covariances @ matrix.T
-        else:
-            covariances = None
+            covariances_rotated = deepcopy(matrix @ self._covariances @ matrix.T)
+            near_zero = len(
+                covariances_rotated[
+                    np.abs(covariances_rotated) < COVARIANCE_ROTATION_TOLERANCE
+                ]
+            )
+            if near_zero > 0:
+                logger.debug(
+                    f"{near_zero} covariance elements are within {COVARIANCE_ROTATION_TOLERANCE:.0e}"
+                    " of zero after rotation, setting these elements to 0."
+                )
+                covariances_rotated = np.where(
+                    np.abs(covariances_rotated) < COVARIANCE_ROTATION_TOLERANCE,
+                    0,
+                    covariances_rotated,
+                )
 
-        return coords, covariances
-
-    def to_equatorial(self):
-        if self.frame == "equatorial":
-            return self
-        elif self.frame == "ecliptic":
-            coords, covariances = self._rotate(TRANSFORM_EC2EQ)
-            data = {}
-            data["x"] = coords[:, 0].filled()
-            data["y"] = coords[:, 1].filled()
-            data["z"] = coords[:, 2].filled()
-            data["vx"] = coords[:, 3].filled()
-            data["vy"] = coords[:, 4].filled()
-            data["vz"] = coords[:, 5].filled()
-            data["times"] = self.times
-            data["covariances"] = covariances
-            data["origin"] = self.origin
-            data["frame"] = "equatorial"
-            return CartesianCoordinates(**data)
         else:
-            raise ValueError
+            covariances_rotated = None
 
-    def to_ecliptic(self):
-        if self.frame == "equatorial":
-            coords, covariances = self._rotate(TRANSFORM_EQ2EC)
-            data = {}
-            data["x"] = coords[:, 0].filled()
-            data["y"] = coords[:, 1].filled()
-            data["z"] = coords[:, 2].filled()
-            data["vx"] = coords[:, 3].filled()
-            data["vy"] = coords[:, 4].filled()
-            data["vz"] = coords[:, 5].filled()
-            data["times"] = self.times
-            data["covariances"] = covariances
-            data["origin"] = self.origin
-            data["frame"] = "ecliptic"
-            return CartesianCoordinates(**data)
-        elif self.frame == "ecliptic":
-            return self
+        data = {}
+        data["x"] = coords_rotated[:, 0]
+        data["y"] = coords_rotated[:, 1]
+        data["z"] = coords_rotated[:, 2]
+        data["vx"] = coords_rotated[:, 3]
+        data["vy"] = coords_rotated[:, 4]
+        data["vz"] = coords_rotated[:, 5]
+        data["times"] = deepcopy(self.times)
+        data["covariances"] = covariances_rotated
+        data["origin"] = deepcopy(self.origin)
+        data["frame"] = deepcopy(frame_out)
+        data["units"] = deepcopy(self.units)
+        data["names"] = deepcopy(self.names)
+        return CartesianCoordinates(**data)
+
+    def translate(
+        self, vectors: Union[np.ndarray, np.ma.masked_array], origin_out: str
+    ) -> "CartesianCoordinates":
+        """
+        Translate CartesianCoordinates by the given coordinate vector(s).
+        A copy is made of the coordinates and a new instance of the
+        CartesianCoordinates class is returned.
+
+        Translation will only be applied to those coordinates that do not already
+        have the desired origin (self.origin != origin_out).
+
+        Parameters
+        ----------
+        vectors : {`~numpy.ndarray`, `~numpy.ma.masked_array`} (N, 6), (1, 6) or (6)
+            Translation vector(s) for each coordinate or a single vector with which
+            to translate all coordinates.
+        origin_out : str
+            Name of the origin to which coordinates are being translated.
+
+        Returns
+        -------
+        CartesianCoordinates : `~thor.coordinates.cartesian.CartesianCoordinates`
+            Translated Cartesian coordinates and their covariances.
+
+        Raises
+        ------
+        ValueError: If vectors does not have shape (N, 6), (1, 6), or (6)
+        TypeError: If vectors is not a `~numpy.ndarray` or a `~numpy.ma.masked_array`
+        """
+        if not isinstance(vectors, (np.ndarray, np.ma.masked_array)):
+            err = "coords should be one of {`~numpy.ndarray`, `~numpy.ma.masked_array`}"
+            raise TypeError(err)
+
+        if len(vectors.shape) == 2:
+            N, D = vectors.shape
+        elif len(vectors.shape) == 1:
+            N, D = vectors.shape[0], None
         else:
-            raise ValueError
+            err = (
+                f"vectors should be 2D or 1D, instead vectors is {len(vectors.shape)}D."
+            )
+            raise ValueError(err)
+
+        N_self, D_self = self.values.shape
+        if (N != len(self) and N != 1) and (D is None and N != D_self):
+            err = (
+                f"Translation vector(s) should have shape ({N_self}, {D_self}),"
+                f" (1, {D_self}) or ({D_self},).\n"
+                f"Given translation vector(s) has shape {vectors.shape}."
+            )
+            raise ValueError(err)
+
+        coords_translated = deepcopy(self.values)
+
+        # Only apply translation to coordinates that do not already have the desired origin
+        origin_different_mask = np.where(self.origin != origin_out)[0]
+        origin_same_mask = np.where(self.origin == origin_out)[0]
+        if len(coords_translated[origin_same_mask]) > 0:
+            info = (
+                f"Translation will not be applied to the {len(coords_translated[origin_same_mask])} "
+                "coordinates that already have the desired origin."
+            )
+            logger.info(info)
+
+        if len(vectors.shape) == 2:
+            coords_translated[origin_different_mask] = (
+                coords_translated[origin_different_mask]
+                + vectors[origin_different_mask]
+            )
+        else:
+            coords_translated[origin_different_mask] = (
+                coords_translated[origin_different_mask] + vectors
+            )
+
+        covariances_translated = deepcopy(self.covariances)
+
+        data = {}
+        data["x"] = coords_translated[:, 0]
+        data["y"] = coords_translated[:, 1]
+        data["z"] = coords_translated[:, 2]
+        data["vx"] = coords_translated[:, 3]
+        data["vy"] = coords_translated[:, 4]
+        data["vz"] = coords_translated[:, 5]
+        data["times"] = deepcopy(self.times)
+        data["covariances"] = covariances_translated
+        data["origin"] = deepcopy(origin_out)
+        data["frame"] = deepcopy(self.frame)
+        data["units"] = deepcopy(self.units)
+        data["names"] = deepcopy(self.names)
+        return CartesianCoordinates(**data)
 
     @classmethod
     def from_df(
         cls,
-        df,
-        coord_cols=CARTESIAN_COLS,
-        origin_col="origin",
-        frame_col="frame",
-    ):
+        df: pd.DataFrame,
+        coord_cols: dict = CARTESIAN_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "CartesianCoordinates":
         """
         Create a CartesianCoordinates class from a dataframe.
 
@@ -238,10 +379,10 @@ class CartesianCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing Cartesian coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["x"] = Column name of x distance values
                 coord_cols["y"] = Column name of y distance values
                 coord_cols["z"] = Column name of z distance values

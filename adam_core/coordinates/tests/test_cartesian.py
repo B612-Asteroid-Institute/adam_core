@@ -23,8 +23,8 @@ def test_CartesianCoordinates_rotate():
     )
 
     rot_matrix = np.identity(D)
-    values_rotated, covariances_rotated = coords._rotate(rot_matrix)
+    coords_rotated = coords.rotate(rot_matrix, "identity")
 
-    np.testing.assert_equal(values_rotated, values)
-    np.testing.assert_equal(covariances_rotated, covariances)
+    np.testing.assert_equal(coords_rotated.values, values)
+    np.testing.assert_equal(coords_rotated.covariances, covariances)
     return

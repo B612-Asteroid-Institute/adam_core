@@ -1,8 +1,8 @@
-from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 from jax import config
@@ -21,8 +21,8 @@ __all__ = [
     "COMETARY_UNITS",
 ]
 
-COMETARY_COLS = OrderedDict()
-COMETARY_UNITS = OrderedDict()
+COMETARY_COLS = {}
+COMETARY_UNITS = {}
 for i in ["q", "e", "i", "raan", "ap", "tp"]:
     COMETARY_COLS[i] = i
 COMETARY_UNITS["q"] = u.au
@@ -39,12 +39,12 @@ Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 class CometaryCoordinates(Coordinates):
     def __init__(
         self,
-        q: Optional[np.ndarray] = None,
-        e: Optional[np.ndarray] = None,
-        i: Optional[np.ndarray] = None,
-        raan: Optional[np.ndarray] = None,
-        ap: Optional[np.ndarray] = None,
-        tp: Optional[np.ndarray] = None,
+        q: Optional[Union[int, float, np.ndarray]] = None,
+        e: Optional[Union[int, float, np.ndarray]] = None,
+        i: Optional[Union[int, float, np.ndarray]] = None,
+        raan: Optional[Union[int, float, np.ndarray]] = None,
+        ap: Optional[Union[int, float, np.ndarray]] = None,
+        tp: Optional[Union[int, float, np.ndarray]] = None,
         times: Optional[Time] = None,
         covariances: Optional[np.ndarray] = None,
         sigma_q: Optional[np.ndarray] = None,
@@ -53,10 +53,10 @@ class CometaryCoordinates(Coordinates):
         sigma_raan: Optional[np.ndarray] = None,
         sigma_ap: Optional[np.ndarray] = None,
         sigma_tp: Optional[np.ndarray] = None,
-        origin: str = "heliocentric",
+        origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = COMETARY_COLS,
-        units: OrderedDict = COMETARY_UNITS,
+        names: dict = COMETARY_COLS,
+        units: dict = COMETARY_UNITS,
         mu: float = MU,
     ):
         sigmas = (sigma_q, sigma_e, sigma_i, sigma_raan, sigma_ap, sigma_tp)
@@ -80,70 +80,118 @@ class CometaryCoordinates(Coordinates):
 
         return
 
-    @property
     def q(self):
+        """
+        Periapsis distance
+        """
         return self._values[:, 0]
 
-    @property
     def e(self):
+        """
+        Eccentricity
+        """
         return self._values[:, 1]
 
-    @property
     def i(self):
+        """
+        Inclination
+        """
         return self._values[:, 2]
 
-    @property
     def raan(self):
+        """
+        Right ascension of the ascending node
+        """
         return self._values[:, 3]
 
-    @property
     def ap(self):
+        """
+        Argument of periapsis
+        """
         return self._values[:, 4]
 
-    @property
     def tp(self):
+        """
+        Time of periapse passage
+        """
         return self._values[:, 5]
 
-    @property
     def sigma_q(self):
+        """
+        1-sigma uncertainty in periapsis distance
+        """
         return self.sigmas[:, 0]
 
-    @property
     def sigma_e(self):
+        """
+        1-sigma uncertainty in eccentricity
+        """
         return self.sigmas[:, 1]
 
-    @property
     def sigma_i(self):
+        """
+        1-sigma uncertainty in inclination
+        """
         return self.sigmas[:, 2]
 
-    @property
     def sigma_raan(self):
+        """
+        1-sigma uncertainty in right ascension of the ascending node
+        """
         return self.sigmas[:, 3]
 
-    @property
     def sigma_ap(self):
+        """
+        1-sigma uncertainty in argument of periapsis
+        """
         return self.sigmas[:, 4]
 
-    @property
     def sigma_tp(self):
+        """
+        1-sigma uncertainty in time of periapse passage
+        """
         return self.sigmas[:, 5]
 
-    @property
     def a(self):
-        # pericenter distance
+        """
+        Semi-major axis
+        """
         return self.q / (1 - self.e)
 
-    @property
-    def p(self):
-        # apocenter distance
+    def Q(self):
+        """
+        Apoapsis distance
+        """
         return self.a * (1 + self.e)
 
-    @property
+    def p(self):
+        """
+        Semi-latus rectum
+        """
+        return self.a / (1 - self.e**2)
+
+    def P(self):
+        """
+        Period
+        """
+        return np.sqrt(4 * np.pi**2 * self.a**3 / self.mu)
+
     def mu(self):
+        """
+        Gravitational parameter
+        """
         return self._mu
 
     def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _cometary_to_cartesian, cometary_to_cartesian
+
+        if self.times is None:
+            err = (
+                "To convert Cometary coordinates to Cartesian coordinates, the times\n"
+                "at which the Coordinates coordinates are defined is required to give\n"
+                "the time of periapsis passage context."
+            )
+            raise ValueError(err)
 
         coords_cartesian = cometary_to_cartesian(
             self.values.filled(),
@@ -159,6 +207,8 @@ class CometaryCoordinates(Coordinates):
                 self.values,
                 self.covariances,
                 _cometary_to_cartesian,
+                in_axes=(0, 0, None, None, None),
+                out_axes=0,
                 t0=self.times.tdb.mjd,
                 mu=self.mu,
                 max_iter=100,
@@ -183,8 +233,18 @@ class CometaryCoordinates(Coordinates):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates, mu=MU):
+    def from_cartesian(
+        cls, cartesian: CartesianCoordinates, mu: float = MU
+    ) -> "CometaryCoordinates":
         from .transform import _cartesian_to_cometary, cartesian_to_cometary
+
+        if cartesian.times is None:
+            err = (
+                "To convert Cometary coordinates to Cartesian coordinates, the times\n"
+                "at which the Cartesian coordinates are defined is required to calculate\n"
+                "the time of periapsis passage."
+            )
+            raise ValueError(err)
 
         coords_cometary = cartesian_to_cometary(
             cartesian.values.filled(),
@@ -222,8 +282,12 @@ class CometaryCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls, df, coord_cols=COMETARY_COLS, origin_col="origin", frame_col="frame"
-    ):
+        cls,
+        df: pd.DataFrame,
+        coord_cols: dict = COMETARY_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "CometaryCoordinates":
         """
         Create a KeplerianCoordinates class from a dataframe.
 
@@ -232,10 +296,10 @@ class CometaryCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing Keplerian coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["q"] = Column name of pericenter distance values
                 coord_cols["e"] = Column name of eccentricity values
                 coord_cols["i"] = Column name of inclination values

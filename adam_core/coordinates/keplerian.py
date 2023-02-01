@@ -1,7 +1,7 @@
-from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from astropy.time import Time
 from jax import config
@@ -20,8 +20,8 @@ __all__ = [
     "KEPLERIAN_UNITS",
 ]
 
-KEPLERIAN_COLS = OrderedDict()
-KEPLERIAN_UNITS = OrderedDict()
+KEPLERIAN_COLS = {}
+KEPLERIAN_UNITS = {}
 for i in ["a", "e", "i", "raan", "ap", "M"]:
     KEPLERIAN_COLS[i] = i
 KEPLERIAN_UNITS["a"] = u.au
@@ -37,12 +37,12 @@ MU = c.MU
 class KeplerianCoordinates(Coordinates):
     def __init__(
         self,
-        a: Optional[np.ndarray] = None,
-        e: Optional[np.ndarray] = None,
-        i: Optional[np.ndarray] = None,
-        raan: Optional[np.ndarray] = None,
-        ap: Optional[np.ndarray] = None,
-        M: Optional[np.ndarray] = None,
+        a: Optional[Union[int, float, np.ndarray]] = None,
+        e: Optional[Union[int, float, np.ndarray]] = None,
+        i: Optional[Union[int, float, np.ndarray]] = None,
+        raan: Optional[Union[int, float, np.ndarray]] = None,
+        ap: Optional[Union[int, float, np.ndarray]] = None,
+        M: Optional[Union[int, float, np.ndarray]] = None,
         times: Optional[Time] = None,
         covariances: Optional[np.ndarray] = None,
         sigma_a: Optional[np.ndarray] = None,
@@ -51,10 +51,10 @@ class KeplerianCoordinates(Coordinates):
         sigma_raan: Optional[np.ndarray] = None,
         sigma_ap: Optional[np.ndarray] = None,
         sigma_M: Optional[np.ndarray] = None,
-        origin: str = "heliocentric",
+        origin: str = "heliocenter",
         frame: str = "ecliptic",
-        names: OrderedDict = KEPLERIAN_COLS,
-        units: OrderedDict = KEPLERIAN_UNITS,
+        names: dict = KEPLERIAN_COLS,
+        units: dict = KEPLERIAN_UNITS,
         mu: float = MU,
     ):
         sigmas = (sigma_a, sigma_e, sigma_i, sigma_raan, sigma_ap, sigma_M)
@@ -78,86 +78,122 @@ class KeplerianCoordinates(Coordinates):
 
         return
 
-    @property
     def a(self):
+        """
+        Semi-major axis
+        """
         return self._values[:, 0]
 
-    @property
     def e(self):
+        """
+        Eccentricity
+        """
         return self._values[:, 1]
 
-    @property
     def i(self):
+        """
+        Inclination
+        """
         return self._values[:, 2]
 
-    @property
     def raan(self):
+        """
+        Right ascension of the ascending node
+        """
         return self._values[:, 3]
 
-    @property
     def ap(self):
+        """
+        Argument of periapsis
+        """
         return self._values[:, 4]
 
-    @property
     def M(self):
+        """
+        Mean anomaly
+        """
         return self._values[:, 5]
 
-    @property
     def sigma_a(self):
+        """
+        1-sigma uncertainty in semi-major axis
+        """
         return self.sigmas[:, 0]
 
-    @property
     def sigma_e(self):
+        """
+        1-sigma uncertainty in eccentricity
+        """
         return self.sigmas[:, 1]
 
-    @property
     def sigma_i(self):
+        """
+        1-sigma uncertainty in inclination
+        """
         return self.sigmas[:, 2]
 
-    @property
     def sigma_raan(self):
+        """
+        1-sigma uncertainty in right ascension of the ascending node
+        """
         return self.sigmas[:, 3]
 
-    @property
     def sigma_ap(self):
+        """
+        1-sigma uncertainty in argument of periapsis
+        """
         return self.sigmas[:, 4]
 
-    @property
     def sigma_M(self):
+        """
+        1-sigma uncertainty in mean anomaly
+        """
         return self.sigmas[:, 5]
 
-    @property
     def q(self):
-        # pericenter distance
+        """
+        Periapsis distance
+        """
         return self.a * (1 - self.e)
 
-    @property
-    def p(self):
-        # apocenter distance
+    def Q(self):
+        """
+        Apoapsis distance
+        """
         return self.a * (1 + self.e)
 
-    @property
+    def p(self):
+        """
+        Semi-latus rectum
+        """
+        return self.a / (1 - self.e**2)
+
     def P(self):
+        """
+        Period
+        """
         return np.sqrt(4 * np.pi**2 * self.a**3 / self.mu)
 
-    @property
     def mu(self):
+        """
+        Gravitational parameter
+        """
         return self._mu
 
     def to_cartesian(self) -> CartesianCoordinates:
-        from .transform import _keplerian_to_cartesian, keplerian_to_cartesian
+        from .transform import _keplerian_to_cartesian_a, keplerian_to_cartesian
 
         coords_cartesian = keplerian_to_cartesian(
             self.values.filled(),
             mu=MU,
-            max_iter=100,
+            max_iter=1000,
             tol=1e-15,
         )
         coords_cartesian = np.array(coords_cartesian)
 
         if self.covariances is not None:
             covariances_cartesian = transform_covariances_jacobian(
-                self.values, self.covariances, _keplerian_to_cartesian
+                self.values, self.covariances, _keplerian_to_cartesian_a
             )
         else:
             covariances_cartesian = None
@@ -178,7 +214,7 @@ class KeplerianCoordinates(Coordinates):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates, mu=MU):
+    def from_cartesian(cls, cartesian: CartesianCoordinates, mu: float = MU):
         from .transform import _cartesian_to_keplerian6, cartesian_to_keplerian
 
         coords_keplerian = cartesian_to_keplerian(
@@ -193,6 +229,8 @@ class KeplerianCoordinates(Coordinates):
                 cartesian.values,
                 cartesian.covariances,
                 _cartesian_to_keplerian6,
+                in_axes=(0, 0, None),
+                out_axes=0,
                 t0=cartesian.times.tdb.mjd,
                 mu=mu,
             )
@@ -201,11 +239,11 @@ class KeplerianCoordinates(Coordinates):
 
         coords = cls(
             a=coords_keplerian[:, 0],
-            e=coords_keplerian[:, 2],
-            i=coords_keplerian[:, 3],
-            raan=coords_keplerian[:, 4],
-            ap=coords_keplerian[:, 5],
-            M=coords_keplerian[:, 6],
+            e=coords_keplerian[:, 4],
+            i=coords_keplerian[:, 5],
+            raan=coords_keplerian[:, 6],
+            ap=coords_keplerian[:, 7],
+            M=coords_keplerian[:, 8],
             times=cartesian.times,
             covariances=covariances_keplerian,
             origin=cartesian.origin,
@@ -217,8 +255,12 @@ class KeplerianCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls, df, coord_cols=KEPLERIAN_COLS, origin_col="origin", frame_col="frame"
-    ):
+        cls,
+        df: pd.DataFrame,
+        coord_cols: dict = KEPLERIAN_COLS,
+        origin_col: str = "origin",
+        frame_col: str = "frame",
+    ) -> "KeplerianCoordinates":
         """
         Create a KeplerianCoordinates class from a dataframe.
 
@@ -227,10 +269,10 @@ class KeplerianCoordinates(Coordinates):
         df : `~pandas.DataFrame`
             Pandas DataFrame containing Keplerian coordinates and optionally their
             times and covariances.
-        coord_cols : OrderedDict
-            Ordered dictionary containing as keys the coordinate dimensions and their equivalent columns
+        coord_cols : dict
+            Dictionary containing as keys the coordinate dimensions and their equivalent columns
             as values. For example,
-                coord_cols = OrderedDict()
+                coord_cols = {}
                 coord_cols["a"] = Column name of semi-major axis values
                 coord_cols["e"] = Column name of eccentricity values
                 coord_cols["i"] = Column name of inclination values
