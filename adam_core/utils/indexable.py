@@ -205,7 +205,7 @@ class Indexable:
         member_lengths = {
             len(v)
             for v in self.__dict__.values()
-            if isinstance(v, SLICEABLE_DATA_STRUCTURES)
+            if isinstance(v, SLICEABLE_DATA_STRUCTURES) or isinstance(v, Indexable)
         }
         if len(member_lengths) != 1:
             raise ValueError("All sliceable members must have the same length.")
