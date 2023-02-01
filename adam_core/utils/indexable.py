@@ -75,6 +75,29 @@ def _map_values_to_integers(values: npt.ArrayLike) -> npt.NDArray[int]:
     return np.array(values_mapped["values_mapped"])
 
 
+def _check_slices_are_consecutive(slices: npt.NDArray[slice]) -> bool:
+    """
+    Checks if an array of slices are consecutive and share the same step.
+
+    Parameters
+    ----------
+    slices : np.ndarray[slice]
+        The slices to be checked.
+
+    Returns
+    -------
+    bool
+        True if the slices are consecutive and share the same step.
+    """
+    for i, s_i in enumerate(slices[:-1]):
+        if s_i.stop != slices[i + 1].start:
+            return False
+        if s_i.step is not None and (s_i.step != slices[i + 1].step):
+            return False
+
+    return True
+
+
 class Indexable:
     """
     Class that enables indexing and slicing of itself and its members.
@@ -292,7 +315,7 @@ class Indexable:
 
         Returns
         -------
-        member_ind : np.ndarray
+        member_ind : slice or np.ndarray
             Slice into this class's members.
         """
         # --- Integer Slice
@@ -318,32 +341,31 @@ class Indexable:
 
         elif isinstance(ind, slice) and self._class_index_to_members_is_slice:
 
+            slices = self._class_index_to_members[ind]
+
+            # If there is only one slice then we can just return it
+            if len(slices) == 1:
+                return slices[0]
+
             # Check if the array of slices are consecutive and share
             # the same step size. If so, create a single slice that
             # combines all of the slices.
-            slices = self._class_index_to_members[ind]
-            is_consecutive = True
-            for i, s_i in enumerate(slices[:-1]):
-                if s_i.stop != slices[i + 1].start:
-                    is_consecutive = False
-                    break
-                if s_i.step is not None and (s_i.step != slices[i + 1].step):
-                    is_consecutive = False
-                    break
-
-            if is_consecutive:
+            elif _check_slices_are_consecutive(slices):
                 logger.debug(
                     "Slices are consecutive and share the same step. "
                     f"Combining slices a single slice with start {slices[0].start}, "
                     f"end {slices[-1].stop} and step {slices[0].step}."
                 )
                 return slice(slices[0].start, slices[-1].stop, slices[0].step)
+
+            # If the slices are not consecutive then we need to
+            # combine them and return the indices of the members
             else:
                 logger.debug(
                     "Slices are not consecutive. "
-                    "Combining slices a concatenating the members index for each slice."
+                    "Combining slices and concatenating the members index for each slice."
                 )
-                return np.concatenate([self._class_index[s] for s in slices])
+                return np.concatenate([self._member_index[s] for s in slices])
 
         elif np.array_equal(self._class_index, self._member_index):
             logger.debug("Using class index to index member arrays.")

@@ -6,6 +6,7 @@ from astropy.time import Time
 
 from ..indexable import (
     Indexable,
+    _check_slices_are_consecutive,
     _convert_grouped_array_to_slices,
     _map_values_to_integers,
     concatenate,
@@ -158,6 +159,20 @@ def test__map_values_to_integers():
     mapping = _map_values_to_integers(values)
     desired = np.array([0, 1, 0])
     np.testing.assert_equal(mapping, desired)
+
+
+def test__check_slices_are_consecutive():
+    # Slices are consecutive and share the same step
+    slices = np.array([slice(0, 1, 1), slice(1, 2, 1), slice(2, 10, 1)])
+    assert _check_slices_are_consecutive(slices) is True
+
+    # Step is not consistent
+    slices = np.array([slice(0, 1, 1), slice(1, 2, 2), slice(2, 10, 1)])
+    assert _check_slices_are_consecutive(slices) is False
+
+    # Step is consistent but slices are not consecutive
+    slices = np.array([slice(0, 1, 1), slice(1, 2, 1), slice(0, 1, 1)])
+    assert _check_slices_are_consecutive(slices) is False
 
 
 def test__check_member_validity_raises():
