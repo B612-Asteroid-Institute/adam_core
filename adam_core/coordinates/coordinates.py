@@ -253,7 +253,7 @@ class Coordinates(Indexable):
             if (isinstance(sigmas, tuple) and all(sigmas)) or isinstance(
                 sigmas, (np.ndarray, np.ma.masked_array)
             ):
-                logger.info(
+                logger.warning(
                     "Both covariances and sigmas have been given. Sigmas will be ignored "
                     "and the covariance matrices will be used instead."
                 )
