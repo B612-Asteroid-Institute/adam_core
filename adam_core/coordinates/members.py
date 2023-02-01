@@ -67,7 +67,7 @@ class CoordinateMembers(Indexable):
         else:
             index = np.array([])
 
-        Indexable.__init__(self, index)
+        super().__init__(self, index)
         return
 
     def cartesian(self):
