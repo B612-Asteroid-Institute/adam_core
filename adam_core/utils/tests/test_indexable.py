@@ -365,17 +365,13 @@ def test_Indexable_set_index_int_unsorted():
     indexable.set_index("index_array_int")
 
     # The index is unsorted with the numbers 0-9 repeated 10 times
-    assert indexable._class_index_attribute == "index_array_int"
-    np.testing.assert_equal(
-        indexable._class_index, np.unique(indexable.index_array_int)
-    )
+    assert indexable._index_attribute == "index_array_int"
+    np.testing.assert_equal(indexable._index, np.unique(indexable.index_array_int))
 
     # The class index to members mapping should be an array of integers
     # since the index is cannot be represented as slices
-    np.testing.assert_equal(
-        indexable._class_index_to_integers, indexable.index_array_int
-    )
-    assert indexable._class_index_to_slices is None
+    np.testing.assert_equal(indexable._index_to_integers, indexable.index_array_int)
+    assert indexable._index_to_slices is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -395,18 +391,16 @@ def test_Indexable_set_index_int_sorted():
     indexable.set_index("index_array_int")
 
     # The index is sorted with the with the numbers 0-9 repeated 10 times in order
-    assert indexable._class_index_attribute == "index_array_int"
-    np.testing.assert_equal(
-        indexable._class_index, np.unique(indexable.index_array_int)
-    )
+    assert indexable._index_attribute == "index_array_int"
+    np.testing.assert_equal(indexable._index, np.unique(indexable.index_array_int))
 
     # The class index to slices mapping should be an array of slices
     # since the index is can be represented as slices
     np.testing.assert_equal(
-        indexable._class_index_to_slices,
+        indexable._index_to_slices,
         np.array([slice(10 * i, 10 * (i + 1), 1) for i in range(10)]),
     )
-    assert indexable._class_index_to_integers is None
+    assert indexable._index_to_integers is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -428,15 +422,13 @@ def test_Indexable_set_index_str_unsorted():
     indexable.set_index("index_array_str")
 
     # The index is unsorted with the numbers 0-9 repeated 10 times
-    assert indexable._class_index_attribute == "index_array_str"
-    np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
+    assert indexable._index_attribute == "index_array_str"
+    np.testing.assert_equal(indexable._index, np.arange(0, 10))
 
     # The class index to members mapping should be an array of integers
     # since the index is cannot be represented as slices
-    np.testing.assert_equal(
-        indexable._class_index_to_integers, indexable.index_array_int
-    )
-    assert indexable._class_index_to_slices is None
+    np.testing.assert_equal(indexable._index_to_integers, indexable.index_array_int)
+    assert indexable._index_to_slices is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
@@ -463,16 +455,16 @@ def test_Indexable_set_index_str_sorted():
     indexable.set_index("index_array_str")
 
     # The index is unsorted with the numbers 0-9 repeated 10 times
-    assert indexable._class_index_attribute == "index_array_str"
-    np.testing.assert_equal(indexable._class_index, np.arange(0, 10))
+    assert indexable._index_attribute == "index_array_str"
+    np.testing.assert_equal(indexable._index, np.arange(0, 10))
 
     # The class index to slices mapping should be an array of slices
     # since the index is can be represented as slices
     np.testing.assert_equal(
-        indexable._class_index_to_slices,
+        indexable._index_to_slices,
         np.array([slice(10 * i, 10 * (i + 1), 1) for i in range(10)]),
     )
-    assert indexable._class_index_to_integers is None
+    assert indexable._index_to_integers is None
 
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
