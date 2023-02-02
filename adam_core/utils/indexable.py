@@ -113,16 +113,18 @@ class Indexable:
             integer indices or an array of slices)
 
 
-    Class Index:
+    Index:
     [0, 1, 2]
-    The class index is used to determine the length (size) of the class. In this example,
+    The index is used to determine the length (size) of the class. In this example,
     the len(instance) would be 3.
 
-    Class To Members Mapping:
+    Index To Members Mapping:
     [0, 0, 0, 1, 1, 1, 2, 2, 2]
-    If, as above, the class to members mapping is sorted (monotonically increasing), then
-    it is converted to an array of slices which allows for faster querying.
+    or [1, 1, 1, 0, 0, 2, 2, 2]
+    If, as above, the index values are grouped, then they
+    are converted to an array of slices which allows for faster querying.
     [slice(0, 2), slice(2, 5), slice(5, 8)]
+
 
     For example, here orbits is a subclass of Indexable and has members that are
     `~numpy.ndarray`s, `~numpy.ma.core.MaskedArray`s, and `~astropy.time.core.Time`s.
@@ -173,7 +175,7 @@ class Indexable:
         """
         The externally facing index of the class.
         """
-        return self._class_index
+        return self._index
 
     @index.setter
     def index(self, value):
@@ -225,15 +227,15 @@ class Indexable:
 
         Sets
         ----
-        self._class_index : `~numpy.ndarray`
+        self._index : `~numpy.ndarray`
             The externally facing index of the class.
-        self._class_index_to_slices : `~numpy.ndarray`, None
+        self._index_to_slices : `~numpy.ndarray`, None
             The mapping from the externally facing index to the class members as slices into the
             underlying arrays. None if the arrays are not grouped.
-        self._class_index_to_integers : `~numpy.ndarray`, None
+        self._index_to_integers : `~numpy.ndarray`, None
             The mapping from the externally facing index to the class members as integers into the
             underlying arrays. None if the arrays are grouped and can be represented as slices
-        self._class_index_attribute : str, None
+        self._index_attribute : str, None
             The attribute on which the index was set, if any. None if no attribute was used.
         self._member_length : int
             The length of the members of the class.
@@ -248,49 +250,44 @@ class Indexable:
         self._member_length = self._check_member_validity()
 
         # Figure out the values that are going to be mapped to an index
-        # If no index values are given then we set the class index
+        # If no index values are given then we set the index
         # to be the range of the member lengths
         if index_values is None:
             # Use the range of the member lengths
-            class_index_values = np.arange(0, self._member_length)
-            self._class_index_attribute = None
+            index_values_ = np.arange(0, self._member_length)
+            self._index_attribute = None
         elif isinstance(index_values, str):
             # Use the provided string as an attribute lookup
-            class_index_values = getattr(self, index_values)
-            self._class_index_attribute = index_values
+            index_values_ = getattr(self, index_values)
+            self._index_attribute = index_values
         elif isinstance(index_values, np.ndarray):
             # Use the provided values directly
-            class_index_values = index_values
-            self._class_index_attribute = None
+            index_values_ = index_values
+            self._index_attribute = None
         else:
             raise ValueError("values must be None, str, or numpy.ndarray")
 
         # If the index is to be set using an array that has a non-integer dtype
         # then we map the unique values of the index to integers. This will make querying the
         # index significantly faster.
-        if (
-            isinstance(class_index_values, np.ndarray)
-            and class_index_values.dtype.type != int
-        ):
-            logger.debug("Mapping class index values to integers.")
-            class_index_values = _map_values_to_integers(class_index_values)
+        if isinstance(index_values_, np.ndarray) and index_values_.dtype.type != int:
+            logger.debug("Mapping index values to integers.")
+            index_values_ = _map_values_to_integers(index_values_)
 
         # Extract unique values to act as the externally facing index.
-        self._class_index = pd.unique(class_index_values)
+        self._index = pd.unique(index_values_)
 
-        # See if we can convert the class index to an array of slices.
+        # See if we can convert the index to an array of slices.
         try:
-            self._class_index_to_slices = _convert_grouped_array_to_slices(
-                class_index_values
-            )
-            self._class_index_to_integers = None
+            self._index_to_slices = _convert_grouped_array_to_slices(index_values_)
+            self._index_to_integers = None
             logger.debug(
-                "Class index values are grouped. Converted class index to an array of slices."
+                "Index values are grouped. Converted index to an array of slices."
             )
         except ValueError:
-            self._class_index_to_slices = None
-            self._class_index_to_integers = class_index_values
-            logger.debug("Class index values are not grouped.")
+            self._index_to_slices = None
+            self._index_to_integers = index_values_
+            logger.debug("Index values are not grouped.")
 
         return
 
@@ -299,13 +296,13 @@ class Indexable:
     ) -> np.ndarray:
         """
         Given a integer, slice, list, or `~numpy.ndarray`, appropriately slice
-        the class index and return the correct index or indices for this class's underlying
+        the index and return the correct index or indices for this class's underlying
         members.
 
         Parameters
         ----------
         class_ind : Union[int, slice, list, np.ndarray]
-            Slice of the class index.
+            Slice of the index.
 
         Returns
         -------
@@ -337,9 +334,9 @@ class Indexable:
 
         elif (
             isinstance(ind, (slice, np.ndarray, list))
-            and self._class_index_to_slices is not None
+            and self._index_to_slices is not None
         ):
-            slices = self._class_index_to_slices[ind]
+            slices = self._index_to_slices[ind]
 
             # If there is only one slice then we can just return it
             if len(slices) == 1:
@@ -365,29 +362,27 @@ class Indexable:
                 )
                 return np.concatenate([member_indices[s] for s in slices])
 
-        elif np.array_equal(self._class_index, member_indices):
-            logger.debug("Using class index to index member arrays.")
-            return self._class_index[ind]
+        elif np.array_equal(self._index, member_indices):
+            logger.debug("Using index to directly index member arrays.")
+            return self._index[ind]
         else:
-            logger.debug(
-                "Using unique class index to index member arrays with np.isin."
-            )
+            logger.debug("Using index to index member arrays with np.isin.")
             return member_indices[
                 np.isin(
-                    self._class_index_to_integers,
-                    self._class_index[ind],
+                    self._index_to_integers,
+                    self._index[ind],
                 )
             ]
 
     def __len__(self):
-        return len(self._class_index)
+        return len(self._index)
 
     def __getitem__(self, class_ind: Union[int, slice, list, np.ndarray]):
         member_ind = self._query_index(class_ind)
         copy_self = copy(self)
 
         for k, v in copy_self.__dict__.items():
-            if k != "_class_index":
+            if k != "_index":
                 if isinstance(v, (np.ndarray, np.ma.masked_array, Time, Indexable)):
                     copy_self.__dict__[k] = v[member_ind]
                 elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
@@ -406,8 +401,8 @@ class Indexable:
         member_ind = self._query_index(class_ind)
 
         for k, v in self.__dict__.items():
-            # Everything but the class index is sliced as normal
-            if k != "_class_index":
+            # Everything but the index is sliced as normal
+            if k != "_index":
                 if isinstance(v, np.ma.masked_array):
                     self.__dict__[k] = np.delete(v, member_ind, axis=0)
                     self.__dict__[k].mask = np.delete(v.mask, member_ind, axis=0)
@@ -432,13 +427,13 @@ class Indexable:
             else:
                 self.__dict__[k] = np.delete(v, np.s_[class_ind], axis=0)
 
-        self.set_index(self._class_index_attribute)
+        self.set_index(self._index_attribute)
 
         return
 
     def __next__(self):
         try:
-            self._class_index[self.idx]
+            self._index[self.idx]
         except IndexError:
             self.idx = 0
             raise StopIteration
@@ -554,7 +549,7 @@ class Indexable:
         sorted_indices = df_sorted.index.values
 
         # Store the index attribute if there was one
-        index_attribute = deepcopy(self._class_index_attribute)
+        index_attribute = deepcopy(self._index_attribute)
 
         # Reset index to be equal to the range of integers corresponding to the
         # length of the class's members.
@@ -653,9 +648,9 @@ def concatenate(
                     np.concatenate(v), scale=time_scales[k], format="mjd"
                 )
 
-    if "_class_index" in copy.__dict__.keys():
-        if copy._class_index_attribute is not None:
-            copy.set_index(copy._class_index_attribute)
+    if "_index" in copy.__dict__.keys():
+        if copy._index_attribute is not None:
+            copy.set_index(copy._index_attribute)
         else:
             copy.set_index()
 
