@@ -332,7 +332,7 @@ def _cartesian_to_keplerian(
         nu : true anomaly in degrees.
         n : mean motion in degrees per day.
         P : period in days.
-        tp : time of pericenter passage in days.
+        tp : time of periapsis passage in days.
 
     References
     ----------
@@ -384,7 +384,7 @@ def _cartesian_to_keplerian(
         (i < FLOAT_TOLERANCE) | (jnp.abs(i - 2 * jnp.pi) < FLOAT_TOLERANCE), 0.0, raan
     )
 
-    # Calculate the argument of pericenter
+    # Calculate the argument of periapsis
     # Equation 2.4-9 in Bate, Mueller, & White [1]
     ap = jnp.arccos(jnp.dot(n, e_vec) / (n_mag * e))
     # Adopt convention that if the orbit is circular the argument of
@@ -439,11 +439,11 @@ def _cartesian_to_keplerian(
 
     # In the case of closed orbits, if the mean anomaly is
     # greater than 180 degrees then the orbit is
-    # approaching pericenter passage in which case
-    # the pericenter will occur in the future
+    # approaching periapsis passage in which case
+    # the periapsis will occur in the future
     # in less than half a period. If the mean anomaly is less
-    # than 180 degrees, then the orbit is ascending from pericenter
-    # passage and the most recent pericenter was in the past.
+    # than 180 degrees, then the orbit is ascending from periapsis
+    # passage and the most recent periapsis was in the past.
     dtp = M / n
     dtp = jnp.where((M > jnp.pi) & (e < (1.0 - FLOAT_TOLERANCE)), P - M / n, -M / n)
     tp = t0 + dtp
@@ -552,7 +552,7 @@ def cartesian_to_keplerian(
         nu : true anomaly in degrees.
         n : mean motion in degrees per day.
         P : period in days.
-        tp : time of pericenter passage in days.
+        tp : time of periapsis passage in days.
     """
     coords_keplerian = _cartesian_to_keplerian_vmap(coords_cartesian, t0, mu)
     return coords_keplerian

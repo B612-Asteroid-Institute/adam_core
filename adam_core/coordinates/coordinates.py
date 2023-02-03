@@ -441,7 +441,7 @@ class Coordinates(Indexable):
                 coord_cols["e"] = Column name of eccentricity values
                 coord_cols["i"] = Column name of inclination values
                 coord_cols["raan"] = Column name of longitude of ascending node values
-                coord_cols["ap"] = Column name of argument of pericenter values
+                coord_cols["ap"] = Column name of argument of periapsis values
                 coord_cols["M"] = Column name of mean anomaly values
         origin_col : str
             Name of the column containing the origin of each coordinate.

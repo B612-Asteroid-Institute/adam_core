@@ -86,77 +86,209 @@ class SphericalCoordinates(Coordinates):
         )
         return
 
+    @property
     def rho(self):
         """
         Radial distance
         """
         return self._values[:, 0]
 
+    @rho.setter
+    def rho(self, value):
+        self._values[:, 0] = value
+        self._values[:, 0].mask = False
+
+    @rho.deleter
+    def rho(self):
+        self._values[:, 0] = np.nan
+        self._values[:, 0].mask = True
+
+    @property
     def lon(self):
         """
         Longitude
         """
         return self._values[:, 1]
 
+    @lon.setter
+    def lon(self, value):
+        self._values[:, 1] = value
+        self._values[:, 1].mask = False
+
+    @lon.deleter
+    def lon(self):
+        self._values[:, 1] = np.nan
+        self._values[:, 1].mask = True
+
+    @property
     def lat(self):
         """
         Latitude
         """
         return self._values[:, 2]
 
+    @lat.setter
+    def lat(self, value):
+        self._values[:, 2] = value
+        self._values[:, 2].mask = False
+
+    @lat.deleter
+    def lat(self):
+        self._values[:, 2] = np.nan
+        self._values[:, 2].mask = True
+
+    @property
     def vrho(self):
         """
         Radial velocity
         """
         return self._values[:, 3]
 
+    @vrho.setter
+    def vrho(self, value):
+        self._values[:, 3] = value
+        self._values[:, 3].mask = False
+
+    @vrho.deleter
+    def vrho(self):
+        self._values[:, 3] = np.nan
+        self._values[:, 3].mask = True
+
+    @property
     def vlon(self):
         """
         Longitudinal velocity
         """
         return self._values[:, 4]
 
+    @vlon.setter
+    def vlon(self, value):
+        self._values[:, 4] = value
+        self._values[:, 4].mask = False
+
+    @vlon.deleter
+    def vlon(self):
+        self._values[:, 4] = np.nan
+        self._values[:, 4].mask = True
+
+    @property
     def vlat(self):
         """
         Latitudinal velocity
         """
         return self._values[:, 5]
 
+    @vlat.setter
+    def vlat(self, value):
+        self._values[:, 5] = value
+        self._values[:, 5].mask = False
+
+    @vlat.deleter
+    def vlat(self):
+        self._values[:, 5] = np.nan
+        self._values[:, 5].mask = True
+
+    @property
     def sigma_rho(self):
         """
         1-sigma uncertainty in radial distance
         """
         return self.sigmas[:, 0]
 
+    @sigma_rho.setter
+    def sigma_rho(self, value):
+        self._covariances[:, 0, 0] = value**2
+        self._covariances[:, 0, 0].mask = False
+
+    @sigma_rho.deleter
+    def sigma_rho(self):
+        self._covariances[:, 0, 0] = np.nan
+        self._covariances[:, 0, 0].mask = True
+
+    @property
     def sigma_lon(self):
         """
         1-sigma uncertainty in longitude
         """
         return self.sigmas[:, 1]
 
+    @sigma_lon.setter
+    def sigma_lon(self, value):
+        self._covariances[:, 1, 1] = value**2
+        self._covariances[:, 1, 1].mask = False
+
+    @sigma_lon.deleter
+    def sigma_lon(self):
+        self._covariances[:, 1, 1] = np.nan
+        self._covariances[:, 1, 1].mask = True
+
+    @property
     def sigma_lat(self):
         """
         1-sigma uncertainty in latitude
         """
         return self.sigmas[:, 2]
 
+    @sigma_lat.setter
+    def sigma_lat(self, value):
+        self._covariances[:, 2, 2] = value**2
+        self._covariances[:, 2, 2].mask = False
+
+    @sigma_lat.deleter
+    def sigma_lat(self):
+        self._covariances[:, 2, 2] = np.nan
+        self._covariances[:, 2, 2].mask = True
+
+    @property
     def sigma_vrho(self):
         """
         1-sigma uncertainty in radial velocity
         """
         return self.sigmas[:, 3]
 
+    @sigma_vrho.setter
+    def sigma_vrho(self, value):
+        self._covariances[:, 3, 3] = value**2
+        self._covariances[:, 3, 3].mask = False
+
+    @sigma_vrho.deleter
+    def sigma_vrho(self):
+        self._covariances[:, 3, 3] = np.nan
+        self._covariances[:, 3, 3].mask = True
+
+    @property
     def sigma_vlon(self):
         """
         1-sigma uncertainty in longitudinal velocity
         """
         return self.sigmas[:, 4]
 
+    @sigma_vlon.setter
+    def sigma_vlon(self, value):
+        self._covariances[:, 4, 4] = value**2
+        self._covariances[:, 4, 4].mask = False
+
+    @sigma_vlon.deleter
+    def sigma_vlon(self):
+        self._covariances[:, 4, 4] = np.nan
+        self._covariances[:, 4, 4].mask = True
+
+    @property
     def sigma_vlat(self):
         """
         1-sigma uncertainty in latitudinal velocity
         """
         return self.sigmas[:, 5]
+
+    @sigma_vlat.setter
+    def sigma_vlat(self, value):
+        self._covariances[:, 5, 5] = value**2
+        self._covariances[:, 5, 5].mask = False
+
+    @sigma_vlat.deleter
+    def sigma_vlat(self):
+        self._covariances[:, 5, 5] = np.nan
+        self._covariances[:, 5, 5].mask = True
 
     def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _spherical_to_cartesian, spherical_to_cartesian
