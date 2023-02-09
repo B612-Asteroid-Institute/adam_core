@@ -63,9 +63,11 @@ def sigmas_to_covariance(
         I = np.identity(D, dtype=sigmas_.dtype)  # NOQA: E741
         covariances = np.einsum("kj,ji->kij", sigmas_**2, I)
         covariances = np.ma.masked_array(
-            covariances, dtype=np.float64, fill_value=COVARIANCE_FILL_VALUE
+            covariances,
+            dtype=np.float64,
+            fill_value=COVARIANCE_FILL_VALUE,
         )
-        covariances.mask = np.where(np.isnan(covariances) | (covariances == 0), 1, 0)
+        covariances.mask = np.ma.zeros((N, D, D), dtype=bool)
 
     return covariances
 
