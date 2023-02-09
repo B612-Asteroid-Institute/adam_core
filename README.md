@@ -6,7 +6,110 @@ A set of shared astrodynamics libraries and utilities.
 
 ## Usage
 
-### Coordinates
+### Orbits
+
+To define an orbit: 
+```python
+from astropy.time import Time
+from adam_core.coordinates import KeplerianCoordinates
+from adam_core.orbits import Orbits
+
+keplerian_elements = KeplerianCoordinates(
+    times=Time(59000.0, scale="tdb", format="mjd"),
+    a=1.0, 
+    e=0.002,
+    i=10.,
+    raan=50.0,
+    ap=20.0,
+    M=30.0, 
+)
+orbits = Orbits(
+    keplerian_elements,
+    orbit_ids=["1"],
+    object_ids=["Test Orbit"]
+)
+```
+The underlying orbits class is 2 dimensional and can store elements and covariances for multiple orbits.
+
+Orbits can be easily converted to a pandas DataFrame:
+```python
+orbits.to_df()
+  orbit_id   object_id  mjd_tdb    a      e     i  raan    ap     M       origin     frame
+0        1  Test Orbit  59000.0  1.0  0.002  10.0  50.0  20.0  30.0  heliocenter  ecliptic
+```
+
+Orbits can also be defined with uncertainties. 
+```python
+from astropy.time import Time
+from adam_core.coordinates import KeplerianCoordinates
+from adam_core.orbits import Orbits
+
+keplerian_elements = KeplerianCoordinates(
+    times=Time(59000.0, scale="tdb", format="mjd"),
+    a=1.0, 
+    e=0.002,
+    i=10.,
+    raan=50.0,
+    ap=20.0,
+    M=30.0, 
+    sigma_a=0.002,
+    sigma_e=0.001,
+    sigma_i=0.01,
+    sigma_raan=0.01,
+    sigma_ap=0.1,
+    sigma_M=0.1,
+)
+
+orbits = Orbits(
+    keplerian_elements,
+    orbit_ids=["1"],
+    object_ids=["Test Orbit with Uncertainties"]
+)
+orbits.to_df(sigmas=True)
+  orbit_id                      object_id  mjd_tdb    a  ...  sigma_ap  sigma_M       origin     frame
+0        1  Test Orbit with Uncertainties  59000.0  1.0  ...       0.1      0.1  heliocenter  ecliptic
+```
+
+To query orbits from JPL Horizons: 
+```python
+from astropy.time import Time
+from adam_core.orbits.query import query_horizons
+
+times = Time([60000.0], scale="tdb", format="mjd")
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_horizons(object_ids, times)
+```
+
+To query orbits from JPL SBDB: 
+```python
+from adam_core.orbits.query import query_sbdb
+
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_sbdb(object_ids)
+```
+
+#### Orbital Element Conversions
+Orbital elements can be accessed via the corresponding attribute. All conversions, including covariances, are done on demand and stored. 
+
+```python
+# Keplerian Elements
+orbits.keplerian
+
+# Cometary Elements
+orbits.cometary
+
+# Cartesian Elements
+orbits.cartesian
+
+# Spherical Elements
+orbits.spherical
+```
+
+### Lower Level Classes
+These classes are designed more for developers interested in building codes derived from utilities 
+in this package. 
+
+#### Coordinates
 
 ```python
 from astropy.time import Time
@@ -37,7 +140,6 @@ keplerian_coordinates = transform_coordinates(
 )
 
 print(keplerian_coordinates)
-
 ```
 
 
@@ -48,6 +150,7 @@ adam_core
 ├── constants.py  # Shared constants
 ├── coordinates   # Coordinate classes and transformations
 ├── dynamics      # Numerical solutions
+├── orbits        # Orbits class and query utilities
 └── utils         # Utility classes like Indexable or conversions like times_from_df
 ```
 
