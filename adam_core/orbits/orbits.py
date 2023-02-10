@@ -7,6 +7,7 @@ import pandas as pd
 
 from ..coordinates.coordinates import Coordinates
 from ..coordinates.members import CoordinateMembers
+from .classification import calc_orbit_class
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class Orbits(CoordinateMembers):
         coordinates: Coordinates,
         orbit_ids: Optional[npt.ArrayLike] = None,
         object_ids: Optional[npt.ArrayLike] = None,
+        classes: Optional[npt.ArrayLike] = None,
     ):
         if orbit_ids is not None:
             self._orbit_ids = orbit_ids
@@ -27,6 +29,11 @@ class Orbits(CoordinateMembers):
             self._object_ids = object_ids
         else:
             self._object_ids = np.array(["None" for i in range(len(coordinates))])
+
+        if classes is not None:
+            self._classes = classes
+        else:
+            self._classes = None
 
         super().__init__(
             self,
@@ -70,6 +77,24 @@ class Orbits(CoordinateMembers):
     def object_ids(self):
         self._object_ids = np.array(["None" for i in range(len(self._object_ids))])
 
+    @property
+    def classes(self):
+        if self._classes is None:
+            logger.info("No classes have been set for these orbits. Calculating...")
+            self._classes = calc_orbit_class(self.keplerian)
+
+        return self._classes
+
+    @classes.setter
+    def classes(self, values):
+        if len(values) != len(self._orbit_ids):
+            raise ValueError("Classes must be the same length as the number of orbits.")
+        self._classes = values
+
+    @classes.deleter
+    def classes(self):
+        self._classes = np.array(["None" for i in range(len(self._classes))])
+
     def to_df(
         self,
         time_scale: str = "tdb",
@@ -105,6 +130,8 @@ class Orbits(CoordinateMembers):
         )
         df.insert(0, "orbit_id", self.orbit_ids)
         df.insert(1, "object_id", self.object_ids)
+        if self._classes is not None:
+            df.insert(2, "orbit_class", self.classes)
 
         return df
 
@@ -162,5 +189,10 @@ class Orbits(CoordinateMembers):
             data["object_ids"] = df["object_id"].values
         else:
             data["object_ids"] = None
+
+        if "orbit_class" in columns:
+            data["classes"] = df["class"].values
+        else:
+            data["classes"] = None
 
         return cls(**data)
