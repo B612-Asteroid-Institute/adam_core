@@ -127,6 +127,35 @@ orbits.cartesian
 orbits.spherical
 ```
 
+### Propagator
+The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. By default,
+`adam_core` ships with PYOORB.
+
+To propagate orbits with PYOORB (here we grab some orbits from Horizons first):
+```python
+import numpy as np
+from astropy.time import Time
+from astropy import units as u
+from adam_core.orbits.query import query_horizons
+from adam_core.propagator import PYOORB
+# Get orbit to propagate
+initial_time = Time([60000.0], scale="tdb", format="mjd")
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_horizons(object_ids, initial_time)
+# Make sure PYOORB is ready
+propagator = PYOORB()
+# Define propagation times
+times = initial_time + np.arange(0, 100) * u.d
+# Propagate orbits! This function supports multiprocessing for large
+# propagation jobs.
+propagated_orbits = propagator.propagate_orbits(
+    orbits,
+    times,
+    chunk_size=100,
+    num_jobs=1,
+)
+```
+
 ### Lower Level Classes
 These classes are designed more for developers interested in building codes derived from utilities
 in this package.
