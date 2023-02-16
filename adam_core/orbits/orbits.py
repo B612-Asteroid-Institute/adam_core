@@ -21,17 +21,17 @@ class Orbits(CoordinateMembers):
         classes: Optional[npt.ArrayLike] = None,
     ):
         if orbit_ids is not None:
-            self._orbit_ids = orbit_ids
+            self._orbit_ids = self._convert_to_array(orbit_ids)
         else:
             self._orbit_ids = np.arange(0, len(coordinates))
 
         if object_ids is not None:
-            self._object_ids = object_ids
+            self._object_ids = self._convert_to_array(object_ids)
         else:
             self._object_ids = np.array(["None" for i in range(len(coordinates))])
 
         if classes is not None:
-            self._classes = classes
+            self._classes = self._convert_to_array(classes)
         else:
             self._classes = None
 

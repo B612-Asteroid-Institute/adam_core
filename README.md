@@ -25,17 +25,39 @@ keplerian_elements = KeplerianCoordinates(
 )
 orbits = Orbits(
     keplerian_elements,
-    orbit_ids=["1"],
-    object_ids=["Test Orbit"]
+    orbit_ids="1",
+    object_ids="Test Orbit"
 )
 ```
 The underlying orbits class is 2 dimensional and can store elements and covariances for multiple orbits.
 
+```python
+from astropy.time import Time
+from adam_core.coordinates import KeplerianCoordinates
+from adam_core.orbits import Orbits
+
+keplerian_elements = KeplerianCoordinates(
+    times=Time([59000.0, 60000.0], scale="tdb", format="mjd"),
+    a=[1.0, 3.0], 
+    e=[0.002, 0.0],
+    i=[10., 30.],
+    raan=[50.0, 32.0],
+    ap=[20.0, 94.0],
+    M=[30.0, 159.0],
+)
+orbits = Orbits(
+    keplerian_elements,
+    orbit_ids=["1", "2"],
+    object_ids=["Test Orbit 1", "Test Orbit 2"]
+)
+```
+
 Orbits can be easily converted to a pandas DataFrame:
 ```python
 orbits.to_df()
-  orbit_id   object_id  mjd_tdb    a      e     i  raan    ap     M       origin     frame
-0        1  Test Orbit  59000.0  1.0  0.002  10.0  50.0  20.0  30.0  heliocenter  ecliptic
+  orbit_id     object_id  mjd_tdb    a      e     i  raan    ap      M       origin     frame
+0        1  Test Orbit 1  59000.0  1.0  0.002  10.0  50.0  20.0   30.0  heliocenter  ecliptic
+1        2  Test Orbit 2  60000.0  3.0  0.000  30.0  32.0  94.0  159.0  heliocenter  ecliptic
 ```
 
 Orbits can also be defined with uncertainties. 

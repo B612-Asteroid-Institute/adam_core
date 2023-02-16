@@ -291,6 +291,28 @@ class Indexable:
 
         return
 
+    @staticmethod
+    def _convert_to_array(value):
+        """
+        Check the type of the value and convert it to a numpy array if it is not already.
+
+        This should be used when ingesting data into the class to ensure that the data is
+        in the correct format.
+        """
+        if isinstance(value, (int, float, str)):
+            logger.debug("Converting member to a numpy array.")
+            value = np.array([value])
+        elif isinstance(value, list):
+            logger.debug("Converting list to a numpy array.")
+            value = np.array(value)
+        elif isinstance(value, (np.ndarray, np.ma.masked_array)):
+            logger.debug("Member is already a numpy array.")
+        else:
+            err = "Member must be int, float, str, list, or numpy.ndarray to be converted to a numpy.ndarray"
+            raise ValueError(err)
+
+        return value
+
     def _query_index(
         self, class_ind: Union[int, slice, list, np.ndarray]
     ) -> np.ndarray:

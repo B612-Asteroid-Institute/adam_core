@@ -206,6 +206,30 @@ def test__check_member_validity():
     assert member_length == N
 
 
+def test__convert_to_array():
+    # Test that the function correctly converts strings, floats, ints to an array
+    # as a single element in the array
+    value = "test str"
+    desired = np.array(["test str"])
+    np.testing.assert_equal(Indexable._convert_to_array(value), desired)
+
+    value = 23
+    desired = np.array([23])
+    np.testing.assert_equal(Indexable._convert_to_array(value), desired)
+
+    value = 3.14
+    desired = np.array([3.14])
+    np.testing.assert_equal(Indexable._convert_to_array(value), desired)
+
+    value = [3, 2, 1]
+    desired = np.array([3, 2, 1])
+    np.testing.assert_equal(Indexable._convert_to_array(value), desired)
+
+    value = np.array([1, 2, 3])
+    desired = np.array([1, 2, 3])
+    np.testing.assert_equal(Indexable._convert_to_array(value), desired)
+
+
 def test_Indexable__query_index_int():
     # Array is grouped and can be represented by slices
     indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
