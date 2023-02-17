@@ -178,10 +178,7 @@ class Coordinates(Indexable):
         D = len(kwargs)
         units_ = {}
         for d, (name, q) in enumerate(kwargs.items()):
-            if isinstance(q, (int, float)):
-                q_ = np.array([q], dtype=np.float64)
-            else:
-                q_ = q
+            q_ = self._convert_to_array(q)
 
             # If the coordinate dimension has a coresponding unit
             # then use that unit. If it does not look for the unit

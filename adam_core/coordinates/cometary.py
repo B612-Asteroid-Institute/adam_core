@@ -472,6 +472,8 @@ class CometaryCoordinates(Coordinates):
                 cartesian.values,
                 cartesian.covariances,
                 _cartesian_to_cometary,
+                in_axes=(0, 0, None),
+                out_axes=0,
                 t0=cartesian.times.tdb.mjd,
                 mu=mu,
             )

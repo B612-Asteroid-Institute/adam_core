@@ -1,3 +1,4 @@
+import logging
 from copy import deepcopy
 from typing import Optional
 
@@ -12,7 +13,7 @@ from .keplerian import KEPLERIAN_COLS, KeplerianCoordinates
 from .spherical import SPHERICAL_COLS, SphericalCoordinates
 from .transform import cartesian_to_frame, cartesian_to_origin, transform_coordinates
 
-__all__ = ["CoordinateMembers"]
+logger = logging.getLogger(__name__)
 
 
 class CoordinateMembers(Indexable):
@@ -65,11 +66,12 @@ class CoordinateMembers(Indexable):
         if coordinates is not None:
             index = np.arange(0, len(coordinates), 1)
         else:
-            index = np.array([])
+            index = None
 
-        Indexable.__init__(self, index)
+        super().__init__(self, index)
         return
 
+    @property
     def cartesian(self):
         if "CartesianCoordinates" not in self.__allowed_coordinate_types:
             err = "Cartesian coordinates are not supported by this class."
@@ -94,6 +96,31 @@ class CoordinateMembers(Indexable):
 
         return self._cartesian
 
+    @cartesian.setter
+    def cartesian(self, coords: CartesianCoordinates):
+        if "CartesianCoordinates" not in self.__allowed_coordinate_types:
+            err = "Cartesian coordinates are not supported by this class."
+            raise ValueError(err)
+
+        if len(coords) != len(self):
+            err = "Length of new coordinates must match length of existing coordinates."
+            raise ValueError(err)
+
+        logger.debug(
+            "Setting cartesian coordinates and clearing other cached representations."
+        )
+        self._cartesian = coords
+        self._keplerian = None
+        self._cometary = None
+        self._spherical = None
+        return
+
+    @cartesian.deleter
+    def cartesian(self):
+        self._cartesian = None
+        return
+
+    @property
     def spherical(self):
         if "SphericalCoordinates" not in self.__allowed_coordinate_types:
             err = "Spherical coordinates are not supported by this class."
@@ -118,6 +145,31 @@ class CoordinateMembers(Indexable):
 
         return self._spherical
 
+    @spherical.setter
+    def spherical(self, coords: SphericalCoordinates):
+        if "SphericalCoordinates" not in self.__allowed_coordinate_types:
+            err = "Spherical coordinates are not supported by this class."
+            raise ValueError(err)
+
+        if len(coords) != len(self):
+            err = "Length of new coordinates must match length of existing coordinates."
+            raise ValueError(err)
+
+        logger.debug(
+            "Setting spherical coordinates and clearing other cached representations."
+        )
+        self._spherical = coords
+        self._cartesian = None
+        self._keplerian = None
+        self._cometary = None
+        return
+
+    @spherical.deleter
+    def spherical(self):
+        self._spherical = None
+        return
+
+    @property
     def keplerian(self):
         if "KeplerianCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
@@ -142,6 +194,30 @@ class CoordinateMembers(Indexable):
 
         return self._keplerian
 
+    @keplerian.setter
+    def keplerian(self, coords: KeplerianCoordinates):
+        if "KeplerianCoordinates" not in self.__allowed_coordinate_types:
+            err = "Keplerian coordinates are not supported by this class."
+            raise ValueError(err)
+        if len(coords) != len(self):
+            err = "Length of new coordinates must match length of existing coordinates."
+            raise ValueError(err)
+
+        logger.debug(
+            "Setting keplerian coordinates and clearing other cached representations."
+        )
+        self._keplerian = coords
+        self._cartesian = None
+        self._spherical = None
+        self._cometary = None
+        return
+
+    @keplerian.deleter
+    def keplerian(self):
+        self._keplerian = None
+        return
+
+    @property
     def cometary(self):
         if "CometaryCoordinates" not in self.__allowed_coordinate_types:
             err = "Keplerian coordinates are not supported by this class."
@@ -164,6 +240,29 @@ class CoordinateMembers(Indexable):
             ):
                 self._cometary = transform_coordinates(self._spherical, "cometary")
         return self._cometary
+
+    @cometary.setter
+    def cometary(self, coords: CometaryCoordinates):
+        if "CometaryCoordinates" not in self.__allowed_coordinate_types:
+            err = "Cometary coordinates are not supported by this class."
+            raise ValueError(err)
+        if len(coords) != len(self):
+            err = "Length of new coordinates must match length of existing coordinates."
+            raise ValueError(err)
+
+        logger.debug(
+            "Setting cometary coordinates and clearing other cached representations."
+        )
+        self._cometary = coords
+        self._cartesian = None
+        self._keplerian = None
+        self._spherical = None
+        return
+
+    @cometary.deleter
+    def cometary(self):
+        self._cometary = None
+        return
 
     def to_frame(self, frame: str):
         """
