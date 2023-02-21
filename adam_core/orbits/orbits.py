@@ -36,7 +36,6 @@ class Orbits(CoordinateMembers):
             self._classes = None
 
         super().__init__(
-            self,
             coordinates=coordinates,
             cartesian=True,
             keplerian=True,
