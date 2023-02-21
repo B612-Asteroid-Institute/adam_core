@@ -68,7 +68,7 @@ class CoordinateMembers(Indexable):
         else:
             index = None
 
-        super().__init__(self, index)
+        super().__init__(index)
         return
 
     @property
