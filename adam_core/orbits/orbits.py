@@ -98,8 +98,8 @@ class Orbits(CoordinateMembers):
         self,
         time_scale: str = "tdb",
         coordinate_type: Optional[str] = None,
-        sigmas: bool = False,
-        covariances: bool = False,
+        sigmas: Optional[bool] = None,
+        covariances: Optional[bool] = None,
     ) -> pd.DataFrame:
         """
         Represent Orbits as a `~pandas.DataFrame`.
@@ -111,9 +111,11 @@ class Orbits(CoordinateMembers):
         coordinate_type : {"cartesian", "spherical", "keplerian", "cometary"}
             Desired output representation of the orbits.
         sigmas : bool, optional
-            Include 1-sigma uncertainty columns.
+            Include 1-sigma uncertainty columns. If None, will determine if
+            any uncertainties are present and add them if so.
         covariances : bool, optional
-            Include lower triangular covariance matrix columns.
+            Include lower triangular covariance matrix columns. If None, will
+            determine if any uncertainties are present and add them if so.
 
         Returns
         -------
