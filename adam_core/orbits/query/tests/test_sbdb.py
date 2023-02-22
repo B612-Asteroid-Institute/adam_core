@@ -1,13 +1,15 @@
+import json
+import os
+from collections import OrderedDict
+from contextlib import contextmanager
+from unittest.mock import patch
+
 import numpy as np
 import numpy.testing as npt
 import pytest
-from unittest.mock import patch
-import os
-import json
-from collections import OrderedDict
-from contextlib import contextmanager
 from astroquery.jplsbdb import SBDB
-from ..sbdb import _convert_SBDB_covariances, query_sbdb, NotFoundError
+
+from ..sbdb import NotFoundError, _convert_SBDB_covariances, query_sbdb
 
 
 def test__convert_SBDB_covariances():
@@ -67,8 +69,8 @@ def test_query_sbdb_for_2001vb():
 
 def test_query_sbdb_for_missing_value():
     with pytest.raises(NotFoundError):
-        with mock_sbdb_query("missing.json") as mock:
-            result = query_sbdb(["missing"])
+        with mock_sbdb_query("missing.json"):
+            query_sbdb(["missing"])
 
 
 @contextmanager
