@@ -123,6 +123,10 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     -------
     orbits : `~adam_core.orbits.orbits.Orbits`
         Orbits object containing the queried orbits.
+
+    Raises
+    ------
+    NotFoundError: If any of the queries object IDs are not found.
     """
     results = _get_sbdb_elements(ids)
 
@@ -133,38 +137,47 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     times = np.zeros((len(results)), dtype=np.float64)
 
     for i, result in enumerate(results):
+        if "object" not in result:
+            raise NotFoundError(f"object {object} was not found", object)
+
         object_ids.append(result["object"]["fullname"])
         classes.append(result["object"]["orbit_class"]["code"])
 
-        if "covariance" in result["orbit"]:
-            result_i = result["orbit"]["covariance"]
-            covariances_sbdb[i, :, :] = result_i["data"]
+        orbit = result["orbit"]
+        elements = orbit["elements"]
+        epoch = orbit["epoch"]
+        if "covariance" in orbit:
+            covariances_sbdb[i, :, :] = orbit["covariance"]["data"]
+
+            if "elements" in orbit["covariance"]:
+                # If elements is provided inside covariance, then it's
+                # the elements at the epoch which was used to
+                # calculate covariance, so we should prefer it.
+                elements = orbit["covariance"]["elements"]
+                epoch = orbit["covariance"]["epoch"]
 
         else:
-            result_i = result["orbit"]
             sigmas = np.array(
                 [
                     [
-                        result_i["elements"]["e_sig"],
-                        result_i["elements"]["q_sig"].value,
-                        result_i["elements"]["tp_sig"].value,
-                        result_i["elements"]["om_sig"].value,
-                        result_i["elements"]["w_sig"].value,
-                        result_i["elements"]["i_sig"].value,
+                        elements["e_sig"],
+                        elements["q_sig"].value,
+                        elements["tp_sig"].value,
+                        elements["om_sig"].value,
+                        elements["w_sig"].value,
+                        elements["i_sig"].value,
                     ]
                 ]
             )
             covariances_sbdb[i, :, :] = sigmas_to_covariance(sigmas).filled()[0]
 
-        times[i] = result_i["epoch"].value
-        coords_cometary[i, 0] = result_i["elements"]["q"].value
-        coords_cometary[i, 1] = result_i["elements"]["e"]
-        coords_cometary[i, 2] = result_i["elements"]["i"].value
-        coords_cometary[i, 3] = result_i["elements"]["om"].value
-        coords_cometary[i, 4] = result_i["elements"]["w"].value
-        coords_cometary[i, 5] = Time(
-            result_i["elements"]["tp"].value, scale="tdb", format="jd"
-        ).mjd
+        times[i] = epoch.value
+        coords_cometary[i, 0] = elements["q"].value
+        coords_cometary[i, 1] = elements["e"]
+        coords_cometary[i, 2] = elements["i"].value
+        coords_cometary[i, 3] = elements["om"].value
+        coords_cometary[i, 4] = elements["w"].value
+        coords_cometary[i, 5] = Time(elements["tp"].value, scale="tdb", format="jd").mjd
 
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
     times = Time(times, scale="tdb", format="jd")
@@ -184,3 +197,12 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     classes = np.array(classes)
 
     return Orbits(coordinates, object_ids=object_ids)
+
+
+class NotFoundError(Exception):
+    def __init__(self, message, object_id):
+        self.message = message
+        self.object_id = object_id
+
+    def __str__(self):
+        return self.message

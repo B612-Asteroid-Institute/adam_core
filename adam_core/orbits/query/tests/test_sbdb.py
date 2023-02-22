@@ -1,7 +1,15 @@
+import json
+import os
+from collections import OrderedDict
+from contextlib import contextmanager
+from unittest.mock import patch
+
 import numpy as np
 import numpy.testing as npt
+import pytest
+from astroquery.jplsbdb import SBDB
 
-from ..sbdb import _convert_SBDB_covariances
+from ..sbdb import NotFoundError, _convert_SBDB_covariances, query_sbdb
 
 
 def test__convert_SBDB_covariances():
@@ -41,3 +49,37 @@ def test__convert_SBDB_covariances():
         )
 
     npt.assert_equal(cometary_covariances, adam_core_format)
+
+
+def test_query_sbdb_for_ceres():
+    with mock_sbdb_query("Ceres.json") as mock:
+        result = query_sbdb(["Ceres"])
+        mock.assert_called_once()
+
+    assert len(result) == 1
+
+
+def test_query_sbdb_for_2001vb():
+    with mock_sbdb_query("2001VB.json") as mock:
+        result = query_sbdb(["2001VB"])
+        mock.assert_called_once()
+
+    assert len(result) == 1
+
+
+def test_query_sbdb_for_missing_value():
+    with pytest.raises(NotFoundError):
+        with mock_sbdb_query("missing.json"):
+            query_sbdb(["missing"])
+
+
+@contextmanager
+def mock_sbdb_query(response_file: str):
+    with patch("adam_core.orbits.query.sbdb.SBDB.query") as mock_sbdb_query:
+        resp_path = os.path.join(
+            os.path.dirname(__file__), "testdata", "sbdb", response_file
+        )
+        response_dict = json.load(open(resp_path, "r"))
+        response_value = SBDB()._process_data(OrderedDict(response_dict))
+        mock_sbdb_query.return_value = response_value
+        yield mock_sbdb_query
