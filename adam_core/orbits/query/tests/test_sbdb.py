@@ -67,6 +67,28 @@ def test_query_sbdb_for_2001vb():
     assert len(result) == 1
 
 
+def test_query_sbdb_for_54509():
+    # 54509 has a 7x7 covariance matrix so lets test that we
+    # correctly convert it to the 6x6 format
+    with mock_sbdb_query("54509.json") as mock:
+        assert mock.return_value["orbit"]["covariance"]["data"].shape == (7, 7)
+        assert mock.return_value["orbit"]["covariance"]["labels"] == [
+            "e",
+            "q",
+            "tp",
+            "node",
+            "peri",
+            "i",
+            "A2",
+        ]
+        result = query_sbdb(["54509"])
+        mock.assert_called_once()
+
+    assert len(result) == 1
+    assert result.cometary.covariances.shape == (1, 6, 6)
+    assert not np.isnan(result.cometary.covariances.filled()).all()
+
+
 def test_query_sbdb_for_missing_value():
     with pytest.raises(NotFoundError):
         with mock_sbdb_query("missing.json"):

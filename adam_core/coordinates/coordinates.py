@@ -356,8 +356,8 @@ class Coordinates(Indexable):
     def to_df(
         self,
         time_scale: Optional[str] = None,
-        sigmas: bool = False,
-        covariances: bool = False,
+        sigmas: Optional[bool] = None,
+        covariances: Optional[bool] = None,
         origin_col: str = "origin",
         frame_col: str = "frame",
     ) -> pd.DataFrame:
@@ -370,9 +370,11 @@ class Coordinates(Indexable):
             Desired timescale of the output MJDs. If None, will default to
             the time scale of the current instance.
         sigmas : bool, optional
-            Include 1-sigma uncertainty columns.
+            Include 1-sigma uncertainty columns. If None, will determine if
+            any uncertainties are present and add them if so.
         covariances : bool, optional
-            Include lower triangular covariance matrix columns.
+            Include lower triangular covariance matrix columns. If None, will
+            determine if any uncertainties are present and add them if so.
         origin_col : str
             Name of the column to store the origin of each coordinate.
         frame_col : str
@@ -401,11 +403,36 @@ class Coordinates(Indexable):
 
         df = df.join(pd.DataFrame(data))
 
-        if sigmas:
+        # If the sigmas are all NaN don't add them unless explicitly requested
+        if isinstance(sigmas, bool):
+            add_sigmas = sigmas
+        elif sigmas is None:
+            if np.isnan(self.sigmas.filled()).all():
+                add_sigmas = False
+            else:
+                add_sigmas = True
+        else:
+            raise TypeError(f"sigmas must be a bool or None, not {type(sigmas)}.")
+
+        if add_sigmas:
             df_sigmas = sigmas_to_df(self.sigmas, coord_names=list(self.names.values()))
             df = df.join(df_sigmas)
 
-        if covariances:
+        # If the covariances are all NaN don't add them unless
+        # explicitly requested
+        if isinstance(covariances, bool):
+            add_covariances = covariances
+        elif covariances is None:
+            if np.isnan(self.covariances.filled()).all():
+                add_covariances = False
+            else:
+                add_covariances = True
+        else:
+            raise TypeError(
+                f"covariances must be a bool or None, not {type(covariances)}."
+            )
+
+        if add_covariances:
             df_covariances = covariances_to_df(
                 self.covariances, list(self.names.values()), kind="lower"
             )

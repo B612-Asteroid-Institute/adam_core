@@ -1,3 +1,4 @@
+import logging
 from typing import List, OrderedDict
 
 import numpy as np
@@ -8,6 +9,8 @@ from astroquery.jplsbdb import SBDB
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import sigmas_to_covariance
 from ..orbits import Orbits
+
+logger = logging.getLogger(__name__)
 
 
 def _convert_SBDB_covariances(
@@ -138,7 +141,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
 
     for i, result in enumerate(results):
         if "object" not in result:
-            raise NotFoundError(f"object {object} was not found", object)
+            raise NotFoundError("object {} was not found", ids[i])
 
         object_ids.append(result["object"]["fullname"])
         classes.append(result["object"]["orbit_class"]["code"])
@@ -147,7 +150,26 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         elements = orbit["elements"]
         epoch = orbit["epoch"]
         if "covariance" in orbit:
-            covariances_sbdb[i, :, :] = orbit["covariance"]["data"]
+            labels = orbit["covariance"]["labels"]
+            if len(labels) > 6:
+                logger.debug(
+                    "Covariance matrix has more parameters than just orbital elements. "
+                    "Ignoring non-orbital elements in covariance matrix."
+                )
+                labels = labels[:6]
+
+            expected_labels = ["e", "q", "tp", "node", "peri", "i"]
+            if labels != expected_labels:
+                raise ValueError(
+                    "Expected covariance matrix labels to be {expected_labels} instead got {labels}."
+                )
+
+            # Limit covariances to just the orbital elements
+            # The SBDB API documentation states that physical parameter covariances
+            # are appended to the rows and columns of the covariance matrix with the
+            # orbital elements remaining in the first 6 rows and columns.
+            # See: Orbit Subsection: covariance in https://ssd-api.jpl.nasa.gov/doc/sbdb.html
+            covariances_sbdb[i, :, :] = orbit["covariance"]["data"][:6, :6]
 
             if "elements" in orbit["covariance"]:
                 # If elements is provided inside covariance, then it's
