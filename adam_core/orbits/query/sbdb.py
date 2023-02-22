@@ -104,7 +104,7 @@ def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
     return results
 
 
-def query_sbdb(ids: npt.ArrayLike) -> Orbits:
+def query_sbdb(ids: npt.ArrayLike, raise_errors: bool = True) -> Orbits:
     """
     Query JPL's Small-Body Database (SBDB) for orbits. The epoch at
     which the orbits are returned are near the epoch as published by the
@@ -123,6 +123,10 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     -------
     orbits : `~adam_core.orbits.orbits.Orbits`
         Orbits object containing the queried orbits.
+
+    Raises
+    ------
+    NotFoundError: If any of the queries object IDs are not found.
     """
     results = _get_sbdb_elements(ids)
 
@@ -133,6 +137,9 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     times = np.zeros((len(results)), dtype=np.float64)
 
     for i, result in enumerate(results):
+        if "object" not in result:
+            raise NotFoundError(f"object {object} was not found", object)
+
         object_ids.append(result["object"]["fullname"])
         classes.append(result["object"]["orbit_class"]["code"])
 
@@ -184,3 +191,12 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     classes = np.array(classes)
 
     return Orbits(coordinates, object_ids=object_ids)
+
+
+class NotFoundError(Exception):
+    def __init__(self, message, object_id):
+        self.message = message
+        self.object_id = object_id
+        
+    def __str__(self):
+        return self.message
