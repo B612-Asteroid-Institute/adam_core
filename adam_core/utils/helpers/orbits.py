@@ -18,7 +18,7 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
     ----------
     num_orbits : optional, int
         The number of orbits to return, which must be less than or equal to
-        the number of sample objects (26).
+        the number of sample objects (27).
 
     Returns
     -------
