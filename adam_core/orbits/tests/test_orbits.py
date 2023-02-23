@@ -27,3 +27,42 @@ def test_orbits__init__():
     assert orbits.keplerian.raan[0] == 50.0
     assert orbits.keplerian.ap[0] == 20.0
     assert orbits.keplerian.M[0] == 30.0
+
+
+def test_orbits__eq__():
+    keplerian_elements1 = KeplerianCoordinates(
+        times=Time(59000.0, scale="tdb", format="mjd"),
+        a=1.0,
+        e=0.002,
+        i=10.0,
+        raan=50.0,
+        ap=20.0,
+        M=30.0,
+    )
+    keplerian_elements2 = KeplerianCoordinates(
+        times=Time(59000.0, scale="tdb", format="mjd"),
+        a=1.0,
+        e=0.002,
+        i=10.0,
+        raan=50.0,
+        ap=20.0,
+        M=30.0,
+    )
+
+    orbits1 = Orbits(keplerian_elements1, orbit_ids=["1"], object_ids=["Test Orbit"])
+    orbits2 = Orbits(keplerian_elements2, orbit_ids=["1"], object_ids=["Test Orbit"])
+
+    assert orbits1 == orbits2
+
+    keplerian_elements3 = KeplerianCoordinates(
+        times=Time(59000.0, scale="tdb", format="mjd"),
+        a=0.0,
+        e=0.002,
+        i=10.0,
+        raan=50.0,
+        ap=20.0,
+        M=30.0,
+    )
+
+    orbits3 = Orbits(keplerian_elements3, orbit_ids=["1"], object_ids=["Test Orbit"])
+    assert orbits1 != orbits3

@@ -230,6 +230,141 @@ def test__convert_to_array():
     np.testing.assert_equal(Indexable._convert_to_array(value), desired)
 
 
+def test_Indexable__eq__array():
+    # Numpy array
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_3 = DummyIndexable(np.array([0, 1, 3]))
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__masked_array():
+    # Numpy masked array
+    values = np.ma.array([0, 1, 2])
+    values.mask = [True, False, True]
+    indexable_1 = DummyIndexable(values)
+    indexable_2 = DummyIndexable(values)
+    values3 = np.ma.array([0, 1, 3])
+    values3.mask = [True, False, True]
+    indexable_3 = DummyIndexable(values3)
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+    # Numpy masked array (same values but different mask)
+    values = np.ma.array([0, 1, 2])
+    values.mask = [True, False, True]
+    indexable_1 = DummyIndexable(values)
+    indexable_2 = DummyIndexable(values)
+    values3 = np.ma.array([0, 1, 2])
+    values3.mask = [True, True, True]
+    indexable_3 = DummyIndexable(values3)
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__Time():
+    # Astropy Time object
+    indexable_1 = DummyIndexable(Time([59000.0, 59001.0, 59002.0], format="mjd"))
+    indexable_2 = DummyIndexable(Time([59000.0, 59001.0, 59002.0], format="mjd"))
+    indexable_3 = DummyIndexable(Time([59000.0, 59001.0, 59003.0], format="mjd"))
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__Indexable():
+    # Other Indexable
+    indexable_1 = DummyIndexable(DummyIndexable(np.array([0, 1, 2])))
+    indexable_2 = DummyIndexable(DummyIndexable(np.array([0, 1, 2])))
+    indexable_3 = DummyIndexable(DummyIndexable(np.array([0, 1, 3])))
+    indexable_4 = DummyIndexable(DummyIndexable(np.array([0, 1, 2])))
+    indexable_4.__dict__["test"] = "test"
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+    assert indexable_1 != indexable_4
+
+
+def test_Indexable__eq__None():
+    # Other types (None)
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_1.__dict__["test"] = None
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2.__dict__["test"] = None
+    indexable_3 = DummyIndexable(np.array([0, 1, 2]))
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__str():
+    # Other types (str)
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_1.__dict__["test"] = "test"
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2.__dict__["test"] = "test"
+    indexable_3 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_3.__dict__["test"] = "test2"
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__dict():
+    # Other types (dict)
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_1.__dict__["test"] = {"a": 0, "b": "1"}
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2.__dict__["test"] = {"a": 0, "b": "1"}
+    indexable_3 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_3.__dict__["test"] = {"a": 0, "b": "2"}
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__float():
+    # Other types (float)
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_1.__dict__["test"] = 0.1
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2.__dict__["test"] = 0.1
+    indexable_3 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_3.__dict__["test"] = 0.2
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__int():
+    # Other types (int)
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_1.__dict__["test"] = 1
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2.__dict__["test"] = 1
+    indexable_3 = DummyIndexable(np.array([0, 1, 2]))
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
+def test_Indexable__eq__set():
+    # Other types (set)
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_1.__dict__["test"] = set([0, 1])
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2.__dict__["test"] = set([0, 1])
+    indexable_3 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_3.__dict__["test"] = set([0, 2])
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
 def test_Indexable__query_index_int():
     # Array is grouped and can be represented by slices
     indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))

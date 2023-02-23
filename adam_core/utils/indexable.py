@@ -399,6 +399,43 @@ class Indexable:
     def __len__(self):
         return len(self._index)
 
+    def __eq__(self, other: "Indexable") -> bool:
+        # If the objects do not share the same attributes then they are not equal
+        if set(self.__dict__.keys()) != set(other.__dict__.keys()):
+            return False
+
+        for k, v in self.__dict__.items():
+            # If the key is not in the other object then they are not equal
+            if k not in other.__dict__:
+                return False
+
+            v_other = other.__dict__[k]
+            if isinstance(v, np.ma.masked_array):
+                if not np.array_equal(v.data, v_other.data) or not np.array_equal(
+                    v.mask, v_other.mask
+                ):
+                    return False
+            elif isinstance(v, np.ndarray):
+                if not np.array_equal(v, v_other):
+                    return False
+            elif isinstance(v, Time):
+                if not np.array_equal(v.mjd, v_other.mjd) and v.scale == v_other.scale:
+                    return False
+            elif isinstance(v, Indexable):
+                if v != v_other:
+                    return False
+            elif isinstance(v, UNSLICEABLE_DATA_STRUCTURES):
+                if v != v_other:
+                    return False
+            elif v is None:
+                if v_other is not None:
+                    return False
+            else:
+                err = f"{type(v)} are not supported."
+                raise NotImplementedError(err)
+
+        return True
+
     def __getitem__(self, class_ind: Union[int, slice, list, np.ndarray]):
         member_ind = self._query_index(class_ind)
         copy_self = copy(self)
