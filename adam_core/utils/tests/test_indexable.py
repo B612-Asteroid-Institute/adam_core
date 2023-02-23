@@ -25,7 +25,7 @@ SLICES = [
     slice(99, 10, -2),
 ]
 
-ATTRIBUTES = [
+SLICEABLE_ATTRIBUTES = [
     "index_array_int",
     "index_array_str",
     "array",
@@ -33,6 +33,14 @@ ATTRIBUTES = [
     "array_3d",
     "masked_array",
     "times",
+]
+UNSLICEABLE_ATTRIBUTES = [
+    "tuple",
+    "int",
+    "float",
+    "str",
+    "dict",
+    "set",
 ]
 N = 100
 
@@ -53,14 +61,21 @@ class TestIndexable(Indexable):
         self.masked_array.mask[0:N:2] = 1
         self.times = Time(np.arange(59000, 59000 + N), scale="utc", format="mjd")
 
-        Indexable.__init__(self)
+        self.tuple = (1, 2, 3)
+        self.int = 1
+        self.float = 1.0
+        self.str = "test"
+        self.dict = {"a": 1, "b": 2}
+        self.set = {1, 2, 3}
+
+        super().__init__()
 
 
 class DummyIndexable(Indexable):
     def __init__(self, array):
         self.array = array
 
-        Indexable.__init__(self)
+        super().__init__()
 
 
 def assert_equal(a, b):
@@ -444,7 +459,7 @@ def test_Indexable_slicing():
     # For each slice, slice the test indexable and check that this operation
     # is equivalent to slicing the individual attributes
     for s in SLICES:
-        for attribute_i in ATTRIBUTES:
+        for attribute_i in SLICEABLE_ATTRIBUTES:
             indexable_i = indexable[s]
             assert_equal(
                 indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][s]
@@ -460,7 +475,7 @@ def test_Indexable_iteration():
     # Iterate through the indexable and check that this operation
     # is equivalent to iterating through the individual attributes
     for i, indexable_i in enumerate(indexable):
-        for attribute_i in ATTRIBUTES:
+        for attribute_i in SLICEABLE_ATTRIBUTES:
             assert_equal(
                 indexable_i.__dict__[attribute_i],
                 indexable.__dict__[attribute_i][i : i + 1],
@@ -475,41 +490,61 @@ def test_Indexable_deletion():
     # is equivalent to deleting the first element of the individual attributes
     indexable_mod = deepcopy(indexable)
     del indexable_mod[0]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_mod.__dict__[attribute_i], indexable.__dict__[attribute_i][1:]
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_mod.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
     # Delete the last 10 elements of the indexable and check that this operation
     # is equivalent to deleting the last 10 elements of the individual attributes
     del indexable_mod[-10:]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_mod.__dict__[attribute_i],
             indexable.__dict__[attribute_i][1 : N - 10],
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_mod.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
     # Delete the first 20 elements of the indexable and check that this operation
     # is equivalent to deleting the first 20 elements of the individual attributes
     del indexable_mod[:20]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_mod.__dict__[attribute_i],
             # We've removed the first 1 element in the first test, and now
             # we remove the next 20
             indexable.__dict__[attribute_i][21 : N - 10],
         )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_mod.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
+        )
 
     # Delete the first and last element and check that this operation is equivalent to
     # deleting the first and last element of the individual attributes
     array_slice = np.array([0, -1])
     del indexable_mod[array_slice]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_mod.__dict__[attribute_i],
             # We've removed the first 21 elements in test 1 and 3, and now
             # we remove the next one and the last element
             indexable.__dict__[attribute_i][22 : N - 11],
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_mod.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
     return
@@ -522,10 +557,15 @@ def test_Indexable_yield_chunks():
     # Iterate through the indexable and check that this operation
     # is equivalent to iterating through the individual attributes
     for i, indexable_i in enumerate(indexable.yield_chunks(10)):
-        for attribute_i in ATTRIBUTES:
+        for attribute_i in SLICEABLE_ATTRIBUTES:
             assert_equal(
                 indexable_i.__dict__[attribute_i],
                 indexable.__dict__[attribute_i][i * 10 : (i + 1) * 10],
+            )
+        for attribute_i in UNSLICEABLE_ATTRIBUTES:
+            assert_equal(
+                indexable_i.__dict__[attribute_i],
+                indexable.__dict__[attribute_i],
             )
 
     return
@@ -548,9 +588,14 @@ def test_Indexable_set_index_int_unsorted():
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
     indexable_i = indexable[0]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][::10]
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
     return
@@ -577,9 +622,14 @@ def test_Indexable_set_index_int_sorted():
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
     indexable_i = indexable[0]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][:10]
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
 
@@ -605,9 +655,14 @@ def test_Indexable_set_index_str_unsorted():
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
     indexable_i = indexable[0]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][::10]
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
     # Test that the length of the class is the same as the length of the index
@@ -641,9 +696,14 @@ def test_Indexable_set_index_str_sorted():
     # If we grab the first element of the class now we expect each member array to the every 10th element
     # in the original members
     indexable_i = indexable[0]
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_i.__dict__[attribute_i], indexable.__dict__[attribute_i][:10]
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_i.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
     # Test that the length of the class is the same as the length of the index
@@ -656,13 +716,13 @@ def test_Indexable_concatenate():
     indexable2 = TestIndexable()
     indexable3 = TestIndexable()
     # Slightly modify the second and third indexable with the exception of the array of strings
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         if attribute_i != "index_array_str":
             indexable2.__dict__[attribute_i] = indexable2.__dict__[attribute_i] + 100
             indexable3.__dict__[attribute_i] = indexable3.__dict__[attribute_i] + 200
 
     indexable = concatenate([indexable1, indexable2, indexable3])
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable.__dict__[attribute_i][:100],
             indexable1.__dict__[attribute_i][:100],
@@ -674,6 +734,19 @@ def test_Indexable_concatenate():
         assert_equal(
             indexable.__dict__[attribute_i][200:300],
             indexable3.__dict__[attribute_i][:100],
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable.__dict__[attribute_i],
+            indexable1.__dict__[attribute_i],
+        )
+        assert_equal(
+            indexable.__dict__[attribute_i],
+            indexable2.__dict__[attribute_i],
+        )
+        assert_equal(
+            indexable.__dict__[attribute_i],
+            indexable3.__dict__[attribute_i],
         )
 
     return
@@ -687,10 +760,15 @@ def test_Indexable_sort_values():
     indexable_sorted = indexable.sort_values("index_array_int", inplace=False)
 
     # Test that the attributes are correctly sorted
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable_sorted.__dict__[attribute_i][:10],
             indexable.__dict__[attribute_i][::10],
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable_sorted.__dict__[attribute_i],
+            indexable.__dict__[attribute_i],
         )
 
     return
@@ -705,10 +783,15 @@ def test_Indexable_sort_values_inplace():
     indexable.sort_values("index_array_int", inplace=True)
 
     # Test that the attributes are correctly sorted
-    for attribute_i in ATTRIBUTES:
+    for attribute_i in SLICEABLE_ATTRIBUTES:
         assert_equal(
             indexable.__dict__[attribute_i][:10],
             indexable_unsorted.__dict__[attribute_i][::10],
+        )
+    for attribute_i in UNSLICEABLE_ATTRIBUTES:
+        assert_equal(
+            indexable.__dict__[attribute_i],
+            indexable_unsorted.__dict__[attribute_i],
         )
 
     return
