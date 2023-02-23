@@ -365,6 +365,19 @@ def test_Indexable__eq__set():
     assert indexable_1 != indexable_3
 
 
+def test_Indexable__eq__tuple():
+    # Other types (tuple)
+    indexable_1 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_1.__dict__["test"] = (0, 1)
+    indexable_2 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_2.__dict__["test"] = (0, 1)
+    indexable_3 = DummyIndexable(np.array([0, 1, 2]))
+    indexable_3.__dict__["test"] = (0, 2)
+
+    assert indexable_1 == indexable_2
+    assert indexable_1 != indexable_3
+
+
 def test_Indexable__query_index_int():
     # Array is grouped and can be represented by slices
     indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))

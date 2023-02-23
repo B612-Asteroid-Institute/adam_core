@@ -13,7 +13,7 @@ __all__ = ["Indexable", "concatenate"]
 logger = logging.getLogger(__name__)
 
 SLICEABLE_DATA_STRUCTURES = (np.ndarray, np.ma.masked_array, Time)
-UNSLICEABLE_DATA_STRUCTURES = (str, int, float, dict, bool, set, OrderedDict)
+UNSLICEABLE_DATA_STRUCTURES = (str, int, float, dict, bool, set, tuple, OrderedDict)
 
 
 def _convert_grouped_array_to_slices(values: npt.ArrayLike) -> npt.NDArray[slice]:
