@@ -2,6 +2,7 @@ from astropy.time import Time
 
 from ...coordinates import KeplerianCoordinates
 from ..orbits import Orbits
+from ...utils.helpers import orbits as orbits_helpers
 
 
 def test_orbits__init__():
@@ -66,3 +67,9 @@ def test_orbits__eq__():
 
     orbits3 = Orbits(keplerian_elements3, orbit_ids=["1"], object_ids=["Test Orbit"])
     assert orbits1 != orbits3
+
+
+def test_orbit_iteration():
+    orbits = orbits_helpers.make_simple_orbits(num_orbits=10)
+    for o in orbits:
+        assert len(o) == 1
