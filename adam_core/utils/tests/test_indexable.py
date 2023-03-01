@@ -791,3 +791,10 @@ def test_Indexable_sort_values_inplace():
         )
 
     return
+
+
+def test_Indexable_getitem_index_copying():
+    indexable = TestIndexable()
+    one_row = indexable[0]
+    assert one_row._index.shape == (1,)
+    assert one_row._index[0] == 0
