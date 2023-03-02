@@ -1,8 +1,8 @@
 from astropy.time import Time
 
 from ...coordinates import KeplerianCoordinates
-from ..orbits import Orbits
 from ...utils.helpers import orbits as orbits_helpers
+from ..orbits import Orbits
 
 
 def test_orbits__init__():
