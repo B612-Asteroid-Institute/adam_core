@@ -398,11 +398,24 @@ def test_Indexable__check_index_int():
     indexable = DummyIndexable(np.array([0, 1, 2]))
     assert indexable._check_index(0) == slice(0, 1, None)
 
+    # Test that an index error is raised when attempting to access an element
+    # that is out of bounds
+    with pytest.raises(IndexError):
+        indexable._check_index(4)
+
 
 def test_Indexable__check_index_slice():
     # Check that a slice is correctly returned
     indexable = DummyIndexable(np.array([0, 1, 2]))
     assert indexable._check_index(slice(0, 1, None)) == slice(0, 1, None)
+
+    # Test that an index error is raised when attempting to access an element
+    # that is out of bounds
+    with pytest.raises(IndexError):
+        indexable._check_index(slice(0, 4, None))
+
+    with pytest.raises(IndexError):
+        indexable._check_index(slice(4, 6, None))
 
 
 def test_Indexable__check_index_array():
@@ -412,11 +425,21 @@ def test_Indexable__check_index_array():
         indexable._check_index(np.array([0, 1, 2])), np.array([0, 1, 2])
     )
 
+    # Test that an index error is raised when attempting to access an element
+    # that is out of bounds
+    with pytest.raises(IndexError):
+        indexable._check_index(np.array([0, 1, 4]))
+
 
 def test_Indexable__check_index_list():
     # Check that a list is correctly converted to an array
     indexable = DummyIndexable(np.array([0, 1, 2]))
     assert np.array_equal(indexable._check_index([0, 1, 2]), np.array([0, 1, 2]))
+
+    # Test that an index error is raised when attempting to access an element
+    # that is out of bounds
+    with pytest.raises(IndexError):
+        indexable._check_index([0, 1, 4])
 
 
 def test_Indexable__query_index_slice():
