@@ -328,20 +328,12 @@ class Indexable:
         -------
         slice, np.ndarray
             The index converted to a slice or array of integers.
-
-        Raises
-        ------
-        IndexError: If the index is out of bounds.
         """
         # --- Integer Slice
         # If the index is an integer then we need to convert it to a slice so that
         # we do not change the dimensionality of the member arrays (or in the cases
         # of a 1D array we need to avoid returning just a single value)
         if isinstance(class_ind, int):
-            # Check boundaries on the integer
-            if class_ind >= len(self):
-                raise IndexError(f"Index {class_ind} is out of bounds.")
-
             return slice(class_ind, class_ind + 1)
 
         # --- Lists and Arrays
@@ -349,22 +341,10 @@ class Indexable:
             # Convert lists to arrays
             if isinstance(class_ind, list):
                 class_ind = np.array(class_ind)
-
-            # Check boundaries on the array
-            if np.any(class_ind >= len(self)):
-                raise IndexError(f"Index {class_ind} is out of bounds.")
-
             return class_ind
 
         # --- Slices
         elif isinstance(class_ind, slice):
-            # Check boundaries on the slice
-            if class_ind.start is not None and class_ind.start >= len(self):
-                raise IndexError(f"Index {class_ind.start} is out of bounds.")
-
-            if class_ind.stop is not None and class_ind.stop > len(self):
-                raise IndexError(f"Index {class_ind.stop} is out of bounds.")
-
             return class_ind
 
         else:
