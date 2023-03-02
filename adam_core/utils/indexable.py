@@ -52,7 +52,7 @@ def _convert_grouped_array_to_slices(values: npt.ArrayLike) -> npt.NDArray[slice
     return np.array(slices)
 
 
-def _map_values_to_integers(values: npt.ArrayLike) -> npt.NDArray[int]:
+def _map_values_to_integers(values: npt.ArrayLike) -> npt.NDArray[np.int_]:
     """
     Map the unique values in an array to integers.
 
@@ -314,8 +314,8 @@ class Indexable:
         return value
 
     def _check_index(
-        self, class_ind: Union[int, slice, list, np.ndarray]
-    ) -> Union[slice, np.ndarray]:
+        self, class_ind: Union[int, slice, List[int], npt.NDArray[np.int_]]
+    ) -> Union[slice, npt.NDArray[np.int_]]:
         """
         Check the index and convert it to a slice or array of integers.
 
@@ -372,7 +372,9 @@ class Indexable:
                 "class_ind should be one of {int, slice, np.ndarray, list}."
             )
 
-    def _query_index(self, class_ind: Union[slice, np.ndarray]) -> np.ndarray:
+    def _query_index(
+        self, class_ind: Union[slice, npt.NDArray[np.int_]]
+    ) -> npt.NDArray[np.int_]:
         """
         Given a slice or `~numpy.ndarray`, appropriately slice
         the index and return the correct index or indices for this class's underlying
@@ -485,7 +487,9 @@ class Indexable:
 
         return True
 
-    def __getitem__(self, class_ind: Union[int, slice, list, np.ndarray]):
+    def __getitem__(
+        self, class_ind: Union[int, slice, List[int], npt.NDArray[np.int_]]
+    ):
         class_ind = self._check_index(class_ind)
         member_ind = self._query_index(class_ind)
         copy_self = copy(self)
@@ -506,7 +510,9 @@ class Indexable:
 
         return copy_self
 
-    def __delitem__(self, class_ind: Union[int, slice, tuple, list, np.ndarray]):
+    def __delitem__(
+        self, class_ind: Union[int, slice, List[int], npt.NDArray[np.int_]]
+    ):
         class_ind = self._check_index(class_ind)
         member_ind = self._query_index(class_ind)
 
