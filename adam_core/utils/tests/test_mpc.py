@@ -1,9 +1,39 @@
 import numpy as np
 from astropy.time import Time
 
-from ..mpc import convert_mpc_packed_dates
+from ..mpc import convert_mpc_packed_dates, pack_mpc_designation, unpack_mpc_designation
 
 # --- Tests last updated: 07-03-2023
+DESIGNATIONS_UP2P = {
+    # Packed : Unpacked
+    # Taken from: https://minorplanetcenter.net/iau/info/PackedDes.html
+    # Provisional Minor Planet Designations
+    "1995 XA": "J95X00A",
+    "1995 XL1": "J95X01L",
+    "1995 FB13": "J95F13B",
+    "1998 SQ108": "J98SA8Q",
+    "1998 SV127": "J98SC7V",
+    "1998 SS162": "J98SG2S",
+    "2099 AZ193": "K99AJ3Z",
+    "2008 AA360": "K08Aa0A",
+    "2007 TA418": "K07Tf8A",
+    # Provisional Minor Planet Designations (Surveys)
+    "2040 P-L": "PLS2040",
+    "3138 T-1": "T1S3138",
+    "1010 T-2": "T2S1010",
+    "4101 T-3": "T3S4101",
+    # Permanent Minor Planet Designations
+    "3202": "03202",
+    "50000": "50000",
+    "100345": "A0345",
+    "360017": "a0017",
+    "203289": "K3289",
+    "620000": "~0000",
+    "620061": "~000z",
+    "3140113": "~AZaz",
+    "15396335": "~zzzz",
+}
+DESIGNATIONS_P2UP = {v: k for k, v in DESIGNATIONS_UP2P.items()}
 
 
 def test_convert_mpc_packed_dates():
@@ -42,3 +72,15 @@ def test_convert_mpc_packed_dates():
 
     np.testing.assert_equal(mjd_actual.tt.mjd, mjd_desired.tt.mjd)
     return
+
+
+def test_unpack_mpc_designation():
+    # Test unpacking of packed form designations
+    for designation_pf, designation in DESIGNATIONS_P2UP.items():
+        assert unpack_mpc_designation(designation_pf) == designation
+
+
+def test_pack_mpc_designation():
+    # Test packing of unpacked designations
+    for designation, designation_pf in DESIGNATIONS_UP2P.items():
+        assert pack_mpc_designation(designation) == designation_pf
