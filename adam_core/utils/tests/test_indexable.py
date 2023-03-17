@@ -46,20 +46,16 @@ N = 100
 
 
 class TestIndexable(Indexable):
-    def __init__(self):
-        self.index_array_int = np.concatenate(
-            [np.arange(10, dtype=int) for i in range(10)]
-        )
-        self.index_array_str = np.concatenate(
-            [np.arange(10, dtype=int).astype(str) for i in range(10)]
-        )
-        self.array = np.arange(0, N)
-        self.array_2d = np.random.random((N, 6))
-        self.array_3d = np.random.random((N, 6, 6))
-        self.masked_array = np.ma.arange(0, N)
-        self.masked_array.mask = np.zeros(N)
-        self.masked_array.mask[0:N:2] = 1
-        self.times = Time(np.arange(59000, 59000 + N), scale="utc", format="mjd")
+    def __init__(self, size: int=N):
+        self.index_array_int = np.array([i % 10 for i in range(size)])
+        self.index_array_str = self.index_array_int.astype("str")
+        self.array = np.arange(0, size)
+        self.array_2d = np.random.random((size, 6))
+        self.array_3d = np.random.random((size, 6, 6))
+        self.masked_array = np.ma.arange(0, size)
+        self.masked_array.mask = np.zeros(size)
+        self.masked_array.mask[0:size:2] = 1
+        self.times = Time(np.arange(59000, 59000 + size), scale="utc", format="mjd")
 
         self.tuple = (1, 2, 3)
         self.int = 1
