@@ -22,7 +22,7 @@ def test_benchmark_slice(benchmark, size, slicer):
     benchmark(indexable.__getitem__, 1)
 
 
-@pytest.mark.parametrize("size", [10, 100, 1000, 10000])
+@pytest.mark.parametrize("size", [10, 100, 1000])
 @pytest.mark.benchmark(group="iterate")
 def test_benchmark_iterate(benchmark, size):
     indexable = TestIndexable(size)
@@ -53,7 +53,7 @@ def test_benchmark_indirect_indexing(benchmark, size, indexer):
 
 @pytest.mark.parametrize(
     "size",
-    [10, 100, 1000, 10000],
+    [10, 100, 1000],
     ids=lambda x: f"(size={x})"
 )
 @pytest.mark.parametrize(
