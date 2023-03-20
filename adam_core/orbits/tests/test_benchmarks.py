@@ -1,5 +1,6 @@
 from ...utils.helpers.orbits import make_real_orbits
 
+
 def test_benchmark_iterate_real_orbits(benchmark):
     orbits = make_real_orbits(27)
 
@@ -8,6 +9,7 @@ def test_benchmark_iterate_real_orbits(benchmark):
             pass
 
     benchmark(noop_iterate, orbits)
+
 
 def test_benchmark_iterate_real_orbits_df(benchmark):
     orbits = make_real_orbits(27).to_df().iterrows()

@@ -1,9 +1,8 @@
-import pytest
-import numpy as np
 import astropy.time
+import numpy as np
+import pytest
 
 from ..cartesian import CartesianCoordinates
-from ..spherical import SphericalCoordinates
 from ..transform import transform_coordinates
 
 
@@ -29,7 +28,7 @@ def test_benchmark_transform_cartesian_coordinates(
         vx=np.array([1]),
         vy=np.array([1]),
         vz=np.array([1]),
-        times=astropy.time.Time(50000, format="mjd")
+        times=astropy.time.Time(50000, format="mjd"),
     )
     benchmark(
         transform_coordinates,

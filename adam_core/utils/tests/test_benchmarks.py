@@ -14,7 +14,7 @@ from .test_indexable import TestIndexable, concatenate
         (10000, 9999),
         (100000, 99999),
     ],
-    ids=repr
+    ids=repr,
 )
 @pytest.mark.benchmark(group="slice")
 def test_benchmark_slice(benchmark, size, slicer):
@@ -35,15 +35,9 @@ def test_benchmark_iterate(benchmark, size):
 
 
 @pytest.mark.parametrize(
-    "indexer",
-    [1, [3, 5, 7], slice(2, 5, 1)],
-    ids=lambda x: f"(idx={repr(x)})"
+    "indexer", [1, [3, 5, 7], slice(2, 5, 1)], ids=lambda x: f"(idx={repr(x)})"
 )
-@pytest.mark.parametrize(
-    "size",
-    [100, 1000, 10000],
-    ids=lambda x: f"(size={x})"
-)
+@pytest.mark.parametrize("size", [100, 1000, 10000], ids=lambda x: f"(size={x})")
 @pytest.mark.benchmark(group="slice")
 def test_benchmark_indirect_indexing(benchmark, size, indexer):
     indexable = TestIndexable(size)
@@ -51,16 +45,8 @@ def test_benchmark_indirect_indexing(benchmark, size, indexer):
     benchmark(indexable.__getitem__, indexer)
 
 
-@pytest.mark.parametrize(
-    "size",
-    [10, 100, 1000],
-    ids=lambda x: f"(size={x})"
-)
-@pytest.mark.parametrize(
-    "n",
-    [2, 5, 10],
-    ids=lambda x: f"(n={x})"    
-)
+@pytest.mark.parametrize("size", [10, 100, 1000], ids=lambda x: f"(size={x})")
+@pytest.mark.parametrize("n", [2, 5, 10], ids=lambda x: f"(n={x})")
 @pytest.mark.benchmark(group="concat")
 def test_benchmark_concatenate(benchmark, size, n):
     benchmark(concatenate, [TestIndexable(size)] * n)

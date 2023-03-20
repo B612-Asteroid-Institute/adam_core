@@ -46,7 +46,7 @@ N = 100
 
 
 class TestIndexable(Indexable):
-    def __init__(self, size: int=N):
+    def __init__(self, size: int = N):
         self.index_array_int = np.array([i % 10 for i in range(size)])
         self.index_array_str = self.index_array_int.astype("str")
         self.array = np.arange(0, size)
