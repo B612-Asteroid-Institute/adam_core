@@ -13,9 +13,9 @@ def _unpack_mpc_date(epoch_pf: str) -> Time:
     #    1998 Jan. 18.73     = J981I73
     #    2001 Oct. 22.138303 = K01AM138303
     epoch_pf = str(epoch_pf)
-    year = _lookup_mpc(epoch_pf[0]) * 100 + int(epoch_pf[1:3])
-    month = _lookup_mpc(epoch_pf[3])
-    day = _lookup_mpc(epoch_pf[4])
+    year = int(epoch_pf[0], base=32) * 100 + int(epoch_pf[1:3])
+    month = int(epoch_pf[3], base=32)
+    day = int(epoch_pf[4], base=32)
     isot_string = "{:d}-{:02d}-{:02d}".format(year, month, day)
 
     if len(epoch_pf) > 5:
@@ -26,17 +26,6 @@ def _unpack_mpc_date(epoch_pf: str) -> Time:
         isot_string += "T{:02d}:{:02d}:{:09.6f}".format(hours, minutes, seconds)
 
     return Time(isot_string, format="isot", scale="tt")
-
-
-def _lookup_mpc(x: str) -> int:
-    # Convert the single character dates into integers.
-    try:
-        x = int(x)
-    except ValueError:
-        x = ord(x) - 55
-    if x < 0 or x > 31:
-        raise ValueError
-    return x
 
 
 def convert_mpc_packed_dates(pf_tt: npt.ArrayLike) -> Time:
