@@ -90,15 +90,15 @@ def pack_numbered_designation(designation: str) -> str:
 
     if number <= 99999:
         return "{:05}".format(number)
-    elif (number >= 100000) & (number <= 619999):
-        ind = int(np.floor(number / 10000))
-        return "{}{:04}".format(BASE62[ind], number % 10000)
+    elif (number >= 100000) and (number <= 619999):
+        bigpart, remainder = divmod(number, 10000)
+        return f"{BASE62[bigpart]}{remainder:04}"
     else:
         x = number - 620000
         number_pf = []
         while x:
             number_pf.append(BASE62[int(x % 62)])
-            x = int(x / 62)
+            x //= 62
 
         number_pf.reverse()
         return "~{}".format("".join(number_pf).zfill(4))
@@ -170,7 +170,7 @@ def pack_provisional_designation(designation: str) -> str:
         if cycle <= 99:
             cycle_pf = str(cycle).zfill(2)
         else:
-            cycle_pf = BASE62[int(cycle / 10)] + str(cycle % 10)
+            cycle_pf = BASE62[cycle // 10] + str(cycle % 10)
 
     designation_pf = "{}{}{}{}".format(year, letter1, cycle_pf, letter2)
     return designation_pf
