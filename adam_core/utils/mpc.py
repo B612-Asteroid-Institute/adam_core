@@ -89,10 +89,10 @@ def pack_numbered_designation(designation: str) -> str:
         )
 
     if number <= 99999:
-        designation_pf = "{:05}".format(number)
+        return "{:05}".format(number)
     elif (number >= 100000) & (number <= 619999):
         ind = int(np.floor(number / 10000))
-        designation_pf = "{}{:04}".format(BASE62[ind], number % 10000)
+        return "{}{:04}".format(BASE62[ind], number % 10000)
     else:
         x = number - 620000
         number_pf = []
@@ -101,9 +101,7 @@ def pack_numbered_designation(designation: str) -> str:
             x = int(x / 62)
 
         number_pf.reverse()
-        designation_pf = "~{}".format("".join(number_pf).zfill(4))
-
-    return designation_pf
+        return "~{}".format("".join(number_pf).zfill(4))
 
 
 def pack_provisional_designation(designation: str) -> str:
@@ -319,7 +317,7 @@ def unpack_numbered_designation(designation_pf: str) -> str:
         number = BASE62_MAP[designation_pf[0]] * 10000 + int(designation_pf[1:])
 
     if number is None:
-        raise ValueError("Packed numbered designation  could not be unpacked.")
+        raise ValueError("Packed numbered designation could not be unpacked.")
     else:
         designation = str(number)
 
