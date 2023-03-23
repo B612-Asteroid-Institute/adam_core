@@ -334,6 +334,8 @@ class Indexable:
         # we do not change the dimensionality of the member arrays (or in the cases
         # of a 1D array we need to avoid returning just a single value)
         if isinstance(class_ind, int):
+            if class_ind < 0:
+                class_ind = self._member_length + class_ind
             return slice(class_ind, class_ind + 1)
 
         # --- Lists and Arrays
