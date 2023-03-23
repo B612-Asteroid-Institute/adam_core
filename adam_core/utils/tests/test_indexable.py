@@ -12,17 +12,27 @@ from ..indexable import (
     concatenate,
 )
 
+N = 100
 SLICES = [
     slice(0, 1, 1),
     slice(1, 2, 1),
-    slice(8, 9, 1),
     slice(7, 8, 1),
-    slice(0, 10, 1),
+    slice(8, 9, 1),
+    slice(0, N, 1),
     slice(0, 5, 1),
     slice(5, 10, 1),
     slice(50, 60, 2),
-    slice(50, 60, 2),
-    slice(99, 10, -2),
+    slice(50, N, 2),
+    slice(N - 1, 10, -2),
+    slice(-5, -1, 1),
+    slice(-10, -5, 2),
+    slice(-N + 1, -1, 1),
+    slice(-N + 1, -10, 2),
+    slice(-N + 1, -N + 2, 1),
+    # Out of bounds slices
+    slice(N, N + 1, 1),
+    slice(2 * N, 3 * N, 1),
+    slice(-2 * N, -N, 1),
 ]
 
 SLICEABLE_ATTRIBUTES = [
@@ -42,7 +52,6 @@ UNSLICEABLE_ATTRIBUTES = [
     "dict",
     "set",
 ]
-N = 100
 
 
 class TestIndexable(Indexable):

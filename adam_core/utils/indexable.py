@@ -386,6 +386,9 @@ class Indexable:
         # and see if we can combine them into a single slice.
         if self._index_to_slices is not None:
             slices = self._index_to_slices[class_ind]
+            # If there are no slices then return an empty array
+            if len(slices) == 0:
+                return np.array([], dtype=np.int_)
 
             # If there is only one slice then we can just return it
             if len(slices) == 1:
