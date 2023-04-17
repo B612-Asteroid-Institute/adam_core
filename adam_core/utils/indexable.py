@@ -52,7 +52,7 @@ def _convert_grouped_array_to_slices(values: npt.ArrayLike) -> npt.NDArray[slice
     return np.array(slices)
 
 
-def _map_values_to_integers(values: npt.ArrayLike) -> npt.NDArray[int]:
+def _map_values_to_integers(values: npt.ArrayLike) -> npt.NDArray[np.int_]:
     """
     Map the unique values in an array to integers.
 
@@ -313,52 +313,82 @@ class Indexable:
 
         return value
 
-    def _query_index(
-        self, class_ind: Union[int, slice, list, np.ndarray]
-    ) -> np.ndarray:
+    def _check_index(
+        self, class_ind: Union[int, slice, List[int], npt.NDArray[np.int_]]
+    ) -> Union[slice, npt.NDArray[np.int_]]:
         """
-        Given a integer, slice, list, or `~numpy.ndarray`, appropriately slice
-        the index and return the correct index or indices for this class's underlying
-        members.
+        Check the index and convert it to a slice or array of integers.
 
         Parameters
         ----------
-        class_ind : Union[int, slice, list, np.ndarray]
-            Slice of the index.
+        class_ind : int, slice, list, np.ndarray
+            The index to be checked.
 
         Returns
         -------
-        member_ind : slice or np.ndarray
-            Slice into this class's members.
+        slice, np.ndarray
+            The index converted to a slice or array of integers.
         """
-        # Create array of all possible indices in the class's members
-        member_indices = np.arange(0, self._member_length)
-
         # --- Integer Slice
         # If the index is an integer then we need to convert it to a slice so that
         # we do not change the dimensionality of the member arrays (or in the cases
         # of a 1D array we need to avoid returning just a single value)
         if isinstance(class_ind, int):
-            ind = slice(class_ind, class_ind + 1)
+            if class_ind < 0:
+                class_ind = self._member_length + class_ind
+            return slice(class_ind, class_ind + 1)
 
-        # --- Slices, Arrays, and Lists
-        elif isinstance(class_ind, (slice, np.ndarray, list)):
-            ind = class_ind
+        # --- Lists and Arrays
+        elif isinstance(class_ind, (list, np.ndarray)):
+            # Convert lists to arrays
+            if isinstance(class_ind, list):
+                class_ind = np.array(class_ind)
+            return class_ind
+
+        # --- Slices
+        elif isinstance(class_ind, slice):
+            return class_ind
 
         else:
             raise TypeError(
                 "class_ind should be one of {int, slice, np.ndarray, list}."
             )
 
-        # --- Check boundaries on the slice
-        if isinstance(ind, slice) and ind.start is not None and ind.start >= len(self):
-            raise IndexError(f"Index {ind.start} is out of bounds.")
+    def _query_index(
+        self, class_ind: Union[slice, npt.NDArray[np.int_]]
+    ) -> npt.NDArray[np.int_]:
+        """
+        Given a slice or `~numpy.ndarray`, appropriately slice
+        the index and return the correct index or indices for this class's underlying
+        members.
 
-        elif (
-            isinstance(ind, (slice, np.ndarray, list))
-            and self._index_to_slices is not None
-        ):
-            slices = self._index_to_slices[ind]
+        Parameters
+        ----------
+        class_ind : Union[slice, np.ndarray]
+            Slice of the index.
+
+        Returns
+        -------
+        member_ind : slice or np.ndarray
+            Slice into this class's members.
+
+        Raises
+        ------
+        TypeError: If class_ind is not one of {slice, np.ndarray}.
+        """
+        if not isinstance(class_ind, (slice, np.ndarray)):
+            raise TypeError("class_ind should be one of {slice, np.ndarray}.")
+
+        # Create array of all possible indices in the class's members
+        member_indices = np.arange(0, self._member_length)
+
+        # If the index is an array of slices then lets use those
+        # and see if we can combine them into a single slice.
+        if self._index_to_slices is not None:
+            slices = self._index_to_slices[class_ind]
+            # If there are no slices then return an empty array
+            if len(slices) == 0:
+                return np.array([], dtype=np.int_)
 
             # If there is only one slice then we can just return it
             if len(slices) == 1:
@@ -384,15 +414,21 @@ class Indexable:
                 )
                 return np.concatenate([member_indices[s] for s in slices])
 
+        # If its not an array of slices then lets check if index is equal
+        # to the member indices. If so, we can just return the index sliced.
         elif np.array_equal(self._index, member_indices):
             logger.debug("Using index to directly index member arrays.")
-            return self._index[ind]
+            return self._index[class_ind]
+
+        # If the index is not equal to the member indices then we need to
+        # use np.isin to find the indices of the members that are in the
+        # index.
         else:
             logger.debug("Using index to index member arrays with np.isin.")
             return member_indices[
                 np.isin(
                     self._index_to_integers,
-                    self._index[ind],
+                    self._index[class_ind],
                 )
             ]
 
@@ -436,7 +472,10 @@ class Indexable:
 
         return True
 
-    def __getitem__(self, class_ind: Union[int, slice, list, np.ndarray]):
+    def __getitem__(
+        self, class_ind: Union[int, slice, List[int], npt.NDArray[np.int_]]
+    ):
+        class_ind = self._check_index(class_ind)
         member_ind = self._query_index(class_ind)
         copy_self = copy(self)
 
@@ -452,11 +491,14 @@ class Indexable:
                     err = f"{type(v)} are not supported."
                     raise NotImplementedError(err)
             else:
-                copy_self.__dict__[k] = v[np.s_[class_ind]]
+                copy_self.__dict__[k] = v[class_ind]
 
         return copy_self
 
-    def __delitem__(self, class_ind: Union[int, slice, tuple, list, np.ndarray]):
+    def __delitem__(
+        self, class_ind: Union[int, slice, List[int], npt.NDArray[np.int_]]
+    ):
+        class_ind = self._check_index(class_ind)
         member_ind = self._query_index(class_ind)
 
         for k, v in self.__dict__.items():
@@ -484,7 +526,7 @@ class Indexable:
                     raise NotImplementedError(err)
 
             else:
-                self.__dict__[k] = np.delete(v, np.s_[class_ind], axis=0)
+                self.__dict__[k] = np.delete(v, class_ind, axis=0)
 
         self.set_index(self._index_attribute)
 

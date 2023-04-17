@@ -12,17 +12,27 @@ from ..indexable import (
     concatenate,
 )
 
+N = 100
 SLICES = [
     slice(0, 1, 1),
     slice(1, 2, 1),
-    slice(8, 9, 1),
     slice(7, 8, 1),
-    slice(0, 10, 1),
+    slice(8, 9, 1),
+    slice(0, N, 1),
     slice(0, 5, 1),
     slice(5, 10, 1),
     slice(50, 60, 2),
-    slice(50, 60, 2),
-    slice(99, 10, -2),
+    slice(50, N, 2),
+    slice(N - 1, 10, -2),
+    slice(-5, -1, 1),
+    slice(-10, -5, 2),
+    slice(-N + 1, -1, 1),
+    slice(-N + 1, -10, 2),
+    slice(-N + 1, -N + 2, 1),
+    # Out of bounds slices
+    slice(N, N + 1, 1),
+    slice(2 * N, 3 * N, 1),
+    slice(-2 * N, -N, 1),
 ]
 
 SLICEABLE_ATTRIBUTES = [
@@ -42,7 +52,6 @@ UNSLICEABLE_ATTRIBUTES = [
     "dict",
     "set",
 ]
-N = 100
 
 
 class TestIndexable(Indexable):
@@ -389,18 +398,30 @@ def test_Indexable__eq__tuple():
     assert indexable_1 != indexable_3
 
 
-def test_Indexable__query_index_int():
-    # Array is grouped and can be represented by slices
-    indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
-    indexable.set_index("array")
-    index = indexable._query_index(2)
-    assert index == slice(2, 3, 1)
+def test_Indexable__check_index_int():
+    # Check that an integer is correctly converted to a slice
+    indexable = DummyIndexable(np.array([0, 1, 2]))
+    assert indexable._check_index(0) == slice(0, 1, None)
 
-    # Array is not grouped and can be not be represented by slices
-    indexable = DummyIndexable(np.array([0, 1, 0]))
-    indexable.set_index("array")
-    index = indexable._query_index(1)
-    assert index == np.array([1])
+
+def test_Indexable__check_index_slice():
+    # Check that a slice is correctly returned
+    indexable = DummyIndexable(np.array([0, 1, 2]))
+    assert indexable._check_index(slice(0, 1, None)) == slice(0, 1, None)
+
+
+def test_Indexable__check_index_array():
+    # Check that an array is correctly returned
+    indexable = DummyIndexable(np.array([0, 1, 2]))
+    assert np.array_equal(
+        indexable._check_index(np.array([0, 1, 2])), np.array([0, 1, 2])
+    )
+
+
+def test_Indexable__check_index_list():
+    # Check that a list is correctly converted to an array
+    indexable = DummyIndexable(np.array([0, 1, 2]))
+    assert np.array_equal(indexable._check_index([0, 1, 2]), np.array([0, 1, 2]))
 
 
 def test_Indexable__query_index_slice():
@@ -433,19 +454,16 @@ def test_Indexable__query_index_array():
     np.testing.assert_equal(index, np.array([0, 1, 2]))
 
 
-def test_Indexable__query_index_list():
-    # Array is grouped and can be represented by slices
+def test_Indexable__query_index_raises():
+    # Try to query with an integer
     indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
-    indexable.set_index("array")
-    index = indexable._query_index([0, 1])
-    assert index == slice(0, 2, 1)
+    with pytest.raises(TypeError):
+        indexable._query_index(2)
 
-    # Array is not grouped and can be not be represented by slices
-    indexable = DummyIndexable(np.array([0, 1, 0]))
-    indexable.set_index("array")
-    # I want the first two unique values in array which is the entire array
-    index = indexable._query_index([0, 1])
-    np.testing.assert_equal(index, [0, 1, 2])
+    # Try to query with a list
+    indexable = DummyIndexable(np.array([0, 1, 2, 3, 4, 5]))
+    with pytest.raises(TypeError):
+        indexable._query_index([0, 2])
 
 
 def test_Indexable_slicing():
@@ -791,3 +809,10 @@ def test_Indexable_sort_values_inplace():
         )
 
     return
+
+
+def test_Indexable_getitem_index_copying():
+    indexable = TestIndexable()
+    one_row = indexable[0]
+    assert one_row._index.shape == (1,)
+    assert one_row._index[0] == 0
