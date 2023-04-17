@@ -1,6 +1,6 @@
 BSD 3-Clause License
 
-Copyright (c) 2022, Asteroid Institute
+Copyright (c) 2022-2023, Asteroid Institute
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@ They maintain the same 3-Clause License.
 
 BSD 3-Clause License
 
-Copyright (c) 2018, Joachim Moeyens
+Copyright (c) 2018-2023, Joachim Moeyens
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
