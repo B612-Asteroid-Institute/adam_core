@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, Type
 
 import numpy as np
 import pandas as pd
@@ -296,7 +296,7 @@ class CoordinateMembers(Indexable):
         self._spherical = None
         return
 
-    def to_df(
+    def _to_df(
         self,
         time_scale: Optional[str] = None,
         coordinate_type: Optional[str] = None,
@@ -416,6 +416,12 @@ class CoordinateMembers(Indexable):
         """
         data = {}
         columns = df.columns.values
+        coord_class: Type[
+            CartesianCoordinates
+            | KeplerianCoordinates
+            | CometaryCoordinates
+            | SphericalCoordinates
+        ]
         if coord_cols is None:
             if cartesian and np.all(np.in1d(list(CARTESIAN_COLS.values()), columns)):
                 coord_class = CartesianCoordinates
@@ -480,62 +486,3 @@ class CoordinateMembers(Indexable):
         data["coordinates"] = coordinates
 
         return data
-
-    @classmethod
-    def from_df(
-        cls: "CoordinateMembers",
-        df: pd.DataFrame,
-        cartesian: bool = True,
-        keplerian: bool = True,
-        cometary: bool = True,
-        spherical: bool = True,
-        coord_cols: Optional[dict] = None,
-        origin_col: str = "origin",
-        frame_col: str = "frame",
-    ) -> "CoordinateMembers":
-        """
-        Instantiate CoordinateMembers from a `pandas.DataFrame`. If all
-        coordinate types are set to true,  this function will look
-        for coordinates in this order: Cartesian, Keplerian, Cometary, Spherical.
-
-        Parameters
-        ----------
-        df : `~pandas.DataFrame`
-            Pandas DataFrame containing coordinates of a single type.
-        cartesian : bool, optional
-            Look for Cartesian coordinates.
-        keplerian : bool, optional
-            Look for Keplerian coordinates.
-        cometary : bool, optional
-            Look for Cometary coordinates.
-        spherical : bool, optional
-            Look for Spherical coordinates.
-        coord_cols : dict, optional
-            Dictionary containing the coordinate dimensions as keys and their equivalent columns
-            as values. If None, this function will use the default dictionaries for each coordinate class.
-            The following coordinate (dictionary) keys are supported:
-                Cartesian columns: x, y, z, vx, vy, vz
-                Keplerian columns: a, e, i, raan, ap, M
-                Cometary columns: q, e, i, raan, ap, tp
-                Spherical columns: rho, lon, lat, vrho, vlon, vlat
-        origin_col : str
-            Name of the column containing the origin of each coordinate.
-        frame_col : str
-            Name of the column containing the coordinate frame.
-
-        Returns
-        -------
-        cls : `~thor.coordinates.members.Members`
-            CoordinateMembers extracted from the given `~pandas.DataFrame`.
-        """
-        data = cls._dict_from_df(
-            df,
-            cartesian=cartesian,
-            keplerian=keplerian,
-            cometary=cometary,
-            spherical=spherical,
-            coord_cols=coord_cols,
-            origin_col=origin_col,
-            frame_col=frame_col,
-        )
-        return cls(**data)

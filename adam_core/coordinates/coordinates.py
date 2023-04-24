@@ -1,10 +1,10 @@
 import logging
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
+from astropy import units as u
 from astropy.time import Time
-from astropy.units import Quantity
 
 from ..utils import Indexable, times_from_df, times_to_df
 from .covariances import (
@@ -125,8 +125,8 @@ def _ingest_covariance(
 
     if covariance.shape[1] != covariance.shape[2] != axes:
         err = (
-            f"Coordinates have {axes} defined dimensions, expected covariance matrix\n",
-            f"shapes of (N, {axes}, {axes}.",
+            f"Coordinates have {axes} defined dimensions, expected covariance matrix\n"
+            f"shapes of (N, {axes}, {axes}."
         )
         raise ValueError(err)
 
@@ -166,24 +166,26 @@ class Coordinates(Indexable):
         covariances: Optional[Union[np.ndarray, np.ma.masked_array, List]] = None,
         sigmas: Optional[Union[tuple, np.ndarray, np.ma.masked_array]] = None,
         times: Optional[Time] = None,
-        origin: Optional[Union[np.ndarray, str]] = "heliocenter",
-        frame: Optional[Union[np.ndarray, str]] = "ecliptic",
+        origin: Union[np.ndarray, str] = "heliocenter",
+        frame: str = "ecliptic",
         names: dict = {},
         units: dict = {},
         **kwargs,
     ):
-        coords = None
-
         # Total number of coordinate dimensions
-        D = len(kwargs)
+        D = len(kwargs.keys())
+        if D == 0:
+            raise ValueError("No coordinates were passed.")
+
         units_ = {}
+        coords_init = np.ma.masked_array([])
         for d, (name, q) in enumerate(kwargs.items()):
             q_ = self._convert_to_array(q)
 
             # If the coordinate dimension has a coresponding unit
             # then use that unit. If it does not look for the unit
             # in the units kwarg.
-            if isinstance(q_, Quantity):
+            if isinstance(q_, u.Quantity):
                 units_[name] = q_.unit
                 q_ = q_.value
             else:
@@ -192,6 +194,9 @@ class Coordinates(Indexable):
                     f"using unit defined in units kwarg ({units[name]})."
                 )
                 units_[name] = units[name]
+
+            if d == 0:
+                coords = coords_init
 
             coords = _ingest_coordinate(q_, d, coords, D=D)
 
@@ -204,36 +209,31 @@ class Coordinates(Indexable):
 
             if len(self.values) != len(times_):
                 err = (
-                    "coordinates (N = {}) and times (N = {}) do not have the same length.\n"
+                    f"coordinates (N = {len(self._values)}) and times (N = {len(times_)})"
+                    "do not have the same length.\n"
                     "If times are defined, each coordinate must have a corresponding time.\n"
                 )
-                raise ValueError(err.format(len(self._values), len(times_)))
+                raise ValueError(err)
 
             self._times = times_
         else:
             self._times = None
 
-        if origin is not None:
-            if isinstance(origin, str):
-                self._origin = np.empty(len(self._values), dtype="<U16")
-                self._origin.fill(origin)
-            elif isinstance(origin, np.ndarray):
-                assert len(origin) == len(self._values)
-                self._origin = origin
-            else:
-                err = "Origin should be a str or `~numpy.ndarray`"
-                raise TypeError(err)
-        else:
+        if isinstance(origin, str):
+            self._origin = np.empty(len(self._values), dtype="<U16")
+            self._origin.fill(origin)
+        elif isinstance(origin, np.ndarray):
+            assert len(origin) == len(self._values)
             self._origin = origin
-
-        if frame is not None:
-            if isinstance(frame, str):
-                self._frame = frame
-            else:
-                err = "frame should be a str"
-                raise TypeError(err)
         else:
+            err = "Origin should be a str or `~numpy.ndarray`"
+            raise TypeError(err)
+
+        if isinstance(frame, str):
             self._frame = frame
+        else:
+            err = "frame should be a str"
+            raise TypeError(err)
 
         self._frame = frame
         self._names = names
@@ -288,19 +288,19 @@ class Coordinates(Indexable):
         return
 
     @property
-    def times(self):
+    def times(self) -> Time:
         return self._times
 
     @property
-    def values(self):
+    def values(self) -> np.ma.masked_array:
         return self._values
 
     @property
-    def covariances(self):
+    def covariances(self) -> np.ma.masked_array:
         return self._covariances
 
     @property
-    def sigmas(self):
+    def sigmas(self) -> np.ma.masked_array:
         sigmas = None
         if self._covariances is not None:
             cov_diag = np.diagonal(self._covariances, axis1=1, axis2=2)
@@ -309,19 +309,19 @@ class Coordinates(Indexable):
         return sigmas
 
     @property
-    def origin(self):
+    def origin(self) -> np.ndarray:
         return self._origin
 
     @property
-    def frame(self):
+    def frame(self) -> str:
         return self._frame
 
     @property
-    def names(self):
+    def names(self) -> Dict[str, str]:
         return self._names
 
     @property
-    def units(self):
+    def units(self) -> Dict[str, u.Unit]:
         return self._units
 
     def has_units(self, units: dict) -> bool:

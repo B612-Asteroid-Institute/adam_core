@@ -1,7 +1,7 @@
 import logging
 from collections import OrderedDict
 from copy import copy, deepcopy
-from typing import List, Optional, Union
+from typing import List, Optional, Sized, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -98,7 +98,7 @@ def _check_slices_are_consecutive(slices: npt.NDArray[slice]) -> bool:
     return True
 
 
-class Indexable:
+class Indexable(Sized):
     """
     Class that enables indexing and slicing of itself and its members.
     If an Indexable subclass has members that are `~numpy.ndarray`s, `~numpy.ma.core.MaskedArray`s,
@@ -432,10 +432,13 @@ class Indexable:
                 )
             ]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._index)
 
-    def __eq__(self, other: "Indexable") -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Indexable):
+            return NotImplemented
+
         # If the objects do not share the same attributes then they are not equal
         if set(self.__dict__.keys()) != set(other.__dict__.keys()):
             return False
@@ -701,9 +704,9 @@ def concatenate(
 
     # Astropy time objects concatenate slowly and very poorly so we convert them to
     # numpy arrays and track which attributes should be time objects.
-    time_attributes = []
-    time_scales = {}
-    time_formats = {}
+    time_attributes: List[str] = []
+    time_scales: dict[str, str] = {}
+    time_formats: dict[str, str] = {}
     for k, v in indexables[0].__dict__.items():
         if isinstance(v, (np.ndarray, np.ma.masked_array, Indexable)):
             data[k] = [deepcopy(v)]

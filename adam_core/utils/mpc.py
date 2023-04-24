@@ -166,11 +166,11 @@ def pack_provisional_designation(designation: str) -> str:
 
     cycle_pf = "00"
     if len(cycle) > 0:
-        cycle = int(cycle)
-        if cycle <= 99:
-            cycle_pf = str(cycle).zfill(2)
+        cycle_int = int(cycle)
+        if cycle_int <= 99:
+            cycle_pf = str(cycle_int).zfill(2)
         else:
-            cycle_pf = BASE62[cycle // 10] + str(cycle % 10)
+            cycle_pf = BASE62[cycle_int // 10] + str(cycle_int % 10)
 
     designation_pf = "{}{}{}{}".format(year, letter1, cycle_pf, letter2)
     return designation_pf
@@ -370,9 +370,11 @@ def unpack_provisional_designation(designation_pf: str) -> str:
 
     number = int(BASE62_MAP[cycle1]) * 10 + BASE62_MAP[cycle2]
     if number == 0:
-        number = ""
+        number_str = ""
+    else:
+        number_str = str(number)
 
-    designation = "{} {}{}{}".format(year, letter1, letter2, number)
+    designation = "{} {}{}{}".format(year, letter1, letter2, number_str)
 
     return designation
 

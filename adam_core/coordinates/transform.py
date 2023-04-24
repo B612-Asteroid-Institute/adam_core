@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -1237,12 +1237,12 @@ def cartesian_to_frame(
 
 
 def transform_coordinates(
-    coords: Coordinates,
+    coords: Type[Coordinates],
     representation_out: str,
     frame_out: Optional[str] = None,
     origin_out: Optional[str] = None,
     unit_sphere: bool = True,
-) -> Coordinates:
+) -> Type[Coordinates]:
     """
     Transform coordinates between frames ('ecliptic', 'equatorial')
     and/or representations ('cartesian', 'spherical', 'keplerian').

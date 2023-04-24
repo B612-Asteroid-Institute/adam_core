@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -348,7 +348,7 @@ class SphericalCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls,
+        cls: Type["SphericalCoordinates"],
         df: pd.DataFrame,
         coord_cols: dict = SPHERICAL_COLS,
         origin_col: str = "origin",

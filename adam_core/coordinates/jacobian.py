@@ -64,6 +64,6 @@ def calc_jacobian(
     # return the first one. All relevant functions in adam_core return
     # primary result first, though we may want to come up with a more general
     # solution in the future.
-    if isinstance(jacobian, Tuple):
+    if isinstance(jacobian, Tuple):  # type: ignore
         jacobian = jacobian[0]
     return np.array(jacobian)

@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Type
 
 import numpy as np
 import numpy.typing as npt
@@ -45,7 +45,7 @@ class Orbits(CoordinateMembers):
         return
 
     @property
-    def orbit_ids(self):
+    def orbit_ids(self) -> np.ndarray:
         return self._orbit_ids
 
     @orbit_ids.setter
@@ -61,7 +61,7 @@ class Orbits(CoordinateMembers):
         self._orbit_ids = np.arange(0, len(self._orbit_ids))
 
     @property
-    def object_ids(self):
+    def object_ids(self) -> np.ndarray:
         return self._object_ids
 
     @object_ids.setter
@@ -98,8 +98,8 @@ class Orbits(CoordinateMembers):
         self,
         time_scale: str = "tdb",
         coordinate_type: Optional[str] = None,
-        sigmas: Optional[bool] = None,
-        covariances: Optional[bool] = None,
+        sigmas: bool = False,
+        covariances: bool = False,
     ) -> pd.DataFrame:
         """
         Represent Orbits as a `~pandas.DataFrame`.
@@ -111,19 +111,16 @@ class Orbits(CoordinateMembers):
         coordinate_type : {"cartesian", "spherical", "keplerian", "cometary"}
             Desired output representation of the orbits.
         sigmas : bool, optional
-            Include 1-sigma uncertainty columns. If None, will determine if
-            any uncertainties are present and add them if so.
+            Include 1-sigma uncertainty columns.
         covariances : bool, optional
-            Include lower triangular covariance matrix columns. If None, will
-            determine if any uncertainties are present and add them if so.
+            Include lower triangular covariance matrix columns.
 
         Returns
         -------
         df : `~pandas.DataFrame`
             Pandas DataFrame containing orbits.
         """
-        df = CoordinateMembers.to_df(
-            self,
+        df = self._to_df(
             time_scale=time_scale,
             coordinate_type=coordinate_type,
             sigmas=sigmas,
@@ -138,7 +135,7 @@ class Orbits(CoordinateMembers):
 
     @classmethod
     def from_df(
-        cls: "Orbits",
+        cls: Type["Orbits"],
         df: pd.DataFrame,
         coord_cols: Optional[dict] = None,
         origin_col: str = "origin",

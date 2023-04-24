@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import jax.numpy as jnp
 from jax import config, jit, lax
 
@@ -38,7 +40,7 @@ def calc_mean_anomaly(nu: float, e: float) -> float:
 
 
 @jit
-def _calc_elliptical_anomalies(nu: float, e: float) -> float:
+def _calc_elliptical_anomalies(nu: float, e: float) -> Tuple[float, float]:
     nu_ = jnp.where(nu >= 2 * jnp.pi, nu % (2 * jnp.pi), nu)
     E = jnp.arctan2(jnp.sqrt(1 - e**2) * jnp.sin(nu_), e + jnp.cos(nu_))
     M = E - e * jnp.sin(E)
@@ -47,7 +49,7 @@ def _calc_elliptical_anomalies(nu: float, e: float) -> float:
 
 
 @jit
-def _calc_hyperbolic_anomalies(nu: float, e: float) -> float:
+def _calc_hyperbolic_anomalies(nu: float, e: float) -> Tuple[float, float]:
     nu_ = jnp.where(nu >= 2 * jnp.pi, nu % (2 * jnp.pi), nu)
     H = 2 * jnp.arctanh(jnp.sqrt((e - 1) / (e + 1)) * jnp.tan(nu_ / 2))
     M = e * jnp.sinh(H) - H
@@ -56,7 +58,7 @@ def _calc_hyperbolic_anomalies(nu: float, e: float) -> float:
 
 
 @jit
-def _calc_parabolic_anomalies(nu: float, e: float) -> float:
+def _calc_parabolic_anomalies(nu: float, e: float) -> Tuple[float, float]:
     nu_ = jnp.where(nu >= 2 * jnp.pi, nu % (2 * jnp.pi), nu)
     D = jnp.arctan(nu_ / 2)
     M = D + (D**3 / 3)

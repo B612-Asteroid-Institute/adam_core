@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -498,7 +498,7 @@ class CometaryCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls,
+        cls: Type["CometaryCoordinates"],
         df: pd.DataFrame,
         coord_cols: dict = COMETARY_COLS,
         origin_col: str = "origin",
