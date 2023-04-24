@@ -19,73 +19,11 @@ from .covariances import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "_ingest_coordinate",
     "_ingest_covariance",
     "Coordinates",
 ]
 
 COORD_FILL_VALUE = np.NaN
-
-
-def _ingest_coordinate(
-    q: Union[list, np.ndarray],
-    d: int,
-    coords: Optional[np.ma.masked_array] = None,
-    D: int = 6,
-) -> np.ma.masked_array:
-    """
-    Ingest coordinates along an axis (like the x, y, z) and add them to an existing masked array
-    of coordinate measurements if that object already exists. If that object doesn't exist then
-    create it and return it. Any missing values in q should be represented with NaNs.
-
-    Parameters
-    ----------
-    q : list or `~numpy.ndarray` (N)
-        List or 1-D array of coordinate measurements.
-    d : int
-        The coordinate axis (as an index). For example, for a 6D Cartesian
-        state vector, the x-axis takes the 0th index, the y-axis takes the 1st index,
-        the z axis takes the 2nd index, the x-velocity takes the 3rd index, etc..
-    coords : `~numpy.ma.ndarray` (N, D), optional
-        If coordinates (ie, other axes) have already been defined then pass them here
-        so that current axis of coordinates can be added.
-    D : int, optional
-        Total number of dimensions represented by the coordinates.
-
-    Returns
-    -------
-    coords : `~numpy.ma.masked_array` (N, D)
-        Masked array of 6D coordinate measurements with q measurements ingested.
-
-    Raises
-    ------
-    ValueError
-        If the length of q doesn't match the length of coords.
-    """
-    if q is not None:
-        q_ = np.asarray(q)
-        N_ = len(q_)
-        if coords is None:
-            coords = np.ma.zeros(
-                (N_, D),
-                dtype=np.float64,
-            )
-            coords.fill_value = COORD_FILL_VALUE
-            coords.mask = np.ones((N_, D), dtype=bool)
-
-        else:
-            N, D = coords.shape
-            if N != N_:
-                err = (
-                    "q needs to be the same length as the existing coordinates.\n"
-                    f"q has length {N_} while coords has {N} coordinates in 6 dimensions."
-                )
-                raise ValueError(err)
-
-        coords[:, d] = q_
-        coords.mask[:, d] = np.where(np.isnan(q_), True, False)
-
-    return coords
 
 
 def _ingest_covariance(
@@ -172,15 +110,39 @@ class Coordinates(Indexable):
         units: dict = {},
         **kwargs,
     ):
-        # Total number of coordinate dimensions
+        # Total number of coordinate dimensions passed (D)
         D = len(kwargs.keys())
         if D == 0:
             raise ValueError("No coordinates were passed.")
 
+        # Total number of coordinate measurements passed (N)
+        # Lets grab the first coordinate dimension and use that
+        # to determine the number of measurements to expect.
+        # And error will be raised later if the number of measurements in other
+        # coordinate dimensions do not match.
+        q = list(kwargs.values())[0]
+        q_ = self._convert_to_array(q)
+        N = len(q_)
+
         units_ = {}
-        coords_init = np.ma.masked_array([])
+        coords = np.ma.zeros(
+            (N, D),
+            dtype=np.float64,
+        )
+        coords.fill_value = COORD_FILL_VALUE
+        coords.mask = np.ones((N, D), dtype=bool)
+
         for d, (name, q) in enumerate(kwargs.items()):
             q_ = self._convert_to_array(q)
+
+            # If the coordinate dimension is not the same length as the
+            # other coordinate dimensions raise an error.
+            if len(q_) != N:
+                err = (
+                    f"Coordinate dimension {name} has {len(q_)} measurements, "
+                    f"expected {N}."
+                )
+                raise ValueError(err)
 
             # If the coordinate dimension has a coresponding unit
             # then use that unit. If it does not look for the unit
@@ -195,10 +157,9 @@ class Coordinates(Indexable):
                 )
                 units_[name] = units[name]
 
-            if d == 0:
-                coords = coords_init
-
-            coords = _ingest_coordinate(q_, d, coords, D=D)
+            q_ = np.asarray(q)
+            coords[:, d] = q_
+            coords.mask[:, d] = np.where(np.isnan(q_), True, False)
 
         self._values = coords
         if isinstance(times, Time):
