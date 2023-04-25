@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -469,7 +469,7 @@ class KeplerianCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls,
+        cls: Type["KeplerianCoordinates"],
         df: pd.DataFrame,
         coord_cols: dict = KEPLERIAN_COLS,
         origin_col: str = "origin",

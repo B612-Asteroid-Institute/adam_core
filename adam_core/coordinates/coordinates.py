@@ -1,10 +1,10 @@
 import logging
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
+from astropy import units as u
 from astropy.time import Time
-from astropy.units import Quantity
 
 from ..utils import Indexable, times_from_df, times_to_df
 from .covariances import (
@@ -19,73 +19,11 @@ from .covariances import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "_ingest_coordinate",
     "_ingest_covariance",
     "Coordinates",
 ]
 
 COORD_FILL_VALUE = np.NaN
-
-
-def _ingest_coordinate(
-    q: Union[list, np.ndarray],
-    d: int,
-    coords: Optional[np.ma.masked_array] = None,
-    D: int = 6,
-) -> np.ma.masked_array:
-    """
-    Ingest coordinates along an axis (like the x, y, z) and add them to an existing masked array
-    of coordinate measurements if that object already exists. If that object doesn't exist then
-    create it and return it. Any missing values in q should be represented with NaNs.
-
-    Parameters
-    ----------
-    q : list or `~numpy.ndarray` (N)
-        List or 1-D array of coordinate measurements.
-    d : int
-        The coordinate axis (as an index). For example, for a 6D Cartesian
-        state vector, the x-axis takes the 0th index, the y-axis takes the 1st index,
-        the z axis takes the 2nd index, the x-velocity takes the 3rd index, etc..
-    coords : `~numpy.ma.ndarray` (N, D), optional
-        If coordinates (ie, other axes) have already been defined then pass them here
-        so that current axis of coordinates can be added.
-    D : int, optional
-        Total number of dimensions represented by the coordinates.
-
-    Returns
-    -------
-    coords : `~numpy.ma.masked_array` (N, D)
-        Masked array of 6D coordinate measurements with q measurements ingested.
-
-    Raises
-    ------
-    ValueError
-        If the length of q doesn't match the length of coords.
-    """
-    if q is not None:
-        q_ = np.asarray(q)
-        N_ = len(q_)
-        if coords is None:
-            coords = np.ma.zeros(
-                (N_, D),
-                dtype=np.float64,
-            )
-            coords.fill_value = COORD_FILL_VALUE
-            coords.mask = np.ones((N_, D), dtype=bool)
-
-        else:
-            N, D = coords.shape
-            if N != N_:
-                err = (
-                    "q needs to be the same length as the existing coordinates.\n"
-                    f"q has length {N_} while coords has {N} coordinates in 6 dimensions."
-                )
-                raise ValueError(err)
-
-        coords[:, d] = q_
-        coords.mask[:, d] = np.where(np.isnan(q_), True, False)
-
-    return coords
 
 
 def _ingest_covariance(
@@ -125,8 +63,8 @@ def _ingest_covariance(
 
     if covariance.shape[1] != covariance.shape[2] != axes:
         err = (
-            f"Coordinates have {axes} defined dimensions, expected covariance matrix\n",
-            f"shapes of (N, {axes}, {axes}.",
+            f"Coordinates have {axes} defined dimensions, expected covariance matrix\n"
+            f"shapes of (N, {axes}, {axes}."
         )
         raise ValueError(err)
 
@@ -166,24 +104,50 @@ class Coordinates(Indexable):
         covariances: Optional[Union[np.ndarray, np.ma.masked_array, List]] = None,
         sigmas: Optional[Union[tuple, np.ndarray, np.ma.masked_array]] = None,
         times: Optional[Time] = None,
-        origin: Optional[Union[np.ndarray, str]] = "heliocenter",
-        frame: Optional[Union[np.ndarray, str]] = "ecliptic",
+        origin: Union[np.ndarray, str] = "heliocenter",
+        frame: str = "ecliptic",
         names: dict = {},
         units: dict = {},
         **kwargs,
     ):
-        coords = None
+        # Total number of coordinate dimensions passed (D)
+        D = len(kwargs.keys())
+        if D == 0:
+            raise ValueError("No coordinates were passed.")
 
-        # Total number of coordinate dimensions
-        D = len(kwargs)
+        # Total number of coordinate measurements passed (N)
+        # Lets grab the first coordinate dimension and use that
+        # to determine the number of measurements to expect.
+        # And error will be raised later if the number of measurements in other
+        # coordinate dimensions do not match.
+        q = list(kwargs.values())[0]
+        q_ = self._convert_to_array(q)
+        N = len(q_)
+
         units_ = {}
+        coords = np.ma.zeros(
+            (N, D),
+            dtype=np.float64,
+        )
+        coords.fill_value = COORD_FILL_VALUE
+        coords.mask = np.ones((N, D), dtype=bool)
+
         for d, (name, q) in enumerate(kwargs.items()):
             q_ = self._convert_to_array(q)
+
+            # If the coordinate dimension is not the same length as the
+            # other coordinate dimensions raise an error.
+            if len(q_) != N:
+                err = (
+                    f"Coordinate dimension {name} has {len(q_)} measurements, "
+                    f"expected {N}."
+                )
+                raise ValueError(err)
 
             # If the coordinate dimension has a coresponding unit
             # then use that unit. If it does not look for the unit
             # in the units kwarg.
-            if isinstance(q_, Quantity):
+            if isinstance(q_, u.Quantity):
                 units_[name] = q_.unit
                 q_ = q_.value
             else:
@@ -193,7 +157,9 @@ class Coordinates(Indexable):
                 )
                 units_[name] = units[name]
 
-            coords = _ingest_coordinate(q_, d, coords, D=D)
+            q_ = np.asarray(q)
+            coords[:, d] = q_
+            coords.mask[:, d] = np.where(np.isnan(q_), True, False)
 
         self._values = coords
         if isinstance(times, Time):
@@ -204,36 +170,31 @@ class Coordinates(Indexable):
 
             if len(self.values) != len(times_):
                 err = (
-                    "coordinates (N = {}) and times (N = {}) do not have the same length.\n"
+                    f"coordinates (N = {len(self._values)}) and times (N = {len(times_)})"
+                    "do not have the same length.\n"
                     "If times are defined, each coordinate must have a corresponding time.\n"
                 )
-                raise ValueError(err.format(len(self._values), len(times_)))
+                raise ValueError(err)
 
             self._times = times_
         else:
             self._times = None
 
-        if origin is not None:
-            if isinstance(origin, str):
-                self._origin = np.empty(len(self._values), dtype="<U16")
-                self._origin.fill(origin)
-            elif isinstance(origin, np.ndarray):
-                assert len(origin) == len(self._values)
-                self._origin = origin
-            else:
-                err = "Origin should be a str or `~numpy.ndarray`"
-                raise TypeError(err)
-        else:
+        if isinstance(origin, str):
+            self._origin = np.empty(len(self._values), dtype="<U16")
+            self._origin.fill(origin)
+        elif isinstance(origin, np.ndarray):
+            assert len(origin) == len(self._values)
             self._origin = origin
-
-        if frame is not None:
-            if isinstance(frame, str):
-                self._frame = frame
-            else:
-                err = "frame should be a str"
-                raise TypeError(err)
         else:
+            err = "Origin should be a str or `~numpy.ndarray`"
+            raise TypeError(err)
+
+        if isinstance(frame, str):
             self._frame = frame
+        else:
+            err = "frame should be a str"
+            raise TypeError(err)
 
         self._frame = frame
         self._names = names
@@ -288,19 +249,19 @@ class Coordinates(Indexable):
         return
 
     @property
-    def times(self):
+    def times(self) -> Time:
         return self._times
 
     @property
-    def values(self):
+    def values(self) -> np.ma.masked_array:
         return self._values
 
     @property
-    def covariances(self):
+    def covariances(self) -> np.ma.masked_array:
         return self._covariances
 
     @property
-    def sigmas(self):
+    def sigmas(self) -> np.ma.masked_array:
         sigmas = None
         if self._covariances is not None:
             cov_diag = np.diagonal(self._covariances, axis1=1, axis2=2)
@@ -309,19 +270,19 @@ class Coordinates(Indexable):
         return sigmas
 
     @property
-    def origin(self):
+    def origin(self) -> np.ndarray:
         return self._origin
 
     @property
-    def frame(self):
+    def frame(self) -> str:
         return self._frame
 
     @property
-    def names(self):
+    def names(self) -> Dict[str, str]:
         return self._names
 
     @property
-    def units(self):
+    def units(self) -> Dict[str, u.Unit]:
         return self._units
 
     def has_units(self, units: dict) -> bool:

@@ -44,7 +44,9 @@ def _convert_coordinates_units(
 
 
 def _convert_covariances_units(
-    covariances: Union[np.ndarray, np.ma.masked_array], units: List, desired_units: List
+    covariances: Union[np.ndarray, np.ma.masked_array],
+    units: np.ndarray,
+    desired_units: np.ndarray,
 ) -> Union[np.ndarray, np.ma.masked_array]:
     """
     Convert covariance units to desired units.
@@ -92,7 +94,8 @@ def _convert_covariances_units(
 
 
 def convert_coordinates(
-    coords: Coordinates, desired_units: Union[List, dict]
+    coords: Coordinates,
+    desired_units: Union[List, dict],
 ) -> Coordinates:
     """
     Convert coordinates to desired units.

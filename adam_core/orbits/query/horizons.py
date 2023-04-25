@@ -7,6 +7,7 @@ from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.cometary import CometaryCoordinates
+from ...coordinates.coordinates import Coordinates
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...utils.astropy import _check_times
 from ..orbits import Orbits
@@ -145,6 +146,7 @@ def query_horizons(
     orbits : `~adam_core.orbits.orbits.Orbits`
         Orbits object containing the state vectors or elements of the object at each time.
     """
+    coordinates: Coordinates
     if coordinate_type == "cartesian":
         vectors = _get_horizons_vectors(
             object_ids,

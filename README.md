@@ -1,6 +1,6 @@
 # Asteroid Institute ADAM Core
 
-A set of shared astrodynamics libraries and utilities. 
+A set of shared astrodynamics libraries and utilities.
 
 `adam_core` is used by a variety of library and services at Asteroid Institute. Sharing these common classes, types, and conversions amongst our tools ensures consistency and accuracy.
 
@@ -8,7 +8,7 @@ A set of shared astrodynamics libraries and utilities.
 
 ### Orbits
 
-To define an orbit: 
+To define an orbit:
 ```python
 from astropy.time import Time
 from adam_core.coordinates import KeplerianCoordinates
@@ -16,12 +16,12 @@ from adam_core.orbits import Orbits
 
 keplerian_elements = KeplerianCoordinates(
     times=Time(59000.0, scale="tdb", format="mjd"),
-    a=1.0, 
+    a=1.0,
     e=0.002,
     i=10.,
     raan=50.0,
     ap=20.0,
-    M=30.0, 
+    M=30.0,
 )
 orbits = Orbits(
     keplerian_elements,
@@ -38,7 +38,7 @@ from adam_core.orbits import Orbits
 
 keplerian_elements = KeplerianCoordinates(
     times=Time([59000.0, 60000.0], scale="tdb", format="mjd"),
-    a=[1.0, 3.0], 
+    a=[1.0, 3.0],
     e=[0.002, 0.0],
     i=[10., 30.],
     raan=[50.0, 32.0],
@@ -60,7 +60,7 @@ orbits.to_df()
 1        2  Test Orbit 2  60000.0  3.0  0.000  30.0  32.0  94.0  159.0  heliocenter  ecliptic
 ```
 
-Orbits can also be defined with uncertainties. 
+Orbits can also be defined with uncertainties.
 ```python
 from astropy.time import Time
 from adam_core.coordinates import KeplerianCoordinates
@@ -68,12 +68,12 @@ from adam_core.orbits import Orbits
 
 keplerian_elements = KeplerianCoordinates(
     times=Time(59000.0, scale="tdb", format="mjd"),
-    a=1.0, 
+    a=1.0,
     e=0.002,
     i=10.,
     raan=50.0,
     ap=20.0,
-    M=30.0, 
+    M=30.0,
     sigma_a=0.002,
     sigma_e=0.001,
     sigma_i=0.01,
@@ -92,7 +92,7 @@ orbits.to_df(sigmas=True)
 0        1  Test Orbit with Uncertainties  59000.0  1.0  ...       0.1      0.1  heliocenter  ecliptic
 ```
 
-To query orbits from JPL Horizons: 
+To query orbits from JPL Horizons:
 ```python
 from astropy.time import Time
 from adam_core.orbits.query import query_horizons
@@ -102,7 +102,7 @@ object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, times)
 ```
 
-To query orbits from JPL SBDB: 
+To query orbits from JPL SBDB:
 ```python
 from adam_core.orbits.query import query_sbdb
 
@@ -111,7 +111,7 @@ orbits = query_sbdb(object_ids)
 ```
 
 #### Orbital Element Conversions
-Orbital elements can be accessed via the corresponding attribute. All conversions, including covariances, are done on demand and stored. 
+Orbital elements can be accessed via the corresponding attribute. All conversions, including covariances, are done on demand and stored.
 
 ```python
 # Keplerian Elements
@@ -128,8 +128,8 @@ orbits.spherical
 ```
 
 ### Lower Level Classes
-These classes are designed more for developers interested in building codes derived from utilities 
-in this package. 
+These classes are designed more for developers interested in building codes derived from utilities
+in this package.
 
 #### Coordinates
 
@@ -198,4 +198,3 @@ docker compose run adam_core pytest .
 # Run a shell in the container
 docker compose run adam_core bash
 ```
-

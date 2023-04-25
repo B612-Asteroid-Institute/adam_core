@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -615,7 +615,7 @@ class CartesianCoordinates(Coordinates):
 
     @classmethod
     def from_df(
-        cls,
+        cls: Type["CartesianCoordinates"],
         df: pd.DataFrame,
         coord_cols: dict = CARTESIAN_COLS,
         origin_col: str = "origin",

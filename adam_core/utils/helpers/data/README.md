@@ -1,7 +1,7 @@
 # adam_core/utils/helpers/data
 
-The csv file "sample_objects.csv" contains 27 orbits of a variety of real objects from different dynamical classes. It was generated on February 22, 2023 
-with the following code snippet: 
+The csv file "sample_objects.csv" contains 27 orbits of a variety of real objects from different dynamical classes. It was generated on February 22, 2023
+with the following code snippet:
 
 ```python
 from adam_core.orbits.query import query_sbdb

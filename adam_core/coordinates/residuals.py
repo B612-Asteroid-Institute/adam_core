@@ -1,3 +1,5 @@
+from typing import Type
+
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import mahalanobis
@@ -81,7 +83,7 @@ class Residuals(Indexable):
         return pd.DataFrame(data)
 
 
-def calc_residuals(observed: Coordinates, predicted: Coordinates):
+def calc_residuals(observed: Type[Coordinates], predicted: Type[Coordinates]):
     """
     Calculate the residuals beteween two sets of coordinates: one observed
     and another predicted.
@@ -127,8 +129,8 @@ def calc_residuals(observed: Coordinates, predicted: Coordinates):
     if observed.covariances is not None:
         chi2s = residuals**2 / observed.sigmas**2
 
-        d = []
-        p = []
+        d_list = []
+        p_list = []
         for i, (observed_i, predicted_i) in enumerate(zip(observed, predicted)):
             mask = observed_i.values.mask
             dof_i = dof[i]
@@ -140,11 +142,11 @@ def calc_residuals(observed: Coordinates, predicted: Coordinates):
             d_i = mahalanobis(u, v, np.linalg.inv(cov))
             p_i = 1 - chi2.cdf(d_i, dof_i)
 
-            d.append(d_i)
-            p.append(p_i)
+            d_list.append(d_i)
+            p_list.append(p_i)
 
-        d = np.array(d)
-        p = np.array(p)
+        d = np.array(d_list)
+        p = np.array(p_list)
     else:
         p = np.empty(len(observed))
         p.fill(np.NaN)
