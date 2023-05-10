@@ -14,26 +14,14 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..orbits.orbits import Orbits
 from .propagator import Propagator
 
-PYOORB_CONFIG = {"dynamical_model": "N", "ephemeris_file": "de430.dat"}
-
 
 class PYOORB(Propagator):
-    def __init__(self, **kwargs):
-        # Make sure only the correct kwargs are passed to the constructor
-        allowed_kwargs = PYOORB_CONFIG.keys()
-        for k in kwargs:
-            if k not in allowed_kwargs:
-                warnings.warn(
-                    f"Invalid argument {k} passed to PYOORB propagator. Ignoring..."
-                )
+    def __init__(
+        self, *, dynamical_model: str = "N", ephemeris_file: str = "de430.dat"
+    ):
 
-        # If an allowed kwarg is missing, add the default
-        for k in allowed_kwargs:
-            if k not in kwargs:
-                kwargs[k] = PYOORB_CONFIG[k]
-
-        self.dynamical_model = kwargs["dynamical_model"]
-        self.ephemeris_file = kwargs["ephemeris_file"]
+        self.dynamical_model = dynamical_model
+        self.ephemeris_file = ephemeris_file
 
         env_var = "ADAM_CORE_PYOORB_INITIALIZED"
         if env_var in os.environ.keys() and os.environ[env_var] == "True":
