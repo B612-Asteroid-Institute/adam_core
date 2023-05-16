@@ -11,8 +11,6 @@ from .covariances import (
     COVARIANCE_FILL_VALUE,
     covariances_from_df,
     covariances_to_df,
-    sigmas_from_df,
-    sigmas_to_covariance,
     sigmas_to_df,
 )
 
@@ -232,7 +230,7 @@ class Coordinates(Indexable):
             else:  # isinstance(sigmas, (np.ndarray, np.ma.masked_array)):
                 sigmas_ = sigmas
 
-            self._covariances = sigmas_to_covariance(sigmas_)
+            # self._covariances = sigmas_to_covariance(sigmas_)
 
         # Both covariances and sigmas are None
         else:
@@ -470,19 +468,19 @@ class Coordinates(Indexable):
 
         # If the covariance matrices are fully masked out then try reading covariances
         # using the standard deviation columns
-        if (
-            isinstance(covariances, np.ma.masked_array)
-            and (np.all(covariances.mask) is True)
-        ) or (covariances is None):
-            sigmas = sigmas_from_df(
-                df,
-                coord_names=list(coord_cols.keys()),
-            )
-            covariances = sigmas_to_covariance(sigmas)
-            if isinstance(covariances, np.ma.masked_array) and (
-                np.all(covariances.mask) is True
-            ):
-                covariances = None
+        # if (
+        #     isinstance(covariances, np.ma.masked_array)
+        #     and (np.all(covariances.mask) is True)
+        # ) or (covariances is None):
+        #     sigmas = sigmas_from_df(
+        #         df,
+        #         coord_names=list(coord_cols.keys()),
+        #     )
+        #     covariances = sigmas_to_covariance(sigmas)
+        #     if isinstance(covariances, np.ma.masked_array) and (
+        #         np.all(covariances.mask) is True
+        #     ):
+        #         covariances = None
 
         data["covariances"] = covariances
         data["names"] = coord_cols
