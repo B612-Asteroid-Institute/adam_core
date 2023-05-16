@@ -7,6 +7,7 @@ from quivr import Float64Field, Table
 from .covariances import CoordinateCovariances
 from .frame import Frame
 from .origin import Origin
+from .times import Times
 
 __all__ = ["CartesianCoordinates", "CARTESIAN_COLS", "CARTESIAN_UNITS"]
 
@@ -31,6 +32,7 @@ class CartesianCoordinates(Table):
     vx = Float64Field(nullable=True)
     vy = Float64Field(nullable=True)
     vz = Float64Field(nullable=True)
+    times = Times.as_field(nullable=True)
     covariances = CoordinateCovariances.as_field(nullable=True)
     origin = Origin.as_field(nullable=False)
     frame = Frame.as_field(nullable=False)
@@ -217,6 +219,7 @@ class CartesianCoordinates(Table):
             vx=coords_rotated[:, 3],
             vy=coords_rotated[:, 4],
             vz=coords_rotated[:, 5],
+            times=self.times,
             covariances=CoordinateCovariances.from_matrix(covariances_rotated),
             origin=self.origin,
             frame=Frame.from_kwargs(name=[frame_out] * len(self)),
@@ -262,6 +265,7 @@ class CartesianCoordinates(Table):
             vx=coords_translated[:, 3],
             vy=coords_translated[:, 4],
             vz=coords_translated[:, 5],
+            times=self.times,
             covariances=self.covariances,
             origin=Origin.from_kwargs(code=[origin_out] * len(self)),
             frame=self.frame,
