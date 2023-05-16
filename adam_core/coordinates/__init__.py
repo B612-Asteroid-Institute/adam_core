@@ -20,6 +20,7 @@ from .members import CoordinateMembers
 from .origin import Origin
 from .residuals import calc_residuals
 from .spherical import SPHERICAL_COLS, SPHERICAL_UNITS, SphericalCoordinates
+from .times import Times
 from .transform import (
     _cartesian_to_cometary,
     _cartesian_to_keplerian,
