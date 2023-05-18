@@ -1,9 +1,7 @@
-import jax.numpy as jnp
 import numpy as np
 from astropy import units as u
 from quivr import Float64Field, Table
 
-from ..constants import Constants as c
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .frame import Frame
@@ -26,9 +24,6 @@ COMETARY_UNITS["i"] = u.deg
 COMETARY_UNITS["raan"] = u.deg
 COMETARY_UNITS["ap"] = u.deg
 COMETARY_UNITS["tp"] = u.d
-
-MU = c.MU
-Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 
 
 class CometaryCoordinates(Table):

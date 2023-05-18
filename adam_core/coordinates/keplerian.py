@@ -2,7 +2,6 @@ import numpy as np
 from astropy import units as u
 from quivr import Float64Field, Table
 
-from ..constants import Constants as c
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .frame import Frame
@@ -25,8 +24,6 @@ KEPLERIAN_UNITS["i"] = u.deg
 KEPLERIAN_UNITS["raan"] = u.deg
 KEPLERIAN_UNITS["ap"] = u.deg
 KEPLERIAN_UNITS["M"] = u.deg
-
-MU = c.MU
 
 
 class KeplerianCoordinates(Table):
