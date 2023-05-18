@@ -3,7 +3,7 @@ from copy import deepcopy
 import pandas as pd
 from astropy.time import Time
 
-__all__ = ["times_from_df", "times_to_df", "_check_times"]
+__all__ = ["times_from_df", "times_to_df"]
 
 
 def times_from_df(df: pd.DataFrame) -> Time:
@@ -54,33 +54,3 @@ def times_to_df(times: Time, time_scale: str = "utc") -> pd.DataFrame:
     data[f"mjd_{time.scale}"] = time.mjd
 
     return pd.DataFrame(data)
-
-
-def _check_times(times, arg_name="times"):
-    """
-    Check that 'time' is an astropy time object, if not, raise an error.
-
-    Parameters
-    ----------
-    time : `~astropy.time.core.Time`
-
-    arg_name : str
-        Name of argument in function.
-
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    ValueError : If time is not an astropy time object.
-    """
-    err = (
-        "Time ({}) has to be an `~astropy.time.core.Time` object.\n"
-        "Convert using:\n\n"
-        "from astropy.time import Time\n"
-        "times = Time(t_array, scale='...', format='...')"
-    )
-    if type(times) != Time:
-        raise TypeError(err.format(arg_name))
-    return
