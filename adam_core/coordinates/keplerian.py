@@ -194,7 +194,14 @@ class KeplerianCoordinates(Table):
         covariances_keplerian = self.covariances.to_matrix()
         if not np.all(np.isnan(covariances_keplerian)):
             covariances_cartesian = transform_covariances_jacobian(
-                self.values, covariances_keplerian, _keplerian_to_cartesian_a
+                self.values,
+                covariances_keplerian,
+                _keplerian_to_cartesian_a,
+                in_axes=(0, None, None, None),
+                out_axes=0,
+                mu=mu,
+                max_iter=1000,
+                tol=1e-15,
             )
             covariances_cartesian = CoordinateCovariances.from_matrix(
                 covariances_cartesian.filled()
