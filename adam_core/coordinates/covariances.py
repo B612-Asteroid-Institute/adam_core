@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "CoordinateCovariances",
+    "sigmas_to_covariances",
     "sample_covariance",
     "transform_covariances_sampling",
     "transform_covariances_jacobian",
@@ -27,6 +28,27 @@ __all__ = [
 ]
 
 COVARIANCE_FILL_VALUE = np.NaN
+
+
+def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
+    """
+    Convert an array of standard deviations to an array of covariance matrices.
+    Non-diagonal elements are set to zero.
+
+    Parameters
+    ----------
+    sigmas : `numpy.ndarray` (N, D)
+        Standard deviations for N coordinates in D dimensions.
+
+    Returns
+    -------
+    covariances : `numpy.ndarray` (N, D, D)
+        Covariance matrices for N coordinates in D dimensions.
+    """
+    D = sigmas.shape[1]
+    identity = np.identity(D, dtype=sigmas.dtype)
+    covariances = np.einsum("kj,ji->kij", sigmas**2, identity, order="C")
+    return covariances
 
 
 class CoordinateCovariances(Table):
@@ -88,10 +110,7 @@ class CoordinateCovariances(Table):
             Covariance matrices with the diagonal elements set to the
             squares of the input sigmas.
         """
-        D = sigmas.shape[1]
-        identity = np.identity(D, dtype=sigmas.dtype)
-        covariances = np.einsum("kj,ji->kij", sigmas**2, identity, order="C")
-        return cls.from_matrix(covariances)
+        return cls.from_matrix(sigmas_to_covariances(sigmas))
 
 
 def sample_covariance(
