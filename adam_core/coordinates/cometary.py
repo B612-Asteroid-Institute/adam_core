@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
 from astropy import units as u
 from quivr import Float64Field, Table
@@ -7,6 +9,11 @@ from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .frame import Frame
 from .origin import Origin
 from .times import Times
+
+if TYPE_CHECKING:
+    from .keplerian import KeplerianCoordinates
+    from .spherical import SphericalCoordinates
+
 
 __all__ = [
     "CometaryCoordinates",
@@ -300,3 +307,25 @@ class CometaryCoordinates(Table):
         )
 
         return coords
+
+    def to_keplerian(self) -> "KeplerianCoordinates":
+        from .keplerian import KeplerianCoordinates
+
+        return KeplerianCoordinates.from_cartesian(self.to_cartesian())
+
+    @classmethod
+    def from_keplerian(
+        cls, keplerian_coordinates: "KeplerianCoordinates"
+    ) -> "CometaryCoordinates":
+        return cls.from_cartesian(keplerian_coordinates.to_cartesian())
+
+    def to_spherical(self) -> "SphericalCoordinates":
+        from .spherical import SphericalCoordinates
+
+        return SphericalCoordinates.from_cartesian(self.to_cartesian())
+
+    @classmethod
+    def from_spherical(
+        cls, spherical_coordinates: "SphericalCoordinates"
+    ) -> "CometaryCoordinates":
+        return cls.from_cartesian(spherical_coordinates.to_cartesian())

@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -6,8 +6,24 @@ from scipy.spatial.distance import mahalanobis
 from scipy.stats import chi2
 
 from ..utils import Indexable
+from .cartesian import CartesianCoordinates
+from .cometary import CometaryCoordinates
 from .conversions import convert_coordinates
-from .coordinates import Coordinates
+from .keplerian import KeplerianCoordinates
+from .spherical import SphericalCoordinates
+
+CoordinateType = Union[
+    CartesianCoordinates,
+    CometaryCoordinates,
+    KeplerianCoordinates,
+    SphericalCoordinates,
+]
+SUPPORTED_COORDINATES = (
+    CartesianCoordinates,
+    CometaryCoordinates,
+    KeplerianCoordinates,
+    SphericalCoordinates,
+)
 
 __all__ = ["calc_residuals"]
 
@@ -83,7 +99,7 @@ class Residuals(Indexable):
         return pd.DataFrame(data)
 
 
-def calc_residuals(observed: Type[Coordinates], predicted: Type[Coordinates]):
+def calc_residuals(observed, predicted):
     """
     Calculate the residuals beteween two sets of coordinates: one observed
     and another predicted.
@@ -102,8 +118,8 @@ def calc_residuals(observed: Type[Coordinates], predicted: Type[Coordinates]):
         Includes chi2, dof and mahalanobis distance if the covariance matrices for the observed
         coordinates are defined.
     """
-    assert isinstance(observed, Coordinates)
-    assert isinstance(predicted, Coordinates)
+    assert isinstance(observed, SUPPORTED_COORDINATES)
+    assert isinstance(predicted, SUPPORTED_COORDINATES)
     assert type(observed) == type(predicted)
     assert len(observed) == len(predicted)
     if observed.times is not None and predicted.times is not None:

@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import Optional, Type, Union
+from typing import Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -12,7 +12,6 @@ from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
 from .cartesian import CARTESIAN_UNITS, CartesianCoordinates
 from .cometary import COMETARY_UNITS, CometaryCoordinates
 from .conversions import convert_coordinates
-from .coordinates import COORD_FILL_VALUE, Coordinates
 from .keplerian import KEPLERIAN_UNITS, KeplerianCoordinates
 from .spherical import SPHERICAL_UNITS, SphericalCoordinates
 
@@ -38,6 +37,13 @@ __all__ = [
     "cartesian_to_cometary",
     "_cometary_to_cartesian",
     "cometary_to_cartesian",
+]
+
+CoordinateType = Union[
+    CartesianCoordinates,
+    KeplerianCoordinates,
+    CometaryCoordinates,
+    SphericalCoordinates,
 ]
 
 
@@ -1237,12 +1243,12 @@ def cartesian_to_frame(
 
 
 def transform_coordinates(
-    coords: Type[Coordinates],
+    coords: CoordinateType,
     representation_out: str,
     frame_out: Optional[str] = None,
     origin_out: Optional[str] = None,
     unit_sphere: bool = True,
-) -> Type[Coordinates]:
+) -> CoordinateType:
     """
     Transform coordinates between frames ('ecliptic', 'equatorial')
     and/or representations ('cartesian', 'spherical', 'keplerian').
@@ -1435,11 +1441,11 @@ def transform_coordinates(
         # rho and vrho values were assumed then make sure the output coordinates
         # and covariances are set back to NaN values and masked
         if set_rho_nan:
-            coords_out._values[:, 0] = COORD_FILL_VALUE
+            coords_out._values[:, 0] = np.NaN
             coords_out._values[:, 0].mask = 1
 
         if set_vrho_nan:
-            coords_out._values[:, 3] = COORD_FILL_VALUE
+            coords_out._values[:, 3] = np.NaN
             coords_out._values[:, 3].mask = 1
 
     elif representation_out == "keplerian":

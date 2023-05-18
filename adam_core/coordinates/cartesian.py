@@ -1,4 +1,5 @@
 import logging
+from typing import TYPE_CHECKING
 
 import numpy as np
 from astropy import units as u
@@ -8,6 +9,11 @@ from .covariances import CoordinateCovariances
 from .frame import Frame
 from .origin import Origin
 from .times import Times
+
+if TYPE_CHECKING:
+    from .cometary import CometaryCoordinates
+    from .keplerian import KeplerianCoordinates
+    from .spherical import SphericalCoordinates
 
 __all__ = ["CartesianCoordinates", "CARTESIAN_COLS", "CARTESIAN_UNITS"]
 
@@ -271,3 +277,34 @@ class CartesianCoordinates(Table):
             frame=self.frame,
         )
         return coords
+
+    def to_cometary(self) -> "CometaryCoordinates":
+        from .cometary import CometaryCoordinates
+
+        return CometaryCoordinates.from_cartesian(self)
+
+    @classmethod
+    def from_cometary(cls, cometary: "CometaryCoordinates") -> "CartesianCoordinates":
+        return cometary.to_cartesian()
+
+    def to_keplerian(self) -> "KeplerianCoordinates":
+        from .keplerian import KeplerianCoordinates
+
+        return KeplerianCoordinates.from_cartesian(self)
+
+    @classmethod
+    def from_keplerian(
+        cls, keplerian: "KeplerianCoordinates"
+    ) -> "CartesianCoordinates":
+        return keplerian.to_cartesian()
+
+    def to_spherical(self) -> "SphericalCoordinates":
+        from .spherical import SphericalCoordinates
+
+        return SphericalCoordinates.from_cartesian(self)
+
+    @classmethod
+    def from_spherical(
+        cls, spherical: "SphericalCoordinates"
+    ) -> "CartesianCoordinates":
+        return spherical.to_cartesian()

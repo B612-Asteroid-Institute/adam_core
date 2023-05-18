@@ -3,8 +3,6 @@ from typing import List, Union
 
 import numpy as np
 
-from .coordinates import Coordinates
-
 
 def _convert_coordinates_units(
     coords: Union[np.ndarray, np.ma.masked_array], units: List, desired_units: List
@@ -94,9 +92,9 @@ def _convert_covariances_units(
 
 
 def convert_coordinates(
-    coords: Coordinates,
+    coords,
     desired_units: Union[List, dict],
-) -> Coordinates:
+):
     """
     Convert coordinates to desired units.
 

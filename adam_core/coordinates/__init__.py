@@ -2,7 +2,6 @@
 from .cartesian import CARTESIAN_COLS, CARTESIAN_UNITS, CartesianCoordinates
 from .cometary import COMETARY_COLS, COMETARY_UNITS, CometaryCoordinates
 from .conversions import convert_coordinates
-from .coordinates import Coordinates, _ingest_covariance
 from .covariances import (
     covariances_from_df,
     covariances_to_df,
@@ -16,7 +15,6 @@ from .covariances import (
 from .frame import Frame
 from .jacobian import calc_jacobian
 from .keplerian import KEPLERIAN_COLS, KEPLERIAN_UNITS, KeplerianCoordinates
-from .members import CoordinateMembers
 from .origin import Origin
 from .residuals import calc_residuals
 from .spherical import SPHERICAL_COLS, SPHERICAL_UNITS, SphericalCoordinates
