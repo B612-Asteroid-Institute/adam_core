@@ -162,7 +162,7 @@ class KeplerianCoordinates(Table):
         """
         Period.
         """
-        return np.sqrt(4 * np.pi**2 * self.a.to_numpy() ** 3 / self.mu)
+        return np.sqrt(4 * np.pi**2 * self.a.to_numpy() ** 3 / self.origin.mu)
 
     @P.setter
     def P(self, value):
@@ -180,8 +180,11 @@ class KeplerianCoordinates(Table):
         )
         raise ValueError(err)
 
-    def to_cartesian(self, mu: float = MU) -> CartesianCoordinates:
+    def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _keplerian_to_cartesian_a, keplerian_to_cartesian
+
+        # Extract gravitational parameter from origin
+        mu = self.origin.mu
 
         coords_cartesian = keplerian_to_cartesian(
             self.values,
@@ -231,8 +234,11 @@ class KeplerianCoordinates(Table):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates, mu: float = MU):
+    def from_cartesian(cls, cartesian: CartesianCoordinates):
         from .transform import _cartesian_to_keplerian6, cartesian_to_keplerian
+
+        # Extract gravitational parameter from origin
+        mu = cartesian.origin.mu
 
         coords_keplerian = cartesian_to_keplerian(
             cartesian.values,

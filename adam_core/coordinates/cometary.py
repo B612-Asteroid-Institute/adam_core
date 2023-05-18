@@ -168,7 +168,7 @@ class CometaryCoordinates(Table):
         """
         Period.
         """
-        return np.sqrt(4 * np.pi**2 * self.a.to_numpy() ** 3 / self.mu)
+        return np.sqrt(4 * np.pi**2 * self.a.to_numpy() ** 3 / self.origin.mu)
 
     @P.setter
     def P(self, value):
@@ -186,7 +186,7 @@ class CometaryCoordinates(Table):
         )
         raise ValueError(err)
 
-    def to_cartesian(self, mu: float = MU) -> CartesianCoordinates:
+    def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _cometary_to_cartesian, cometary_to_cartesian
 
         if self.times is None:
@@ -196,6 +196,9 @@ class CometaryCoordinates(Table):
                 "the time of periapsis passage context."
             )
             raise ValueError(err)
+
+        # Extract gravitational parameter from origin
+        mu = self.origin.mu
 
         coords_cartesian = cometary_to_cartesian(
             self.values,
@@ -247,9 +250,7 @@ class CometaryCoordinates(Table):
         return coords
 
     @classmethod
-    def from_cartesian(
-        cls, cartesian: CartesianCoordinates, mu: float = MU
-    ) -> "CometaryCoordinates":
+    def from_cartesian(cls, cartesian: CartesianCoordinates) -> "CometaryCoordinates":
         from .transform import _cartesian_to_cometary, cartesian_to_cometary
 
         if cartesian.times is None:
@@ -259,6 +260,9 @@ class CometaryCoordinates(Table):
                 "the time of periapsis passage."
             )
             raise ValueError(err)
+
+        # Extract gravitational parameter from origin
+        mu = cartesian.origin.mu
 
         coords_cometary = cartesian_to_cometary(
             cartesian.values,
