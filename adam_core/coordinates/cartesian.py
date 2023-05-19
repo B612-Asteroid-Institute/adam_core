@@ -2,11 +2,13 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from quivr import Float64Field, Table
 
 from .covariances import CoordinateCovariances
 from .frame import Frame
+from .io import coords_from_dataframe, coords_to_dataframe
 from .origin import Origin
 from .times import Times
 
@@ -308,3 +310,48 @@ class CartesianCoordinates(Table):
         cls, spherical: "SphericalCoordinates"
     ) -> "CartesianCoordinates":
         return spherical.to_cartesian()
+
+    def to_dataframe(
+        self, sigmas: bool = False, covariances: bool = True
+    ) -> pd.DataFrame:
+        """
+        Convert coordinates to a pandas DataFrame.
+
+        Parameters
+        ----------
+        sigmas : bool, optional
+            If True, include 1-sigma uncertainties in the DataFrame.
+        covariances : bool, optional
+            If True, include covariance matrices in the DataFrame. Covariance matrices
+            will be split into 21 columns, with the lower triangular elements stored.
+
+        Returns
+        -------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
+        """
+        return coords_to_dataframe(
+            self,
+            ["x", "y", "z", "vx", "vy", "vz"],
+            sigmas=sigmas,
+            covariances=covariances,
+        )
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "CartesianCoordinates":
+        """
+        Create coordinates from a pandas DataFrame.
+
+        Parameters
+        ----------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
+
+        Returns
+        -------
+        coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
+            Cartesian coordinates.
+        """
+        return coords_from_dataframe(
+            cls, df, coord_names=["x", "y", "z", "vx", "vy", "vz"]
+        )

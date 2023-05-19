@@ -1,12 +1,14 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pandas as pd
 from astropy import units as u
 from quivr import Float64Field, Table
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .frame import Frame
+from .io import coords_from_dataframe, coords_to_dataframe
 from .origin import Origin
 from .times import Times
 
@@ -329,3 +331,48 @@ class CometaryCoordinates(Table):
         cls, spherical_coordinates: "SphericalCoordinates"
     ) -> "CometaryCoordinates":
         return cls.from_cartesian(spherical_coordinates.to_cartesian())
+
+    def to_dataframe(
+        self, sigmas: bool = False, covariances: bool = True
+    ) -> pd.DataFrame:
+        """
+        Convert coordinates to a pandas DataFrame.
+
+        Parameters
+        ----------
+        sigmas : bool, optional
+            If True, include 1-sigma uncertainties in the DataFrame.
+        covariances : bool, optional
+            If True, include covariance matrices in the DataFrame. Covariance matrices
+            will be split into 21 columns, with the lower triangular elements stored.
+
+        Returns
+        -------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
+        """
+        return coords_to_dataframe(
+            self,
+            ["q", "e", "i", "raan", "ap", "tp"],
+            sigmas=sigmas,
+            covariances=covariances,
+        )
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "CometaryCoordinates":
+        """
+        Create coordinates from a pandas DataFrame.
+
+        Parameters
+        ----------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
+
+        Returns
+        -------
+        coords : `~adam_core.coordinates.cometary.CometaryCoordinates`
+            Cometary coordinates.
+        """
+        return coords_from_dataframe(
+            cls, df, coord_names=["q", "e", "i", "raan", "ap", "tp"]
+        )
