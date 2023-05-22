@@ -224,7 +224,9 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     object_ids = np.array(object_ids)
     classes = np.array(classes)
 
-    return Orbits.from_kwargs(object_ids=object_ids, cometary=coordinates)
+    return Orbits.from_kwargs(
+        object_ids=object_ids, coordinates=coordinates.to_cartesian()
+    )
 
 
 class NotFoundError(Exception):

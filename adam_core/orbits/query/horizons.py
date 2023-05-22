@@ -172,7 +172,9 @@ def query_horizons(
         )
         object_ids = vectors["targetname"].values
 
-        return Orbits.from_kwargs(object_ids=object_ids, cartesian=coordinates)
+        return Orbits.from_kwargs(
+            object_ids=object_ids, coordinates=coordinates.to_cartesian()
+        )
 
     elif coordinate_type == "keplerian":
         elements = _get_horizons_elements(
@@ -200,7 +202,9 @@ def query_horizons(
         )
         object_ids = elements["targetname"].values
 
-        return Orbits.from_kwargs(object_ids=object_ids, keplerian=coordinates)
+        return Orbits.from_kwargs(
+            object_ids=object_ids, coordinates=coordinates.to_cartesian()
+        )
 
     elif coordinate_type == "cometary":
         elements = _get_horizons_elements(
@@ -228,7 +232,9 @@ def query_horizons(
             frame=frame,
         )
         object_ids = elements["targetname"].values
-        return Orbits.from_kwargs(object_ids=object_ids, cometary=coordinates)
+        return Orbits.from_kwargs(
+            object_ids=object_ids, coordinates=coordinates.to_cartesian()
+        )
 
     else:
         err = "coordinate_type should be one of {'cartesian', 'keplerian', 'cometary'}"
