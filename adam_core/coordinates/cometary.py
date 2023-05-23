@@ -226,18 +226,13 @@ class CometaryCoordinates(Table):
                 max_iter=100,
                 tol=1e-15,
             )
-            covariances_cartesian = CoordinateCovariances.from_matrix(
-                covariances_cartesian.filled()
-            )
         else:
             covariances_cartesian = np.empty(
                 (len(coords_cartesian), 6, 6), dtype=np.float64
             )
             covariances_cartesian.fill(np.nan)
-            covariances_cartesian = CoordinateCovariances.from_matrix(
-                covariances_cartesian
-            )
 
+        covariances_cartesian = CoordinateCovariances.from_matrix(covariances_cartesian)
         coords = CartesianCoordinates.from_kwargs(
             x=coords_cartesian[:, 0],
             y=coords_cartesian[:, 1],
@@ -291,10 +286,8 @@ class CometaryCoordinates(Table):
                 (len(coords_cometary), 6, 6), dtype=np.float64
             )
             covariances_cometary.fill(np.nan)
-            covariances_cometary = CoordinateCovariances.from_matrix(
-                covariances_cometary
-            )
 
+        covariances_cometary = CoordinateCovariances.from_matrix(covariances_cometary)
         coords = cls.from_kwargs(
             q=coords_cometary[:, 0],
             e=coords_cometary[:, 1],

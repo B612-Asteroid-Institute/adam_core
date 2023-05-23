@@ -212,18 +212,13 @@ class KeplerianCoordinates(Table):
                 max_iter=1000,
                 tol=1e-15,
             )
-            covariances_cartesian = CoordinateCovariances.from_matrix(
-                covariances_cartesian.filled()
-            )
         else:
             covariances_cartesian = np.empty(
                 (len(coords_cartesian), 6, 6), dtype=np.float64
             )
             covariances_cartesian.fill(np.nan)
-            covariances_cartesian = CoordinateCovariances.from_matrix(
-                covariances_cartesian
-            )
 
+        covariances_cartesian = CoordinateCovariances.from_matrix(covariances_cartesian)
         coords = CartesianCoordinates.from_kwargs(
             x=coords_cartesian[:, 0],
             y=coords_cartesian[:, 1],
@@ -264,18 +259,13 @@ class KeplerianCoordinates(Table):
                 t0=cartesian.times.to_astropy().tdb.mjd,
                 mu=mu,
             )
-            covariances_keplerian = CoordinateCovariances.from_matrix(
-                covariances_keplerian.filled()
-            )
         else:
             covariances_keplerian = np.empty(
                 (len(coords_keplerian), 6, 6), dtype=np.float64
             )
             covariances_keplerian.fill(np.nan)
-            covariances_keplerian = CoordinateCovariances.from_matrix(
-                covariances_keplerian
-            )
 
+        covariances_keplerian = CoordinateCovariances.from_matrix(covariances_keplerian)
         coords = cls.from_kwargs(
             a=coords_keplerian[:, 0],
             e=coords_keplerian[:, 4],

@@ -112,10 +112,8 @@ class SphericalCoordinates(Table):
                 (len(coords_cartesian), 6, 6), dtype=np.float64
             )
             covariances_cartesian.fill(np.nan)
-            covariances_cartesian = CoordinateCovariances.from_matrix(
-                covariances_cartesian
-            )
 
+        covariances_cartesian = CoordinateCovariances.from_matrix(covariances_cartesian)
         coords = CartesianCoordinates.from_kwargs(
             x=coords_cartesian[:, 0],
             y=coords_cartesian[:, 1],
@@ -147,10 +145,8 @@ class SphericalCoordinates(Table):
                 (len(coords_spherical), 6, 6), dtype=np.float64
             )
             covariances_spherical.fill(np.nan)
-            covariances_spherical = CoordinateCovariances.from_matrix(
-                covariances_spherical
-            )
 
+        covariances_spherical = CoordinateCovariances.from_matrix(covariances_spherical)
         coords = cls.from_kwargs(
             rho=coords_spherical[:, 0],
             lon=coords_spherical[:, 1],
