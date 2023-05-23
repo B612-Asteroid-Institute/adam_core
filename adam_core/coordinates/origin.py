@@ -1,9 +1,10 @@
 import logging
 from enum import Enum
-from typing import Optional, Self
+from typing import Optional
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 from quivr import StringField, Table
 
 from ..constants import KM_P_AU, S_P_DAY
@@ -66,8 +67,16 @@ class Origin(Table):
         super().__init__(table)
         self._mu = mu
 
-    def with_table(self, table: pa.Table) -> Self:
+    def with_table(self, table: pa.Table) -> "Origin":
         return super().with_table(table, mu=self.mu)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (str, np.ndarray)):
+            return pc.all(pc.equal(self.code, other)).as_py()
+        elif isinstance(other, Origin):
+            return pc.all(pc.equal(self.code, other.code)).as_py()
+        else:
+            raise TypeError(f"Cannot compare Origin to type: {type(other)}")
 
     @property
     def mu(self):
