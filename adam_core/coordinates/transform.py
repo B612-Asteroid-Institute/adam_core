@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 from typing import Optional, Union
 
 import jax.numpy as jnp
@@ -9,11 +8,10 @@ from jax import config, jit, lax, vmap
 from ..constants import Constants as c
 from ..dynamics.barker import solve_barker
 from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
-from .cartesian import CARTESIAN_UNITS, CartesianCoordinates
-from .cometary import COMETARY_UNITS, CometaryCoordinates
-from .conversions import convert_coordinates
-from .keplerian import KEPLERIAN_UNITS, KeplerianCoordinates
-from .spherical import SPHERICAL_UNITS, SphericalCoordinates
+from .cartesian import CartesianCoordinates
+from .cometary import CometaryCoordinates
+from .keplerian import KeplerianCoordinates
+from .spherical import SphericalCoordinates
 
 config.update("jax_enable_x64", True)
 config.update("jax_platform_name", "cpu")
@@ -577,7 +575,7 @@ def _keplerian_to_cartesian_p(
     Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
     to Cartesian orbits since their semi-major axes are by definition undefined.
     Please consider representing the orbits with Cometary elements
-    and using those to convert to Cartesian. See `~thor.coordinates.cometary._cometary_to_cartesian`.
+    and using those to convert to Cartesian. See `~adam_core.coordinates.cometary._cometary_to_cartesian`.
 
     Parameters
     ----------
@@ -708,7 +706,7 @@ def _keplerian_to_cartesian_a(
     Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
     to Cartesian orbits since their semi-major axes are by definition undefined.
     Please consider representing the orbits with Cometary elements
-    and using those to convert to Cartesian. See `~thor.coordinates.cometary._cometary_to_cartesian`.
+    and using those to convert to Cartesian. See `~adam_core.coordinates.cometary._cometary_to_cartesian`.
 
     Parameters
     ----------
@@ -789,7 +787,7 @@ def _keplerian_to_cartesian_q(
     Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
     to Cartesian orbits since their semi-major axes are by definition undefined.
     Please consider representing the orbits with Cometary elements
-    and using those to convert to Cartesian. See `~thor.coordinates.cometary._cometary_to_cartesian`.
+    and using those to convert to Cartesian. See `~adam_core.coordinates.cometary._cometary_to_cartesian`.
 
     Parameters
     ----------
@@ -869,7 +867,7 @@ def keplerian_to_cartesian(
     Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
     to Cartesian orbits since their semi-major axes are by definition undefined.
     Please consider representing these orbits with Cometary elements
-    and using those to convert to Cartesian. See `~thor.coordinates.cometary.cometary_to_cartesian`.
+    and using those to convert to Cartesian. See `~adam_core.coordinates.cometary.cometary_to_cartesian`.
 
     Parameters
     ----------
@@ -1192,12 +1190,12 @@ def cartesian_to_origin(
     ----------
     coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Cartesian coordinates and optionally their covariances.
-    origin : {'heliocenter', 'barycenter'}
+    origin : {'SUN', 'SOLAR_SYSTEM_BARYCENTER'}
         Name of the desired origin.
 
     Returns
     -------
-    CartesianCoordinates : `~thor.coordinates.cartesian.CartesianCoordinates`
+    CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Translated Cartesian coordinates and their covariances.
     """
     unique_origins = np.unique(coords.origin)
@@ -1228,7 +1226,7 @@ def cartesian_to_frame(
 
     Returns
     -------
-    CartesianCoordinates : `~thor.coordinates.cartesian.CartesianCoordinates`
+    CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Rotated Cartesian coordinates and their covariances.
     """
     if frame == "ecliptic" and coords.frame != "ecliptic":
@@ -1255,13 +1253,13 @@ def transform_coordinates(
 
     Parameters
     ----------
-    coords : `~thor.coordinates.Coordinates`
+    coords : `~adam_core.coordinates.Coordinates`
         Coordinates to transform between representations and frames.
     representation_out : {'cartesian', 'spherical', 'keplerian', 'cometary'}
         Desired coordinate type or representation of the output coordinates.
     frame_out : {'equatorial', 'ecliptic'}
         Desired reference frame of the output coordinates.
-    origin_out : {'heliocenter', 'barycenter'}
+    origin_out : {'SUN', 'SOLAR_SYSTEM_BARYCENTER'}
         Desired origin of the output coordinates.
     unit_sphere : bool
         Assume the coordinates lie on a unit sphere. In many cases, spherical coordinates
@@ -1272,7 +1270,7 @@ def transform_coordinates(
 
     Returns
     -------
-    coords_out : `~thor.coordinates.Coordinates`
+    coords_out : `~adam_core.coordinates.Coordinates`
         Coordinates in desired output representation and frame.
 
     Raises
@@ -1312,14 +1310,14 @@ def transform_coordinates(
         if frame_out != "equatorial" and frame_out != "ecliptic":
             raise ValueError("".join(frame_err).format("frame_out"))
     else:
-        frame_out = coords.frame
+        frame_out = str(coords.frame.name[0])
 
-    origin_err = ["{} should be one of:\n", "'heliocenter' or 'barycenter'"]
+    origin_err = ["{} should be one of:\n", "'SUN' or 'SOLAR_SYSTEM_BARYCENTER'"]
     if origin_out is not None:
-        if origin_out != "barycenter" and origin_out != "heliocenter":
+        if origin_out != "SOLAR_SYSTEM_BARYCENTER" and origin_out != "SUN":
             raise ValueError("".join(origin_err).format("origin_out"))
     else:
-        origin_out = coords.origin
+        origin_out = str(coords.origin.code[0])
 
     # Check that representation_in and representation_out are one of cartesian
     # or spherical, raise errors otherwise
@@ -1337,11 +1335,7 @@ def transform_coordinates(
 
     # If coords are already in the desired frame, have the desired origin and representation
     # then return them unaltered
-    if (
-        coords.frame == frame_out
-        and origin_out is None
-        and np.all(coords.origin == origin_out)
-    ):
+    if coords.frame == frame_out and origin_out is None and coords.origin == origin_out:
         if (
             isinstance(coords, CartesianCoordinates)
             and representation_out == "cartesian"
@@ -1364,70 +1358,60 @@ def transform_coordinates(
         else:
             pass
 
-    # At this point, some form of transformation is going to occur so make a
-    # copy of the coords and then convert the coords to Cartesian if they aren't already and make sure
-    # the units match the default units assumed for each class
-    coords_ = deepcopy(coords)
-
     set_rho_nan = False
     set_vrho_nan = False
-    if isinstance(coords_, CartesianCoordinates):
-        if not coords_.has_units(CARTESIAN_UNITS):
-            logger.info(
-                "Cartesian coordinates do not have default units, converting units before transforming."
-            )
-            coords_ = convert_coordinates(coords_, CARTESIAN_UNITS)
-        cartesian = coords_
+    if isinstance(coords, CartesianCoordinates):
 
-    elif isinstance(coords_, SphericalCoordinates):
-        if not coords_.has_units(SPHERICAL_UNITS):
-            logger.info(
-                "Spherical coordinates do not have default units, converting units before transforming."
-            )
-            coords_ = convert_coordinates(coords_, SPHERICAL_UNITS)
+        cartesian = coords
+
+    elif isinstance(coords, SphericalCoordinates):
 
         if representation_out == "spherical" or representation_out == "cartesian":
             if unit_sphere:
-                set_rho_nan = True
-                if np.all(np.isnan(coords_.rho.filled())):
+                values = coords.values
+
+                if np.all(np.isnan(coords.rho.to_numpy())):
                     logger.debug(
                         "Spherical coordinates have no defined radial distance (rho),"
                         "assuming spherical coordinates lie on unit sphere."
                     )
-                    coords_.values[:, 0] = 1.0
-                    coords._values.mask[:, 0] = 0
+                    values[:, 0] = 1.0
+                    set_rho_nan = True
 
-                set_vrho_nan = True
-                if np.all(np.isnan(coords_.vrho.filled())):
+                if np.all(np.isnan(coords.vrho.to_numpy())):
                     logger.debug(
                         "Spherical coordinates have no defined radial velocity (vrho),"
                         " assuming spherical coordinates lie on unit sphere with zero velocity."
                     )
-                    coords_.covariances[:, 3, :] = 0.0
-                    coords_.covariances[:, :, 3] = 0.0
+                    values = coords.values
+                    values[:, 3] = 0.0
+                    set_vrho_nan = True
 
-        cartesian = coords_.to_cartesian()
+                coords = SphericalCoordinates.from_kwargs(
+                    rho=values[:, 0],
+                    lat=values[:, 1],
+                    lon=values[:, 2],
+                    vrho=values[:, 3],
+                    vlat=values[:, 4],
+                    vlon=values[:, 5],
+                    covariances=coords.covariances,
+                    times=coords.times,
+                    frame=coords.frame,
+                    origin=coords.origin,
+                )
 
-    elif isinstance(coords_, KeplerianCoordinates):
-        if not coords_.has_units(KEPLERIAN_UNITS):
-            logger.info(
-                "Keplerian coordinates do not have default units, converting units before transforming."
-            )
-            coords_ = convert_coordinates(coords_, KEPLERIAN_UNITS)
+        cartesian = coords.to_cartesian()
 
-        cartesian = coords_.to_cartesian()
+    elif isinstance(coords, KeplerianCoordinates):
 
-    elif isinstance(coords_, CometaryCoordinates):
-        if not coords_.has_units(COMETARY_UNITS):
-            logger.info(
-                "Cometary coordinates do not have default units, converting units before transforming."
-            )
-            coords_ = convert_coordinates(coords_, COMETARY_UNITS)
+        cartesian = coords.to_cartesian()
 
-        cartesian = coords_.to_cartesian()
+    elif isinstance(coords, CometaryCoordinates):
+
+        cartesian = coords.to_cartesian()
 
     # Translate coordinates to new origin (if different from current)
-    if origin_out is not None and np.all(cartesian.origin != origin_out):
+    if origin_out is not None and cartesian.origin != origin_out:
         cartesian = cartesian_to_origin(cartesian, origin_out)
 
     # Rotate coordinates to new frame (if different from current)
@@ -1440,13 +1424,28 @@ def transform_coordinates(
         # If we assumed the coordinates lie on a unit sphere and the
         # rho and vrho values were assumed then make sure the output coordinates
         # and covariances are set back to NaN values and masked
-        if set_rho_nan:
-            coords_out._values[:, 0] = np.NaN
-            coords_out._values[:, 0].mask = 1
 
-        if set_vrho_nan:
-            coords_out._values[:, 3] = np.NaN
-            coords_out._values[:, 3].mask = 1
+        if set_rho_nan or set_vrho_nan:
+            values_out = coords_out.values
+
+            if set_rho_nan:
+                values_out[:, 0] = np.NaN
+
+            if set_vrho_nan:
+                values_out[:, 3] = np.NaN
+
+            coords = SphericalCoordinates.from_kwargs(
+                rho=values_out[:, 0],
+                lat=values_out[:, 1],
+                lon=values_out[:, 2],
+                vrho=values_out[:, 3],
+                vlat=values_out[:, 4],
+                vlon=values_out[:, 5],
+                covariances=coords.covariances,
+                times=coords.times,
+                frame=coords.frame,
+                origin=coords.origin,
+            )
 
     elif representation_out == "keplerian":
         coords_out = KeplerianCoordinates.from_cartesian(cartesian)
