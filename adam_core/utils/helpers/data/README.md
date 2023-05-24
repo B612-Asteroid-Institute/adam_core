@@ -23,5 +23,6 @@ for dynamical_class in SAMPLE_OBJECTS.keys():
     OBJECT_IDS += SAMPLE_OBJECTS[dynamical_class]
 
 orbits = query_sbdb(OBJECT_IDS)
-orbits.to_df().to_csv("sample_orbits.csv", index=False)
+orbits_df = orbits.to_dataframe()
+orbits_df.to_csv("sample_orbits.csv", index=False)
 ```

@@ -5,7 +5,11 @@ import numpy as np
 import pandas as pd
 from astropy.time import Time
 
-from ...coordinates import KeplerianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
+from ...coordinates.frame import Frame
+from ...coordinates.keplerian import KeplerianCoordinates
+from ...coordinates.origin import Origin
+from ...coordinates.times import Times
 from ...orbits import Orbits
 
 
@@ -26,7 +30,8 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
         Orbits object containing the sample orbits.
     """
     orbits_file = files("adam_core.utils.helpers.data").joinpath("sample_orbits.csv")
-    df = pd.read_csv(orbits_file, index_col=False)
+    df = pd.read_csv(orbits_file, index_col=False, float_precision="round_trip")
+    df["orbit_ids"] = np.array([None for _ in range(len(df))], dtype=object)
 
     if num_orbits is None:
         num_orbits = len(df)
@@ -36,7 +41,7 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
             f"num_orbits must be less than or equal to the number of sample orbits ({len(df)})."
         )
 
-    return Orbits.from_df(df.iloc[:num_orbits])
+    return Orbits.from_dataframe(df)[:num_orbits]
 
 
 def make_simple_orbits(num_orbits: int = 10) -> Orbits:
@@ -63,22 +68,30 @@ def make_simple_orbits(num_orbits: int = 10) -> Orbits:
         "ap": np.linspace(0, 360, num_orbits),
         "M": np.linspace(0, 360, num_orbits),
     }
-    for dim, value in data.copy().items():
-        data[f"sigma_{dim}"] = np.round(0.01 * value, 4)
-        data[dim] = np.round(value, 3)
+    # Hyperbolic orbits have negative semi-major axes
+    data["a"] = np.where(data["e"] > 1.0, -data["a"], data["a"])
 
-    data["times"] = Time(
-        np.round(np.linspace(59000.0, 59000.0 + num_orbits, num_orbits), 3),
-        scale="tdb",
-        format="mjd",
+    sigmas = np.zeros((num_orbits, 6))
+    for i, dim in enumerate(["a", "e", "i", "raan", "ap", "M"]):
+        sigmas[:, i] = np.round(0.01 * data[dim], 4)
+
+    data["covariances"] = CoordinateCovariances.from_sigmas(sigmas)
+    data["times"] = Times.from_astropy(
+        Time(
+            np.round(np.linspace(59000.0, 59000.0 + num_orbits, num_orbits), 3),
+            scale="tdb",
+            format="mjd",
+        )
     )
+    data["origin"] = Origin.from_kwargs(code=["SUN" for i in range(num_orbits)])
+    data["frame"] = Frame.from_kwargs(name=["ecliptic" for i in range(num_orbits)])
 
-    coords = KeplerianCoordinates(**data)
+    coords = KeplerianCoordinates.from_kwargs(**data)
     object_ids = [f"Object {i:03d}" for i in range(num_orbits)]
     orbit_ids = [f"Orbit {i:03d}" for i in range(num_orbits)]
 
-    orbits = Orbits(
-        coords,
+    orbits = Orbits.from_kwargs(
+        coordinates=coords.to_cartesian(),
         orbit_ids=orbit_ids,
         object_ids=object_ids,
     )

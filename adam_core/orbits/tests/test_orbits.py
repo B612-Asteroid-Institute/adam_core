@@ -1,72 +1,40 @@
 from astropy.time import Time
 
-from ...coordinates import KeplerianCoordinates
+from ...coordinates import CartesianCoordinates
+from ...coordinates.frame import Frame
+from ...coordinates.origin import Origin
+from ...coordinates.times import Times
 from ...utils.helpers import orbits as orbits_helpers
 from ..orbits import Orbits
 
 
 def test_orbits__init__():
-    keplerian_elements = KeplerianCoordinates(
-        times=Time(59000.0, scale="tdb", format="mjd"),
-        a=1.0,
-        e=0.002,
-        i=10.0,
-        raan=50.0,
-        ap=20.0,
-        M=30.0,
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[0.5],
+        y=[0.5],
+        z=[0.004],
+        vx=[0.005],
+        vy=[-0.005],
+        vz=[0.0002],
+        times=Times.from_astropy(Time([59000.0], scale="tdb", format="mjd")),
+        origin=Origin.from_kwargs(code=["SUN"]),
+        frame=Frame.from_kwargs(name=["ecliptic"]),
     )
 
-    orbits = Orbits(keplerian_elements, orbit_ids=["1"], object_ids=["Test Orbit"])
-
-    assert orbits.orbit_ids[0] == "1"
-    assert orbits.object_ids[0] == "Test Orbit"
-    assert orbits.keplerian.times[0].mjd == 59000.0
-    assert orbits.keplerian.times[0].scale == "tdb"
-    assert orbits.keplerian.a[0] == 1.0
-    assert orbits.keplerian.e[0] == 0.002
-    assert orbits.keplerian.i[0] == 10.0
-    assert orbits.keplerian.raan[0] == 50.0
-    assert orbits.keplerian.ap[0] == 20.0
-    assert orbits.keplerian.M[0] == 30.0
-
-
-def test_orbits__eq__():
-    keplerian_elements1 = KeplerianCoordinates(
-        times=Time(59000.0, scale="tdb", format="mjd"),
-        a=1.0,
-        e=0.002,
-        i=10.0,
-        raan=50.0,
-        ap=20.0,
-        M=30.0,
-    )
-    keplerian_elements2 = KeplerianCoordinates(
-        times=Time(59000.0, scale="tdb", format="mjd"),
-        a=1.0,
-        e=0.002,
-        i=10.0,
-        raan=50.0,
-        ap=20.0,
-        M=30.0,
+    orbits = Orbits.from_kwargs(
+        coordinates=coordinates, orbit_ids=["1"], object_ids=["Test Orbit"]
     )
 
-    orbits1 = Orbits(keplerian_elements1, orbit_ids=["1"], object_ids=["Test Orbit"])
-    orbits2 = Orbits(keplerian_elements2, orbit_ids=["1"], object_ids=["Test Orbit"])
-
-    assert orbits1 == orbits2
-
-    keplerian_elements3 = KeplerianCoordinates(
-        times=Time(59000.0, scale="tdb", format="mjd"),
-        a=0.0,
-        e=0.002,
-        i=10.0,
-        raan=50.0,
-        ap=20.0,
-        M=30.0,
-    )
-
-    orbits3 = Orbits(keplerian_elements3, orbit_ids=["1"], object_ids=["Test Orbit"])
-    assert orbits1 != orbits3
+    assert orbits.orbit_ids[0].as_py() == "1"
+    assert orbits.object_ids[0].as_py() == "Test Orbit"
+    assert orbits.coordinates.times.mjd.to_numpy()[0] == 59000.0
+    assert orbits.coordinates.times.scale.to_numpy(zero_copy_only=False)[0] == "tdb"
+    assert orbits.coordinates.x.to_numpy()[0] == 0.5
+    assert orbits.coordinates.y.to_numpy()[0] == 0.5
+    assert orbits.coordinates.z.to_numpy()[0] == 0.004
+    assert orbits.coordinates.vx.to_numpy()[0] == 0.005
+    assert orbits.coordinates.vy.to_numpy()[0] == -0.005
+    assert orbits.coordinates.vz.to_numpy()[0] == 0.0002
 
 
 def test_orbit_iteration():

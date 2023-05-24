@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Union
+from typing import TYPE_CHECKING, List, Type, Union
 
 import pandas as pd
 
@@ -88,7 +88,7 @@ def coords_to_dataframe(
 
 
 def coords_from_dataframe(
-    cls: "CoordinateType", df: pd.DataFrame, coord_names: List[str]
+    cls: "Type[CoordinateType]", df: pd.DataFrame, coord_names: List[str]
 ) -> "CoordinateType":
     """
     Return coordinates from a pandas DataFrame that was generated with

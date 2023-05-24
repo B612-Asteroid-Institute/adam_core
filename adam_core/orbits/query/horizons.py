@@ -185,7 +185,7 @@ def query_horizons(
         )
 
         times = Times.from_astropy(
-            Time(vectors["datetime_jd"].values, scale="tdb", format="jd")
+            Time(elements["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = Frame.from_kwargs(name=["ecliptic" for i in range(len(times))])
@@ -216,7 +216,7 @@ def query_horizons(
 
         tp = Time(elements["Tp_jd"].values, scale="tdb", format="jd")
         times = Times.from_astropy(
-            Time(vectors["datetime_jd"].values, scale="tdb", format="jd")
+            Time(elements["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = Frame.from_kwargs(name=["ecliptic" for i in range(len(times))])

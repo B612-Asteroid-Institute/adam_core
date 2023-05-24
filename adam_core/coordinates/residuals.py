@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import pyarrow as pa
@@ -70,7 +70,7 @@ def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray
 
 def batch_coords_and_covariances(
     coords: np.ndarray, covariances: np.ndarray
-) -> Tuple[np.ndarray, 4]:
+) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
     """
     Batch coordinates and covariances into groups that have the same
     number of dimensions that have missing values (represented by NaNs).
@@ -103,10 +103,10 @@ def batch_coords_and_covariances(
     batch_masks = np.unique(nans, axis=0)
     indices = np.arange(0, N, dtype=np.int64)
 
-    batch_indices = []
-    batch_dimensions = []
-    batch_coords = []
-    batch_covariances = []
+    batch_indices: List[np.ndarray] = []
+    batch_dimensions: List[np.ndarray] = []
+    batch_coords: List[np.ndarray] = []
+    batch_covariances: List[np.ndarray] = []
     for batch in batch_masks:
         # Find the indices of the coordinates that have the same missing dimensions
         # and select the coordinates and covariances for those indices
