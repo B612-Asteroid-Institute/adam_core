@@ -17,7 +17,7 @@ from .io import coords_from_dataframe, coords_to_dataframe
 from .jacobian import calc_jacobian
 from .keplerian import KEPLERIAN_COLS, KEPLERIAN_UNITS, KeplerianCoordinates
 from .origin import Origin
-from .residuals import calc_residuals
+from .residuals import calculate_chi2
 from .spherical import SPHERICAL_COLS, SPHERICAL_UNITS, SphericalCoordinates
 from .times import Times
 from .transform import (
