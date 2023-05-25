@@ -78,9 +78,7 @@ def coords_to_dataframe(
             df_cov = df_cov.drop(columns=cov_cols)
 
     # Join the dataframes
-    df = df_times.join(df_coords)
-    df = df.join(df_origin)
-    df = df.join(df_frame)
+    df = pd.concat([df_times, df_coords, df_origin, df_frame], axis=1)
     if covariances or sigmas:
         df = df.join(df_cov)
 
