@@ -47,14 +47,14 @@ class CartesianCoordinates(Table):
 
     @property
     def values(self) -> np.ndarray:
-        return self.table.to_pandas()[["x", "y", "z", "vx", "vy", "vz"]].values
+        return np.array(self.table.select(["x", "y", "z", "vx", "vy", "vz"])).T
 
     @property
     def r(self) -> np.ndarray:
         """
         Position vector.
         """
-        return self.values[:, 0:3]
+        return np.array(self.table.select(["x", "y", "z"]))
 
     @property
     def r_mag(self) -> np.ndarray:
@@ -75,7 +75,7 @@ class CartesianCoordinates(Table):
         """
         Velocity vector.
         """
-        return self.values[:, 3:6]
+        return np.array(self.table.select(["vx", "vy", "vz"]))
 
     @property
     def v_mag(self) -> np.ndarray:

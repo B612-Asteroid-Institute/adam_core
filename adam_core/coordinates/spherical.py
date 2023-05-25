@@ -50,9 +50,9 @@ class SphericalCoordinates(Table):
 
     @property
     def values(self) -> np.ndarray:
-        return self.table.to_pandas()[
-            ["rho", "lon", "lat", "vrho", "vlon", "vlat"]
-        ].values
+        return np.array(
+            self.table.select(["rho", "lon", "lat", "vrho", "vlon", "vlat"])
+        ).T
 
     @property
     def sigma_rho(self):

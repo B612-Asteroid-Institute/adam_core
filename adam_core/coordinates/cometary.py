@@ -54,7 +54,7 @@ class CometaryCoordinates(Table):
 
     @property
     def values(self) -> np.ndarray:
-        return self.table.to_pandas()[["q", "e", "i", "raan", "ap", "tp"]].values
+        return np.array(self.table.select(["q", "e", "i", "raan", "ap", "tp"])).T
 
     @property
     def sigma_q(self) -> np.ndarray:
