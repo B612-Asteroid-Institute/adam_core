@@ -2,7 +2,7 @@ FROM ubuntu:jammy
 
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install libcurl4-openssl-dev libssl-dev git python3 pip -y
+    && apt-get install libcurl4-openssl-dev libssl-dev git python3.11 pip -y
 
 # Upgrade pip to the latest version and install pre-commit
 RUN pip install --upgrade pip pre-commit
