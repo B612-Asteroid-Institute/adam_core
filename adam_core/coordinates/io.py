@@ -106,8 +106,8 @@ def coords_from_dataframe(
         Coordinates read from the DataFrame.
     """
     times = Times.from_dataframe(
-        df[["times.mjd", "times.scale"]].rename(
-            columns={"times.mjd": "mjd", "times.scale": "scale"}
+        df[["times.jd1", "times.jd2"]].rename(
+            columns={"times.jd1": "jd1", "times.jd2": "jd2"}
         )
     )
     origin = Origin.from_dataframe(

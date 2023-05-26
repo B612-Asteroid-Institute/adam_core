@@ -27,8 +27,9 @@ def test_orbits__init__():
 
     assert orbits.orbit_ids[0].as_py() == "1"
     assert orbits.object_ids[0].as_py() == "Test Orbit"
-    assert orbits.coordinates.times.mjd.to_numpy()[0] == 59000.0
-    assert orbits.coordinates.times.scale.to_numpy(zero_copy_only=False)[0] == "tdb"
+    assert orbits.coordinates.times.jd1.to_numpy()[0] == 2459000.0
+    assert orbits.coordinates.times.jd2.to_numpy()[0] == 0.5
+    assert orbits.coordinates.times.scale == "tdb"
     assert orbits.coordinates.x.to_numpy()[0] == 0.5
     assert orbits.coordinates.y.to_numpy()[0] == 0.5
     assert orbits.coordinates.z.to_numpy()[0] == 0.004
