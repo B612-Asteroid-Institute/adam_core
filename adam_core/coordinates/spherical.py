@@ -96,6 +96,65 @@ class SphericalCoordinates(Table):
         """
         return self.covariances.sigmas[:, 5]
 
+    def to_unit_sphere(self, only_missing: bool = False) -> "SphericalCoordinates":
+        """
+        Convert to unit sphere. By default, all coordinates will have their rho values
+        set to 1.0 and their vrho values set to 0.0. If only_missing is True, then only
+        coordinates that have NaN values for rho will be set to 1.0 and coordinates that
+        have NaN values for vrho will be set to 0.0.
+
+        TODO: We could look at scaling the uncertainties as well, but this is not currently
+        implemented nor probably necessary. This function will mostly be used to convert
+        SphericalCoordinates that have missing radial distances to cartesian coordinates on a
+        unit sphere.
+
+        Parameters
+        ----------
+        only_missing : bool, optional
+            If True, then only coordinates that have NaN values for rho will be set to 1.0 and
+            coordinates that have NaN values for vrho will be set to 0.0. If False, then all
+            coordinates will be set to 1.0 and 0.0, respectively. The default is False.
+
+        Returns
+        -------
+        SphericalCoordinates
+            Spherical coordinates on a unit sphere, with rho and vrho set to 1.0 and 0.0, respectively.
+        """
+        # Extract coordinate values
+        coords = self.values
+
+        # Set rho to 1.0 for all points that are NaN, or if force is True
+        # then set rho to 1.0 for all points
+        if not only_missing:
+            mask = np.ones(len(coords), dtype=bool)
+        else:
+            mask = np.isnan(coords[:, 0])
+
+        coords[mask, 0] = 1.0
+
+        # Set vrho to 0.0 for all points that are NaN, or if force is True
+        # then set vrho to 0.0 for all points
+        if not only_missing:
+            mask = np.ones(len(coords), dtype=bool)
+        else:
+            mask = np.isnan(coords[:, 3])
+
+        coords[mask, 3] = 0.0
+
+        # Convert back to spherical coordinates
+        return SphericalCoordinates.from_kwargs(
+            rho=coords[:, 0],
+            lon=coords[:, 1],
+            lat=coords[:, 2],
+            vrho=coords[:, 3],
+            vlon=coords[:, 4],
+            vlat=coords[:, 5],
+            times=self.times,
+            covariances=self.covariances,
+            origin=self.origin,
+            frame=self.frame,
+        )
+
     def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _spherical_to_cartesian, spherical_to_cartesian
 
