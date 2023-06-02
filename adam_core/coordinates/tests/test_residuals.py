@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial.distance import mahalanobis
 
-from ..residuals import batch_coords_and_covariances, calculate_chi2
+from ..residuals import _batch_coords_and_covariances, calculate_chi2
 
 
 def test_calculate_chi2():
@@ -10,8 +10,8 @@ def test_calculate_chi2():
     # the chi2 calculation is correct.
     residuals = np.array(
         [
-            [1, 1, 1],
-            [1, 1, 1],
+            [1, 2, 3],
+            [2, 1, 1],
         ]
     )
     covariances = np.array(
@@ -20,13 +20,13 @@ def test_calculate_chi2():
             [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         ]
     )
-    np.testing.assert_allclose(calculate_chi2(residuals, covariances), [3, 3])
+    np.testing.assert_allclose(calculate_chi2(residuals, covariances), [14, 6])
 
     # Test that the chi2 calculation works for a single residual and is
     # exactly equal to chi2 (observed - expected)^2 / sigma^2
-    residuals = np.array([[1]])
+    residuals = np.array([[3]])
     covariances = np.array([[[1]]])
-    np.testing.assert_allclose(calculate_chi2(residuals, covariances), [1])
+    np.testing.assert_allclose(calculate_chi2(residuals, covariances), [9])
 
 
 def test_calculate_chi2_mahalanobis():
@@ -72,7 +72,7 @@ def test_batch_coords_and_covariances_single_batch_no_missing_values():
         batch_dimensions,
         batch_coords,
         batch_covariances,
-    ) = batch_coords_and_covariances(coords, covariances)
+    ) = _batch_coords_and_covariances(coords, covariances)
     assert (
         len(batch_indices)
         == len(batch_dimensions)
@@ -106,7 +106,7 @@ def test_batch_coords_and_covariances_single_batch_missing_values():
         batch_dimensions,
         batch_coords,
         batch_covariances,
-    ) = batch_coords_and_covariances(coords, covariances)
+    ) = _batch_coords_and_covariances(coords, covariances)
     assert (
         len(batch_indices)
         == len(batch_dimensions)
@@ -141,7 +141,7 @@ def test_batch_coords_and_covariances_single_batch_missing_values():
         batch_dimensions,
         batch_coords,
         batch_covariances,
-    ) = batch_coords_and_covariances(coords, covariances)
+    ) = _batch_coords_and_covariances(coords, covariances)
     assert (
         len(batch_indices)
         == len(batch_dimensions)
@@ -175,7 +175,7 @@ def test_batch_coords_and_covariances_multiple_batches():
         batch_dimensions,
         batch_coords,
         batch_covariances,
-    ) = batch_coords_and_covariances(coords, covariances)
+    ) = _batch_coords_and_covariances(coords, covariances)
     assert (
         len(batch_indices)
         == len(batch_dimensions)
