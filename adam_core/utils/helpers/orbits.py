@@ -6,7 +6,6 @@ import pandas as pd
 from astropy.time import Time
 
 from ...coordinates.covariances import CoordinateCovariances
-from ...coordinates.frame import Frame
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
@@ -41,7 +40,7 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
             f"num_orbits must be less than or equal to the number of sample orbits ({len(df)})."
         )
 
-    return Orbits.from_dataframe(df)[:num_orbits]
+    return Orbits.from_dataframe(df, "ecliptic")[:num_orbits]
 
 
 def make_simple_orbits(num_orbits: int = 10) -> Orbits:
@@ -84,7 +83,7 @@ def make_simple_orbits(num_orbits: int = 10) -> Orbits:
         )
     )
     data["origin"] = Origin.from_kwargs(code=["SUN" for i in range(num_orbits)])
-    data["frame"] = Frame.from_kwargs(name=["ecliptic" for i in range(num_orbits)])
+    data["frame"] = "ecliptic"
 
     coords = KeplerianCoordinates.from_kwargs(**data)
     object_ids = [f"Object {i:03d}" for i in range(num_orbits)]

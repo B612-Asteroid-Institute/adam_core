@@ -2,7 +2,6 @@ import numpy as np
 
 from ..cartesian import CartesianCoordinates
 from ..covariances import CoordinateCovariances
-from ..frame import Frame
 from ..origin import Origin
 
 
@@ -22,7 +21,7 @@ def test_CartesianCoordinates_rotate():
         vz=values[:, 5],
         covariances=CoordinateCovariances.from_matrix(covariances),
         origin=Origin.from_kwargs(code=["origin"] * N),
-        frame=Frame.from_kwargs(name=["frame"] * N),
+        frame="equatorial",
     )
 
     rot_matrix = np.identity(D)

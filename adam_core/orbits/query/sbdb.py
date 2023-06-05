@@ -8,7 +8,6 @@ from astroquery.jplsbdb import SBDB
 
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
-from ...coordinates.frame import Frame
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
 from ..orbits import Orbits
@@ -207,7 +206,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
     times = Times.from_astropy(Time(times, scale="tdb", format="jd"))
     origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
-    frame = Frame.from_kwargs(name=["ecliptic" for i in range(len(times))])
+    frame = "ecliptic"
     coordinates = CometaryCoordinates.from_kwargs(
         times=times,
         q=coords_cometary[:, 0],

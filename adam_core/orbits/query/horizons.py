@@ -7,7 +7,6 @@ from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.frame import Frame
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
@@ -158,7 +157,7 @@ def query_horizons(
             Time(vectors["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
-        frame = Frame.from_kwargs(name=["ecliptic" for i in range(len(times))])
+        frame = "ecliptic"
         coordinates = CartesianCoordinates.from_kwargs(
             times=times,
             x=vectors["x"].values,
@@ -188,7 +187,7 @@ def query_horizons(
             Time(elements["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
-        frame = Frame.from_kwargs(name=["ecliptic" for i in range(len(times))])
+        frame = "ecliptic"
         coordinates = KeplerianCoordinates(
             times=times,
             a=elements["a"].values,
@@ -219,7 +218,7 @@ def query_horizons(
             Time(elements["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
-        frame = Frame.from_kwargs(name=["ecliptic" for i in range(len(times))])
+        frame = "ecliptic"
         coordinates = CometaryCoordinates.from_kwargs(
             times=times,
             q=elements["q"].values,

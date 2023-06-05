@@ -1,13 +1,12 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 from astropy import units as u
-from quivr import Float64Field, Table
+from quivr import Float64Field, StringAttribute, Table
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
-from .frame import Frame
 from .io import coords_from_dataframe, coords_to_dataframe
 from .origin import Origin
 from .times import Times
@@ -50,7 +49,7 @@ class CometaryCoordinates(Table):
     times = Times.as_field(nullable=True)
     covariances = CoordinateCovariances.as_field(nullable=True)
     origin = Origin.as_field(nullable=False)
-    frame = Frame.as_field(nullable=False)
+    frame = StringAttribute()
 
     @property
     def values(self) -> np.ndarray:
@@ -352,7 +351,9 @@ class CometaryCoordinates(Table):
         )
 
     @classmethod
-    def from_dataframe(cls, df: pd.DataFrame) -> "CometaryCoordinates":
+    def from_dataframe(
+        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
+    ) -> "CometaryCoordinates":
         """
         Create coordinates from a pandas DataFrame.
 
@@ -360,6 +361,8 @@ class CometaryCoordinates(Table):
         ----------
         df : `~pandas.Dataframe`
             DataFrame containing coordinates.
+        frame : {"ecliptic", "equatorial"}
+            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -367,5 +370,5 @@ class CometaryCoordinates(Table):
             Cometary coordinates.
         """
         return coords_from_dataframe(
-            cls, df, coord_names=["q", "e", "i", "raan", "ap", "tp"]
+            cls, df, coord_names=["q", "e", "i", "raan", "ap", "tp"], frame=frame
         )

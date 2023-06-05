@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 import pandas as pd
 from quivr import StringField, Table
@@ -43,7 +44,9 @@ class Orbits(Table):
         return df
 
     @classmethod
-    def from_dataframe(cls, df: pd.DataFrame) -> "Orbits":
+    def from_dataframe(
+        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
+    ) -> "Orbits":
         """
         Create an Orbits object from a pandas DataFrame.
 
@@ -51,6 +54,8 @@ class Orbits(Table):
         ----------
         df : `~pandas.DataFrame`
             DataFrame containing orbits and their Cartesian elements.
+        frame : {"ecliptic", "equatorial"}
+            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -59,7 +64,7 @@ class Orbits(Table):
         """
         orbit_ids = df["orbit_ids"].values
         object_ids = df["object_ids"].values
-        coordinates = CartesianCoordinates.from_dataframe(df)
+        coordinates = CartesianCoordinates.from_dataframe(df, frame=frame)
         return cls.from_kwargs(
             orbit_ids=orbit_ids, object_ids=object_ids, coordinates=coordinates
         )

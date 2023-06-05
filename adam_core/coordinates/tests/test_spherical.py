@@ -1,6 +1,5 @@
 import numpy as np
 
-from ..frame import Frame
 from ..origin import Origin
 from ..spherical import SphericalCoordinates
 
@@ -19,7 +18,7 @@ def test_SphericalCoordinates_to_unit_sphere():
         vlon=[0.005, 0.006, 0.007],
         vlat=[-0.0005, 0.0006, -0.007],
         origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
-        frame=Frame.from_kwargs(name=["ecliptic", "ecliptic", "ecliptic"]),
+        frame="ecliptic",
     )
 
     unit_sphere = coords.to_unit_sphere(only_missing=True)

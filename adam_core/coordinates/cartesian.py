@@ -1,13 +1,12 @@
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 from astropy import units as u
-from quivr import Float64Field, Table
+from quivr import Float64Field, StringAttribute, Table
 
 from .covariances import CoordinateCovariances
-from .frame import Frame
 from .io import coords_from_dataframe, coords_to_dataframe
 from .origin import Origin
 from .times import Times
@@ -43,7 +42,7 @@ class CartesianCoordinates(Table):
     times = Times.as_field(nullable=True)
     covariances = CoordinateCovariances.as_field(nullable=True)
     origin = Origin.as_field(nullable=False)
-    frame = Frame.as_field(nullable=False)
+    frame = StringAttribute()
 
     @property
     def values(self) -> np.ndarray:
@@ -230,7 +229,7 @@ class CartesianCoordinates(Table):
             times=self.times,
             covariances=CoordinateCovariances.from_matrix(covariances_rotated),
             origin=self.origin,
-            frame=Frame.from_kwargs(name=[frame_out] * len(self)),
+            frame=frame_out,
         )
         return coords
 
@@ -338,7 +337,9 @@ class CartesianCoordinates(Table):
         )
 
     @classmethod
-    def from_dataframe(cls, df: pd.DataFrame) -> "CartesianCoordinates":
+    def from_dataframe(
+        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
+    ) -> "CartesianCoordinates":
         """
         Create coordinates from a pandas DataFrame.
 
@@ -346,6 +347,8 @@ class CartesianCoordinates(Table):
         ----------
         df : `~pandas.Dataframe`
             DataFrame containing coordinates.
+        frame : {"ecliptic", "equatorial"}
+            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -353,5 +356,5 @@ class CartesianCoordinates(Table):
             Cartesian coordinates.
         """
         return coords_from_dataframe(
-            cls, df, coord_names=["x", "y", "z", "vx", "vy", "vz"]
+            cls, df, coord_names=["x", "y", "z", "vx", "vy", "vz"], frame=frame
         )

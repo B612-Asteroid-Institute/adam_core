@@ -1,9 +1,8 @@
-from typing import TYPE_CHECKING, List, Type, Union
+from typing import TYPE_CHECKING, List, Literal, Type, Union
 
 import pandas as pd
 
 from .covariances import CoordinateCovariances
-from .frame import Frame
 from .origin import Origin
 from .times import Times
 
@@ -62,11 +61,6 @@ def coords_to_dataframe(
     origin_dict = {col: f"origin.{col}" for col in df_origin.columns}
     df_origin.rename(columns=origin_dict, inplace=True)
 
-    # Gather the frame and put it into a dataframe
-    df_frame = coords.frame.to_dataframe(flatten=True)
-    frame_dict = {col: f"frame.{col}" for col in df_frame.columns}
-    df_frame.rename(columns=frame_dict, inplace=True)
-
     # Gather the covariances and put them into a dataframe
     if covariances or sigmas:
         df_cov = coords.covariances.to_dataframe(
@@ -78,7 +72,7 @@ def coords_to_dataframe(
             df_cov = df_cov.drop(columns=cov_cols)
 
     # Join the dataframes
-    df = pd.concat([df_times, df_coords, df_origin, df_frame], axis=1)
+    df = pd.concat([df_times, df_coords, df_origin], axis=1)
     if covariances or sigmas:
         df = df.join(df_cov)
 
@@ -86,7 +80,10 @@ def coords_to_dataframe(
 
 
 def coords_from_dataframe(
-    cls: "Type[CoordinateType]", df: pd.DataFrame, coord_names: List[str]
+    cls: "Type[CoordinateType]",
+    df: pd.DataFrame,
+    coord_names: List[str],
+    frame: Literal["ecliptic", "equatorial"],
 ) -> "CoordinateType":
     """
     Return coordinates from a pandas DataFrame that was generated with
@@ -99,6 +96,8 @@ def coords_from_dataframe(
         DataFrame containing coordinates and covariances.
     coord_names : list of str
         Names of the coordinates dimensions.
+    frame : {"ecliptic", "equatorial"}
+        Frame in which the coordinates are defined.
 
     Returns
     -------
@@ -112,9 +111,6 @@ def coords_from_dataframe(
     )
     origin = Origin.from_dataframe(
         df[["origin.code"]].rename(columns={"origin.code": "code"})
-    )
-    frame = Frame.from_dataframe(
-        df[["frame.name"]].rename(columns={"frame.name": "name"})
     )
     covariances = CoordinateCovariances.from_dataframe(df, coord_names=coord_names)
     coords = {col: df[col].values for col in coord_names}

@@ -12,7 +12,6 @@ from .covariances import (
     transform_covariances_jacobian,
     transform_covariances_sampling,
 )
-from .frame import Frame
 from .io import coords_from_dataframe, coords_to_dataframe
 from .jacobian import calc_jacobian
 from .keplerian import KEPLERIAN_COLS, KEPLERIAN_UNITS, KeplerianCoordinates

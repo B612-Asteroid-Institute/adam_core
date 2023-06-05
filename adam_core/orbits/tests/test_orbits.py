@@ -1,7 +1,6 @@
 from astropy.time import Time
 
 from ...coordinates import CartesianCoordinates
-from ...coordinates.frame import Frame
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
 from ...utils.helpers import orbits as orbits_helpers
@@ -18,7 +17,7 @@ def test_orbits__init__():
         vz=[0.0002],
         times=Times.from_astropy(Time([59000.0], scale="tdb", format="mjd")),
         origin=Origin.from_kwargs(code=["SUN"]),
-        frame=Frame.from_kwargs(name=["ecliptic"]),
+        frame="ecliptic",
     )
 
     orbits = Orbits.from_kwargs(
