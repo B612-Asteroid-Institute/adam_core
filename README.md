@@ -177,6 +177,24 @@ propagated_orbits = propagator.propagate_orbits(
 )
 ```
 
+### Low-level APIs
+
+Getting the heliocentric ecliptic state vector of a DE440 body at a given set of times (in this case the barycenter of the Jovian system):
+```python
+import numpy as np
+from astropy.time import Time
+
+from adam_core.coordinates.origin import OriginCodes
+from adam_core.utils.spice import get_perturber_state
+
+states = get_perturber_state(
+    OriginCodes.JUPITER_BARYCENTER,
+    Time(np.arange(59000, 60000), format="mjd", scale="tdb"),
+    frame="ecliptic",
+    origin=OriginCodes.SUN,
+)
+```
+
 ## Package Structure
 
 ```bash
