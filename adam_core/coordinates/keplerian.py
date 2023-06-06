@@ -1,18 +1,20 @@
-from typing import Optional, Type, Union
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 from astropy import units as u
-from astropy.time import Time
-from jax import config
+from quivr import Float64Column, StringAttribute, Table
 
-from ..constants import Constants as c
 from .cartesian import CartesianCoordinates
-from .coordinates import Coordinates
-from .covariances import transform_covariances_jacobian
+from .covariances import CoordinateCovariances, transform_covariances_jacobian
+from .io import coords_from_dataframe, coords_to_dataframe
+from .origin import Origin
+from .times import Times
 
-config.update("jax_enable_x64", True)
-config.update("jax_platform_name", "cpu")
+if TYPE_CHECKING:
+    from .cometary import CometaryCoordinates
+    from .spherical import SphericalCoordinates
+
 
 __all__ = [
     "KeplerianCoordinates",
@@ -31,263 +33,72 @@ KEPLERIAN_UNITS["raan"] = u.deg
 KEPLERIAN_UNITS["ap"] = u.deg
 KEPLERIAN_UNITS["M"] = u.deg
 
-MU = c.MU
 
+class KeplerianCoordinates(Table):
 
-class KeplerianCoordinates(Coordinates):
-    def __init__(
-        self,
-        a: Optional[Union[int, float, np.ndarray]] = None,
-        e: Optional[Union[int, float, np.ndarray]] = None,
-        i: Optional[Union[int, float, np.ndarray]] = None,
-        raan: Optional[Union[int, float, np.ndarray]] = None,
-        ap: Optional[Union[int, float, np.ndarray]] = None,
-        M: Optional[Union[int, float, np.ndarray]] = None,
-        times: Optional[Time] = None,
-        covariances: Optional[np.ndarray] = None,
-        sigma_a: Optional[np.ndarray] = None,
-        sigma_e: Optional[np.ndarray] = None,
-        sigma_i: Optional[np.ndarray] = None,
-        sigma_raan: Optional[np.ndarray] = None,
-        sigma_ap: Optional[np.ndarray] = None,
-        sigma_M: Optional[np.ndarray] = None,
-        origin: str = "heliocenter",
-        frame: str = "ecliptic",
-        names: dict = KEPLERIAN_COLS,
-        units: dict = KEPLERIAN_UNITS,
-        mu: float = MU,
-    ):
-        sigmas = (sigma_a, sigma_e, sigma_i, sigma_raan, sigma_ap, sigma_M)
-        Coordinates.__init__(
-            self,
-            a=a,
-            e=e,
-            i=i,
-            raan=raan,
-            ap=ap,
-            M=M,
-            covariances=covariances,
-            sigmas=sigmas,
-            times=times,
-            origin=origin,
-            frame=frame,
-            names=names,
-            units=units,
-        )
-        self._mu = mu
-
-        return
+    a = Float64Column(nullable=False)
+    e = Float64Column(nullable=False)
+    i = Float64Column(nullable=False)
+    raan = Float64Column(nullable=False)
+    ap = Float64Column(nullable=False)
+    M = Float64Column(nullable=False)
+    times = Times.as_column(nullable=True)
+    covariances = CoordinateCovariances.as_column(nullable=True)
+    origin = Origin.as_column(nullable=False)
+    frame = StringAttribute()
 
     @property
-    def a(self):
-        """
-        Semi-major axis
-        """
-        return self._values[:, 0]
-
-    @a.setter
-    def a(self, value):
-        self._values[:, 0] = value
-        self._values[:, 0].mask = False
-
-    @a.deleter
-    def a(self):
-        self._values[:, 0] = np.nan
-        self._values[:, 0].mask = True
+    def values(self) -> np.ndarray:
+        return np.array(self.table.select(["a", "e", "i", "raan", "ap", "M"])).T
 
     @property
-    def e(self):
+    def sigma_a(self) -> np.ndarray:
         """
-        Eccentricity
+        1-sigma uncertainty in semi-major axis.
         """
-        return self._values[:, 1]
-
-    @e.setter
-    def e(self, value):
-        self._values[:, 1] = value
-        self._values[:, 1].mask = False
-
-    @e.deleter
-    def e(self):
-        self._values[:, 1] = np.nan
-        self._values[:, 1].mask = True
+        return self.covariances.sigmas[:, 0]
 
     @property
-    def i(self):
+    def sigma_e(self) -> np.ndarray:
         """
-        Inclination
+        1-sigma uncertainty in eccentricity.
         """
-        return self._values[:, 2]
-
-    @i.setter
-    def i(self, value):
-        self._values[:, 2] = value
-        self._values[:, 2].mask = False
-
-    @i.deleter
-    def i(self):
-        self._values[:, 2] = np.nan
-        self._values[:, 2].mask = True
+        return self.covariances.sigmas[:, 1]
 
     @property
-    def raan(self):
+    def sigma_i(self) -> np.ndarray:
         """
-        Right ascension of the ascending node
+        1-sigma uncertainty in inclination.
         """
-        return self._values[:, 3]
-
-    @raan.setter
-    def raan(self, value):
-        self._values[:, 3] = value
-        self._values[:, 3].mask = False
-
-    @raan.deleter
-    def raan(self):
-        self._values[:, 3] = np.nan
-        self._values[:, 3].mask = True
+        return self.covariances.sigmas[:, 2]
 
     @property
-    def ap(self):
+    def sigma_raan(self) -> np.ndarray:
         """
-        Argument of periapsis
+        1-sigma uncertainty in right ascension of the ascending node.
         """
-        return self._values[:, 4]
-
-    @ap.setter
-    def ap(self, value):
-        self._values[:, 4] = value
-        self._values[:, 4].mask = False
-
-    @ap.deleter
-    def ap(self):
-        self._values[:, 4] = np.nan
-        self._values[:, 4].mask = True
+        return self.covariances.sigmas[:, 3]
 
     @property
-    def M(self):
+    def sigma_ap(self) -> np.ndarray:
         """
-        Mean anomaly
+        1-sigma uncertainty in argument of periapsis.
         """
-        return self._values[:, 5]
-
-    @M.setter
-    def M(self, value):
-        self._values[:, 5] = value
-        self._values[:, 5].mask = False
-
-    @M.deleter
-    def M(self):
-        self._values[:, 5] = np.nan
-        self._values[:, 5].mask = True
+        return self.covariances.sigmas[:, 4]
 
     @property
-    def sigma_a(self):
+    def sigma_M(self) -> np.ndarray:
         """
-        1-sigma uncertainty in semi-major axis
+        1-sigma uncertainty in mean anomaly.
         """
-        return self.sigmas[:, 0]
-
-    @sigma_a.setter
-    def sigma_a(self, value):
-        self._covariances[:, 0, 0] = value**2
-        self._covariances[:, 0, 0].mask = False
-
-    @sigma_a.deleter
-    def sigma_a(self):
-        self._covariances[:, 0, 0] = np.nan
-        self._covariances[:, 0, 0].mask = True
+        return self.covariances.sigmas[:, 5]
 
     @property
-    def sigma_e(self):
+    def q(self) -> np.ndarray:
         """
-        1-sigma uncertainty in eccentricity
+        Periapsis distance.
         """
-        return self.sigmas[:, 1]
-
-    @sigma_e.setter
-    def sigma_e(self, value):
-        self._covariances[:, 1, 1] = value**2
-        self._covariances[:, 1, 1].mask = False
-
-    @sigma_e.deleter
-    def sigma_e(self):
-        self._covariances[:, 1, 1] = np.nan
-        self._covariances[:, 1, 1].mask = True
-
-    @property
-    def sigma_i(self):
-        """
-        1-sigma uncertainty in inclination
-        """
-        return self.sigmas[:, 2]
-
-    @sigma_i.setter
-    def sigma_i(self, value):
-        self._covariances[:, 2, 2] = value**2
-        self._covariances[:, 2, 2].mask = False
-
-    @sigma_i.deleter
-    def sigma_i(self):
-        self._covariances[:, 2, 2] = np.nan
-        self._covariances[:, 2, 2].mask = True
-
-    @property
-    def sigma_raan(self):
-        """
-        1-sigma uncertainty in right ascension of the ascending node
-        """
-        return self.sigmas[:, 3]
-
-    @sigma_raan.setter
-    def sigma_raan(self, value):
-        self._covariances[:, 3, 3] = value**2
-        self._covariances[:, 3, 3].mask = False
-
-    @sigma_raan.deleter
-    def sigma_raan(self):
-        self._covariances[:, 3, 3] = np.nan
-        self._covariances[:, 3, 3].mask = True
-
-    @property
-    def sigma_ap(self):
-        """
-        1-sigma uncertainty in argument of periapsis
-        """
-        return self.sigmas[:, 4]
-
-    @sigma_ap.setter
-    def sigma_ap(self, value):
-        self._covariances[:, 4, 4] = value**2
-        self._covariances[:, 4, 4].mask = False
-
-    @sigma_ap.deleter
-    def sigma_ap(self):
-        self._covariances[:, 4, 4] = np.nan
-        self._covariances[:, 4, 4].mask = True
-
-    @property
-    def sigma_M(self):
-        """
-        1-sigma uncertainty in mean anomaly
-        """
-        return self.sigmas[:, 5]
-
-    @sigma_M.setter
-    def sigma_M(self, value):
-        self._covariances[:, 5, 5] = value**2
-        self._covariances[:, 5, 5].mask = False
-
-    @sigma_M.deleter
-    def sigma_M(self):
-        self._covariances[:, 5, 5] = np.nan
-        self._covariances[:, 5, 5].mask = True
-
-    @property
-    def q(self):
-        """
-        Periapsis distance
-        """
-        return self.a * (1 - self.e)
+        return self.a.to_numpy() * (1 - self.e.to_numpy())
 
     @q.setter
     def q(self, value):
@@ -306,11 +117,11 @@ class KeplerianCoordinates(Coordinates):
         raise ValueError(err)
 
     @property
-    def Q(self):
+    def Q(self) -> np.ndarray:
         """
-        Apoapsis distance
+        Apoapsis distance.
         """
-        return self.a * (1 + self.e)
+        return self.a.to_numpy() * (1 + self.e.to_numpy())
 
     @Q.setter
     def Q(self, value):
@@ -329,11 +140,11 @@ class KeplerianCoordinates(Coordinates):
         raise ValueError(err)
 
     @property
-    def p(self):
+    def p(self) -> np.ndarray:
         """
-        Semi-latus rectum
+        Semi-latus rectum.
         """
-        return self.a / (1 - self.e**2)
+        return self.a.to_numpy() / (1 - self.e.to_numpy() ** 2)
 
     @p.setter
     def p(self, value):
@@ -352,11 +163,11 @@ class KeplerianCoordinates(Coordinates):
         raise ValueError(err)
 
     @property
-    def P(self):
+    def P(self) -> np.ndarray:
         """
-        Period
+        Period.
         """
-        return np.sqrt(4 * np.pi**2 * self.a**3 / self.mu)
+        return np.sqrt(4 * np.pi**2 * self.a.to_numpy() ** 3 / self.origin.mu)
 
     @P.setter
     def P(self, value):
@@ -374,45 +185,40 @@ class KeplerianCoordinates(Coordinates):
         )
         raise ValueError(err)
 
-    @property
-    def mu(self):
-        """
-        Gravitational parameter
-        """
-        return self._mu
-
-    @mu.setter
-    def mu(self, value):
-        if not isinstance(value, (int, float)):
-            raise TypeError(
-                "Gravitational parameter (mu) should be an integer or a float."
-            )
-        self._mu = value
-
-    @mu.deleter
-    def mu(self):
-        err = "Gravitational parameter (mu) cannot be deleted. Please set it to the desired value."
-        raise ValueError(err)
-
     def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _keplerian_to_cartesian_a, keplerian_to_cartesian
 
+        # Extract gravitational parameter from origin
+        mu = self.origin.mu
+
         coords_cartesian = keplerian_to_cartesian(
-            self.values.filled(),
-            mu=self.mu,
+            self.values,
+            mu=mu,
             max_iter=1000,
             tol=1e-15,
         )
         coords_cartesian = np.array(coords_cartesian)
 
-        if self.covariances is not None:
+        covariances_keplerian = self.covariances.to_matrix()
+        if not np.all(np.isnan(covariances_keplerian)):
             covariances_cartesian = transform_covariances_jacobian(
-                self.values, self.covariances, _keplerian_to_cartesian_a
+                self.values,
+                covariances_keplerian,
+                _keplerian_to_cartesian_a,
+                in_axes=(0, None, None, None),
+                out_axes=0,
+                mu=mu,
+                max_iter=1000,
+                tol=1e-15,
             )
         else:
-            covariances_cartesian = None
+            covariances_cartesian = np.empty(
+                (len(coords_cartesian), 6, 6), dtype=np.float64
+            )
+            covariances_cartesian.fill(np.nan)
 
-        coords = CartesianCoordinates(
+        covariances_cartesian = CoordinateCovariances.from_matrix(covariances_cartesian)
+        coords = CartesianCoordinates.from_kwargs(
             x=coords_cartesian[:, 0],
             y=coords_cartesian[:, 1],
             z=coords_cartesian[:, 2],
@@ -428,30 +234,38 @@ class KeplerianCoordinates(Coordinates):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates, mu: float = MU):
+    def from_cartesian(cls, cartesian: CartesianCoordinates):
         from .transform import _cartesian_to_keplerian6, cartesian_to_keplerian
 
+        # Extract gravitational parameter from origin
+        mu = cartesian.origin.mu
+
         coords_keplerian = cartesian_to_keplerian(
-            cartesian.values.filled(),
-            cartesian.times.tdb.mjd,
+            cartesian.values,
+            cartesian.times.to_astropy().tdb.mjd,
             mu=mu,
         )
         coords_keplerian = np.array(coords_keplerian)
 
-        if cartesian.covariances is not None and (~np.all(cartesian.covariances.mask)):
+        cartesian_covariances = cartesian.covariances.to_matrix()
+        if not np.all(np.isnan(cartesian_covariances)):
             covariances_keplerian = transform_covariances_jacobian(
                 cartesian.values,
-                cartesian.covariances,
+                cartesian_covariances,
                 _cartesian_to_keplerian6,
                 in_axes=(0, 0, None),
                 out_axes=0,
-                t0=cartesian.times.tdb.mjd,
+                t0=cartesian.times.to_astropy().tdb.mjd,
                 mu=mu,
             )
         else:
-            covariances_keplerian = None
+            covariances_keplerian = np.empty(
+                (len(coords_keplerian), 6, 6), dtype=np.float64
+            )
+            covariances_keplerian.fill(np.nan)
 
-        coords = cls(
+        covariances_keplerian = CoordinateCovariances.from_matrix(covariances_keplerian)
+        coords = cls.from_kwargs(
             a=coords_keplerian[:, 0],
             e=coords_keplerian[:, 4],
             i=coords_keplerian[:, 5],
@@ -462,43 +276,76 @@ class KeplerianCoordinates(Coordinates):
             covariances=covariances_keplerian,
             origin=cartesian.origin,
             frame=cartesian.frame,
-            mu=mu,
         )
-
         return coords
 
+    def to_cometary(self) -> "CometaryCoordinates":
+        from .cometary import CometaryCoordinates
+
+        return CometaryCoordinates.from_cartesian(self.to_cartesian())
+
     @classmethod
-    def from_df(
-        cls: Type["KeplerianCoordinates"],
-        df: pd.DataFrame,
-        coord_cols: dict = KEPLERIAN_COLS,
-        origin_col: str = "origin",
-        frame_col: str = "frame",
+    def from_cometary(
+        cls, cometary_coordinates: "CometaryCoordinates"
     ) -> "KeplerianCoordinates":
+        return cls.from_cartesian(cometary_coordinates.to_cartesian())
+
+    def to_spherical(self) -> "SphericalCoordinates":
+        from .spherical import SphericalCoordinates
+
+        return SphericalCoordinates.from_cartesian(self.to_cartesian())
+
+    @classmethod
+    def from_spherical(
+        cls, spherical_coordinates: "SphericalCoordinates"
+    ) -> "KeplerianCoordinates":
+        return cls.from_cartesian(spherical_coordinates.to_cartesian())
+
+    def to_dataframe(
+        self, sigmas: bool = False, covariances: bool = True
+    ) -> pd.DataFrame:
         """
-        Create a KeplerianCoordinates class from a dataframe.
+        Convert coordinates to a pandas DataFrame.
 
         Parameters
         ----------
-        df : `~pandas.DataFrame`
-            Pandas DataFrame containing Keplerian coordinates and optionally their
-            times and covariances.
-        coord_cols : dict
-            Dictionary containing as keys the coordinate dimensions and their equivalent columns
-            as values. For example,
-                coord_cols = {}
-                coord_cols["a"] = Column name of semi-major axis values
-                coord_cols["e"] = Column name of eccentricity values
-                coord_cols["i"] = Column name of inclination values
-                coord_cols["raan"] = Column name of longitude of ascending node values
-                coord_cols["ap"] = Column name of argument of periapsis values
-                coord_cols["M"] = Column name of mean anomaly values
-        origin_col : str
-            Name of the column containing the origin of each coordinate.
-        frame_col : str
-            Name of the column containing the coordinate frame.
+        sigmas : bool, optional
+            If True, include 1-sigma uncertainties in the DataFrame.
+        covariances : bool, optional
+            If True, include covariance matrices in the DataFrame. Covariance matrices
+            will be split into 21 columns, with the lower triangular elements stored.
+
+        Returns
+        -------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
         """
-        data = Coordinates._dict_from_df(
-            df, coord_cols=coord_cols, origin_col=origin_col, frame_col=frame_col
+        return coords_to_dataframe(
+            self,
+            ["a", "e", "i", "raan", "ap", "M"],
+            sigmas=sigmas,
+            covariances=covariances,
         )
-        return cls(**data)
+
+    @classmethod
+    def from_dataframe(
+        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
+    ) -> "KeplerianCoordinates":
+        """
+        Create coordinates from a pandas DataFrame.
+
+        Parameters
+        ----------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
+        frame : {"ecliptic", "equatorial"}
+            Frame in which coordinates are defined.
+
+        Returns
+        -------
+        coords : `~adam_core.coordinates.keplerian.KeplerianCoordinates`
+            Keplerian coordinates.
+        """
+        return coords_from_dataframe(
+            cls, df, coord_names=["a", "e", "i", "raan", "ap", "M"], frame=frame
+        )

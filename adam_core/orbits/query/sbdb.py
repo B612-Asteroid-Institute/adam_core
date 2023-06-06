@@ -7,7 +7,9 @@ from astropy.time import Time
 from astroquery.jplsbdb import SBDB
 
 from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.covariances import sigmas_to_covariance
+from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
+from ...coordinates.origin import Origin
+from ...coordinates.times import Times
 from ..orbits import Orbits
 
 logger = logging.getLogger(__name__)
@@ -191,7 +193,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
                     ]
                 ]
             )
-            covariances_sbdb[i, :, :] = sigmas_to_covariance(sigmas).filled()[0]
+            covariances_sbdb[i, :, :] = sigmas_to_covariances(sigmas).filled()[0]
 
         times[i] = epoch.value
         coords_cometary[i, 0] = elements["q"].value
@@ -202,9 +204,10 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         coords_cometary[i, 5] = Time(elements["tp"].value, scale="tdb", format="jd").mjd
 
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
-    times = Time(times, scale="tdb", format="jd")
-
-    coordinates = CometaryCoordinates(
+    times = Times.from_astropy(Time(times, scale="tdb", format="jd"))
+    origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
+    frame = "ecliptic"
+    coordinates = CometaryCoordinates.from_kwargs(
         times=times,
         q=coords_cometary[:, 0],
         e=coords_cometary[:, 1],
@@ -212,13 +215,17 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         raan=coords_cometary[:, 3],
         ap=coords_cometary[:, 4],
         tp=coords_cometary[:, 5],
-        covariances=covariances_cometary,
+        covariances=CoordinateCovariances.from_matrix(covariances_cometary),
+        origin=origin,
+        frame=frame,
     )
 
     object_ids = np.array(object_ids)
     classes = np.array(classes)
 
-    return Orbits(coordinates, object_ids=object_ids)
+    return Orbits.from_kwargs(
+        object_ids=object_ids, coordinates=coordinates.to_cartesian()
+    )
 
 
 class NotFoundError(Exception):

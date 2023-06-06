@@ -85,8 +85,8 @@ def test_query_sbdb_for_54509():
         mock.assert_called_once()
 
     assert len(result) == 1
-    assert result.cometary.covariances.shape == (1, 6, 6)
-    assert not np.isnan(result.cometary.covariances.filled()).all()
+    assert result.coordinates.covariances.to_matrix().shape == (1, 6, 6)
+    assert not np.isnan(result.coordinates.covariances.to_matrix()).all()
 
 
 def test_query_sbdb_for_missing_value():

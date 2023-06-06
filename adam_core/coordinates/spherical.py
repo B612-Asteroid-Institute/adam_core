@@ -1,13 +1,20 @@
-from typing import Optional, Type, Union
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 from astropy import units as u
-from astropy.time import Time
+from quivr import Float64Column, StringAttribute, Table
 
 from .cartesian import CartesianCoordinates
-from .coordinates import Coordinates
-from .covariances import transform_covariances_jacobian
+from .covariances import CoordinateCovariances, transform_covariances_jacobian
+from .io import coords_from_dataframe, coords_to_dataframe
+from .origin import Origin
+from .times import Times
+
+if TYPE_CHECKING:
+    from .cometary import CometaryCoordinates
+    from .keplerian import KeplerianCoordinates
+
 
 __all__ = [
     "SphericalCoordinates",
@@ -27,283 +34,145 @@ SPHERICAL_UNITS["vlon"] = u.deg / u.d
 SPHERICAL_UNITS["vlat"] = u.deg / u.d
 
 
-class SphericalCoordinates(Coordinates):
-    def __init__(
-        self,
-        rho: Optional[Union[int, float, np.ndarray]] = None,
-        lon: Optional[Union[int, float, np.ndarray]] = None,
-        lat: Optional[Union[int, float, np.ndarray]] = None,
-        vrho: Optional[Union[int, float, np.ndarray]] = None,
-        vlon: Optional[Union[int, float, np.ndarray]] = None,
-        vlat: Optional[Union[int, float, np.ndarray]] = None,
-        times: Optional[Time] = None,
-        covariances: Optional[np.ndarray] = None,
-        sigma_rho: Optional[np.ndarray] = None,
-        sigma_lon: Optional[np.ndarray] = None,
-        sigma_lat: Optional[np.ndarray] = None,
-        sigma_vrho: Optional[np.ndarray] = None,
-        sigma_vlon: Optional[np.ndarray] = None,
-        sigma_vlat: Optional[np.ndarray] = None,
-        origin: str = "heliocenter",
-        frame: str = "ecliptic",
-        names: dict = SPHERICAL_COLS,
-        units: dict = SPHERICAL_UNITS,
-    ):
+class SphericalCoordinates(Table):
+
+    rho = Float64Column(nullable=True)
+    lon = Float64Column(nullable=True)
+    lat = Float64Column(nullable=True)
+    vrho = Float64Column(nullable=True)
+    vlon = Float64Column(nullable=True)
+    vlat = Float64Column(nullable=True)
+    times = Times.as_column(nullable=True)
+    covariances = CoordinateCovariances.as_column(nullable=True)
+    origin = Origin.as_column(nullable=False)
+    frame = StringAttribute()
+
+    @property
+    def values(self) -> np.ndarray:
+        return np.array(
+            self.table.select(["rho", "lon", "lat", "vrho", "vlon", "vlat"])
+        ).T
+
+    @property
+    def sigma_rho(self):
         """
+        1-sigma uncertainty in radial distance.
+        """
+        return self.covariances.sigmas[:, 0]
+
+    @property
+    def sigma_lon(self):
+        """
+        1-sigma uncertainty in longitude.
+        """
+        return self.covariances.sigmas[:, 1]
+
+    @property
+    def sigma_lat(self):
+        """
+        1-sigma uncertainty in latitude.
+        """
+        return self.covariances.sigmas[:, 2]
+
+    @property
+    def sigma_vrho(self):
+        """
+        1-sigma uncertainty in radial velocity.
+        """
+        return self.covariances.sigmas[:, 3]
+
+    @property
+    def sigma_vlon(self):
+        """
+        1-sigma uncertainty in longitudinal velocity.
+        """
+        return self.covariances.sigmas[:, 4]
+
+    @property
+    def sigma_vlat(self):
+        """
+        1-sigma uncertainty in latitudinal velocity.
+        """
+        return self.covariances.sigmas[:, 5]
+
+    def to_unit_sphere(self, only_missing: bool = False) -> "SphericalCoordinates":
+        """
+        Convert to unit sphere. By default, all coordinates will have their rho values
+        set to 1.0 and their vrho values set to 0.0. If only_missing is True, then only
+        coordinates that have NaN values for rho will be set to 1.0 and coordinates that
+        have NaN values for vrho will be set to 0.0.
+
+        TODO: We could look at scaling the uncertainties as well, but this is not currently
+        implemented nor probably necessary. This function will mostly be used to convert
+        SphericalCoordinates that have missing radial distances to cartesian coordinates on a
+        unit sphere.
 
         Parameters
         ----------
-        rho : `~numpy.ndarray` (N)
-            Radial distance in units of au.
-        lon : `~numpy.ndarray` (N)
-            Longitudinal angle in units of degrees.
-        lat : `~numpy.ndarray` (N)
-            Latitudinal angle in units of degrees (geographic coordinate
-            style with 0 degrees at the equator and ranging from -90 to 90).
-        vrho : `~numpy.ndarray` (N)
-            Radial velocity in units of au per day.
-        vlon : `~numpy.ndarray` (N)
-            Longitudinal velocity in units of degrees per day.
-        vlat : `~numpy.ndarray` (N)
-            Latitudinal velocity in units of degrees per day.
+        only_missing : bool, optional
+            If True, then only coordinates that have NaN values for rho will be set to 1.0 and
+            coordinates that have NaN values for vrho will be set to 0.0. If False, then all
+            coordinates will be set to 1.0 and 0.0, respectively. The default is False.
+
+        Returns
+        -------
+        SphericalCoordinates
+            Spherical coordinates on a unit sphere, with rho and vrho set to 1.0 and 0.0, respectively.
         """
-        sigmas = (sigma_rho, sigma_lon, sigma_lat, sigma_vrho, sigma_vlon, sigma_vlat)
-        Coordinates.__init__(
-            self,
-            rho=rho,
-            lon=lon,
-            lat=lat,
-            vrho=vrho,
-            vlon=vlon,
-            vlat=vlat,
-            covariances=covariances,
-            sigmas=sigmas,
-            times=times,
-            origin=origin,
-            frame=frame,
-            names=names,
-            units=units,
+        # Extract coordinate values
+        coords = self.values
+
+        # Set rho to 1.0 for all points that are NaN, or if force is True
+        # then set rho to 1.0 for all points
+        if not only_missing:
+            mask = np.ones(len(coords), dtype=bool)
+        else:
+            mask = np.isnan(coords[:, 0])
+
+        coords[mask, 0] = 1.0
+
+        # Set vrho to 0.0 for all points that are NaN, or if force is True
+        # then set vrho to 0.0 for all points
+        if not only_missing:
+            mask = np.ones(len(coords), dtype=bool)
+        else:
+            mask = np.isnan(coords[:, 3])
+
+        coords[mask, 3] = 0.0
+
+        # Convert back to spherical coordinates
+        return SphericalCoordinates.from_kwargs(
+            rho=coords[:, 0],
+            lon=coords[:, 1],
+            lat=coords[:, 2],
+            vrho=coords[:, 3],
+            vlon=coords[:, 4],
+            vlat=coords[:, 5],
+            times=self.times,
+            covariances=self.covariances,
+            origin=self.origin,
+            frame=self.frame,
         )
-        return
-
-    @property
-    def rho(self):
-        """
-        Radial distance
-        """
-        return self._values[:, 0]
-
-    @rho.setter
-    def rho(self, value):
-        self._values[:, 0] = value
-        self._values[:, 0].mask = False
-
-    @rho.deleter
-    def rho(self):
-        self._values[:, 0] = np.nan
-        self._values[:, 0].mask = True
-
-    @property
-    def lon(self):
-        """
-        Longitude
-        """
-        return self._values[:, 1]
-
-    @lon.setter
-    def lon(self, value):
-        self._values[:, 1] = value
-        self._values[:, 1].mask = False
-
-    @lon.deleter
-    def lon(self):
-        self._values[:, 1] = np.nan
-        self._values[:, 1].mask = True
-
-    @property
-    def lat(self):
-        """
-        Latitude
-        """
-        return self._values[:, 2]
-
-    @lat.setter
-    def lat(self, value):
-        self._values[:, 2] = value
-        self._values[:, 2].mask = False
-
-    @lat.deleter
-    def lat(self):
-        self._values[:, 2] = np.nan
-        self._values[:, 2].mask = True
-
-    @property
-    def vrho(self):
-        """
-        Radial velocity
-        """
-        return self._values[:, 3]
-
-    @vrho.setter
-    def vrho(self, value):
-        self._values[:, 3] = value
-        self._values[:, 3].mask = False
-
-    @vrho.deleter
-    def vrho(self):
-        self._values[:, 3] = np.nan
-        self._values[:, 3].mask = True
-
-    @property
-    def vlon(self):
-        """
-        Longitudinal velocity
-        """
-        return self._values[:, 4]
-
-    @vlon.setter
-    def vlon(self, value):
-        self._values[:, 4] = value
-        self._values[:, 4].mask = False
-
-    @vlon.deleter
-    def vlon(self):
-        self._values[:, 4] = np.nan
-        self._values[:, 4].mask = True
-
-    @property
-    def vlat(self):
-        """
-        Latitudinal velocity
-        """
-        return self._values[:, 5]
-
-    @vlat.setter
-    def vlat(self, value):
-        self._values[:, 5] = value
-        self._values[:, 5].mask = False
-
-    @vlat.deleter
-    def vlat(self):
-        self._values[:, 5] = np.nan
-        self._values[:, 5].mask = True
-
-    @property
-    def sigma_rho(self):
-        """
-        1-sigma uncertainty in radial distance
-        """
-        return self.sigmas[:, 0]
-
-    @sigma_rho.setter
-    def sigma_rho(self, value):
-        self._covariances[:, 0, 0] = value**2
-        self._covariances[:, 0, 0].mask = False
-
-    @sigma_rho.deleter
-    def sigma_rho(self):
-        self._covariances[:, 0, 0] = np.nan
-        self._covariances[:, 0, 0].mask = True
-
-    @property
-    def sigma_lon(self):
-        """
-        1-sigma uncertainty in longitude
-        """
-        return self.sigmas[:, 1]
-
-    @sigma_lon.setter
-    def sigma_lon(self, value):
-        self._covariances[:, 1, 1] = value**2
-        self._covariances[:, 1, 1].mask = False
-
-    @sigma_lon.deleter
-    def sigma_lon(self):
-        self._covariances[:, 1, 1] = np.nan
-        self._covariances[:, 1, 1].mask = True
-
-    @property
-    def sigma_lat(self):
-        """
-        1-sigma uncertainty in latitude
-        """
-        return self.sigmas[:, 2]
-
-    @sigma_lat.setter
-    def sigma_lat(self, value):
-        self._covariances[:, 2, 2] = value**2
-        self._covariances[:, 2, 2].mask = False
-
-    @sigma_lat.deleter
-    def sigma_lat(self):
-        self._covariances[:, 2, 2] = np.nan
-        self._covariances[:, 2, 2].mask = True
-
-    @property
-    def sigma_vrho(self):
-        """
-        1-sigma uncertainty in radial velocity
-        """
-        return self.sigmas[:, 3]
-
-    @sigma_vrho.setter
-    def sigma_vrho(self, value):
-        self._covariances[:, 3, 3] = value**2
-        self._covariances[:, 3, 3].mask = False
-
-    @sigma_vrho.deleter
-    def sigma_vrho(self):
-        self._covariances[:, 3, 3] = np.nan
-        self._covariances[:, 3, 3].mask = True
-
-    @property
-    def sigma_vlon(self):
-        """
-        1-sigma uncertainty in longitudinal velocity
-        """
-        return self.sigmas[:, 4]
-
-    @sigma_vlon.setter
-    def sigma_vlon(self, value):
-        self._covariances[:, 4, 4] = value**2
-        self._covariances[:, 4, 4].mask = False
-
-    @sigma_vlon.deleter
-    def sigma_vlon(self):
-        self._covariances[:, 4, 4] = np.nan
-        self._covariances[:, 4, 4].mask = True
-
-    @property
-    def sigma_vlat(self):
-        """
-        1-sigma uncertainty in latitudinal velocity
-        """
-        return self.sigmas[:, 5]
-
-    @sigma_vlat.setter
-    def sigma_vlat(self, value):
-        self._covariances[:, 5, 5] = value**2
-        self._covariances[:, 5, 5].mask = False
-
-    @sigma_vlat.deleter
-    def sigma_vlat(self):
-        self._covariances[:, 5, 5] = np.nan
-        self._covariances[:, 5, 5].mask = True
 
     def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _spherical_to_cartesian, spherical_to_cartesian
 
-        coords_cartesian = spherical_to_cartesian(self.values.filled())
+        coords_cartesian = spherical_to_cartesian(self.values)
         coords_cartesian = np.array(coords_cartesian)
 
-        if self.covariances is not None:
+        covariances_spherical = self.covariances.to_matrix()
+        if not np.all(np.isnan(covariances_spherical)):
             covariances_cartesian = transform_covariances_jacobian(
-                self.values, self.covariances, _spherical_to_cartesian
+                self.values, covariances_spherical, _spherical_to_cartesian
             )
         else:
-            covariances_cartesian = None
+            covariances_cartesian = np.empty(
+                (len(coords_cartesian), 6, 6), dtype=np.float64
+            )
+            covariances_cartesian.fill(np.nan)
 
-        coords = CartesianCoordinates(
+        covariances_cartesian = CoordinateCovariances.from_matrix(covariances_cartesian)
+        coords = CartesianCoordinates.from_kwargs(
             x=coords_cartesian[:, 0],
             y=coords_cartesian[:, 1],
             z=coords_cartesian[:, 2],
@@ -321,17 +190,22 @@ class SphericalCoordinates(Coordinates):
     def from_cartesian(cls, cartesian: CartesianCoordinates) -> "SphericalCoordinates":
         from .transform import _cartesian_to_spherical, cartesian_to_spherical
 
-        coords_spherical = cartesian_to_spherical(cartesian.values.filled())
+        coords_spherical = cartesian_to_spherical(cartesian.values)
         coords_spherical = np.array(coords_spherical)
 
-        if cartesian.covariances is not None and (~np.all(cartesian.covariances.mask)):
+        cartesian_covariances = cartesian.covariances.to_matrix()
+        if not np.all(np.isnan(cartesian_covariances)):
             covariances_spherical = transform_covariances_jacobian(
-                cartesian.values, cartesian.covariances, _cartesian_to_spherical
+                cartesian.values, cartesian_covariances, _cartesian_to_spherical
             )
         else:
-            covariances_spherical = None
+            covariances_spherical = np.empty(
+                (len(coords_spherical), 6, 6), dtype=np.float64
+            )
+            covariances_spherical.fill(np.nan)
 
-        coords = cls(
+        covariances_spherical = CoordinateCovariances.from_matrix(covariances_spherical)
+        coords = cls.from_kwargs(
             rho=coords_spherical[:, 0],
             lon=coords_spherical[:, 1],
             lat=coords_spherical[:, 2],
@@ -346,38 +220,82 @@ class SphericalCoordinates(Coordinates):
 
         return coords
 
+    def to_cometary(self) -> "CometaryCoordinates":
+        from .cometary import CometaryCoordinates
+
+        return CometaryCoordinates.from_cartesian(self.to_cartesian())
+
     @classmethod
-    def from_df(
-        cls: Type["SphericalCoordinates"],
-        df: pd.DataFrame,
-        coord_cols: dict = SPHERICAL_COLS,
-        origin_col: str = "origin",
-        frame_col: str = "frame",
+    def from_cometary(
+        cls, cometary_coordinates: "CometaryCoordinates"
     ) -> "SphericalCoordinates":
+        return cls.from_cartesian(cometary_coordinates.to_cartesian())
+
+    def to_keplerian(self) -> "KeplerianCoordinates":
+        from .keplerian import KeplerianCoordinates
+
+        return KeplerianCoordinates.from_cartesian(self.to_cartesian())
+
+    @classmethod
+    def from_keplerian(
+        cls, keplerian_coordinates: "KeplerianCoordinates"
+    ) -> "SphericalCoordinates":
+        return cls.from_cartesian(keplerian_coordinates.to_cartesian())
+
+    @classmethod
+    def from_spherical(
+        cls, spherical_coordinates: "SphericalCoordinates"
+    ) -> "SphericalCoordinates":
+        return spherical_coordinates
+
+    def to_dataframe(
+        self, sigmas: bool = False, covariances: bool = True
+    ) -> pd.DataFrame:
         """
-        Create a SphericalCoordinates class from a dataframe.
+        Convert coordinates to a pandas DataFrame.
 
         Parameters
         ----------
-        df : `~pandas.DataFrame`
-            Pandas DataFrame containing spherical coordinates and optionally their
-            times and covariances.
-        coord_cols : dict
-            Dictionary containing as keys the coordinate dimensions and their equivalent columns
-            as values. For example,
-                coord_cols = {}
-                coord_cols["rho"] = Column name of radial distance values
-                coord_cols["lon"] = Column name of longitudinal values
-                coord_cols["rho"] = Column name of latitudinal values
-                coord_cols["vrho"] = Column name of the radial velocity values
-                coord_cols["vlon"] = Column name of longitudinal velocity values
-                coord_cols["vlat"] = Column name of latitudinal velocity values
-        origin_col : str
-            Name of the column containing the origin of each coordinate.
-        frame_col : str
-            Name of the column containing the coordinate frame.
+        sigmas : bool, optional
+            If True, include 1-sigma uncertainties in the DataFrame.
+        covariances : bool, optional
+            If True, include covariance matrices in the DataFrame. Covariance matrices
+            will be split into 21 columns, with the lower triangular elements stored.
+
+        Returns
+        -------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
         """
-        data = Coordinates._dict_from_df(
-            df, coord_cols=coord_cols, origin_col=origin_col, frame_col=frame_col
+        return coords_to_dataframe(
+            self,
+            ["rho", "lon", "lat", "vrho", "vlon", "vlat"],
+            sigmas=sigmas,
+            covariances=covariances,
         )
-        return cls(**data)
+
+    @classmethod
+    def from_dataframe(
+        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
+    ) -> "SphericalCoordinates":
+        """
+        Create coordinates from a pandas DataFrame.
+
+        Parameters
+        ----------
+        df : `~pandas.Dataframe`
+            DataFrame containing coordinates.
+        frame : {"ecliptic", "equatorial"}
+            Frame in which coordinates are defined.
+
+        Returns
+        -------
+        coords : `~adam_core.coordinates.spherical.SphericalCoordinates`
+            Spherical coordinates.
+        """
+        return coords_from_dataframe(
+            cls,
+            df,
+            coord_names=["rho", "lon", "lat", "vrho", "vlon", "vlat"],
+            frame=frame,
+        )

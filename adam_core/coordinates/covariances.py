@@ -1,11 +1,12 @@
 import logging
-from copy import deepcopy
-from typing import Callable, List, Union
+from typing import Callable, List
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from astropy import units as u
-from astropy.table import Table
+from astropy.table import Table as AstropyTable
+from quivr import Column, Table
 from scipy.stats import multivariate_normal
 
 from .jacobian import calc_jacobian
@@ -13,7 +14,8 @@ from .jacobian import calc_jacobian
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "sigmas_to_covariance",
+    "CoordinateCovariances",
+    "sigmas_to_covariances",
     "sample_covariance",
     "transform_covariances_sampling",
     "transform_covariances_jacobian",
@@ -27,49 +29,141 @@ __all__ = [
 COVARIANCE_FILL_VALUE = np.NaN
 
 
-def sigmas_to_covariance(
-    sigmas: Union[np.ndarray, np.ma.masked_array]
-) -> np.ma.masked_array:
+def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
     """
-    Convert an array of sigmas into an array of covariance
-    matrices (non-diagonal elements are assumed to be zero).
+    Convert an array of standard deviations to an array of covariance matrices.
+    Non-diagonal elements are set to zero.
 
     Parameters
     ----------
-    sigmas : {`~numpy.ndarray`, `~numpy.ma.masked_array`} (N, D)
-        1-sigma uncertainty values for each coordinate dimension D.
+    sigmas : `numpy.ndarray` (N, D)
+        Standard deviations for N coordinates in D dimensions.
 
     Returns
     -------
-    covariances : `~numpy.ma.masked_array` (N, D, D)
-        Covariance matrices with the squared 1-sigma values inserted along
-        each N diagonal.
+    covariances : `numpy.ndarray` (N, D, D)
+        Covariance matrices for N coordinates in D dimensions.
     """
-    if isinstance(sigmas, (np.ma.masked_array)):
-        sigmas_ = sigmas.filled()
-    else:
-        sigmas_ = sigmas
-
-    N, D = sigmas_.shape
-    if np.all(np.isnan(sigmas_)):
-        covariances = np.ma.zeros(
-            (N, D, D),
-            dtype=np.float64,
-        )
-        covariances.fill_value = COVARIANCE_FILL_VALUE
-        covariances.mask = np.ma.ones((N, D, D), dtype=bool)
-
-    else:
-        I = np.identity(D, dtype=sigmas_.dtype)  # NOQA: E741
-        covariances = np.einsum("kj,ji->kij", sigmas_**2, I)
-        covariances = np.ma.masked_array(
-            covariances,
-            dtype=np.float64,
-            fill_value=COVARIANCE_FILL_VALUE,
-        )
-        covariances.mask = np.ma.zeros((N, D, D), dtype=bool)
-
+    D = sigmas.shape[1]
+    identity = np.identity(D, dtype=sigmas.dtype)
+    covariances = np.einsum("kj,ji->kij", sigmas**2, identity, order="C")
     return covariances
+
+
+class CoordinateCovariances(Table):
+    # TODO: Would be interesting if the dimensionality can be generalized
+    #      to D dimensions, so (N, D, D) instead of (N, 6, 6). We would be
+    #      able to use this class for the covariance matrices of different
+    #      measurments like projections (D = 4) and photometry (D = 1).
+    values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
+
+    @property
+    def sigmas(self):
+        cov_diag = np.diagonal(self.to_matrix(), axis1=1, axis2=2)
+        sigmas = np.sqrt(cov_diag)
+        return sigmas
+
+    def to_matrix(self) -> np.ndarray:
+        """
+        Return the covariance matrices as a 3D array of shape (N, 6, 6).
+
+        Returns
+        -------
+        covariances : `numpy.ndarray` (N, 6, 6)
+            Covariance matrices for N coordinates in 6 dimensions.
+        """
+        return self.values.combine_chunks().to_numpy_ndarray()
+
+    @classmethod
+    def from_matrix(cls, covariances: np.ndarray) -> "CoordinateCovariances":
+        """
+        Create a Covariances object from a 3D array of covariance matrices.
+
+        Parameters
+        ----------
+        covariances : `numpy.ndarray` (N, 6, 6)
+            Covariance matrices for N coordinates in 6 dimensions.
+
+        Returns
+        -------
+        covariances : `Covariances`
+            Covariance matrices for N coordinates in 6 dimensions.
+        """
+        cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
+        return cls.from_arrays([cov])
+
+    @classmethod
+    def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
+        """
+        Create a Covariances object from a 2D array of sigmas.
+
+        Parameters
+        ----------
+        sigmas : `numpy.ndarray` (N, 6)
+            Array of 1-sigma uncertainties for N coordinates in 6
+            dimensions.
+
+        Returns
+        -------
+        covariances : `Covariances`
+            Covariance matrices with the diagonal elements set to the
+            squares of the input sigmas.
+        """
+        return cls.from_matrix(sigmas_to_covariances(sigmas))
+
+    def to_dataframe(
+        self,
+        coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
+        sigmas: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Return the covariance matrices represented as lower triangular columns in a pandas DataFrame.
+
+        Parameters
+        ----------
+        coord_names : `list` of `str`, optional
+            Names of the coordinate axes. Default is ["x", "y", "z", "vx", "vy", "vz"].
+        sigmas : `bool`, optional
+            If True, the standard deviations are added as columns to the DataFrame. Default is False.
+
+        Returns
+        -------
+        df : `pandas.DataFrame`
+            Covariance matrices (lower triangular) for N coordinates in 6 dimensions.
+        """
+        df = covariances_to_df(self.to_matrix(), coord_names=coord_names, kind="lower")
+        if sigmas:
+            df_sigmas = sigmas_to_df(self.sigmas, coord_names=coord_names)
+            df = df_sigmas.join(df)
+
+        return df
+
+    @classmethod
+    def from_dataframe(
+        cls, df, coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"]
+    ) -> "CoordinateCovariances":
+        """
+        Create a Covariances object from a pandas DataFrame.
+
+        Parameters
+        ----------
+        df : `pandas.DataFrame`
+            Covariance matrices (lower triangular) for N coordinates in 6 dimensions.
+        coord_names : `list` of `str`, optional
+            Names of the coordinate axes. Default is ["x", "y", "z", "vx", "vy", "vz"].
+
+        Returns
+        -------
+        covariances : `CoordinateCovariances`
+            Covariance matrices for N coordinates in 6 dimensions.
+        """
+        try:
+            covariances = covariances_from_df(df, coord_names=coord_names, kind="lower")
+        except KeyError:
+            sigmas = sigmas_from_df(df, coord_names=coord_names)
+            covariances = sigmas_to_covariances(sigmas)
+
+        return cls.from_matrix(covariances)
 
 
 def sample_covariance(
@@ -99,8 +193,8 @@ def sample_covariance(
 
 
 def transform_covariances_sampling(
-    coords: Union[np.ndarray, np.ma.masked_array],
-    covariances: Union[np.ndarray, np.ma.masked_array],
+    coords: np.ndarray,
+    covariances: np.ndarray,
     func: Callable,
     num_samples: int = 100000,
 ) -> np.ma.masked_array:
@@ -109,9 +203,9 @@ def transform_covariances_sampling(
 
     Parameters
     ----------
-    coords : {`~numpy.ndarray`, `~np.ma.masked_array`} (N, D)
+    coords : `~numpy.ndarray` (N, D)
         Coordinates that correspond to the input covariance matrices.
-    covariances : {`~numpy.ndarray`, `~np.ma.masked_array`} (N, D, D)
+    covariances : `~numpy.ndarray` (N, D, D)
         Covariance matrices to transform via sampling.
     func : function
         A function that takes coords (N, D) as input and returns the transformed
@@ -122,59 +216,34 @@ def transform_covariances_sampling(
 
     Returns
     -------
-    covariances_out : `~np.ma.masked_array` (N, D, D)
+    covariances_out : `~numpy.ndarray` (N, D, D)
         Transformed covariance matrices.
-
-    Raises
-    ------
-    TypeError: If coords or covariances are not a `~numpy.ndarray` or a `~numpy.ma.masked_array`
     """
-    if isinstance(coords, np.ma.masked_array):
-        coords_ = deepcopy(coords.filled())
-    elif isinstance(coords, np.ndarray):
-        coords_ = deepcopy(coords)
-    else:
-        err = "coords should be one of {`~numpy.ndarray`, `~numpy.ma.masked_array`}"
-        raise TypeError(err)
-
-    if isinstance(covariances, np.ma.masked_array):
-        covariances_ = deepcopy(covariances.filled())
-    elif isinstance(covariances, np.ndarray):
-        covariances_ = deepcopy(covariances)
-    else:
-        err = (
-            "covariances should be one of {`~numpy.ndarray`, `~numpy.ma.masked_array`}"
-        )
-        raise TypeError(err)
-
     covariances_out = []
-    for coord, covariance in zip(coords_, covariances_):
+    for coord, covariance in zip(coords, covariances):
         samples = sample_covariance(coord, covariance, num_samples)
         samples_converted = func(samples)
         covariances_out.append(np.cov(samples_converted.T))
 
     covariances_out = np.stack(covariances_out)
-    covariances_out = np.ma.masked_array(
-        covariances, fill_value=COVARIANCE_FILL_VALUE, mask=np.isnan(covariances)
-    )
     return covariances_out
 
 
 def transform_covariances_jacobian(
-    coords: Union[np.ndarray, np.ma.masked_array],
-    covariances: Union[np.ndarray, np.ma.masked_array],
+    coords: np.ndarray,
+    covariances: np.ndarray,
     _func: Callable,
     **kwargs,
-) -> np.ma.masked_array:
+) -> np.ndarray:
     """
     Transform covariance matrices by calculating the Jacobian of the transformation function
     using `~jax.jacfwd`.
 
     Parameters
     ----------
-    coords : {`~numpy.ndarray`, `~np.ma.masked_array`} (N, D)
+    coords : `~numpy.ndarray` (N, D)
         Coordinates that correspond to the input covariance matrices.
-    covariances : {`~numpy.ndarray`, `~np.ma.masked_array`} (N, D, D)
+    covariances : `~numpy.ndarray` (N, D, D)
         Covariance matrices to transform via numerical differentiation.
     _func : function
         A function that takes a single coord (D) as input and return the transformed
@@ -183,41 +252,16 @@ def transform_covariances_jacobian(
 
     Returns
     -------
-    covariances_out : `~np.ma.masked_array` (N, D, D)
+    covariances_out : `~numpy.ndarray` (N, D, D)
         Transformed covariance matrices.
-
-    Raises
-    ------
-    TypeError: If coords or covariances are not a `~numpy.ndarray` or a `~numpy.ma.masked_array`
     """
-    if isinstance(coords, np.ma.masked_array):
-        coords_ = deepcopy(coords.filled())
-    elif isinstance(coords, np.ndarray):
-        coords_ = deepcopy(coords)
-    else:
-        err = "coords should be one of {`~numpy.ndarray`, `~numpy.ma.masked_array`}"
-        raise TypeError(err)
-
-    if isinstance(covariances, np.ma.masked_array):
-        covariances_ = deepcopy(covariances.filled())
-    elif isinstance(covariances, np.ndarray):
-        covariances_ = deepcopy(covariances)
-    else:
-        err = (
-            "covariances should be one of {`~numpy.ndarray`, `~numpy.ma.masked_array`}"
-        )
-        raise TypeError(err)
-
-    jacobian = calc_jacobian(coords_, _func, **kwargs)
-    covariances = jacobian @ covariances_ @ np.transpose(jacobian, axes=(0, 2, 1))
-    covariances_out = np.ma.masked_array(
-        covariances, fill_value=COVARIANCE_FILL_VALUE, mask=np.isnan(covariances)
-    )
-    return covariances_out
+    jacobian = calc_jacobian(coords, _func, **kwargs)
+    covariances = jacobian @ covariances @ np.transpose(jacobian, axes=(0, 2, 1))
+    return covariances
 
 
 def sigmas_to_df(
-    sigmas: np.ma.masked_array,
+    sigmas: np.ndarray,
     coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
 ) -> pd.DataFrame:
     """
@@ -225,7 +269,7 @@ def sigmas_to_df(
 
     Parameters
     ----------
-    sigmas : `~numpy.ma.masked_array` (N, D)
+    sigmas : `~numpy.ndarray` (N, D)
         1-sigma uncertainty values for each coordinate dimension D.
     coord_names : List[str]
         Names of the coordinate columns, will be used to determine column names for
@@ -249,7 +293,7 @@ def sigmas_to_df(
 def sigmas_from_df(
     df: pd.DataFrame,
     coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
-) -> np.ma.masked_array:
+) -> np.ndarray:
     """
     Read sigmas from a `~pandas.DataFrame`.
 
@@ -264,19 +308,17 @@ def sigmas_from_df(
 
     Returns
     -------
-    sigmas : `~numpy.ma.masked_array` (N, D)
+    sigmas : `~numpy.ndarray` (N, D)
         1-sigma uncertainty values for each coordinate dimension D.
     """
     N = len(df)
     D = len(coord_names)
-    sigmas = np.ma.zeros((N, D), dtype=np.float64)
-    sigmas.fill_value = COVARIANCE_FILL_VALUE
-    sigmas.mask = np.ones((N, D), dtype=bool)
+    sigmas = np.zeros((N, D), dtype=np.float64)
+    sigmas.fill(COVARIANCE_FILL_VALUE)
 
     for i in range(D):
         try:
             sigmas[:, i] = df[f"sigma_{coord_names[i]}"].values
-            sigmas.mask[:, i] = np.where(np.isnan(sigmas[:, i]), 1, 0)
 
         except KeyError:
             logger.debug(f"No sigma column found for dimension {coord_names[i]}.")
@@ -285,7 +327,7 @@ def sigmas_from_df(
 
 
 def covariances_to_df(
-    covariances: np.ma.masked_array,
+    covariances: np.ndarray,
     coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
     kind: str = "lower",
 ) -> pd.DataFrame:
@@ -295,7 +337,7 @@ def covariances_to_df(
 
     Parameters
     ----------
-    covariances : `~numpy.ma.masked_array` (N, D, D)
+    covariances : `~numpy.ndarray` (N, D, D)
         3D array of covariance matrices.
     coord_names : List[str]
         Names of the coordinate columns, will be used to determine column names for
@@ -335,7 +377,7 @@ def covariances_from_df(
     df: pd.DataFrame,
     coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
     kind: str = "lower",
-) -> np.ma.masked_array:
+) -> np.ndarray:
     """
     Read covariance matrices from a `~pandas.DataFrame`.
 
@@ -352,7 +394,7 @@ def covariances_from_df(
 
     Returns
     -------
-    covariances : `~numpy.ma.masked_array` (N, D, D)
+    covariances : `~numpy.ndarray` (N, D, D)
         3D array of covariance matrices.
 
     Raises
@@ -361,9 +403,8 @@ def covariances_from_df(
     """
     N = len(df)
     D = len(coord_names)
-    covariances = np.ma.zeros((N, D, D), dtype=np.float64)
-    covariances.fill_value = COVARIANCE_FILL_VALUE
-    covariances.mask = np.ones((N, D, D), dtype=bool)
+    covariances = np.zeros((N, D, D), dtype=np.float64)
+    covariances.fill(COVARIANCE_FILL_VALUE)
 
     if kind == "upper":
         ii, jj = np.triu_indices(D)
@@ -391,7 +432,7 @@ def covariances_to_table(
     coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
     coord_units=[u.au, u.au, u.au, u.au / u.d, u.au / u.d, u.au / u.d],
     kind: str = "lower",
-) -> Table:
+) -> AstropyTable:
     """
     Place covariance matrices into a `astropy.table.table.Table`. Splits the covariance matrices
     into either upper or lower triangular form and then adds one column per dimension.
@@ -435,11 +476,11 @@ def covariances_to_table(
             covariances[:, i, j] * coord_units[i] * coord_units[j]
         )
 
-    return Table(data)
+    return AstropyTable(data)
 
 
 def covariances_from_table(
-    table: Table,
+    table: AstropyTable,
     coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
     kind: str = "lower",
 ) -> np.ma.masked_array:

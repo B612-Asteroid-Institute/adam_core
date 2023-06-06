@@ -1,161 +1,214 @@
-from typing import Type
+from typing import List, Tuple, Union
 
 import numpy as np
-import pandas as pd
-from scipy.spatial.distance import mahalanobis
+import pyarrow as pa
+from quivr import Float64Column, Int64Column, ListColumn, Table
 from scipy.stats import chi2
 
-from ..utils import Indexable
-from .conversions import convert_coordinates
-from .coordinates import Coordinates
+from .cartesian import CartesianCoordinates
+from .cometary import CometaryCoordinates
+from .keplerian import KeplerianCoordinates
+from .spherical import SphericalCoordinates
 
-__all__ = ["calc_residuals"]
+CoordinateType = Union[
+    CartesianCoordinates,
+    CometaryCoordinates,
+    KeplerianCoordinates,
+    SphericalCoordinates,
+]
+SUPPORTED_COORDINATES = (
+    CartesianCoordinates,
+    CometaryCoordinates,
+    KeplerianCoordinates,
+    SphericalCoordinates,
+)
 
-
-class Residuals(Indexable):
-    def __init__(
-        self,
-        residuals,
-        chi2,
-        dof,
-        mahalanobis_distance,
-        probability,
-        names,
-    ):
-        self._values = residuals
-        self._chi2 = chi2
-        self._dof = dof
-        self._mahalanobis_distance = mahalanobis_distance
-        self._probability = probability
-        self._names = names
-
-        # For each dimension in values add a class attribute
-        for i, name in enumerate(self._names):
-            self.__dict__[f"d{name}"] = self._values[:, i]
-
-        Indexable.__init__(self)
-        return
-
-    def __len__(self):
-        return len(self.values)
-
-    @property
-    def values(self):
-        return self._values
-
-    @property
-    def chi2(self):
-        return self._chi2
-
-    @property
-    def chi2_total(self):
-        return self.chi2.sum(axis=1)
-
-    @property
-    def dof(self):
-        return self._dof
-
-    @property
-    def mahalanobis_distance(self):
-        return self._mahalanobis_distance
-
-    @property
-    def probabality(self):
-        return self._probability
-
-    @property
-    def names(self):
-        return self._names
-
-    def to_df(self):
-        data = {}
-        for i, (k, v) in enumerate(self.names.items()):
-            data[v] = self.values[:, i].filled()
-
-        for i, (k, v) in enumerate(self.names.items()):
-            data[f"{v}_chi2"] = self.chi2[:, i].filled()
-
-        data["chi2"] = self.chi2_total
-        data["dof"] = self.dof
-        data["mahalanobis_distance"] = self.mahalanobis_distance
-        data["probability"] = self.probabality
-
-        return pd.DataFrame(data)
+__all__ = [
+    "Residuals",
+    "calculate_chi2",
+    "_batch_coords_and_covariances",
+]
 
 
-def calc_residuals(observed: Type[Coordinates], predicted: Type[Coordinates]):
+class Residuals(Table):
+
+    values = ListColumn(pa.float64(), list_size=-1, nullable=True)
+    chi2 = Float64Column(nullable=True)
+    dof = Int64Column(nullable=True)
+    probability = Float64Column(nullable=True)
+
+    @classmethod
+    def calculate(
+        cls, observed: CoordinateType, predicted: CoordinateType
+    ) -> "Residuals":
+        """
+        Calculate the residuals between the observed and predicted coordinates. The observed
+        coordinate's covariance matrix is used to calculate the chi2 and degrees of freedom.
+
+        TODO: We may want to add support for a single predicted coordinate and covariance
+            compared to multiple observed coordinates and covariances.
+            Add support for cases where both the observed and predicted coordinates have
+            covariances. Maybe a Kolmogorov-Smirnov test?
+
+        Parameters
+        ----------
+        observed : CoordinateType (N, D)
+            Observed coordinates.
+        predicted : CoordinateType (N, D) or (1, D)
+            Predicted coordinates. If a single coordinate is provided, it is broadcasted
+            to the same shape as the observed coordinates.
+
+        Returns
+        -------
+        residuals : `~adam_core.coordinates.residuals.Residuals`
+            Residuals between the observed and predicted coordinates.
+        """
+        if not isinstance(observed, SUPPORTED_COORDINATES):
+            raise TypeError(
+                f"Observed coordinates must be one of {SUPPORTED_COORDINATES}, not {type(observed)}."
+            )
+        if not isinstance(predicted, SUPPORTED_COORDINATES):
+            raise TypeError(
+                f"Predicted coordinates must be one of {SUPPORTED_COORDINATES}, not {type(predicted)}."
+            )
+        if type(observed) != type(predicted):
+            raise TypeError(
+                "Observed and predicted coordinates must be the same type, "
+                f"not {type(observed)} and {type(predicted)}."
+            )
+
+        N, D = observed.values.shape
+        p = np.empty(N, dtype=np.float64)
+        chi2s = np.empty(N, dtype=np.float64)
+
+        # Caclulate the degrees of freedom for every coordinate
+        # Number of coordinate dimensions less the number of quantities that are NaN
+        dof = D - np.sum(np.isnan(observed.values), axis=1)
+
+        # Calculate the array of residuals
+        residuals = observed.values - predicted.values
+
+        # Batch the coordinates and covariances into groups that have the same
+        # number of dimensions that have missing values (represented by NaNs)
+        (
+            batch_indices,
+            batch_dimensions,
+            batch_coords,
+            batch_covariances,
+        ) = _batch_coords_and_covariances(
+            observed.values, observed.covariances.to_matrix()
+        )
+
+        for indices, dimensions, coords, covariances in zip(
+            batch_indices, batch_dimensions, batch_coords, batch_covariances
+        ):
+            if not np.all(np.isnan(covariances)):
+                # Calculate the chi2 for each coordinate
+                chi2_values = calculate_chi2(residuals[indices], covariances)
+
+                # Calculate the probability for each coordinate
+                p[indices] = 1 - chi2.cdf(np.sqrt(chi2_values), dof[indices])
+
+                # Set the chi2 for each coordinate
+                chi2s[indices] = chi2_values
+
+            else:
+                # If the covariance matrix is all NaNs, then the chi2 is NaN
+                chi2s[indices] = np.nan
+                p[indices] = np.nan
+
+        return cls.from_kwargs(
+            values=residuals.tolist(),
+            chi2=chi2s,
+            dof=dof,
+            probability=p,
+        )
+
+
+def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray:
     """
-    Calculate the residuals beteween two sets of coordinates: one observed
-    and another predicted.
+    Calculate the vectorized normalized squared residual for each residual and covariance pair.
+    This normalized residual is equivalent to the Mahalanobis distance squared.
+    For residuals with no covariance (all non-diagonal covariance elements are zero) this
+    is exactly equivalent to chi2.
 
     Parameters
     ----------
-    observed : Coordinates
-        Observed coordinates.
-    predicted : Coordinates
-        Predicted coordinates.
+    residuals : `~numpy.ndarray` (N, D)
+        Array of N residuals in D dimensions (observed - predicted).
+    covariances : `~numpy.ndarray` (N, D, D)
+        Array of N covariance matrices in D dimensions.
 
     Returns
     -------
-    residuals : Residuals
-        Residuals calculated between the observed and predicted coordinates (observed - predicted).
-        Includes chi2, dof and mahalanobis distance if the covariance matrices for the observed
-        coordinates are defined.
+    chi2 : `~numpy.ndarray` (N)
+        Array of chi2 values for each residual and covariance pair.
+
+    References
+    ----------
+    [1] Carpino, M. et al. (2003). Error statistics of asteroid optical astrometric observations.
+        Icarus, 166, 248-270. https://doi.org/10.1016/S0019-1035(03)00051-4
     """
-    assert isinstance(observed, Coordinates)
-    assert isinstance(predicted, Coordinates)
-    assert type(observed) == type(predicted)
-    assert len(observed) == len(predicted)
-    if observed.times is not None and predicted.times is not None:
-        np.testing.assert_equal(observed.times.tdb.mjd, predicted.times.tdb.mjd)
+    W = np.linalg.inv(covariances)
+    chi2 = np.einsum("ij,ji->i", np.einsum("ij,ijk->ik", residuals, W), residuals.T)
+    return chi2
 
-    if not predicted.has_units(observed.units):
-        predicted = convert_coordinates(predicted, observed.units)
 
-    residual_names = {}
-    for k, v in observed.names.items():
-        residual_names[k] = f"d{v}"
+def _batch_coords_and_covariances(
+    coords: np.ndarray, covariances: np.ndarray
+) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+    """
+    Batch coordinates and covariances into groups that have the same
+    number of dimensions that have missing values (represented by NaNs).
 
-    # Caclulate the degrees of freedom for every coordinate
-    # Number of coordinate dimensions less the number of masked quantities
-    dof = observed.values.shape[1] - observed.values.mask.sum(axis=1)
+    Parameters
+    ----------
+    coords : `~numpy.ndarray` (N, D)
+        Array of N coordinates in D dimensions.
+    covariances : `~numpy.ndarray` (N, D, D)
+        Array of N covariance matrices in D dimensions.
 
-    residuals = observed.values - predicted.values
-    # if isinstance(observed, SphericalCoordinates):
-    # residuals[:, 1] = np.where(residuals[:, 1] > 180., 360. - residuals[:, 1], residuals[:, 1])
-    # residual_ra *= np.cos(np.radians(dec_pred))
-    # residuals[:, 2] = np.where(residuals[:, 2] > 90., 360. - residuals[:, 2], residuals[:, 2])
+    Returns
+    -------
+    batch_indices : List[`~numpy.ndarray` (<=N)]
+        List of arrays of indices into the original arrays that correspond to
+        coordinates with the same number of dimensions that have missing values.
+    batch_dimensions : List[`~numpy.ndarray` (<=D)]
+        List of arrays of dimensions that have values for each batch.
+    batch_coords : List[`~numpy.ndarray` (<=N, <=D)]
+        Array of N coordinates in D dimensions with missing dimensions removed.
+    batch_covariances : List[`~numpy.ndarray` (<=N, <=D, <=D)]
+        Array of N covariance matrices in D dimensions with missing dimensions removed.
+    """
+    N, D = coords.shape
+    assert covariances.shape == (N, D, D)
 
-    if observed.covariances is not None:
-        chi2s = residuals**2 / observed.sigmas**2
+    # Find the indices of the coordinates that have the same missing dimensions
+    # (if any) and select the coordinates and covariances for those indices
+    nans = np.isnan(coords)
+    batch_masks = np.unique(nans, axis=0)
+    indices = np.arange(0, N, dtype=np.int64)
 
-        d_list = []
-        p_list = []
-        for i, (observed_i, predicted_i) in enumerate(zip(observed, predicted)):
-            mask = observed_i.values.mask
-            dof_i = dof[i]
+    batch_indices: List[np.ndarray] = []
+    batch_dimensions: List[np.ndarray] = []
+    batch_coords: List[np.ndarray] = []
+    batch_covariances: List[np.ndarray] = []
+    for batch in batch_masks:
+        # Find the indices of the coordinates that have the same missing dimensions
+        # and select the coordinates and covariances for those indices
+        batch_mask_i = indices[np.where(np.all(nans == batch, axis=1))[0]]
+        coords_i = coords[batch_mask_i]
+        covariances_i = covariances[batch_mask_i]
 
-            u = predicted_i.values[~mask].filled()
-            v = observed_i.values.compressed()
-            cov = observed_i.covariances.compressed().reshape(dof_i, dof_i)
+        # Remove the missing dimensions from the coordinates and covariances
+        dimensions_with_values = np.where(~batch)[0]
+        coords_i = coords_i[:, dimensions_with_values]
+        covariances_i = covariances_i[:, dimensions_with_values, :]
+        covariances_i = covariances_i[:, :, dimensions_with_values]
 
-            d_i = mahalanobis(u, v, np.linalg.inv(cov))
-            p_i = 1 - chi2.cdf(d_i, dof_i)
+        batch_indices.append(batch_mask_i)
+        batch_dimensions.append(dimensions_with_values)
+        batch_coords.append(coords_i)
+        batch_covariances.append(covariances_i)
 
-            d_list.append(d_i)
-            p_list.append(p_i)
-
-        d = np.array(d_list)
-        p = np.array(p_list)
-    else:
-        p = np.empty(len(observed))
-        p.fill(np.NaN)
-        d = np.empty(len(observed))
-        d.fill(np.NaN)
-
-        chi2s = np.ma.zeros(residuals.shape, dtype=float)
-        chi2s.fill(np.NaN)
-        chi2s.mask = residuals.mask
-        chi2s.fill_value = np.NaN
-
-    return Residuals(residuals, chi2s, dof, d, p, residual_names)
+    return batch_indices, batch_dimensions, batch_coords, batch_covariances
