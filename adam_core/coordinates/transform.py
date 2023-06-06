@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -11,6 +11,7 @@ from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .keplerian import KeplerianCoordinates
+from .origin import OriginCodes
 from .spherical import SphericalCoordinates
 
 config.update("jax_enable_x64", True)
@@ -43,6 +44,12 @@ CoordinateType = Union[
     CometaryCoordinates,
     SphericalCoordinates,
 ]
+CoordinatesClasses = (
+    CartesianCoordinates,
+    KeplerianCoordinates,
+    CometaryCoordinates,
+    SphericalCoordinates,
+)
 
 
 MU = c.MU
@@ -1181,7 +1188,7 @@ def cometary_to_cartesian(
 
 
 def cartesian_to_origin(
-    coords: CartesianCoordinates, origin: str
+    coords: CartesianCoordinates, origin: OriginCodes
 ) -> "CartesianCoordinates":
     """
     Translate coordinates to a different origin.
@@ -1208,11 +1215,11 @@ def cartesian_to_origin(
         #    origin_in, coords.times[mask], frame=coords.frame, origin=origin
         # )
 
-    return coords.translate(vectors, origin)
+    return coords.translate(vectors, origin.name)
 
 
 def cartesian_to_frame(
-    coords: CartesianCoordinates, frame: str
+    coords: CartesianCoordinates, frame: Literal["ecliptic", "equatorial"]
 ) -> "CartesianCoordinates":
     """
     Rotate Cartesian coordinates and their covariances to the given frame.
@@ -1242,32 +1249,24 @@ def cartesian_to_frame(
 
 def transform_coordinates(
     coords: CoordinateType,
-    representation_out: str,
-    frame_out: Optional[str] = None,
-    origin_out: Optional[str] = None,
-    unit_sphere: bool = True,
+    representation_out: CoordinateType,
+    frame_out: Optional[Literal["ecliptic", "equatorial"]] = None,
+    origin_out: Optional[OriginCodes] = None,
 ) -> CoordinateType:
     """
-    Transform coordinates between frames ('ecliptic', 'equatorial')
-    and/or representations ('cartesian', 'spherical', 'keplerian').
+    Transform coordinates between frames ('ecliptic', 'equatorial'), origins,
+    and/or representations ('cartesian', 'spherical', 'keplerian', 'cometary').
 
     Parameters
     ----------
     coords : `~adam_core.coordinates.Coordinates`
         Coordinates to transform between representations and frames.
-    representation_out : {'cartesian', 'spherical', 'keplerian', 'cometary'}
+    representation_out : `~adam_core.coordinates.Coordinates`
         Desired coordinate type or representation of the output coordinates.
-    frame_out : {'equatorial', 'ecliptic'}
+    frame_out : {'ecliptic', 'equatorial'}
         Desired reference frame of the output coordinates.
     origin_out : {'SUN', 'SOLAR_SYSTEM_BARYCENTER'}
         Desired origin of the output coordinates.
-    unit_sphere : bool
-        Assume the coordinates lie on a unit sphere. In many cases, spherical coordinates
-        may not have a value for radial distance or radial velocity but transforms to other
-        representations or frames are still meaningful. If this parameter is set to true,
-        then if radial distance is not defined and/or radial velocity is not defined
-        then they are assumed to be 1.0 au and 0.0 au/d, respectively.
-
     Returns
     -------
     coords_out : `~adam_core.coordinates.Coordinates`
@@ -1279,179 +1278,47 @@ def transform_coordinates(
         If frame_in, frame_out are not one of 'equatorial', 'ecliptic'.
         If representation_in, representation_out are not one of 'cartesian',
             'spherical', 'keplerian', 'cometary'.
+    TypeError
+        If coords is not a `~adam_core.coordinates.Coordinates` object.
+        If origin_out is not a `~adam_core.coordinates.OriginCodes` object.
     """
     # Check that coords is a thor.coordinates.Coordinates object
-    if not isinstance(
-        coords,
-        (
-            CartesianCoordinates,
-            SphericalCoordinates,
-            KeplerianCoordinates,
-            CometaryCoordinates,
-        ),
-    ):
-        err = (
-            "Coords of type {} are not supported.\n"
-            "Supported coordinates are:\n"
-            "  CartesianCoordinates\n"
-            "  SphericalCoordinates\n"
-            "  KeplerianCoordinates\n"
-            "  CometaryCoordinates\n"
+    if not isinstance(coords, CoordinatesClasses):
+        raise TypeError("Unsupported coordinate type: {}".format(type(coords)))
+
+    if frame_out not in {None, "equatorial", "ecliptic"}:
+        raise ValueError("Unsupported frame_out: {}".format(frame_out))
+
+    if origin_out is not None and not isinstance(origin_out, OriginCodes):
+        raise TypeError("Unsupported origin_out type: {}".format(type(origin_out)))
+
+    if representation_out not in CoordinatesClasses:
+        raise ValueError(
+            "Unsupported representation_out: {}".format(representation_out)
         )
-        raise TypeError(err)
 
-    # Check that frame_in and frame_out are one of equatorial
-    # or ecliptic, raise errors otherwise
-    frame_err = ["{} should be one of:\n", "'equatorial' or 'ecliptic'"]
-    if coords.frame != "equatorial" and coords.frame != "ecliptic":
-        raise ValueError("".join(frame_err).format("frame_in"))
+    coord_frame = coords.frame
+    # Extract the origins from the input coordinates
+    coord_origin = coords.origin.code.to_numpy(zero_copy_only=False)
 
-    if frame_out is not None:
-        if frame_out != "equatorial" and frame_out != "ecliptic":
-            raise ValueError("".join(frame_err).format("frame_out"))
-    else:
-        frame_out = str(coords.frame.name[0])
+    if frame_out is None:
+        frame_out = coord_frame
 
-    origin_err = ["{} should be one of:\n", "'SUN' or 'SOLAR_SYSTEM_BARYCENTER'"]
-    if origin_out is not None:
-        if origin_out != "SOLAR_SYSTEM_BARYCENTER" and origin_out != "SUN":
-            raise ValueError("".join(origin_err).format("origin_out"))
-    else:
-        origin_out = str(coords.origin.code[0])
+    if origin_out is None:
+        origin_out = coord_origin
 
-    # Check that representation_in and representation_out are one of cartesian
-    # or spherical, raise errors otherwise
-    representation_err = [
-        "{} should be one of:\n",
-        "'cartesian', 'spherical', 'keplerian', 'cometary'",
-    ]
-    if representation_out not in (
-        "cartesian",
-        "spherical",
-        "keplerian",
-        "cometary",
-    ):
-        raise ValueError("".join(representation_err).format("representation_out"))
-
-    # If coords are already in the desired frame, have the desired origin and representation
-    # then return them unaltered
-    if coords.frame == frame_out and origin_out is None and coords.origin == origin_out:
-        if (
-            isinstance(coords, CartesianCoordinates)
-            and representation_out == "cartesian"
-        ):
+    if type(coords) == representation_out:
+        if coord_frame == frame_out and np.all(coord_origin == origin_out):
             return coords
-        elif (
-            isinstance(coords, SphericalCoordinates)
-            and representation_out == "spherical"
-        ):
-            return coords
-        elif (
-            isinstance(coords, KeplerianCoordinates)
-            and representation_out == "keplerian"
-        ):
-            return coords
-        elif (
-            isinstance(coords, CometaryCoordinates) and representation_out == "cometary"
-        ):
-            return coords
-        else:
-            pass
 
-    set_rho_nan = False
-    set_vrho_nan = False
-    if isinstance(coords, CartesianCoordinates):
-
-        cartesian = coords
-
-    elif isinstance(coords, SphericalCoordinates):
-
-        if representation_out == "spherical" or representation_out == "cartesian":
-            if unit_sphere:
-                values = coords.values
-
-                if np.all(np.isnan(coords.rho.to_numpy())):
-                    logger.debug(
-                        "Spherical coordinates have no defined radial distance (rho),"
-                        "assuming spherical coordinates lie on unit sphere."
-                    )
-                    values[:, 0] = 1.0
-                    set_rho_nan = True
-
-                if np.all(np.isnan(coords.vrho.to_numpy())):
-                    logger.debug(
-                        "Spherical coordinates have no defined radial velocity (vrho),"
-                        " assuming spherical coordinates lie on unit sphere with zero velocity."
-                    )
-                    values = coords.values
-                    values[:, 3] = 0.0
-                    set_vrho_nan = True
-
-                coords = SphericalCoordinates.from_kwargs(
-                    rho=values[:, 0],
-                    lat=values[:, 1],
-                    lon=values[:, 2],
-                    vrho=values[:, 3],
-                    vlat=values[:, 4],
-                    vlon=values[:, 5],
-                    covariances=coords.covariances,
-                    times=coords.times,
-                    frame=coords.frame,
-                    origin=coords.origin,
-                )
-
-        cartesian = coords.to_cartesian()
-
-    elif isinstance(coords, KeplerianCoordinates):
-
-        cartesian = coords.to_cartesian()
-
-    elif isinstance(coords, CometaryCoordinates):
-
-        cartesian = coords.to_cartesian()
+    cartesian = coords.to_cartesian()
 
     # Translate coordinates to new origin (if different from current)
-    if origin_out is not None and cartesian.origin != origin_out:
+    if np.all(cartesian.origin != origin_out):
         cartesian = cartesian_to_origin(cartesian, origin_out)
 
     # Rotate coordinates to new frame (if different from current)
     if cartesian.frame != frame_out:
         cartesian = cartesian_to_frame(cartesian, frame_out)
 
-    if representation_out == "spherical":
-        coords_out = SphericalCoordinates.from_cartesian(cartesian)
-
-        # If we assumed the coordinates lie on a unit sphere and the
-        # rho and vrho values were assumed then make sure the output coordinates
-        # and covariances are set back to NaN values and masked
-
-        if set_rho_nan or set_vrho_nan:
-            values_out = coords_out.values
-
-            if set_rho_nan:
-                values_out[:, 0] = np.NaN
-
-            if set_vrho_nan:
-                values_out[:, 3] = np.NaN
-
-            coords = SphericalCoordinates.from_kwargs(
-                rho=values_out[:, 0],
-                lat=values_out[:, 1],
-                lon=values_out[:, 2],
-                vrho=values_out[:, 3],
-                vlat=values_out[:, 4],
-                vlon=values_out[:, 5],
-                covariances=coords.covariances,
-                times=coords.times,
-                frame=coords.frame,
-                origin=coords.origin,
-            )
-
-    elif representation_out == "keplerian":
-        coords_out = KeplerianCoordinates.from_cartesian(cartesian)
-    elif representation_out == "cometary":
-        coords_out = CometaryCoordinates.from_cartesian(cartesian)
-    elif representation_out == "cartesian":
-        coords_out = cartesian
-
-    return coords_out
+    return representation_out.from_cartesian(cartesian)
