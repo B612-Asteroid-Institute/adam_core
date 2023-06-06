@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 from astropy import units as u
-from quivr import Float64Field, StringAttribute, Table
+from quivr import Float64Column, StringAttribute, Table
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
@@ -36,15 +36,15 @@ SPHERICAL_UNITS["vlat"] = u.deg / u.d
 
 class SphericalCoordinates(Table):
 
-    rho = Float64Field(nullable=True)
-    lon = Float64Field(nullable=True)
-    lat = Float64Field(nullable=True)
-    vrho = Float64Field(nullable=True)
-    vlon = Float64Field(nullable=True)
-    vlat = Float64Field(nullable=True)
-    times = Times.as_field(nullable=True)
-    covariances = CoordinateCovariances.as_field(nullable=True)
-    origin = Origin.as_field(nullable=False)
+    rho = Float64Column(nullable=True)
+    lon = Float64Column(nullable=True)
+    lat = Float64Column(nullable=True)
+    vrho = Float64Column(nullable=True)
+    vlon = Float64Column(nullable=True)
+    vlat = Float64Column(nullable=True)
+    times = Times.as_column(nullable=True)
+    covariances = CoordinateCovariances.as_column(nullable=True)
+    origin = Origin.as_column(nullable=False)
     frame = StringAttribute()
 
     @property

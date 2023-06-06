@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 from astropy import units as u
-from quivr import Float64Field, StringAttribute, Table
+from quivr import Float64Column, StringAttribute, Table
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
@@ -40,15 +40,15 @@ class CometaryCoordinates(Table):
     # grab the MJD column. That said, we would want to force it
     # the time scale to be in TDB..
 
-    q = Float64Field(nullable=False)
-    e = Float64Field(nullable=False)
-    i = Float64Field(nullable=False)
-    raan = Float64Field(nullable=False)
-    ap = Float64Field(nullable=False)
-    tp = Float64Field(nullable=False)
-    times = Times.as_field(nullable=True)
-    covariances = CoordinateCovariances.as_field(nullable=True)
-    origin = Origin.as_field(nullable=False)
+    q = Float64Column(nullable=False)
+    e = Float64Column(nullable=False)
+    i = Float64Column(nullable=False)
+    raan = Float64Column(nullable=False)
+    ap = Float64Column(nullable=False)
+    tp = Float64Column(nullable=False)
+    times = Times.as_column(nullable=True)
+    covariances = CoordinateCovariances.as_column(nullable=True)
+    origin = Origin.as_column(nullable=False)
     frame = StringAttribute()
 
     @property

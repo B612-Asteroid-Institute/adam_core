@@ -1,5 +1,5 @@
 from astropy.time import Time
-from quivr import Float64Field, StringAttribute, Table
+from quivr import Float64Column, StringAttribute, Table
 
 
 class Times(Table):
@@ -7,8 +7,8 @@ class Times(Table):
     # Stores the time as a pair of float64 values in the same style as erfa/astropy:
     # The first one is the day-part of a Julian date, and the second is
     # the fractional day-part.
-    jd1 = Float64Field(nullable=False)
-    jd2 = Float64Field(nullable=False)
+    jd1 = Float64Column(nullable=False)
+    jd2 = Float64Column(nullable=False)
     scale = StringAttribute()
 
     @classmethod

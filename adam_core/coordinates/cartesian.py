@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 from astropy import units as u
-from quivr import Float64Field, StringAttribute, Table
+from quivr import Float64Column, StringAttribute, Table
 
 from .covariances import CoordinateCovariances
 from .io import coords_from_dataframe, coords_to_dataframe
@@ -33,15 +33,15 @@ logger = logging.getLogger(__name__)
 
 class CartesianCoordinates(Table):
 
-    x = Float64Field(nullable=True)
-    y = Float64Field(nullable=True)
-    z = Float64Field(nullable=True)
-    vx = Float64Field(nullable=True)
-    vy = Float64Field(nullable=True)
-    vz = Float64Field(nullable=True)
-    times = Times.as_field(nullable=True)
-    covariances = CoordinateCovariances.as_field(nullable=True)
-    origin = Origin.as_field(nullable=False)
+    x = Float64Column(nullable=True)
+    y = Float64Column(nullable=True)
+    z = Float64Column(nullable=True)
+    vx = Float64Column(nullable=True)
+    vy = Float64Column(nullable=True)
+    vz = Float64Column(nullable=True)
+    times = Times.as_column(nullable=True)
+    covariances = CoordinateCovariances.as_column(nullable=True)
+    origin = Origin.as_column(nullable=False)
     frame = StringAttribute()
 
     @property

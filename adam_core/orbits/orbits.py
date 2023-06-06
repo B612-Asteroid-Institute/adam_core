@@ -2,7 +2,7 @@ import logging
 from typing import Literal
 
 import pandas as pd
-from quivr import StringField, Table
+from quivr import StringColumn, Table
 
 from ..coordinates.cartesian import CartesianCoordinates
 
@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 class Orbits(Table):
 
-    orbit_ids = StringField(nullable=True)
-    object_ids = StringField(nullable=True)
-    coordinates = CartesianCoordinates.as_field(nullable=False)
+    orbit_ids = StringColumn(nullable=True)
+    object_ids = StringColumn(nullable=True)
+    coordinates = CartesianCoordinates.as_column(nullable=False)
 
     def to_dataframe(self, sigmas: bool = False, covariances: bool = True):
         """

@@ -6,7 +6,7 @@ import pandas as pd
 import pyarrow as pa
 from astropy import units as u
 from astropy.table import Table as AstropyTable
-from quivr import Field, Table
+from quivr import Column, Table
 from scipy.stats import multivariate_normal
 
 from .jacobian import calc_jacobian
@@ -55,7 +55,7 @@ class CoordinateCovariances(Table):
     #      to D dimensions, so (N, D, D) instead of (N, 6, 6). We would be
     #      able to use this class for the covariance matrices of different
     #      measurments like projections (D = 4) and photometry (D = 1).
-    values = Field(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
+    values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
     @property
     def sigmas(self):

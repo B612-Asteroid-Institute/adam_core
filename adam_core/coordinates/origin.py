@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 import pyarrow as pa
-from quivr import StringField, Table
+from quivr import StringColumn, Table
 
 from ..constants import KM_P_AU, S_P_DAY
 
@@ -56,11 +56,11 @@ class OriginGravitationalParameters(float, Enum):
     MOON = _convert_mu_units(4902.800118)
 
 
-# TODO: Replace with DictionaryField or similar
+# TODO: Replace with DictionaryColumn or similar
 #       Investigate whether this class is even necessary
 class Origin(Table):
 
-    code = StringField(nullable=False)
+    code = StringColumn(nullable=False)
 
     def __init__(self, table: pa.Table, mu: Optional[float] = None):
         super().__init__(table)

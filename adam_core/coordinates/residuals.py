@@ -2,7 +2,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 import pyarrow as pa
-from quivr import Float64Field, Int64Field, ListField, Table
+from quivr import Float64Column, Int64Column, ListColumn, Table
 from scipy.stats import chi2
 
 from .cartesian import CartesianCoordinates
@@ -32,10 +32,10 @@ __all__ = [
 
 class Residuals(Table):
 
-    values = ListField(pa.float64(), list_size=-1, nullable=True)
-    chi2 = Float64Field(nullable=True)
-    dof = Int64Field(nullable=True)
-    probability = Float64Field(nullable=True)
+    values = ListColumn(pa.float64(), list_size=-1, nullable=True)
+    chi2 = Float64Column(nullable=True)
+    dof = Int64Column(nullable=True)
+    probability = Float64Column(nullable=True)
 
     @classmethod
     def calculate(
