@@ -12,84 +12,105 @@ To define an orbit:
 ```python
 from astropy.time import Time
 from adam_core.coordinates import KeplerianCoordinates
+from adam_core.coordinates import Times
+from adam_core.coordinates import Origin
 from adam_core.orbits import Orbits
 
-keplerian_elements = KeplerianCoordinates(
-    times=Time(59000.0, scale="tdb", format="mjd"),
-    a=1.0,
-    e=0.002,
-    i=10.,
-    raan=50.0,
-    ap=20.0,
-    M=30.0,
+keplerian_elements = KeplerianCoordinates.from_kwargs(
+    times=Times.from_astropy(
+        Time([59000.0], scale="tdb", format="mjd")
+    ),
+    a=[1.0],
+    e=[0.002],
+    i=[10.],
+    raan=[50.0],
+    ap=[20.0],
+    M=[30.0],
+    origin=Origin.from_kwargs(code=["SUN"]),
+    frame="ecliptic"
 )
-orbits = Orbits(
-    keplerian_elements,
-    orbit_ids="1",
-    object_ids="Test Orbit"
+orbits = Orbits.from_kwargs(
+    orbit_ids=["1"],
+    object_ids=["Test Orbit"],
+    coordinates=keplerian_elements.to_cartesian(),
 )
 ```
+Note that internally, all orbits are stored in Cartesian coordinates. Cartesian coordinates do not have any
+singularities and are thus more robust for numerical integration. Any orbital element conversions to Cartesian
+can be done on demand by calling `to_cartesian()` on the coordinates object.
+
 The underlying orbits class is 2 dimensional and can store elements and covariances for multiple orbits.
 
 ```python
 from astropy.time import Time
 from adam_core.coordinates import KeplerianCoordinates
+from adam_core.coordinates import Times
+from adam_core.coordinates import Origin
 from adam_core.orbits import Orbits
 
-keplerian_elements = KeplerianCoordinates(
-    times=Time([59000.0, 60000.0], scale="tdb", format="mjd"),
+keplerian_elements = KeplerianCoordinates.from_kwargs(
+    times=Times.from_astropy(
+        Time([59000.0, 60000.0], scale="tdb", format="mjd")
+    ),
     a=[1.0, 3.0],
     e=[0.002, 0.0],
     i=[10., 30.],
     raan=[50.0, 32.0],
     ap=[20.0, 94.0],
     M=[30.0, 159.0],
+    origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+    frame="ecliptic"
 )
-orbits = Orbits(
-    keplerian_elements,
+orbits = Orbits.from_kwargs(
     orbit_ids=["1", "2"],
-    object_ids=["Test Orbit 1", "Test Orbit 2"]
+    object_ids=["Test Orbit 1", "Test Orbit 2"],
+    coordinates=keplerian_elements.to_cartesian(),
 )
 ```
 
 Orbits can be easily converted to a pandas DataFrame:
 ```python
-orbits.to_df()
-  orbit_id     object_id  mjd_tdb    a      e     i  raan    ap      M       origin     frame
-0        1  Test Orbit 1  59000.0  1.0  0.002  10.0  50.0  20.0   30.0  heliocenter  ecliptic
-1        2  Test Orbit 2  60000.0  3.0  0.000  30.0  32.0  94.0  159.0  heliocenter  ecliptic
+orbits.to_dataframe()
+ orbit_ids	object_ids	times.jd1	times.jd2	x	y	z	vx	vy	vz	...	cov_vy_y	cov_vy_z	cov_vy_vx	cov_vy_vy	cov_vz_x	cov_vz_y	cov_vz_z	cov_vz_vx	cov_vz_vy	cov_vz_vz
+0	1	Test Orbit 1	2459000.0	0.5	-0.166403	0.975273	0.133015	-0.016838	-0.003117	0.001921	...	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN
+1	2	Test Orbit 2	2460000.0	0.5	0.572777	-2.571820	-1.434457	0.009387	0.002900	-0.001452	...	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN
 ```
 
 Orbits can also be defined with uncertainties.
 ```python
+import numpy as np
 from astropy.time import Time
 from adam_core.coordinates import KeplerianCoordinates
+from adam_core.coordinates import Times
+from adam_core.coordinates import Origin
+from adam_core.coordinates import CoordinateCovariances
 from adam_core.orbits import Orbits
 
-keplerian_elements = KeplerianCoordinates(
-    times=Time(59000.0, scale="tdb", format="mjd"),
-    a=1.0,
-    e=0.002,
-    i=10.,
-    raan=50.0,
-    ap=20.0,
-    M=30.0,
-    sigma_a=0.002,
-    sigma_e=0.001,
-    sigma_i=0.01,
-    sigma_raan=0.01,
-    sigma_ap=0.1,
-    sigma_M=0.1,
+keplerian_elements = KeplerianCoordinates.from_kwargs(
+    times=Times.from_astropy(
+        Time([59000.0], scale="tdb", format="mjd")
+    ),
+    a=[1.0],
+    e=[0.002],
+    i=[10.],
+    raan=[50.0],
+    ap=[20.0],
+    M=[30.0],
+    covariances=CoordinateCovariances.from_sigmas(
+        np.array([[0.002, 0.001, 0.01, 0.01, 0.1, 0.1]])
+    ),
+    origin=Origin.from_kwargs(code=["SUN"]),
+    frame="ecliptic"
 )
 
-orbits = Orbits(
-    keplerian_elements,
+orbits = Orbits.from_kwargs(
     orbit_ids=["1"],
-    object_ids=["Test Orbit with Uncertainties"]
+    object_ids=["Test Orbit with Uncertainties"],
+    coordinates=keplerian_elements.to_cartesian(),
 )
-orbits.to_df(sigmas=True)
-  orbit_id                      object_id  mjd_tdb    a  ...  sigma_ap  sigma_M       origin     frame
-0        1  Test Orbit with Uncertainties  59000.0  1.0  ...       0.1      0.1  heliocenter  ecliptic
+orbits.to_dataframe(sigmas=True)
+ orbit_ids	object_ids	times.jd1	times.jd2	x	y	z	vx	vy	vz	...	cov_vy_y	cov_vy_z	cov_vy_vx	cov_vy_vy	cov_vz_x	cov_vz_y	cov_vz_z	cov_vz_vx	cov_vz_vy	cov_vz_vz
+0	1	Test Orbit with Uncertainties	2459000.0	0.5	-0.166403	0.975273	0.133015	-0.016838	-0.003117	0.001921	...	3.625729e-08	-1.059731e-08	-9.691716e-11	1.872922e-09	1.392222e-08	-1.759744e-09	-1.821839e-09	-7.865582e-11	2.237521e-10	3.971297e-11
 ```
 
 To query orbits from JPL Horizons:
@@ -114,56 +135,47 @@ orbits = query_sbdb(object_ids)
 Orbital elements can be accessed via the corresponding attribute. All conversions, including covariances, are done on demand and stored.
 
 ```python
-# Keplerian Elements
-orbits.keplerian
-
-# Cometary Elements
-orbits.cometary
-
 # Cartesian Elements
-orbits.cartesian
+orbits.coordinates
 
-# Spherical Elements
-orbits.spherical
+# To convert to other representations
+cometary_elements = orbits.coordinates.to_cometary()
+keplerian_elements = orbits.coordinates.to_keplerian()
+spherical_elements = orbits.coordinates.to_spherical()
 ```
 
-### Lower Level Classes
-These classes are designed more for developers interested in building codes derived from utilities
-in this package.
+### Propagator
+The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. By default,
+`adam_core` ships with PYOORB.
 
-#### Coordinates
-
+To propagate orbits with PYOORB (here we grab some orbits from Horizons first):
 ```python
+import numpy as np
 from astropy.time import Time
-from adam_core.coordinates import CartesianCoordinates, transform_coordinates
+from astropy import units as u
+from adam_core.orbits.query import query_horizons
+from adam_core.propagator import PYOORB
 
-# Instantiate a Cartesian coordinate
-time = Time(
-    [cartesian.mjd_tdb],
-    scale="tdb",
-    format="mjd",
-)
-cartesian_coordinates = CartesianCoordinates(
-    x=np.array([cartesian.x]),
-    y=np.array([cartesian.y]),
-    z=np.array([cartesian.z]),
-    vx=np.array([cartesian.vx]),
-    vy=np.array([cartesian.vy]),
-    vz=np.array([cartesian.vz]),
-    times=time,
-    origin="heliocenter",
-    frame="ecliptic",
-)
+# Get orbit to propagate
+initial_time = Time([60000.0], scale="tdb", format="mjd")
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_horizons(object_ids, initial_time)
 
-keplerian_coordinates = transform_coordinates(
-    cartesian_coordinates,
-    representation_out="keplerian",
-    frame_out="ecliptic"
-)
+# Make sure PYOORB is ready
+propagator = PYOORB()
 
-print(keplerian_coordinates)
+# Define propagation times
+times = initial_time + np.arange(0, 100) * u.d
+
+# Propagate orbits! This function supports multiprocessing for large
+# propagation jobs.
+propagated_orbits = propagator.propagate_orbits(
+    orbits,
+    times,
+    chunk_size=100,
+    num_jobs=1,
+)
 ```
-
 
 ## Package Structure
 

@@ -171,9 +171,7 @@ def query_horizons(
         )
         object_ids = vectors["targetname"].values
 
-        return Orbits.from_kwargs(
-            object_ids=object_ids, coordinates=coordinates.to_cartesian()
-        )
+        return Orbits.from_kwargs(object_ids=object_ids, coordinates=coordinates)
 
     elif coordinate_type == "keplerian":
         elements = _get_horizons_elements(

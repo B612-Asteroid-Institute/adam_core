@@ -3,6 +3,7 @@ from .cartesian import CARTESIAN_COLS, CARTESIAN_UNITS, CartesianCoordinates
 from .cometary import COMETARY_COLS, COMETARY_UNITS, CometaryCoordinates
 from .conversions import convert_coordinates
 from .covariances import (
+    CoordinateCovariances,
     covariances_from_df,
     covariances_to_df,
     covariances_to_table,

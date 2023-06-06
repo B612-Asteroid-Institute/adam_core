@@ -1,4 +1,4 @@
-name: docker - Build, Lint, and Test
+name: docker - Build Lint and Test
 
 on:
   push:
@@ -17,8 +17,12 @@ jobs:
       - uses: jpribyl/action-docker-layer-caching@v0.1.0
         # Ignore the failure of a step and avoid terminating the job.
         continue-on-error: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          install: true
       - name: Build and Install
-        run: docker build -t adam-core:$IMAGE_TAG .
+        run: docker build --load -t adam-core:$IMAGE_TAG .
       - name: Lint
         run:  docker run -i adam-core:$IMAGE_TAG pre-commit run --all-files
       - name: Test
