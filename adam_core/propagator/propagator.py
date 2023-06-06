@@ -5,9 +5,10 @@ from itertools import repeat
 from typing import Optional
 
 from astropy.time import Time
+from quivr.concat import concatenate
 
 from ..orbits import Orbits
-from ..utils.indexable import concatenate
+from .utils import _iterate_chunks, sort_propagated_orbits
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,9 @@ class Propagator(ABC):
             Propagated orbits.
         """
         if num_jobs is None or num_jobs > 1:
-            orbits_split = list(orbits.yield_chunks(chunk_size))
+            orbits_split = [
+                orbit_chunk for orbit_chunk in _iterate_chunks(orbits, chunk_size)
+            ]
 
             p = mp.Pool(
                 processes=num_jobs,
@@ -93,9 +96,7 @@ class Propagator(ABC):
         else:
             propagated = self._propagate_orbits(orbits, times)
 
-        propagated.sort_values(
-            by=["orbit_ids", "times"], ascending=[True, True], inplace=True
-        )
+        propagated = sort_propagated_orbits(propagated)
 
         return propagated
 
@@ -144,7 +145,9 @@ class Propagator(ABC):
         TODO: Add an observers class
         """
         if num_jobs is None or num_jobs > 1:
-            orbits_split = list(orbits.yield_chunks(chunk_size))
+            orbits_split = [
+                orbit_chunk for orbit_chunk in _iterate_chunks(orbits, chunk_size)
+            ]
 
             p = mp.Pool(
                 processes=num_jobs,

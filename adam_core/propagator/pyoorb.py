@@ -6,12 +6,14 @@ except ImportError:
 import enum
 import os
 import warnings
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from astropy.time import Time
 
 from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.origin import Origin
+from ..coordinates.times import Times
 from ..orbits.orbits import Orbits
 from .propagator import Propagator
 
@@ -51,8 +53,10 @@ class PYOORB(Propagator):
                         os.environ["CONDA_PREFIX"], "share/openorb"
                     )
 
+            oorb_data = os.environ["OORB_DATA"]
+
             # Prepare pyoorb
-            ephfile = os.path.join(os.getenv("OORB_DATA"), self.ephemeris_file)
+            ephfile = os.path.join(oorb_data, self.ephemeris_file)
             err = oo.pyoorb.oorb_init(ephfile)
             if err == 0:
                 os.environ[env_var] = "True"
@@ -67,8 +71,8 @@ class PYOORB(Propagator):
         t0: np.ndarray,
         orbit_type: OpenOrbOrbitType,
         time_scale: OpenOrbTimescale,
-        magnitude: Optional[float] = None,
-        slope: Optional[float] = None,
+        magnitude: Optional[Union[float, np.ndarray]] = None,
+        slope: Optional[Union[float, np.ndarray]] = None,
     ) -> np.ndarray:
         """
         Convert an array of orbits into the format expected by PYOORB.
@@ -203,8 +207,8 @@ class PYOORB(Propagator):
         """
         # Convert orbits into PYOORB format
         orbits_pyoorb = self._configure_orbits(
-            orbits.cartesian.values.filled(),
-            orbits.cartesian.times.tt.mjd,
+            orbits.coordinates.values,
+            orbits.coordinates.times.to_astropy().tt.mjd,
             OpenOrbOrbitType.CARTESIAN,
             OpenOrbTimescale.TT,
             magnitude=None,
@@ -252,29 +256,29 @@ class PYOORB(Propagator):
         times_ = times_.tdb
 
         if orbits.object_ids is not None:
-            object_ids = orbits.object_ids[orbit_ids_]
+            object_ids = orbits.object_ids.to_numpy(zero_copy_only=False)[orbit_ids_]
         else:
             object_ids = None
 
         if orbits.orbit_ids is not None:
-            orbit_ids = orbits.orbit_ids[orbit_ids_]
+            orbit_ids = orbits.orbit_ids.to_numpy(zero_copy_only=False)[orbit_ids_]
         else:
             orbit_ids = None
 
-        propagated_orbits = Orbits(
-            CartesianCoordinates(
+        propagated_orbits = Orbits.from_kwargs(
+            orbit_ids=orbit_ids,
+            object_ids=object_ids,
+            coordinates=CartesianCoordinates.from_kwargs(
                 x=x,
                 y=y,
                 z=z,
                 vx=vx,
                 vy=vy,
                 vz=vz,
-                times=times_,
-                origin="heliocenter",
+                times=Times.from_astropy(times_),
+                origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
                 frame="ecliptic",
             ),
-            orbit_ids=orbit_ids,
-            object_ids=object_ids,
         )
         return propagated_orbits
 
