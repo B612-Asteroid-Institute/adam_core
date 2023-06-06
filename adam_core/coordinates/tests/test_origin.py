@@ -5,19 +5,46 @@ from ..origin import Origin
 
 
 def test_origin_eq__():
+    origin = Origin.from_kwargs(code=["SUN", "EARTH", "SUN"])
+
     # Test equality with string
-    origin = Origin.from_kwargs(code=["SUN", "SUN", "SUN"])
-    assert origin == "SUN"
-    origin = Origin.from_kwargs(code=["SUN", "EARTH", "MARS"])
-    assert origin != "ecliptic"
+    np.testing.assert_equal(origin == "SUN", np.array([True, False, True]))
+    np.testing.assert_equal(origin != "SUN", np.array([False, True, False]))
 
     # Test equality with numpy array
-    assert origin == np.array(["SUN", "EARTH", "MARS"])
-    assert origin != np.array(["SUN", "SUN", "MARS"])
+    np.testing.assert_equal(
+        origin == np.array(["SUN", "EARTH", "SUN"]), np.array([True, True, True])
+    )
+    np.testing.assert_equal(
+        origin == np.array(["SUN", "EARTH", "EARTH"]), np.array([True, True, False])
+    )
+    np.testing.assert_equal(
+        origin != np.array(["SUN", "EARTH", "EARTH"]), np.array([False, False, True])
+    )
+    np.testing.assert_equal(
+        origin == np.array(["SUN", "SUN", "SUN"]), np.array([True, False, True])
+    )
+    np.testing.assert_equal(
+        origin != np.array(["SUN", "SUN", "SUN"]), np.array([False, True, False])
+    )
 
     # Test equality with Origin
-    assert origin == Origin.from_kwargs(code=["SUN", "EARTH", "MARS"])
-    assert origin != Origin.from_kwargs(code=["SUN", "SUN", "MARS"])
+    np.testing.assert_equal(
+        origin == Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+        np.array([True, False, True]),
+    )
+    np.testing.assert_equal(
+        origin != Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+        np.array([False, True, False]),
+    )
+    np.testing.assert_equal(
+        origin == Origin.from_kwargs(code=["SUN", "EARTH", "SUN"]),
+        np.array([True, True, True]),
+    )
+    np.testing.assert_equal(
+        origin != Origin.from_kwargs(code=["SUN", "EARTH", "SUN"]),
+        np.array([False, False, False]),
+    )
 
 
 def test_origin_eq__raises():

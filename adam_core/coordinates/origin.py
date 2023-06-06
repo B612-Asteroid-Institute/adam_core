@@ -4,7 +4,6 @@ from typing import Optional
 
 import numpy as np
 import pyarrow as pa
-import pyarrow.compute as pc
 from quivr import StringField, Table
 
 from ..constants import KM_P_AU, S_P_DAY
@@ -70,13 +69,19 @@ class Origin(Table):
     def with_table(self, table: pa.Table) -> "Origin":
         return super().with_table(table, mu=self.mu)
 
-    def __eq__(self, other: object) -> bool:
+    def __eq__(self, other: object) -> np.ndarray:
         if isinstance(other, (str, np.ndarray)):
-            return pc.all(pc.equal(self.code, other)).as_py()
+            codes = self.code.to_numpy(zero_copy_only=False)
+            return codes == other
         elif isinstance(other, Origin):
-            return pc.all(pc.equal(self.code, other.code)).as_py()
+            codes = self.code.to_numpy(zero_copy_only=False)
+            other_codes = other.code.to_numpy(zero_copy_only=False)
+            return codes == other_codes
         else:
             raise TypeError(f"Cannot compare Origin to type: {type(other)}")
+
+    def __ne__(self, other: object) -> np.ndarray:
+        return ~self.__eq__(other)
 
     @property
     def mu(self):
