@@ -6,7 +6,7 @@ import pandas as pd
 import pyarrow as pa
 from astropy import units as u
 from astropy.table import Table as AstropyTable
-from quivr import Column, Table
+from quivr import ListColumn, Table
 from scipy.stats import multivariate_normal
 
 from .jacobian import calc_jacobian
@@ -55,7 +55,12 @@ class CoordinateCovariances(Table):
     #      to D dimensions, so (N, D, D) instead of (N, 6, 6). We would be
     #      able to use this class for the covariance matrices of different
     #      measurments like projections (D = 4) and photometry (D = 1).
-    values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
+
+    # This is temporary while we await the implementation of
+    # https://github.com/apache/arrow/issues/35599
+    values = ListColumn(pa.float64(), list_size=36)
+    # When fixed, we should revert to:
+    # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
     @property
     def sigmas(self):
@@ -72,7 +77,13 @@ class CoordinateCovariances(Table):
         covariances : `numpy.ndarray` (N, 6, 6)
             Covariance matrices for N coordinates in 6 dimensions.
         """
-        return self.values.combine_chunks().to_numpy_ndarray()
+        # return self.values.combine_chunks().to_numpy_ndarray()
+        cov = np.stack(self.values.to_numpy(zero_copy_only=False))
+        if np.all(cov == None):  # noqa: E711
+            return np.full((len(self), 6, 6), np.nan)
+        else:
+            cov = np.stack(cov).reshape(-1, 6, 6)
+        return cov
 
     @classmethod
     def from_matrix(cls, covariances: np.ndarray) -> "CoordinateCovariances":
@@ -89,8 +100,9 @@ class CoordinateCovariances(Table):
         covariances : `Covariances`
             Covariance matrices for N coordinates in 6 dimensions.
         """
-        cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
-        return cls.from_arrays([cov])
+        # cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
+        cov = covariances.reshape(-1, 36)
+        return cls.from_kwargs(values=list(cov))
 
     @classmethod
     def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
