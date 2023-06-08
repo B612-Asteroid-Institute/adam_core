@@ -9,14 +9,14 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.times import Times
 from ..utils.spice import get_perturber_state, setup_SPICE
-from .observers import OBSERVATORY_GEODETICS, ObservatoryCodes
+from .observers import OBSERVATORY_CODES, OBSERVATORY_GEODETICS
 
 R_EARTH = c.R_EARTH
 OMEGA_EARTH = 2 * np.pi / 0.997269675925926
 
 
 def get_observer_state(
-    code: ObservatoryCodes,
+    code: str,
     times: Time,
     frame: Literal["ecliptic", "equatorial"] = "ecliptic",
     origin: OriginCodes = OriginCodes.SUN,
@@ -34,7 +34,7 @@ def get_observer_state(
 
     Parameters
     ----------
-    code : ObservatoryCodes
+    code : str
         MPC observatory code for which to find the states.
     observation_times : `~astropy.time.core.Time` (N)
         Epochs for which to find the observatory locations.
@@ -49,6 +49,10 @@ def get_observer_state(
         The state vectors of the observer in the desired frame
         and measured from the desired origin.
     """
+    if code not in OBSERVATORY_CODES:
+        err = f"{code} is not a valid MPC observatory code."
+        raise ValueError(err)
+
     if frame == "ecliptic":
         frame_spice = "ECLIPJ2000"
     elif frame == "equatorial":
@@ -61,11 +65,11 @@ def get_observer_state(
     setup_SPICE()
 
     # Get observatory geodetic information
-    geodetics = OBSERVATORY_GEODETICS[code.value].values[0]
+    geodetics = OBSERVATORY_GEODETICS.select("code", code).values[0]
 
     if np.any(np.isnan(geodetics)):
         err = (
-            f"{code.name} is missing information on Earth-based geodetic coordinates. The MPC Obs Code\n"
+            f"{code} is missing information on Earth-based geodetic coordinates. The MPC Obs Code\n"
             "file may be missing this information or the observer is a space-based observatory.\n"
             "Space observatories are currently not supported.\n"
         )

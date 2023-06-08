@@ -1,6 +1,3 @@
-from enum import Enum
-from typing import List
-
 import numpy as np
 import pandas as pd
 from mpc_obscodes import mpc_obscodes
@@ -34,7 +31,4 @@ OBSERVATORY_GEODETICS = ObservatoryGeodetics.from_kwargs(
     name=OBSCODES["Name"].values,
 )
 
-codes: List[str] = [
-    code for code in OBSERVATORY_GEODETICS.code.to_numpy(zero_copy_only=False)
-]
-ObservatoryCodes = Enum("ObservatoryCodes", codes)  # type: ignore
+OBSERVATORY_CODES = set(OBSERVATORY_GEODETICS.code.to_numpy(zero_copy_only=False))
