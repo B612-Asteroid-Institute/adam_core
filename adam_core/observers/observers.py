@@ -14,12 +14,17 @@ class ObservatoryGeodetics(Table):
     sin_phi = Float64Column()
     name = StringColumn()
 
+    @property
     def values(self):
-        return np.array(self.table.select("longitude", "cos_phi", "sin_phi")).T
+        return np.array(self.table.select(("longitude", "cos_phi", "sin_phi"))).T
 
 
 # Read MPC extended observatory codes file
-OBSCODES = pd.read_json(mpc_obscodes, orient="index")
+OBSCODES = pd.read_json(
+    mpc_obscodes,
+    orient="index",
+    dtype={"Longitude": float, "cos": float, "sin": float, "Name": str},
+)
 OBSCODES.reset_index(inplace=True, names=["code"])
 OBSERVATORY_GEODETICS = ObservatoryGeodetics.from_kwargs(
     code=OBSCODES["code"].values,

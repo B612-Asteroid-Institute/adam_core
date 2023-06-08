@@ -76,7 +76,7 @@ def get_perturber_state(
 
     Returns
     -------
-    states : CartesianCoordinates
+    states : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         The state vectors of the perturber in the desired frame
         and measured from the desired origin.
     """
