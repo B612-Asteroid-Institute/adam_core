@@ -5,6 +5,10 @@ import numpy as np
 import spiceypy as sp
 from astropy.time import Time
 from naif_de440 import de440
+from naif_earth_itrf93 import earth_itrf93
+from naif_eop_high_prec import eop_high_prec
+from naif_eop_historical import eop_historical
+from naif_eop_predict import eop_predict
 from naif_leapseconds import leapseconds
 
 from ..constants import KM_P_AU, S_P_DAY
@@ -12,8 +16,17 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.times import Times
 
+DEFAULT_KERNELS = [
+    leapseconds,
+    de440,
+    eop_predict,
+    eop_historical,
+    eop_high_prec,
+    earth_itrf93,
+]
 
-def setup_SPICE(kernels: List[str] = [leapseconds, de440], force: bool = False):
+
+def setup_SPICE(kernels: List[str] = DEFAULT_KERNELS, force: bool = False):
     """
     Load SPICE kernels.
 
@@ -44,7 +57,7 @@ def setup_SPICE(kernels: List[str] = [leapseconds, de440], force: bool = False):
 def get_perturber_state(
     perturber: OriginCodes,
     times: Time,
-    frame: Literal["ecliptic", "equatorial"],
+    frame: Literal["ecliptic", "equatorial"] = "ecliptic",
     origin: OriginCodes = OriginCodes.SUN,
 ) -> CartesianCoordinates:
     """
