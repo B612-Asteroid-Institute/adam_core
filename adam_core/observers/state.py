@@ -75,53 +75,63 @@ def get_observer_state(
         )
         raise ValueError(err)
 
-    # Get observer location on Earth
-    longitude = geodetics[0]
-    cos_phi = geodetics[1]
-    sin_phi = geodetics[2]
-    sin_longitude = np.sin(np.radians(longitude))
-    cos_longitude = np.cos(np.radians(longitude))
-
-    # Calculate pointing vector from geocenter to observatory
-    o_hat_ITRF93 = np.array([cos_longitude * cos_phi, sin_longitude * cos_phi, sin_phi])
-
-    # Multiply pointing vector with Earth radius to get actual vector
-    o_vec_ITRF93 = np.dot(R_EARTH, o_hat_ITRF93)
-
     # Grab Earth state vector
     state = get_perturber_state(OriginCodes.EARTH, times, frame=frame, origin=origin)
 
-    # Convert MJD epochs in TDB to ET in TDB
-    epochs_tdb = times.tdb
-    epochs_et = np.array([sp.str2et("JD {:.16f} TDB".format(i)) for i in epochs_tdb.jd])
+    # If the code is 500 (geocenter), we can just return the Earth state vector
+    if code == "500":
+        return state
 
-    # Grab rotaton matrices from ITRF93 to ecliptic J2000
-    # The ITRF93 high accuracy Earth rotation model takes into account:
-    # Precession:  1976 IAU model from Lieske.
-    # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
-    # True sidereal time using accurate values of TAI-UT1
-    # Polar motion
-    rotation_matrices = np.array(
-        [sp.pxform("ITRF93", frame_spice, i) for i in epochs_et]
-    )
+    # If not then we need to add a topocentric correction
+    else:
+        # Get observer location on Earth
+        longitude = geodetics[0]
+        cos_phi = geodetics[1]
+        sin_phi = geodetics[2]
+        sin_longitude = np.sin(np.radians(longitude))
+        cos_longitude = np.cos(np.radians(longitude))
 
-    # Add o_vec + r_geo to get r_obs
-    r_obs = np.array(
-        [
-            rg + rm @ o_vec_ITRF93
-            for rg, rm in zip(state.values[:, :3], rotation_matrices)
-        ]
-    )
+        # Calculate pointing vector from geocenter to observatory
+        o_hat_ITRF93 = np.array(
+            [cos_longitude * cos_phi, sin_longitude * cos_phi, sin_phi]
+        )
 
-    # Calculate velocity
-    v_obs = np.array(
-        [
-            vg
-            + rm
-            @ (-OMEGA_EARTH * R_EARTH * np.cross(o_hat_ITRF93, np.array([0, 0, 1])))
-            for vg, rm in zip(state.values[:, 3:], rotation_matrices)
-        ]
-    )
+        # Multiply pointing vector with Earth radius to get actual vector
+        o_vec_ITRF93 = np.dot(R_EARTH, o_hat_ITRF93)
+
+        # Convert MJD epochs in TDB to ET in TDB
+        epochs_tdb = times.tdb
+        epochs_et = np.array(
+            [sp.str2et("JD {:.16f} TDB".format(i)) for i in epochs_tdb.jd]
+        )
+
+        # Grab rotaton matrices from ITRF93 to ecliptic J2000
+        # The ITRF93 high accuracy Earth rotation model takes into account:
+        # Precession:  1976 IAU model from Lieske.
+        # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
+        # True sidereal time using accurate values of TAI-UT1
+        # Polar motion
+        rotation_matrices = np.array(
+            [sp.pxform("ITRF93", frame_spice, i) for i in epochs_et]
+        )
+
+        # Add o_vec + r_geo to get r_obs
+        r_obs = np.array(
+            [
+                rg + rm @ o_vec_ITRF93
+                for rg, rm in zip(state.values[:, :3], rotation_matrices)
+            ]
+        )
+
+        # Calculate velocity
+        v_obs = np.array(
+            [
+                vg
+                + rm
+                @ (-OMEGA_EARTH * R_EARTH * np.cross(o_hat_ITRF93, np.array([0, 0, 1])))
+                for vg, rm in zip(state.values[:, 3:], rotation_matrices)
+            ]
+        )
 
     return CartesianCoordinates.from_kwargs(
         times=Times.from_astropy(times),
