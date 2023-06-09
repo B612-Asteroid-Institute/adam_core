@@ -92,14 +92,18 @@ def get_perturber_state(
     setup_SPICE()
 
     # Convert MJD epochs in TDB to ET in TDB
-    epochs_tdb = times.tdb
-    epochs_et = np.array([sp.str2et("JD {:.16f} TDB".format(i)) for i in epochs_tdb.jd])
+    epochs_tdb = times.tdb.jd
+    unique_epochs_tdb = np.unique(epochs_tdb)
+    unique_epochs_et = np.array(
+        [sp.str2et("JD {:.16f} TDB".format(i)) for i in unique_epochs_tdb]
+    )
 
     # Get position of the body in km and km/s in the desired frame and measured from the desired origin
-    states = np.empty((len(epochs_et), 6), dtype=np.float64)
-    for i, epoch in enumerate(epochs_et):
+    states = np.empty((len(epochs_tdb), 6), dtype=np.float64)
+    for i, epoch in enumerate(unique_epochs_et):
+        mask = np.where(epochs_tdb == unique_epochs_tdb[i])[0]
         state, lt = sp.spkez(perturber.value, epoch, frame_spice, "NONE", origin.value)
-        states[i, :] = state
+        states[mask, :] = state
 
     # Convert to AU and AU per day
     states = states / KM_P_AU
