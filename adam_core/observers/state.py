@@ -13,6 +13,7 @@ from .observers import OBSERVATORY_CODES, OBSERVATORY_GEODETICS
 
 R_EARTH = c.R_EARTH
 OMEGA_EARTH = 2 * np.pi / 0.997269675925926
+Z_AXIS = np.array([0, 0, 1])
 
 
 def get_observer_state(
@@ -75,7 +76,7 @@ def get_observer_state(
         )
         raise ValueError(err)
 
-    # Grab Earth state vector
+    # Grab Earth state vector (this function handles duplicate times)
     state = get_perturber_state(OriginCodes.EARTH, times, frame=frame, origin=origin)
 
     # If the code is 500 (geocenter), we can just return the Earth state vector
@@ -100,38 +101,37 @@ def get_observer_state(
         o_vec_ITRF93 = np.dot(R_EARTH, o_hat_ITRF93)
 
         # Convert MJD epochs in TDB to ET in TDB
-        epochs_tdb = times.tdb
-        epochs_et = np.array(
-            [sp.str2et("JD {:.16f} TDB".format(i)) for i in epochs_tdb.jd]
+        epochs_tdb = times.tdb.jd
+        unique_epochs_tdb = np.unique(epochs_tdb)
+        unique_epochs_et = np.array(
+            [sp.str2et("JD {:.16f} TDB".format(i)) for i in unique_epochs_tdb]
         )
 
-        # Grab rotaton matrices from ITRF93 to ecliptic J2000
-        # The ITRF93 high accuracy Earth rotation model takes into account:
-        # Precession:  1976 IAU model from Lieske.
-        # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
-        # True sidereal time using accurate values of TAI-UT1
-        # Polar motion
-        rotation_matrices = np.array(
-            [sp.pxform("ITRF93", frame_spice, i) for i in epochs_et]
-        )
+        N = len(epochs_tdb)
+        r_obs = np.empty((N, 3), dtype=np.float64)
+        v_obs = np.empty((N, 3), dtype=np.float64)
+        r_geo = state.r
+        v_geo = state.v
+        for i, epoch in enumerate(unique_epochs_et):
+            # Grab rotaton matrices from ITRF93 to ecliptic J2000
+            # The ITRF93 high accuracy Earth rotation model takes into account:
+            # Precession:  1976 IAU model from Lieske.
+            # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
+            # True sidereal time using accurate values of TAI-UT1
+            # Polar motion
+            rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch)
 
-        # Add o_vec + r_geo to get r_obs
-        r_obs = np.array(
-            [
-                rg + rm @ o_vec_ITRF93
-                for rg, rm in zip(state.values[:, :3], rotation_matrices)
-            ]
-        )
+            # Find indices of epochs that match the current unique epoch
+            mask = np.where(epochs_tdb == unique_epochs_tdb[i])[0]
 
-        # Calculate velocity
-        v_obs = np.array(
-            [
-                vg
-                + rm
-                @ (-OMEGA_EARTH * R_EARTH * np.cross(o_hat_ITRF93, np.array([0, 0, 1])))
-                for vg, rm in zip(state.values[:, 3:], rotation_matrices)
-            ]
-        )
+            # Add o_vec + r_geo to get r_obs (thank you numpy broadcasting)
+            r_obs[mask] = r_geo[mask] + rotation_matrix @ o_vec_ITRF93
+
+            # Calculate the velocity (thank you numpy broadcasting)
+            rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
+            v_obs[mask] = v_geo[mask] + rotation_matrix @ (
+                -OMEGA_EARTH * R_EARTH * rotation_direction
+            )
 
     return CartesianCoordinates.from_kwargs(
         times=Times.from_astropy(times),
