@@ -100,29 +100,28 @@ def get_observer_state(
         # Multiply pointing vector with Earth radius to get actual vector
         o_vec_ITRF93 = np.dot(R_EARTH, o_hat_ITRF93)
 
-        # Convert MJD epochs in TDB to ET in TDB
         epochs_tdb = times.tdb.jd
         unique_epochs_tdb = np.unique(epochs_tdb)
-        unique_epochs_et = np.array(
-            [sp.str2et("JD {:.16f} TDB".format(i)) for i in unique_epochs_tdb]
-        )
 
         N = len(epochs_tdb)
         r_obs = np.empty((N, 3), dtype=np.float64)
         v_obs = np.empty((N, 3), dtype=np.float64)
         r_geo = state.r
         v_geo = state.v
-        for i, epoch in enumerate(unique_epochs_et):
+        for epoch_tdb in unique_epochs_tdb:
+            # Convert MJD epoch in TDB to ET in TDB
+            epoch_et = sp.str2et("JD {:.16f} TDB".format(epoch_tdb))
             # Grab rotaton matrices from ITRF93 to ecliptic J2000
             # The ITRF93 high accuracy Earth rotation model takes into account:
             # Precession:  1976 IAU model from Lieske.
             # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
             # True sidereal time using accurate values of TAI-UT1
             # Polar motion
-            rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch)
+
+            rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch_et)
 
             # Find indices of epochs that match the current unique epoch
-            mask = np.where(epochs_tdb == unique_epochs_tdb[i])[0]
+            mask = np.where(epochs_tdb == epoch_tdb)[0]
 
             # Add o_vec + r_geo to get r_obs (thank you numpy broadcasting)
             r_obs[mask] = r_geo[mask] + rotation_matrix @ o_vec_ITRF93
