@@ -31,4 +31,6 @@ OBSERVATORY_GEODETICS = ObservatoryGeodetics.from_kwargs(
     name=OBSCODES["Name"].values,
 )
 
-OBSERVATORY_CODES = set(OBSERVATORY_GEODETICS.code.to_numpy(zero_copy_only=False))
+OBSERVATORY_CODES = {
+    x for x in OBSERVATORY_GEODETICS.code.to_numpy(zero_copy_only=False)
+}
