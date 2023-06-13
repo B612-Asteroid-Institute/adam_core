@@ -28,7 +28,7 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
     orbits : `~adam_core.orbits.orbits.Orbits`
         Orbits object containing the sample orbits.
     """
-    orbits_file = files("adam_core.utils.helpers.data").joinpath("sample_orbits.csv")
+    orbits_file = files("adam_core.utils.helpers.data").joinpath("orbits.csv")
     df = pd.read_csv(orbits_file, index_col=False, float_precision="round_trip")
     df["orbit_ids"] = np.array([None for _ in range(len(df))], dtype=object)
 
