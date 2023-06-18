@@ -1,3 +1,25 @@
+[project]
+name = "adam_core"
+version = 0.1.0
+authors = [
+  { name="Kathleen Kiker", email="kathleen@b612foundation.org" },
+  { name="Alec Koumjian", email="alec@b612foundation.org" },
+  { name="Joachim Moeyens", email="moeyensj@uw.edu" },
+  { name="Spencer Nelson", email="spencer@b612foundation.org" },
+  { name="Nate Tellis", email="nate@b612foundation.org" }
+]
+description = "Core libraries for the ADAM platform"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/b612-asteroid-institute/adam_core"
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
