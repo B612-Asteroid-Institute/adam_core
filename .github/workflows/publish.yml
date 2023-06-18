@@ -1,0 +1,33 @@
+name: Publish a release to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_pypi:
+        type: boolean
+        default: false
+        description: "Publish to the test PyPI instance, https://test.pypi.org/"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.11"
+    - name: Build Source Distribution and Wheel
+      run: python -m build --sdist --wheel --outdir dist/ .
+    - name: Publish adam_core to Test PyPI
+      if: ${{ inputs.test_pypi }}
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        repository-url: https://test.pypi.org/legacy/
+    - name: Publish adam_core to PyPI
+      if: ${{ ! inputs.test_pypi }}
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
