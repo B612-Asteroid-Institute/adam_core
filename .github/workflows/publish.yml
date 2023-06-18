@@ -18,6 +18,8 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.11"
+    - name: Install build
+      run: python -m pip install build
     - name: Build Source Distribution and Wheel
       run: python -m build --sdist --wheel --outdir dist/ .
     - name: Publish adam_core to Test PyPI
