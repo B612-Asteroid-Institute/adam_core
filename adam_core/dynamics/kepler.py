@@ -6,6 +6,7 @@ from jax import config, jit, lax
 from .barker import solve_barker
 
 config.update("jax_enable_x64", True)
+config.update("jax_platform_name", "cpu")
 
 
 @jit
