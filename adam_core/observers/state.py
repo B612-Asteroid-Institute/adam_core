@@ -8,7 +8,7 @@ from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.times import Times
-from ..utils.spice import get_perturber_state, setup_SPICE
+from ..utils.spice import _jd_tdb_to_et, get_perturber_state, setup_SPICE
 from .observers import OBSERVATORY_CODES, OBSERVATORY_GEODETICS
 
 R_EARTH = c.R_EARTH
@@ -110,7 +110,7 @@ def get_observer_state(
         v_geo = state.v
         for epoch_tdb in unique_epochs_tdb:
             # Convert MJD epoch in TDB to ET in TDB
-            epoch_et = sp.str2et("JD {:.16f} TDB".format(epoch_tdb))
+            epoch_et = _jd_tdb_to_et(epoch_tdb)
             # Grab rotaton matrices from ITRF93 to ecliptic J2000
             # The ITRF93 high accuracy Earth rotation model takes into account:
             # Precession:  1976 IAU model from Lieske.

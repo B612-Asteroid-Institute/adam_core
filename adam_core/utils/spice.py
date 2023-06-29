@@ -26,6 +26,32 @@ DEFAULT_KERNELS = [
 ]
 
 
+J2000_TDB_JD = 2451545.0
+
+
+def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
+    """
+    Convert an astropy Time object to an ephemeris time (ET) in seconds.
+
+    Parameters
+    ----------
+    jd_tdb : `~numpy.ndarray` (N)
+        Times in JD TDB.
+
+    Returns
+    -------
+    et : `~numpy.ndarray` (N)
+        Times in ET in seconds.
+    """
+    # Convert to days since J2000 (noon on January 1, 2000)
+    days_since_j2000 = jd_tdb - J2000_TDB_JD
+
+    # Convert to seconds since J2000
+    # (SPICE format)
+    et = days_since_j2000 * S_P_DAY
+    return et
+
+
 def setup_SPICE(kernels: List[str] = DEFAULT_KERNELS, force: bool = False):
     """
     Load SPICE kernels.
@@ -94,9 +120,7 @@ def get_perturber_state(
     # Convert MJD epochs in TDB to ET in TDB
     epochs_tdb = times.tdb.jd
     unique_epochs_tdb = np.unique(epochs_tdb)
-    unique_epochs_et = np.array(
-        [sp.str2et("JD {:.16f} TDB".format(i)) for i in unique_epochs_tdb]
-    )
+    unique_epochs_et = _jd_tdb_to_et(unique_epochs_tdb)
 
     # Get position of the body in km and km/s in the desired frame and measured from the desired origin
     states = np.empty((len(epochs_tdb), 6), dtype=np.float64)
