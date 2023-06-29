@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 from mpc_obscodes import mpc_obscodes
 from quivr import Float64Column, StringColumn, Table
@@ -10,10 +9,6 @@ class ObservatoryGeodetics(Table):
     cos_phi = Float64Column()
     sin_phi = Float64Column()
     name = StringColumn()
-
-    @property
-    def values(self):
-        return np.array(self.table.select(("longitude", "cos_phi", "sin_phi"))).T
 
 
 # Read MPC extended observatory codes file

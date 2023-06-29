@@ -2,6 +2,8 @@ import os
 
 import numpy as np
 import pandas as pd
+import pytest
+from astropy.time import Time
 
 from ...constants import KM_P_AU, S_P_DAY
 from ...coordinates import Residuals
@@ -212,3 +214,14 @@ def test_get_observer_state_500():
         np.testing.assert_array_less(
             v_offset, 0.01
         )  # Velocities agree to within 0.01 mm/s
+
+
+def test_get_observer_state_raises():
+    # Test that when we ask for a space-based observatory we raise an error
+    code = "C51"
+    with pytest.raises(ValueError):
+        # Get the observer state using adam_core
+        get_observer_state(
+            code,
+            Time([59000, 59001], format="mjd", scale="tdb"),
+        )

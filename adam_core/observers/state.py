@@ -66,9 +66,14 @@ def get_observer_state(
     setup_SPICE()
 
     # Get observatory geodetic information
-    geodetics = OBSERVATORY_GEODETICS.select("code", code).values[0]
+    geodetics = OBSERVATORY_GEODETICS.select("code", code).table.to_pylist()[0]
 
-    if np.any(np.isnan(geodetics)):
+    # Unpack geodetic information
+    longitude = geodetics["longitude"]
+    cos_phi = geodetics["cos_phi"]
+    sin_phi = geodetics["sin_phi"]
+
+    if np.any(np.isnan([longitude, cos_phi, sin_phi])):
         err = (
             f"{code} is missing information on Earth-based geodetic coordinates. The MPC Obs Code\n"
             "file may be missing this information or the observer is a space-based observatory.\n"
@@ -86,9 +91,6 @@ def get_observer_state(
     # If not then we need to add a topocentric correction
     else:
         # Get observer location on Earth
-        longitude = geodetics[0]
-        cos_phi = geodetics[1]
-        sin_phi = geodetics[2]
         sin_longitude = np.sin(np.radians(longitude))
         cos_longitude = np.cos(np.radians(longitude))
 
