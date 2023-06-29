@@ -48,8 +48,6 @@ def coords_to_dataframe(
     """
     # Gather times and put them into a dataframe
     df_times = coords.times.to_dataframe(flatten=True)
-    times_dict = {col: f"times.{col}" for col in df_times.columns}
-    df_times.rename(columns=times_dict, inplace=True)
 
     df_coords = pd.DataFrame(
         data=coords.values,
@@ -103,12 +101,13 @@ def coords_from_dataframe(
     -------
     coords : {CartesianCoordinates, CometaryCoordinates, KeplerianCoordinates, SphericalCoordinates}
         Coordinates read from the DataFrame.
+
+    Raises
+    ------
+    ValueError : If the DataFrame does not contain the expected columns for the times of the coordinates.
     """
-    times = Times.from_dataframe(
-        df[["times.jd1", "times.jd2"]].rename(
-            columns={"times.jd1": "jd1", "times.jd2": "jd2"}
-        )
-    )
+    times = Times.from_dataframe(df)
+
     origin = Origin.from_dataframe(
         df[["origin.code"]].rename(columns={"origin.code": "code"})
     )

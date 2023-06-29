@@ -5,6 +5,10 @@ import numpy as np
 import spiceypy as sp
 from astropy.time import Time
 from naif_de440 import de440
+from naif_earth_itrf93 import earth_itrf93
+from naif_eop_high_prec import eop_high_prec
+from naif_eop_historical import eop_historical
+from naif_eop_predict import eop_predict
 from naif_leapseconds import leapseconds
 
 from ..constants import KM_P_AU, S_P_DAY
@@ -12,8 +16,43 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.times import Times
 
+DEFAULT_KERNELS = [
+    leapseconds,
+    de440,
+    eop_predict,
+    eop_historical,
+    eop_high_prec,
+    earth_itrf93,
+]
 
-def setup_SPICE(kernels: List[str] = [leapseconds, de440], force: bool = False):
+
+J2000_TDB_JD = 2451545.0
+
+
+def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
+    """
+    Convert an astropy Time object to an ephemeris time (ET) in seconds.
+
+    Parameters
+    ----------
+    jd_tdb : `~numpy.ndarray` (N)
+        Times in JD TDB.
+
+    Returns
+    -------
+    et : `~numpy.ndarray` (N)
+        Times in ET in seconds.
+    """
+    # Convert to days since J2000 (noon on January 1, 2000)
+    days_since_j2000 = jd_tdb - J2000_TDB_JD
+
+    # Convert to seconds since J2000
+    # (SPICE format)
+    et = days_since_j2000 * S_P_DAY
+    return et
+
+
+def setup_SPICE(kernels: List[str] = DEFAULT_KERNELS, force: bool = False):
     """
     Load SPICE kernels.
 
@@ -44,7 +83,7 @@ def setup_SPICE(kernels: List[str] = [leapseconds, de440], force: bool = False):
 def get_perturber_state(
     perturber: OriginCodes,
     times: Time,
-    frame: Literal["ecliptic", "equatorial"],
+    frame: Literal["ecliptic", "equatorial"] = "ecliptic",
     origin: OriginCodes = OriginCodes.SUN,
 ) -> CartesianCoordinates:
     """
@@ -63,7 +102,7 @@ def get_perturber_state(
 
     Returns
     -------
-    states : CartesianCoordinates
+    states : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         The state vectors of the perturber in the desired frame
         and measured from the desired origin.
     """
@@ -79,14 +118,16 @@ def get_perturber_state(
     setup_SPICE()
 
     # Convert MJD epochs in TDB to ET in TDB
-    epochs_tdb = times.tdb
-    epochs_et = np.array([sp.str2et("JD {:.16f} TDB".format(i)) for i in epochs_tdb.jd])
+    epochs_tdb = times.tdb.jd
+    unique_epochs_tdb = np.unique(epochs_tdb)
+    unique_epochs_et = _jd_tdb_to_et(unique_epochs_tdb)
 
     # Get position of the body in km and km/s in the desired frame and measured from the desired origin
-    states = np.empty((len(epochs_et), 6), dtype=np.float64)
-    for i, epoch in enumerate(epochs_et):
+    states = np.empty((len(epochs_tdb), 6), dtype=np.float64)
+    for i, epoch in enumerate(unique_epochs_et):
+        mask = np.where(epochs_tdb == unique_epochs_tdb[i])[0]
         state, lt = sp.spkez(perturber.value, epoch, frame_spice, "NONE", origin.value)
-        states[i, :] = state
+        states[mask, :] = state
 
     # Convert to AU and AU per day
     states = states / KM_P_AU
