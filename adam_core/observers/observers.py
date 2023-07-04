@@ -76,6 +76,20 @@ class Observers(Table):
             coordinates=get_observer_state(code, times),
         )
 
+    def iterate_codes(self):
+        """
+        Iterate over the codes in the Observers table.
+
+        Yields
+        ------
+        code : str
+            The code for observer.
+        observers : `~adam_core.observers.observers.Observers`
+            The Observers table for this observer.
+        """
+        for code in self.code.unique():
+            yield code.as_py(), self.select("code", code)
+
     def to_dataframe(self) -> pd.DataFrame:
         """
         Convert the Observers table to a pandas DataFrame.
