@@ -1,3 +1,5 @@
+import warnings
+
 import pandas as pd
 from astropy.time import Time
 from mpc_obscodes import mpc_obscodes
@@ -16,12 +18,21 @@ class ObservatoryGeodetics(Table):
 
 
 # Read MPC extended observatory codes file
-OBSCODES = pd.read_json(
-    mpc_obscodes,
-    orient="index",
-    dtype={"Longitude": float, "cos": float, "sin": float, "Name": str},
-)
-OBSCODES.reset_index(inplace=True, names=["code"])
+# Ignore warning about pandas deprecation
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message="The behavior of 'to_datetime' with 'unit' when parsing strings is deprecated",
+    )
+    OBSCODES = pd.read_json(
+        mpc_obscodes,
+        orient="index",
+        dtype={"Longitude": float, "cos": float, "sin": float, "Name": str},
+        encoding_errors="strict",
+        precise_float=True,
+    )
+    OBSCODES.reset_index(inplace=True, names=["code"])
+
 OBSERVATORY_GEODETICS = ObservatoryGeodetics.from_kwargs(
     code=OBSCODES["code"].values,
     longitude=OBSCODES["Longitude"].values,
