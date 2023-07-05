@@ -12,7 +12,7 @@ from ..kepler import (
 RELATIVE_TOLERANCE = 0.0
 ABSOLUTE_TOLERANCE = 1e-15
 
-# --- Tests last updated: 2023-01-26
+# --- Tests last updated: 2023-06-14
 
 
 def test_calc_mean_anomaly_elliptical():
@@ -192,3 +192,29 @@ def test_solve_kepler_hyperbolic():
     npt.assert_allclose(
         nu_actual, nu_desired, rtol=RELATIVE_TOLERANCE, atol=ABSOLUTE_TOLERANCE
     )
+
+
+def test_solve_kepler_elliptical_orbits(orbital_elements):
+    # Test true anomaly calculations for elliptical orbits.
+    # Limit orbits to those with eccentricity < 1.0
+    orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
+    nu_desired = orbital_elements["nu"]
+    M = orbital_elements["M"].values
+    e = orbital_elements["e"].values
+
+    for e_i, M_i, nu_desired_i in zip(e, M, nu_desired):
+        nu_actual = np.degrees(solve_kepler(e_i, np.radians(M_i)))
+        npt.assert_allclose(nu_actual, nu_desired_i, rtol=0.0, atol=1e-12)
+
+
+def test_solve_kepler_hyperbolic_orbits(orbital_elements):
+    # Test true anomaly calculations for elliptical orbits.
+    # Limit orbits to those with eccentricity > 1.0
+    orbital_elements = orbital_elements[orbital_elements["e"] > 1.0]
+    nu_desired = orbital_elements["nu"]
+    M = orbital_elements["M"].values
+    e = orbital_elements["e"].values
+
+    for e_i, M_i, nu_desired_i in zip(e, M, nu_desired):
+        nu_actual = np.degrees(solve_kepler(e_i, np.radians(M_i)))
+        npt.assert_allclose(nu_actual, nu_desired_i, rtol=0.0, atol=1e-12)

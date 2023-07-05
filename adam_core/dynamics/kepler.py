@@ -6,6 +6,7 @@ from jax import config, jit, lax
 from .barker import solve_barker
 
 config.update("jax_enable_x64", True)
+config.update("jax_platform_name", "cpu")
 
 
 @jit
@@ -136,7 +137,7 @@ def solve_kepler(e: float, M: float, max_iter: int = 100, tol: float = 1e-15) ->
         # Newton-Raphson
         # Equation 3.45 in Curtis (2014) [1]
         f = e * jnp.sinh(F) - F - M
-        fp = e * jnp.cosh(F) * F - 1
+        fp = e * jnp.cosh(F) - 1
 
         ratio = f / fp
         F -= ratio
