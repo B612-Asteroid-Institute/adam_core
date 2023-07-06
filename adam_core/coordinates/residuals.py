@@ -96,7 +96,7 @@ class Residuals(Table):
             batch_coords,
             batch_covariances,
         ) = _batch_coords_and_covariances(
-            observed.values, observed.covariances.to_matrix()
+            observed.values, observed.covariance.to_matrix()
         )
 
         for indices, dimensions, coords, covariances in zip(

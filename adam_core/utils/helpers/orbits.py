@@ -30,7 +30,7 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
     """
     orbits_file = files("adam_core.utils.helpers.data").joinpath("orbits.csv")
     df = pd.read_csv(orbits_file, index_col=False, float_precision="round_trip")
-    df["orbit_ids"] = np.array([None for _ in range(len(df))], dtype=object)
+    df["orbit_id"] = np.array([None for _ in range(len(df))], dtype=object)
 
     if num_orbits is None:
         num_orbits = len(df)
@@ -74,8 +74,8 @@ def make_simple_orbits(num_orbits: int = 10) -> Orbits:
     for i, dim in enumerate(["a", "e", "i", "raan", "ap", "M"]):
         sigmas[:, i] = np.round(0.01 * data[dim], 4)
 
-    data["covariances"] = CoordinateCovariances.from_sigmas(sigmas)
-    data["times"] = Times.from_astropy(
+    data["covariance"] = CoordinateCovariances.from_sigmas(sigmas)
+    data["time"] = Times.from_astropy(
         Time(
             np.round(np.linspace(59000.0, 59000.0 + num_orbits, num_orbits), 3),
             scale="tdb",
@@ -91,7 +91,7 @@ def make_simple_orbits(num_orbits: int = 10) -> Orbits:
 
     orbits = Orbits.from_kwargs(
         coordinates=coords.to_cartesian(),
-        orbit_ids=orbit_ids,
-        object_ids=object_ids,
+        orbit_id=orbit_ids,
+        object_id=object_ids,
     )
     return orbits

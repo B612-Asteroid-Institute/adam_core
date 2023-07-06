@@ -49,24 +49,24 @@ def sort_propagated_orbits(propagated_orbits: Orbits) -> Orbits:
             propagated_orbits.object_ids,
             pc.add(
                 pc.struct_field(
-                    pc.struct_field(propagated_orbits.table["coordinates"], "times"),
+                    pc.struct_field(propagated_orbits.table["coordinates"], "time"),
                     "jd1",
                 ),
                 pc.struct_field(
-                    pc.struct_field(propagated_orbits.table["coordinates"], "times"),
+                    pc.struct_field(propagated_orbits.table["coordinates"], "time"),
                     "jd2",
                 ),
             ),
         ],
-        names=["orbit_ids", "object_ids", "times"],
+        names=["orbit_id", "object_id", "time"],
     )
 
     indices = pc.sort_indices(
         table,
         (
-            ("orbit_ids", "ascending"),
-            ("object_ids", "ascending"),
-            ("times", "ascending"),
+            ("orbit_id", "ascending"),
+            ("object_id", "ascending"),
+            ("time", "ascending"),
         ),
     )
     return propagated_orbits.take(indices)

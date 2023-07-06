@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 class Orbits(Table):
 
-    orbit_ids = StringColumn(nullable=True)
-    object_ids = StringColumn(nullable=True)
+    orbit_id = StringColumn(nullable=True)
+    object_id = StringColumn(nullable=True)
     coordinates = CartesianCoordinates.as_column(nullable=False)
 
     def to_dataframe(self, sigmas: bool = False, covariances: bool = True):
@@ -34,8 +34,8 @@ class Orbits(Table):
         """
         df = pd.DataFrame(
             {
-                "orbit_ids": self.orbit_ids.to_pandas(),
-                "object_ids": self.object_ids.to_pandas(),
+                "orbit_id": self.orbit_id.to_pandas(),
+                "object_id": self.object_id.to_pandas(),
             }
         )
         df = df.join(
@@ -62,9 +62,9 @@ class Orbits(Table):
         orbits : `~adam_core.orbits.orbits.Orbits`
             Orbits.
         """
-        orbit_ids = df["orbit_ids"].values
-        object_ids = df["object_ids"].values
+        orbit_id = df["orbit_id"].values
+        object_id = df["object_id"].values
         coordinates = CartesianCoordinates.from_dataframe(df, frame=frame)
         return cls.from_kwargs(
-            orbit_ids=orbit_ids, object_ids=object_ids, coordinates=coordinates
+            orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
         )

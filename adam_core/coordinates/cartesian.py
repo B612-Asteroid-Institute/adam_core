@@ -39,8 +39,8 @@ class CartesianCoordinates(Table):
     vx = Float64Column(nullable=True)
     vy = Float64Column(nullable=True)
     vz = Float64Column(nullable=True)
-    times = Times.as_column(nullable=True)
-    covariances = CoordinateCovariances.as_column(nullable=True)
+    time = Times.as_column(nullable=True)
+    covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column(nullable=False)
     frame = StringAttribute()
 
@@ -95,70 +95,70 @@ class CartesianCoordinates(Table):
         """
         1-sigma uncertainty in the X-coordinate.
         """
-        return self.covariances.sigmas[:, 0]
+        return self.covariance.sigmas[:, 0]
 
     @property
     def sigma_y(self) -> np.ndarray:
         """
         1-sigma uncertainty in the Y-coordinate.
         """
-        return self.covariances.sigmas[:, 1]
+        return self.covariance.sigmas[:, 1]
 
     @property
     def sigma_z(self) -> np.ndarray:
         """
         1-sigma uncertainty in the Z-coordinate.
         """
-        return self.covariances.sigmas[:, 2]
+        return self.covariance.sigmas[:, 2]
 
     @property
     def sigma_vx(self) -> np.ndarray:
         """
         1-sigma uncertainty in the X-coordinate velocity.
         """
-        return self.covariances.sigmas[:, 3]
+        return self.covariance.sigmas[:, 3]
 
     @property
     def sigma_vy(self) -> np.ndarray:
         """
         1-sigma uncertainty in the Y-coordinate velocity.
         """
-        return self.covariances.sigmas[:, 4]
+        return self.covariance.sigmas[:, 4]
 
     @property
     def sigma_vz(self) -> np.ndarray:
         """
         1-sigma uncertainty in the Z-coordinate velocity.
         """
-        return self.covariances.sigmas[:, 5]
+        return self.covariance.sigmas[:, 5]
 
     @property
     def sigma_r(self) -> np.ndarray:
         """
         1-sigma uncertainties in the position vector.
         """
-        return np.sqrt(self.covariances.sigmas[:, 0:3])
+        return np.sqrt(self.covariance.sigmas[:, 0:3])
 
     @property
     def sigma_r_mag(self) -> np.ndarray:
         """
         1-sigma uncertainty in the position.
         """
-        return np.sqrt(np.sum(self.covariances.sigmas[:, 0:3] ** 2, axis=1))
+        return np.sqrt(np.sum(self.covariance.sigmas[:, 0:3] ** 2, axis=1))
 
     @property
     def sigma_v(self) -> np.ndarray:
         """
         1-sigma uncertainties in the velocity vector.
         """
-        return np.sqrt(self.covariances.sigmas[:, 3:6])
+        return np.sqrt(self.covariance.sigmas[:, 3:6])
 
     @property
     def sigma_v_mag(self) -> np.ndarray:
         """
         1-sigma uncertainty in the velocity vector.
         """
-        return np.sqrt(np.sum(self.covariances.sigmas[:, 3:6] ** 2, axis=1))
+        return np.sqrt(np.sum(self.covariance.sigmas[:, 3:6] ** 2, axis=1))
 
     def rotate(
         self, rotation_matrix: np.ndarray, frame_out: str
@@ -191,7 +191,7 @@ class CartesianCoordinates(Table):
 
         # Extract covariances
         masked_covariances = np.ma.masked_array(
-            self.covariances.to_matrix(), fill_value=0.0
+            self.covariance.to_matrix(), fill_value=0.0
         )
         masked_covariances.mask = np.isnan(masked_covariances.data)
 
@@ -226,8 +226,8 @@ class CartesianCoordinates(Table):
             vx=coords_rotated[:, 3],
             vy=coords_rotated[:, 4],
             vz=coords_rotated[:, 5],
-            times=self.times,
-            covariances=CoordinateCovariances.from_matrix(covariances_rotated),
+            time=self.time,
+            covariance=CoordinateCovariances.from_matrix(covariances_rotated),
             origin=self.origin,
             frame=frame_out,
         )
@@ -272,8 +272,8 @@ class CartesianCoordinates(Table):
             vx=coords_translated[:, 3],
             vy=coords_translated[:, 4],
             vz=coords_translated[:, 5],
-            times=self.times,
-            covariances=self.covariances,
+            time=self.time,
+            covariance=self.covariance,
             origin=Origin.from_kwargs(code=[origin_out] * len(self)),
             frame=self.frame,
         )

@@ -134,7 +134,7 @@ def get_perturber_state(
     states[:, 3:] = states[:, 3:] * S_P_DAY
 
     return CartesianCoordinates.from_kwargs(
-        times=Times.from_astropy(times),
+        time=Times.from_astropy(times),
         x=states[:, 0],
         y=states[:, 1],
         z=states[:, 2],

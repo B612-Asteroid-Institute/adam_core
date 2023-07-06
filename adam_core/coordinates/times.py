@@ -66,8 +66,8 @@ class Times(Table):
 
         # Rename columns to remove times. prefix
         for col in df_filtered.columns:
-            if "times." in col:
-                df_filtered.rename(columns={col: col.split("times.")[-1]}, inplace=True)
+            if "time." in col:
+                df_filtered.rename(columns={col: col.split("time.")[-1]}, inplace=True)
 
         df_renamed = df_filtered.rename(
             columns={col: col.split("_")[0] for col in df_filtered.columns}

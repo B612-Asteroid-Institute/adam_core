@@ -19,7 +19,7 @@ def test_CartesianCoordinates_rotate():
         vx=values[:, 3],
         vy=values[:, 4],
         vz=values[:, 5],
-        covariances=CoordinateCovariances.from_matrix(covariances),
+        covariance=CoordinateCovariances.from_matrix(covariances),
         origin=Origin.from_kwargs(code=["origin"] * N),
         frame="equatorial",
     )
@@ -28,5 +28,5 @@ def test_CartesianCoordinates_rotate():
     coords_rotated = coords.rotate(rot_matrix, "identity")
 
     np.testing.assert_equal(coords_rotated.values, values)
-    np.testing.assert_equal(coords_rotated.covariances.to_matrix(), covariances)
+    np.testing.assert_equal(coords_rotated.covariance.to_matrix(), covariances)
     return

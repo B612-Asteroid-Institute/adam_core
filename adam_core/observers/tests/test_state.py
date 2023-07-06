@@ -34,7 +34,7 @@ def test_get_observer_state_X05():
         # Get the observer state using adam_core
         states = get_observer_state(
             code,
-            states_expected.times.to_astropy(),
+            states_expected.time.to_astropy(),
             frame=states_expected.frame,
             origin=origin_code,
         )
@@ -74,7 +74,7 @@ def test_get_observer_state_I41():
         # Get the observer state using adam_core
         states = get_observer_state(
             code,
-            states_expected.times.to_astropy(),
+            states_expected.time.to_astropy(),
             frame=states_expected.frame,
             origin=origin_code,
         )
@@ -114,7 +114,7 @@ def test_get_observer_state_W84():
         # Get the observer state using adam_core
         states = get_observer_state(
             code,
-            states_expected.times.to_astropy(),
+            states_expected.time.to_astropy(),
             frame=states_expected.frame,
             origin=origin_code,
         )
@@ -154,7 +154,7 @@ def test_get_observer_state_000():
         # Get the observer state using adam_core
         states = get_observer_state(
             code,
-            states_expected.times.to_astropy(),
+            states_expected.time.to_astropy(),
             frame=states_expected.frame,
             origin=origin_code,
         )
@@ -194,7 +194,7 @@ def test_get_observer_state_500():
         # Get the observer state using adam_core
         states = get_observer_state(
             code,
-            states_expected.times.to_astropy(),
+            states_expected.time.to_astropy(),
             frame=states_expected.frame,
             origin=origin_code,
         )

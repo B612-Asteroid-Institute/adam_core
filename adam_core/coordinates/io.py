@@ -47,7 +47,7 @@ def coords_to_dataframe(
         DataFrame containing coordinates and covariances.
     """
     # Gather times and put them into a dataframe
-    df_times = coords.times.to_dataframe(flatten=True)
+    df_times = coords.time.to_dataframe(flatten=True)
 
     df_coords = pd.DataFrame(
         data=coords.values,
@@ -61,7 +61,7 @@ def coords_to_dataframe(
 
     # Gather the covariances and put them into a dataframe
     if covariances or sigmas:
-        df_cov = coords.covariances.to_dataframe(
+        df_cov = coords.covariance.to_dataframe(
             coord_names=coord_names,
             sigmas=sigmas,
         )
@@ -115,5 +115,5 @@ def coords_from_dataframe(
     coords = {col: df[col].values for col in coord_names}
 
     return cls.from_kwargs(
-        **coords, times=times, origin=origin, frame=frame, covariances=covariances
+        **coords, time=times, origin=origin, frame=frame, covariance=covariances
     )
