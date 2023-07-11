@@ -221,3 +221,40 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
     np.testing.assert_array_less(r_diff, 10)
     # Assert velocities are to within 1 mm/s
     np.testing.assert_array_less(v_diff, 1)
+
+
+def test_benchmark_propagate_2body(benchmark, orbital_elements):
+    t0 = orbital_elements["mjd_tdb"].values
+    orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
+    cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
+    t0 = orbital_elements["mjd_tdb"].values
+    # Create orbits object
+    orbits = Orbits.from_kwargs(
+        orbit_id=orbital_elements["targetname"].values,
+        object_id=orbital_elements["targetname"].values,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=cartesian_elements[:, 0],
+            y=cartesian_elements[:, 1],
+            z=cartesian_elements[:, 2],
+            vx=cartesian_elements[:, 3],
+            vy=cartesian_elements[:, 4],
+            vz=cartesian_elements[:, 5],
+            time=Times.from_astropy(
+                Time(
+                    t0,
+                    format="mjd",
+                    scale="tdb",
+                )
+            ),
+            origin=Origin.from_kwargs(
+                code=["SUN" for i in range(len(cartesian_elements))]
+            ),
+            frame="ecliptic",
+        ),
+    )
+    times = Time(
+        t0.min() + np.arange(0, 100, 10),
+        format="mjd",
+        scale="tdb",
+    )
+    benchmark(propagate_2body, orbits, times=times)
