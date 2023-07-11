@@ -69,8 +69,8 @@ def _propagate_2body(
 
 
 # Vectorization Map: _propagate_2body
-_propagate_2body_vmap = vmap(
-    _propagate_2body, in_axes=(0, 0, 0, None, None, None), out_axes=(0)
+_propagate_2body_vmap = jit(
+    vmap(_propagate_2body, in_axes=(0, 0, 0, None, None, None), out_axes=(0))
 )
 
 
