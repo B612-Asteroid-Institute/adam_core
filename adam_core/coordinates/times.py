@@ -14,7 +14,13 @@ class Times(Table):
 
     @classmethod
     def from_astropy(cls, time: Time):
-        return cls.from_kwargs(jd1=time.jd1, jd2=time.jd2, scale=time.scale)
+        if time.isscalar == 1:
+            jd1 = [time.jd1]
+            jd2 = [time.jd2]
+        else:
+            jd1 = time.jd1
+            jd2 = time.jd2
+        return cls.from_kwargs(jd1=jd1, jd2=jd2, scale=time.scale)
 
     def to_astropy(self, format: str = "jd") -> Time:
         t = Time(
