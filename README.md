@@ -17,7 +17,7 @@ from adam_core.coordinates import Origin
 from adam_core.orbits import Orbits
 
 keplerian_elements = KeplerianCoordinates.from_kwargs(
-    times=Times.from_astropy(
+    time=Times.from_astropy(
         Time([59000.0], scale="tdb", format="mjd")
     ),
     a=[1.0],
@@ -30,8 +30,8 @@ keplerian_elements = KeplerianCoordinates.from_kwargs(
     frame="ecliptic"
 )
 orbits = Orbits.from_kwargs(
-    orbit_ids=["1"],
-    object_ids=["Test Orbit"],
+    orbit_id=["1"],
+    object_id=["Test Orbit"],
     coordinates=keplerian_elements.to_cartesian(),
 )
 ```
@@ -49,7 +49,7 @@ from adam_core.coordinates import Origin
 from adam_core.orbits import Orbits
 
 keplerian_elements = KeplerianCoordinates.from_kwargs(
-    times=Times.from_astropy(
+    time=Times.from_astropy(
         Time([59000.0, 60000.0], scale="tdb", format="mjd")
     ),
     a=[1.0, 3.0],
@@ -62,8 +62,8 @@ keplerian_elements = KeplerianCoordinates.from_kwargs(
     frame="ecliptic"
 )
 orbits = Orbits.from_kwargs(
-    orbit_ids=["1", "2"],
-    object_ids=["Test Orbit 1", "Test Orbit 2"],
+    orbit_id=["1", "2"],
+    object_id=["Test Orbit 1", "Test Orbit 2"],
     coordinates=keplerian_elements.to_cartesian(),
 )
 ```
@@ -87,7 +87,7 @@ from adam_core.coordinates import CoordinateCovariances
 from adam_core.orbits import Orbits
 
 keplerian_elements = KeplerianCoordinates.from_kwargs(
-    times=Times.from_astropy(
+    time=Times.from_astropy(
         Time([59000.0], scale="tdb", format="mjd")
     ),
     a=[1.0],
@@ -96,7 +96,7 @@ keplerian_elements = KeplerianCoordinates.from_kwargs(
     raan=[50.0],
     ap=[20.0],
     M=[30.0],
-    covariances=CoordinateCovariances.from_sigmas(
+    covariance=CoordinateCovariances.from_sigmas(
         np.array([[0.002, 0.001, 0.01, 0.01, 0.1, 0.1]])
     ),
     origin=Origin.from_kwargs(code=["SUN"]),
@@ -104,8 +104,8 @@ keplerian_elements = KeplerianCoordinates.from_kwargs(
 )
 
 orbits = Orbits.from_kwargs(
-    orbit_ids=["1"],
-    object_ids=["Test Orbit with Uncertainties"],
+    orbit_id=["1"],
+    object_id=["Test Orbit with Uncertainties"],
     coordinates=keplerian_elements.to_cartesian(),
 )
 orbits.to_dataframe(sigmas=True)
@@ -179,6 +179,7 @@ propagated_orbits = propagator.propagate_orbits(
 
 ### Low-level APIs
 
+#### State Vectors from Development Ephemeris files
 Getting the heliocentric ecliptic state vector of a DE440 body at a given set of times (in this case the barycenter of the Jovian system):
 ```python
 import numpy as np
@@ -192,6 +193,29 @@ states = get_perturber_state(
     Time(np.arange(59000, 60000), format="mjd", scale="tdb"),
     frame="ecliptic",
     origin=OriginCodes.SUN,
+)
+```
+
+#### 2-body Propagation
+`adam_core` also has 2-body propagation functionality. To propagate any orbit with 2-body dynamics:
+```python
+import numpy as np
+from astropy.time import Time
+from astropy import units as u
+from adam_core.orbits.query import query_sbdb
+from adam_core.dynamics.propagation import propagate_2body
+
+# Get orbit to propagate
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_sbdb(object_ids)
+
+# Define propagation times
+times = Time(np.arange(59000, 60000), scale="tdb", format="mjd")
+
+# Propagate orbits with 2-body dynamics
+propagated_orbits = propagate_2body(
+    orbits,
+    times
 )
 ```
 
