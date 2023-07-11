@@ -140,9 +140,11 @@ def _cartesian_to_spherical(
 
 
 # Vectorization Map: _cartesian_to_spherical
-_cartesian_to_spherical_vmap = vmap(
-    _cartesian_to_spherical,
-    in_axes=(0,),
+_cartesian_to_spherical_vmap = jit(
+    vmap(
+        _cartesian_to_spherical,
+        in_axes=(0,),
+    )
 )
 
 
@@ -253,9 +255,11 @@ def _spherical_to_cartesian(
 
 
 # Vectorization Map: _spherical_to_cartesian
-_spherical_to_cartesian_vmap = vmap(
-    _spherical_to_cartesian,
-    in_axes=(0,),
+_spherical_to_cartesian_vmap = jit(
+    vmap(
+        _spherical_to_cartesian,
+        in_axes=(0,),
+    )
 )
 
 
@@ -477,9 +481,11 @@ def _cartesian_to_keplerian(
 
 
 # Vectorization Map: _cartesian_to_keplerian
-_cartesian_to_keplerian_vmap = vmap(
-    _cartesian_to_keplerian,
-    in_axes=(0, 0, None),
+_cartesian_to_keplerian_vmap = jit(
+    vmap(
+        _cartesian_to_keplerian,
+        in_axes=(0, 0, None),
+    )
 )
 
 
@@ -694,9 +700,11 @@ def _keplerian_to_cartesian_p(
 
 
 # Vectorization Map: _keplerian_to_cartesian_p
-_keplerian_to_cartesian_p_vmap = vmap(
-    _keplerian_to_cartesian_p,
-    in_axes=(0, None, None, None),
+_keplerian_to_cartesian_p_vmap = jit(
+    vmap(
+        _keplerian_to_cartesian_p,
+        in_axes=(0, None, None, None),
+    )
 )
 
 
@@ -775,9 +783,11 @@ def _keplerian_to_cartesian_a(
 
 
 # Vectorization Map: _keplerian_to_cartesian_a
-_keplerian_to_cartesian_a_vmap = vmap(
-    _keplerian_to_cartesian_a,
-    in_axes=(0, None, None, None),
+_keplerian_to_cartesian_a_vmap = jit(
+    vmap(
+        _keplerian_to_cartesian_a,
+        in_axes=(0, None, None, None),
+    )
 )
 
 
@@ -856,9 +866,11 @@ def _keplerian_to_cartesian_q(
 
 
 # Vectorization Map: _keplerian_to_cartesian_q
-_keplerian_to_cartesian_q_vmap = vmap(
-    _keplerian_to_cartesian_q,
-    in_axes=(0, None, None, None),
+_keplerian_to_cartesian_q_vmap = jit(
+    vmap(
+        _keplerian_to_cartesian_q,
+        in_axes=(0, None, None, None),
+    )
 )
 
 
@@ -989,9 +1001,11 @@ def _cartesian_to_cometary(
 
 
 # Vectorization Map: _cartesian_to_cometary
-_cartesian_to_cometary_vmap = vmap(
-    _cartesian_to_cometary,
-    in_axes=(0, 0, None),
+_cartesian_to_cometary_vmap = jit(
+    vmap(
+        _cartesian_to_cometary,
+        in_axes=(0, 0, None),
+    )
 )
 
 
@@ -1132,9 +1146,11 @@ def _cometary_to_cartesian(
 
 
 # Vectorization Map: _cometary_to_cartesian
-_cometary_to_cartesian_vmap = vmap(
-    _cometary_to_cartesian,
-    in_axes=(0, 0, None, None, None),
+_cometary_to_cartesian_vmap = jit(
+    vmap(
+        _cometary_to_cartesian,
+        in_axes=(0, 0, None, None, None),
+    )
 )
 
 
