@@ -45,8 +45,8 @@ def sort_propagated_orbits(propagated_orbits: Orbits) -> Orbits:
     # Build table with orbit_ids, object_ids, and times
     table = pa.table(
         [
-            propagated_orbits.orbit_ids,
-            propagated_orbits.object_ids,
+            propagated_orbits.orbit_id,
+            propagated_orbits.object_id,
             pc.add(
                 pc.struct_field(
                     pc.struct_field(propagated_orbits.table["coordinates"], "time"),
