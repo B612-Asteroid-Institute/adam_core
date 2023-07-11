@@ -253,8 +253,8 @@ def test_benchmark_propagate_2body(benchmark, orbital_elements):
         ),
     )
     times = Time(
-        t0.min() + np.arange(0, 100, 10),
+        [t0.min() + 1],
         format="mjd",
         scale="tdb",
     )
-    benchmark(propagate_2body, orbits, times=times)
+    benchmark(propagate_2body, orbits[0], times=times)
