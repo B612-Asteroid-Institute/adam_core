@@ -117,17 +117,18 @@ def propagate_2body(
     # and then pass this to the vectorized map version of _propagate_2body
     n_orbits = cartesian_orbits.shape[0]
     n_times = len(times)
-    orbit_ids_ = np.hstack(
-        [orbit_ids[i] for i in range(n_orbits) for j in range(n_times)]
-    )
-    object_ids_ = np.hstack(
-        [object_ids[i] for i in range(n_orbits) for j in range(n_times)]
-    )
-    orbits_array_ = jnp.vstack(
-        [cartesian_orbits[i] for i in range(n_orbits) for j in range(n_times)]
-    )
-    t0_ = jnp.hstack([t0[i] for i in range(n_orbits) for j in range(n_times)])
-    t1_ = jnp.hstack([t1 for i in range(n_orbits)])
+    m = n_orbits * n_times
+    orbit_ids_ = np.empty(m, dtype=str)
+    object_ids_ = np.empty(m, dtype=str)
+    orbits_array_ = np.empty((m, 6), dtype=float)
+    t0_ = np.empty(m, dtype=float)
+    t1_ = np.empty(m, dtype=float)
+    for i in range(n_orbits):
+        orbit_ids_[i * n_times : (i + 1) * n_times] = orbit_ids[i]
+        object_ids_[i * n_times : (i + 1) * n_times] = object_ids[i]
+        orbits_array_[i * n_times : (i + 1) * n_times] = cartesian_orbits[i]
+        t0_[i * n_times : (i + 1) * n_times] = t0[i]
+        t1_[i * n_times : (i + 1) * n_times] = t1
 
     orbits_propagated = _propagate_2body_vmap(
         orbits_array_, t0_, t1_, mu, max_iter, tol
@@ -136,9 +137,12 @@ def propagate_2body(
 
     cartesian_covariances = orbits.coordinates.covariance.to_matrix()
     if not np.all(np.isnan(cartesian_covariances)):
-        covariances_array_ = np.stack(
-            [cartesian_covariances[i] for i in range(n_orbits) for j in range(n_times)]
-        )
+        covariances_array_ = np.empty((m, 6, 6), dtype=float)
+        for i in range(n_orbits):
+            covariances_array_[i * n_times : (i + 1) * n_times] = cartesian_covariances[
+                i
+            ]
+
         cartesian_covariances = transform_covariances_jacobian(
             orbits_array_,
             covariances_array_,
@@ -156,6 +160,9 @@ def propagate_2body(
     else:
         cartesian_covariances = None
 
+    origin_code = np.empty(n_orbits * n_times, dtype=str)
+    origin_code.fill("SUN")
+
     orbits_propagated = Orbits.from_kwargs(
         orbit_id=orbit_ids_,
         object_id=object_ids_,
@@ -170,7 +177,7 @@ def propagate_2body(
             time=Times.from_astropy(
                 Time(t1_, scale="tdb", format="mjd"),
             ),
-            origin=Origin.from_kwargs(code=["SUN" for i in range(n_orbits * n_times)]),
+            origin=Origin.from_kwargs(code=origin_code),
             frame="ecliptic",
         ),
     )
