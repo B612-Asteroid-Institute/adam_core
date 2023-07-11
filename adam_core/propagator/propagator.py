@@ -1,5 +1,5 @@
 import logging
-import multiprocessing as mp
+import concurrent.futures
 from abc import ABC, abstractmethod
 from itertools import repeat
 from typing import Optional
@@ -145,25 +145,14 @@ class Propagator(ABC):
         TODO: Add an observers class
         """
         if num_jobs is None or num_jobs > 1:
-            orbits_split = [
-                orbit_chunk for orbit_chunk in _iterate_chunks(orbits, chunk_size)
-            ]
+            with concurrent.futures.ProcessPoolExecutor(max_workers=num_jobs) as executor:
+                futures = []
+                for orbit_chunk in _iterate_chunks(orbits, chunk_size):
+                    futures.append(executor.submit(ephemeris_worker, orbit_chunk, observers, self))
 
-            p = mp.Pool(
-                processes=num_jobs,
-            )
-
-            ephemeris_list = p.starmap(
-                ephemeris_worker,
-                zip(
-                    orbits_split,
-                    repeat(observers),
-                    repeat(self),
-                ),
-            )
-            p.close()
-            p.join()
-
+                ephemeris_list = []
+                for future in concurrent.futures.as_completed(futures):
+                    ephemeris_list.append(future.result())
             ephemeris = concatenate(ephemeris_list)
 
         else:
