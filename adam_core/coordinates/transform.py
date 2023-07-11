@@ -1308,13 +1308,16 @@ def transform_coordinates(
         origin_out = coord_origin
 
     if type(coords) == representation_out:
-        if coord_frame == frame_out and np.all(coord_origin == origin_out):
+        if coord_frame == frame_out and np.all(coord_origin == origin_out.name):
             return coords
 
-    cartesian = coords.to_cartesian()
+    if type(coords) != CartesianCoordinates:
+        cartesian = coords.to_cartesian()
+    else:
+        cartesian = coords
 
     # Translate coordinates to new origin (if different from current)
-    if np.all(cartesian.origin != origin_out):
+    if np.all(cartesian.origin != origin_out.name):
         cartesian = cartesian_to_origin(cartesian, origin_out)
 
     # Rotate coordinates to new frame (if different from current)
