@@ -46,8 +46,8 @@ class CometaryCoordinates(Table):
     raan = Float64Column(nullable=False)
     ap = Float64Column(nullable=False)
     tp = Float64Column(nullable=False)
-    times = Times.as_column(nullable=True)
-    covariances = CoordinateCovariances.as_column(nullable=True)
+    time = Times.as_column(nullable=True)
+    covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column(nullable=False)
     frame = StringAttribute()
 
@@ -60,42 +60,42 @@ class CometaryCoordinates(Table):
         """
         1-sigma uncertainty in periapsis distance.
         """
-        return self.covariances.sigmas[:, 0]
+        return self.covariance.sigmas[:, 0]
 
     @property
     def sigma_e(self) -> np.ndarray:
         """
         1-sigma uncertainty in eccentricity.
         """
-        return self.covariances.sigmas[:, 1]
+        return self.covariance.sigmas[:, 1]
 
     @property
     def sigma_i(self) -> np.ndarray:
         """
         1-sigma uncertainty in inclination.
         """
-        return self.covariances.sigmas[:, 2]
+        return self.covariance.sigmas[:, 2]
 
     @property
     def sigma_raan(self):
         """
         1-sigma uncertainty in right ascension of the ascending node.
         """
-        return self.covariances.sigmas[:, 3]
+        return self.covariance.sigmas[:, 3]
 
     @property
     def sigma_ap(self) -> np.ndarray:
         """
         1-sigma uncertainty in argument of periapsis.
         """
-        return self.covariances.sigmas[:, 4]
+        return self.covariance.sigmas[:, 4]
 
     @property
     def sigma_tp(self) -> np.ndarray:
         """
         1-sigma uncertainty in time of periapse passage.
         """
-        return self.covariances.sigmas[:, 5]
+        return self.covariance.sigmas[:, 5]
 
     @property
     def a(self) -> np.ndarray:
@@ -192,7 +192,7 @@ class CometaryCoordinates(Table):
     def to_cartesian(self) -> CartesianCoordinates:
         from .transform import _cometary_to_cartesian, cometary_to_cartesian
 
-        if self.times is None:
+        if self.time is None:
             err = (
                 "To convert Cometary coordinates to Cartesian coordinates, the times\n"
                 "at which the Coordinates coordinates are defined is required to give\n"
@@ -205,14 +205,14 @@ class CometaryCoordinates(Table):
 
         coords_cartesian = cometary_to_cartesian(
             self.values,
-            t0=self.times.to_astropy().tdb.mjd,
+            t0=self.time.to_astropy().tdb.mjd,
             mu=mu,
             max_iter=100,
             tol=1e-15,
         )
         coords_cartesian = np.array(coords_cartesian)
 
-        cometary_covariances = self.covariances.to_matrix()
+        cometary_covariances = self.covariance.to_matrix()
         if not np.all(np.isnan(cometary_covariances)):
             covariances_cartesian = transform_covariances_jacobian(
                 self.values,
@@ -220,7 +220,7 @@ class CometaryCoordinates(Table):
                 _cometary_to_cartesian,
                 in_axes=(0, 0, None, None, None),
                 out_axes=0,
-                t0=self.times.to_astropy().tdb.mjd,
+                t0=self.time.to_astropy().tdb.mjd,
                 mu=mu,
                 max_iter=100,
                 tol=1e-15,
@@ -239,8 +239,8 @@ class CometaryCoordinates(Table):
             vx=coords_cartesian[:, 3],
             vy=coords_cartesian[:, 4],
             vz=coords_cartesian[:, 5],
-            times=self.times,
-            covariances=covariances_cartesian,
+            time=self.time,
+            covariance=covariances_cartesian,
             origin=self.origin,
             frame=self.frame,
         )
@@ -251,7 +251,7 @@ class CometaryCoordinates(Table):
     def from_cartesian(cls, cartesian: CartesianCoordinates) -> "CometaryCoordinates":
         from .transform import _cartesian_to_cometary, cartesian_to_cometary
 
-        if cartesian.times is None:
+        if cartesian.time is None:
             err = (
                 "To convert Cometary coordinates to Cartesian coordinates, the times\n"
                 "at which the Cartesian coordinates are defined is required to calculate\n"
@@ -264,7 +264,7 @@ class CometaryCoordinates(Table):
 
         coords_cometary = cartesian_to_cometary(
             cartesian.values,
-            cartesian.times.to_astropy().tdb.mjd,
+            cartesian.time.to_astropy().tdb.mjd,
             mu=mu,
         )
         coords_cometary = np.array(coords_cometary)
@@ -277,7 +277,7 @@ class CometaryCoordinates(Table):
                 _cartesian_to_cometary,
                 in_axes=(0, 0, None),
                 out_axes=0,
-                t0=cartesian.times.to_astropy().tdb.mjd,
+                t0=cartesian.time.to_astropy().tdb.mjd,
                 mu=mu,
             )
         else:
@@ -294,8 +294,8 @@ class CometaryCoordinates(Table):
             raan=coords_cometary[:, 3],
             ap=coords_cometary[:, 4],
             tp=coords_cometary[:, 5],
-            times=cartesian.times,
-            covariances=covariances_cometary,
+            time=cartesian.time,
+            covariance=covariances_cometary,
             origin=cartesian.origin,
             frame=cartesian.frame,
         )

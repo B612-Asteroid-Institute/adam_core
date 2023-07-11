@@ -135,7 +135,7 @@ def get_observer_state(
             )
 
     return CartesianCoordinates.from_kwargs(
-        times=Times.from_astropy(times),
+        time=Times.from_astropy(times),
         x=r_obs[:, 0],
         y=r_obs[:, 1],
         z=r_obs[:, 2],

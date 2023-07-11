@@ -159,7 +159,7 @@ def query_horizons(
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
         coordinates = CartesianCoordinates.from_kwargs(
-            times=times,
+            time=times,
             x=vectors["x"].values,
             y=vectors["y"].values,
             z=vectors["z"].values,
@@ -169,9 +169,9 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
-        object_ids = vectors["targetname"].values
+        object_id = vectors["targetname"].values
 
-        return Orbits.from_kwargs(object_ids=object_ids, coordinates=coordinates)
+        return Orbits.from_kwargs(object_id=object_id, coordinates=coordinates)
 
     elif coordinate_type == "keplerian":
         elements = _get_horizons_elements(
@@ -187,7 +187,7 @@ def query_horizons(
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
         coordinates = KeplerianCoordinates(
-            times=times,
+            time=times,
             a=elements["a"].values,
             e=elements["e"].values,
             i=elements["incl"].values,
@@ -197,10 +197,10 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
-        object_ids = elements["targetname"].values
+        object_id = elements["targetname"].values
 
         return Orbits.from_kwargs(
-            object_ids=object_ids, coordinates=coordinates.to_cartesian()
+            object_id=object_id, coordinates=coordinates.to_cartesian()
         )
 
     elif coordinate_type == "cometary":
@@ -218,7 +218,7 @@ def query_horizons(
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
         coordinates = CometaryCoordinates.from_kwargs(
-            times=times,
+            time=times,
             q=elements["q"].values,
             e=elements["e"].values,
             i=elements["incl"].values,
@@ -228,9 +228,10 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
-        object_ids = elements["targetname"].values
+        object_id = elements["targetname"].values
+
         return Orbits.from_kwargs(
-            object_ids=object_ids, coordinates=coordinates.to_cartesian()
+            object_id=object_id, coordinates=coordinates.to_cartesian()
         )
 
     else:

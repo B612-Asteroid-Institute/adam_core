@@ -42,8 +42,8 @@ class SphericalCoordinates(Table):
     vrho = Float64Column(nullable=True)
     vlon = Float64Column(nullable=True)
     vlat = Float64Column(nullable=True)
-    times = Times.as_column(nullable=True)
-    covariances = CoordinateCovariances.as_column(nullable=True)
+    time = Times.as_column(nullable=True)
+    covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column(nullable=False)
     frame = StringAttribute()
 
@@ -58,42 +58,42 @@ class SphericalCoordinates(Table):
         """
         1-sigma uncertainty in radial distance.
         """
-        return self.covariances.sigmas[:, 0]
+        return self.covariance.sigmas[:, 0]
 
     @property
     def sigma_lon(self):
         """
         1-sigma uncertainty in longitude.
         """
-        return self.covariances.sigmas[:, 1]
+        return self.covariance.sigmas[:, 1]
 
     @property
     def sigma_lat(self):
         """
         1-sigma uncertainty in latitude.
         """
-        return self.covariances.sigmas[:, 2]
+        return self.covariance.sigmas[:, 2]
 
     @property
     def sigma_vrho(self):
         """
         1-sigma uncertainty in radial velocity.
         """
-        return self.covariances.sigmas[:, 3]
+        return self.covariance.sigmas[:, 3]
 
     @property
     def sigma_vlon(self):
         """
         1-sigma uncertainty in longitudinal velocity.
         """
-        return self.covariances.sigmas[:, 4]
+        return self.covariance.sigmas[:, 4]
 
     @property
     def sigma_vlat(self):
         """
         1-sigma uncertainty in latitudinal velocity.
         """
-        return self.covariances.sigmas[:, 5]
+        return self.covariance.sigmas[:, 5]
 
     def to_unit_sphere(self, only_missing: bool = False) -> "SphericalCoordinates":
         """
@@ -148,8 +148,8 @@ class SphericalCoordinates(Table):
             vrho=coords[:, 3],
             vlon=coords[:, 4],
             vlat=coords[:, 5],
-            times=self.times,
-            covariances=self.covariances,
+            time=self.time,
+            covariance=self.covariance,
             origin=self.origin,
             frame=self.frame,
         )
@@ -160,7 +160,7 @@ class SphericalCoordinates(Table):
         coords_cartesian = spherical_to_cartesian(self.values)
         coords_cartesian = np.array(coords_cartesian)
 
-        covariances_spherical = self.covariances.to_matrix()
+        covariances_spherical = self.covariance.to_matrix()
         if not np.all(np.isnan(covariances_spherical)):
             covariances_cartesian = transform_covariances_jacobian(
                 self.values, covariances_spherical, _spherical_to_cartesian
@@ -179,8 +179,8 @@ class SphericalCoordinates(Table):
             vx=coords_cartesian[:, 3],
             vy=coords_cartesian[:, 4],
             vz=coords_cartesian[:, 5],
-            times=self.times,
-            covariances=covariances_cartesian,
+            time=self.time,
+            covariance=covariances_cartesian,
             origin=self.origin,
             frame=self.frame,
         )
@@ -212,8 +212,8 @@ class SphericalCoordinates(Table):
             vrho=coords_spherical[:, 3],
             vlon=coords_spherical[:, 4],
             vlat=coords_spherical[:, 5],
-            times=cartesian.times,
-            covariances=covariances_spherical,
+            time=cartesian.time,
+            covariance=covariances_spherical,
             origin=cartesian.origin,
             frame=cartesian.frame,
         )

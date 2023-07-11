@@ -208,14 +208,14 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
     frame = "ecliptic"
     coordinates = CometaryCoordinates.from_kwargs(
-        times=times,
+        time=times,
         q=coords_cometary[:, 0],
         e=coords_cometary[:, 1],
         i=coords_cometary[:, 2],
         raan=coords_cometary[:, 3],
         ap=coords_cometary[:, 4],
         tp=coords_cometary[:, 5],
-        covariances=CoordinateCovariances.from_matrix(covariances_cometary),
+        covariance=CoordinateCovariances.from_matrix(covariances_cometary),
         origin=origin,
         frame=frame,
     )
@@ -224,7 +224,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     classes = np.array(classes)
 
     return Orbits.from_kwargs(
-        object_ids=object_ids, coordinates=coordinates.to_cartesian()
+        object_id=object_ids, coordinates=coordinates.to_cartesian()
     )
 
 

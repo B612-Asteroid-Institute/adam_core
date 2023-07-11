@@ -266,8 +266,8 @@ class PYOORB(Propagator):
             orbit_ids = None
 
         propagated_orbits = Orbits.from_kwargs(
-            orbit_ids=orbit_ids,
-            object_ids=object_ids,
+            orbit_id=orbit_ids,
+            object_id=object_ids,
             coordinates=CartesianCoordinates.from_kwargs(
                 x=x,
                 y=y,
@@ -275,7 +275,7 @@ class PYOORB(Propagator):
                 vx=vx,
                 vy=vy,
                 vz=vz,
-                times=Times.from_astropy(times_),
+                time=Times.from_astropy(times_),
                 origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
                 frame="ecliptic",
             ),
