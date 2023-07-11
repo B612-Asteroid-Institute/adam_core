@@ -117,18 +117,11 @@ def propagate_2body(
     # and then pass this to the vectorized map version of _propagate_2body
     n_orbits = cartesian_orbits.shape[0]
     n_times = len(times)
-    m = n_orbits * n_times
-    orbit_ids_ = np.empty(m, dtype=str)
-    object_ids_ = np.empty(m, dtype=str)
-    orbits_array_ = np.empty((m, 6), dtype=float)
-    t0_ = np.empty(m, dtype=float)
-    t1_ = np.empty(m, dtype=float)
-    for i in range(n_orbits):
-        orbit_ids_[i * n_times : (i + 1) * n_times] = orbit_ids[i]
-        object_ids_[i * n_times : (i + 1) * n_times] = object_ids[i]
-        orbits_array_[i * n_times : (i + 1) * n_times] = cartesian_orbits[i]
-        t0_[i * n_times : (i + 1) * n_times] = t0[i]
-        t1_[i * n_times : (i + 1) * n_times] = t1
+    orbit_ids_ = np.repeat(orbit_ids, n_times)
+    object_ids_ = np.repeat(object_ids, n_times)
+    orbits_array_ = np.repeat(cartesian_orbits, n_times, axis=0)
+    t0_ = np.repeat(t0, n_times)
+    t1_ = np.tile(t1, n_orbits)
 
     orbits_propagated = _propagate_2body_vmap(
         orbits_array_, t0_, t1_, mu, max_iter, tol
@@ -137,11 +130,7 @@ def propagate_2body(
 
     cartesian_covariances = orbits.coordinates.covariance.to_matrix()
     if not np.all(np.isnan(cartesian_covariances)):
-        covariances_array_ = np.empty((m, 6, 6), dtype=float)
-        for i in range(n_orbits):
-            covariances_array_[i * n_times : (i + 1) * n_times] = cartesian_covariances[
-                i
-            ]
+        covariances_array_ = np.repeat(cartesian_covariances, n_times, axis=0)
 
         cartesian_covariances = transform_covariances_jacobian(
             orbits_array_,
