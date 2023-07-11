@@ -11,8 +11,8 @@ def test_benchmark_iterate_real_orbits(benchmark):
     benchmark(noop_iterate, orbits)
 
 
-def test_benchmark_iterate_real_orbits_df(benchmark):
-    orbits = make_real_orbits(27).to_df().iterrows()
+def test_benchmark_iterate_real_orbits_dataframe(benchmark):
+    orbits = make_real_orbits(27).to_dataframe().itterrows()
 
     def noop_iterate(iterator):
         for _ in iterator:
