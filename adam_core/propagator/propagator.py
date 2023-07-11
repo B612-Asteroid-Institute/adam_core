@@ -73,24 +73,14 @@ class Propagator(ABC):
             Propagated orbits.
         """
         if num_jobs is None or num_jobs > 1:
-            orbits_split = [
-                orbit_chunk for orbit_chunk in _iterate_chunks(orbits, chunk_size)
-            ]
+            with concurrent.futures.ProcessPoolExecutor(max_workers=num_jobs) as executor:
+                futures = []
+                for orbit_chunk in _iterate_chunks(orbits, chunk_size):
+                    futures.append(executor.submit(propagation_worker, orbit_chunk, times, self))
 
-            p = mp.Pool(
-                processes=num_jobs,
-            )
-
-            propagated_list = p.starmap(
-                propagation_worker,
-                zip(
-                    orbits_split,
-                    repeat(times),
-                    repeat(self),
-                ),
-            )
-            p.close()
-            p.join()
+                propagated_list = []
+                for future in concurrent.futures.as_completed(futures):
+                    propagated_list.append(future.result())
 
             propagated = concatenate(propagated_list)
         else:
