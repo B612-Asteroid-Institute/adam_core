@@ -8,7 +8,7 @@ from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
 from ...orbits import Orbits
-from ..propagation import _propagate_2body, propagate_2body
+from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
 MU = c.MU
 
@@ -223,8 +223,37 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
     np.testing.assert_array_less(v_diff, 1)
 
 
-def test_benchmark_propagate_2body(benchmark, orbital_elements):
+def test_benchmark__propagate_2body(benchmark, orbital_elements):
+    # Benchmark _propagate_2body with a single orbit propagated forward 1 day
+    orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
+    cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
+
+    benchmark(_propagate_2body, cartesian_elements[0], t0[0], t0[0] + 1)
+
+
+def test_benchmark__propagate_2body_vmap(benchmark, orbital_elements):
+    # Benchmark the vectorized map version of _propagate_2body with a single
+    # orbit propagated forward 1 day
+    orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
+    cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
+    t0 = orbital_elements["mjd_tdb"].values
+
+    benchmark(
+        _propagate_2body_vmap,
+        cartesian_elements[:1],
+        t0[:1],
+        t0[:1] + 1,
+        MU,
+        1000,
+        1e-14,
+    )
+
+
+def test_benchmark_propagate_2body(benchmark, orbital_elements):
+    # Benchmark propagate_2body with a single orbit propagated forward 1 day
+    # This function appears to add substantial overhead, so we benchmark it
+    # separately from _propagate_2body
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
