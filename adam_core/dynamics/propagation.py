@@ -2,6 +2,8 @@ import jax.numpy as jnp
 import numpy as np
 from astropy.time import Time
 from jax import config, jit, vmap
+import pyarrow as pa
+import itertools
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
@@ -107,19 +109,17 @@ def propagate_2body(
         Orbits propagated to each MJD.
     """
     # Lets extract the cartesian orbits and times from the orbits object
-    cartesian_orbits = orbits.coordinates.values
-    t0 = orbits.coordinates.time.to_astropy().tdb.mjd
+    coords = orbits.coordinates
+    cartesian_orbits = coords.table.select(["x", "y", "z", "vx", "vy", "vz"])
+    t0 = coords.time.to_astropy().tdb.mjd
     t1 = times.tdb.mjd
-    orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)
-    object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
-
     # Lets stack the orbits into a single array shaped by the number of orbits and number of times
     # and then pass this to the vectorized map version of _propagate_2body
     n_orbits = cartesian_orbits.shape[0]
     n_times = len(times)
-    orbit_ids_ = np.repeat(orbit_ids, n_times)
-    object_ids_ = np.repeat(object_ids, n_times)
-    orbits_array_ = np.repeat(cartesian_orbits, n_times, axis=0)
+    orbit_ids_ = pa.concat_arrays(itertools.repeat(orbits.orbit_id, n_times))
+    object_ids_ = pa.concat_arrays(itertools.repeat(orbits.object_id, n_times))
+    orbits_array_ = np.array(pa.concat_tables(itertools.repeat(cartesian_orbits, n_times))).T
     t0_ = np.repeat(t0, n_times)
     t1_ = np.tile(t1, n_orbits)
 
@@ -149,8 +149,7 @@ def propagate_2body(
     else:
         cartesian_covariances = None
 
-    origin_code = np.empty(n_orbits * n_times, dtype=str)
-    origin_code.fill("SUN")
+    origin_code = pa.repeat("SUN", n_orbits * n_times)
 
     orbits_propagated = Orbits.from_kwargs(
         orbit_id=orbit_ids_,
