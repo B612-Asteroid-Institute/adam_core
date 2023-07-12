@@ -6,8 +6,9 @@ from typing import Optional
 from astropy.time import Time
 from quivr.concat import concatenate
 
+from ..observers import Observers
 from ..orbits import Orbits
-from .utils import _iterate_chunks, sort_propagated_orbits
+from .utils import _iterate_chunks, sort_ephemeris, sort_propagated_orbits
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def propagation_worker(orbits: Orbits, times: Time, propagator: "Propagator") ->
     return propagated
 
 
-def ephemeris_worker(orbits: Orbits, observers, propagator: "Propagator"):
+def ephemeris_worker(orbits: Orbits, observers: Observers, propagator: "Propagator"):
     ephemeris = propagator._generate_ephemeris(orbits, observers)
     return ephemeris
 
@@ -106,7 +107,7 @@ class Propagator(ABC):
     def generate_ephemeris(
         self,
         orbits: Orbits,
-        observers,
+        observers: Observers,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
     ):
@@ -118,7 +119,7 @@ class Propagator(ABC):
         ----------
         orbits : `~adam_core.orbits.orbits.Orbits` (N)
             Orbits for which to generate ephemerides.
-        observers : (M)
+        observers : `~adam_core.observers.observers.Observers` (M)
             Observers for which to generate the ephemerides of each
             orbit.
         chunk_size : int, optional
@@ -133,9 +134,6 @@ class Propagator(ABC):
         ephemeris : (N * M)
             Predicted ephemerides for each orbit observed by each
             observer.
-
-        TODO: Add ephemeris class
-        TODO: Add an observers class
         """
         if max_processes is None or max_processes > 1:
             with concurrent.futures.ProcessPoolExecutor(
@@ -155,8 +153,5 @@ class Propagator(ABC):
         else:
             ephemeris = self._generate_ephemeris(orbits, observers)
 
-        ephemeris.sort_values(
-            by=["orbit_ids", "origin", "times"],
-            inplace=True,
-        )
+        ephemeris = sort_ephemeris(ephemeris)
         return ephemeris

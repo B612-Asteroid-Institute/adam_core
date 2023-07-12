@@ -4,16 +4,22 @@ except ImportError:
     raise ImportError("PYOORB is not installed.")
 
 import enum
+import itertools
 import os
 import warnings
 from typing import Optional, Union
 
 import numpy as np
+import pyarrow as pa
 from astropy.time import Time
+from quivr.concat import concatenate
+from quivr.defragment import defragment
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin
 from ..coordinates.times import Times
+from ..observers.observers import Observers
+from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from .propagator import Propagator
 from .utils import _assert_times_almost_equal
@@ -284,7 +290,115 @@ class PYOORB(Propagator):
         )
         return propagated_orbits
 
-    def _generate_ephemeris(self, orbits: Orbits, observers):
-        raise NotImplementedError(
-            "Ephemeris generation is not yet implemented for PYOORB."
+    def _generate_ephemeris(self, orbits: Orbits, observers: Observers) -> Ephemeris:
+        """
+        Generate ephemerides for orbits as viewed from observers using PYOORB.
+
+        Parameters
+        ----------
+        orbits : `~adam_core.orbits.orbits.Orbits` (N)
+            Orbits to generate ephemerides for.
+        observers : `~adam_core.observers.observers.Observers` (M)
+            Observers to generate ephemerides for.
+
+        Returns
+        -------
+        ephemeris : `~adam_core.ephemeris.ephemeris.Ephemeris` (N * M)
+            Ephemerides for each orbit as viewed from each observer.
+        """
+        # Convert orbits into PYOORB format
+        orbits_pyoorb = self._configure_orbits(
+            orbits.coordinates.values,
+            orbits.coordinates.time.to_astropy().tt.mjd,
+            OpenOrbOrbitType.CARTESIAN,
+            OpenOrbTimescale.TT,
+            magnitude=None,
+            slope=None,
         )
+
+        ephemeris_list = []
+        # Iterate over unique observatory codes and their times
+        for code_i, observer_i in observers.iterate_codes():
+            # Extract obervation times
+            times = observer_i.coordinates.time.to_astropy()
+
+            # Convert epochs into PYOORB format
+            epochs_pyoorb = self._configure_epochs(times.tt.mjd, OpenOrbTimescale.TT)
+
+            # Generate ephemeris
+            ephemeris, err = oo.pyoorb.oorb_ephemeris_full(
+                in_orbits=orbits_pyoorb,
+                in_obscode=code_i,
+                in_date_ephems=epochs_pyoorb,
+                in_dynmodel=self.dynamical_model,
+            )
+
+            if err != 0:
+                raise RuntimeError(f"PYOORB ephemeris generation failed with error code {err}.")
+
+            # Stack 3D ephemeris into single 2D array
+            ephemeris = np.vstack(ephemeris)
+
+            # PYOORB returns ephemerides for each orbit, so lets reconstruct orbit IDs
+            ids = np.arange(0, len(orbits))
+            orbit_ids_idx = np.array([i for i in ids for j in range(len(observer_i))])
+            orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
+            object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
+
+            # Columns returned by PYOORB, we will only use a subset
+            # columns = [
+            #     "mjd_utc",
+            #     "RA_deg",
+            #     "Dec_deg",
+            #     "vRAcosDec",
+            #     "vDec",
+            #     "PhaseAngle_deg",
+            #     "SolarElon_deg",
+            #     "r_au",
+            #     "delta_au",
+            #     "VMag",
+            #     "PosAngle_deg",
+            #     "TLon_deg",
+            #     "TLat_deg",
+            #     "TOCLon_deg",
+            #     "TOCLat_deg",
+            #     "HLon_deg",
+            #     "HLat_deg",
+            #     "HOCLon_deg",
+            #     "HOCLat_deg",
+            #     "Alt_deg",
+            #     "SolarAlt_deg",
+            #     "LunarAlt_deg",
+            #     "LunarPhase",
+            #     "LunarElon_deg",
+            #     "obj_x",
+            #     "obj_y",
+            #     "obj_z",
+            #     "obj_vx",
+            #     "obj_vy",
+            #     "obj_vz",
+            #     "obs_x",
+            #     "obs_y",
+            #     "obs_z",
+            #     "TrueAnom",
+            # ]
+            observer_table = pa.concat_tables(
+                itertools.repeat(observer_i.table, len(orbits))
+            )
+
+            ephemeris_list.append(
+                Ephemeris.from_kwargs(
+                    orbit_id=orbit_ids,
+                    object_id=object_ids,
+                    observer=defragment(Observers(observer_table)),
+                    ra=ephemeris[:, 1],
+                    dec=ephemeris[:, 2],
+                    vra=ephemeris[:, 3] / np.cos(np.radians(ephemeris[:, 2])),
+                    vdec=ephemeris[:, 4],
+                    frame="equatorial",
+                )
+            )
+
+        # Concatenate ephemeris into single table
+        ephemeris = concatenate(ephemeris_list)
+        return ephemeris
