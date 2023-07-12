@@ -1,5 +1,7 @@
 import pandas as pd
+import pyarrow as pa
 from astropy.time import Time
+import erfa
 from quivr import Float64Column, StringAttribute, Table
 
 
@@ -15,6 +17,127 @@ class Times(Table):
     @classmethod
     def from_astropy(cls, time: Time):
         return cls.from_kwargs(jd1=time.jd1, jd2=time.jd2, scale=time.scale)
+
+    def mjd(self) -> pa.lib.DoubleArray:
+        """
+        Convert to modified Julian date.
+        """
+        return pa.compute.add(pa.compute.add(self.jd1, -2400000.5), self.jd2)
+
+    def set_scale(self, scale: str):
+        """
+        Set the time scale.
+        """
+        if scale == self.scale:
+            return
+        if scale not in ["utc", "tai", "tt", "tdb"]:
+            raise ValueError(f"Invalid time scale: {scale}")
+        if self.scale == "utc":
+            if scale == "tai":
+                self._utc_to_tai()
+            elif scale == "tt":
+                self._utc_to_tai()
+                self._tai_to_tt()
+            elif scale == "tdb":
+                self._utc_to_tai()
+                self._tai_to_tt()
+                self._tt_to_tdb_approx()
+        elif self.scale == "tai":
+            if scale == "utc":
+                self._tai_to_utc()
+            elif scale == "tt":
+                self._tai_to_tt()
+            elif scale == "tdb":
+                self._tai_to_tt()
+                self._tt_to_tdb_approx()
+        elif self.scale == "tt":
+            if scale == "utc":
+                self._tt_to_tai()
+                self._tai_to_utc()
+            elif scale == "tai":
+                self._tt_to_tai()
+            elif scale == "tdb":
+                self._tt_to_tdb_approx()
+        elif self.scale == "tdb":
+            if scale == "utc":
+                self._tdb_to_tt_approx()
+                self._tt_to_tai()
+                self._tai_to_utc()
+            elif scale == "tai":
+                self._tdb_to_tt_approx()
+                self._tt_to_tai()
+            elif scale == "tt":
+                self._tdb_to_tt_approx()
+
+    def _utc_to_ut1(self):
+        """
+        Convert self.scale from UTC to UT1.
+        """
+        new_jd1, new_jd2 = erfa.utcut1(self.jd1, self.jd2)
+        self.jd1 = pa.array(new_jd1)
+        self.jd2 = pa.array(new_jd2)
+        self.scale = "ut1"
+
+    def _utc_to_tai(self):
+        """
+        Convert self.scale from UTC to TAI.
+        """
+        new_jd1, new_jd2 = erfa.utctai(self.jd1, self.jd2)
+        self.jd1 = pa.array(new_jd1)
+        self.jd2 = pa.array(new_jd2)
+        self.scale = "tai"
+
+    def _tai_to_tt(self):
+        """
+        Convert self.scale from TAI to TT.
+        """
+        new_jd1, new_jd2 = erfa.taitt(self.jd1, self.jd2)
+        self.jd1 = pa.array(new_jd1)
+        self.jd2 = pa.array(new_jd2)
+        self.scale = "tt"
+
+    def _tt_to_tdb_approx(self):
+        """
+        Convert self.scale from TT to TDB using an approximate model, and assuming time from the geocenter.
+
+        UT1 is approximated to be equal to UTC, which is wrong by up to a few hundred milliseconds.
+        """
+        # Need to get UT1 corresponding to the TT time
+        tai1, tai2 = erfa.tttai(self.jd1, self.jd2)
+        utc1, utc2 = erfa.taiutc(tai1, tai2)
+
+        ut = (utc1 - 0.5 + utc2) % 1.0
+        delta_sec = erfa.dtdb(self.jd1, self.jd2, ut, 0, 0, 0)
+        self.jd2 = pc.compute.add(self.jd2, pa.array(delta_sec / 86400.0))
+        self.scale = "tdb"
+
+    def _tt_to_tai(self):
+        """
+        Convert self.scale from TT to TAI.
+        """
+        new_jd1, new_jd2 = erfa.tttai(self.jd1, self.jd2)
+        self.jd1 = pa.array(new_jd1)
+        self.jd2 = pa.array(new_jd2)
+        self.scale = "tai"
+
+    def _tai_to_utc(self):
+        """
+        Convert self.scale from TAI to UTC.
+        """
+        new_jd1, new_jd2 = erfa.taiutc(self.jd1, self.jd2)
+        self.jd1 = pa.array(new_jd1)
+        self.jd2 = pa.array(new_jd2)
+        self.scale = "utc"
+
+    def _tdb_to_tai_approx(self):
+        # Need to get UT1 corresponding to the TT time
+        tai1, tai2 = erfa.tttai(self.jd1, self.jd2)
+        utc1, utc2 = erfa.taiutc(tai1, tai2)
+
+        ut = (utc1 - 0.5 + utc2) % 1.0
+        delta_sec = erfa.dtdb(self.jd1, self.jd2, ut, 0, 0, 0)
+        self.jd2 = pc.compute.add(self.jd2, pa.array(-delta_sec / 86400.0))
+        self.scale = "tai"
 
     def to_astropy(self, format: str = "jd") -> Time:
         t = Time(
