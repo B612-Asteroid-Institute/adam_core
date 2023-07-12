@@ -68,6 +68,17 @@ class CoordinateCovariances(Table):
         sigmas = np.sqrt(cov_diag)
         return sigmas
 
+    def all_null(self) -> bool:
+        """
+        Return True if all covariance matrices are null.
+
+        Returns
+        -------
+        all_null : `bool`
+            True if all covariance matrices are null.
+        """
+        return self.values.null_count == len(self)
+
     def to_matrix(self) -> np.ndarray:
         """
         Return the covariance matrices as a 3D array of shape (N, 6, 6).

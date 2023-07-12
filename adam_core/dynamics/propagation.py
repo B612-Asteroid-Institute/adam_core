@@ -128,8 +128,8 @@ def propagate_2body(
     )
     orbits_propagated = np.array(orbits_propagated)
 
-    cartesian_covariances = orbits.coordinates.covariance.to_matrix()
-    if not np.all(np.isnan(cartesian_covariances)):
+    if not coords.covariance.all_null():
+        cartesian_covariances = orbits.coordinates.covariance.to_matrix()
         covariances_array_ = np.repeat(cartesian_covariances, n_times, axis=0)
 
         cartesian_covariances = transform_covariances_jacobian(
