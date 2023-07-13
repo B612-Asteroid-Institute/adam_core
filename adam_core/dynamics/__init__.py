@@ -1,4 +1,5 @@
 # flake8: noqa: F401
+from .aberrations import add_light_time, add_stellar_aberration
 from .barker import solve_barker
 from .chi import calc_chi
 from .kepler import solve_kepler
