@@ -247,7 +247,7 @@ class KeplerianCoordinates(Table):
         )
         coords_keplerian = np.array(coords_keplerian)
 
-        cartesian_covariances = cartesian.covariances.to_matrix()
+        cartesian_covariances = cartesian.covariance.to_matrix()
         if not np.all(np.isnan(cartesian_covariances)):
             covariances_keplerian = transform_covariances_jacobian(
                 cartesian.values,

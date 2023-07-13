@@ -193,7 +193,7 @@ class SphericalCoordinates(Table):
         coords_spherical = cartesian_to_spherical(cartesian.values)
         coords_spherical = np.array(coords_spherical)
 
-        cartesian_covariances = cartesian.covariances.to_matrix()
+        cartesian_covariances = cartesian.covariance.to_matrix()
         if not np.all(np.isnan(cartesian_covariances)):
             covariances_spherical = transform_covariances_jacobian(
                 cartesian.values, cartesian_covariances, _cartesian_to_spherical

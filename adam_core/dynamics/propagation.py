@@ -1,0 +1,174 @@
+import jax.numpy as jnp
+import numpy as np
+from astropy.time import Time
+from jax import config, jit, vmap
+
+from ..constants import Constants as c
+from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.covariances import (
+    CoordinateCovariances,
+    transform_covariances_jacobian,
+)
+from ..coordinates.origin import Origin
+from ..coordinates.times import Times
+from ..orbits import Orbits
+from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
+
+config.update("jax_enable_x64", True)
+
+
+MU = c.MU
+
+
+@jit
+def _propagate_2body(
+    orbit: jnp.ndarray,
+    t0: float,
+    t1: float,
+    mu: float = MU,
+    max_iter: int = 1000,
+    tol: float = 1e-14,
+) -> jnp.ndarray:
+    """
+    Propagate an orbit from t0 to t1.
+
+    Parameters
+    ----------
+    orbit : `~jax.numpy.ndarray` (6)
+        Cartesian orbit with position in units of au and velocity in units of au per day.
+    t0 : float (1)
+        Epoch in MJD at which the orbit are defined.
+    t1 : float (N)
+        Epochs to which to propagate the given orbit.
+    mu : float, optional
+        Gravitational parameter (GM) of the attracting body in units of
+        au**3 / d**2.
+    max_iter : int, optional
+        Maximum number of iterations over which to converge. If number of iterations is
+        exceeded, will return the value of the universal anomaly at the last iteration.
+    tol : float, optional
+        Numerical tolerance to which to compute universal anomaly using the Newtown-Raphson
+        method.
+
+    Returns
+    -------
+    orbits : `~jax.numpy.ndarray` (N, 6)
+        Orbit propagated to each MJD with position in units of au and velocity in units
+        of au per day.
+    """
+    r = orbit[0:3]
+    v = orbit[3:6]
+    dt = t1 - t0
+
+    lagrange_coeffs, stumpff_coeffs, chi = calc_lagrange_coefficients(
+        r, v, dt, mu=mu, max_iter=max_iter, tol=tol
+    )
+    r_new, v_new = apply_lagrange_coefficients(r, v, *lagrange_coeffs)
+
+    return jnp.array([r_new[0], r_new[1], r_new[2], v_new[0], v_new[1], v_new[2]])
+
+
+# Vectorization Map: _propagate_2body
+_propagate_2body_vmap = jit(
+    vmap(_propagate_2body, in_axes=(0, 0, 0, None, None, None), out_axes=(0))
+)
+
+
+def propagate_2body(
+    orbits: Orbits,
+    times: Time,
+    mu: float = MU,
+    max_iter: int = 1000,
+    tol: float = 1e-14,
+) -> Orbits:
+    """
+    Propagate orbits using the 2-body universal anomaly formalism.
+
+    Parameters
+    ----------
+    orbits : `~jax.numpy.ndarray` (N, 6)
+        Cartesian orbits with position in units of au and velocity in units of au per day.
+    times : `~astropy.time.core.Time` (M)
+        Epochs to which to propagate each orbit. If a single epoch is given, all orbits are propagated to this
+        epoch. If multiple epochs are given, then each orbit to will be propagated to each epoch.
+    mu : float, optional
+        Gravitational parameter (GM) of the attracting body in units of
+        au**3 / d**2.
+    max_iter : int, optional
+        Maximum number of iterations over which to converge. If number of iterations is
+        exceeded, will return the value of the universal anomaly at the last iteration.
+    tol : float, optional
+        Numerical tolerance to which to compute universal anomaly using the Newtown-Raphson
+        method.
+
+    Returns
+    -------
+    orbits : `~adam_core.orbits.orbits.Orbits` (N*M)
+        Orbits propagated to each MJD.
+    """
+    # Lets extract the cartesian orbits and times from the orbits object
+    cartesian_orbits = orbits.coordinates.values
+    t0 = orbits.coordinates.time.to_astropy().tdb.mjd
+    t1 = times.tdb.mjd
+    orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)
+    object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
+
+    # Lets stack the orbits into a single array shaped by the number of orbits and number of times
+    # and then pass this to the vectorized map version of _propagate_2body
+    n_orbits = cartesian_orbits.shape[0]
+    n_times = len(times)
+    orbit_ids_ = np.repeat(orbit_ids, n_times)
+    object_ids_ = np.repeat(object_ids, n_times)
+    orbits_array_ = np.repeat(cartesian_orbits, n_times, axis=0)
+    t0_ = np.repeat(t0, n_times)
+    t1_ = np.tile(t1, n_orbits)
+
+    orbits_propagated = _propagate_2body_vmap(
+        orbits_array_, t0_, t1_, mu, max_iter, tol
+    )
+    orbits_propagated = np.array(orbits_propagated)
+
+    cartesian_covariances = orbits.coordinates.covariance.to_matrix()
+    if not np.all(np.isnan(cartesian_covariances)):
+        covariances_array_ = np.repeat(cartesian_covariances, n_times, axis=0)
+
+        cartesian_covariances = transform_covariances_jacobian(
+            orbits_array_,
+            covariances_array_,
+            _propagate_2body,
+            in_axes=(0, 0, 0, None, None, None),
+            out_axes=0,
+            t0=t0_,
+            t1=t1_,
+            mu=mu,
+            max_iter=max_iter,
+            tol=tol,
+        )
+        cartesian_covariances = CoordinateCovariances.from_matrix(cartesian_covariances)
+
+    else:
+        cartesian_covariances = None
+
+    origin_code = np.empty(n_orbits * n_times, dtype=str)
+    origin_code.fill("SUN")
+
+    orbits_propagated = Orbits.from_kwargs(
+        orbit_id=orbit_ids_,
+        object_id=object_ids_,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=orbits_propagated[:, 0],
+            y=orbits_propagated[:, 1],
+            z=orbits_propagated[:, 2],
+            vx=orbits_propagated[:, 3],
+            vy=orbits_propagated[:, 4],
+            vz=orbits_propagated[:, 5],
+            covariance=cartesian_covariances,
+            time=Times.from_astropy(
+                Time(t1_, scale="tdb", format="mjd"),
+            ),
+            origin=Origin.from_kwargs(code=origin_code),
+            frame="ecliptic",
+        ),
+    )
+
+    return orbits_propagated

@@ -5,3 +5,6 @@
     Icarus, 166, 248–270. https://doi.org/10.1016/S0019-1035(03)00051-4
 * Curtis, H. D. (2014). Orbital Mechanics for Engineering Students. 3rd ed.,  
     Elsevier Ltd. ISBN-13: 978-0080977478
+* Danby, J. M. A. (1992). Fundamentals of Celestial Mechanics. 2nd ed.,
+    William-Bell, Inc. ISBN-13: 978-0943396200
+    Notes: of particular interest is Danby's fantastic chapter on universal variables (6.9)

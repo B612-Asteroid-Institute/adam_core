@@ -269,7 +269,7 @@ class CometaryCoordinates(Table):
         )
         coords_cometary = np.array(coords_cometary)
 
-        cartesian_covariances = cartesian.covariances.to_matrix()
+        cartesian_covariances = cartesian.covariance.to_matrix()
         if not np.all(np.isnan(cartesian_covariances)):
             covariances_cometary = transform_covariances_jacobian(
                 cartesian.values,
