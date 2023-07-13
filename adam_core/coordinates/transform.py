@@ -1327,7 +1327,7 @@ def transform_coordinates(
         if coord_frame == frame_out and np.all(coord_origin == origin_out.name):
             return coords
 
-    if type(coords) != CartesianCoordinates:
+    if not isinstance(coords, CartesianCoordinates):
         cartesian = coords.to_cartesian()
     else:
         cartesian = coords
