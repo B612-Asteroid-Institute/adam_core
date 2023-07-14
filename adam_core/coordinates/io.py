@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING, List, Literal, Type, Union
+from typing import TYPE_CHECKING, List, Literal, Optional, Type, Union
 
+import numpy as np
 import pandas as pd
 
 from .covariances import CoordinateCovariances
@@ -23,8 +24,8 @@ if TYPE_CHECKING:
 def coords_to_dataframe(
     coords: "CoordinateType",
     coord_names: List[str],
-    sigmas: bool = False,
-    covariances: bool = False,
+    sigmas: Optional[bool] = None,
+    covariances: Optional[bool] = None,
 ) -> pd.DataFrame:
     """
     Store coordinates as a pandas DataFrame.
@@ -36,10 +37,14 @@ def coords_to_dataframe(
     coord_names : list of str
         Names of the coordinates to store.
     sigmas : bool, optional
-        If True, include 1-sigma uncertainties in the DataFrame.
+        If None, will check if any sigmas are defined (via covariance matrix) and add them to the dataframe.
+        If True, include 1-sigma uncertainties in the DataFrame regardless. If False, do not include 1-sigma
+        uncertainties in the DataFrame.
     covariances : bool, optional
-        If True, include covariance matrices in the DataFrame. Covariance matrices
-        will be split into 21 columns, with the lower triangular elements stored.
+        If None, will check if any of the covariance terms are defined and add them to the datframe.
+        If True, include covariance matrices in the DataFrame regardless. Covariance matrices
+        will be split into 21 columns, with the lower triangular elements stored. If False, do not
+        include covariance matrices in the DataFrame.
 
     Returns
     -------
@@ -58,6 +63,12 @@ def coords_to_dataframe(
     df_origin = coords.origin.to_dataframe(flatten=True)
     origin_dict = {col: f"origin.{col}" for col in df_origin.columns}
     df_origin.rename(columns=origin_dict, inplace=True)
+
+    if covariances is None:
+        covariances = np.all(~np.isnan(coords.covariance.to_matrix()))
+
+    if sigmas is None:
+        sigmas = np.all(~np.isnan(coords.covariance.sigmas))
 
     # Gather the covariances and put them into a dataframe
     if covariances or sigmas:
