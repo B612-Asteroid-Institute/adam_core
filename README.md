@@ -173,7 +173,7 @@ propagated_orbits = propagator.propagate_orbits(
     orbits,
     times,
     chunk_size=100,
-    num_jobs=1,
+    max_processes=1,
 )
 ```
 

@@ -49,7 +49,7 @@ class Propagator(ABC):
         orbits: Orbits,
         times: Time,
         chunk_size: int = 100,
-        num_jobs: Optional[int] = 1,
+        max_processes: Optional[int] = 1,
     ) -> Orbits:
         """
         Propagate each orbit in orbits to each time in times.
@@ -62,9 +62,9 @@ class Propagator(ABC):
             Times to which to propagate orbits.
         chunk_size : int, optional
             Number of orbits to send to each job.
-        num_jobs : int or None, optional
-            Number of jobs to launch. If None then the number of
-            jobs will be equal to the number of cores on the machine. If 1
+        max_processes : int or None, optional
+            Maximum number of processes to launch. If None then the number of
+            processes will be equal to the number of cores on the machine. If 1
             then no multiprocessing will be used.
 
         Returns
@@ -72,8 +72,8 @@ class Propagator(ABC):
         propagated : `~adam_core.orbits.orbits.Orbits`
             Propagated orbits.
         """
-        if num_jobs is None or num_jobs > 1:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_jobs) as executor:
+        if max_processes is None or max_processes > 1:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_processes) as executor:
                 futures = []
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
                     futures.append(executor.submit(propagation_worker, orbit_chunk, times, self))
@@ -105,7 +105,7 @@ class Propagator(ABC):
         orbits: Orbits,
         observers,
         chunk_size: int = 100,
-        num_jobs: Optional[int] = 1,
+        max_processes: Optional[int] = 1,
     ):
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -120,9 +120,9 @@ class Propagator(ABC):
             orbit.
         chunk_size : int, optional
             Number of orbits to send to each job.
-        num_jobs : int or None, optional
-            Number of jobs to launch. If None then the number of
-            jobs will be equal to the number of cores on the machine. If 1
+        max_processes : int or None, optional
+            Number of processes to launch. If None then the number of
+            processes will be equal to the number of cores on the machine. If 1
             then no multiprocessing will be used.
 
         Returns
@@ -134,8 +134,8 @@ class Propagator(ABC):
         TODO: Add ephemeris class
         TODO: Add an observers class
         """
-        if num_jobs is None or num_jobs > 1:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_jobs) as executor:
+        if max_processes is None or max_processes > 1:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_processes) as executor:
                 futures = []
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
                     futures.append(executor.submit(ephemeris_worker, orbit_chunk, observers, self))

@@ -30,7 +30,7 @@ def test_propagator_single_worker():
     times = Time(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
 
     prop = MockPropagator()
-    have = prop.propagate_orbits(orbits, times, num_jobs=1)
+    have = prop.propagate_orbits(orbits, times, max_processes=1)
 
     assert len(have) == len(orbits) * len(times)
 
@@ -40,6 +40,6 @@ def test_propagator_multiple_workers():
     times = Time(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
 
     prop = MockPropagator()
-    have = prop.propagate_orbits(orbits, times, num_jobs=4)
+    have = prop.propagate_orbits(orbits, times, max_processes=4)
 
     assert len(have) == len(orbits) * len(times)
