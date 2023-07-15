@@ -17,6 +17,7 @@ from quivr.defragment import defragment
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin
+from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.times import Times
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
@@ -385,17 +386,24 @@ class PYOORB(Propagator):
             observer_table = pa.concat_tables(
                 itertools.repeat(observer_i.table, len(orbits))
             )
+            observer_table = defragment(Observers(observer_table))
 
             ephemeris_list.append(
                 Ephemeris.from_kwargs(
                     orbit_id=orbit_ids,
                     object_id=object_ids,
-                    observer=defragment(Observers(observer_table)),
-                    ra=ephemeris[:, 1],
-                    dec=ephemeris[:, 2],
-                    vra=ephemeris[:, 3] / np.cos(np.radians(ephemeris[:, 2])),
-                    vdec=ephemeris[:, 4],
-                    frame="equatorial",
+                    observer=observer_table,
+                    coordinates=SphericalCoordinates.from_kwargs(
+                        time=observer_table.coordinates.time,
+                        rho=None,  # PYOORB rho (delta_au) is geocentric not topocentric
+                        lon=ephemeris[:, 1],
+                        lat=ephemeris[:, 2],
+                        vlon=ephemeris[:, 3] / np.cos(np.radians(ephemeris[:, 2])),
+                        vlat=ephemeris[:, 4],
+                        vrho=None,  # PYOORB doesn't calculate observer velocity so it can't calulate vrho
+                        origin=Origin.from_kwargs(code=observer_table.code),
+                        frame="equatorial",
+                    ),
                 )
             )
 

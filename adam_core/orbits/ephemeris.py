@@ -1,5 +1,5 @@
 import pandas as pd
-from quivr import Float64Column, StringAttribute, StringColumn, Table
+from quivr import StringColumn, Table
 from typing_extensions import Self
 
 from ..coordinates.spherical import SphericalCoordinates
@@ -11,26 +11,7 @@ class Ephemeris(Table):
     orbit_id = StringColumn(nullable=False)
     object_id = StringColumn()
     observer = Observers.as_column(nullable=False)
-    rho = Float64Column()
-    ra = Float64Column(nullable=False)
-    dec = Float64Column(nullable=False)
-    vrho = Float64Column()
-    vra = Float64Column()
-    vdec = Float64Column()
-    frame = StringAttribute()
-
-    def as_spherical_coordinates(self) -> SphericalCoordinates:
-        return SphericalCoordinates.from_kwargs(
-            rho=self.rho,
-            lon=self.ra,
-            lat=self.dec,
-            vrho=self.vrho,
-            vlon=self.vra,
-            vlat=self.vdec,
-            time=self.observer.coordinates.time,
-            origin=self.observer.code,
-            frame=self.frame,
-        )
+    coordinates = SphericalCoordinates.as_column(nullable=False)
 
     def to_dataframe(self) -> pd.DataFrame:
         """
@@ -44,38 +25,23 @@ class Ephemeris(Table):
         df = pd.DataFrame()
         df["orbit_id"] = self.orbit_id
         df["object_id"] = self.object_id
-        df["ra"] = self.ra
-        df["dec"] = self.dec
-        df["vra"] = self.vra
-        df["vdec"] = self.vdec
-        df["rho"] = self.rho
-        df["vrho"] = self.vrho
+        df_coordinates = self.coordinates.to_dataframe()
 
         df_obs = self.observer.to_dataframe()
-        df = pd.concat([df, df_obs], axis=1)
+        df = pd.concat([df, df_coordinates, df_obs], axis=1)
+        df.rename(
+            columns={
+                "lon": "ra",
+                "lat": "dec",
+                "vlon": "vra",
+                "vlat": "vdec",
+            },
+            inplace=True,
+        )
+        # These columns are duplicated with the Observer columns so lets
+        # drop them
+        df.drop(columns=["origin.code", "obs_jd1_tdb", "obs_jd2_tdb"], inplace=True)
 
-        df = df[
-            [
-                "orbit_id",
-                "object_id",
-                "obs_code",
-                "obs_jd1_tdb",
-                "obs_jd2_tdb",
-                "ra",
-                "dec",
-                "rho",
-                "vra",
-                "vdec",
-                "vrho",
-                "obs_x",
-                "obs_y",
-                "obs_z",
-                "obs_vx",
-                "obs_vy",
-                "obs_vz",
-                "obs_origin.code",
-            ]
-        ]
         return df
 
     @classmethod
@@ -93,17 +59,29 @@ class Ephemeris(Table):
         ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
             The Ephemeris table.
         """
-        observers = Observers.from_dataframe(df)
-
+        observers = Observers.from_dataframe(
+            df.rename(
+                columns={
+                    "jd1_tdb": "obs_jd1_tdb",
+                    "jd2_tdb": "obs_jd2_tdb",
+                }
+            )
+        )
+        coordinates = SphericalCoordinates.from_dataframe(
+            df.rename(
+                columns={
+                    "ra": "lon",
+                    "dec": "lat",
+                    "vra": "vlon",
+                    "vdec": "vlat",
+                    "obs_code": "origin.code",
+                },
+            ),
+            "equatorial",
+        )
         return cls.from_kwargs(
             orbit_id=df["orbit_id"],
             object_id=df["object_id"],
             observer=observers,
-            ra=df["ra"],
-            dec=df["dec"],
-            rho=df["rho"],
-            vra=df["vra"],
-            vdec=df["vdec"],
-            vrho=df["vrho"],
-            frame="equatorial",
+            coordinates=coordinates,
         )

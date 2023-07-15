@@ -207,7 +207,7 @@ ephemeris = propagator.generate_ephemeris(
     orbits,
     observers,
     chunk_size=100,
-    num_jobs=1
+    max_processes=1
 )
 ```
 
