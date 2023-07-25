@@ -32,7 +32,7 @@ __all__ = [
 
 class Residuals(Table):
 
-    values = ListColumn(pa.float64(), list_size=-1, nullable=True)
+    values = ListColumn(pa.float64(), nullable=True)
     chi2 = Float64Column(nullable=True)
     dof = Int64Column(nullable=True)
     probability = Float64Column(nullable=True)

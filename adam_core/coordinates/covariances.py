@@ -6,7 +6,7 @@ import pandas as pd
 import pyarrow as pa
 from astropy import units as u
 from astropy.table import Table as AstropyTable
-from quivr import ListColumn, Table
+from quivr import FixedSizeListColumn, Table
 from scipy.stats import multivariate_normal
 
 from .jacobian import calc_jacobian
@@ -58,7 +58,7 @@ class CoordinateCovariances(Table):
 
     # This is temporary while we await the implementation of
     # https://github.com/apache/arrow/issues/35599
-    values = ListColumn(pa.float64(), list_size=36)
+    values = FixedSizeListColumn(pa.float64(), list_size=36)
     # When fixed, we should revert to:
     # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
