@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture
 def orbital_elements():
     orbital_elements_file = files("adam_core.utils.helpers.data").joinpath(
-        "elements.csv"
+        "elements_sun.csv"
     )
     df = pd.read_csv(
         orbital_elements_file, index_col=False, float_precision="round_trip"

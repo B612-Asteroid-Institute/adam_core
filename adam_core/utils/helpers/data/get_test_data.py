@@ -11,7 +11,9 @@ from adam_core.orbits.query.horizons import (
 )
 
 
-def _get_orbital_elements(object_ids: List[str], time: Time) -> pd.DataFrame:
+def _get_orbital_elements(
+    object_ids: List[str], time: Time, location: str
+) -> pd.DataFrame:
     """
     Get orbital elements as Cartesian, Cometary, and Keplerian representations from JPL Horizons.
 
@@ -21,6 +23,9 @@ def _get_orbital_elements(object_ids: List[str], time: Time) -> pd.DataFrame:
         Object IDs to query.
     epoch : `~astropy.time.core.Time`
         Epoch at which to query orbital elements.
+    location : str
+        Location of the observer (in this case typically "@sun" or "@ssb"
+        for barycentric or heliocentric elements, respectively).
 
     Returns
     -------
@@ -28,14 +33,18 @@ def _get_orbital_elements(object_ids: List[str], time: Time) -> pd.DataFrame:
         DataFrame containing orbital elements in different representations for each object ID.
     """
     vectors_df = _get_horizons_vectors(
-        object_ids, time, location="@sun", id_type="smallbody", aberrations="geometric"
+        object_ids,
+        time,
+        location=location,
+        id_type="smallbody",
+        aberrations="geometric",
     )
     vectors_df = vectors_df[
         ["targetname", "datetime_jd", "x", "y", "z", "vx", "vy", "vz"]
     ]
 
     elements_df = _get_horizons_elements(
-        object_ids, time, location="@sun", id_type="smallbody"
+        object_ids, time, location=location, id_type="smallbody"
     )
     elements_df = elements_df[
         [
@@ -84,21 +93,31 @@ if __name__ == "__main__":
     )
 
     # Query for the orbital elements in different representations from JPL Horizons and save to a file
-    horizons_elements_dfs = []
-    for orbit in orbits:
-        prov_designation = (
-            orbit.object_ids.to_numpy(zero_copy_only=False)[0]
-            .split("(")
-            .pop()
-            .split(")")[0]
-        )
+    for origin in ["@sun", "@ssb"]:
 
-        horizons_elements_df = _get_orbital_elements(
-            [prov_designation], orbit.coordinates.times.to_astropy()
-        )
-        horizons_elements_dfs.append(horizons_elements_df)
+        horizons_elements_dfs = []
+        for orbit in orbits:
+            prov_designation = (
+                orbit.object_id.to_numpy(zero_copy_only=False)[0]
+                .split("(")
+                .pop()
+                .split(")")[0]
+            )
 
-    horizons_elements_df = pd.concat(horizons_elements_dfs)
-    horizons_elements_df.to_csv(
-        files("adam_core.utils.helpers.data").joinpath("elements.csv"), index=False
-    )
+            horizons_elements_df = _get_orbital_elements(
+                [prov_designation], orbit.coordinates.time.to_astropy(), location=origin
+            )
+            horizons_elements_dfs.append(horizons_elements_df)
+
+        horizons_elements_df = pd.concat(horizons_elements_dfs)
+
+        if origin == "@sun":
+            horizons_elements_df.to_csv(
+                files("adam_core.utils.helpers.data").joinpath("elements_sun.csv"),
+                index=False,
+            )
+        else:
+            horizons_elements_df.to_csv(
+                files("adam_core.utils.helpers.data").joinpath("elements_ssb.csv"),
+                index=False,
+            )
