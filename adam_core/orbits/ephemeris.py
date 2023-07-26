@@ -3,14 +3,12 @@ from quivr import StringColumn, Table
 from typing_extensions import Self
 
 from ..coordinates.spherical import SphericalCoordinates
-from ..observers import Observers
 
 
 class Ephemeris(Table):
 
     orbit_id = StringColumn(nullable=False)
     object_id = StringColumn()
-    observer = Observers.as_column(nullable=False)
     coordinates = SphericalCoordinates.as_column(nullable=False)
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -27,8 +25,7 @@ class Ephemeris(Table):
         df["object_id"] = self.object_id
         df_coordinates = self.coordinates.to_dataframe()
 
-        df_obs = self.observer.to_dataframe()
-        df = pd.concat([df, df_coordinates, df_obs], axis=1)
+        df = pd.concat([df, df_coordinates], axis=1)
         df.rename(
             columns={
                 "lon": "ra",
@@ -38,10 +35,6 @@ class Ephemeris(Table):
             },
             inplace=True,
         )
-        # These columns are duplicated with the Observer columns so lets
-        # drop them
-        df.drop(columns=["origin.code", "obs_jd1_tdb", "obs_jd2_tdb"], inplace=True)
-
         return df
 
     @classmethod
@@ -59,14 +52,6 @@ class Ephemeris(Table):
         ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
             The Ephemeris table.
         """
-        observers = Observers.from_dataframe(
-            df.rename(
-                columns={
-                    "jd1_tdb": "obs_jd1_tdb",
-                    "jd2_tdb": "obs_jd2_tdb",
-                }
-            )
-        )
         coordinates = SphericalCoordinates.from_dataframe(
             df.rename(
                 columns={
@@ -82,6 +67,5 @@ class Ephemeris(Table):
         return cls.from_kwargs(
             orbit_id=df["orbit_id"],
             object_id=df["object_id"],
-            observer=observers,
             coordinates=coordinates,
         )

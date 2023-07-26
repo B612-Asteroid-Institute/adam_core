@@ -54,7 +54,7 @@ def _assert_times_almost_equal(
 
     diff = np.abs(have - want)
     if np.any(diff > tolerance_in_days):
-        raise ValueError(f"Times were not within {tolerance:.2f} ms of each other.")
+        raise ValueError(f"Times were not within {tolerance:.6f} ms of each other.")
 
 
 def sort_propagated_orbits(propagated_orbits: Orbits) -> Orbits:
