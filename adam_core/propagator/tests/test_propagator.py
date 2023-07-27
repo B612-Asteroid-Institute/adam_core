@@ -1,11 +1,10 @@
+import quivr
 from astropy.time import Time
-from ...orbits import Orbits
+
 from ... import coordinates
+from ...orbits import Orbits
 from ...utils.helpers.orbits import make_real_orbits
 from .. import Propagator
-
-import quivr
-import pyarrow as pa
 
 
 class MockPropagator(Propagator):
