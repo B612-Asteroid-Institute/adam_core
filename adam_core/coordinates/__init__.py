@@ -16,7 +16,7 @@ from .covariances import (
 from .io import coords_from_dataframe, coords_to_dataframe
 from .jacobian import calc_jacobian
 from .keplerian import KEPLERIAN_COLS, KEPLERIAN_UNITS, KeplerianCoordinates
-from .origin import Origin
+from .origin import Origin, OriginCodes, OriginGravitationalParameters
 from .residuals import Residuals
 from .spherical import SPHERICAL_COLS, SPHERICAL_UNITS, SphericalCoordinates
 from .times import Times
