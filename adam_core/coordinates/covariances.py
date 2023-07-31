@@ -177,6 +177,17 @@ class CoordinateCovariances(Table):
 
         return cls.from_matrix(covariances)
 
+    def is_all_nan(self) -> bool:
+        """
+        Check if all covariance matrix values are NaN.
+
+        Returns
+        -------
+        is_all_nan : bool
+            True if all covariance matrix elements are NaN, False otherwise.
+        """
+        return np.all(np.isnan(self.to_matrix()))
+
 
 def sample_covariance(
     mean: np.ndarray, cov: np.ndarray, num_samples: int = 100000

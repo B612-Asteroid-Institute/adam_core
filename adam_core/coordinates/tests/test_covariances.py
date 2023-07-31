@@ -103,3 +103,27 @@ def test_CoordinateCovariances_to_dataframe():
     np.testing.assert_equal(df["sigma_vx"].values, np.sqrt(np.array([25.0, 36.0])))
     np.testing.assert_equal(df["sigma_vy"].values, np.sqrt(np.array([36.0, 49.0])))
     np.testing.assert_equal(df["sigma_vz"].values, np.sqrt(np.array([49.0, 64.0])))
+
+
+def test_CoordinateCovariances_is_all_nan():
+    # Test that all_nan convenience method works as intended
+    # No NaNs at all
+    covariances = np.ones((10, 6, 6))
+    cov = CoordinateCovariances.from_matrix(covariances)
+    assert not cov.is_all_nan()
+
+    # Single NaN value
+    covariances = np.ones((10, 6, 6))
+    covariances[0, 0, 0] = np.nan
+    cov = CoordinateCovariances.from_matrix(covariances)
+    assert not cov.is_all_nan()
+
+    # Null covariance (None)
+    covariances = [None, np.ones((6, 6)).flatten()]
+    cov = CoordinateCovariances.from_kwargs(values=covariances)
+    assert not cov.is_all_nan()
+
+    # All NaNs
+    covariances = np.ones((10, 6, 6)) * np.nan
+    cov = CoordinateCovariances.from_matrix(covariances)
+    assert cov.is_all_nan()
