@@ -1,16 +1,17 @@
 import pandas as pd
+import quivr as qv
 from astropy.time import Time
-from quivr import Float64Column, StringAttribute, Table
+from typing_extensions import Self
 
 
-class Times(Table):
+class Times(qv.Table):
 
     # Stores the time as a pair of float64 values in the same style as erfa/astropy:
     # The first one is the day-part of a Julian date, and the second is
     # the fractional day-part.
-    jd1 = Float64Column()
-    jd2 = Float64Column()
-    scale = StringAttribute(default="utc")
+    jd1 = qv.Float64Column()
+    jd2 = qv.Float64Column()
+    scale = qv.StringAttribute(default="utc")
 
     @classmethod
     def from_astropy(cls, time: Time):
@@ -33,6 +34,24 @@ class Times(Table):
             return t
         t.format = format
         return t
+
+    def to_scale(self, scale: str) -> Self:
+        """
+        Convert to a different time scale.
+
+        Parameters
+        ----------
+        scale : str
+            The time scale to convert to.
+
+        Returns
+        -------
+        times : `~adam_core.coordinates.times.Times`
+            The times in the new scale.
+        """
+        time = self.to_astropy()
+        time._set_scale(scale)
+        return self.from_astropy(time)
 
     def to_dataframe(self, flatten: bool = True) -> pd.DataFrame:
         """
