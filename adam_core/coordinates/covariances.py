@@ -4,9 +4,9 @@ from typing import Callable, List
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import quivr as qv
 from astropy import units as u
 from astropy.table import Table as AstropyTable
-from quivr import FixedSizeListColumn, Table
 from scipy.stats import multivariate_normal
 
 from .jacobian import calc_jacobian
@@ -50,17 +50,12 @@ def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
     return covariances
 
 
-class CoordinateCovariances(Table):
+class CoordinateCovariances(qv.Table):
     # TODO: Would be interesting if the dimensionality can be generalized
     #      to D dimensions, so (N, D, D) instead of (N, 6, 6). We would be
     #      able to use this class for the covariance matrices of different
     #      measurments like projections (D = 4) and photometry (D = 1).
-
-    # This is temporary while we await the implementation of
-    # https://github.com/apache/arrow/issues/35599
-    values = FixedSizeListColumn(pa.float64(), list_size=36)
-    # When fixed, we should revert to:
-    # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
+    values = qv.Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
     @property
     def sigmas(self):
@@ -77,36 +72,7 @@ class CoordinateCovariances(Table):
         covariances : `numpy.ndarray` (N, 6, 6)
             Covariance matrices for N coordinates in 6 dimensions.
         """
-        # return self.values.combine_chunks().to_numpy_ndarray()
-        values = self.values.to_numpy(zero_copy_only=False)
-
-        # If all covariance matrices are None, then return a covariances
-        # filled with NaNs.
-        if np.all(values == None):  # noqa: E711
-            return np.full((len(self), 6, 6), np.nan)
-
-        else:
-            # Try to stack the values into a 3D array. If this works, then
-            # all covariance matrices are the same size and we can return
-            # the stacked matrices.
-            try:
-                cov = np.stack(values).reshape(-1, 6, 6)
-
-            # If not then some of the arrays might be None. Lets loop through
-            # the values and fill in the arrays that are missing (None) with NaNs.
-            except ValueError as e:
-                # If we don't get the error we expect, then raise it.
-                if str(e) != "all input arrays must have the same shape":
-                    raise e
-                else:
-                    for i in range(len(values)):
-                        if values[i] is None:
-                            values[i] = np.full(36, np.nan)
-
-                # Try stacking again
-                cov = np.stack(values).reshape(-1, 6, 6)
-
-            return cov
+        return self.values.combine_chunks().to_numpy_ndarray()
 
     @classmethod
     def from_matrix(cls, covariances: np.ndarray) -> "CoordinateCovariances":
@@ -123,9 +89,8 @@ class CoordinateCovariances(Table):
         covariances : `Covariances`
             Covariance matrices for N coordinates in 6 dimensions.
         """
-        # cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
-        cov = covariances.reshape(-1, 36)
-        return cls.from_kwargs(values=list(cov))
+        cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
+        return cls.from_kwargs(values=cov)
 
     @classmethod
     def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
