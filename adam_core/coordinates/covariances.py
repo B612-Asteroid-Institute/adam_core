@@ -78,12 +78,35 @@ class CoordinateCovariances(Table):
             Covariance matrices for N coordinates in 6 dimensions.
         """
         # return self.values.combine_chunks().to_numpy_ndarray()
-        cov = np.stack(self.values.to_numpy(zero_copy_only=False))
-        if np.all(cov == None):  # noqa: E711
+        values = self.values.to_numpy(zero_copy_only=False)
+
+        # If all covariance matrices are None, then return a covariances
+        # filled with NaNs.
+        if np.all(values == None):  # noqa: E711
             return np.full((len(self), 6, 6), np.nan)
+
         else:
-            cov = np.stack(cov).reshape(-1, 6, 6)
-        return cov
+            # Try to stack the values into a 3D array. If this works, then
+            # all covariance matrices are the same size and we can return
+            # the stacked matrices.
+            try:
+                cov = np.stack(values).reshape(-1, 6, 6)
+
+            # If not then some of the arrays might be None. Lets loop through
+            # the values and fill in the arrays that are missing (None) with NaNs.
+            except ValueError as e:
+                # If we don't get the error we expect, then raise it.
+                if str(e) != "all input arrays must have the same shape":
+                    raise e
+                else:
+                    for i in range(len(values)):
+                        if values[i] is None:
+                            values[i] = np.full(36, np.nan)
+
+                # Try stacking again
+                cov = np.stack(values).reshape(-1, 6, 6)
+
+            return cov
 
     @classmethod
     def from_matrix(cls, covariances: np.ndarray) -> "CoordinateCovariances":

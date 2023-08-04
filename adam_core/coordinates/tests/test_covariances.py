@@ -47,6 +47,19 @@ def test_CoordinateCovariances_to_from_matrix():
     cov = CoordinateCovariances.from_matrix(covariances)
     np.testing.assert_equal(cov.to_matrix(), covariances)
 
+    # Test when covariances are mixed with None and np.array
+    covariances = [None, np.ones((6, 6)).flatten()]
+    cov = CoordinateCovariances.from_kwargs(values=covariances)
+    cov_expected = np.ones((2, 6, 6))
+    cov_expected[0, :, :] = np.NaN
+    np.testing.assert_equal(cov.to_matrix(), cov_expected)
+
+    # Test when covariances are only None
+    covariances = [None, None]
+    cov = CoordinateCovariances.from_kwargs(values=covariances)
+    cov_expected = np.full((2, 6, 6), np.NaN)
+    np.testing.assert_equal(cov.to_matrix(), cov_expected)
+
 
 def test_CoordinateCovariances_to_dataframe():
     # Given an array of covariances test that the dataframe
