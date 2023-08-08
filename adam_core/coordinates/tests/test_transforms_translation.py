@@ -9,6 +9,23 @@ from ..times import Times
 from ..transform import cartesian_to_origin
 
 
+def assert_coords_equal(
+    have: CartesianCoordinates,
+    want: CartesianCoordinates,
+):
+    diff = want.values - have.values
+
+    # Calculate offset in position in mm
+    r_diff = np.linalg.norm(diff[:, :3], axis=1) * u.au.to(u.mm)
+    # Calculate offset in velocity in nm/s
+    v_diff = np.linalg.norm(diff[:, 3:], axis=1) * (u.au / u.d).to(u.nm / u.s)
+
+    # Assert positions are to within 10 mm
+    np.testing.assert_array_less(r_diff, 10)
+    # Assert velocities are to within 10 nm/s
+    np.testing.assert_array_less(v_diff, 10)
+
+
 def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
     # Test cartesian_to_origin correctly converts between heliocentric and
     # barycentric cartesian coordinates
@@ -56,20 +73,9 @@ def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
         OriginCodes.SOLAR_SYSTEM_BARYCENTER,
     )
 
-    diff = (
-        cartesian_coordinates_barycentric_actual.values
-        - cartesian_coordinates_barycentric.values
+    assert_coords_equal(
+        cartesian_coordinates_barycentric, cartesian_coordinates_barycentric
     )
-
-    # Calculate offset in position in mm
-    r_diff = np.linalg.norm(diff[:, :3], axis=1) * u.au.to(u.mm)
-    # Calculate offset in velocity in nm/s
-    v_diff = np.linalg.norm(diff[:, 3:], axis=1) * (u.au / u.d).to(u.nm / u.s)
-
-    # Assert positions are to within 10 mm
-    np.testing.assert_array_less(r_diff, 10)
-    # Assert velocities are to within 10 nm/s
-    np.testing.assert_array_less(v_diff, 10)
 
     # Convert barycentric cartesian coordinates to heliocentric cartesian coordinates
     cartesian_coordinates_heliocentric_actual = cartesian_to_origin(
@@ -77,20 +83,9 @@ def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
         OriginCodes.SUN,
     )
 
-    diff = (
-        cartesian_coordinates_heliocentric_actual.values
-        - cartesian_coordinates_heliocentric.values
+    assert_coords_equal(
+        cartesian_coordinates_heliocentric_actual, cartesian_coordinates_heliocentric
     )
-
-    # Calculate offset in position in mm
-    r_diff = np.linalg.norm(diff[:, :3], axis=1) * u.au.to(u.mm)
-    # Calculate offset in velocity in nm/s
-    v_diff = np.linalg.norm(diff[:, 3:], axis=1) * (u.au / u.d).to(u.nm / u.s)
-
-    # Assert positions are to within 10 mm
-    np.testing.assert_array_less(r_diff, 10)
-    # Assert velocities are to within 10 nm/s
-    np.testing.assert_array_less(v_diff, 10)
 
     # Now lets complicate matters by concatenating heliocentric and barycentric
     # cartesian coordinates and converting them to barycentric cartesian coordinates
@@ -103,19 +98,13 @@ def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
         OriginCodes.SOLAR_SYSTEM_BARYCENTER,
     )
 
-    diff = cartesian_coordinates_barycentric_actual.values - np.tile(
-        cartesian_coordinates_barycentric.values, (2, 1)
+    cartesian_coordinates_barycentric_ = concatenate(
+        [cartesian_coordinates_barycentric for i in range(2)]
     )
 
-    # Calculate offset in position in mm
-    r_diff = np.linalg.norm(diff[:, :3], axis=1) * u.au.to(u.mm)
-    # Calculate offset in velocity in nm/s
-    v_diff = np.linalg.norm(diff[:, 3:], axis=1) * (u.au / u.d).to(u.nm / u.s)
-
-    # Assert positions are to within 10 mm
-    np.testing.assert_array_less(r_diff, 10)
-    # Assert velocities are to within 10 nm/s
-    np.testing.assert_array_less(v_diff, 10)
+    assert_coords_equal(
+        cartesian_coordinates_barycentric_actual, cartesian_coordinates_barycentric_
+    )
 
     # Now lets complicate matters again by concatenating heliocentric and barycentric
     # cartesian coordinates and converting them to heliocentric cartesian coordinates
@@ -128,16 +117,10 @@ def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
         OriginCodes.SUN,
     )
 
-    diff = cartesian_coordinates_heliocentric_actual.values - np.tile(
-        cartesian_coordinates_heliocentric.values, (2, 1)
+    cartesian_coordinates_heliocentric_ = concatenate(
+        [cartesian_coordinates_heliocentric for i in range(2)]
     )
 
-    # Calculate offset in position in mm
-    r_diff = np.linalg.norm(diff[:, :3], axis=1) * u.au.to(u.mm)
-    # Calculate offset in velocity in nm/s
-    v_diff = np.linalg.norm(diff[:, 3:], axis=1) * (u.au / u.d).to(u.nm / u.s)
-
-    # Assert positions are to within 10 mm
-    np.testing.assert_array_less(r_diff, 10)
-    # Assert velocities are to within 10 nm/s
-    np.testing.assert_array_less(v_diff, 10)
+    assert_coords_equal(
+        cartesian_coordinates_heliocentric_actual, cartesian_coordinates_heliocentric_
+    )
