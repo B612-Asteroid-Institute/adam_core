@@ -41,7 +41,7 @@ class CartesianCoordinates(Table):
     vz = Float64Column(nullable=True)
     time = Times.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
-    origin = Origin.as_column(nullable=False)
+    origin = Origin.as_column()
     frame = StringAttribute()
 
     @property

@@ -8,8 +8,8 @@ class Times(Table):
     # Stores the time as a pair of float64 values in the same style as erfa/astropy:
     # The first one is the day-part of a Julian date, and the second is
     # the fractional day-part.
-    jd1 = Float64Column(nullable=False)
-    jd2 = Float64Column(nullable=False)
+    jd1 = Float64Column()
+    jd2 = Float64Column()
     scale = StringAttribute()
 
     @classmethod

@@ -40,15 +40,15 @@ class CometaryCoordinates(Table):
     # grab the MJD column. That said, we would want to force it
     # the time scale to be in TDB..
 
-    q = Float64Column(nullable=False)
-    e = Float64Column(nullable=False)
-    i = Float64Column(nullable=False)
-    raan = Float64Column(nullable=False)
-    ap = Float64Column(nullable=False)
-    tp = Float64Column(nullable=False)
+    q = Float64Column()
+    e = Float64Column()
+    i = Float64Column()
+    raan = Float64Column()
+    ap = Float64Column()
+    tp = Float64Column()
     time = Times.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
-    origin = Origin.as_column(nullable=False)
+    origin = Origin.as_column()
     frame = StringAttribute()
 
     @property
