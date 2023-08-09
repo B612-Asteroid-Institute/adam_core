@@ -231,6 +231,9 @@ class PYOORB(Propagator):
             )
             states_list.append(orbits_pyoorb_i)
 
+            if err != 0:
+                raise RuntimeError(f"PYOORB propagation failed with error code {err}.")
+
         # Convert list of new states into a pandas data frame
         # These states at the moment will always be return as cartesian
         # state vectors
