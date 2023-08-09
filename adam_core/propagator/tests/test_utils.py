@@ -1,7 +1,8 @@
 import numpy as np
+import pytest
 from quivr import Float64Column, Table
 
-from ..utils import _iterate_chunks
+from ..utils import _assert_times_almost_equal, _iterate_chunks
 
 
 class SampleTable(Table):
@@ -34,3 +35,18 @@ def test__iterate_chunks_table():
             assert len(chunk) == 1
             assert isinstance(chunk, SampleTable)
             np.testing.assert_equal(chunk.a.to_numpy(), np.arange(i * 2, i * 2 + 1))
+
+
+def test__assert_times_almost_equal():
+    have = np.array([1.0, 2.0, 3.0])
+    want = np.array([1.0, 2.0, 3.0])
+
+    _assert_times_almost_equal(have, want, tolerance=1.0)
+
+    with pytest.raises(ValueError):
+        have = np.array([1.0, 2.0, 3.0])
+        want = np.array([1.0, 2.0, 3.0])
+
+        # Offset have by 2 ms
+        have += 2 / 86800 / 1000
+        _assert_times_almost_equal(have, want, tolerance=1.0)

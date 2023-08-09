@@ -16,6 +16,7 @@ from ..coordinates.origin import Origin
 from ..coordinates.times import Times
 from ..orbits.orbits import Orbits
 from .propagator import Propagator
+from .utils import _assert_times_almost_equal
 
 
 class OpenOrbTimescale(enum.Enum):
@@ -250,6 +251,10 @@ class PYOORB(Propagator):
         vy = states[:, 5]
         vz = states[:, 6]
         mjd_tt = states[:, 8]
+
+        # Check to make sure the desired times are within an acceptable
+        # tolerance
+        _assert_times_almost_equal(mjd_tt, np.repeat(epochs_pyoorb[:, 0], len(orbits)))
 
         # Convert output epochs to TDB
         times_ = Time(mjd_tt, format="mjd", scale="tt")
