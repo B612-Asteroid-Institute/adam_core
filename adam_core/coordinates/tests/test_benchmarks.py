@@ -4,6 +4,7 @@ from astropy.time import Time
 
 from ..cartesian import CartesianCoordinates
 from ..cometary import CometaryCoordinates
+from ..covariances import CoordinateCovariances
 from ..keplerian import KeplerianCoordinates
 from ..origin import Origin, OriginCodes
 from ..spherical import SphericalCoordinates
@@ -50,3 +51,22 @@ def test_benchmark_transform_cartesian_coordinates(
         frame_out=frame,
         origin_out=origin,
     )
+
+
+@pytest.mark.benchmark(group="coordinate_covariances")
+def test_benchmark_CoordinateCovariances_to_matrix(benchmark):
+
+    covariances_filled = [np.random.random(36) for _ in range(500)]
+    covariances_missing = [None for _ in range(500)]
+    coordinate_covariances = CoordinateCovariances.from_kwargs(
+        values=covariances_filled + covariances_missing
+    )
+    benchmark(coordinate_covariances.to_matrix)
+
+
+@pytest.mark.benchmark(group="coordinate_covariances")
+def test_benchmark_CoordinateCovariances_from_matrix(benchmark):
+
+    covariances = np.random.random((1000, 6, 6))
+    covariances[500:, :, :] = np.nan
+    benchmark(CoordinateCovariances.from_matrix, covariances)
