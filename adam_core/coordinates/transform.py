@@ -3,6 +3,7 @@ from typing import Literal, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
+import pyarrow.compute as pc
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
@@ -1222,16 +1223,15 @@ def cartesian_to_origin(
     CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Translated Cartesian coordinates and their covariances.
     """
-    origins = coords.origin.code.to_numpy(zero_copy_only=False)
-    unique_origins = np.unique(origins)
+    unique_origins = coords.origin.code.unique()
     vectors = np.empty(coords.values.shape, dtype=np.float64)
     times = coords.time.to_astropy()
 
     for origin_in in unique_origins:
 
-        mask = np.where(origins == origin_in)[0]
+        mask = pc.equal(coords.origin.code, origin_in).to_numpy(zero_copy_only=False)
         vectors[mask] = get_perturber_state(
-            OriginCodes[origin_in],
+            OriginCodes[origin_in.as_py()],
             times[mask],
             frame=coords.frame,
             origin=origin,
