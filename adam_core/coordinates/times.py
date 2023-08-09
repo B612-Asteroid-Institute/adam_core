@@ -10,7 +10,7 @@ class Times(Table):
     # the fractional day-part.
     jd1 = Float64Column()
     jd2 = Float64Column()
-    scale = StringAttribute()
+    scale = StringAttribute(default="utc")
 
     @classmethod
     def from_astropy(cls, time: Time):
