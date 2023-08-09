@@ -60,7 +60,7 @@ class OriginGravitationalParameters(float, Enum):
 #       Investigate whether this class is even necessary
 class Origin(Table):
 
-    code = StringColumn(nullable=False)
+    code = StringColumn()
 
     def __init__(self, table: pa.Table, mu: Optional[float] = None):
         super().__init__(table)

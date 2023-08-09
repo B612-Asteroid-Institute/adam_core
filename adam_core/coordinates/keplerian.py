@@ -36,15 +36,15 @@ KEPLERIAN_UNITS["M"] = u.deg
 
 class KeplerianCoordinates(Table):
 
-    a = Float64Column(nullable=False)
-    e = Float64Column(nullable=False)
-    i = Float64Column(nullable=False)
-    raan = Float64Column(nullable=False)
-    ap = Float64Column(nullable=False)
-    M = Float64Column(nullable=False)
+    a = Float64Column()
+    e = Float64Column()
+    i = Float64Column()
+    raan = Float64Column()
+    ap = Float64Column()
+    M = Float64Column()
     time = Times.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
-    origin = Origin.as_column(nullable=False)
+    origin = Origin.as_column()
     frame = StringAttribute()
 
     @property

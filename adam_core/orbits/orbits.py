@@ -13,7 +13,7 @@ class Orbits(Table):
 
     orbit_id = StringColumn(nullable=True)
     object_id = StringColumn(nullable=True)
-    coordinates = CartesianCoordinates.as_column(nullable=False)
+    coordinates = CartesianCoordinates.as_column()
 
     def to_dataframe(self, sigmas: bool = False, covariances: bool = True):
         """

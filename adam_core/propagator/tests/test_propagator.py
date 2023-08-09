@@ -15,7 +15,7 @@ class MockPropagator(Propagator):
             repeated_time = Time([t] * len(orbits))
             orbits.coordinates.time = coordinates.Times.from_astropy(
                 repeated_time
-            ).to_structarray()
+            )
             all_times.append(orbits)
 
         return quivr.concatenate(all_times)

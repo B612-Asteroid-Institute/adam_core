@@ -58,7 +58,7 @@ class CoordinateCovariances(Table):
 
     # This is temporary while we await the implementation of
     # https://github.com/apache/arrow/issues/35599
-    values = FixedSizeListColumn(pa.float64(), list_size=36)
+    values = FixedSizeListColumn(pa.float64(), list_size=36, nullable=True)
     # When fixed, we should revert to:
     # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 

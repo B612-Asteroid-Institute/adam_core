@@ -5,7 +5,7 @@ from ..utils import _iterate_chunks
 
 
 class SampleTable(Table):
-    a = Float64Column(nullable=False)
+    a = Float64Column()
 
 
 def test__iterate_chunks():
