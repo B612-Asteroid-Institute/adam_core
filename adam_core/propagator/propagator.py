@@ -1,7 +1,6 @@
-import logging
 import concurrent.futures
+import logging
 from abc import ABC, abstractmethod
-from itertools import repeat
 from typing import Optional
 
 from astropy.time import Time
@@ -73,10 +72,14 @@ class Propagator(ABC):
             Propagated orbits.
         """
         if max_processes is None or max_processes > 1:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_processes) as executor:
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=max_processes
+            ) as executor:
                 futures = []
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
-                    futures.append(executor.submit(propagation_worker, orbit_chunk, times, self))
+                    futures.append(
+                        executor.submit(propagation_worker, orbit_chunk, times, self)
+                    )
 
                 propagated_list = []
                 for future in concurrent.futures.as_completed(futures):
@@ -135,10 +138,14 @@ class Propagator(ABC):
         TODO: Add an observers class
         """
         if max_processes is None or max_processes > 1:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_processes) as executor:
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=max_processes
+            ) as executor:
                 futures = []
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
-                    futures.append(executor.submit(ephemeris_worker, orbit_chunk, observers, self))
+                    futures.append(
+                        executor.submit(ephemeris_worker, orbit_chunk, observers, self)
+                    )
 
                 ephemeris_list = []
                 for future in concurrent.futures.as_completed(futures):

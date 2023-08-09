@@ -3,11 +3,13 @@ from typing import Literal, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
+import pyarrow.compute as pc
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
 from ..dynamics.barker import solve_barker
 from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
+from ..utils.spice import get_perturber_state
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .keplerian import KeplerianCoordinates
@@ -1213,7 +1215,7 @@ def cartesian_to_origin(
     ----------
     coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Cartesian coordinates and optionally their covariances.
-    origin : {'SUN', 'SOLAR_SYSTEM_BARYCENTER'}
+    origin : `~adam_core.coordinates.origin.OriginCodes`
         Name of the desired origin.
 
     Returns
@@ -1221,15 +1223,19 @@ def cartesian_to_origin(
     CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Translated Cartesian coordinates and their covariances.
     """
-    unique_origins = np.unique(coords.origin)
-    vectors = np.zeros(coords.values.shape, dtype=np.float64)
+    unique_origins = coords.origin.code.unique()
+    vectors = np.empty(coords.values.shape, dtype=np.float64)
+    times = coords.time.to_astropy()
 
     for origin_in in unique_origins:
-        raise NotImplementedError("get_perturber_state not implemented yet")
-        # mask = np.where(coords.origin == origin_in)[0]
-        # vectors[mask] = get_perturber_state(
-        #    origin_in, coords.times[mask], frame=coords.frame, origin=origin
-        # )
+
+        mask = pc.equal(coords.origin.code, origin_in).to_numpy(zero_copy_only=False)
+        vectors[mask] = get_perturber_state(
+            OriginCodes[origin_in.as_py()],
+            times[mask],
+            frame=coords.frame,
+            origin=origin,
+        ).values
 
     return coords.translate(vectors, origin.name)
 
