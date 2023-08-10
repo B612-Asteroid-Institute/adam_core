@@ -98,7 +98,7 @@ class Observers(Table):
         observers : `~adam_core.observers.observers.Observers`
             The Observers table for this observer.
         """
-        for code in self.code.unique():
+        for code in self.code.unique().sort():
             yield code.as_py(), self.select("code", code)
 
     def to_dataframe(self) -> pd.DataFrame:
