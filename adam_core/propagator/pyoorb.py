@@ -444,20 +444,20 @@ class PYOORB(Propagator):
         # Concatenate ephemeris into single table
         ephemeris = qv.concatenate(ephemeris_list)
 
-        # We round jd2 to 10 digits or to within 8.64 microseconds to
-        # get around linking on floating point time numbers
+        # We use mjd as the time linking key because openorb uses
+        # mjd. If we try to use coordinates.time.jd1 and jd2 directly,
+        # we will get loss-of-precision issues, and the keys won't
+        # align.
         linkages = qv.MultiKeyLinkage(
             left_table=ephemeris,
             right_table=observers,
             left_keys={
                 "code": ephemeris.coordinates.origin.code,
-                "jd1": ephemeris.coordinates.time.jd1,
-                "jd2": pc.round(ephemeris.coordinates.time.jd2, ndigits=10),
+                "mjd": ephemeris.coordinates.time.mjd(),
             },
             right_keys={
                 "code": observers_utc.code,
-                "jd1": observers_utc.coordinates.time.jd1,
-                "jd2": pc.round(observers_utc.coordinates.time.jd2, ndigits=10),
+                "mjd": observers_utc.coordinates.time.mjd(),
             },
         )
 

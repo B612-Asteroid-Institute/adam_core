@@ -1,4 +1,6 @@
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 import quivr as qv
 from astropy.time import Time
 from typing_extensions import Self
@@ -98,3 +100,25 @@ class Times(qv.Table):
             columns={col: col.split("_")[0] for col in df_filtered.columns}
         )
         return cls.from_kwargs(jd1=df_renamed.jd1, jd2=df_renamed.jd2, scale=scale)
+
+    def jd(self) -> pa.lib.DoubleArray:
+        """
+        Returns the times as a double-precision array of julian date values.
+
+        Returns
+        -------
+        jd : `~pyarrow.DoubleArray`
+            The times as a double-precision array of julian date values.
+        """
+        return pc.add(self.jd1, self.jd2)
+
+    def mjd(self) -> pa.lib.DoubleArray:
+        """
+        Returns the times as a double-precision array of modified julian date values.
+
+        Returns
+        -------
+        mjd : `~pyarrow.DoubleArray`
+            The times as a double-precision array of modified julian date values.
+        """
+        return pc.add(pc.add(self.jd1, -2400000.5), self.jd2)
