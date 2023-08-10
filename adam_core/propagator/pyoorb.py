@@ -16,6 +16,7 @@ from ..coordinates.origin import Origin
 from ..coordinates.times import Times
 from ..orbits.orbits import Orbits
 from .propagator import Propagator
+from .utils import _assert_times_almost_equal
 
 
 class OpenOrbTimescale(enum.Enum):
@@ -208,7 +209,7 @@ class PYOORB(Propagator):
         # Convert orbits into PYOORB format
         orbits_pyoorb = self._configure_orbits(
             orbits.coordinates.values,
-            orbits.coordinates.times.to_astropy().tt.mjd,
+            orbits.coordinates.time.to_astropy().tt.mjd,
             OpenOrbOrbitType.CARTESIAN,
             OpenOrbTimescale.TT,
             magnitude=None,
@@ -229,6 +230,9 @@ class PYOORB(Propagator):
                 in_dynmodel=self.dynamical_model,
             )
             states_list.append(orbits_pyoorb_i)
+
+            if err != 0:
+                raise RuntimeError(f"PYOORB propagation failed with error code {err}.")
 
         # Convert list of new states into a pandas data frame
         # These states at the moment will always be return as cartesian
@@ -251,19 +255,17 @@ class PYOORB(Propagator):
         vz = states[:, 6]
         mjd_tt = states[:, 8]
 
+        # Check to make sure the desired times are within an acceptable
+        # tolerance
+        _assert_times_almost_equal(mjd_tt, np.repeat(epochs_pyoorb[:, 0], len(orbits)))
+
         # Convert output epochs to TDB
         times_ = Time(mjd_tt, format="mjd", scale="tt")
         times_ = times_.tdb
 
-        if orbits.object_ids is not None:
-            object_ids = orbits.object_ids.to_numpy(zero_copy_only=False)[orbit_ids_]
-        else:
-            object_ids = None
-
-        if orbits.orbit_ids is not None:
-            orbit_ids = orbits.orbit_ids.to_numpy(zero_copy_only=False)[orbit_ids_]
-        else:
-            orbit_ids = None
+        # Map the object and orbit IDs back to the input arrays
+        object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_]
+        orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_]
 
         propagated_orbits = Orbits.from_kwargs(
             orbit_id=orbit_ids,
