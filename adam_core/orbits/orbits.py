@@ -1,18 +1,19 @@
 import logging
+import uuid
 from typing import Literal
 
 import pandas as pd
-from quivr import StringColumn, Table
+import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 
 logger = logging.getLogger(__name__)
 
 
-class Orbits(Table):
+class Orbits(qv.Table):
 
-    orbit_id = StringColumn(nullable=True)
-    object_id = StringColumn(nullable=True)
+    orbit_id = qv.StringColumn(default=lambda: uuid.uuid4().hex)
+    object_id = qv.StringColumn(nullable=True)
     coordinates = CartesianCoordinates.as_column()
 
     def to_dataframe(self, sigmas: bool = False, covariances: bool = True):
