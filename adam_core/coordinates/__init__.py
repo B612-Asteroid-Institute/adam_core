@@ -8,6 +8,7 @@ from .covariances import (
     covariances_to_df,
     covariances_to_table,
     sample_covariance,
+    sample_covariance_sigma_points,
     sigmas_from_df,
     sigmas_to_df,
     transform_covariances_jacobian,

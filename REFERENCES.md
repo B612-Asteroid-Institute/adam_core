@@ -8,3 +8,5 @@
 * Danby, J. M. A. (1992). Fundamentals of Celestial Mechanics. 2nd ed.,
     William-Bell, Inc. ISBN-13: 978-0943396200
     Notes: of particular interest is Danby's fantastic chapter on universal variables (6.9)
+* Wan, E. A; Van Der Merwe, R. (2000). The unscented Kalman filter for nonlinear estimation.  
+    Proceedings of the IEEE 2000 Adaptive Systems for Signal Processing, Communications, and Control Symposium, 153-158. https://doi.org/10.1109/ASSPCC.2000.882463

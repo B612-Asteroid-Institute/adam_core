@@ -1,6 +1,36 @@
 import numpy as np
 
-from ..covariances import CoordinateCovariances
+from ...utils.helpers.orbits import make_real_orbits
+from ..covariances import CoordinateCovariances, sample_covariance_sigma_points
+
+
+def test_sample_covariance_sigma_points():
+    # Get a sample of real orbits and test that sigma point sampling
+    # allows the state vector and its covariance to be reconstructed
+    orbits = make_real_orbits()
+
+    for orbit in orbits:
+        mean = orbit.coordinates.values[0]
+        covariance = orbit.coordinates.covariance.to_matrix()[0]
+
+        samples, W, W_cov = sample_covariance_sigma_points(mean, covariance)
+
+        # In a 6 dimensional space we expect 13 sigma point samples
+        assert len(samples) == 13
+        # The first sample should be the mean
+        np.testing.assert_equal(samples[0], mean)
+        # The first weight should be 0.0
+        assert W[0] == 0.0
+        # The first weight for the covariance should be 0
+        # since beta = 0 internally
+        assert W_cov[0] == 0.0
+
+        # Reconstruct the mean and covariance
+        mean_sg = np.dot(W, samples)
+        np.testing.assert_allclose(mean_sg, mean, rtol=0, atol=1e-14)
+
+        cov_sg = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
+        np.testing.assert_allclose(cov_sg, covariance, rtol=0, atol=1e-14)
 
 
 def test_CoordinateCovariances_from_sigmas():
