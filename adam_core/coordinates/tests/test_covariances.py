@@ -1,10 +1,14 @@
 import numpy as np
 
 from ...utils.helpers.orbits import make_real_orbits
-from ..covariances import CoordinateCovariances, sample_covariance_sigma_points
+from ..covariances import (
+    CoordinateCovariances,
+    mean_and_covariance_from_sigma_points,
+    sample_covariance_sigma_points,
+)
 
 
-def test_sample_covariance_sigma_points():
+def test_sigma_points():
     # Get a sample of real orbits and test that sigma point sampling
     # allows the state vector and its covariance to be reconstructed
     orbits = make_real_orbits()
@@ -25,12 +29,13 @@ def test_sample_covariance_sigma_points():
         # since beta = 0 internally
         assert W_cov[0] == 0.0
 
-        # Reconstruct the mean and covariance
-        mean_sg = np.dot(W, samples)
+        # Reconstruct the mean and covariance and test that they match
+        # the original inputs to within 1e-14
+        mean_sg, covariance_sg = mean_and_covariance_from_sigma_points(
+            samples, W, W_cov
+        )
         np.testing.assert_allclose(mean_sg, mean, rtol=0, atol=1e-14)
-
-        cov_sg = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
-        np.testing.assert_allclose(cov_sg, covariance, rtol=0, atol=1e-14)
+        np.testing.assert_allclose(covariance_sg, covariance, rtol=0, atol=1e-14)
 
 
 def test_CoordinateCovariances_from_sigmas():
