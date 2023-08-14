@@ -9,7 +9,7 @@ from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
-from ...orbits import Orbits
+from ...orbits.orbits import Orbits
 
 
 def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
