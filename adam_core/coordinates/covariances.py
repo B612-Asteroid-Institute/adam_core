@@ -319,31 +319,32 @@ def sample_covariance_sigma_points(
     return sigma_points, W, W_cov
 
 
-def mean_and_covariance_from_sigma_points(sigma_points, W, W_cov):
+def mean_and_covariance_from_weighted_samples(samples, W, W_cov):
     """
-    Calculate a covariance matrix from sigma points and their corresponding weights.
+    Calculate a covariance matrix from samples and their corresponding weights.
 
     Parameters
     ----------
-    sigma_points : `~numpy.ndarray` (2 * D + 1, D)
-        Sigma points drawn from the distribution.
+    samples : `~numpy.ndarray` (2 * D + 1, D)
+        Samples drawn from the distribution (these can be randomly drawn
+        or sigma points)
     W: `~numpy.ndarray` (2 * D + 1)
-        Weights of the sigma points.
+        Weights of the samples.
     W_cov: `~numpy.ndarray` (2 * D + 1)
-        Weights of the sigma points to reconstruct covariance matrix.
+        Weights of the samples to reconstruct covariance matrix.
 
     Returns
     -------
     mean : `~numpy.ndarray` (D)
-        Mean calculated from the sigma points and weights.
+        Mean calculated from the samples and weights.
     cov : `~numpy.ndarray` (D, D)
-        Covariance matrix calculated from the sigma points and weights.
+        Covariance matrix calculated from the samples and weights.
     """
     # Calculate the mean from the sigma points and weights
-    mean = np.dot(W, sigma_points)
+    mean = np.dot(W, samples)
 
     # Calculate the covariance matrix from the sigma points and weights
-    cov = np.cov(sigma_points, aweights=W_cov, rowvar=False, bias=True)
+    cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
     return mean, cov
 
 

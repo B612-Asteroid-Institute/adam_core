@@ -7,7 +7,7 @@ from .covariances import (
     covariances_from_df,
     covariances_to_df,
     covariances_to_table,
-    mean_and_covariance_from_sigma_points,
+    mean_and_covariance_from_weighted_samples,
     sample_covariance_random,
     sample_covariance_sigma_points,
     sigmas_from_df,
