@@ -9,7 +9,6 @@ from jax import config, jit, lax, vmap
 from ..constants import Constants as c
 from ..dynamics.barker import solve_barker
 from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
-from ..utils.spice import get_perturber_state
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .keplerian import KeplerianCoordinates
@@ -1223,6 +1222,8 @@ def cartesian_to_origin(
     CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Translated Cartesian coordinates and their covariances.
     """
+    from ..utils.spice import get_perturber_state
+
     unique_origins = coords.origin.code.unique()
     vectors = np.empty(coords.values.shape, dtype=np.float64)
     times = coords.time.to_astropy()
