@@ -8,7 +8,7 @@ from .covariances import (
     covariances_to_df,
     covariances_to_table,
     mean_and_covariance_from_sigma_points,
-    sample_covariance,
+    sample_covariance_random,
     sample_covariance_sigma_points,
     sigmas_from_df,
     sigmas_to_df,

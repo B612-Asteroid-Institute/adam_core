@@ -14,19 +14,6 @@ from .jacobian import calc_jacobian
 
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    "CoordinateCovariances",
-    "sigmas_to_covariances",
-    "sample_covariance",
-    "transform_covariances_sampling",
-    "transform_covariances_jacobian",
-    "sigmas_to_df",
-    "sigmas_from_df",
-    "covariances_to_df",
-    "covariances_from_df",
-    "covariances_to_table",
-]
-
 COVARIANCE_FILL_VALUE = np.NaN
 
 
@@ -216,12 +203,17 @@ class CoordinateCovariances(Table):
         return np.all(np.isnan(self.to_matrix()))
 
 
-def sample_covariance(
+def sample_covariance_random(
     mean: np.ndarray, cov: np.ndarray, num_samples: int = 100000
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sample a multivariate Gaussian distribution with given
     mean and covariances.
+
+    The returned weights will be equal to 1 / num_samples so that
+    each sample is equally weighted. Weights are returned from this function
+    so its interface is identical to that of
+    `~adam_core.coordinates.covariances.sample_covariance_sigma_points`.
 
     Parameters
     ----------
@@ -236,10 +228,16 @@ def sample_covariance(
     -------
     samples : `~numpy.ndarray` (num_samples, D)
         The drawn samples row-by-row.
+    W: `~numpy.ndarray` (num_samples)
+        Weights of the samples.
+    W_cov: `~numpy.ndarray` (num_samples)
+        Weights of the samples to reconstruct covariance matrix.
     """
     normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
     samples = normal.rvs(num_samples)
-    return samples
+    W = np.full(num_samples, 1 / num_samples)
+    W_cov = np.full(num_samples, 1 / num_samples)
+    return samples, W, W_cov
 
 
 def sample_covariance_sigma_points(
@@ -378,7 +376,7 @@ def transform_covariances_sampling(
     """
     covariances_out = []
     for coord, covariance in zip(coords, covariances):
-        samples = sample_covariance(coord, covariance, num_samples)
+        samples, W, W_cov = sample_covariance_random(coord, covariance, num_samples)
         samples_converted = func(samples)
         covariances_out.append(np.cov(samples_converted.T))
 
