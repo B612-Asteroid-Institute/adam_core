@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import pandas as pd
@@ -341,9 +341,7 @@ class CartesianCoordinates(Table):
         )
 
     @classmethod
-    def from_dataframe(
-        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
-    ) -> "CartesianCoordinates":
+    def from_dataframe(cls, df: pd.DataFrame) -> "CartesianCoordinates":
         """
         Create coordinates from a pandas DataFrame.
 
@@ -351,8 +349,6 @@ class CartesianCoordinates(Table):
         ----------
         df : `~pandas.Dataframe`
             DataFrame containing coordinates.
-        frame : {"ecliptic", "equatorial"}
-            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -360,5 +356,5 @@ class CartesianCoordinates(Table):
             Cartesian coordinates.
         """
         return coords_from_dataframe(
-            cls, df, coord_names=["x", "y", "z", "vx", "vy", "vz"], frame=frame
+            cls, df, coord_names=["x", "y", "z", "vx", "vy", "vz"]
         )

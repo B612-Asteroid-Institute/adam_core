@@ -24,7 +24,7 @@ def test_get_observer_state_X05():
             index_col=False,
             float_precision="round_trip",
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
+        states_expected = CartesianCoordinates.from_dataframe(states_df)
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -64,7 +64,7 @@ def test_get_observer_state_I41():
             index_col=False,
             float_precision="round_trip",
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
+        states_expected = CartesianCoordinates.from_dataframe(states_df)
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -104,7 +104,7 @@ def test_get_observer_state_W84():
             index_col=False,
             float_precision="round_trip",
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
+        states_expected = CartesianCoordinates.from_dataframe(states_df)
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -144,7 +144,7 @@ def test_get_observer_state_000():
             index_col=False,
             float_precision="round_trip",
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
+        states_expected = CartesianCoordinates.from_dataframe(states_df)
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -184,7 +184,7 @@ def test_get_observer_state_500():
             index_col=False,
             float_precision="round_trip",
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
+        states_expected = CartesianCoordinates.from_dataframe(states_df)
 
         if origin == "sun":
             origin_code = OriginCodes.SUN

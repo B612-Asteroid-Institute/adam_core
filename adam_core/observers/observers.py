@@ -150,18 +150,17 @@ class Observers(Table):
             columns={
                 "obs_jd1_tdb": "jd1_tdb",
                 "obs_jd2_tdb": "jd2_tdb",
-                "obs_x": "x",
-                "obs_y": "y",
-                "obs_z": "z",
-                "obs_vx": "vx",
-                "obs_vy": "vy",
-                "obs_vz": "vz",
+                "obs_x_ec": "x_ec",
+                "obs_y_ec": "y_ec",
+                "obs_z_ec": "z_ec",
+                "obs_vx_ec": "vx_ec",
+                "obs_vy_ec": "vy_ec",
+                "obs_vz_ec": "vz_ec",
                 "obs_origin.code": "origin.code",
             }
         )
         coordinates = CartesianCoordinates.from_dataframe(
             df_renamed,
-            frame="ecliptic",
         )
         return cls.from_kwargs(
             code=df["obs_code"].values,

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import pandas as pd
@@ -280,9 +280,7 @@ class SphericalCoordinates(Table):
         )
 
     @classmethod
-    def from_dataframe(
-        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
-    ) -> "SphericalCoordinates":
+    def from_dataframe(cls, df: pd.DataFrame) -> "SphericalCoordinates":
         """
         Create coordinates from a pandas DataFrame.
 
@@ -290,8 +288,6 @@ class SphericalCoordinates(Table):
         ----------
         df : `~pandas.Dataframe`
             DataFrame containing coordinates.
-        frame : {"ecliptic", "equatorial"}
-            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -299,8 +295,5 @@ class SphericalCoordinates(Table):
             Spherical coordinates.
         """
         return coords_from_dataframe(
-            cls,
-            df,
-            coord_names=["rho", "lon", "lat", "vrho", "vlon", "vlat"],
-            frame=frame,
+            cls, df, coord_names=["rho", "lon", "lat", "vrho", "vlon", "vlat"]
         )

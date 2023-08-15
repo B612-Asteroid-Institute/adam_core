@@ -20,6 +20,7 @@ class Ephemeris(Table):
         df : `~pandas.DataFrame`
             The Ephemeris table as a DataFrame.
         """
+        assert self.coordinates.frame == "equatorial"
         df = pd.DataFrame()
         df["orbit_id"] = self.orbit_id
         df["object_id"] = self.object_id
@@ -28,10 +29,13 @@ class Ephemeris(Table):
         df = pd.concat([df, df_coordinates], axis=1)
         df.rename(
             columns={
-                "lon": "ra",
-                "lat": "dec",
-                "vlon": "vra",
-                "vlat": "vdec",
+                "origin.code": "obs_code",
+                "lon_eq": "ra",
+                "lat_eq": "dec",
+                "vlon_eq": "vra",
+                "vlat_eq": "vdec",
+                "rho_eq": "rho",
+                "vrho_eq": "vrho",
             },
             inplace=True,
         )
@@ -55,14 +59,15 @@ class Ephemeris(Table):
         coordinates = SphericalCoordinates.from_dataframe(
             df.rename(
                 columns={
-                    "ra": "lon",
-                    "dec": "lat",
-                    "vra": "vlon",
-                    "vdec": "vlat",
+                    "ra": "lon_eq",
+                    "dec": "lat_eq",
+                    "vra": "vlon_eq",
+                    "vdec": "vlat_eq",
+                    "rho": "rho_eq",
+                    "vrho": "vrho_eq",
                     "obs_code": "origin.code",
                 },
             ),
-            "equatorial",
         )
         return cls.from_kwargs(
             orbit_id=df["orbit_id"],

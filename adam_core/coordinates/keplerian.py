@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import pandas as pd
@@ -332,9 +332,7 @@ class KeplerianCoordinates(Table):
         )
 
     @classmethod
-    def from_dataframe(
-        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
-    ) -> "KeplerianCoordinates":
+    def from_dataframe(cls, df: pd.DataFrame) -> "KeplerianCoordinates":
         """
         Create coordinates from a pandas DataFrame.
 
@@ -342,8 +340,6 @@ class KeplerianCoordinates(Table):
         ----------
         df : `~pandas.Dataframe`
             DataFrame containing coordinates.
-        frame : {"ecliptic", "equatorial"}
-            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -351,5 +347,5 @@ class KeplerianCoordinates(Table):
             Keplerian coordinates.
         """
         return coords_from_dataframe(
-            cls, df, coord_names=["a", "e", "i", "raan", "ap", "M"], frame=frame
+            cls, df, coord_names=["a", "e", "i", "raan", "ap", "M"]
         )

@@ -1,6 +1,5 @@
 import logging
 import uuid
-from typing import Literal
 
 import pandas as pd
 import quivr as qv
@@ -45,9 +44,7 @@ class Orbits(qv.Table):
         return df
 
     @classmethod
-    def from_dataframe(
-        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
-    ) -> "Orbits":
+    def from_dataframe(cls, df: pd.DataFrame) -> "Orbits":
         """
         Create an Orbits object from a pandas DataFrame.
 
@@ -55,8 +52,6 @@ class Orbits(qv.Table):
         ----------
         df : `~pandas.DataFrame`
             DataFrame containing orbits and their Cartesian elements.
-        frame : {"ecliptic", "equatorial"}
-            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -65,7 +60,7 @@ class Orbits(qv.Table):
         """
         orbit_id = df["orbit_id"].values
         object_id = df["object_id"].values
-        coordinates = CartesianCoordinates.from_dataframe(df, frame=frame)
+        coordinates = CartesianCoordinates.from_dataframe(df)
         return cls.from_kwargs(
             orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
         )

@@ -40,7 +40,7 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
             f"num_orbits must be less than or equal to the number of sample orbits ({len(df)})."
         )
 
-    return Orbits.from_dataframe(df, "ecliptic")[:num_orbits]
+    return Orbits.from_dataframe(df)[:num_orbits]
 
 
 def make_simple_orbits(num_orbits: int = 10) -> Orbits:

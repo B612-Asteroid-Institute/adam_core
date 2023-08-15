@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import pandas as pd
@@ -356,9 +356,7 @@ class CometaryCoordinates(Table):
         )
 
     @classmethod
-    def from_dataframe(
-        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
-    ) -> "CometaryCoordinates":
+    def from_dataframe(cls, df: pd.DataFrame) -> "CometaryCoordinates":
         """
         Create coordinates from a pandas DataFrame.
 
@@ -366,8 +364,6 @@ class CometaryCoordinates(Table):
         ----------
         df : `~pandas.Dataframe`
             DataFrame containing coordinates.
-        frame : {"ecliptic", "equatorial"}
-            Frame in which coordinates are defined.
 
         Returns
         -------
@@ -375,5 +371,5 @@ class CometaryCoordinates(Table):
             Cometary coordinates.
         """
         return coords_from_dataframe(
-            cls, df, coord_names=["q", "e", "i", "raan", "ap", "tp"], frame=frame
+            cls, df, coord_names=["q", "e", "i", "raan", "ap", "tp"]
         )
