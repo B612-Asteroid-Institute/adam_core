@@ -60,3 +60,38 @@ class VariantOrbits(qv.Table):
             weights_cov=W_cov,
             coordinates=variant_coordinates,
         )
+
+    def link_to_orbits(
+        self, orbits: Orbits
+    ) -> qv.MultiKeyLinkage[Orbits, "VariantOrbits"]:
+        """
+        Link variants to the orbits from which they were generated.
+
+        Parameters
+        ----------
+        orbits : `~adam_core.orbits.orbits.Orbits`
+            Orbits from which the variants were generated.
+
+        Returns
+        -------
+        linkage : `~quivr.MultiKeyLinkage[Orbits, VariantOrbits]`
+            Linkage between variants and orbits.
+        """
+        assert orbits.coordinates.time.scale == self.coordinates.time.scale
+
+        # We might want to replace linking on jd1 and jd2 with just linking on mjd
+        # once the changes have been merged
+        return qv.MultiKeyLinkage(
+            orbits,
+            self,
+            left_keys={
+                "orbit_id": orbits.orbit_id,
+                "jd1": orbits.coordinates.time.jd1,
+                "jd2": orbits.coordinates.time.jd2,
+            },
+            right_keys={
+                "orbit_id": self.orbit_id,
+                "jd1": self.coordinates.time.jd1,
+                "jd2": self.coordinates.time.jd2,
+            },
+        )
