@@ -19,7 +19,8 @@ from ..coordinates.times import Times
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
-from .propagator import Propagator
+from ..orbits.variants import VariantOrbits
+from .propagator import OrbitType, Propagator
 from .utils import _assert_times_almost_equal
 
 
@@ -194,20 +195,20 @@ class PYOORB(Propagator):
         )
         return epochs_pyoorb
 
-    def _propagate_orbits(self, orbits: Orbits, times: Time) -> Orbits:
+    def _propagate_orbits(self, orbits: OrbitType, times: Time) -> OrbitType:
         """
         Propagate orbits using PYOORB.
 
         Parameters
         ----------
-        orbits : `~adam_core.orbits.orbits.Orbits` (N)
+        orbits : {`~adam_core.orbits.orbits.Orbits`, `~adam_core.orbits.orbits.VariantOrbits`} (N)
             Orbits to propagate.
         times : `~astropy.time.core.Time` (M)
             Times to which to propagate orbits.
 
         Returns
         -------
-        propagated : `~adam_core.orbits.orbits.Orbits` (N * M)
+        propagated : {`~adam_core.orbits.orbits.Orbits`, `~adam_core.orbits.orbits.VariantOrbits`} (N * M)
             Orbits propagated to each time in times.
         """
         # Convert orbits into PYOORB format
@@ -269,25 +270,53 @@ class PYOORB(Propagator):
         times_ = Time(mjd_tt, format="mjd", scale="tt")
         times_ = times_.tdb
 
-        # Map the object and orbit IDs back to the input arrays
-        object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_]
-        orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_]
+        if isinstance(orbits, Orbits):
+            # Map the object and orbit IDs back to the input arrays
+            object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_]
+            orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_]
 
-        propagated_orbits = Orbits.from_kwargs(
-            orbit_id=orbit_ids,
-            object_id=object_ids,
-            coordinates=CartesianCoordinates.from_kwargs(
-                x=x,
-                y=y,
-                z=z,
-                vx=vx,
-                vy=vy,
-                vz=vz,
-                time=Times.from_astropy(times_),
-                origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
-                frame="ecliptic",
-            ),
-        )
+            propagated_orbits = Orbits.from_kwargs(
+                orbit_id=orbit_ids,
+                object_id=object_ids,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=x,
+                    y=y,
+                    z=z,
+                    vx=vx,
+                    vy=vy,
+                    vz=vz,
+                    time=Times.from_astropy(times_),
+                    origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
+                    frame="ecliptic",
+                ),
+            )
+
+        elif isinstance(orbits, VariantOrbits):
+
+            # Map the object and orbit IDs back to the input arrays
+            object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_]
+            orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_]
+            weights = orbits.weights.to_numpy()[orbit_ids_]
+            weights_cov = orbits.weights_cov.to_numpy()[orbit_ids_]
+
+            propagated_orbits = VariantOrbits.from_kwargs(
+                orbit_id=orbit_ids,
+                object_id=object_ids,
+                weights=weights,
+                weights_cov=weights_cov,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=x,
+                    y=y,
+                    z=z,
+                    vx=vx,
+                    vy=vy,
+                    vz=vz,
+                    time=Times.from_astropy(times_),
+                    origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
+                    frame="ecliptic",
+                ),
+            )
+
         return propagated_orbits
 
     def _generate_ephemeris(

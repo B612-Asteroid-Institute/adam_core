@@ -1,19 +1,25 @@
 import concurrent.futures
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Union
 
 import quivr as qv
 from astropy.time import Time
 
 from ..observers import Observers
 from ..orbits import Ephemeris, Orbits
+from ..orbits.orbits import Orbits
+from ..orbits.variants import VariantOrbits
 from .utils import _iterate_chunks, sort_propagated_orbits
 
 logger = logging.getLogger(__name__)
 
+OrbitType = Union[Orbits, VariantOrbits]
 
-def propagation_worker(orbits: Orbits, times: Time, propagator: "Propagator") -> Orbits:
+
+def propagation_worker(
+    orbits: OrbitType, times: Time, propagator: "Propagator"
+) -> Orbits:
     propagated = propagator._propagate_orbits(orbits, times)
     return propagated
 
@@ -38,7 +44,7 @@ class Propagator(ABC):
     """
 
     @abstractmethod
-    def _propagate_orbits(self, orbits: Orbits, times: Time) -> Orbits:
+    def _propagate_orbits(self, orbits: OrbitType, times: Time) -> OrbitType:
         """
         Propagate orbits to times.
 
@@ -50,6 +56,7 @@ class Propagator(ABC):
         self,
         orbits: Orbits,
         times: Time,
+        covariance: bool = False,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
     ) -> Orbits:
@@ -62,6 +69,10 @@ class Propagator(ABC):
             Orbits to propagate.
         times : `~astropy.time.core.Time` (M)
             Times to which to propagate orbits.
+        covariance: bool, optional
+            Propagate the covariance matrices of the orbits. This is done by sampling the
+            orbits from their covariance matrices and propagating each sample. The covariance
+            of the propagated orbits is then the covariance of the samples.
         chunk_size : int, optional
             Number of orbits to send to each job.
         max_processes : int or None, optional
@@ -74,25 +85,65 @@ class Propagator(ABC):
         propagated : `~adam_core.orbits.orbits.Orbits`
             Propagated orbits.
         """
+        # Check if we need to propagate orbit variants so we can propagate covariance
+        # matrices
+        if not orbits.coordinates.covariance.is_all_nan() and covariance is True:
+            variants = VariantOrbits.create(orbits)
+        else:
+            variants = None
+
         if max_processes is None or max_processes > 1:
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=max_processes
             ) as executor:
+
+                # Add orbits to propagate to futures
                 futures = []
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
                     futures.append(
                         executor.submit(propagation_worker, orbit_chunk, times, self)
                     )
 
+                # Add variants to propagate to futures
+                if variants is not None:
+                    for variant_chunk in _iterate_chunks(variants, chunk_size):
+                        futures.append(
+                            executor.submit(
+                                propagation_worker, variant_chunk, times, self
+                            )
+                        )
+
                 propagated_list = []
+                variants_list = []
                 for future in concurrent.futures.as_completed(futures):
-                    propagated_list.append(future.result())
+                    result = future.result() 
+                    if isinstance(result, Orbits):
+                        propagated_list.append(result)
+                    elif isinstance(result, VariantOrbits):
+                        variants_list.append(result)
+                    else:
+                        raise ValueError(
+                            f"Unexpected result type from propagation worker: {type(result)}"
+                        )
 
             propagated = qv.concatenate(propagated_list)
+            if len(variants_list) > 0:
+                propagated_variants = qv.concatenate(variants_list)
+            else:
+                propagated_variants = None
+        
         else:
             propagated = self._propagate_orbits(orbits, times)
 
+            if variants is not None:
+                propagated_variants = self._propagate_orbits(variants, times)
+            else:
+                propagated_variants = None
+
         propagated = sort_propagated_orbits(propagated)
+
+        if propagated_variants is not None:
+            propagated = propagated_variants.collapse(propagated)
 
         return propagated
 
