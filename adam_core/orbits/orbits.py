@@ -1,8 +1,9 @@
 import logging
 import uuid
-from typing import Literal
+from typing import Iterable, Literal, Tuple
 
 import pandas as pd
+import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -15,6 +16,22 @@ class Orbits(qv.Table):
     orbit_id = qv.StringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.StringColumn(nullable=True)
     coordinates = CartesianCoordinates.as_column()
+
+    def group_by_orbit_id(self) -> Iterable[Tuple[str, "Orbits"]]:
+        """
+        Group orbits by orbit ID and yield them.
+
+        Yields
+        ------
+        orbit_id : str
+            Orbit ID.
+        orbits : `~adam_core.orbits.orbits.Orbits`
+            Orbits belonging to this orbit ID.
+        """
+        unique_orbit_ids = self.orbit_id.unique()
+        for orbit_id in unique_orbit_ids:
+            mask = pc.equal(self.orbit_id, orbit_id)
+            yield orbit_id, self.apply_mask(mask)
 
     def to_dataframe(self, sigmas: bool = False, covariances: bool = True):
         """
