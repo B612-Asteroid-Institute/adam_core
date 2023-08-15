@@ -1,10 +1,16 @@
 import uuid
 from typing import Literal
 
+import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.covariances import (
+    CoordinateCovariances,
+    mean_and_covariance_from_weighted_samples,
+)
 from ..coordinates.variants import create_coordinate_variants
 from .orbits import Orbits
 
@@ -95,3 +101,77 @@ class VariantOrbits(qv.Table):
                 "jd2": self.coordinates.time.jd2,
             },
         )
+
+    def collapse(self, orbits: Orbits) -> Orbits:
+        """
+        Collapse the variants and recalculate the covariance matrix for each
+        each orbit at each epoch. The mean state is taken from the orbits class and
+        is not calculate from the variants.
+
+        Parameters
+        ----------
+        orbits : `~adam_core.orbits.orbits.Orbits`
+            Orbits from which the variants were generated.
+
+        Returns
+        -------
+        collapsed_orbits : `~adam_core.orbits.orbits.Orbits`
+            The collapsed orbits.
+        """
+        link = self.link_to_orbits(orbits)
+
+        # Iterate over the variants and calculate the mean state and covariance matrix
+        # for each orbit at each epoch then create a new orbit with the calculated covariance matrix
+        orbits_list = []
+        for key, orbit, variants in link.iterate():
+            key = key.as_py()
+
+            assert len(orbit) == 1
+
+            samples = variants.coordinates.values
+            mean_state, covariance = mean_and_covariance_from_weighted_samples(
+                samples, variants.weights.to_numpy(), variants.weights_cov.to_numpy()
+            )
+
+            orbit_collapsed = Orbits.from_kwargs(
+                orbit_id=orbit.orbit_id,
+                object_id=orbit.object_id,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    time=orbit.coordinates.time,
+                    x=orbit.coordinates.x,
+                    y=orbit.coordinates.y,
+                    z=orbit.coordinates.z,
+                    vx=orbit.coordinates.vx,
+                    vy=orbit.coordinates.vy,
+                    vz=orbit.coordinates.vz,
+                    covariance=CoordinateCovariances.from_matrix(covariance),
+                    frame=orbit.coordinates.frame,
+                    origin=orbit.coordinates.origin,
+                ),
+            )
+
+            orbits_list.append(orbit_collapsed)
+
+        orbits_collapsed = qv.concatenate(orbits_list)
+
+        # Array of indices into the collapsed orbits
+        orbits_idx = pa.array(np.arange(0, len(orbits_collapsed)))
+
+        # Make a list of arrays that will be used to sort the orbits
+        orbits_idx_sorted_list = []
+
+        # Loop over input orbits and figure out where in the collapsed orbits they occur
+        # There has to be an easier or better way to do this?
+        for orbit in orbits:
+            mask_orbit_id = pc.equal(orbits_collapsed.orbit_id, orbit.orbit_id[0])
+            mask_jd1 = pc.equal(
+                orbits_collapsed.coordinates.time.jd1, orbit.coordinates.time.jd1[0]
+            )
+            mask_jd2 = pc.equal(
+                orbits_collapsed.coordinates.time.jd2, orbit.coordinates.time.jd2[0]
+            )
+            mask = pc.and_(mask_orbit_id, pc.and_(mask_jd1, mask_jd2))
+            orbits_idx_sorted_list.append(orbits_idx.filter(mask))
+
+        orbits_idx_sorted = pa.concat_arrays(orbits_idx_sorted_list)
+        return orbits_collapsed.take(orbits_idx_sorted)
