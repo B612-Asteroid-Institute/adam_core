@@ -198,7 +198,10 @@ class CoordinateCovariances(Table):
             sigmas = sigmas_from_df(df, coord_names=coord_names)
             covariances = sigmas_to_covariances(sigmas)
 
-        return cls.from_matrix(covariances)
+        if np.all(np.isnan(covariances)):
+            return cls.from_kwargs(values=[None for i in range(len(covariances))])
+        else:
+            return cls.from_matrix(covariances)
 
     def is_all_nan(self) -> bool:
         """

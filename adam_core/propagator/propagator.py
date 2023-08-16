@@ -3,10 +3,11 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
+import quivr as qv
 from astropy.time import Time
-from quivr.concat import concatenate
 
-from ..orbits import Orbits
+from ..observers import Observers
+from ..orbits import Ephemeris, Orbits
 from .utils import _iterate_chunks, sort_propagated_orbits
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,9 @@ def propagation_worker(orbits: Orbits, times: Time, propagator: "Propagator") ->
     return propagated
 
 
-def ephemeris_worker(orbits: Orbits, observers, propagator: "Propagator"):
+def ephemeris_worker(
+    orbits: Orbits, observers: Observers, propagator: "Propagator"
+) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
     ephemeris = propagator._generate_ephemeris(orbits, observers)
     return ephemeris
 
@@ -85,7 +88,7 @@ class Propagator(ABC):
                 for future in concurrent.futures.as_completed(futures):
                     propagated_list.append(future.result())
 
-            propagated = concatenate(propagated_list)
+            propagated = qv.concatenate(propagated_list)
         else:
             propagated = self._propagate_orbits(orbits, times)
 
@@ -106,10 +109,10 @@ class Propagator(ABC):
     def generate_ephemeris(
         self,
         orbits: Orbits,
-        observers,
+        observers: Observers,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
-    ):
+    ) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
         in observers.
@@ -118,7 +121,7 @@ class Propagator(ABC):
         ----------
         orbits : `~adam_core.orbits.orbits.Orbits` (N)
             Orbits for which to generate ephemerides.
-        observers : (M)
+        observers : `~adam_core.observers.observers.Observers` (M)
             Observers for which to generate the ephemerides of each
             orbit.
         chunk_size : int, optional
@@ -130,12 +133,9 @@ class Propagator(ABC):
 
         Returns
         -------
-        ephemeris : (N * M)
+        ephemeris : List[`~quivr.linkage.MultiKeyLinkage`] (M)
             Predicted ephemerides for each orbit observed by each
             observer.
-
-        TODO: Add ephemeris class
-        TODO: Add an observers class
         """
         if max_processes is None or max_processes > 1:
             with concurrent.futures.ProcessPoolExecutor(
@@ -150,13 +150,8 @@ class Propagator(ABC):
                 ephemeris_list = []
                 for future in concurrent.futures.as_completed(futures):
                     ephemeris_list.append(future.result())
-            ephemeris = concatenate(ephemeris_list)
+
+            return qv.combine_multilinkages(ephemeris_list)
 
         else:
-            ephemeris = self._generate_ephemeris(orbits, observers)
-
-        ephemeris.sort_values(
-            by=["orbit_ids", "origin", "times"],
-            inplace=True,
-        )
-        return ephemeris
+            return self._generate_ephemeris(orbits, observers)

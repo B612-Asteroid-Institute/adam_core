@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -325,7 +325,7 @@ class CometaryCoordinates(Table):
         return cls.from_cartesian(spherical_coordinates.to_cartesian())
 
     def to_dataframe(
-        self, sigmas: bool = False, covariances: bool = True
+        self, sigmas: Optional[bool] = None, covariances: Optional[bool] = None
     ) -> pd.DataFrame:
         """
         Convert coordinates to a pandas DataFrame.
@@ -333,10 +333,15 @@ class CometaryCoordinates(Table):
         Parameters
         ----------
         sigmas : bool, optional
-            If True, include 1-sigma uncertainties in the DataFrame.
+            If None, will only include sigmas if they are not null.
+            If True, include 1-sigma uncertainties in the DataFrame. If False, do not include
+            sigmas.
         covariances : bool, optional
+            If None, will only include covariances if they are not null.
             If True, include covariance matrices in the DataFrame. Covariance matrices
-            will be split into 21 columns, with the lower triangular elements stored.
+            will be split into 21 columns, with the lower triangular elements stored. If False,
+            do not include covariances.
+
 
         Returns
         -------

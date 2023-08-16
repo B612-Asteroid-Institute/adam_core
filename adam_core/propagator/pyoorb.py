@@ -9,11 +9,16 @@ import warnings
 from typing import Optional, Union
 
 import numpy as np
+import pyarrow.compute as pc
+import quivr as qv
 from astropy.time import Time
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin
+from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.times import Times
+from ..observers.observers import Observers
+from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from .propagator import Propagator
 from .utils import _assert_times_almost_equal
@@ -255,9 +260,11 @@ class PYOORB(Propagator):
         vz = states[:, 6]
         mjd_tt = states[:, 8]
 
-        # Check to make sure the desired times are within an acceptable
-        # tolerance
-        _assert_times_almost_equal(mjd_tt, np.repeat(epochs_pyoorb[:, 0], len(orbits)))
+        # Check to make sure the desired times are within 1 microsecond
+        # of the times returned by PYOORB
+        _assert_times_almost_equal(
+            mjd_tt, np.repeat(epochs_pyoorb[:, 0], len(orbits)), tolerance=0.001
+        )
 
         # Convert output epochs to TDB
         times_ = Time(mjd_tt, format="mjd", scale="tt")
@@ -284,7 +291,183 @@ class PYOORB(Propagator):
         )
         return propagated_orbits
 
-    def _generate_ephemeris(self, orbits: Orbits, observers):
-        raise NotImplementedError(
-            "Ephemeris generation is not yet implemented for PYOORB."
+    def _generate_ephemeris(
+        self, orbits: Orbits, observers: Observers
+    ) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
+        """
+        Generate ephemerides for orbits as viewed from observers using PYOORB.
+
+        Parameters
+        ----------
+        orbits : `~adam_core.orbits.orbits.Orbits` (N)
+            Orbits to generate ephemerides for.
+        observers : `~adam_core.observers.observers.Observers` (M)
+            Observers to generate ephemerides for.
+
+        Returns
+        -------
+        ephemeris : `~quivr.linkage.MultikeyLinkage` (M)
+            Ephemerides for each orbit as viewed from each observer.
+        """
+        # Convert orbits into PYOORB format
+        orbits_pyoorb = self._configure_orbits(
+            orbits.coordinates.values,
+            orbits.coordinates.time.to_astropy().tt.mjd,
+            OpenOrbOrbitType.CARTESIAN,
+            OpenOrbTimescale.TT,
+            magnitude=None,
+            slope=None,
         )
+
+        # Check if observation times are defined in UTC
+        if observers.coordinates.time.scale != "utc":
+            observers_utc = Observers.from_kwargs(
+                code=observers.code,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=observers.coordinates.x,
+                    y=observers.coordinates.y,
+                    z=observers.coordinates.z,
+                    vx=observers.coordinates.vx,
+                    vy=observers.coordinates.vy,
+                    vz=observers.coordinates.vz,
+                    covariance=observers.coordinates.covariance,
+                    time=observers.coordinates.time.to_scale("utc"),
+                    origin=observers.coordinates.origin,
+                    frame=observers.coordinates.frame,
+                ),
+            )
+        else:
+            observers_utc = observers
+
+        ephemeris_list = []
+        # Iterate over unique observatory codes and their times
+        for code_i, observer_i in observers_utc.iterate_codes():
+            # Extract obervation times
+            times_utc = observer_i.coordinates.time.to_astropy().utc.mjd
+
+            # Convert epochs into PYOORB format (we want UTC as output)
+            epochs_pyoorb = self._configure_epochs(times_utc, OpenOrbTimescale.UTC)
+
+            # Generate ephemeris
+            ephemeris, err = oo.pyoorb.oorb_ephemeris_full(
+                in_orbits=orbits_pyoorb,
+                in_obscode=code_i,
+                in_date_ephems=epochs_pyoorb,
+                in_dynmodel=self.dynamical_model,
+            )
+
+            if err != 0:
+                raise RuntimeError(
+                    f"PYOORB ephemeris generation failed with error code {err}."
+                )
+
+            # Stack 3D ephemeris into single 2D array
+            ephemeris = np.vstack(ephemeris)
+
+            # PYOORB returns ephemerides for each orbit, so lets reconstruct orbit IDs
+            ids = np.arange(0, len(orbits))
+            orbit_ids_idx = np.repeat(ids, len(times_utc))
+            orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
+            object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
+
+            # Columns returned by PYOORB, we will only use a subset
+            # columns = [
+            #     "mjd_utc",
+            #     "RA_deg",
+            #     "Dec_deg",
+            #     "vRAcosDec",
+            #     "vDec",
+            #     "PhaseAngle_deg",
+            #     "SolarElon_deg",
+            #     "r_au",
+            #     "delta_au",
+            #     "VMag",
+            #     "PosAngle_deg",
+            #     "TLon_deg",
+            #     "TLat_deg",
+            #     "TOCLon_deg",
+            #     "TOCLat_deg",
+            #     "HLon_deg",
+            #     "HLat_deg",
+            #     "HOCLon_deg",
+            #     "HOCLat_deg",
+            #     "Alt_deg",
+            #     "SolarAlt_deg",
+            #     "LunarAlt_deg",
+            #     "LunarPhase",
+            #     "LunarElon_deg",
+            #     "obj_x",
+            #     "obj_y",
+            #     "obj_z",
+            #     "obj_vx",
+            #     "obj_vy",
+            #     "obj_vz",
+            #     "obs_x",
+            #     "obs_y",
+            #     "obs_z",
+            #     "TrueAnom",
+            # ]
+            codes = np.empty(len(ephemeris), dtype=object)
+            codes[:] = code_i
+
+            # Check to make sure the desired times are within 1 microsecond
+            # of the times returned by PYOORB
+            _assert_times_almost_equal(
+                np.tile(times_utc, len(orbits)),
+                ephemeris[:, 0],
+                tolerance=0.001,
+            )
+
+            ephemeris = Ephemeris.from_kwargs(
+                orbit_id=orbit_ids,
+                object_id=object_ids,
+                coordinates=SphericalCoordinates.from_kwargs(
+                    time=Times.from_astropy(
+                        Time(
+                            ephemeris[:, 0],
+                            scale="utc",
+                            format="mjd",
+                        )
+                    ),
+                    rho=None,  # PYOORB rho (delta_au) is geocentric not topocentric
+                    lon=ephemeris[:, 1],
+                    lat=ephemeris[:, 2],
+                    vlon=ephemeris[:, 3] / np.cos(np.radians(ephemeris[:, 2])),
+                    vlat=ephemeris[:, 4],
+                    vrho=None,  # PYOORB doesn't calculate observer velocity so it can't calulate vrho
+                    origin=Origin.from_kwargs(code=codes),
+                    frame="equatorial",
+                ),
+            )
+            ephemeris_list.append(ephemeris)
+
+        # Concatenate ephemeris into single table
+        ephemeris = qv.concatenate(ephemeris_list)
+
+        # We use mjd as the time linking key because openorb uses
+        # mjd. If we try to use coordinates.time.jd1 and jd2 directly,
+        # we will get loss-of-precision issues, and the keys won't
+        # align.
+        linkages = qv.MultiKeyLinkage(
+            left_table=ephemeris,
+            right_table=observers,
+            left_keys={
+                "code": ephemeris.coordinates.origin.code,
+                "mjd": ephemeris.coordinates.time.mjd(),
+            },
+            right_keys={
+                "code": observers_utc.code,
+                "mjd": observers_utc.coordinates.time.mjd(),
+            },
+        )
+
+        # Check to make sure we have the correct number of linkages
+        expected_length = len(observers)
+        actual_length = len(linkages.all_unique_values)
+        if expected_length != actual_length:
+            raise ValueError(
+                "Ephemerides were not correctly linked to observers. "
+                f"Expected {expected_length} unique keys, got {actual_length}."
+            )
+
+        return linkages

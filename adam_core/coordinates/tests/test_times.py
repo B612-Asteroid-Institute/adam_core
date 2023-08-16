@@ -18,3 +18,14 @@ def test_Times_to_from_astropy_roundtrip(scale):
 
     times_astropy_2 = times.to_astropy()
     np.testing.assert_equal(times_astropy_2.mjd, times_astropy.mjd)
+
+
+def test_Times_to_scale():
+    # Test that we can convert between time scales correctly
+    times_tdb = Time(np.arange(59000, 60000), scale="tdb", format="mjd")
+    times_tdb = Times.from_astropy(times_tdb)
+    assert times_tdb.scale == "tdb"
+
+    times_utc = times_tdb.to_scale("utc")
+    assert times_utc.scale == "utc"
+    np.testing.assert_equal(times_utc.to_astropy().mjd, times_tdb.to_astropy().utc.mjd)

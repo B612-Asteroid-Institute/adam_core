@@ -148,6 +148,7 @@ spherical_elements = orbits.coordinates.to_spherical()
 The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. By default,
 `adam_core` ships with PYOORB.
 
+#### Propagation
 To propagate orbits with PYOORB (here we grab some orbits from Horizons first):
 ```python
 import numpy as np
@@ -156,7 +157,7 @@ from astropy import units as u
 from adam_core.orbits.query import query_horizons
 from adam_core.propagator import PYOORB
 
-# Get orbit to propagate
+# Get orbits to propagate
 initial_time = Time([60000.0], scale="tdb", format="mjd")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
@@ -176,6 +177,40 @@ propagated_orbits = propagator.propagate_orbits(
     max_processes=1,
 )
 ```
+
+#### Ephemeris Generation
+The propagator class can also be used to generate ephemerides for a set of orbits and observers.
+
+```python
+import numpy as np
+from astropy.time import Time
+from astropy import units as u
+from adam_core.orbits.query import query_horizons
+from adam_core.propagator import PYOORB
+from adam_core.observers import Observers
+
+# Get orbits to propagate
+initial_time = Time([60000.0], scale="tdb", format="mjd")
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_horizons(object_ids, initial_time)
+
+# Make sure PYOORB is ready
+propagator = PYOORB()
+
+# Define a set of observers and observation times
+times = initial_time + np.arange(0, 100) * u.d
+observers = Observers.from_code("I11", times)
+
+# Generate ephemerides! This function supports multiprocessing for large
+# propagation jobs.
+ephemeris = propagator.generate_ephemeris(
+    orbits,
+    observers,
+    chunk_size=100,
+    max_processes=1
+)
+```
+
 
 ### Low-level APIs
 
