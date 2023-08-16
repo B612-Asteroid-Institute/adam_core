@@ -9,7 +9,6 @@ import warnings
 from typing import Optional, Union
 
 import numpy as np
-import pyarrow.compute as pc
 import quivr as qv
 from astropy.time import Time
 

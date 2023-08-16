@@ -9,7 +9,7 @@ import quivr as qv
 from quivr.validators import and_, ge, le
 
 from ..coordinates import cartesian, origin, times
-from ..observers import state, observers
+from ..observers import observers, state
 
 
 class Exposures(qv.Table):

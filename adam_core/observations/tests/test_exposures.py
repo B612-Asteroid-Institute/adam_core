@@ -6,7 +6,6 @@ import numpy as np
 import quivr as qv
 
 from ...coordinates import cartesian, origin, times
-from ...observers import observers
 from .. import exposures
 
 
