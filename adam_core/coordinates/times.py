@@ -2,7 +2,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 from typing_extensions import Self
 
 
@@ -122,3 +122,6 @@ class Times(qv.Table):
             The times as a double-precision array of modified julian date values.
         """
         return pc.add(pc.add(self.jd1, -2400000.5), self.jd2)
+
+    def add(self, timedelta: TimeDelta) -> "Times":
+        return Times.from_astropy(self.to_astropy() + timedelta)
