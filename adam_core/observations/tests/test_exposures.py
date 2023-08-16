@@ -6,6 +6,7 @@ import numpy as np
 import quivr as qv
 
 from ...coordinates import cartesian, origin, times
+from ...observers import observers
 from .. import exposures
 
 
@@ -104,7 +105,11 @@ def test_exposure_states():
         observatory_code=codes,
     )
 
-    states = exp.observer_states()
+    obs = exp.observers()
+    codes = obs.code
+
+    assert codes.to_pylist() == ["W84", "I41", "W84", "I41", "W84"]
+    states = obs.coordinates
 
     # Assert that states are same, to within expected number of bits
     # of precision.

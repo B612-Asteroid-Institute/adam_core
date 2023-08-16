@@ -9,7 +9,7 @@ import quivr as qv
 from quivr.validators import and_, ge, le
 
 from ..coordinates import cartesian, origin, times
-from ..observers import state
+from ..observers import state, observers
 
 
 class Exposures(qv.Table):
@@ -33,7 +33,7 @@ class Exposures(qv.Table):
             mask = pc.equal(self.observatory_code, code)
             yield code, self.apply_mask(mask)
 
-    def observer_states(
+    def observers(
         self,
         frame: Literal["ecliptic", "equatorial"] = "ecliptic",
         origin: origin.OriginCodes = origin.OriginCodes.SUN,
@@ -44,8 +44,9 @@ class Exposures(qv.Table):
 
         # bunch of bookkeeping here to return states with the same
         # indexing as self
-        states = []
+        coords = []
         indices = []
+        codes = []
 
         unique_codes = self.observatory_code.unique().to_pylist()
         for code in unique_codes:
@@ -54,17 +55,22 @@ class Exposures(qv.Table):
             indices_for_code = pc.indices_nonzero(mask)
 
             times_for_code = exposures_for_code.midpoint().to_astropy()
-            states_for_code = state.get_observer_state(
+            coords_for_code = state.get_observer_state(
                 code, times_for_code, frame=frame, origin=origin
             )
 
-            states.append(states_for_code)
+            coords.append(coords_for_code)
             indices.append(indices_for_code)
+            codes.append(pa.array([code] * len(coords_for_code)))
 
-        states_table = qv.concatenate(states)
+        observers_table = observers.Observers.from_kwargs(
+            code=pa.concat_arrays(codes),
+            coordinates=qv.concatenate(coords),
+        )
+
         indices = pa.concat_arrays(indices)
         original_ordering = pc.array_sort_indices(indices)
-        return states_table.take(original_ordering)
+        return observers_table.take(original_ordering)
 
     def midpoint(self) -> times.Times:
         """
