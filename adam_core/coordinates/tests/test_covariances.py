@@ -1,6 +1,73 @@
 import numpy as np
 
-from ..covariances import CoordinateCovariances
+from ...utils.helpers.orbits import make_real_orbits
+from ..covariances import (
+    CoordinateCovariances,
+    mean_and_covariance_from_weighted_samples,
+    sample_covariance_random,
+    sample_covariance_sigma_points,
+)
+
+
+def test_sample_covariance_sigma_points():
+    # Get a sample of real orbits and test that sigma point sampling
+    # allows the state vector and its covariance to be reconstructed
+    orbits = make_real_orbits()
+
+    # Limit to first 10 orbits
+    for orbit in orbits[:10]:
+        mean = orbit.coordinates.values[0]
+        covariance = orbit.coordinates.covariance.to_matrix()[0]
+
+        samples, W, W_cov = sample_covariance_sigma_points(mean, covariance)
+
+        # In a 6 dimensional space we expect 13 sigma point samples
+        assert len(samples) == 13
+        np.testing.assert_almost_equal(np.sum(W), 1.0)
+        np.testing.assert_almost_equal(np.sum(W_cov), 1.0)
+        # The first sample should be the mean
+        np.testing.assert_equal(samples[0], mean)
+        # The first weight should be 0.0
+        assert W[0] == 0.0
+        # The first weight for the covariance should be 0
+        # since beta = 0 internally
+        assert W_cov[0] == 0.0
+
+        # Reconstruct the mean and covariance and test that they match
+        # the original inputs to within 1e-14
+        mean_sg, covariance_sg = mean_and_covariance_from_weighted_samples(
+            samples, W, W_cov
+        )
+        np.testing.assert_allclose(mean_sg, mean, rtol=0, atol=1e-14)
+        np.testing.assert_allclose(covariance_sg, covariance, rtol=0, atol=1e-14)
+
+
+def test_sample_covariance_random():
+    # Get a sample of real orbits and test that random sampling
+    # allows the state vector and its covariance to be reconstructed
+    orbits = make_real_orbits()
+
+    # Limit to first 10 orbits
+    for orbit in orbits[:10]:
+        mean = orbit.coordinates.values[0]
+        covariance = orbit.coordinates.covariance.to_matrix()[0]
+
+        samples, W, W_cov = sample_covariance_random(mean, covariance, 1000000)
+
+        # In a 6 dimensional space we expect 1000000 samples
+        assert len(samples) == 1000000
+        np.testing.assert_almost_equal(np.sum(W), 1.0)
+        np.testing.assert_almost_equal(np.sum(W_cov), 1.0)
+
+        # Reconstruct the mean and covariance and test that they match
+        # the original inputs to within 1e-8 and 1e-14 respectively
+        mean_rs, covariance_rs = mean_and_covariance_from_weighted_samples(
+            samples, W, W_cov
+        )
+        # Note how many samples are needed to get the covariance to
+        # match to within 1e-14... (the same tolerance as sigma point sampling)
+        np.testing.assert_allclose(mean_rs, mean, rtol=0, atol=1e-8)
+        np.testing.assert_allclose(covariance_rs, covariance, rtol=0, atol=1e-14)
 
 
 def test_CoordinateCovariances_from_sigmas():

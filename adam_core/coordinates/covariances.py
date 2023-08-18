@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -7,24 +7,12 @@ import pyarrow as pa
 from astropy import units as u
 from astropy.table import Table as AstropyTable
 from quivr import FixedSizeListColumn, Table
+from scipy.linalg import sqrtm
 from scipy.stats import multivariate_normal
 
 from .jacobian import calc_jacobian
 
 logger = logging.getLogger(__name__)
-
-__all__ = [
-    "CoordinateCovariances",
-    "sigmas_to_covariances",
-    "sample_covariance",
-    "transform_covariances_sampling",
-    "transform_covariances_jacobian",
-    "sigmas_to_df",
-    "sigmas_from_df",
-    "covariances_to_df",
-    "covariances_from_df",
-    "covariances_to_table",
-]
 
 COVARIANCE_FILL_VALUE = np.NaN
 
@@ -215,12 +203,17 @@ class CoordinateCovariances(Table):
         return np.all(np.isnan(self.to_matrix()))
 
 
-def sample_covariance(
+def sample_covariance_random(
     mean: np.ndarray, cov: np.ndarray, num_samples: int = 100000
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sample a multivariate Gaussian distribution with given
     mean and covariances.
+
+    The returned weights will be equal to 1 / num_samples so that
+    each sample is equally weighted. Weights are returned from this function
+    so its interface is identical to that of
+    `~adam_core.coordinates.covariances.sample_covariance_sigma_points`.
 
     Parameters
     ----------
@@ -235,10 +228,124 @@ def sample_covariance(
     -------
     samples : `~numpy.ndarray` (num_samples, D)
         The drawn samples row-by-row.
+    W: `~numpy.ndarray` (num_samples)
+        Weights of the samples.
+    W_cov: `~numpy.ndarray` (num_samples)
+        Weights of the samples to reconstruct covariance matrix.
     """
     normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
     samples = normal.rvs(num_samples)
-    return samples
+    W = np.full(num_samples, 1 / num_samples)
+    W_cov = np.full(num_samples, 1 / num_samples)
+    return samples, W, W_cov
+
+
+def sample_covariance_sigma_points(
+    mean: np.ndarray, cov: np.ndarray, alpha: float = 1, kappa: float = 0.0
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Create sigma-point samples of a multivariate Gaussian distribution
+    with given mean and covariances.
+
+    Parameters
+    ----------
+    mean : `~numpy.ndarray` (D)
+        Multivariate mean of the Gaussian distribution.
+    cov : `~numpy.ndarray` (D, D)
+        Multivariate variance-covariance matrix of the Gaussian distribution.
+    alpha : float, optional
+        Spread of the sigma points between 1e^-2 and 1.
+    kappa : float, optional
+        Secondary scaling parameter usually set to 0.
+
+    Returns
+    -------
+    sigma_points : `~numpy.ndarray` (2 * D + 1, D)
+        Sigma points drawn from the distribution.
+    W: `~numpy.ndarray` (2 * D + 1)
+        Weights of the sigma points.
+    W_cov: `~numpy.ndarray` (2 * D + 1)
+        Weights of the sigma points to reconstruct covariance matrix.
+
+    References
+    ----------
+    [1] Wan, E. A; Van Der Merwe, R. (2000). The unscented Kalman filter for nonlinear estimation.
+        Proceedings of the IEEE 2000 Adaptive Systems for Signal Processing,
+        Communications, and Control Symposium, 153-158.
+        https://doi.org/10.1109/ASSPCC.2000.882463
+    """
+    # Calculate the dimensionality of the distribution
+    D = mean.shape[0]
+
+    # See equation 15 in Wan & Van Der Merwe (2000) [1]
+    N = 2 * D + 1
+    sigma_points = np.empty((N, D))
+    W = np.empty(N)
+    W_cov = np.empty(N)
+
+    # Calculate the scaling parameter lambda
+    lambd = alpha**2 * (D + kappa) - D
+
+    # First sigma point is the mean
+    sigma_points[0] = mean
+
+    # Beta is used to encode prior knowledge about the distribution.
+    # If the distribution is a well-constrained Gaussian, beta = 2 is optimal
+    # but lets set beta to 0 for now which has the effect of not weighting the mean state
+    # with 0 for the covariance matrix. This is generally better for more distributions.
+    beta = 0
+    # Calculate the weights for mean and the covariance matrix
+    # Weight are used to reconstruct the mean and covariance matrix from the sigma points
+    W[0] = lambd / (D + lambd)
+    W_cov[0] = W[0] + (1 - alpha**2 + beta)
+
+    # Take the matrix square root of the scaled covariance matrix.
+    # Sometimes you'll see this done with a Cholesky decomposition for speed
+    # but sqrtm is sufficiently optimized for this use case and typically provides
+    # better results
+    L = sqrtm((D + lambd) * cov)
+
+    # Calculate the remaining sigma points
+    for i in range(D):
+        offset = L[i]
+        sigma_points[i + 1] = mean + offset
+        sigma_points[i + 1 + D] = mean - offset
+
+    # The weights for the remaining sigma points are the same
+    # for the mean and the covariance matrix
+    W[1:] = 1 / (2 * (D + lambd))
+    W_cov[1:] = 1 / (2 * (D + lambd))
+
+    return sigma_points, W, W_cov
+
+
+def mean_and_covariance_from_weighted_samples(samples, W, W_cov):
+    """
+    Calculate a covariance matrix from samples and their corresponding weights.
+
+    Parameters
+    ----------
+    samples : `~numpy.ndarray` (2 * D + 1, D)
+        Samples drawn from the distribution (these can be randomly drawn
+        or sigma points)
+    W: `~numpy.ndarray` (2 * D + 1)
+        Weights of the samples.
+    W_cov: `~numpy.ndarray` (2 * D + 1)
+        Weights of the samples to reconstruct covariance matrix.
+
+    Returns
+    -------
+    mean : `~numpy.ndarray` (D)
+        Mean calculated from the samples and weights.
+    cov : `~numpy.ndarray` (D, D)
+        Covariance matrix calculated from the samples and weights.
+    """
+    # Calculate the mean from the sigma points and weights
+    mean = np.dot(W, samples)
+
+    # Calculate the covariance matrix from the sigma points and weights
+    cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
+    return mean, cov
 
 
 def transform_covariances_sampling(
@@ -270,7 +377,7 @@ def transform_covariances_sampling(
     """
     covariances_out = []
     for coord, covariance in zip(coords, covariances):
-        samples = sample_covariance(coord, covariance, num_samples)
+        samples, W, W_cov = sample_covariance_random(coord, covariance, num_samples)
         samples_converted = func(samples)
         covariances_out.append(np.cov(samples_converted.T))
 
