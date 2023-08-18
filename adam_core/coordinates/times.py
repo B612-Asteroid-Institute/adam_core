@@ -1,3 +1,6 @@
+from typing import Union
+
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -75,6 +78,18 @@ class Times(qv.Table):
         )
         return df
 
+    def unique(self) -> Self:
+        """
+        Return unique Times.
+
+        Returns
+        -------
+        unique : `~adam_core.coordinates.times.Times`
+            Unique Times.
+        """
+        unique_jd = self.jd().unique()
+        return self.from_jd(unique_jd, self.scale)
+
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame) -> "Times":
         """
@@ -101,9 +116,69 @@ class Times(qv.Table):
         )
         return cls.from_kwargs(jd1=df_renamed.jd1, jd2=df_renamed.jd2, scale=scale)
 
+    @classmethod
+    def from_jd(cls, jd: Union[np.ndarray, pa.lib.DoubleArray], scale: str) -> Self:
+        """
+        Create a Times table from an array of julian dates (JD).
+
+        Warning! In the range 24,010,000.5 - 24,099,999.5 JD (10,000 - 99,999 MJD) can at
+        most be accurate to ~10 ms when represented as a single 64-bit float.
+
+        Parameters
+        ----------
+        jd : {`~numpy.ndarray`, `~pyarrow.DoubleArray`}
+            An array of julian dates.
+        scale : str
+            The time scale.
+
+        Returns
+        -------
+        times : `~adam_core.coordinates.times.Times`
+            The times.
+        """
+        if isinstance(jd, np.ndarray):
+            if jd.dtype != np.double:
+                jd = jd.astype(np.double)
+            jd = pa.array(jd)
+
+        jd1 = pc.floor(jd)
+        jd2 = pc.subtract(jd, jd1)
+        return cls.from_kwargs(jd1=jd1, jd2=jd2, scale=scale)
+
+    @classmethod
+    def from_mjd(cls, mjd: Union[np.ndarray, pa.lib.DoubleArray], scale: str) -> Self:
+        """
+        Create a Times table from an array of modified julian dates (MJD).
+
+        Warning! In the range 10,000 - 99,999 MJD can at most be accurate to ~0.1 ms when
+        represented as a single 64-bit float.
+
+        Parameters
+        ----------
+        mjd : {`~numpy.ndarray`, `~pyarrow.DoubleArray`}
+            An array of modified julian dates.
+        scale : str
+            The time scale.
+
+        Returns
+        -------
+        times : `~adam_core.coordinates.times.Times`
+            The times.
+        """
+        if isinstance(mjd, np.ndarray):
+            if mjd.dtype != np.double:
+                mjd = mjd.astype(np.double)
+            mjd = pa.array(mjd)
+
+        jd = pc.add(mjd, 2400000.5)
+        return cls.from_jd(jd, scale)
+
     def jd(self) -> pa.lib.DoubleArray:
         """
         Returns the times as a double-precision array of julian date values.
+
+        Warning! In the range 24,010,000.5 - 24,099,999.5 JD (10,000 - 99,999 MJD) can at
+        most be accurate to ~10 ms when represented as a single 64-bit float.
 
         Returns
         -------
@@ -115,6 +190,9 @@ class Times(qv.Table):
     def mjd(self) -> pa.lib.DoubleArray:
         """
         Returns the times as a double-precision array of modified julian date values.
+
+        Warning! In the range 10,000 - 99,999 MJD can at most be accurate to ~0.1 ms when
+        represented as a single 64-bit float.
 
         Returns
         -------
