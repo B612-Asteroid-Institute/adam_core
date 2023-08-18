@@ -78,6 +78,18 @@ class Times(qv.Table):
         )
         return df
 
+    def unique(self) -> Self:
+        """
+        Return unique Times.
+
+        Returns
+        -------
+        unique : `~adam_core.coordinates.times.Times`
+            Unique Times.
+        """
+        unique_jd = self.jd().unique()
+        return self.from_jd(unique_jd, self.scale)
+
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame) -> "Times":
         """

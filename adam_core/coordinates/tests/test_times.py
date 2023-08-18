@@ -56,3 +56,19 @@ def test_Times_from_mjd():
     np.testing.assert_allclose(
         times.mjd().to_numpy(), times_astropy.mjd, rtol=0, atol=1e-9
     )
+
+
+def test_Times_unique():
+    # Test that we can get unique times
+    times_astropy = Time(
+        np.array([2450000.5, 2450000.5, 2450001.5], dtype=np.double),
+        format="jd",
+        scale="tai",
+    )
+    times = Times.from_jd(times_astropy.mjd, times_astropy.scale)
+
+    times_unique = times.unique()
+    assert len(times_unique) == 2
+    np.testing.assert_equal(
+        times_unique.jd().to_numpy(), np.unique(times.jd().to_numpy())
+    )
