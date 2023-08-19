@@ -39,6 +39,29 @@ class PointSourceDetections(qv.Table):
     mag = qv.Float64Column(validator=and_(ge(-10), le(30)))
     mag_sigma = qv.Float64Column(nullable=True)
 
+    def to_spherical(
+        self, obscodes: pyarrow.StringArray
+    ) -> spherical.SphericalCoordinates:
+        sigma_data = np.vstack(
+            [
+                pyarrow.nulls(len(self), pyarrow.float64()),
+                self.ra_sigma.to_numpy(),
+                self.dec_sigma.to_numpy(),
+                pyarrow.nulls(len(self), pyarrow.float64()),
+                pyarrow.nulls(len(self), pyarrow.float64()),
+                pyarrow.nulls(len(self), pyarrow.float64()),
+            ]
+        ).T
+
+        return spherical.SphericalCoordinates.from_kwargs(
+            lon=self.ra,
+            lat=self.dec,
+            covariance=covariances.CoordinateCovariances.from_sigmas(sigma_data),
+            time=self.time,
+            origin=origin.Origin.from_kwargs(code=obscodes),
+            frame="equatorial",
+        )
+
     def group_by_exposure(self) -> Iterator["PointSourceDetections"]:
         """
         Returns an iterator of PointSourceDetections, each grouped by exposure_id.
