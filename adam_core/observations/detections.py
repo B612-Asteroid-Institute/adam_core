@@ -10,7 +10,7 @@ import pyarrow.compute
 import quivr as qv
 from quivr.validators import and_, ge, le
 
-from ..coordinates import times
+from ..coordinates import covariances, origin, spherical, times
 from . import exposures
 
 
