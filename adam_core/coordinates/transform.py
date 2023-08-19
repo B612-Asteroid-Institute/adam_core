@@ -1358,4 +1358,9 @@ def transform_coordinates(
     if cartesian.frame != frame_out:
         cartesian = cartesian_to_frame(cartesian, frame_out)
 
+    # You might think this should be 'isinstance', but no! We're
+    # checking whether the input is a particular class variable, not
+    # an instance of a class.
+    if representation_out is CartesianCoordinates:
+        return cartesian
     return representation_out.from_cartesian(cartesian)
