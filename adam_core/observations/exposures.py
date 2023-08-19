@@ -37,7 +37,7 @@ class Exposures(qv.Table):
         self,
         frame: Literal["ecliptic", "equatorial"] = "ecliptic",
         origin: origin.OriginCodes = origin.OriginCodes.SUN,
-    ) -> cartesian.CartesianCoordinates:
+    ) -> observers.Observers:
         """
         Return the observer location at each exposure midpoint.
         """
