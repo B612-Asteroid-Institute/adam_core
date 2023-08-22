@@ -25,6 +25,10 @@ class VariantOrbits(qv.Table):
         cls,
         orbits: Orbits,
         method: Literal["auto", "sigma-point", "monte-carlo"] = "auto",
+        num_samples: int = 10000,
+        alpha: float = 1,
+        beta: float = 0,
+        kappa: float = 0,
     ) -> "VariantOrbits":
         """
         Sample and create variants for the given orbits by sampling the covariance matrices.
@@ -47,6 +51,14 @@ class VariantOrbits(qv.Table):
         method : {'sigma-point', 'monte-carlo', 'auto'}, optional
             The method to use for sampling the covariance matrix. If 'auto' is selected then the method
             will be automatically selected based on the covariance matrix. The default is 'auto'.
+        num_samples : int, optional
+            The number of samples to draw when sampling with monte-carlo.
+        alpha : float, optional
+            Spread of the sigma points between 1e^-2 and 1.
+        beta : float, optional
+            Prior knowledge of the distribution when generating sigma points usually set to 2 for a Gaussian.
+        kappa : float, optional
+            Secondary scaling parameter when generating sigma points usually set to 0.
 
         Returns
         -------
@@ -54,7 +66,12 @@ class VariantOrbits(qv.Table):
             The variant orbits.
         """
         idx, W, W_cov, variant_coordinates = create_coordinate_variants(
-            orbits.coordinates, method=method
+            orbits.coordinates,
+            method=method,
+            num_samples=num_samples,
+            alpha=alpha,
+            beta=beta,
+            kappa=kappa,
         )
         return cls.from_kwargs(
             orbit_id=pc.take(orbits.orbit_id, idx),

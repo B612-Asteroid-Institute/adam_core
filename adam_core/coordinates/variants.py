@@ -23,7 +23,12 @@ CoordinateType = Union[
 
 
 def create_coordinate_variants(
-    coordinates: CoordinateType, method: Literal["auto", "sigma-point", "monte-carlo"]
+    coordinates: CoordinateType,
+    method: Literal["auto", "sigma-point", "monte-carlo"],
+    num_samples: int = 10000,
+    alpha: float = 1,
+    beta: float = 0,
+    kappa: float = 0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, CoordinateType]:
     """
     Sample and create variants for the given coordinates by sampling the covariance matrices.
@@ -52,6 +57,15 @@ def create_coordinate_variants(
     method : {'sigma-point', 'monte-carlo', 'auto'}, optional
         The method to use for sampling the covariance matrix. If 'auto' is selected then the method
         will be automatically selected based on the covariance matrix. The default is 'auto'.
+    num_samples : int, optional
+        The number of samples to draw when sampling with monte-carlo.
+    alpha : float, optional
+        Spread of the sigma points between 1e^-2 and 1.
+    beta : float, optional
+        Prior knowledge of the distribution when generating sigma points usually set to 2 for a Gaussian.
+    kappa : float, optional
+        Secondary scaling parameter when generating sigma points usually set to 0.
+
 
     Returns
     -------
@@ -100,14 +114,20 @@ def create_coordinate_variants(
             )
 
         if method == "sigma-point":
-            samples, W, W_cov = sample_covariance_sigma_points(mean, cov)
+            samples, W, W_cov = sample_covariance_sigma_points(
+                mean, cov, alpha=alpha, beta=beta, kappa=kappa
+            )
 
         elif method == "monte-carlo":
-            samples, W, W_cov = sample_covariance_random(mean, cov, 10000)
+            samples, W, W_cov = sample_covariance_random(
+                mean, cov, num_samples=num_samples
+            )
 
         elif method == "auto":
             # Sample with sigma points
-            samples, W, W_cov = sample_covariance_sigma_points(mean, cov)
+            samples, W, W_cov = sample_covariance_sigma_points(
+                mean, cov, alpha=alpha, beta=beta, kappa=kappa
+            )
 
             # Check if the sigma point sampling is good enough by seeing if we can
             # recover the mean and covariance from the sigma points
@@ -119,7 +139,9 @@ def create_coordinate_variants(
             diff_mean = np.abs(mean_sg - mean)
             diff_cov = np.abs(cov_sg - cov)
             if np.any(diff_mean >= 1e-12) or np.any(diff_cov >= 1e-12):
-                samples, W, W_cov = sample_covariance_random(mean, cov, 10000)
+                samples, W, W_cov = sample_covariance_random(
+                    mean, cov, num_samples=num_samples
+                )
 
         else:
             raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
