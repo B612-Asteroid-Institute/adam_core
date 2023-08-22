@@ -19,8 +19,8 @@ class VariantOrbits(qv.Table):
 
     orbit_id = qv.StringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.StringColumn(nullable=True)
-    weights = qv.Float64Column(nullable=True, validator=qv.and_(qv.ge(0), qv.le(1)))
-    weights_cov = qv.Float64Column(nullable=True, validator=qv.and_(qv.ge(0), qv.le(1)))
+    weights = qv.Float64Column(nullable=True)
+    weights_cov = qv.Float64Column(nullable=True)
     coordinates = CartesianCoordinates.as_column()
 
     @classmethod

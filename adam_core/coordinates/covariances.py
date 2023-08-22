@@ -344,7 +344,11 @@ def mean_and_covariance_from_weighted_samples(samples, W, W_cov):
     mean = np.dot(W, samples)
 
     # Calculate the covariance matrix from the sigma points and weights
-    cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
+    # `~numpy.cov` does not support negative weights so we will calculate
+    # the covariance manually
+    # cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
+    residual = samples - mean
+    cov = (W_cov * residual.T) @ residual
     return mean, cov
 
 
