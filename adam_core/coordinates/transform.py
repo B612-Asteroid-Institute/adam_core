@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, TypeVar, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -39,12 +39,15 @@ __all__ = [
     "cometary_to_cartesian",
 ]
 
-CoordinateType = Union[
-    CartesianCoordinates,
-    KeplerianCoordinates,
-    CometaryCoordinates,
-    SphericalCoordinates,
-]
+CoordinateType = TypeVar(
+    "CoordinateType",
+    bound=Union[
+        CartesianCoordinates,
+        KeplerianCoordinates,
+        CometaryCoordinates,
+        SphericalCoordinates,
+    ],
+)
 CoordinatesClasses = (
     CartesianCoordinates,
     KeplerianCoordinates,

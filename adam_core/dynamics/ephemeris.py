@@ -2,10 +2,21 @@ from typing import Tuple
 
 import jax.numpy as jnp
 import numpy as np
+import quivr as qv
 from jax import jit, vmap
 
 from ..constants import Constants as c
-from ..coordinates.transform import _cartesian_to_spherical
+from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.covariances import (
+    CoordinateCovariances,
+    transform_covariances_jacobian,
+)
+from ..coordinates.origin import Origin, OriginCodes
+from ..coordinates.spherical import SphericalCoordinates
+from ..coordinates.transform import _cartesian_to_spherical, transform_coordinates
+from ..observers.observers import Observers
+from ..orbits.ephemeris import Ephemeris
+from ..orbits.orbits import Orbits
 from .aberrations import _add_light_time, add_stellar_aberration
 
 MU = c.MU
@@ -97,3 +108,152 @@ _generate_ephemeris_2body_vmap = jit(
         out_axes=(0, 0),
     )
 )
+
+
+def generate_ephemeris_2body(
+    propagated_orbits: Orbits,
+    observers: Observers,
+    lt_tol: float = 1e-10,
+    mu: float = MU,
+    max_iter: int = 1000,
+    tol: float = 1e-15,
+) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
+    """
+    Generate on-sky ephemerides for each propagated orbit as viewed by the observers.
+    This function calculates the light time delay between the propagated orbits and the observers,
+    and then propagates the orbits backward by that amount to when the light from each object was actually
+    emitted towards the observer.
+
+    The motion of the observer in an inertial frame will cause an object
+    to appear in a different location than its true geometric location, this is known as
+    stellar aberration. Stellar aberration is will also be applied after
+    light time correction has been added.
+
+    The velocity of the input orbits are unmodified only the position
+    vector is modified with stellar aberration.
+
+    Parameters
+    ----------
+    propagated_orbits : `~adam_core.orbits.orbits.Orbits` (N)
+        Propagated orbits.
+    observers : `~adam_core.observers.observers.Observers` (N)
+        Observers for which to generate ephemerides. Orbits should already have been
+        propagated to the same times as the observers.
+    lt_tol : float, optional
+        Calculate aberration to within this value in time (units of days).
+    mu : float, optional
+        Gravitational parameter (GM) of the attracting body in units of
+        AU**3 / d**2.
+    max_iter : int, optional
+        Maximum number of iterations over which to converge for propagation.
+    tol : float, optional
+        Numerical tolerance to which to compute universal anomaly during propagation using the Newtown-Raphson
+        method.
+
+    Returns
+    -------
+    ephemeris : `~quivr.linkage.MultikeyLinkage` (N)
+        Topocentric ephemerides for each propagated orbit as observed by the given observers.
+    """
+    # Transform both the orbits and observers to the barycenter if they are not already.
+    propagated_orbits_barycentric = propagated_orbits.set_column(
+        "coordinates",
+        transform_coordinates(
+            propagated_orbits.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    observers_barycentric = observers.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+
+    # Stack the observer coordinates and codes for each orbit in the propagated orbits
+    num_orbits = len(propagated_orbits_barycentric.orbit_id.unique())
+    observer_coordinates = np.tile(
+        observers_barycentric.coordinates.values, (num_orbits, 1)
+    )
+    observer_codes = np.tile(observers.code.to_numpy(zero_copy_only=False), num_orbits)
+
+    times = propagated_orbits.coordinates.time.to_astropy()
+    ephemeris_spherical, light_time = _generate_ephemeris_2body_vmap(
+        propagated_orbits_barycentric.coordinates.values,
+        times.mjd,
+        observer_coordinates,
+        lt_tol,
+        mu,
+        max_iter,
+        tol,
+    )
+    ephemeris_spherical = np.array(ephemeris_spherical)
+    light_time = np.array(light_time)
+
+    if not propagated_orbits.coordinates.covariance.is_all_nan():
+
+        cartesian_covariances = propagated_orbits.coordinates.covariance.to_matrix()
+        covariances_spherical = transform_covariances_jacobian(
+            propagated_orbits.coordinates.values,
+            cartesian_covariances,
+            _generate_ephemeris_2body,
+            in_axes=(0, 0, 0, None, None, None, None),
+            out_axes=(0, 0),
+            observation_times=times.utc.mjd,
+            observer_coordinates=observer_coordinates,
+            lt_tol=lt_tol,
+            mu=mu,
+            max_iter=max_iter,
+            tol=tol,
+        )
+        covariances_spherical = CoordinateCovariances.from_matrix(
+            np.array(covariances_spherical)
+        )
+
+    else:
+        covariances_spherical = None
+
+    spherical_coordinates = SphericalCoordinates.from_kwargs(
+        time=propagated_orbits.coordinates.time,
+        rho=ephemeris_spherical[:, 0],
+        lon=ephemeris_spherical[:, 1],
+        lat=ephemeris_spherical[:, 2],
+        vrho=ephemeris_spherical[:, 3],
+        vlon=ephemeris_spherical[:, 4],
+        vlat=ephemeris_spherical[:, 5],
+        covariance=covariances_spherical,
+        origin=Origin.from_kwargs(code=observer_codes),
+        frame="ecliptic",
+    )
+
+    # Rotate the spherical coordinates from the ecliptic frame
+    # to the equatorial frame
+    spherical_coordinates = transform_coordinates(
+        spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
+    )
+
+    ephems = Ephemeris.from_kwargs(
+        orbit_id=propagated_orbits_barycentric.orbit_id,
+        object_id=propagated_orbits_barycentric.object_id,
+        coordinates=spherical_coordinates,
+        light_time=light_time,
+    )
+
+    linkages = qv.MultiKeyLinkage(
+        left_table=ephems,
+        right_table=observers,
+        left_keys={
+            "code": ephems.coordinates.origin.code,
+            "mjd": ephems.coordinates.time.mjd(),
+        },
+        right_keys={
+            "code": observers.code,
+            "mjd": observers.coordinates.time.mjd(),
+        },
+    )
+    return linkages
