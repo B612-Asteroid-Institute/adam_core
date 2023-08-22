@@ -133,21 +133,8 @@ class VariantOrbits(qv.Table):
                 samples, variants.weights.to_numpy(), variants.weights_cov.to_numpy()
             )
 
-            orbit_collapsed = Orbits.from_kwargs(
-                orbit_id=orbit.orbit_id,
-                object_id=orbit.object_id,
-                coordinates=CartesianCoordinates.from_kwargs(
-                    time=orbit.coordinates.time,
-                    x=orbit.coordinates.x,
-                    y=orbit.coordinates.y,
-                    z=orbit.coordinates.z,
-                    vx=orbit.coordinates.vx,
-                    vy=orbit.coordinates.vy,
-                    vz=orbit.coordinates.vz,
-                    covariance=CoordinateCovariances.from_matrix(covariance),
-                    frame=orbit.coordinates.frame,
-                    origin=orbit.coordinates.origin,
-                ),
+            orbit_collapsed = orbit.set_column(
+                "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)
             )
 
             orbits_list.append(orbit_collapsed)
