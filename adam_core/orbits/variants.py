@@ -8,7 +8,7 @@ import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
-from ..coordinates.variants import create_coordinate_variants
+from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
 from .orbits import Orbits
 
 
@@ -65,7 +65,7 @@ class VariantOrbits(qv.Table):
         variants_orbits : '~adam_core.orbits.variants.VariantOrbits'
             The variant orbits.
         """
-        idx, W, W_cov, variant_coordinates = create_coordinate_variants(
+        variant_coordinates: VariantCoordinatesTable = create_coordinate_variants(
             orbits.coordinates,
             method=method,
             num_samples=num_samples,
@@ -74,11 +74,11 @@ class VariantOrbits(qv.Table):
             kappa=kappa,
         )
         return cls.from_kwargs(
-            orbit_id=pc.take(orbits.orbit_id, idx),
-            object_id=pc.take(orbits.object_id, idx),
-            weights=W,
-            weights_cov=W_cov,
-            coordinates=variant_coordinates,
+            orbit_id=pc.take(orbits.orbit_id, variant_coordinates.index),
+            object_id=pc.take(orbits.object_id, variant_coordinates.index),
+            weights=variant_coordinates.weight,
+            weights_cov=variant_coordinates.weight_cov,
+            coordinates=variant_coordinates.sample,
         )
 
     def link_to_orbits(

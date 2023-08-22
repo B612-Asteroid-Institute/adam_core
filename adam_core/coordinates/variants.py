@@ -1,6 +1,7 @@
-from typing import Literal, Tuple, Union
+from typing import Generic, Literal, Protocol, TypeVar, Union
 
 import numpy as np
+import pyarrow as pa
 import quivr as qv
 
 from .cartesian import CartesianCoordinates
@@ -22,6 +23,27 @@ CoordinateType = Union[
 ]
 
 
+T = TypeVar("T", bound=CoordinateType, covariant=True)
+
+
+class VariantCoordinatesTable(Generic[T], Protocol):
+    @property
+    def index(self) -> pa.Int64Array:
+        ...
+
+    @property
+    def sample(self) -> T:
+        ...
+
+    @property
+    def weight(self) -> pa.lib.DoubleArray:
+        ...
+
+    @property
+    def weight_cov(self) -> pa.lib.DoubleArray:
+        ...
+
+
 def create_coordinate_variants(
     coordinates: CoordinateType,
     method: Literal["auto", "sigma-point", "monte-carlo"],
@@ -29,7 +51,7 @@ def create_coordinate_variants(
     alpha: float = 1,
     beta: float = 0,
     kappa: float = 0,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, CoordinateType]:
+) -> VariantCoordinatesTable[T]:
     """
     Sample and create variants for the given coordinates by sampling the covariance matrices.
     There are three supported methods:
@@ -69,17 +91,8 @@ def create_coordinate_variants(
 
     Returns
     -------
-    idx : '~numpy.ndarray'
-        The index of the coordinate that each sample belongs to.
-    weights : '~numpy.ndarray'
-        Weights of each sample.
-    cov_weights : '~numpy.ndarray'
-        Weights of the samples to reconstruct covariance matrix.
-    samples : {'~adam_core.coordinates.cartesian.CartesianCoordinates',
-                     '~adam_core.coordinates.keplerian.KeplerianCoordinates',
-                     '~adam_core.coordinates.cometary.CometaryCoordinates',
-                     '~adam_core.coordinates.spherical.SphericalCoordinates'}
-        The samples drawn from the coordinate covariance matrices.
+    variants : '~adam_core.coordinates.variants.VariantCoordinates'
+        The variant coordinates.
 
     Raises
     ------
@@ -87,18 +100,29 @@ def create_coordinate_variants(
         If the covariance matrices are all undefined.
         If the input coordinates are not supported.
     """
-    idx_list = []
-    samples_list = []
-    weights_list = []
-    cov_weights_list = []
-    origins_list = []
-    times_list = []
-
     if coordinates.covariance.is_all_nan():
         raise ValueError(
             "Cannot sample coordinate covariances when covariances are all undefined."
         )
 
+    class VariantCoordinates(qv.Table):
+        index = qv.Int64Column()
+        sample = coordinates.as_column()
+        weight = qv.Float64Column()
+        weight_cov = qv.Float64Column()
+
+    if isinstance(coordinates, CartesianCoordinates):
+        dimensions = ["x", "y", "z", "vx", "vy", "vz"]
+    elif isinstance(coordinates, SphericalCoordinates):
+        dimensions = ["rho", "lon", "lat", "vrho", "vlon", "vlat"]
+    elif isinstance(coordinates, KeplerianCoordinates):
+        dimensions = ["a", "e", "i", "raan", "ap", "M"]
+    elif isinstance(coordinates, CometaryCoordinates):
+        dimensions = ["q", "e", "i", "raan", "ap", "tp"]
+    else:
+        raise ValueError(f"Unsupported coordinate type: {type(coordinates)}")
+
+    variants_list = []
     for i, coordinate_i in enumerate(coordinates):
 
         mean = coordinate_i.values[0]
@@ -146,92 +170,22 @@ def create_coordinate_variants(
         else:
             raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
 
-        origins_list += [coordinate_i.origin for i in range(len(samples))]
-        times_list += [coordinate_i.time for i in range(len(samples))]
-        samples_list.append(samples)
-        weights_list.append(W)
-        cov_weights_list.append(W_cov)
-        idx_list.append(np.full(len(samples), i))
-
-    samples = np.concatenate(samples_list)
-    idx = np.concatenate(idx_list)
-    weights = np.concatenate(weights_list)
-    cov_weights = np.concatenate(cov_weights_list)
-    origins = qv.concatenate(origins_list)
-    times = qv.concatenate(times_list)
-
-    if isinstance(coordinates, CartesianCoordinates):
-        return (
-            idx,
-            weights,
-            cov_weights,
-            CartesianCoordinates.from_kwargs(
-                x=samples[:, 0],
-                y=samples[:, 1],
-                z=samples[:, 2],
-                vx=samples[:, 3],
-                vy=samples[:, 4],
-                vz=samples[:, 5],
-                time=times,
-                covariance=None,
-                origin=origins,
-                frame=coordinates.frame,
-            ),
-        )
-    elif isinstance(coordinates, SphericalCoordinates):
-        return (
-            idx,
-            weights,
-            cov_weights,
-            SphericalCoordinates.from_kwargs(
-                rho=samples[:, 0],
-                lon=samples[:, 1],
-                lat=samples[:, 2],
-                vrho=samples[:, 3],
-                vlon=samples[:, 4],
-                vlat=samples[:, 5],
-                time=times,
-                covariance=None,
-                origin=origins,
-                frame=coordinates.frame,
-            ),
-        )
-    elif isinstance(coordinates, KeplerianCoordinates):
-        return (
-            idx,
-            weights,
-            cov_weights,
-            KeplerianCoordinates.from_kwargs(
-                a=samples[:, 0],
-                e=samples[:, 1],
-                i=samples[:, 2],
-                raan=samples[:, 3],
-                ap=samples[:, 4],
-                M=samples[:, 5],
-                time=times,
-                covariance=None,
-                origin=origins,
-                frame=coordinates.frame,
-            ),
-        )
-    elif isinstance(coordinates, CometaryCoordinates):
-        return (
-            idx,
-            weights,
-            cov_weights,
-            CometaryCoordinates.from_kwargs(
-                q=samples[:, 0],
-                e=samples[:, 1],
-                i=samples[:, 2],
-                raan=samples[:, 3],
-                ap=samples[:, 4],
-                tp=samples[:, 5],
-                time=times,
-                covariance=None,
-                origin=origins,
-                frame=coordinates.frame,
-            ),
+        variants_list.append(
+            VariantCoordinates.from_kwargs(
+                index=np.full(len(samples), i),
+                sample=coordinates.from_kwargs(
+                    origin=qv.concatenate(
+                        [coordinate_i.origin for i in range(len(samples))]
+                    ),
+                    time=qv.concatenate(
+                        [coordinate_i.time for i in range(len(samples))]
+                    ),
+                    frame=coordinate_i.frame,
+                    **{dim: samples[:, i] for i, dim in enumerate(dimensions)},
+                ),
+                weight=W,
+                weight_cov=W_cov,
+            )
         )
 
-    else:
-        raise ValueError(f"Unsupported coordinate type: {type(coordinates)}")
+    return qv.concatenate(variants_list)
