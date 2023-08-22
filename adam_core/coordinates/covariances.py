@@ -319,37 +319,55 @@ def sample_covariance_sigma_points(
     return sigma_points, W, W_cov
 
 
-def mean_and_covariance_from_weighted_samples(samples, W, W_cov):
+def weighted_mean(samples: np.ndarray, W: np.ndarray) -> np.ndarray:
     """
-    Calculate a covariance matrix from samples and their corresponding weights.
+    Calculate the weighted mean of a set of samples.
 
     Parameters
     ----------
-    samples : `~numpy.ndarray` (2 * D + 1, D)
+    samples : `~numpy.ndarray` (N, D)
         Samples drawn from the distribution (these can be randomly drawn
         or sigma points)
-    W: `~numpy.ndarray` (2 * D + 1)
+    W: `~numpy.ndarray` (N)
         Weights of the samples.
-    W_cov: `~numpy.ndarray` (2 * D + 1)
-        Weights of the samples to reconstruct covariance matrix.
 
     Returns
     -------
     mean : `~numpy.ndarray` (D)
         Mean calculated from the samples and weights.
+    """
+    return np.dot(W, samples)
+
+
+def weighted_covariance(
+    mean: np.ndarray, samples: np.ndarray, W_cov: np.ndarray
+) -> np.ndarray:
+    """
+    Calculate a covariance matrix from samples and their corresponding weights.
+
+    Parameters
+    ----------
+    mean : `~numpy.ndarray` (D)
+        Mean calculated from the samples and weights.
+        See `~adam_core.coordinates.covariances.weighted_mean`.
+    samples : `~numpy.ndarray` (N, D)
+        Samples drawn from the distribution (these can be randomly drawn
+        or sigma points)
+    W_cov: `~numpy.ndarray` (N)
+        Weights of the samples to reconstruct covariance matrix.
+
+    Returns
+    -------
     cov : `~numpy.ndarray` (D, D)
         Covariance matrix calculated from the samples and weights.
     """
-    # Calculate the mean from the sigma points and weights
-    mean = np.dot(W, samples)
-
     # Calculate the covariance matrix from the sigma points and weights
     # `~numpy.cov` does not support negative weights so we will calculate
     # the covariance manually
     # cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
     residual = samples - mean
     cov = (W_cov * residual.T) @ residual
-    return mean, cov
+    return cov
 
 
 def transform_covariances_sampling(

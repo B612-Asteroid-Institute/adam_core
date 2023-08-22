@@ -7,10 +7,7 @@ import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import (
-    CoordinateCovariances,
-    mean_and_covariance_from_weighted_samples,
-)
+from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
 from ..coordinates.variants import create_coordinate_variants
 from .orbits import Orbits
 
@@ -129,8 +126,9 @@ class VariantOrbits(qv.Table):
             assert len(orbit) == 1
 
             samples = variants.coordinates.values
-            mean_state, covariance = mean_and_covariance_from_weighted_samples(
-                samples, variants.weights.to_numpy(), variants.weights_cov.to_numpy()
+            mean = orbit.coordinates.values[0]
+            covariance = weighted_covariance(
+                mean, samples, variants.weights_cov.to_numpy()
             )
 
             orbit_collapsed = orbit.set_column(

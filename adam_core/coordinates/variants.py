@@ -6,9 +6,10 @@ import quivr as qv
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .covariances import (
-    mean_and_covariance_from_weighted_samples,
     sample_covariance_random,
     sample_covariance_sigma_points,
+    weighted_covariance,
+    weighted_mean,
 )
 from .keplerian import KeplerianCoordinates
 from .spherical import SphericalCoordinates
@@ -110,9 +111,8 @@ def create_coordinate_variants(
 
             # Check if the sigma point sampling is good enough by seeing if we can
             # recover the mean and covariance from the sigma points
-            mean_sg, cov_sg = mean_and_covariance_from_weighted_samples(
-                samples, W, W_cov
-            )
+            mean_sg = weighted_mean(samples, W)
+            cov_sg = weighted_covariance(mean_sg, samples, W_cov)
 
             # If the sigma point sampling is not good enough, then sample with monte carlo
             # Though it is not guaranteed that monte carlo will actually be better
