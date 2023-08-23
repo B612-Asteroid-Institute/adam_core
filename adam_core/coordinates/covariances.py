@@ -204,7 +204,7 @@ class CoordinateCovariances(Table):
 
 
 def sample_covariance_random(
-    mean: np.ndarray, cov: np.ndarray, num_samples: int = 100000
+    mean: np.ndarray, cov: np.ndarray, num_samples: int = 10000
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sample a multivariate Gaussian distribution with given
@@ -241,7 +241,11 @@ def sample_covariance_random(
 
 
 def sample_covariance_sigma_points(
-    mean: np.ndarray, cov: np.ndarray, alpha: float = 1, kappa: float = 0.0
+    mean: np.ndarray,
+    cov: np.ndarray,
+    alpha: float = 1,
+    beta: float = 0.0,
+    kappa: float = 0.0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Create sigma-point samples of a multivariate Gaussian distribution
@@ -255,6 +259,8 @@ def sample_covariance_sigma_points(
         Multivariate variance-covariance matrix of the Gaussian distribution.
     alpha : float, optional
         Spread of the sigma points between 1e^-2 and 1.
+    beta : float, optional
+        Prior knowledge of the distribution usually set to 2 for a Gaussian.
     kappa : float, optional
         Secondary scaling parameter usually set to 0.
 
@@ -293,7 +299,6 @@ def sample_covariance_sigma_points(
     # If the distribution is a well-constrained Gaussian, beta = 2 is optimal
     # but lets set beta to 0 for now which has the effect of not weighting the mean state
     # with 0 for the covariance matrix. This is generally better for more distributions.
-    beta = 0
     # Calculate the weights for mean and the covariance matrix
     # Weight are used to reconstruct the mean and covariance matrix from the sigma points
     W[0] = lambd / (D + lambd)
@@ -319,33 +324,55 @@ def sample_covariance_sigma_points(
     return sigma_points, W, W_cov
 
 
-def mean_and_covariance_from_weighted_samples(samples, W, W_cov):
+def weighted_mean(samples: np.ndarray, W: np.ndarray) -> np.ndarray:
     """
-    Calculate a covariance matrix from samples and their corresponding weights.
+    Calculate the weighted mean of a set of samples.
 
     Parameters
     ----------
-    samples : `~numpy.ndarray` (2 * D + 1, D)
+    samples : `~numpy.ndarray` (N, D)
         Samples drawn from the distribution (these can be randomly drawn
         or sigma points)
-    W: `~numpy.ndarray` (2 * D + 1)
+    W: `~numpy.ndarray` (N)
         Weights of the samples.
-    W_cov: `~numpy.ndarray` (2 * D + 1)
-        Weights of the samples to reconstruct covariance matrix.
 
     Returns
     -------
     mean : `~numpy.ndarray` (D)
         Mean calculated from the samples and weights.
+    """
+    return np.dot(W, samples)
+
+
+def weighted_covariance(
+    mean: np.ndarray, samples: np.ndarray, W_cov: np.ndarray
+) -> np.ndarray:
+    """
+    Calculate a covariance matrix from samples and their corresponding weights.
+
+    Parameters
+    ----------
+    mean : `~numpy.ndarray` (D)
+        Mean calculated from the samples and weights.
+        See `~adam_core.coordinates.covariances.weighted_mean`.
+    samples : `~numpy.ndarray` (N, D)
+        Samples drawn from the distribution (these can be randomly drawn
+        or sigma points)
+    W_cov: `~numpy.ndarray` (N)
+        Weights of the samples to reconstruct covariance matrix.
+
+    Returns
+    -------
     cov : `~numpy.ndarray` (D, D)
         Covariance matrix calculated from the samples and weights.
     """
-    # Calculate the mean from the sigma points and weights
-    mean = np.dot(W, samples)
-
     # Calculate the covariance matrix from the sigma points and weights
-    cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
-    return mean, cov
+    # `~numpy.cov` does not support negative weights so we will calculate
+    # the covariance manually
+    # cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
+    residual = samples - mean
+    cov = (W_cov * residual.T) @ residual
+    return cov
 
 
 def transform_covariances_sampling(

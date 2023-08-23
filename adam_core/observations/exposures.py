@@ -8,7 +8,7 @@ import pyarrow.compute as pc
 import quivr as qv
 from quivr.validators import and_, ge, le
 
-from ..coordinates import cartesian, origin, times
+from ..coordinates import origin, times
 from ..observers import observers, state
 
 

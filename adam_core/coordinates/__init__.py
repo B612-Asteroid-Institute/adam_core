@@ -7,13 +7,14 @@ from .covariances import (
     covariances_from_df,
     covariances_to_df,
     covariances_to_table,
-    mean_and_covariance_from_weighted_samples,
     sample_covariance_random,
     sample_covariance_sigma_points,
     sigmas_from_df,
     sigmas_to_df,
     transform_covariances_jacobian,
     transform_covariances_sampling,
+    weighted_covariance,
+    weighted_mean,
 )
 from .io import coords_from_dataframe, coords_to_dataframe
 from .jacobian import calc_jacobian
@@ -35,3 +36,4 @@ from .transform import (
     cometary_to_cartesian,
     transform_coordinates,
 )
+from .variants import create_coordinate_variants

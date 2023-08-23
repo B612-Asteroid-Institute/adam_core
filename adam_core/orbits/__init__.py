@@ -2,3 +2,4 @@
 from .classification import calc_orbit_class
 from .ephemeris import Ephemeris
 from .orbits import Orbits
+from .variants import VariantOrbits

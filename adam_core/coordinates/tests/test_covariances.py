@@ -3,9 +3,10 @@ import numpy as np
 from ...utils.helpers.orbits import make_real_orbits
 from ..covariances import (
     CoordinateCovariances,
-    mean_and_covariance_from_weighted_samples,
     sample_covariance_random,
     sample_covariance_sigma_points,
+    weighted_covariance,
+    weighted_mean,
 )
 
 
@@ -35,9 +36,9 @@ def test_sample_covariance_sigma_points():
 
         # Reconstruct the mean and covariance and test that they match
         # the original inputs to within 1e-14
-        mean_sg, covariance_sg = mean_and_covariance_from_weighted_samples(
-            samples, W, W_cov
-        )
+        mean_sg = weighted_mean(samples, W)
+        covariance_sg = weighted_covariance(mean, samples, W_cov)
+
         np.testing.assert_allclose(mean_sg, mean, rtol=0, atol=1e-14)
         np.testing.assert_allclose(covariance_sg, covariance, rtol=0, atol=1e-14)
 
@@ -61,9 +62,9 @@ def test_sample_covariance_random():
 
         # Reconstruct the mean and covariance and test that they match
         # the original inputs to within 1e-8 and 1e-14 respectively
-        mean_rs, covariance_rs = mean_and_covariance_from_weighted_samples(
-            samples, W, W_cov
-        )
+        mean_rs = weighted_mean(samples, W)
+        covariance_rs = weighted_covariance(mean, samples, W_cov)
+
         # Note how many samples are needed to get the covariance to
         # match to within 1e-14... (the same tolerance as sigma point sampling)
         np.testing.assert_allclose(mean_rs, mean, rtol=0, atol=1e-8)
