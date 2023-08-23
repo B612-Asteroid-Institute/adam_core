@@ -1,8 +1,6 @@
 import uuid
 from typing import Literal
 
-import numpy as np
-import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 
@@ -137,10 +135,15 @@ class VariantOrbits(qv.Table):
         # Iterate over the variants and calculate the mean state and covariance matrix
         # for each orbit at each epoch then create a new orbit with the calculated covariance matrix
         orbits_list = []
-        for key, orbit, variants in link.iterate():
-            key = key.as_py()
-
+        for orbit in orbits:
             assert len(orbit) == 1
+
+            key = link.key(
+                orbit_id=orbit.orbit_id[0].as_py(),
+                jd1=orbit.coordinates.time.jd1[0].as_py(),
+                jd2=orbit.coordinates.time.jd2[0].as_py(),
+            )
+            variants = link.select_right(key)
 
             samples = variants.coordinates.values
             mean = orbit.coordinates.values[0]
@@ -154,26 +157,4 @@ class VariantOrbits(qv.Table):
 
             orbits_list.append(orbit_collapsed)
 
-        orbits_collapsed = qv.concatenate(orbits_list)
-
-        # Array of indices into the collapsed orbits
-        orbits_idx = pa.array(np.arange(0, len(orbits_collapsed)))
-
-        # Make a list of arrays that will be used to sort the orbits
-        orbits_idx_sorted_list = []
-
-        # Loop over input orbits and figure out where in the collapsed orbits they occur
-        # There has to be an easier or better way to do this?
-        for orbit in orbits:
-            mask_orbit_id = pc.equal(orbits_collapsed.orbit_id, orbit.orbit_id[0])
-            mask_jd1 = pc.equal(
-                orbits_collapsed.coordinates.time.jd1, orbit.coordinates.time.jd1[0]
-            )
-            mask_jd2 = pc.equal(
-                orbits_collapsed.coordinates.time.jd2, orbit.coordinates.time.jd2[0]
-            )
-            mask = pc.and_(mask_orbit_id, pc.and_(mask_jd1, mask_jd2))
-            orbits_idx_sorted_list.append(orbits_idx.filter(mask))
-
-        orbits_idx_sorted = pa.concat_arrays(orbits_idx_sorted_list)
-        return orbits_collapsed.take(orbits_idx_sorted)
+        return qv.concatenate(orbits_list)
