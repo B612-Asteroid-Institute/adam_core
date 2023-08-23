@@ -1280,6 +1280,9 @@ def transform_coordinates(
     Transform coordinates between frames ('ecliptic', 'equatorial'), origins,
     and/or representations ('cartesian', 'spherical', 'keplerian', 'cometary').
 
+    Input coordinates may be defined from multiple origins but if origin_out is
+    specified, all coordinates will be transformed to that origin.
+
     Parameters
     ----------
     coords : `~adam_core.coordinates.Coordinates`
@@ -1321,17 +1324,25 @@ def transform_coordinates(
         )
 
     coord_frame = coords.frame
-    # Extract the origins from the input coordinates
+    # Extract the origins from the input coordinates. These typically correspond
+    # to the name of OriginCode enums but stored as an array of strings.
     coord_origin = coords.origin.code.to_numpy(zero_copy_only=False)
 
     if frame_out is None:
         frame_out = coord_frame
 
+    # If origin out is not None, then origin_out will be an OriginCode
+    # passed directly to this function. Otherwise, it will be an array of strings
+    # extracted from the input coordinates.
     if origin_out is None:
         origin_out = coord_origin
 
+    # `~adam_core.coordinates.origin.Origin` support equality checks with
+    # `~adam_core.coordinates.origin.OriginCodes` so we can compare them directly.
+    # If its not an OriginCodes enum then origin_out will be an array of strings which
+    # also can be checked for equality.
     if type(coords) == representation_out:
-        if coord_frame == frame_out and np.all(coord_origin == origin_out.name):
+        if coord_frame == frame_out and np.all(coord_origin == origin_out):
             return coords
 
     if not isinstance(coords, CartesianCoordinates):
@@ -1340,7 +1351,7 @@ def transform_coordinates(
         cartesian = coords
 
     # Translate coordinates to new origin (if different from current)
-    if np.all(cartesian.origin != origin_out.name):
+    if np.all(cartesian.origin != origin_out):
         cartesian = cartesian_to_origin(cartesian, origin_out)
 
     # Rotate coordinates to new frame (if different from current)

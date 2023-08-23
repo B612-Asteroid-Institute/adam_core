@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from ..origin import Origin
+from ..origin import Origin, OriginCodes
 
 
 def test_origin_eq__():
@@ -45,6 +45,12 @@ def test_origin_eq__():
         origin != Origin.from_kwargs(code=["SUN", "EARTH", "SUN"]),
         np.array([False, False, False]),
     )
+
+    # Test equality with OriginCodes
+    np.testing.assert_equal(origin == OriginCodes.SUN, np.array([True, False, True]))
+    np.testing.assert_equal(origin != OriginCodes.SUN, np.array([False, True, False]))
+    np.testing.assert_equal(origin == OriginCodes.EARTH, np.array([False, True, False]))
+    np.testing.assert_equal(origin != OriginCodes.EARTH, np.array([True, False, True]))
 
 
 def test_origin_eq__raises():
