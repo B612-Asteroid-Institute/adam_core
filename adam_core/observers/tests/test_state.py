@@ -10,8 +10,32 @@ from ...coordinates import Residuals
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import OriginCodes
 from ...observers import get_observer_state
+from ...utils import get_perturber_state
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "testdata")
+
+
+def test_get_observer_state_OriginCodes():
+    # Test that get_observer_state works using OriginCodes instead of MPC
+    # observatory codes
+    codes = [
+        OriginCodes.SUN,
+        OriginCodes.MERCURY,
+        OriginCodes.VENUS,
+        OriginCodes.EARTH,
+        OriginCodes.MARS_BARYCENTER,
+        OriginCodes.JUPITER_BARYCENTER,
+    ]
+    for code in codes:
+
+        times = Time(np.arange(59000, 60000), format="mjd", scale="tdb")
+        perturber_state = get_perturber_state(
+            code, times, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER
+        )
+        observer_state = get_observer_state(
+            code, times, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER
+        )
+        assert perturber_state == observer_state
 
 
 def test_get_observer_state_X05():
