@@ -1260,9 +1260,9 @@ def cartesian_to_frame(
         Rotated Cartesian coordinates and their covariances.
     """
     if frame == "ecliptic" and coords.frame != "ecliptic":
-        return coords.rotate(TRANSFORM_EC2EQ, "ecliptic")
+        return coords.rotate(TRANSFORM_EQ2EC, "ecliptic")
     elif frame == "equatorial" and coords.frame != "equatorial":
-        return coords.rotate(TRANSFORM_EQ2EC, "equatorial")
+        return coords.rotate(TRANSFORM_EC2EQ, "equatorial")
     elif frame == coords.frame:
         return coords
     else:
