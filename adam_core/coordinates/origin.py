@@ -73,6 +73,9 @@ class Origin(Table):
         if isinstance(other, (str, np.ndarray)):
             codes = self.code.to_numpy(zero_copy_only=False)
             return codes == other
+        elif isinstance(other, OriginCodes):
+            codes = self.code.to_numpy(zero_copy_only=False)
+            return codes == other.name
         elif isinstance(other, Origin):
             codes = self.code.to_numpy(zero_copy_only=False)
             other_codes = other.code.to_numpy(zero_copy_only=False)
