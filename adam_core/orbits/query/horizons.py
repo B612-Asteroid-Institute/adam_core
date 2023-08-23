@@ -19,6 +19,7 @@ def _get_horizons_vectors(
     location: str = "@sun",
     id_type: str = "smallbody",
     aberrations: str = "geometric",
+    refplane: str = "ecliptic",
 ) -> pd.DataFrame:
     """
     Query JPL Horizons (through astroquery) for an object's
@@ -39,6 +40,8 @@ def _get_horizons_vectors(
         ID type, Horizons will find closest match under any given type.
     aberrations : {'geometric', 'astrometric', 'apparent'}
         Adjust state for one of three different aberrations.
+    refplane : {'ecliptic', 'earth'}
+        Reference plane for state vectors.
 
     Returns
     -------
@@ -55,7 +58,7 @@ def _get_horizons_vectors(
             id_type=id_type,
         )
         vectors = obj.vectors(
-            refplane="ecliptic", aberrations=aberrations, cache=False
+            refplane=refplane, aberrations=aberrations, cache=False
         ).to_pandas()
         dfs.append(vectors)
 
@@ -68,6 +71,7 @@ def _get_horizons_elements(
     times: Time,
     location: str = "@sun",
     id_type: str = "smallbody",
+    refplane: str = "ecliptic",
 ) -> pd.DataFrame:
     """
     Query JPL Horizons (through astroquery) for an object's
@@ -86,6 +90,8 @@ def _get_horizons_elements(
     id_type : {'majorbody', 'smallbody', 'designation',
                'name', 'asteroid_name', 'comet_name', 'id'}
         ID type, Horizons will find closest match under any given type.
+    refplane : {'ecliptic', 'earth'}
+        Reference plane for orbital elements.
 
     Returns
     -------
@@ -102,7 +108,7 @@ def _get_horizons_elements(
             id_type=id_type,
         )
         elements = obj.elements(
-            refsystem="J2000", refplane="ecliptic", tp_type="absolute", cache=False
+            refsystem="J2000", refplane=refplane, tp_type="absolute", cache=False
         ).to_pandas()
         dfs.append(elements)
 
