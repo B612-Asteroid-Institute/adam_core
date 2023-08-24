@@ -51,7 +51,7 @@ class SphericalCoordinates(Table):
     def values(self) -> np.ndarray:
         return np.array(
             self.table.select(["rho", "lon", "lat", "vrho", "vlon", "vlat"])
-        ).T
+        )
 
     @property
     def sigma_rho(self):

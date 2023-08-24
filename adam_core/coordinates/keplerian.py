@@ -49,7 +49,7 @@ class KeplerianCoordinates(Table):
 
     @property
     def values(self) -> np.ndarray:
-        return np.array(self.table.select(["a", "e", "i", "raan", "ap", "M"])).T
+        return np.array(self.table.select(["a", "e", "i", "raan", "ap", "M"]))
 
     @property
     def sigma_a(self) -> np.ndarray:
