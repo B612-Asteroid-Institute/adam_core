@@ -1,8 +1,12 @@
-# Asteroid Institute ADAM Core
+# adam_core: ADAM Core Utilities
+#### A Python package by the Asteroid Institute, a program of the B612 Foundation
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
+[![docker - Build, Lint, and Test](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/docker-build-lint-test.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/docker-build-lint-test.yml)
+[![pip - Build, Lint, Test, and Coverage](https://github.com/moeyensj/thor/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/moeyensj/thor/actions/workflows/pip-build-lint-test-coverage.yml)  
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 
-A set of shared astrodynamics libraries and utilities.
-
-`adam_core` is used by a variety of library and services at Asteroid Institute. Sharing these common classes, types, and conversions amongst our tools ensures consistency and accuracy.
+`adam_core` is used by a variety of library and services at the Asteroid Institute. Sharing these common classes, types, and conversions amongst our tools ensures consistency and accuracy.
 
 ## Usage
 
