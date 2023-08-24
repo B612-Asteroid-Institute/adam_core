@@ -75,7 +75,12 @@ def get_observer_state(
     # If it not an origin code then lets get the state vector
     else:
         # Get observatory geodetic information
-        geodetics = OBSERVATORY_GEODETICS.select("code", code).table.to_pylist()[0]
+        geodetics = OBSERVATORY_GEODETICS.select("code", code)
+        if len(geodetics) == 0:
+            raise ValueError(
+                f"Observatory code '{code}' not found in the observatory geodetics table."
+            )
+        geodetics = geodetics.table.to_pylist()[0]
 
         # Unpack geodetic information
         longitude = geodetics["longitude"]
