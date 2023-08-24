@@ -1,15 +1,13 @@
 import concurrent.futures
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import quivr as qv
 from astropy.time import Time
 
 from ..observers import Observers
-from ..orbits import Ephemeris, Orbits
-from ..orbits.orbits import Orbits
-from ..orbits.variants import VariantOrbits
+from ..orbits import Ephemeris, Orbits, VariantOrbits
 from .utils import _iterate_chunks, sort_propagated_orbits
 
 logger = logging.getLogger(__name__)
@@ -113,10 +111,10 @@ class Propagator(ABC):
                             )
                         )
 
-                propagated_list = []
-                variants_list = []
+                propagated_list: List[Orbits] = []
+                variants_list: List[VariantOrbits] = []
                 for future in concurrent.futures.as_completed(futures):
-                    result = future.result() 
+                    result = future.result()
                     if isinstance(result, Orbits):
                         propagated_list.append(result)
                     elif isinstance(result, VariantOrbits):
@@ -131,7 +129,7 @@ class Propagator(ABC):
                 propagated_variants = qv.concatenate(variants_list)
             else:
                 propagated_variants = None
-        
+
         else:
             propagated = self._propagate_orbits(orbits, times)
 
@@ -148,7 +146,9 @@ class Propagator(ABC):
         return propagated
 
     @abstractmethod
-    def _generate_ephemeris(self, orbits: Orbits, observers):
+    def _generate_ephemeris(
+        self, orbits: Orbits, observers: Observers
+    ) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
         """
         Generate ephemerides for the given orbits as observed by
         the observers.

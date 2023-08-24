@@ -1,4 +1,5 @@
 import warnings
+from typing import Union
 
 import pandas as pd
 from astropy.time import Time
@@ -6,7 +7,7 @@ from mpc_obscodes import mpc_obscodes
 from quivr import Float64Column, StringColumn, Table
 from typing_extensions import Self
 
-from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates import cartesian, origin
 
 
 class ObservatoryGeodetics(Table):
@@ -48,10 +49,10 @@ OBSERVATORY_CODES = {
 
 class Observers(Table):
     code = StringColumn(nullable=False)
-    coordinates = CartesianCoordinates.as_column()
+    coordinates = cartesian.CartesianCoordinates.as_column()
 
     @classmethod
-    def from_code(cls, code: str, times: Time) -> Self:
+    def from_code(cls, code: Union[str, origin.OriginCodes], times: Time) -> Self:
         """
         Instantiate an Observers table with a single code and multiple times.
         Times do not need to be unique. The observer state will be calculated
@@ -60,10 +61,13 @@ class Observers(Table):
 
         To load multiple codes, use `from_code` and then concatenate the tables.
 
+        Note that NAIF origin codes may not be supported by `~adam_core.propagator.Propagator`
+        classes such as PYOORB.
+
         Parameters
         ----------
-        code : str
-            MPC observatory code for which to find the states.
+        code : Union[str, OriginCodes]
+            MPC observatory code or NAIF origin code for which to find the states.
         times : `~astropy.time.core.Time` (N)
             Epochs for which to find the observatory locations.
 
@@ -82,8 +86,16 @@ class Observers(Table):
         """
         from .state import get_observer_state
 
+        if isinstance(code, origin.OriginCodes):
+            code_str = code.name
+        elif isinstance(code, str):
+            code_str = code
+        else:
+            err = "Code should be a str or an `~adam_core.coordinates.origin.OriginCodes`."
+            raise ValueError(err)
+
         return cls.from_kwargs(
-            code=[code] * len(times),
+            code=[code_str] * len(times),
             coordinates=get_observer_state(code, times),
         )
 
@@ -159,7 +171,7 @@ class Observers(Table):
                 "obs_origin.code": "origin.code",
             }
         )
-        coordinates = CartesianCoordinates.from_dataframe(
+        coordinates = cartesian.CartesianCoordinates.from_dataframe(
             df_renamed,
             frame="ecliptic",
         )
