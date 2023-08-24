@@ -1350,8 +1350,8 @@ def transform_coordinates(
     else:
         cartesian = coords
 
-    # Translate coordinates to new origin (if different from current)
-    if np.all(cartesian.origin != origin_out):
+    # Translate coordinates to new origin (if any are different from current)
+    if np.any(cartesian.origin != origin_out):
         cartesian = cartesian_to_origin(cartesian, origin_out)
 
     # Rotate coordinates to new frame (if different from current)
