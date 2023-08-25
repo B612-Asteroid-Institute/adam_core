@@ -10,6 +10,7 @@ from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
+from ...observers import Observers
 from ..orbits import Orbits
 
 
@@ -27,7 +28,7 @@ def _get_horizons_vectors(
 
     Parameters
     ----------
-    object_ids : `~numpy.ndarray` (N)
+    object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
     times : `~astropy.core.time.Time` (M)
         Astropy time object at which to gather state vectors.
@@ -80,7 +81,7 @@ def _get_horizons_elements(
 
     Parameters
     ----------
-    object_ids : `~numpy.ndarray` (N)
+    object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
     times : `~astropy.core.time.Time`
         Astropy time object at which to gather state vectors.
@@ -130,7 +131,7 @@ def _get_horizons_ephemeris(
 
     Parameters
     ----------
-    object_ids : `~numpy.ndarray` (N)
+    object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
     times : `~astropy.core.time.Time`
         Astropy time object at which to gather state vectors.
@@ -171,6 +172,40 @@ def _get_horizons_ephemeris(
         inplace=True,
         ignore_index=True,
     )
+    return ephemeris
+
+
+def query_horizons_ephemeris(
+    object_ids: Union[List, npt.ArrayLike], observers: Observers
+) -> pd.DataFrame:
+    """
+    Query JPL Horizons (through astroquery) for an object's predicted ephemeris
+    as seen from a given location at the given times.
+
+    Parameters
+    ----------
+    object_ids : Union[List, `~numpy.ndarray`] (N)
+        Object IDs / designations recognizable by HORIZONS.
+    observers : `~adam_core.observers.observers.Observers`
+        Observers object containing the location and times
+        of the observers.
+
+    Returns
+    -------
+    ephemeris : `~pandas.DataFrame`
+        Dataframe containing the predicted ephemerides of the given objects
+        as seen from the observer location at the given times.
+    """
+    dfs = []
+    for observatory_code, observers_i in observers.iterate_codes():
+        ephemeris = _get_horizons_ephemeris(
+            object_ids,
+            observers_i.coordinates.time.to_astropy(),
+            observatory_code,
+        )
+        dfs.append(ephemeris)
+
+    ephemeris = pd.concat(dfs, ignore_index=True)
     return ephemeris
 
 

@@ -135,6 +135,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     """
     results = _get_sbdb_elements(ids)
 
+    orbit_ids = []
     object_ids = []
     classes = []
     coords_cometary = np.zeros((len(results), 6), dtype=np.float64)
@@ -145,6 +146,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         if "object" not in result:
             raise NotFoundError("object {} was not found", ids[i])
 
+        orbit_ids.append(f"{i:05d}")
         object_ids.append(result["object"]["fullname"])
         classes.append(result["object"]["orbit_class"]["code"])
 
@@ -220,11 +222,12 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         frame=frame,
     )
 
+    orbit_ids = np.array(orbit_ids)
     object_ids = np.array(object_ids)
     classes = np.array(classes)
 
     return Orbits.from_kwargs(
-        object_id=object_ids, coordinates=coordinates.to_cartesian()
+        orbit_id=orbit_ids, object_id=object_ids, coordinates=coordinates.to_cartesian()
     )
 
 
