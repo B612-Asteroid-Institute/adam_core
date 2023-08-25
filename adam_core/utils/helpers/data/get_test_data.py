@@ -1,10 +1,16 @@
 from importlib.resources import files
 from typing import List
 
+import numpy as np
 import pandas as pd
+import pyarrow as pa
+import quivr as qv
+from astropy import units as u
 from astropy.time import Time
 
-from adam_core.orbits.query import query_sbdb
+from adam_core.observers import Observers
+from adam_core.orbits import Orbits
+from adam_core.orbits.query import query_horizons, query_horizons_ephemeris, query_sbdb
 from adam_core.orbits.query.horizons import (
     _get_horizons_elements,
     _get_horizons_vectors,
@@ -20,7 +26,7 @@ def _get_orbital_elements(
     Parameters
     ----------
     object_id : List[str]
-        Object IDs to query.
+        Object IDs to
     epoch : `~astropy.time.core.Time`
         Epoch at which to query orbital elements.
     location : str
@@ -141,3 +147,38 @@ if __name__ == "__main__":
                     ),
                     index=False,
                 )
+
+    # Lets query for propagated Horizons state vectors
+    propagated_orbits_list = []
+    ephemeris_dfs = []
+    for i, (object_id, orbit) in enumerate(zip(object_ids, orbits)):
+        # Extract times from orbit and propagate +/- 30 days
+        times = orbit.coordinates.time.to_astropy() + np.arange(-30, 30, 1) * u.day
+
+        # Query for propagated Horizons state vectors
+        propagated_orbit = query_horizons([object_id], times)
+        propagated_orbit = propagated_orbit.set_column(
+            "orbit_id", pa.array([f"{i:05d}" for _ in range(len(times))])
+        )
+
+        # Define an observer (located at the Rubin Observatory)
+        observers = Observers.from_code("X05", times)
+
+        # Query for ephemeris at the same times as seen from
+        # the Rubin Observatory
+        ephemeris = query_horizons_ephemeris([object_id], observers)
+        ephemeris["orbit_id"] = [f"{i:05d}" for _ in range(len(times))]
+
+        propagated_orbits_list.append(propagated_orbit)
+        ephemeris_dfs.append(ephemeris)
+
+    propagated_orbits: Orbits = qv.concatenate(propagated_orbits_list)
+    propagated_orbits.to_dataframe().to_csv(
+        files("adam_core.utils.helpers.data").joinpath("propagated_orbits.csv"),
+        index=False,
+    )
+
+    ephemeris_df = pd.concat(ephemeris_dfs, ignore_index=True)
+    ephemeris_df.to_csv(
+        files("adam_core.utils.helpers.data").joinpath("ephemeris.csv"), index=False
+    )
