@@ -3,7 +3,7 @@ from typing import Tuple
 import jax.numpy as jnp
 import numpy as np
 import quivr as qv
-from jax import jit, vmap
+from jax import jit, lax, vmap
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
@@ -31,20 +31,28 @@ def _generate_ephemeris_2body(
     mu: float = MU,
     max_iter: int = 100,
     tol: float = 1e-15,
+    stellar_aberration: bool = False,
 ) -> Tuple[jnp.ndarray, jnp.float64]:
     """
     Given a propagated orbit, generate its on-sky ephemeris as viewed from the observer.
     This function calculates the light time delay between the propagated orbit and the observer,
     and then propagates the orbit backward by that amount to when the light from object was actually
-    emitted towards the observer.
+    emitted towards the observer ("astrometric coordinates").
 
     The motion of the observer in an inertial frame will cause an object
-    to appear in a different location than its true geometric location, this is known as
-    stellar aberration. Stellar aberration is will also be applied after
-    light time correction has been added.
+    to appear in a different location than its true location, this is known as
+    stellar aberration (often referred to in combination with other aberrations as "apparent
+    coordinates"). Stellar aberration can optionally be applied after
+    light time correction has been added but it should not be necessary when comparing to ephemerides
+    of solar system small bodies extracted from astrometric catalogs. The stars to which the
+    catalog is calibrated undergo the same aberration as the moving objects as seen from the observer.
 
-    The velocity of the input orbits are unmodified only the position
+    If stellar aberration is applied then the velocity of the input orbits are unmodified, only the position
     vector is modified with stellar aberration.
+
+    For more details on aberrations see:
+        https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/FORTRAN/req/abcorr.html
+        https://ssd.jpl.nasa.gov/horizons/manual.html#defs
 
     Parameters
     ----------
@@ -64,6 +72,8 @@ def _generate_ephemeris_2body(
     tol : float, optional
         Numerical tolerance to which to compute universal anomaly during propagation using the Newtown-Raphson
         method.
+    stellar_aberration : bool, optional
+        Apply stellar aberration to the ephemerides.
 
     Returns
     -------
@@ -87,11 +97,16 @@ def _generate_ephemeris_2body(
     topocentric_coordinates = propagated_orbits_aberrated - observer_coordinates
 
     # Apply stellar aberration to topocentric coordinates
-    topocentric_coordinates = topocentric_coordinates.at[0:3].set(
-        add_stellar_aberration(
-            propagated_orbits_aberrated.reshape(1, -1),
-            observer_coordinates.reshape(1, -1),
-        )[0]
+    topocentric_coordinates = lax.cond(
+        stellar_aberration,
+        lambda topocentric_coords: topocentric_coords.at[0:3].set(
+            add_stellar_aberration(
+                propagated_orbits_aberrated.reshape(1, -1),
+                observer_coordinates.reshape(1, -1),
+            )[0],
+        ),
+        lambda topocentric_coords: topocentric_coords,
+        topocentric_coordinates,
     )
 
     # Convert to spherical coordinates
@@ -104,7 +119,7 @@ def _generate_ephemeris_2body(
 _generate_ephemeris_2body_vmap = jit(
     vmap(
         _generate_ephemeris_2body,
-        in_axes=(0, 0, 0, None, None, None, None),
+        in_axes=(0, 0, 0, None, None, None, None, None),
         out_axes=(0, 0),
     )
 )
@@ -117,20 +132,29 @@ def generate_ephemeris_2body(
     mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-15,
+    stellar_aberration: bool = False,
 ) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
     """
     Generate on-sky ephemerides for each propagated orbit as viewed by the observers.
-    This function calculates the light time delay between the propagated orbits and the observers,
-    and then propagates the orbits backward by that amount to when the light from each object was actually
-    emitted towards the observer.
+    This function calculates the light time delay between the propagated orbit and the observer,
+    and then propagates the orbit backward by that amount to when the light from object was actually
+    emitted towards the observer ("astrometric coordinates").
 
     The motion of the observer in an inertial frame will cause an object
-    to appear in a different location than its true geometric location, this is known as
-    stellar aberration. Stellar aberration is will also be applied after
-    light time correction has been added.
+    to appear in a different location than its true location, this is known as
+    stellar aberration (often referred to in combination with other aberrations as "apparent
+    coordinates"). Stellar aberration can optionally be applied after
+    light time correction has been added but it should not be necessary when comparing to ephemerides
+    of solar system small bodies extracted from astrometric catalogs. The stars to which the
+    catalog is calibrated undergo the same aberration as the moving objects as seen from the observer.
 
-    The velocity of the input orbits are unmodified only the position
+    If stellar aberration is applied then the velocity of the input orbits are unmodified, only the position
     vector is modified with stellar aberration.
+
+    For more details on aberrations see:
+        https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/FORTRAN/req/abcorr.html
+        https://ssd.jpl.nasa.gov/horizons/manual.html#defs
+
 
     Parameters
     ----------
@@ -149,6 +173,8 @@ def generate_ephemeris_2body(
     tol : float, optional
         Numerical tolerance to which to compute universal anomaly during propagation using the Newtown-Raphson
         method.
+    stellar_aberration : bool, optional
+        Apply stellar aberration to the ephemerides.
 
     Returns
     -------
@@ -191,6 +217,7 @@ def generate_ephemeris_2body(
         mu,
         max_iter,
         tol,
+        stellar_aberration,
     )
     ephemeris_spherical = np.array(ephemeris_spherical)
     light_time = np.array(light_time)
@@ -202,7 +229,7 @@ def generate_ephemeris_2body(
             propagated_orbits.coordinates.values,
             cartesian_covariances,
             _generate_ephemeris_2body,
-            in_axes=(0, 0, 0, None, None, None, None),
+            in_axes=(0, 0, 0, None, None, None, None, None),
             out_axes=(0, 0),
             observation_times=times.utc.mjd,
             observer_coordinates=observer_coordinates,
@@ -210,6 +237,7 @@ def generate_ephemeris_2body(
             mu=mu,
             max_iter=max_iter,
             tol=tol,
+            stellar_aberration=stellar_aberration,
         )
         covariances_spherical = CoordinateCovariances.from_matrix(
             np.array(covariances_spherical)
