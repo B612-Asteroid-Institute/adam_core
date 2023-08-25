@@ -116,6 +116,62 @@ def _get_horizons_elements(
     return elements
 
 
+def _get_horizons_ephemeris(
+    object_ids: Union[List, npt.ArrayLike],
+    times: Time,
+    location: str,
+    id_type: str = "smallbody",
+) -> pd.DataFrame:
+    """
+    Query JPL Horizons (through astroquery) for an object's
+    predicted ephemeris as seen from a given location at the given times.
+
+    Parameters
+    ----------
+    object_ids : `~numpy.ndarray` (N)
+        Object IDs / designations recognizable by HORIZONS.
+    times : `~astropy.core.time.Time`
+        Astropy time object at which to gather state vectors.
+    location : str, optional
+        Location of the origin typically a NAIF code or MPC observatory code
+    id_type : {'majorbody', 'smallbody', 'designation',
+               'name', 'asteroid_name', 'comet_name', 'id'}
+        ID type, Horizons will find closest match under any given type.
+
+    Returns
+    -------
+    ephemeris : `~pandas.DataFrame`
+        Dataframe containing the predicted ephemerides of the given objects
+        as seen from the observer location at the given times.
+    """
+    dfs = []
+    for i, obj_id in enumerate(object_ids):
+        obj = Horizons(
+            id=obj_id,
+            epochs=times.utc.mjd,
+            location=location,
+            id_type=id_type,
+        )
+        ephemeris = obj.ephemerides(
+            # RA, DEC, r, r_rate, delta, delta_rate, lighttime
+            # quantities="1, 2, 19, 20, 21",
+            extra_precision=True
+        ).to_pandas()
+        ephemeris.insert(0, "orbit_id", i)
+        ephemeris.insert(2, "mjd_utc", times.utc.mjd)
+        ephemeris.insert(3, "observatory_code", location)
+
+        dfs.append(ephemeris)
+
+    ephemeris = pd.concat(dfs)
+    ephemeris.sort_values(
+        by=["orbit_id", "observatory_code", "datetime_jd"],
+        inplace=True,
+        ignore_index=True,
+    )
+    return ephemeris
+
+
 def query_horizons(
     object_ids: Union[List, npt.ArrayLike],
     times: Time,
