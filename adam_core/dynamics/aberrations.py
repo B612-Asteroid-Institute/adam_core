@@ -192,15 +192,16 @@ def add_stellar_aberration(
     rho_aberrated = rho_aberrated.at[:].set(topo_states[:, :3])
 
     v_obs = observer_states[:, 3:]
-    beta = v_obs / C
-    gamma_inv = jnp.sqrt(1 - jnp.linalg.norm(beta, axis=1, keepdims=True) ** 2)
+    gamma = v_obs / C
+    beta_inv = jnp.sqrt(1 - jnp.linalg.norm(gamma, axis=1, keepdims=True) ** 2)
     delta = jnp.linalg.norm(topo_states[:, :3], axis=1, keepdims=True)
 
     # Equation 7.40 in Urban & Seidelmann (2013) [1]
     rho = topo_states[:, :3] / delta
+    rho_dot_gamma = jnp.sum(rho * gamma, axis=1, keepdims=True)
     rho_aberrated = rho_aberrated.at[:].set(
-        (gamma_inv * rho + beta + rho * beta * beta / (1 + gamma_inv))
-        / (1 + rho * beta)
+        (beta_inv * rho + gamma + rho_dot_gamma * gamma / (1 + beta_inv))
+        / (1 + rho_dot_gamma)
     )
     rho_aberrated = rho_aberrated.at[:].multiply(delta)
 
