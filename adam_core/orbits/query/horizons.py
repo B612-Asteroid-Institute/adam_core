@@ -50,7 +50,7 @@ def _get_horizons_vectors(
         of the object at each time.
     """
     dfs = []
-    for obj_id in object_ids:
+    for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
             epochs=times.tdb.mjd,
@@ -60,6 +60,7 @@ def _get_horizons_vectors(
         vectors = obj.vectors(
             refplane=refplane, aberrations=aberrations, cache=False
         ).to_pandas()
+        vectors.insert(0, "orbit_id", f"{i:05d}")
         dfs.append(vectors)
 
     vectors = pd.concat(dfs, ignore_index=True)
@@ -100,7 +101,7 @@ def _get_horizons_elements(
         of the object at each time.
     """
     dfs = []
-    for obj_id in object_ids:
+    for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
             epochs=times.tdb.mjd,
@@ -110,6 +111,7 @@ def _get_horizons_elements(
         elements = obj.elements(
             refsystem="J2000", refplane=refplane, tp_type="absolute", cache=False
         ).to_pandas()
+        elements.insert(0, "orbit_id", f"{i:05d}")
         dfs.append(elements)
 
     elements = pd.concat(dfs, ignore_index=True)
@@ -157,7 +159,7 @@ def _get_horizons_ephemeris(
             # quantities="1, 2, 19, 20, 21",
             extra_precision=True
         ).to_pandas()
-        ephemeris.insert(0, "orbit_id", i)
+        ephemeris.insert(0, "orbit_id", f"{i:05d}")
         ephemeris.insert(2, "mjd_utc", times.utc.mjd)
         ephemeris.insert(3, "observatory_code", location)
 
@@ -231,9 +233,12 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
+        orbit_id = vectors["orbit_id"].values
         object_id = vectors["targetname"].values
 
-        return Orbits.from_kwargs(object_id=object_id, coordinates=coordinates)
+        return Orbits.from_kwargs(
+            orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
+        )
 
     elif coordinate_type == "keplerian":
         elements = _get_horizons_elements(
@@ -259,10 +264,13 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
+        orbit_id = elements["orbit_id"].values
         object_id = elements["targetname"].values
 
         return Orbits.from_kwargs(
-            object_id=object_id, coordinates=coordinates.to_cartesian()
+            orbit_id=orbit_id,
+            object_id=object_id,
+            coordinates=coordinates.to_cartesian(),
         )
 
     elif coordinate_type == "cometary":
@@ -290,10 +298,13 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
+        orbit_id = elements["orbit_id"].values
         object_id = elements["targetname"].values
 
         return Orbits.from_kwargs(
-            object_id=object_id, coordinates=coordinates.to_cartesian()
+            orbit_id=orbit_id,
+            object_id=object_id,
+            coordinates=coordinates.to_cartesian(),
         )
 
     else:
