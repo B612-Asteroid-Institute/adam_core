@@ -466,6 +466,23 @@ class PYOORB(Propagator):
                     origin=Origin.from_kwargs(code=codes),
                     frame="equatorial",
                 ),
+                aberrated_coordinates=CartesianCoordinates.from_kwargs(
+                    x=ephemeris[:, 24],
+                    y=ephemeris[:, 25],
+                    z=ephemeris[:, 26],
+                    vx=ephemeris[:, 27],
+                    vy=ephemeris[:, 28],
+                    vz=ephemeris[:, 29],
+                    time=Times.from_astropy(
+                        Time(
+                            ephemeris[:, 0],
+                            scale="utc",
+                            format="mjd",
+                        )
+                    ),
+                    origin=Origin.from_kwargs(code=["SUN" for i in range(len(codes))]),
+                    frame="ecliptic",
+                ),
             )
             ephemeris_list.append(ephemeris)
 
