@@ -201,6 +201,13 @@ class Timestamp(qv.Table):
         return v2
 
     def add_seconds(self, seconds: pa.lib.Int64Array | int) -> Timestamp:
+        """
+        Add seconds to the timestamp.
+
+        Args:
+        seconds: The seconds to add. Can be a scalar or an array of
+            the same length as the timestamp. Must be in the range [-86400, 86400).
+        """
         return self.add_nanos(pc.multiply(seconds, 1_000_000_000))
 
     def add_millis(self, millis: pa.lib.Int64Array | int) -> Timestamp:

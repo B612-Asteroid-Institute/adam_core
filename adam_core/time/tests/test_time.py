@@ -180,6 +180,51 @@ class TestTimeMath:
         with pytest.raises(ValueError):
             self.t1.add_nanos([0, 0, MAX_VAL + 1])
 
+    def test_add_seconds_out_of_range(self):
+        MIN_VAL = -86400
+        MAX_VAL = 86400 - 1
+        # Scalars:
+        with pytest.raises(ValueError):
+            self.t1.add_seconds(MIN_VAL - 1)
+        with pytest.raises(ValueError):
+            self.t1.add_seconds(MAX_VAL + 1)
+
+        # Arrays:
+        with pytest.raises(ValueError):
+            self.t1.add_seconds([MIN_VAL - 1, 0, 0])
+        with pytest.raises(ValueError):
+            self.t1.add_seconds([0, MAX_VAL + 1, 0])
+
+    def test_add_millis_out_of_range(self):
+        MIN_VAL = -86400_000
+        MAX_VAL = 86400_000 - 1
+        # Scalars:
+        with pytest.raises(ValueError):
+            self.t1.add_millis(MIN_VAL - 1)
+        with pytest.raises(ValueError):
+            self.t1.add_millis(MAX_VAL + 1)
+
+        # Arrays:
+        with pytest.raises(ValueError):
+            self.t1.add_millis([MIN_VAL - 1, 0, 0])
+        with pytest.raises(ValueError):
+            self.t1.add_millis([0, MAX_VAL + 1, 0])
+
+    def test_add_micros_out_of_range(self):
+        MIN_VAL = -86400_000_000
+        MAX_VAL = 86400_000_000 - 1
+        # Scalars:
+        with pytest.raises(ValueError):
+            self.t1.add_micros(MIN_VAL - 1)
+        with pytest.raises(ValueError):
+            self.t1.add_micros(MAX_VAL + 1)
+
+        # Arrays:
+        with pytest.raises(ValueError):
+            self.t1.add_micros([MIN_VAL - 1, 0, 0])
+        with pytest.raises(ValueError):
+            self.t1.add_micros([0, MAX_VAL + 1, 0])
+
     def test_add_nanos_scalar(self):
         have = self.t1.add_nanos(1)
         assert have.days.to_pylist() == [0, 50000, 60001]
