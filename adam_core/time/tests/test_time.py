@@ -1,6 +1,7 @@
 import astropy.time
 import astropy.units
 import numpy.testing as npt
+import pyarrow.compute as pc
 import pytest
 import quivr as qv
 
@@ -334,3 +335,105 @@ class TestTimeMath:
         have = self.t1.add_days([1, 2, 3])
         assert have.days.to_pylist() == [1, 50002, 60003]
         assert have.nanos.to_pylist() == self.t1.nanos.to_pylist()
+
+    def test_equals_array(self):
+        t1 = self.t1
+        t2 = self.t1
+
+        assert pc.all(t1.equals_array(t2)).as_py()
+
+        t3 = t2.add_nanos(1)
+        assert not pc.all(t1.equals_array(t3)).as_py()
+        assert pc.all(t1.equals_array(t3, precision="us")).as_py()
+
+        t4 = time.Timestamp.from_kwargs(
+            days=t1.days,
+            nanos=t1.nanos,
+            scale="utc",
+        )
+        with pytest.raises(ValueError):
+            t1.equals_array(t4)
+
+    def test_equals_scalar(self):
+        t1 = time.Timestamp.from_kwargs(
+            days=[50000, 60000, 70000],
+            nanos=[0, 1, 2],
+        )
+
+        have = t1.equals_scalar(days=50000, nanos=0)
+        assert have.to_pylist() == [True, False, False]
+
+    def test_equals_scalar_precision(self):
+        t1 = time.Timestamp.from_kwargs(
+            days=[0, 0, 1, 1, 2, 2],
+            nanos=[
+                500,
+                86400_000_000_000 - 500,
+                500,
+                86400_000_000_000 - 500,
+                500,
+                86400_000_000_000 - 500,
+            ],
+        )
+        have = t1.equals_scalar(days=1, nanos=0, precision="us")
+        assert have.to_pylist() == [False, True, True, False, False, False]
+
+    def test_difference_scalar(self):
+        # Compute difference from days=1, nanos=100
+        cases = [
+            {
+                "in_days": 0,
+                "in_nanos": 0,
+                "out_days": -2,
+                "out_nanos": 86400_000_000_000 - 100,
+            },
+            {
+                "in_days": 0,
+                "in_nanos": 50,
+                "out_days": -2,
+                "out_nanos": 86400_000_000_000 - 50,
+            },
+            {"in_days": 0, "in_nanos": 200, "out_days": -1, "out_nanos": 100},
+            {
+                "in_days": 1,
+                "in_nanos": 50,
+                "out_days": -1,
+                "out_nanos": 86400_000_000_000 - 50,
+            },
+            {"in_days": 1, "in_nanos": 100, "out_days": 0, "out_nanos": 0},
+            {"in_days": 1, "in_nanos": 200, "out_days": 0, "out_nanos": 100},
+            {
+                "in_days": 2,
+                "in_nanos": 50,
+                "out_days": 0,
+                "out_nanos": 86400_000_000_000 - 50,
+            },
+            {"in_days": 2, "in_nanos": 100, "out_days": 1, "out_nanos": 0},
+            {"in_days": 2, "in_nanos": 200, "out_days": 1, "out_nanos": 100},
+        ]
+
+        for (i, c) in enumerate(cases):
+            t1 = time.Timestamp.from_kwargs(
+                days=[c["in_days"]],
+                nanos=[c["in_nanos"]],
+            )
+            have_days, have_nanos = t1.difference_scalar(days=1, nanos=100)
+            assert have_days[0].as_py() == c["out_days"], f"case {i}"
+            assert have_nanos[0].as_py() == c["out_nanos"], f"case {i}"
+
+    def test_difference(self):
+        t1 = time.Timestamp.from_kwargs(
+            days=[50000, 60000, 70000],
+            nanos=[0, 1, 2],
+        )
+        t2 = time.Timestamp.from_kwargs(
+            days=[50000, 60000, 70000],
+            nanos=[100, 200, 300],
+        )
+        have_days, have_nanos = t1.difference(t2)
+        assert have_days.to_pylist() == [-1, -1, -1]
+        assert have_nanos.to_pylist() == [
+            86400_000_000_000 - 100,
+            86400_000_000_000 - 199,
+            86400_000_000_000 - 298,
+        ]
