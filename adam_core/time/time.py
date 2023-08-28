@@ -150,3 +150,64 @@ class Timestamp(qv.Table):
             format="mjd",
             scale=self.scale,
         )
+
+    def add_nanos(
+        self, nanos: pa.lib.Int64Array | int, check_range: bool = True
+    ) -> Timestamp:
+        """
+        Add nanoseconds to the timestamp.
+
+        Args:
+        nanos: The nanoseconds to add. Can be a scalar or an array of
+            the same length as the timestamp. Must be in the range [-86400e9, 86400e9).
+        check_range: If True, check that the nanoseconds are in the
+            range [-86400e9, 86400e9). If False, the caller is
+            responsible for ensuring that the nanoseconds are in the
+            correct range.
+
+        """
+        if check_range:
+            if isinstance(nanos, int):
+                if not -86400e9 <= nanos < 86400e9:
+                    raise ValueError("Nanoseconds out of range")
+            else:
+                if not pc.all(
+                    pc.and_(pc.greater_equal(nanos, -86400e9), pc.less(nanos, 86400e9))
+                ).as_py():
+                    raise ValueError("Nanoseconds out of range")
+
+        nanos = pc.add_checked(self.nanos, nanos)
+        overflows = pc.greater_equal(nanos, 86400 * 1e9)
+        underflows = pc.less(nanos, 0)
+
+        mask = pa.StructArray.from_arrays(
+            [overflows, underflows], names=["overflows", "underflows"]
+        )
+        nanos = pc.case_when(
+            mask,
+            pc.subtract(nanos, int(86400 * 1e9)),
+            pc.add(nanos, int(86400 * 1e9)),
+            nanos,
+        )
+
+        days = pc.case_when(
+            mask,
+            pc.add(self.days, 1),
+            pc.subtract(self.days, 1),
+            self.days,
+        )
+        v1 = self.set_column("days", days)
+        v2 = v1.set_column("nanos", nanos)
+        return v2
+
+    def add_seconds(self, seconds: pa.lib.Int64Array | int) -> Timestamp:
+        return self.add_nanos(pc.multiply(seconds, 1_000_000_000))
+
+    def add_millis(self, millis: pa.lib.Int64Array | int) -> Timestamp:
+        return self.add_nanos(pc.multiply(millis, 1_000_000))
+
+    def add_micros(self, micros: pa.lib.Int64Array | int) -> Timestamp:
+        return self.add_nanos(pc.multiply(micros, 1_000))
+
+    def add_days(self, days: pa.lib.Int64Array | int) -> Timestamp:
+        return self.set_column("days", pc.add(self.days, days))
