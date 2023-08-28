@@ -93,7 +93,7 @@ class TestAstropyTime:
 
     empty = time.Timestamp.empty()
 
-    def test_astropy(self):
+    def test_to_astropy(self):
         have = self.ts.to_astropy()
         want = astropy.time.Time(
             [
@@ -106,6 +106,38 @@ class TestAstropyTime:
 
         npt.assert_allclose(have.mjd, want.mjd)
 
+    def test_from_astropy(self):
+        at = astropy.time.Time(
+            [
+                "1858-11-17T00:00:00.000000000",
+                "1995-10-10T12:00:00.000000000",
+                "2023-02-25T23:59:59.999999999",
+            ],
+            scale="tai",
+        )
+        have = time.Timestamp.from_astropy(at)
+        assert have == self.ts
+
+    def test_to_astropy_singleton(self):
+        have = self.ts[0].to_astropy()
+        want = astropy.time.Time("1858-11-17T00:00:00.000000000", scale="tai")
+        assert have.mjd == want.mjd
+
+    def test_from_astropy_scalar(self):
+        at = astropy.time.Time("1858-11-17T00:00:00.000000000", scale="tai")
+        have = time.Timestamp.from_astropy(at)
+        assert have == self.ts[0]
+
     def test_empty(self):
         have = self.empty.to_astropy()
         assert len(have) == 0
+
+    def test_roundtrips(self):
+        zero_astropy_time = astropy.time.Time(0, val2=0, format="mjd")
+
+        from_at = time.Timestamp.from_astropy(zero_astropy_time)
+        assert from_at.days[0].as_py() == 0
+        assert from_at.nanos[0].as_py() == 0
+
+        roundtrip = from_at.to_astropy()
+        assert zero_astropy_time == roundtrip

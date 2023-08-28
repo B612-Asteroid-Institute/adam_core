@@ -95,6 +95,8 @@ class Timestamp(qv.Table):
     def from_astropy(cls, astropy_time: astropy.time.Time) -> Timestamp:
         if astropy_time.scale not in SCALES:
             raise ValueError(f"Unsupported scale: {astropy_time.scale}")
+        if astropy_time.isscalar:
+            return cls._from_astropy_scalar(astropy_time)
 
         jd1, jd2 = astropy_time.jd1, astropy_time.jd2
         days, remainder = divmod(jd1 - 2400000.5, 1)
@@ -113,6 +115,31 @@ class Timestamp(qv.Table):
             scale=astropy_time.scale,
             days=days.astype(np.int64),
             nanos=nanos,
+        )
+
+    @classmethod
+    def _from_astropy_scalar(cls, astropy_time: astropy.time.Time) -> Timestamp:
+        """Astropy times can be scalar-valued, which requires
+        separate handling because the numpy array functions won't
+        work.
+        """
+        jd1, jd2 = astropy_time.jd1, astropy_time.jd2
+        days, remainder = divmod(jd1 - 2400000.5, 1)
+        remainder += jd2
+
+        if remainder < 0:
+            remainder += 1
+            days -= 1
+
+        if remainder >= 1:
+            remainder -= 1
+            days += 1
+
+        nanos = round(remainder * 86400 * 1e9)
+        return cls.from_kwargs(
+            scale=astropy_time.scale,
+            days=[int(days)],
+            nanos=[nanos],
         )
 
     def to_astropy(self) -> astropy.time.Time:
