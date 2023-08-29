@@ -96,3 +96,70 @@ def test_CartesianCoordinates_translate():
 
     np.testing.assert_equal(coords_translated.values, values + translation_vector)
     np.testing.assert_equal(coords_translated.covariance.to_matrix(), covariances)
+
+
+def test_CartesianCoordinates_attributes():
+    # Test that the correct position attributes are returned both for individual
+    # dimensions but also multiple dimensions (as vectors)
+    N, D = 1000, 6
+    values = np.random.random((N, D))
+    covariances = np.random.random((N, D, D))
+
+    coords = CartesianCoordinates.from_kwargs(
+        x=values[:, 0],
+        y=values[:, 1],
+        z=values[:, 2],
+        vx=values[:, 3],
+        vy=values[:, 4],
+        vz=values[:, 5],
+        covariance=CoordinateCovariances.from_matrix(covariances),
+        origin=Origin.from_kwargs(code=["origin"] * N),
+        frame="equatorial",
+    )
+
+    # Test coordinate dimensions
+    np.testing.assert_equal(coords.x, values[:, 0])
+    np.testing.assert_equal(coords.y, values[:, 1])
+    np.testing.assert_equal(coords.z, values[:, 2])
+    np.testing.assert_equal(coords.vx, values[:, 3])
+    np.testing.assert_equal(coords.vy, values[:, 4])
+    np.testing.assert_equal(coords.vz, values[:, 5])
+
+    # Test coordinate vectors and vector magnitudes
+    r_mag = np.linalg.norm(values[:, :3], axis=1)
+    r_hat = values[:, :3] / r_mag[:, None]
+    v_mag = np.linalg.norm(values[:, 3:], axis=1)
+    v_hat = values[:, 3:] / v_mag[:, None]
+    np.testing.assert_equal(coords.r, values[:, :3])
+    np.testing.assert_equal(coords.r_mag, r_mag)
+    np.testing.assert_equal(coords.r_hat, r_hat)
+    np.testing.assert_equal(coords.v, values[:, 3:])
+    np.testing.assert_equal(coords.v_mag, v_mag)
+    np.testing.assert_equal(coords.v_hat, v_hat)
+
+    # Test covariance sigmas
+    np.testing.assert_equal(coords.sigma_x, np.sqrt(covariances[:, 0, 0]))
+    np.testing.assert_equal(coords.sigma_y, np.sqrt(covariances[:, 1, 1]))
+    np.testing.assert_equal(coords.sigma_z, np.sqrt(covariances[:, 2, 2]))
+    np.testing.assert_equal(coords.sigma_vx, np.sqrt(covariances[:, 3, 3]))
+    np.testing.assert_equal(coords.sigma_vy, np.sqrt(covariances[:, 4, 4]))
+    np.testing.assert_equal(coords.sigma_vz, np.sqrt(covariances[:, 5, 5]))
+
+    # Test position and velocity sigma vectors
+    sigma_r = np.empty((N, 3))
+    sigma_r[:, 0] = np.sqrt(covariances[:, 0, 0])
+    sigma_r[:, 1] = np.sqrt(covariances[:, 1, 1])
+    sigma_r[:, 2] = np.sqrt(covariances[:, 2, 2])
+    np.testing.assert_equal(coords.sigma_r, sigma_r)
+
+    sigma_r_mag = np.linalg.norm(sigma_r, axis=1)
+    np.testing.assert_equal(coords.sigma_r_mag, sigma_r_mag)
+
+    sigma_v = np.empty((N, 3))
+    sigma_v[:, 0] = np.sqrt(covariances[:, 3, 3])
+    sigma_v[:, 1] = np.sqrt(covariances[:, 4, 4])
+    sigma_v[:, 2] = np.sqrt(covariances[:, 5, 5])
+    np.testing.assert_equal(coords.sigma_v, sigma_v)
+
+    sigma_v_mag = np.linalg.norm(sigma_v, axis=1)
+    np.testing.assert_equal(coords.sigma_v_mag, sigma_v_mag)
