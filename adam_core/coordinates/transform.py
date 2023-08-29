@@ -1272,7 +1272,7 @@ def cartesian_to_frame(
 
 def transform_coordinates(
     coords: CoordinateType,
-    representation_out: CoordinateType,
+    representation_out: Optional[CoordinateType] = None,
     frame_out: Optional[Literal["ecliptic", "equatorial"]] = None,
     origin_out: Optional[OriginCodes] = None,
 ) -> CoordinateType:
@@ -1288,7 +1288,8 @@ def transform_coordinates(
     coords : `~adam_core.coordinates.Coordinates`
         Coordinates to transform between representations and frames.
     representation_out : `~adam_core.coordinates.Coordinates`
-        Desired coordinate type or representation of the output coordinates.
+        Desired coordinate type or representation of the output coordinates. If None,
+        the output coordinates will be the same type as the input coordinates.
     frame_out : {'ecliptic', 'equatorial'}
         Desired reference frame of the output coordinates.
     origin_out : {'SUN', 'SOLAR_SYSTEM_BARYCENTER'}
@@ -1318,9 +1319,14 @@ def transform_coordinates(
     if origin_out is not None and not isinstance(origin_out, OriginCodes):
         raise TypeError("Unsupported origin_out type: {}".format(type(origin_out)))
 
-    if representation_out not in CoordinatesClasses:
+    if representation_out is None:
+        representation_out_ = coords.__class__
+    else:
+        representation_out_ = representation_out
+
+    if representation_out_ not in CoordinatesClasses:
         raise ValueError(
-            "Unsupported representation_out: {}".format(representation_out)
+            "Unsupported representation_out: {}".format(representation_out_)
         )
 
     coord_frame = coords.frame
@@ -1341,7 +1347,7 @@ def transform_coordinates(
     # `~adam_core.coordinates.origin.OriginCodes` so we can compare them directly.
     # If its not an OriginCodes enum then origin_out will be an array of strings which
     # also can be checked for equality.
-    if type(coords) == representation_out:
+    if type(coords) == representation_out_:
         if coord_frame == frame_out and np.all(coord_origin == origin_out):
             return coords
 
@@ -1361,6 +1367,6 @@ def transform_coordinates(
     # You might think this should be 'isinstance', but no! We're
     # checking whether the input is a particular class variable, not
     # an instance of a class.
-    if representation_out is CartesianCoordinates:
+    if representation_out_ is CartesianCoordinates:
         return cartesian
-    return representation_out.from_cartesian(cartesian)
+    return representation_out_.from_cartesian(cartesian)
