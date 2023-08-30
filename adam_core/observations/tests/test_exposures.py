@@ -142,3 +142,8 @@ def test_exposure_states():
     np.testing.assert_allclose(expected.vx.to_numpy(), states.vx.to_numpy())
     np.testing.assert_allclose(expected.vy.to_numpy(), states.vy.to_numpy(), rtol=1e-6)
     np.testing.assert_allclose(expected.vz.to_numpy(), states.vz.to_numpy(), rtol=1e-5)
+
+
+def test_empty_exposures():
+    have = exposures.Exposures.empty()
+    assert len(have) == 0
