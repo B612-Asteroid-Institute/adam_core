@@ -137,7 +137,7 @@ class CartesianCoordinates(Table):
         """
         1-sigma uncertainties in the position vector.
         """
-        return np.sqrt(self.covariance.sigmas[:, 0:3])
+        return self.covariance.sigmas[:, 0:3]
 
     @property
     def sigma_r_mag(self) -> np.ndarray:
@@ -151,7 +151,7 @@ class CartesianCoordinates(Table):
         """
         1-sigma uncertainties in the velocity vector.
         """
-        return np.sqrt(self.covariance.sigmas[:, 3:6])
+        return self.covariance.sigmas[:, 3:6]
 
     @property
     def sigma_v_mag(self) -> np.ndarray:
