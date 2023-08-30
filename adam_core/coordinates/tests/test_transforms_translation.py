@@ -170,7 +170,6 @@ def test_transform_coordinates_origin(orbital_elements, orbital_elements_barycen
     # Convert heliocentric cartesian coordinates to barycentric cartesian coordinates
     cartesian_coordinates_barycentric_actual = transform_coordinates(
         cartesian_coordinates_heliocentric,
-        CartesianCoordinates,
         origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
     )
 
@@ -181,7 +180,6 @@ def test_transform_coordinates_origin(orbital_elements, orbital_elements_barycen
     # Convert barycentric cartesian coordinates to heliocentric cartesian coordinates
     cartesian_coordinates_heliocentric_actual = transform_coordinates(
         cartesian_coordinates_barycentric,
-        CartesianCoordinates,
         origin_out=OriginCodes.SUN,
     )
 
@@ -197,7 +195,6 @@ def test_transform_coordinates_origin(orbital_elements, orbital_elements_barycen
 
     cartesian_coordinates_barycentric_actual = transform_coordinates(
         cartesian_coordinates_mixed,
-        CartesianCoordinates,
         origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
     )
 
@@ -217,7 +214,6 @@ def test_transform_coordinates_origin(orbital_elements, orbital_elements_barycen
 
     cartesian_coordinates_heliocentric_actual = transform_coordinates(
         cartesian_coordinates_mixed,
-        CartesianCoordinates,
         origin_out=OriginCodes.SUN,
     )
 

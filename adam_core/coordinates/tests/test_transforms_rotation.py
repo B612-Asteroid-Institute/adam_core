@@ -111,7 +111,6 @@ def test_transform_coordinates_frame(orbital_elements, orbital_elements_equatori
     # Convert equatorial coordinates to ecliptic
     cartesian_coordinates_ecliptic_actual = transform_coordinates(
         cartesian_coordinates_equatorial,
-        CartesianCoordinates,
         frame_out="ecliptic",
     )
     assert cartesian_coordinates_ecliptic_actual.frame == "ecliptic"
@@ -124,7 +123,6 @@ def test_transform_coordinates_frame(orbital_elements, orbital_elements_equatori
     # Convert ecliptic coordinates to equatorial
     cartesian_coordinates_equatorial_actual = transform_coordinates(
         cartesian_coordinates_ecliptic,
-        CartesianCoordinates,
         frame_out="equatorial",
     )
     assert cartesian_coordinates_equatorial_actual.frame == "equatorial"

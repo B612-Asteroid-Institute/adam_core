@@ -47,7 +47,7 @@ def test_benchmark_transform_cartesian_coordinates(
     benchmark(
         transform_coordinates,
         from_coords,
-        representation,
+        representation_out=representation,
         frame_out=frame,
         origin_out=origin,
     )
