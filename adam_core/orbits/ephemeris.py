@@ -6,8 +6,8 @@ from ..coordinates.spherical import SphericalCoordinates
 
 class Ephemeris(Table):
 
-    orbit_id = StringColumn(nullable=False)
-    object_id = StringColumn()
+    orbit_id = StringColumn()
+    object_id = StringColumn(nullable=True)
     coordinates = SphericalCoordinates.as_column()
 
     # The coordinates as observed by the observer will be the result of
