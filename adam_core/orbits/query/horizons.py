@@ -65,6 +65,11 @@ def _get_horizons_vectors(
         dfs.append(vectors)
 
     vectors = pd.concat(dfs, ignore_index=True)
+    vectors.sort_values(
+        by=["orbit_id", "datetime_jd"],
+        inplace=True,
+        ignore_index=True,
+    )
     return vectors
 
 
@@ -116,6 +121,11 @@ def _get_horizons_elements(
         dfs.append(elements)
 
     elements = pd.concat(dfs, ignore_index=True)
+    elements.sort_values(
+        by=["orbit_id", "datetime_jd"],
+        inplace=True,
+        ignore_index=True,
+    )
     return elements
 
 
@@ -168,7 +178,7 @@ def _get_horizons_ephemeris(
 
     ephemeris = pd.concat(dfs)
     ephemeris.sort_values(
-        by=["orbit_id", "observatory_code", "datetime_jd"],
+        by=["orbit_id", "datetime_jd", "observatory_code"],
         inplace=True,
         ignore_index=True,
     )
@@ -206,6 +216,11 @@ def query_horizons_ephemeris(
         dfs.append(ephemeris)
 
     ephemeris = pd.concat(dfs, ignore_index=True)
+    ephemeris.sort_values(
+        by=["orbit_id", "datetime_jd", "observatory_code"],
+        inplace=True,
+        ignore_index=True,
+    )
     return ephemeris
 
 
