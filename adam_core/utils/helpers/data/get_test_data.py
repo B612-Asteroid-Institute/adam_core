@@ -1,10 +1,16 @@
 from importlib.resources import files
 from typing import List
 
+import numpy as np
 import pandas as pd
+import pyarrow as pa
+import quivr as qv
+from astropy import units as u
 from astropy.time import Time
 
-from adam_core.orbits.query import query_sbdb
+from adam_core.observers import Observers
+from adam_core.orbits import Orbits
+from adam_core.orbits.query import query_horizons, query_horizons_ephemeris, query_sbdb
 from adam_core.orbits.query.horizons import (
     _get_horizons_elements,
     _get_horizons_vectors,
@@ -20,7 +26,7 @@ def _get_orbital_elements(
     Parameters
     ----------
     object_id : List[str]
-        Object IDs to query.
+        Object IDs to
     epoch : `~astropy.time.core.Time`
         Epoch at which to query orbital elements.
     location : str
@@ -141,3 +147,50 @@ if __name__ == "__main__":
                     ),
                     index=False,
                 )
+
+    # Lets query for propagated Horizons state vectors
+    propagated_orbits_list = []
+    ephemeris_dfs = []
+
+    # Create an array of delta times to propagate the orbits and
+    # get ephemerides relative to the epoch at which the orbits are defined
+    total_days = 60
+    half_arc = total_days / 2
+    # Make it so there are 3 observations every 2 days
+    dts = np.arange(-half_arc, half_arc, 2)
+    dts = np.concatenate([dts, dts + 1 / 48, dts + 1 / 24])
+    dts.sort()
+    num_dts = len(dts)
+
+    for i, (object_id, orbit) in enumerate(zip(object_ids, orbits)):
+        # Extract times from orbit and propagate +/- 30 days
+        times = orbit.coordinates.time.to_astropy() + dts * u.day
+
+        # Query for propagated Horizons state vectors
+        propagated_orbit = query_horizons([object_id], times)
+        propagated_orbit = propagated_orbit.set_column(
+            "orbit_id", pa.array([f"{i:05d}" for _ in range(len(times))])
+        )
+
+        # Define two observers one at the Rubin Observatory and one at CTIO
+        observer_X05 = Observers.from_code("X05", times[: num_dts // 2])
+        observer_W84 = Observers.from_code("W84", times[num_dts // 2 :])
+        observers = qv.concatenate([observer_X05, observer_W84])
+
+        # Query for ephemeris at the same times
+        ephemeris = query_horizons_ephemeris([object_id], observers)
+        ephemeris["orbit_id"] = [f"{i:05d}" for _ in range(len(times))]
+
+        propagated_orbits_list.append(propagated_orbit)
+        ephemeris_dfs.append(ephemeris)
+
+    propagated_orbits: Orbits = qv.concatenate(propagated_orbits_list)
+    propagated_orbits.to_dataframe().to_csv(
+        files("adam_core.utils.helpers.data").joinpath("propagated_orbits.csv"),
+        index=False,
+    )
+
+    ephemeris_df = pd.concat(ephemeris_dfs, ignore_index=True)
+    ephemeris_df.to_csv(
+        files("adam_core.utils.helpers.data").joinpath("ephemeris.csv"), index=False
+    )

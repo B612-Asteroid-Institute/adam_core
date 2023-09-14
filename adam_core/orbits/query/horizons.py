@@ -10,6 +10,7 @@ from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
+from ...observers import Observers
 from ..orbits import Orbits
 
 
@@ -27,7 +28,7 @@ def _get_horizons_vectors(
 
     Parameters
     ----------
-    object_ids : `~numpy.ndarray` (N)
+    object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
     times : `~astropy.core.time.Time` (M)
         Astropy time object at which to gather state vectors.
@@ -50,7 +51,7 @@ def _get_horizons_vectors(
         of the object at each time.
     """
     dfs = []
-    for obj_id in object_ids:
+    for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
             epochs=times.tdb.mjd,
@@ -60,9 +61,15 @@ def _get_horizons_vectors(
         vectors = obj.vectors(
             refplane=refplane, aberrations=aberrations, cache=False
         ).to_pandas()
+        vectors.insert(0, "orbit_id", f"{i:05d}")
         dfs.append(vectors)
 
     vectors = pd.concat(dfs, ignore_index=True)
+    vectors.sort_values(
+        by=["orbit_id", "datetime_jd"],
+        inplace=True,
+        ignore_index=True,
+    )
     return vectors
 
 
@@ -79,7 +86,7 @@ def _get_horizons_elements(
 
     Parameters
     ----------
-    object_ids : `~numpy.ndarray` (N)
+    object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
     times : `~astropy.core.time.Time`
         Astropy time object at which to gather state vectors.
@@ -100,7 +107,7 @@ def _get_horizons_elements(
         of the object at each time.
     """
     dfs = []
-    for obj_id in object_ids:
+    for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
             epochs=times.tdb.mjd,
@@ -110,10 +117,111 @@ def _get_horizons_elements(
         elements = obj.elements(
             refsystem="J2000", refplane=refplane, tp_type="absolute", cache=False
         ).to_pandas()
+        elements.insert(0, "orbit_id", f"{i:05d}")
         dfs.append(elements)
 
     elements = pd.concat(dfs, ignore_index=True)
+    elements.sort_values(
+        by=["orbit_id", "datetime_jd"],
+        inplace=True,
+        ignore_index=True,
+    )
     return elements
+
+
+def _get_horizons_ephemeris(
+    object_ids: Union[List, npt.ArrayLike],
+    times: Time,
+    location: str,
+    id_type: str = "smallbody",
+) -> pd.DataFrame:
+    """
+    Query JPL Horizons (through astroquery) for an object's
+    predicted ephemeris as seen from a given location at the given times.
+
+    Parameters
+    ----------
+    object_ids : Union[List, `~numpy.ndarray`] (N)
+        Object IDs / designations recognizable by HORIZONS.
+    times : `~astropy.core.time.Time`
+        Astropy time object at which to gather state vectors.
+    location : str, optional
+        Location of the origin typically a NAIF code or MPC observatory code
+    id_type : {'majorbody', 'smallbody', 'designation',
+               'name', 'asteroid_name', 'comet_name', 'id'}
+        ID type, Horizons will find closest match under any given type.
+
+    Returns
+    -------
+    ephemeris : `~pandas.DataFrame`
+        Dataframe containing the predicted ephemerides of the given objects
+        as seen from the observer location at the given times.
+    """
+    dfs = []
+    for i, obj_id in enumerate(object_ids):
+        obj = Horizons(
+            id=obj_id,
+            epochs=times.utc.mjd,
+            location=location,
+            id_type=id_type,
+        )
+        ephemeris = obj.ephemerides(
+            # RA, DEC, r, r_rate, delta, delta_rate, lighttime
+            # quantities="1, 2, 19, 20, 21",
+            extra_precision=True
+        ).to_pandas()
+        ephemeris.insert(0, "orbit_id", f"{i:05d}")
+        ephemeris.insert(2, "mjd_utc", times.utc.mjd)
+        ephemeris.insert(3, "observatory_code", location)
+
+        dfs.append(ephemeris)
+
+    ephemeris = pd.concat(dfs)
+    ephemeris.sort_values(
+        by=["orbit_id", "datetime_jd", "observatory_code"],
+        inplace=True,
+        ignore_index=True,
+    )
+    return ephemeris
+
+
+def query_horizons_ephemeris(
+    object_ids: Union[List, npt.ArrayLike], observers: Observers
+) -> pd.DataFrame:
+    """
+    Query JPL Horizons (through astroquery) for an object's predicted ephemeris
+    as seen from a given location at the given times.
+
+    Parameters
+    ----------
+    object_ids : Union[List, `~numpy.ndarray`] (N)
+        Object IDs / designations recognizable by HORIZONS.
+    observers : `~adam_core.observers.observers.Observers`
+        Observers object containing the location and times
+        of the observers.
+
+    Returns
+    -------
+    ephemeris : `~pandas.DataFrame`
+        Dataframe containing the predicted ephemerides of the given objects
+        as seen from the observer location at the given times.
+    """
+    dfs = []
+    for observatory_code, observers_i in observers.iterate_codes():
+        ephemeris = _get_horizons_ephemeris(
+            object_ids,
+            observers_i.coordinates.time.to_astropy(),
+            observatory_code,
+        )
+        dfs.append(ephemeris)
+
+    ephemeris = pd.concat(dfs, ignore_index=True)
+    ephemeris.sort_values(
+        by=["orbit_id", "datetime_jd", "observatory_code"],
+        inplace=True,
+        ignore_index=True,
+    )
+    return ephemeris
 
 
 def query_horizons(
@@ -175,9 +283,12 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
+        orbit_id = vectors["orbit_id"].values
         object_id = vectors["targetname"].values
 
-        return Orbits.from_kwargs(object_id=object_id, coordinates=coordinates)
+        return Orbits.from_kwargs(
+            orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
+        )
 
     elif coordinate_type == "keplerian":
         elements = _get_horizons_elements(
@@ -203,10 +314,13 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
+        orbit_id = elements["orbit_id"].values
         object_id = elements["targetname"].values
 
         return Orbits.from_kwargs(
-            object_id=object_id, coordinates=coordinates.to_cartesian()
+            orbit_id=orbit_id,
+            object_id=object_id,
+            coordinates=coordinates.to_cartesian(),
         )
 
     elif coordinate_type == "cometary":
@@ -234,10 +348,13 @@ def query_horizons(
             origin=origin,
             frame=frame,
         )
+        orbit_id = elements["orbit_id"].values
         object_id = elements["targetname"].values
 
         return Orbits.from_kwargs(
-            object_id=object_id, coordinates=coordinates.to_cartesian()
+            orbit_id=orbit_id,
+            object_id=object_id,
+            coordinates=coordinates.to_cartesian(),
         )
 
     else:
