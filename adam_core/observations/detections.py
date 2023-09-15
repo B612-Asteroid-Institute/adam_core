@@ -47,7 +47,7 @@ class PointSourceDetections(qv.Table):
         exposure_ids = self.exposure_id.unique()
         sorted = self.table.sort_by("exposure_id")
         for exposure_id in exposure_ids:
-            mask = pyarrow.compute.equal(sorted.exposure_id, exposure_id)
+            mask = pyarrow.compute.equal(sorted.column("exposure_id"), exposure_id)
             table = sorted.filter(mask)
             yield PointSourceDetections(table)
 
