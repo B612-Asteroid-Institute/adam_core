@@ -1215,13 +1215,23 @@ def cartesian_to_origin(
     coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Cartesian coordinates and optionally their covariances.
     origin : `~adam_core.coordinates.origin.OriginCodes`
-        Name of the desired origin.
+        Desired origin. Input origins may be either `~adam_core.coordinates.origin.OriginCodes`
+        or a str of an observatory code, but the output origin (this kwarg) should always be an
+        `~adam_core.coordinates.origin.OriginCodes`. If you are looking to generate ephemerides
+        for an observatory, please use a `~adam_core.propagator.propagator.Propagator` instead.
 
     Returns
     -------
     CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Translated Cartesian coordinates and their covariances.
+
+    Raises
+    ------
+    ValueError
+        If origin is not a `~adam_core.coordinates.origin.OriginCodes` object or
+        a str of an observatory code.
     """
+    from ..observers.state import OBSERVATORY_CODES, get_observer_state
     from ..utils.spice import get_perturber_state
 
     unique_origins = coords.origin.code.unique()
@@ -1231,12 +1241,29 @@ def cartesian_to_origin(
     for origin_in in unique_origins:
 
         mask = pc.equal(coords.origin.code, origin_in).to_numpy(zero_copy_only=False)
-        vectors[mask] = get_perturber_state(
-            OriginCodes[origin_in.as_py()],
-            times[mask],
-            frame=coords.frame,
-            origin=origin,
-        ).values
+
+        origin_in_str = origin_in.as_py()
+        # Could use try / except block here but this is more explicit
+        if origin_in_str in OriginCodes.__members__:
+
+            vectors[mask] = get_perturber_state(
+                OriginCodes[origin_in_str],
+                times[mask],
+                frame=coords.frame,
+                origin=origin,
+            ).values
+
+        elif origin_in_str in OBSERVATORY_CODES:
+
+            vectors[mask] = get_observer_state(
+                origin_in_str,
+                times[mask],
+                frame=coords.frame,
+                origin=origin,
+            ).values
+
+        else:
+            raise ValueError("Unsupported origin: {}".format(origin_in_str))
 
     return coords.translate(vectors, origin.name)
 
@@ -1292,8 +1319,12 @@ def transform_coordinates(
         the output coordinates will be the same type as the input coordinates.
     frame_out : {'ecliptic', 'equatorial'}
         Desired reference frame of the output coordinates.
-    origin_out : {'SUN', 'SOLAR_SYSTEM_BARYCENTER'}
-        Desired origin of the output coordinates.
+    origin_out : `~adam_core.coordinates.origin.OriginCodes`
+        Desired origin. Input origins may be either `~adam_core.coordinates.origin.OriginCodes`
+        or a str of an observatory code, but the output origin (this kwarg) should always be an
+        `~adam_core.coordinates.origin.OriginCodes`. If you are looking to generate ephemerides
+        for an observatory, please use a `~adam_core.propagator.propagator.Propagator` instead.
+
     Returns
     -------
     coords_out : `~adam_core.coordinates.Coordinates`
