@@ -20,15 +20,28 @@ class Associations(qv.Table):
 
     def group_by_object(self) -> Iterator["Associations"]:
         """
-        Returns an iterator of PointSourceDetections, each grouped by exposure_id.
+        Group the associations by object ID. Any null object IDs will be returned last.
+
+        Returns
+        -------
+        associations : Iterator[`~adam_core.observations.associations.Associations`]
+            Associations grouped by object ID.
         """
         # Gather unique exposure IDs
         object_ids = self.object_id.unique()
         sorted = self.table.sort_by("object_id")
-        for object_id in object_ids:
+
+        # Return non-null object IDs first
+        for object_id in pc.drop_null(object_ids):
             mask = pc.equal(sorted.column("object_id"), object_id)
             table = sorted.filter(mask)
-            yield Associations(table)
+            yield Associations.from_pyarrow(table)
+
+        # If there are any null object IDs, return them last
+        if object_ids.null_count > 0:
+            mask = pc.is_null(sorted.column("object_id"))
+            table = sorted.filter(mask)
+            yield Associations.from_pyarrow(table)
 
     def link_to_detections(
         self, detections: PointSourceDetections
