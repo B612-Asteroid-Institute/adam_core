@@ -4,7 +4,6 @@ import numpy as np
 import pyarrow as pa
 from pyarrow import compute as pc
 
-from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 
 MILLISECOND_IN_DAYS = 1 / 86400 / 1000
@@ -99,51 +98,3 @@ def sort_propagated_orbits(propagated_orbits: Orbits) -> Orbits:
         ),
     )
     return propagated_orbits.take(indices)
-
-
-def sort_ephemeris(ephemeris: Ephemeris) -> Ephemeris:
-    """
-    Sort ephemeris by orbit_id, object_id, time, and observatory code.
-
-    Parameters
-    ----------
-    ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
-        Ephemerides to sort.
-
-    Returns
-    -------
-    ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
-        Sorted ephemerides.
-    """
-    # Build table with orbit_ids, object_ids, times and observatory codes
-    coords_array = ephemeris.table["observer"].combine_chunks().field("coordinates")
-
-    table = pa.table(
-        [
-            ephemeris.orbit_id,
-            ephemeris.object_id,
-            pc.add(
-                pc.struct_field(
-                    pc.struct_field(coords_array, "time"),
-                    "jd1",
-                ),
-                pc.struct_field(
-                    pc.struct_field(coords_array, "time"),
-                    "jd2",
-                ),
-            ),
-            ephemeris.observer.code,
-        ],
-        names=["orbit_id", "object_id", "time", "observatory_code"],
-    )
-
-    indices = pc.sort_indices(
-        table,
-        (
-            ("orbit_id", "ascending"),
-            ("object_id", "ascending"),
-            ("time", "ascending"),
-            ("observatory_code", "ascending"),
-        ),
-    )
-    return ephemeris.take(indices)
