@@ -8,7 +8,7 @@ from astropy.time import Time
 
 from ..observers import Observers
 from ..orbits import Ephemeris, Orbits, VariantOrbits
-from .utils import _iterate_chunks, sort_propagated_orbits
+from .utils import _iterate_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ class Propagator(ABC):
             else:
                 propagated_variants = None
 
-        propagated = sort_propagated_orbits(propagated)
+        propagated = propagated.sort_by(by=["orbit_id", "time"], ascending=True)
 
         if propagated_variants is not None:
             propagated = propagated_variants.collapse(propagated)

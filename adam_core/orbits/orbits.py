@@ -1,8 +1,9 @@
 import logging
 import uuid
-from typing import Iterable, Literal, Tuple
+from typing import Iterable, List, Literal, Tuple
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 
@@ -32,6 +33,56 @@ class Orbits(qv.Table):
         for orbit_id in unique_orbit_ids:
             mask = pc.equal(self.orbit_id, orbit_id)
             yield orbit_id, self.apply_mask(mask)
+
+    def sort_by(
+        self, by: List[str] = ["orbit_id", "time", "code"], ascending: bool = True
+    ) -> "Orbits":
+        """
+        Sort the Orbits table the desired columns.
+        Column options are "orbit_id", "object_id", "time", and "code".
+
+        Parameters
+        ----------
+        by : List[str], optional
+            The column(s) to sort by. Default is ["orbit_id", "time", "code"].
+        ascending : bool, optional
+            Whether to sort in ascending or descending order.
+
+        Returns
+        -------
+        orbits : `~adam_core.orbits.orbits.Orbits`
+            The sorted orbits table.
+
+        Raises
+        ------
+        ValueError: If an invalid column is passed.
+        """
+        values = []
+        names = []
+        for col in by:
+            if col == "orbit_id":
+                values.append(self.orbit_id)
+            elif col == "object_id":
+                values.append(self.object_id)
+            elif col == "time":
+                values.append(self.coordinates.time.mjd())
+            elif col == "code":
+                values.append(self.coordinates.origin.code)
+            else:
+                raise ValueError(
+                    f"Invalid column {col}. Valid columns are 'orbit_id', 'object_id', 'time' and 'code'"
+                )
+
+            names.append(col)
+
+        table = pa.table(values, names=names)
+        if ascending:
+            order = [(name, "ascending") for name in names]
+        else:
+            order = [(name, "descending") for name in names]
+
+        sort_indices = pc.sort_indices(table, order)
+        return self.take(sort_indices)
 
     def to_dataframe(self, sigmas: bool = False, covariances: bool = True):
         """
