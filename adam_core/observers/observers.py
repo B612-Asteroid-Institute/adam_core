@@ -1,7 +1,9 @@
 import warnings
-from typing import Union
+from typing import List, Union
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 from astropy.time import Time
 from mpc_obscodes import mpc_obscodes
 from quivr import Float64Column, StringColumn, Table
@@ -112,6 +114,51 @@ class Observers(Table):
         """
         for code in self.code.unique().sort():
             yield code.as_py(), self.select("code", code)
+
+    def sort_by(
+        self, by: List[str] = ["time", "code"], ascending: bool = True
+    ) -> "Observers":
+        """
+        Sort the Observers table the desired columns. Column options are "time" and "code".
+
+        Parameters
+        ----------
+        by : List[str], optional
+            The column(s) to sort by. Default is ["time", "code"].
+        ascending : bool, optional
+            Whether to sort in ascending or descending order.
+
+        Returns
+        -------
+        observers : `~adam_core.observers.observers.Observers`
+            The sorted Observers table.
+
+        Raises
+        ------
+        ValueError: If an invalid column is passed.
+        """
+        values = []
+        names = []
+        for col in by:
+            if col == "time":
+                values.append(self.coordinates.time.mjd())
+            elif col == "code":
+                values.append(self.code)
+            else:
+                raise ValueError(
+                    f"Invalid column {col}. Valid columns are 'time' and 'code'"
+                )
+
+            names.append(col)
+
+        table = pa.table(values, names=names)
+        if ascending:
+            order = [(name, "ascending") for name in names]
+        else:
+            order = [(name, "descending") for name in names]
+
+        sort_indices = pc.sort_indices(table, order)
+        return self.take(sort_indices)
 
     def to_dataframe(self) -> pd.DataFrame:
         """
