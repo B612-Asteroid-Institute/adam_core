@@ -10,8 +10,8 @@ import pyarrow.compute
 import quivr as qv
 from quivr.validators import and_, ge, le
 
-from ..coordinates import times
-from . import exposures
+from ..coordinates.times import Times
+from .exposures import Exposures
 
 
 class PointSourceDetections(qv.Table):
@@ -26,7 +26,7 @@ class PointSourceDetections(qv.Table):
 
     # Some, but not all, point source data may include times for
     # individual observations within an exposure.
-    time = times.Times.as_column(nullable=True)
+    time = Times.as_column(nullable=True)
 
     # Should this be a SphericalCoordinates instead?
 
@@ -71,8 +71,8 @@ class PointSourceDetections(qv.Table):
             yield (healpixel, self.apply_mask(mask))
 
     def link_to_exposures(
-        self, exposures: exposures.Exposures
-    ) -> qv.Linkage[PointSourceDetections, exposures.Exposures]:
+        self, exposures: Exposures
+    ) -> qv.Linkage[PointSourceDetections, Exposures]:
         """
         Links the detections to the exposures.
         """

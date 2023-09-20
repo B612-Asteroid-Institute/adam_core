@@ -6,8 +6,10 @@ from typing import List, Optional, Union
 import quivr as qv
 from astropy.time import Time
 
-from ..observers import Observers
-from ..orbits import Ephemeris, Orbits, VariantOrbits
+from ..observers.observers import Observers
+from ..orbits.ephemeris import Ephemeris
+from ..orbits.orbits import Orbits
+from ..orbits.variants import VariantOrbits
 from .utils import _iterate_chunks, sort_propagated_orbits
 
 logger = logging.getLogger(__name__)

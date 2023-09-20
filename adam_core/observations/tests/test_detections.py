@@ -1,8 +1,9 @@
 import astropy.time
 import healpy
 
-from ...coordinates import times
-from .. import detections, exposures
+from ...coordinates.times import Times
+from ..detections import PointSourceDetections
+from ..exposures import Exposures
 
 
 def test_detections_link_to_exposures():
@@ -13,15 +14,15 @@ def test_detections_link_to_exposures():
         ],
         scale="utc",
     )
-    exp = exposures.Exposures.from_kwargs(
+    exp = Exposures.from_kwargs(
         id=["e1", "e2"],
-        start_time=times.Times.from_astropy(start_times),
+        start_time=Times.from_astropy(start_times),
         duration=[60, 30],
         filter=["g", "r"],
         observatory_code=["I41", "I41"],
     )
 
-    det = detections.PointSourceDetections.from_kwargs(
+    det = PointSourceDetections.from_kwargs(
         id=["d1", "d2", "d3", "d4", "d5"],
         exposure_id=["e1", "e1", "e2", "e1", "e2"],
         time=None,
@@ -50,7 +51,7 @@ def test_detection_healpixels():
     ra, dec = healpy.pixelfunc.pix2ang(
         nside=16, ipix=[1, 2, 3, 4, 5], nest=True, lonlat=True
     )
-    det = detections.PointSourceDetections.from_kwargs(
+    det = PointSourceDetections.from_kwargs(
         id=["d1", "d2", "d3", "d4", "d5"],
         exposure_id=["e1", "e1", "e2", "e1", "e2"],
         time=None,
@@ -71,7 +72,7 @@ def test_detection_group_by_healpixel():
     ra, dec = healpy.pixelfunc.pix2ang(
         nside=16, ipix=healpixels, nest=True, lonlat=True
     )
-    det = detections.PointSourceDetections.from_kwargs(
+    det = PointSourceDetections.from_kwargs(
         id=ids,
         exposure_id=[""] * 8,
         ra=ra,
