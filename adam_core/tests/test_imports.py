@@ -33,3 +33,7 @@ def test_import_propagator():
 
 def test_import_observations():
     from adam_core.observations import Exposures, PointSourceDetections
+
+
+def test_import_utils():
+    from adam_core.utils import get_perturber_state, setup_SPICE
