@@ -2,8 +2,8 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 import pandas as pd
+import quivr as qv
 from astropy import units as u
-from quivr import Float64Column, StringAttribute, Table
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
@@ -34,22 +34,22 @@ COMETARY_UNITS["ap"] = u.deg
 COMETARY_UNITS["tp"] = u.d
 
 
-class CometaryCoordinates(Table):
+class CometaryCoordinates(qv.Table):
     # TODO: Time of periapse passage could perhaps be represented
     # as a Times object. We could then modify self.values to only
     # grab the MJD column. That said, we would want to force it
     # the time scale to be in TDB..
 
-    q = Float64Column()
-    e = Float64Column()
-    i = Float64Column()
-    raan = Float64Column()
-    ap = Float64Column()
-    tp = Float64Column()
+    q = qv.Float64Column()
+    e = qv.Float64Column()
+    i = qv.Float64Column()
+    raan = qv.Float64Column()
+    ap = qv.Float64Column()
+    tp = qv.Float64Column()
     time = Times.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
-    frame = StringAttribute()
+    frame = qv.StringAttribute()
 
     @property
     def values(self) -> np.ndarray:

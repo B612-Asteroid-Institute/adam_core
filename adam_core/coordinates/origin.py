@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 import pyarrow as pa
-from quivr import StringColumn, Table
+import quivr as qv
 
 from ..constants import KM_P_AU, S_P_DAY
 
@@ -58,9 +58,9 @@ class OriginGravitationalParameters(float, Enum):
 
 # TODO: Replace with DictionaryColumn or similar
 #       Investigate whether this class is even necessary
-class Origin(Table):
+class Origin(qv.Table):
 
-    code = StringColumn()
+    code = qv.StringColumn()
 
     def __init__(self, table: pa.Table, mu: Optional[float] = None):
         super().__init__(table)

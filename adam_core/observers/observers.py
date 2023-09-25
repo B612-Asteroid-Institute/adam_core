@@ -2,20 +2,21 @@ import warnings
 from typing import Union
 
 import pandas as pd
+import quivr as qv
 from astropy.time import Time
 from mpc_obscodes import mpc_obscodes
-from quivr import Float64Column, StringColumn, Table
 from typing_extensions import Self
 
-from ..coordinates import cartesian, origin
+from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.origin import OriginCodes
 
 
-class ObservatoryGeodetics(Table):
-    code = StringColumn()
-    longitude = Float64Column()
-    cos_phi = Float64Column()
-    sin_phi = Float64Column()
-    name = StringColumn()
+class ObservatoryGeodetics(qv.Table):
+    code = qv.StringColumn()
+    longitude = qv.Float64Column()
+    cos_phi = qv.Float64Column()
+    sin_phi = qv.Float64Column()
+    name = qv.StringColumn()
 
 
 # Read MPC extended observatory codes file
@@ -47,12 +48,12 @@ OBSERVATORY_CODES = {
 }
 
 
-class Observers(Table):
-    code = StringColumn(nullable=False)
-    coordinates = cartesian.CartesianCoordinates.as_column()
+class Observers(qv.Table):
+    code = qv.StringColumn(nullable=False)
+    coordinates = CartesianCoordinates.as_column()
 
     @classmethod
-    def from_code(cls, code: Union[str, origin.OriginCodes], times: Time) -> Self:
+    def from_code(cls, code: Union[str, OriginCodes], times: Time) -> Self:
         """
         Instantiate an Observers table with a single code and multiple times.
         Times do not need to be unique. The observer state will be calculated
@@ -86,7 +87,7 @@ class Observers(Table):
         """
         from .state import get_observer_state
 
-        if isinstance(code, origin.OriginCodes):
+        if isinstance(code, OriginCodes):
             code_str = code.name
         elif isinstance(code, str):
             code_str = code
@@ -171,7 +172,7 @@ class Observers(Table):
                 "obs_origin.code": "origin.code",
             }
         )
-        coordinates = cartesian.CartesianCoordinates.from_dataframe(
+        coordinates = CartesianCoordinates.from_dataframe(
             df_renamed,
             frame="ecliptic",
         )
