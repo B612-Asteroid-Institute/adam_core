@@ -11,7 +11,7 @@ from ..coordinates.covariances import (
 )
 from ..coordinates.origin import Origin
 from ..coordinates.times import Times
-from ..orbits import Orbits
+from ..orbits.orbits import Orbits
 from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
 
 config.update("jax_enable_x64", True)

@@ -5,22 +5,22 @@ import pyarrow.compute as pc
 import pytest
 import quivr as qv
 
-from .. import time
+from ..time import Timestamp
 
 
 class Wrapper(qv.Table):
     id = qv.StringColumn()
-    times = time.Timestamp.as_column(nullable=True)
+    times = Timestamp.as_column(nullable=True)
 
 
 class TestTimeUnits:
 
-    ts = time.Timestamp.from_kwargs(
+    ts = Timestamp.from_kwargs(
         days=[0, 10000, 20000],
         nanos=[0, 1_000_000_000, 2_000_000_000],
     )
 
-    empty = time.Timestamp.empty()
+    empty = Timestamp.empty()
 
     with_nulls = qv.concatenate(
         [
@@ -61,12 +61,12 @@ class TestTimeUnits:
 
 
 class TestMJDConversions:
-    ts = time.Timestamp.from_kwargs(
+    ts = Timestamp.from_kwargs(
         days=[0, 10000, 20000],
         nanos=[0, 43200_000_000_000, 86400_000_000_000 - 1],
     )
 
-    empty = time.Timestamp.empty()
+    empty = Timestamp.empty()
 
     with_nulls = qv.concatenate(
         [
@@ -89,12 +89,12 @@ class TestMJDConversions:
 
 
 class TestAstropyTime:
-    ts = time.Timestamp.from_kwargs(
+    ts = Timestamp.from_kwargs(
         days=[0, 50000, 60000],
         nanos=[0, 43200_000_000_000, 86400_000_000_000 - 1],
     )
 
-    empty = time.Timestamp.empty()
+    empty = Timestamp.empty()
 
     def test_to_astropy(self):
         have = self.ts.to_astropy()
@@ -118,7 +118,7 @@ class TestAstropyTime:
             ],
             scale="tai",
         )
-        have = time.Timestamp.from_astropy(at)
+        have = Timestamp.from_astropy(at)
         assert have == self.ts
 
     def test_to_astropy_singleton(self):
@@ -128,7 +128,7 @@ class TestAstropyTime:
 
     def test_from_astropy_scalar(self):
         at = astropy.time.Time("1858-11-17T00:00:00.000000000", scale="tai")
-        have = time.Timestamp.from_astropy(at)
+        have = Timestamp.from_astropy(at)
         assert have == self.ts[0]
 
     def test_empty(self):
@@ -138,7 +138,7 @@ class TestAstropyTime:
     def test_roundtrip_scalar_zero(self):
         zero_astropy_time = astropy.time.Time(0, val2=0, format="mjd")
 
-        from_at = time.Timestamp.from_astropy(zero_astropy_time)
+        from_at = Timestamp.from_astropy(zero_astropy_time)
         assert from_at.days[0].as_py() == 0
         assert from_at.nanos[0].as_py() == 0
 
@@ -149,7 +149,7 @@ class TestAstropyTime:
         t1 = astropy.time.Time("2020-01-01T00:00:00.000000000", scale="tai")
         t2 = t1 + 1 * astropy.units.second
 
-        have1 = time.Timestamp.from_astropy(t1)
+        have1 = Timestamp.from_astropy(t1)
         have2 = have1.add_seconds(1)
 
         assert have2.to_astropy() == t2
@@ -157,7 +157,7 @@ class TestAstropyTime:
 
 class TestTimeMath:
 
-    t1 = time.Timestamp.from_kwargs(
+    t1 = Timestamp.from_kwargs(
         days=[0, 50000, 60000],
         nanos=[0, 43200_000_000_000, 86400_000_000_000 - 1],
     )
@@ -346,7 +346,7 @@ class TestTimeMath:
         assert not pc.all(t1.equals_array(t3)).as_py()
         assert pc.all(t1.equals_array(t3, precision="us")).as_py()
 
-        t4 = time.Timestamp.from_kwargs(
+        t4 = Timestamp.from_kwargs(
             days=t1.days,
             nanos=t1.nanos,
             scale="utc",
@@ -355,7 +355,7 @@ class TestTimeMath:
             t1.equals_array(t4)
 
     def test_equals_scalar(self):
-        t1 = time.Timestamp.from_kwargs(
+        t1 = Timestamp.from_kwargs(
             days=[50000, 60000, 70000],
             nanos=[0, 1, 2],
         )
@@ -364,7 +364,7 @@ class TestTimeMath:
         assert have.to_pylist() == [True, False, False]
 
     def test_equals_scalar_precision(self):
-        t1 = time.Timestamp.from_kwargs(
+        t1 = Timestamp.from_kwargs(
             days=[0, 0, 1, 1, 2, 2],
             nanos=[
                 500,
@@ -413,7 +413,7 @@ class TestTimeMath:
         ]
 
         for (i, c) in enumerate(cases):
-            t1 = time.Timestamp.from_kwargs(
+            t1 = Timestamp.from_kwargs(
                 days=[c["in_days"]],
                 nanos=[c["in_nanos"]],
             )
@@ -422,11 +422,11 @@ class TestTimeMath:
             assert have_nanos[0].as_py() == c["out_nanos"], f"case {i}"
 
     def test_difference(self):
-        t1 = time.Timestamp.from_kwargs(
+        t1 = Timestamp.from_kwargs(
             days=[50000, 60000, 70000],
             nanos=[0, 1, 2],
         )
-        t2 = time.Timestamp.from_kwargs(
+        t2 = Timestamp.from_kwargs(
             days=[50000, 60000, 70000],
             nanos=[100, 200, 300],
         )

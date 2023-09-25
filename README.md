@@ -3,7 +3,7 @@
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
 [![docker - Build, Lint, and Test](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/docker-build-lint-test.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/docker-build-lint-test.yml)
-[![pip - Build, Lint, Test, and Coverage](https://github.com/moeyensj/thor/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/moeyensj/thor/actions/workflows/pip-build-lint-test-coverage.yml)  
+[![pip - Build, Lint, Test, and Coverage](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml)  
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 
 `adam_core` is used by a variety of library and services at the Asteroid Institute. Sharing these common classes, types, and conversions amongst our tools ensures consistency and accuracy.
@@ -15,6 +15,7 @@
 To define an orbit:
 ```python
 from astropy.time import Time
+
 from adam_core.coordinates import KeplerianCoordinates
 from adam_core.coordinates import Times
 from adam_core.coordinates import Origin
@@ -47,6 +48,7 @@ The underlying orbits class is 2 dimensional and can store elements and covarian
 
 ```python
 from astropy.time import Time
+
 from adam_core.coordinates import KeplerianCoordinates
 from adam_core.coordinates import Times
 from adam_core.coordinates import Origin
@@ -84,6 +86,7 @@ Orbits can also be defined with uncertainties.
 ```python
 import numpy as np
 from astropy.time import Time
+
 from adam_core.coordinates import KeplerianCoordinates
 from adam_core.coordinates import Times
 from adam_core.coordinates import Origin
@@ -120,6 +123,7 @@ orbits.to_dataframe(sigmas=True)
 To query orbits from JPL Horizons:
 ```python
 from astropy.time import Time
+
 from adam_core.orbits.query import query_horizons
 
 times = Time([60000.0], scale="tdb", format="mjd")
@@ -158,6 +162,7 @@ To propagate orbits with PYOORB (here we grab some orbits from Horizons first):
 import numpy as np
 from astropy.time import Time
 from astropy import units as u
+
 from adam_core.orbits.query import query_horizons
 from adam_core.propagator import PYOORB
 
@@ -189,6 +194,7 @@ The propagator class can also be used to generate ephemerides for a set of orbit
 import numpy as np
 from astropy.time import Time
 from astropy import units as u
+
 from adam_core.orbits.query import query_horizons
 from adam_core.propagator import PYOORB
 from adam_core.observers import Observers
@@ -224,8 +230,8 @@ Getting the heliocentric ecliptic state vector of a DE440 body at a given set of
 import numpy as np
 from astropy.time import Time
 
-from adam_core.coordinates.origin import OriginCodes
-from adam_core.utils.spice import get_perturber_state
+from adam_core.coordinates import OriginCodes
+from adam_core.utils import get_perturber_state
 
 states = get_perturber_state(
     OriginCodes.JUPITER_BARYCENTER,
@@ -241,8 +247,9 @@ states = get_perturber_state(
 import numpy as np
 from astropy.time import Time
 from astropy import units as u
+
 from adam_core.orbits.query import query_sbdb
-from adam_core.dynamics.propagation import propagate_2body
+from adam_core.dynamics import propagate_2body
 
 # Get orbit to propagate
 object_ids = ["Duende", "Eros", "Ceres"]

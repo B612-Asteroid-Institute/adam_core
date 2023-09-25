@@ -1,10 +1,10 @@
 import quivr
 from astropy.time import Time
 
-from ... import coordinates
+from ...coordinates.times import Times
 from ...orbits import Orbits
 from ...utils.helpers.orbits import make_real_orbits
-from .. import Propagator
+from ..propagator import Propagator
 
 
 class MockPropagator(Propagator):
@@ -13,7 +13,7 @@ class MockPropagator(Propagator):
         all_times = []
         for t in times:
             repeated_time = Time([t] * len(orbits))
-            orbits.coordinates.time = coordinates.Times.from_astropy(repeated_time)
+            orbits.coordinates.time = Times.from_astropy(repeated_time)
             all_times.append(orbits)
 
         return quivr.concatenate(all_times)

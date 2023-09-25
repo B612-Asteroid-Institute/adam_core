@@ -5,8 +5,10 @@ import astropy.time
 import numpy as np
 import quivr as qv
 
-from ...coordinates import cartesian, origin, times
-from .. import exposures
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.origin import Origin
+from ...coordinates.times import Times
+from ..exposures import Exposures
 
 
 def test_exposure_midpoints():
@@ -17,9 +19,9 @@ def test_exposure_midpoints():
         ],
         scale="utc",
     )
-    exp = exposures.Exposures.from_kwargs(
+    exp = Exposures.from_kwargs(
         id=["e1", "e2"],
-        start_time=times.Times.from_astropy(start_times),
+        start_time=Times.from_astropy(start_times),
         duration=[60, 30],
         filter=["g", "r"],
         observatory_code=["I41", "I41"],
@@ -44,7 +46,7 @@ def test_exposure_states():
         vy = qv.Float64Column()
         vz = qv.Float64Column()
 
-        origin = origin.Origin.as_column()
+        origin = Origin.as_column()
 
         def to_astropy(self):
             return astropy.time.Time(
@@ -52,7 +54,7 @@ def test_exposure_states():
             )
 
         def to_cartesian(self):
-            return cartesian.CartesianCoordinates.from_kwargs(
+            return CartesianCoordinates.from_kwargs(
                 x=self.x,
                 y=self.y,
                 z=self.z,
@@ -96,9 +98,9 @@ def test_exposure_states():
             w84_state_data.to_cartesian()[2],
         ]
     )
-    exp = exposures.Exposures.from_kwargs(
+    exp = Exposures.from_kwargs(
         id=["e1", "e2", "e3", "e4", "e5"],
-        start_time=times.Times.from_astropy(state_times),
+        start_time=Times.from_astropy(state_times),
         duration=[0, 0, 0, 0, 0],
         filter=["g", "r", "g", "r", "g"],
         observatory_code=codes,
@@ -145,5 +147,5 @@ def test_exposure_states():
 
 
 def test_empty_exposures():
-    have = exposures.Exposures.empty()
+    have = Exposures.empty()
     assert len(have) == 0
