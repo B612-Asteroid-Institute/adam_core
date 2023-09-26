@@ -4,10 +4,10 @@ import numpy as np
 import quivr as qv
 from astropy import units as u
 
+from ..time import Timestamp
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .origin import Origin
-from .times import Times
 
 if TYPE_CHECKING:
     from .keplerian import KeplerianCoordinates
@@ -44,7 +44,7 @@ class CometaryCoordinates(qv.Table):
     raan = qv.Float64Column()
     ap = qv.Float64Column()
     tp = qv.Float64Column()
-    time = Times.as_column(nullable=True)
+    time = Timestamp.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
     frame = qv.StringAttribute()
@@ -203,7 +203,7 @@ class CometaryCoordinates(qv.Table):
 
         coords_cartesian = cometary_to_cartesian(
             self.values,
-            t0=self.time.to_astropy().tdb.mjd,
+            t0=self.time.to_numpy(),
             mu=mu,
             max_iter=100,
             tol=1e-15,
@@ -218,7 +218,7 @@ class CometaryCoordinates(qv.Table):
                 _cometary_to_cartesian,
                 in_axes=(0, 0, None, None, None),
                 out_axes=0,
-                t0=self.time.to_astropy().tdb.mjd,
+                t0=self.time.to_numpy(),
                 mu=mu,
                 max_iter=100,
                 tol=1e-15,
@@ -262,7 +262,7 @@ class CometaryCoordinates(qv.Table):
 
         coords_cometary = cartesian_to_cometary(
             cartesian.values,
-            cartesian.time.to_astropy().tdb.mjd,
+            cartesian.time.to_numpy(),
             mu=mu,
         )
         coords_cometary = np.array(coords_cometary)
@@ -275,7 +275,7 @@ class CometaryCoordinates(qv.Table):
                 _cartesian_to_cometary,
                 in_axes=(0, 0, None),
                 out_axes=0,
-                t0=cartesian.time.to_astropy().tdb.mjd,
+                t0=cartesian.time.to_numpy(),
                 mu=mu,
             )
         else:

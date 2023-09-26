@@ -5,9 +5,9 @@ import numpy as np
 import quivr as qv
 from astropy import units as u
 
+from ..time import Timestamp
 from .covariances import CoordinateCovariances
 from .origin import Origin
-from .times import Times
 
 if TYPE_CHECKING:
     from .cometary import CometaryCoordinates
@@ -37,7 +37,7 @@ class CartesianCoordinates(qv.Table):
     vx = qv.Float64Column(nullable=True)
     vy = qv.Float64Column(nullable=True)
     vz = qv.Float64Column(nullable=True)
-    time = Times.as_column(nullable=True)
+    time = Timestamp.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
     frame = qv.StringAttribute()

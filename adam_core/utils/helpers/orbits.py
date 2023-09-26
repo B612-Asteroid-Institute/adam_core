@@ -7,7 +7,7 @@ from astropy.time import Time
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
-from ...coordinates.times import Times
+from ...time import Timestamp
 from ...orbits.orbits import Orbits
 
 
@@ -73,7 +73,7 @@ def make_simple_orbits(num_orbits: int = 10) -> Orbits:
         sigmas[:, i] = np.round(0.01 * data[dim], 4)
 
     data["covariance"] = CoordinateCovariances.from_sigmas(sigmas)
-    data["time"] = Times.from_astropy(
+    data["time"] = Timestamp.from_astropy(
         Time(
             np.round(np.linspace(59000.0, 59000.0 + num_orbits, num_orbits), 3),
             scale="tdb",

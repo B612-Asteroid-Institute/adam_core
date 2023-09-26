@@ -25,6 +25,12 @@ class Timestamp(qv.Table):
     # Nanos since start of day:
     nanos = qv.Int64Column()
 
+    def to_tdb(self) -> Timestamp:
+        if self.scale == "tdb":
+            return self
+        else:
+            return Timestamp.from_astropy(self.to_astropy().tdb)
+
     def micros(self) -> pa.Int64Array:
         return pc.divide(self.nanos, 1_000)
 
@@ -36,6 +42,13 @@ class Timestamp(qv.Table):
 
     def mjd(self) -> pa.lib.DoubleArray:
         return pc.add(self.days, self.fractional_days())
+
+    @classmethod
+    def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
+        days = pc.floor(mjd)
+        fractional_days = pc.subtract(mjd, days)
+        nanos = pc.multiply(fractional_days, 86400 * 1e9)
+        return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
 
     def fractional_days(self) -> pa.lib.DoubleArray:
         return pc.divide(self.nanos, 86400 * 1e9)
