@@ -97,7 +97,15 @@ if __name__ == "__main__":
 
     # Query for the orbital elements from SBDB and save to a file
     object_ids = objects_df["object_id"].values
+
     orbits = query_sbdb(object_ids)
+
+    # Rename 'Oumuamua to match the name in the Horizons database (1I/'Oumuamua (A/2017 U1))
+    object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
+    orbits = orbits.set_column(
+        "object_id", np.where(object_ids == "'Oumuamua (A/2017 U1)", "1I/'Oumuamua (A/2017 U1)", object_ids)
+    )
+    
     orbits.to_parquet(files("adam_core.utils.helpers.data").joinpath("orbits.parquet"))
 
     # Query for the orbital elements in different representations from JPL Horizons and save to a file
