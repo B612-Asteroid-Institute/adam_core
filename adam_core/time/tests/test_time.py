@@ -437,3 +437,38 @@ class TestTimeMath:
             86400_000_000_000 - 199,
             86400_000_000_000 - 298,
         ]
+
+
+def test_dataframe_roundtrip():
+    t1 = Timestamp.from_kwargs(
+        days=[50000, 60000, 70000],
+        nanos=[0, 1, 2],
+        scale="tdb",
+    )
+
+    df = t1.to_dataframe()
+
+    t2 = Timestamp.from_dataframe(df)
+
+    assert t1 == t2
+
+
+@pytest.mark.xfail(
+    reason="wrapper classes do not use custom from_dataframe for subcolumns"
+)
+def test_dataframe_roundtrip_nested():
+    t1 = Timestamp.from_kwargs(
+        days=[50000, 60000, 70000],
+        nanos=[0, 1, 2],
+        scale="tdb",
+    )
+    w = Wrapper.from_kwargs(
+        id=["a", "b", "c"],
+        times=t1,
+    )
+
+    df = w.to_dataframe()
+
+    w2 = Wrapper.from_flat_dataframe(df)
+
+    assert w == w2
