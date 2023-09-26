@@ -37,3 +37,7 @@ def test_import_observations():
 
 def test_import_utils():
     from adam_core.utils import get_perturber_state, setup_SPICE
+
+
+def test_import_time():
+    from adam_core.time import Timestamp
