@@ -4,9 +4,9 @@ from typing import Callable, List, Tuple
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import quivr as qv
 from astropy import units as u
 from astropy.table import Table as AstropyTable
-from quivr import FixedSizeListColumn, Table
 from scipy.linalg import sqrtm
 from scipy.stats import multivariate_normal
 
@@ -38,7 +38,7 @@ def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
     return covariances
 
 
-class CoordinateCovariances(Table):
+class CoordinateCovariances(qv.Table):
     # TODO: Would be interesting if the dimensionality can be generalized
     #      to D dimensions, so (N, D, D) instead of (N, 6, 6). We would be
     #      able to use this class for the covariance matrices of different
@@ -46,7 +46,7 @@ class CoordinateCovariances(Table):
 
     # This is temporary while we await the implementation of
     # https://github.com/apache/arrow/issues/35599
-    values = FixedSizeListColumn(pa.float64(), list_size=36, nullable=True)
+    values = qv.FixedSizeListColumn(pa.float64(), list_size=36, nullable=True)
     # When fixed, we should revert to:
     # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 

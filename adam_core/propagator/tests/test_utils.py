@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
-from quivr import Float64Column, Table
+import quivr as qv
 
 from ..utils import _assert_times_almost_equal, _iterate_chunks
 
 
-class SampleTable(Table):
-    a = Float64Column()
+class SampleTable(qv.Table):
+    a = qv.Float64Column()
 
 
 def test__iterate_chunks():

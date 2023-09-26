@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 import pandas as pd
+import quivr as qv
 from astropy import units as u
-from quivr import Float64Column, StringAttribute, Table
 
 from .covariances import CoordinateCovariances
 from .io import coords_from_dataframe, coords_to_dataframe
@@ -31,18 +31,18 @@ COVARIANCE_ROTATION_TOLERANCE = 1e-25
 logger = logging.getLogger(__name__)
 
 
-class CartesianCoordinates(Table):
+class CartesianCoordinates(qv.Table):
 
-    x = Float64Column(nullable=True)
-    y = Float64Column(nullable=True)
-    z = Float64Column(nullable=True)
-    vx = Float64Column(nullable=True)
-    vy = Float64Column(nullable=True)
-    vz = Float64Column(nullable=True)
+    x = qv.Float64Column(nullable=True)
+    y = qv.Float64Column(nullable=True)
+    z = qv.Float64Column(nullable=True)
+    vx = qv.Float64Column(nullable=True)
+    vy = qv.Float64Column(nullable=True)
+    vz = qv.Float64Column(nullable=True)
     time = Times.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
-    frame = StringAttribute()
+    frame = qv.StringAttribute()
 
     @property
     def values(self) -> np.ndarray:

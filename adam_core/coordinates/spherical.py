@@ -2,8 +2,8 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 import pandas as pd
+import quivr as qv
 from astropy import units as u
-from quivr import Float64Column, StringAttribute, Table
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
@@ -34,18 +34,18 @@ SPHERICAL_UNITS["vlon"] = u.deg / u.d
 SPHERICAL_UNITS["vlat"] = u.deg / u.d
 
 
-class SphericalCoordinates(Table):
+class SphericalCoordinates(qv.Table):
 
-    rho = Float64Column(nullable=True)
-    lon = Float64Column(nullable=True)
-    lat = Float64Column(nullable=True)
-    vrho = Float64Column(nullable=True)
-    vlon = Float64Column(nullable=True)
-    vlat = Float64Column(nullable=True)
+    rho = qv.Float64Column(nullable=True)
+    lon = qv.Float64Column(nullable=True)
+    lat = qv.Float64Column(nullable=True)
+    vrho = qv.Float64Column(nullable=True)
+    vlon = qv.Float64Column(nullable=True)
+    vlat = qv.Float64Column(nullable=True)
     time = Times.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
-    frame = StringAttribute()
+    frame = qv.StringAttribute()
 
     @property
     def values(self) -> np.ndarray:

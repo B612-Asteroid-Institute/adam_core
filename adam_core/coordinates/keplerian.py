@@ -2,8 +2,8 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 import pandas as pd
+import quivr as qv
 from astropy import units as u
-from quivr import Float64Column, StringAttribute, Table
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
@@ -34,18 +34,18 @@ KEPLERIAN_UNITS["ap"] = u.deg
 KEPLERIAN_UNITS["M"] = u.deg
 
 
-class KeplerianCoordinates(Table):
+class KeplerianCoordinates(qv.Table):
 
-    a = Float64Column()
-    e = Float64Column()
-    i = Float64Column()
-    raan = Float64Column()
-    ap = Float64Column()
-    M = Float64Column()
+    a = qv.Float64Column()
+    e = qv.Float64Column()
+    i = qv.Float64Column()
+    raan = qv.Float64Column()
+    ap = qv.Float64Column()
+    M = qv.Float64Column()
     time = Times.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
-    frame = StringAttribute()
+    frame = qv.StringAttribute()
 
     @property
     def values(self) -> np.ndarray:
