@@ -32,7 +32,7 @@ def test_import_propagator():
 
 
 def test_import_observations():
-    from adam_core.observations import Exposures, PointSourceDetections
+    from adam_core.observations import Associations, Exposures, PointSourceDetections
 
 
 def test_import_utils():

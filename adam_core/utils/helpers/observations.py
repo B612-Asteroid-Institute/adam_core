@@ -5,14 +5,15 @@ import numpy as np
 import pandas as pd
 
 from ...coordinates import Times
+from ...observations.associations import Associations
 from ...observations.detections import PointSourceDetections
 from ...observations.exposures import Exposures
 
 
-def make_observations() -> Tuple[Exposures, PointSourceDetections]:
+def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]:
     """
-    Create an Exposures and PointSourceDetections table using predicted ephemerides from JPL Horizons
-    included in adam_core.
+    Create an Exposures, PointSourceDetections, and Associations table
+    using predicted ephemerides from JPL Horizons included in adam_core.
 
     Returns
     -------
@@ -20,6 +21,8 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections]:
         Table of exposures.
     detections : `~adam_core.observations.detections.PointSourceDetections`
         Table of detections.
+    associations : `~adam_core.observations.associations.Associations`
+        Table of associations.
     """
     # Load the ephemeris (these are predicted ephemerides generated via JPL Horizons)
     ephemeris = pd.read_csv(
@@ -99,7 +102,7 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections]:
     # Lets report photometric errors for all observatories
     detections["mag_sigma"] = 0.1
     detections.sort_values(by="mjd_utc", inplace=True, ignore_index=True)
-    detections["obs_id"] = [f"obs_{i:04d}" for i in range(len(detections))]
+    detections["detection_id"] = [f"obs_{i:04d}" for i in range(len(detections))]
 
     # Create exposures table
     exposures = Exposures.from_kwargs(
@@ -112,7 +115,7 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections]:
 
     # Create detections table
     detections = PointSourceDetections.from_kwargs(
-        id=detections["obs_id"],
+        id=detections["detection_id"],
         exposure_id=detections["exposure_id"],
         time=Times.from_mjd(detections["mjd_utc"].values, scale="utc"),
         ra=detections["ra"].values,
@@ -123,4 +126,9 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections]:
         mag_sigma=detections["mag_sigma"].values,
     )
 
-    return exposures, detections
+    # Create associations table
+    associations = Associations.from_kwargs(
+        detection_id=detections.id,
+        object_id=ephemeris["targetname"],
+    )
+    return exposures, detections, associations

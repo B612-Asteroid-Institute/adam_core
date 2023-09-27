@@ -94,3 +94,27 @@ def test_detection_group_by_healpixel():
     assert 3 in groups
     assert len(groups[3]) == 2
     assert groups[3].id.to_pylist() == ["d1", "d6"]
+
+
+def test_detections_group_by_exposure():
+    detections = PointSourceDetections.from_kwargs(
+        id=["d1", "d2", "d3", "d4", "d5"],
+        exposure_id=["e1", "e1", "e2", "e1", "e2"],
+        time=None,
+        ra=[0, 1, 2, 3, 4],
+        dec=[5, 6, 7, 8, 9],
+        mag=[10, 11, 12, 13, 14],
+    )
+
+    groups = list(detections.group_by_exposure())
+    assert len(groups) == 2
+
+    assert groups[0].id.to_pylist() == ["d1", "d2", "d4"]
+    assert groups[0].exposure_id.to_pylist() == ["e1", "e1", "e1"]
+    assert groups[0].ra.to_pylist() == [0, 1, 3]
+    assert groups[0].dec.to_pylist() == [5, 6, 8]
+
+    assert groups[1].id.to_pylist() == ["d3", "d5"]
+    assert groups[1].exposure_id.to_pylist() == ["e2", "e2"]
+    assert groups[1].ra.to_pylist() == [2, 4]
+    assert groups[1].dec.to_pylist() == [7, 9]
