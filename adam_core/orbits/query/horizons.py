@@ -168,7 +168,8 @@ def _get_horizons_ephemeris(
         ephemeris = obj.ephemerides(
             # RA, DEC, r, r_rate, delta, delta_rate, lighttime
             # quantities="1, 2, 19, 20, 21",
-            extra_precision=True
+            extra_precision=True,
+            cache=False,
         ).to_pandas()
         ephemeris.insert(0, "orbit_id", f"{i:05d}")
         ephemeris.insert(2, "mjd_utc", times.utc.mjd)
