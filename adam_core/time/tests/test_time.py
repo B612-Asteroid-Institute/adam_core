@@ -453,9 +453,6 @@ def test_dataframe_roundtrip():
     assert t1 == t2
 
 
-@pytest.mark.xfail(
-    reason="wrapper classes do not use custom from_dataframe for subcolumns"
-)
 def test_dataframe_roundtrip_nested():
     t1 = Timestamp.from_kwargs(
         days=[50000, 60000, 70000],

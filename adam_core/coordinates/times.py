@@ -1,7 +1,6 @@
 from typing import Union
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
@@ -58,26 +57,6 @@ class Times(qv.Table):
         time._set_scale(scale)
         return self.from_astropy(time)
 
-    def to_dataframe(self, flatten: bool = True) -> pd.DataFrame:
-        """
-        Convert to a pandas DataFrame. Time scale is added as a suffix to the column names.
-
-        Parameters
-        ----------
-        flatten : bool
-            If True, flatten any tested tables.
-
-        Returns
-        -------
-        df : `~pandas.DataFrame`
-            A pandas DataFrame with two columns storing the times.
-        """
-        df = super().to_dataframe(flatten)
-        df.rename(
-            columns={col: f"{col}_{self.scale}" for col in df.columns}, inplace=True
-        )
-        return df
-
     def unique(self) -> Self:
         """
         Return unique Times.
@@ -89,32 +68,6 @@ class Times(qv.Table):
         """
         unique_jd = self.jd().unique()
         return self.from_jd(unique_jd, self.scale)
-
-    @classmethod
-    def from_dataframe(cls, df: pd.DataFrame) -> "Times":
-        """
-        Convert from a pandas DataFrame. Time scale is expected to be a suffix to the column names.
-
-        Parameters
-        ----------
-        df : `~pandas.DataFrame`
-            A pandas DataFrame with two columns (*jd1_*, *jd2_*) storing the times.
-        """
-        # Column names may either start with times. or just jd1_ or jd2_
-        df_filtered = df.filter(regex=".*jd[12]_.*", axis=1)
-
-        # Extract time scale from column name
-        scale = df_filtered.columns[0].split("_")[-1]
-
-        # Rename columns to remove times. prefix
-        for col in df_filtered.columns:
-            if "time." in col:
-                df_filtered.rename(columns={col: col.split("time.")[-1]}, inplace=True)
-
-        df_renamed = df_filtered.rename(
-            columns={col: col.split("_")[0] for col in df_filtered.columns}
-        )
-        return cls.from_kwargs(jd1=df_renamed.jd1, jd2=df_renamed.jd2, scale=scale)
 
     @classmethod
     def from_jd(cls, jd: Union[np.ndarray, pa.lib.DoubleArray], scale: str) -> Self:

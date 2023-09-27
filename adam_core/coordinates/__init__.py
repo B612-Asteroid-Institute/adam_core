@@ -16,7 +16,6 @@ from .covariances import (
     weighted_covariance,
     weighted_mean,
 )
-from .io import coords_from_dataframe, coords_to_dataframe
 from .jacobian import calc_jacobian
 from .keplerian import KEPLERIAN_COLS, KEPLERIAN_UNITS, KeplerianCoordinates
 from .origin import Origin, OriginCodes, OriginGravitationalParameters

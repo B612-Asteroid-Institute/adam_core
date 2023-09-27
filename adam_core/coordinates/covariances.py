@@ -142,63 +142,6 @@ class CoordinateCovariances(qv.Table):
         """
         return cls.from_matrix(sigmas_to_covariances(sigmas))
 
-    def to_dataframe(
-        self,
-        coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"],
-        sigmas: bool = False,
-    ) -> pd.DataFrame:
-        """
-        Return the covariance matrices represented as lower triangular columns in a pandas DataFrame.
-
-        Parameters
-        ----------
-        coord_names : `list` of `str`, optional
-            Names of the coordinate axes. Default is ["x", "y", "z", "vx", "vy", "vz"].
-        sigmas : `bool`, optional
-            If True, the standard deviations are added as columns to the DataFrame. Default is False.
-
-        Returns
-        -------
-        df : `pandas.DataFrame`
-            Covariance matrices (lower triangular) for N coordinates in 6 dimensions.
-        """
-        df = covariances_to_df(self.to_matrix(), coord_names=coord_names, kind="lower")
-        if sigmas:
-            df_sigmas = sigmas_to_df(self.sigmas, coord_names=coord_names)
-            df = df_sigmas.join(df)
-
-        return df
-
-    @classmethod
-    def from_dataframe(
-        cls, df, coord_names: List[str] = ["x", "y", "z", "vx", "vy", "vz"]
-    ) -> "CoordinateCovariances":
-        """
-        Create a Covariances object from a pandas DataFrame.
-
-        Parameters
-        ----------
-        df : `pandas.DataFrame`
-            Covariance matrices (lower triangular) for N coordinates in 6 dimensions.
-        coord_names : `list` of `str`, optional
-            Names of the coordinate axes. Default is ["x", "y", "z", "vx", "vy", "vz"].
-
-        Returns
-        -------
-        covariances : `CoordinateCovariances`
-            Covariance matrices for N coordinates in 6 dimensions.
-        """
-        try:
-            covariances = covariances_from_df(df, coord_names=coord_names, kind="lower")
-        except KeyError:
-            sigmas = sigmas_from_df(df, coord_names=coord_names)
-            covariances = sigmas_to_covariances(sigmas)
-
-        if np.all(np.isnan(covariances)):
-            return cls.from_kwargs(values=[None for i in range(len(covariances))])
-        else:
-            return cls.from_matrix(covariances)
-
     def is_all_nan(self) -> bool:
         """
         Check if all covariance matrix values are NaN.

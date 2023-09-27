@@ -1,13 +1,11 @@
 import logging
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
 import quivr as qv
 from astropy import units as u
 
 from .covariances import CoordinateCovariances
-from .io import coords_from_dataframe, coords_to_dataframe
 from .origin import Origin
 from .times import Times
 
@@ -309,56 +307,3 @@ class CartesianCoordinates(qv.Table):
         cls, spherical: "SphericalCoordinates"
     ) -> "CartesianCoordinates":
         return spherical.to_cartesian()
-
-    def to_dataframe(
-        self, sigmas: Optional[bool] = None, covariances: Optional[bool] = None
-    ) -> pd.DataFrame:
-        """
-        Convert coordinates to a pandas DataFrame.
-
-        Parameters
-        ----------
-        sigmas : bool, optional
-            If None, will only include sigmas if they are not null.
-            If True, include 1-sigma uncertainties in the DataFrame. If False, do not include
-            sigmas.
-        covariances : bool, optional
-            If None, will only include covariances if they are not null.
-            If True, include covariance matrices in the DataFrame. Covariance matrices
-            will be split into 21 columns, with the lower triangular elements stored. If False,
-            do not include covariances.
-
-        Returns
-        -------
-        df : `~pandas.Dataframe`
-            DataFrame containing coordinates.
-        """
-        return coords_to_dataframe(
-            self,
-            ["x", "y", "z", "vx", "vy", "vz"],
-            sigmas=sigmas,
-            covariances=covariances,
-        )
-
-    @classmethod
-    def from_dataframe(
-        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
-    ) -> "CartesianCoordinates":
-        """
-        Create coordinates from a pandas DataFrame.
-
-        Parameters
-        ----------
-        df : `~pandas.Dataframe`
-            DataFrame containing coordinates.
-        frame : {"ecliptic", "equatorial"}
-            Frame in which coordinates are defined.
-
-        Returns
-        -------
-        coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
-            Cartesian coordinates.
-        """
-        return coords_from_dataframe(
-            cls, df, coord_names=["x", "y", "z", "vx", "vy", "vz"], frame=frame
-        )

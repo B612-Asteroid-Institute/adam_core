@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import astropy
 import numpy as np
-import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
@@ -373,40 +372,6 @@ class Timestamp(qv.Table):
             days1,
         )
         return days2, nanos2
-
-    def to_dataframe(self, flatten: bool = True) -> pd.DataFrame:
-        """Convert to a dataframe. Time scale is added as a suffix to
-        the column names.
-
-        """
-        df = super().to_dataframe(flatten=flatten)
-        return df.rename(
-            columns={col: f"{col}_{self.scale}" for col in df.columns},
-        )
-
-    @classmethod
-    def from_dataframe(cls, df: pd.DataFrame) -> "Timestamp":
-        """Convert from a pandas DataFrame. Time scale is expected to
-        be a suffix to the column names.
-
-        """
-        df_filtered = df.filter(regex=r".*(days|nanos)_[a-zA-Z]+$")
-        scale = df_filtered.columns[0].split("_")[-1]
-
-        for col in df_filtered.columns:
-            if not col.endswith(f"_{scale}"):
-                raise ValueError(f"Column {col} does not have expected suffix _{scale}")
-            if "timestamp." in col:
-                df_filtered.rename(
-                    columns={col: col.split("timetamp.")[-1]}, inplace=True
-                )
-
-        df_renamed = df_filtered.rename(
-            columns={col: col.split("_")[0] for col in df_filtered.columns}
-        )
-        return cls.from_kwargs(
-            days=df_renamed["days"], nanos=df_renamed["nanos"], scale=scale
-        )
 
 
 def _duration_arrays_within_tolerance(
