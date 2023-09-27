@@ -43,6 +43,12 @@ class Timestamp(qv.Table):
     def mjd(self) -> pa.lib.DoubleArray:
         return pc.add(self.days, self.fractional_days())
 
+    def to_numpy(self) -> np.ndarray:
+        """
+        Returns the times as TDB MJDs in a numpy array.
+        """
+        return self.to_tdb().mjd().to_numpy(False)
+
     @classmethod
     def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
         days = pc.floor(mjd)
