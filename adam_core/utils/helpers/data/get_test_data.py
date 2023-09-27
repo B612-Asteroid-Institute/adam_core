@@ -103,9 +103,14 @@ if __name__ == "__main__":
     # Rename 'Oumuamua to match the name in the Horizons database (1I/'Oumuamua (A/2017 U1))
     object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
     orbits = orbits.set_column(
-        "object_id", np.where(object_ids == "'Oumuamua (A/2017 U1)", "1I/'Oumuamua (A/2017 U1)", object_ids)
+        "object_id",
+        np.where(
+            object_ids == "'Oumuamua (A/2017 U1)",
+            "1I/'Oumuamua (A/2017 U1)",
+            object_ids,
+        ),
     )
-    
+
     orbits.to_parquet(files("adam_core.utils.helpers.data").joinpath("orbits.parquet"))
 
     # Query for the orbital elements in different representations from JPL Horizons and save to a file
@@ -167,12 +172,20 @@ if __name__ == "__main__":
     dts.sort()
     num_dts = len(dts)
 
-    for i, (object_id, orbit) in enumerate(zip(object_ids, orbits)):
+    for i, orbit in enumerate(orbits):
+        # Get the provisional designation
+        prov_designation = (
+            orbit.object_id.to_numpy(zero_copy_only=False)[0]
+            .split("(")
+            .pop()
+            .split(")")[0]
+        )
+
         # Extract times from orbit and propagate +/- 30 days
         times = orbit.coordinates.time.to_astropy() + dts * u.day
 
         # Query for propagated Horizons state vectors
-        propagated_orbit = query_horizons([object_id], times)
+        propagated_orbit = query_horizons([prov_designation], times)
         propagated_orbit = propagated_orbit.set_column(
             "orbit_id", pa.array([f"{i:05d}" for _ in range(len(times))])
         )
@@ -183,7 +196,7 @@ if __name__ == "__main__":
         observers = qv.concatenate([observer_X05, observer_W84])
 
         # Query for ephemeris at the same times
-        ephemeris = query_horizons_ephemeris([object_id], observers)
+        ephemeris = query_horizons_ephemeris([prov_designation], observers)
         ephemeris["orbit_id"] = [f"{i:05d}" for _ in range(len(times))]
 
         propagated_orbits_list.append(propagated_orbit)
