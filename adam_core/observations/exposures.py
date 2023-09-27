@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from typing import Iterator, Literal
 
-import astropy.time
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 from quivr.validators import and_, ge, le
 
 from ..coordinates.origin import OriginCodes
-from ..coordinates.times import Times
 from ..observers import observers, state
+from ..time import Timestamp
 
 
 class Exposures(qv.Table):
@@ -19,7 +18,7 @@ class Exposures(qv.Table):
     """
 
     id = qv.StringColumn()
-    start_time = Times.as_column()
+    start_time = Timestamp.as_column()
     duration = qv.Float64Column(validator=and_(ge(0), le(3600)))
     filter = qv.DictionaryColumn(index_type=pa.int32(), value_type=pa.string())
 
@@ -73,9 +72,8 @@ class Exposures(qv.Table):
         original_ordering = pc.array_sort_indices(indices)
         return observers_table.take(original_ordering)
 
-    def midpoint(self) -> Times:
+    def midpoint(self) -> Timestamp:
         """
         Returns the midpoint of the exposure.
         """
-        delta = astropy.time.TimeDelta(self.duration.to_numpy() / 2, format="sec")
-        return self.start_time.add(delta)
+        return self.start_time.add_seconds(pc.divide(self.duration, 2.0))

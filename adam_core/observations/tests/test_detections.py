@@ -1,7 +1,7 @@
 import astropy.time
 import healpy
 
-from ...coordinates.times import Times
+from ...time import Timestamp
 from ..detections import PointSourceDetections
 from ..exposures import Exposures
 
@@ -16,7 +16,7 @@ def test_detections_link_to_exposures():
     )
     exp = Exposures.from_kwargs(
         id=["e1", "e2"],
-        start_time=Times.from_astropy(start_times),
+        start_time=Timestamp.from_astropy(start_times),
         duration=[60, 30],
         filter=["g", "r"],
         observatory_code=["I41", "I41"],

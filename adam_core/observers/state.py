@@ -7,7 +7,7 @@ from astropy.time import Time
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
-from ..coordinates.times import Times
+from ..time import Timestamp
 from ..utils.spice import _jd_tdb_to_et, get_perturber_state, setup_SPICE
 from .observers import OBSERVATORY_CODES, OBSERVATORY_GEODETICS
 
@@ -152,7 +152,7 @@ def get_observer_state(
                 )
 
         return CartesianCoordinates.from_kwargs(
-            time=Times.from_astropy(times),
+            time=Timestamp.from_astropy(times),
             x=r_obs[:, 0],
             y=r_obs[:, 1],
             z=r_obs[:, 2],

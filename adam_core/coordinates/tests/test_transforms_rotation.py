@@ -1,8 +1,8 @@
 from astropy.time import Time
 
+from ...time import Timestamp
 from ..cartesian import CartesianCoordinates
 from ..origin import Origin
-from ..times import Times
 from ..transform import cartesian_to_frame, transform_coordinates
 from .test_transforms_translation import assert_coords_equal
 
@@ -18,7 +18,7 @@ def test_cartesian_to_frame(orbital_elements, orbital_elements_equatorial):
         vx=orbital_elements["vx"].values,
         vy=orbital_elements["vy"].values,
         vz=orbital_elements["vz"].values,
-        time=Times.from_astropy(
+        time=Timestamp.from_astropy(
             Time(orbital_elements["mjd_tdb"].values, format="mjd", scale="tdb")
         ),
         frame="ecliptic",
@@ -32,7 +32,7 @@ def test_cartesian_to_frame(orbital_elements, orbital_elements_equatorial):
         vx=orbital_elements_equatorial["vx"].values,
         vy=orbital_elements_equatorial["vy"].values,
         vz=orbital_elements_equatorial["vz"].values,
-        time=Times.from_astropy(
+        time=Timestamp.from_astropy(
             Time(
                 orbital_elements_equatorial["mjd_tdb"].values,
                 format="mjd",
@@ -81,7 +81,7 @@ def test_transform_coordinates_frame(orbital_elements, orbital_elements_equatori
         vx=orbital_elements["vx"].values,
         vy=orbital_elements["vy"].values,
         vz=orbital_elements["vz"].values,
-        time=Times.from_astropy(
+        time=Timestamp.from_astropy(
             Time(orbital_elements["mjd_tdb"].values, format="mjd", scale="tdb")
         ),
         frame="ecliptic",
@@ -95,7 +95,7 @@ def test_transform_coordinates_frame(orbital_elements, orbital_elements_equatori
         vx=orbital_elements_equatorial["vx"].values,
         vy=orbital_elements_equatorial["vy"].values,
         vz=orbital_elements_equatorial["vz"].values,
-        time=Times.from_astropy(
+        time=Timestamp.from_astropy(
             Time(
                 orbital_elements_equatorial["mjd_tdb"].values,
                 format="mjd",

@@ -9,8 +9,8 @@ from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
-from ...coordinates.times import Times
 from ...observers import Observers
+from ...time import Timestamp
 from ..orbits import Orbits
 
 
@@ -268,7 +268,7 @@ def query_horizons(
             aberrations=aberrations,
         )
 
-        times = Times.from_astropy(
+        times = Timestamp.from_astropy(
             Time(vectors["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
@@ -299,7 +299,7 @@ def query_horizons(
             id_type=id_type,
         )
 
-        times = Times.from_astropy(
+        times = Timestamp.from_astropy(
             Time(elements["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
@@ -333,7 +333,7 @@ def query_horizons(
         )
 
         tp = Time(elements["Tp_jd"].values, scale="tdb", format="jd")
-        times = Times.from_astropy(
+        times = Timestamp.from_astropy(
             Time(elements["datetime_jd"].values, scale="tdb", format="jd")
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])

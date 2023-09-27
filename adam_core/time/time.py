@@ -53,7 +53,7 @@ class Timestamp(qv.Table):
     def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
         days = pc.floor(mjd)
         fractional_days = pc.subtract(mjd, days)
-        nanos = pc.multiply(fractional_days, 86400 * 1e9)
+        nanos = pc.cast(pc.round(pc.multiply(fractional_days, 86400 * 1e9)), pa.int64())
         return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
 
     def fractional_days(self) -> pa.lib.DoubleArray:
@@ -243,7 +243,9 @@ class Timestamp(qv.Table):
         v2 = v1.set_column("nanos", nanos)
         return v2
 
-    def add_seconds(self, seconds: pa.lib.Int64Array | int) -> Timestamp:
+    def add_seconds(
+        self, seconds: pa.lib.Int64Array | int | pa.DoubleArray | float
+    ) -> Timestamp:
         """
         Add seconds to the timestamp. Negative seconds are supported.
 
@@ -258,7 +260,8 @@ class Timestamp(qv.Table):
             a 'check_range' parameter that allows the caller to disable range
             checking for performance reasons.
         """
-        return self.add_nanos(pc.multiply(seconds, 1_000_000_000))
+        nanos = pc.cast(pc.round(pc.multiply(seconds, 1_000_000_000)), pa.int64())
+        return self.add_nanos(nanos)
 
     def add_millis(self, millis: pa.lib.Int64Array | int) -> Timestamp:
         """
@@ -276,7 +279,8 @@ class Timestamp(qv.Table):
             a 'check_range' parameter that allows the caller to disable range
             checking for performance reasons.
         """
-        return self.add_nanos(pc.multiply(millis, 1_000_000))
+        nanos = pc.cast(pc.round(pc.multiply(millis, 1_000_000)), pa.int64())
+        return self.add_nanos(nanos)
 
     def add_micros(self, micros: pa.lib.Int64Array | int) -> Timestamp:
         """
@@ -294,7 +298,8 @@ class Timestamp(qv.Table):
             a 'check_range' parameter that allows the caller to disable range
             checking for performance reasons.
         """
-        return self.add_nanos(pc.multiply(micros, 1_000))
+        nanos = pc.cast(pc.round(pc.multiply(micros, 1_000)), pa.int64())
+        return self.add_nanos(nanos)
 
     def add_days(self, days: pa.lib.Int64Array | int) -> Timestamp:
         """Add days to the timestamp.

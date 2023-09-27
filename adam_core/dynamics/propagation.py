@@ -10,8 +10,8 @@ from ..coordinates.covariances import (
     transform_covariances_jacobian,
 )
 from ..coordinates.origin import Origin
-from ..coordinates.times import Times
 from ..orbits.orbits import Orbits
+from ..time import Timestamp
 from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
 
 config.update("jax_enable_x64", True)
@@ -163,7 +163,7 @@ def propagate_2body(
             vy=orbits_propagated[:, 4],
             vz=orbits_propagated[:, 5],
             covariance=cartesian_covariances,
-            time=Times.from_astropy(
+            time=Timestamp.from_astropy(
                 Time(t1_, scale="tdb", format="mjd"),
             ),
             origin=Origin.from_kwargs(code=origin_code),

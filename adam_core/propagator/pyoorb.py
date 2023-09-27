@@ -15,11 +15,11 @@ from astropy.time import Time
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin
 from ..coordinates.spherical import SphericalCoordinates
-from ..coordinates.times import Times
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantOrbits
+from ..time import Timestamp
 from .propagator import OrbitType, Propagator
 from .utils import _assert_times_almost_equal
 
@@ -285,7 +285,7 @@ class PYOORB(Propagator):
                     vx=vx,
                     vy=vy,
                     vz=vz,
-                    time=Times.from_astropy(times_),
+                    time=Timestamp.from_astropy(times_),
                     origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
                     frame="ecliptic",
                 ),
@@ -311,7 +311,7 @@ class PYOORB(Propagator):
                     vx=vx,
                     vy=vy,
                     vz=vz,
-                    time=Times.from_astropy(times_),
+                    time=Timestamp.from_astropy(times_),
                     origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
                     frame="ecliptic",
                 ),
@@ -450,7 +450,7 @@ class PYOORB(Propagator):
                 orbit_id=orbit_ids,
                 object_id=object_ids,
                 coordinates=SphericalCoordinates.from_kwargs(
-                    time=Times.from_astropy(
+                    time=Timestamp.from_astropy(
                         Time(
                             ephemeris[:, 0],
                             scale="utc",
@@ -473,7 +473,7 @@ class PYOORB(Propagator):
                     vx=ephemeris[:, 27],
                     vy=ephemeris[:, 28],
                     vz=ephemeris[:, 29],
-                    time=Times.from_astropy(
+                    time=Timestamp.from_astropy(
                         Time(
                             ephemeris[:, 0],
                             scale="utc",

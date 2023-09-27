@@ -6,7 +6,8 @@ import numpy as np
 import quivr as qv
 
 from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.times import Times
+from ...coordinates.origin import Origin
+from ...time import Timestamp
 from ..exposures import Exposures
 
 
@@ -20,7 +21,7 @@ def test_exposure_midpoints():
     )
     exp = Exposures.from_kwargs(
         id=["e1", "e2"],
-        start_time=Times.from_astropy(start_times),
+        start_time=Timestamp.from_astropy(start_times),
         duration=[60, 30],
         filter=["g", "r"],
         observatory_code=["I41", "I41"],
@@ -72,7 +73,7 @@ def test_exposure_states():
     )
     exp = Exposures.from_kwargs(
         id=["e1", "e2", "e3", "e4", "e5"],
-        start_time=Times.from_astropy(state_times),
+        start_time=Timestamp.from_astropy(state_times),
         duration=[0, 0, 0, 0, 0],
         filter=["g", "r", "g", "r", "g"],
         observatory_code=codes,

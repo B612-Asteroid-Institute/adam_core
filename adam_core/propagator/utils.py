@@ -79,11 +79,11 @@ def sort_propagated_orbits(propagated_orbits: Orbits) -> Orbits:
             pc.add(
                 pc.struct_field(
                     pc.struct_field(propagated_orbits.table["coordinates"], "time"),
-                    "jd1",
+                    "days",
                 ),
                 pc.struct_field(
                     pc.struct_field(propagated_orbits.table["coordinates"], "time"),
-                    "jd2",
+                    "nanos",
                 ),
             ),
         ],
@@ -125,11 +125,11 @@ def sort_ephemeris(ephemeris: Ephemeris) -> Ephemeris:
             pc.add(
                 pc.struct_field(
                     pc.struct_field(coords_array, "time"),
-                    "jd1",
+                    "days",
                 ),
                 pc.struct_field(
                     pc.struct_field(coords_array, "time"),
-                    "jd2",
+                    "nanos",
                 ),
             ),
             ephemeris.observer.code,

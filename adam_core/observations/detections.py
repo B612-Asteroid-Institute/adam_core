@@ -10,7 +10,7 @@ import pyarrow.compute
 import quivr as qv
 from quivr.validators import and_, ge, le
 
-from ..coordinates.times import Times
+from ..time import Timestamp
 from .exposures import Exposures
 
 
@@ -26,7 +26,7 @@ class PointSourceDetections(qv.Table):
 
     # Some, but not all, point source data may include times for
     # individual observations within an exposure.
-    time = Times.as_column(nullable=True)
+    time = Timestamp.as_column(nullable=True)
 
     # Should this be a SphericalCoordinates instead?
 

@@ -7,7 +7,7 @@ from astropy import units as u
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .origin import Origin
-from .times import Times
+from ..time import Timestamp
 
 if TYPE_CHECKING:
     from .cometary import CometaryCoordinates
@@ -40,7 +40,7 @@ class KeplerianCoordinates(qv.Table):
     raan = qv.Float64Column()
     ap = qv.Float64Column()
     M = qv.Float64Column()
-    time = Times.as_column(nullable=True)
+    time = Timestamp.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
     frame = qv.StringAttribute()
@@ -240,7 +240,7 @@ class KeplerianCoordinates(qv.Table):
 
         coords_keplerian = cartesian_to_keplerian(
             cartesian.values,
-            cartesian.time.to_astropy().tdb.mjd,
+            cartesian.time.to_numpy(),
             mu=mu,
         )
         coords_keplerian = np.array(coords_keplerian)
@@ -253,7 +253,7 @@ class KeplerianCoordinates(qv.Table):
                 _cartesian_to_keplerian6,
                 in_axes=(0, 0, None),
                 out_axes=0,
-                t0=cartesian.time.to_astropy().tdb.mjd,
+                t0=cartesian.time.to_numpy(),
                 mu=mu,
             )
         else:

@@ -2,13 +2,13 @@ import numpy as np
 import pytest
 from astropy.time import Time
 
+from ...time import Timestamp
 from ..cartesian import CartesianCoordinates
 from ..cometary import CometaryCoordinates
 from ..covariances import CoordinateCovariances
 from ..keplerian import KeplerianCoordinates
 from ..origin import Origin, OriginCodes
 from ..spherical import SphericalCoordinates
-from ..times import Times
 from ..transform import transform_coordinates
 
 
@@ -39,7 +39,7 @@ def test_benchmark_transform_cartesian_coordinates(
         vx=np.array([1]),
         vy=np.array([1]),
         vz=np.array([1]),
-        time=Times.from_astropy(
+        time=Timestamp.from_astropy(
             Time([50000], format="mjd"),
         ),
         origin=Origin.from_kwargs(code=["SUN"]),

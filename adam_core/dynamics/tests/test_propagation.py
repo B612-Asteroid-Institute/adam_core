@@ -6,8 +6,8 @@ from astropy.time import Time
 from ...constants import Constants as c
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
-from ...coordinates.times import Times
 from ...orbits import Orbits
+from ...time import Timestamp
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
 MU = c.MU
@@ -95,7 +95,7 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
             vx=cartesian_elements[:, 3],
             vy=cartesian_elements[:, 4],
             vz=cartesian_elements[:, 5],
-            time=Times.from_astropy(
+            time=Timestamp.from_astropy(
                 Time(
                     t0,
                     format="mjd",
@@ -168,7 +168,7 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
             vx=cartesian_elements[:, 3],
             vy=cartesian_elements[:, 4],
             vz=cartesian_elements[:, 5],
-            time=Times.from_astropy(
+            time=Timestamp.from_astropy(
                 Time(
                     t0,
                     format="mjd",
@@ -268,7 +268,7 @@ def test_benchmark_propagate_2body(benchmark, orbital_elements):
             vx=cartesian_elements[:, 3],
             vy=cartesian_elements[:, 4],
             vz=cartesian_elements[:, 5],
-            time=Times.from_astropy(
+            time=Timestamp.from_astropy(
                 Time(
                     t0,
                     format="mjd",

@@ -14,7 +14,7 @@ from naif_leapseconds import leapseconds
 from ..constants import KM_P_AU, S_P_DAY
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
-from ..coordinates.times import Times
+from ..time import Timestamp
 
 DEFAULT_KERNELS = [
     leapseconds,
@@ -135,7 +135,7 @@ def get_perturber_state(
     states[:, 3:] = states[:, 3:] * S_P_DAY
 
     return CartesianCoordinates.from_kwargs(
-        time=Times.from_astropy(times),
+        time=Timestamp.from_astropy(times),
         x=states[:, 0],
         y=states[:, 1],
         z=states[:, 2],
