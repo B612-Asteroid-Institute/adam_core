@@ -2,7 +2,6 @@ from importlib.resources import files
 from typing import Optional
 
 import numpy as np
-import pandas as pd
 from astropy.time import Time
 
 from ...coordinates.covariances import CoordinateCovariances
@@ -28,19 +27,18 @@ def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:
     orbits : `~adam_core.orbits.orbits.Orbits`
         Orbits object containing the sample orbits.
     """
-    orbits_file = files("adam_core.utils.helpers.data").joinpath("orbits.csv")
-    df = pd.read_csv(orbits_file, index_col=False, float_precision="round_trip")
-    df["orbit_id"] = np.array([None for _ in range(len(df))], dtype=object)
+    orbits_file = files("adam_core.utils.helpers.data").joinpath("orbits.parquet")
+    orbits = Orbits.from_parquet(orbits_file)
 
     if num_orbits is None:
-        num_orbits = len(df)
+        return orbits
 
-    if num_orbits > len(df):
+    if num_orbits > len(orbits):
         raise ValueError(
-            f"num_orbits must be less than or equal to the number of sample orbits ({len(df)})."
+            f"num_orbits must be less than or equal to the number of sample orbits ({len(orbits)})."
         )
 
-    return Orbits.from_dataframe(df, "ecliptic")[:num_orbits]
+    return orbits[:num_orbits]
 
 
 def make_simple_orbits(num_orbits: int = 10) -> Orbits:
