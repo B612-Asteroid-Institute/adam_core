@@ -9,6 +9,7 @@ from astropy.time import Time
 from astroquery.jplhorizons import Horizons
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
+from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.times import Times
 
@@ -31,7 +32,7 @@ for code in observatory_codes:
 
         # Flip the signs of the state to get the state of the observer
         states = CartesianCoordinates.from_kwargs(
-            times=Times.from_astropy(Time(result["datetime_jd"].values, format="jd", scale="tdb")),
+            time=Times.from_astropy(Time(result["datetime_jd"].values, format="jd", scale="tdb")),
             x=-result["x"].values,
             y=-result["y"].values,
             z=-result["z"].values,
@@ -39,7 +40,8 @@ for code in observatory_codes:
             vy=-result["vy"].values,
             vz=-result["vz"].values,
             origin=Origin.from_kwargs(code=[origin.name for _ in range(len(result))]),
-            frame="ecliptic"
+            frame="ecliptic",
+            covariance=CoordinateCovariances.from_matrix(np.full((len(result), 6, 6), np.nan)),
         )
-        states.to_dataframe(covariances=False).to_csv(f"{code}_{id}.csv", index=False)
+        states.to_parquet(f"{code}_{id}.parquet")
 ```

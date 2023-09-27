@@ -1,7 +1,6 @@
 import os
 
 import numpy as np
-import pandas as pd
 import pytest
 from astropy.time import Time
 
@@ -43,12 +42,9 @@ def test_get_observer_state_X05():
     # using the MPC extended observatory codes file and SPICE kernels
     code = "X05"
     for origin in ["sun", "ssb"]:
-        states_df = pd.read_csv(
-            os.path.join(DATA_DIR, f"{code}_{origin}.csv"),
-            index_col=False,
-            float_precision="round_trip",
+        states_expected = CartesianCoordinates.from_parquet(
+            os.path.join(DATA_DIR, f"{code}_{origin}.parquet")
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -83,12 +79,9 @@ def test_get_observer_state_I41():
     # using the MPC extended observatory codes file and SPICE kernels
     code = "I41"
     for origin in ["sun", "ssb"]:
-        states_df = pd.read_csv(
-            os.path.join(DATA_DIR, f"{code}_{origin}.csv"),
-            index_col=False,
-            float_precision="round_trip",
+        states_expected = CartesianCoordinates.from_parquet(
+            os.path.join(DATA_DIR, f"{code}_{origin}.parquet")
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -123,12 +116,9 @@ def test_get_observer_state_W84():
     # using the MPC extended observatory codes file and SPICE kernels
     code = "W84"
     for origin in ["sun", "ssb"]:
-        states_df = pd.read_csv(
-            os.path.join(DATA_DIR, f"{code}_{origin}.csv"),
-            index_col=False,
-            float_precision="round_trip",
+        states_expected = CartesianCoordinates.from_parquet(
+            os.path.join(DATA_DIR, f"{code}_{origin}.parquet")
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -163,12 +153,9 @@ def test_get_observer_state_000():
     # using the MPC extended observatory codes file and SPICE kernels
     code = "000"
     for origin in ["sun", "ssb"]:
-        states_df = pd.read_csv(
-            os.path.join(DATA_DIR, f"{code}_{origin}.csv"),
-            index_col=False,
-            float_precision="round_trip",
+        states_expected = CartesianCoordinates.from_parquet(
+            os.path.join(DATA_DIR, f"{code}_{origin}.parquet")
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
@@ -203,12 +190,9 @@ def test_get_observer_state_500():
     # using the MPC extended observatory codes file and SPICE kernels
     code = "500"
     for origin in ["sun", "ssb"]:
-        states_df = pd.read_csv(
-            os.path.join(DATA_DIR, f"{code}_{origin}.csv"),
-            index_col=False,
-            float_precision="round_trip",
+        states_expected = CartesianCoordinates.from_parquet(
+            os.path.join(DATA_DIR, f"{code}_{origin}.parquet")
         )
-        states_expected = CartesianCoordinates.from_dataframe(states_df, "ecliptic")
 
         if origin == "sun":
             origin_code = OriginCodes.SUN
