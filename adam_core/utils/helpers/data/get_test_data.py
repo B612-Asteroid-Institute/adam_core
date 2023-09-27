@@ -98,10 +98,7 @@ if __name__ == "__main__":
     # Query for the orbital elements from SBDB and save to a file
     object_ids = objects_df["object_id"].values
     orbits = query_sbdb(object_ids)
-    orbits_df = orbits.to_dataframe()
-    orbits_df.to_csv(
-        files("adam_core.utils.helpers.data").joinpath("orbits.csv"), index=False
-    )
+    orbits.to_parquet(files("adam_core.utils.helpers.data").joinpath("orbits.parquet"))
 
     # Query for the orbital elements in different representations from JPL Horizons and save to a file
     for frame in ["ecliptic", "equatorial"]:
@@ -185,9 +182,8 @@ if __name__ == "__main__":
         ephemeris_dfs.append(ephemeris)
 
     propagated_orbits: Orbits = qv.concatenate(propagated_orbits_list)
-    propagated_orbits.to_dataframe().to_csv(
-        files("adam_core.utils.helpers.data").joinpath("propagated_orbits.csv"),
-        index=False,
+    propagated_orbits.to_parquet(
+        files("adam_core.utils.helpers.data").joinpath("propagated_orbits.parquet"),
     )
 
     ephemeris_df = pd.concat(ephemeris_dfs, ignore_index=True)
