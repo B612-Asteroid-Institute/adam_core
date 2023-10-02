@@ -1,13 +1,11 @@
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
 import quivr as qv
 from astropy import units as u
 
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
-from .io import coords_from_dataframe, coords_to_dataframe
 from .origin import Origin
 from .times import Times
 
@@ -247,60 +245,3 @@ class SphericalCoordinates(qv.Table):
         cls, spherical_coordinates: "SphericalCoordinates"
     ) -> "SphericalCoordinates":
         return spherical_coordinates
-
-    def to_dataframe(
-        self, sigmas: Optional[bool] = None, covariances: Optional[bool] = None
-    ) -> pd.DataFrame:
-        """
-        Convert coordinates to a pandas DataFrame.
-
-        Parameters
-        ----------
-        sigmas : bool, optional
-            If None, will only include sigmas if they are not null.
-            If True, include 1-sigma uncertainties in the DataFrame. If False, do not include
-            sigmas.
-        covariances : bool, optional
-            If None, will only include covariances if they are not null.
-            If True, include covariance matrices in the DataFrame. Covariance matrices
-            will be split into 21 columns, with the lower triangular elements stored. If False,
-            do not include covariances.
-
-
-        Returns
-        -------
-        df : `~pandas.Dataframe`
-            DataFrame containing coordinates.
-        """
-        return coords_to_dataframe(
-            self,
-            ["rho", "lon", "lat", "vrho", "vlon", "vlat"],
-            sigmas=sigmas,
-            covariances=covariances,
-        )
-
-    @classmethod
-    def from_dataframe(
-        cls, df: pd.DataFrame, frame: Literal["ecliptic", "equatorial"]
-    ) -> "SphericalCoordinates":
-        """
-        Create coordinates from a pandas DataFrame.
-
-        Parameters
-        ----------
-        df : `~pandas.Dataframe`
-            DataFrame containing coordinates.
-        frame : {"ecliptic", "equatorial"}
-            Frame in which coordinates are defined.
-
-        Returns
-        -------
-        coords : `~adam_core.coordinates.spherical.SphericalCoordinates`
-            Spherical coordinates.
-        """
-        return coords_from_dataframe(
-            cls,
-            df,
-            coord_names=["rho", "lon", "lat", "vrho", "vlon", "vlat"],
-            frame=frame,
-        )

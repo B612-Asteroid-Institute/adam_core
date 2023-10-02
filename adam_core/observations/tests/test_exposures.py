@@ -6,7 +6,6 @@ import numpy as np
 import quivr as qv
 
 from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.origin import Origin
 from ...coordinates.times import Times
 from ..exposures import Exposures
 
@@ -34,37 +33,6 @@ def test_exposure_midpoints():
 
 
 def test_exposure_states():
-    class StateData(qv.Table):
-        # Represents the data in ../../observers/tests/testdata/*.csv
-        jd1_tdb = qv.Float64Column()
-        jd2_tdb = qv.Float64Column()
-
-        x = qv.Float64Column()
-        y = qv.Float64Column()
-        z = qv.Float64Column()
-        vx = qv.Float64Column()
-        vy = qv.Float64Column()
-        vz = qv.Float64Column()
-
-        origin = Origin.as_column()
-
-        def to_astropy(self):
-            return astropy.time.Time(
-                val=self.jd1_tdb, val2=self.jd2_tdb, format="jd", scale="tdb"
-            )
-
-        def to_cartesian(self):
-            return CartesianCoordinates.from_kwargs(
-                x=self.x,
-                y=self.y,
-                z=self.z,
-                vx=self.vx,
-                vy=self.vy,
-                vz=self.vz,
-                origin=self.origin,
-                frame="ecliptic",
-            )
-
     observer_state_dir = (
         pathlib.Path(os.path.dirname(__file__))
         / ".."
@@ -74,28 +42,32 @@ def test_exposure_states():
         / "testdata"
     )
 
-    w84_state_data = StateData.from_csv(observer_state_dir / "W84_sun.csv")
-    i41_state_data = StateData.from_csv(observer_state_dir / "I41_sun.csv")
+    w84_state_data = CartesianCoordinates.from_parquet(
+        observer_state_dir / "W84_sun.parquet"
+    )
+    i41_state_data = CartesianCoordinates.from_parquet(
+        observer_state_dir / "I41_sun.parquet"
+    )
 
     # Mix up w84 and i41 in one big exposure table
     codes = ["W84", "I41", "W84", "I41", "W84"]
     state_times = astropy.time.Time(
         [
-            w84_state_data.to_astropy()[0],
-            i41_state_data.to_astropy()[0],
-            w84_state_data.to_astropy()[3],
-            i41_state_data.to_astropy()[1],
-            w84_state_data.to_astropy()[2],
+            w84_state_data.time.to_astropy()[0],
+            i41_state_data.time.to_astropy()[0],
+            w84_state_data.time.to_astropy()[3],
+            i41_state_data.time.to_astropy()[1],
+            w84_state_data.time.to_astropy()[2],
         ],
         scale="tdb",
     )
     expected = qv.concatenate(
         [
-            w84_state_data.to_cartesian()[0],
-            i41_state_data.to_cartesian()[0],
-            w84_state_data.to_cartesian()[3],
-            i41_state_data.to_cartesian()[1],
-            w84_state_data.to_cartesian()[2],
+            w84_state_data[0],
+            i41_state_data[0],
+            w84_state_data[3],
+            i41_state_data[1],
+            w84_state_data[2],
         ]
     )
     exp = Exposures.from_kwargs(

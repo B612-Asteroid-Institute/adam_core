@@ -451,11 +451,9 @@ def test_dataframe_roundtrip():
     t2 = Timestamp.from_dataframe(df)
 
     assert t1 == t2
+    assert t1.scale == t2.scale
 
 
-@pytest.mark.xfail(
-    reason="wrapper classes do not use custom from_dataframe for subcolumns"
-)
 def test_dataframe_roundtrip_nested():
     t1 = Timestamp.from_kwargs(
         days=[50000, 60000, 70000],
@@ -472,3 +470,4 @@ def test_dataframe_roundtrip_nested():
     w2 = Wrapper.from_flat_dataframe(df)
 
     assert w == w2
+    assert w.times.scale == w2.times.scale
