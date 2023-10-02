@@ -7,8 +7,8 @@ from astropy.time import Time
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
-from ...time import Timestamp
 from ...orbits.orbits import Orbits
+from ...time import Timestamp
 
 
 def make_real_orbits(num_orbits: Optional[int] = None) -> Orbits:

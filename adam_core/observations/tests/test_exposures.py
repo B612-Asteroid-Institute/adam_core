@@ -6,7 +6,6 @@ import numpy as np
 import quivr as qv
 
 from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.origin import Origin
 from ...time import Timestamp
 from ..exposures import Exposures
 

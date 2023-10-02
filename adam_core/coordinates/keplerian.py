@@ -4,10 +4,10 @@ import numpy as np
 import quivr as qv
 from astropy import units as u
 
+from ..time import Timestamp
 from .cartesian import CartesianCoordinates
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .origin import Origin
-from ..time import Timestamp
 
 if TYPE_CHECKING:
     from .cometary import CometaryCoordinates

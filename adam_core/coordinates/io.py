@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING, List, Literal, Optional, Type, Union
 import numpy as np
 import pandas as pd
 
+from ..time import Timestamp
 from .covariances import CoordinateCovariances
 from .origin import Origin
-from ..time import Timestamp
 
 if TYPE_CHECKING:
     from .cartesian import CartesianCoordinates
