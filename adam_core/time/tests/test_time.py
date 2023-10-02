@@ -448,13 +448,12 @@ def test_dataframe_roundtrip():
 
     df = t1.to_dataframe()
 
-    # We must define scale when reading from a dataframe
-    t2 = Timestamp.from_dataframe(df, scale="tdb")
+    t2 = Timestamp.from_dataframe(df)
 
     assert t1 == t2
+    assert t1.scale == t2.scale
 
 
-@pytest.mark.xfail(reason="Nested attributes not yet supported.")
 def test_dataframe_roundtrip_nested():
     t1 = Timestamp.from_kwargs(
         days=[50000, 60000, 70000],
@@ -468,6 +467,7 @@ def test_dataframe_roundtrip_nested():
 
     df = w.to_dataframe()
 
-    w2 = Wrapper.from_flat_dataframe(df, scale="tdb")
+    w2 = Wrapper.from_flat_dataframe(df)
 
     assert w == w2
+    assert w.times.scale == w2.times.scale
