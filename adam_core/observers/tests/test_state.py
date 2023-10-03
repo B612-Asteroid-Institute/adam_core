@@ -2,13 +2,13 @@ import os
 
 import numpy as np
 import pytest
-from astropy.time import Time
 
 from ...constants import KM_P_AU, S_P_DAY
 from ...coordinates import Residuals
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import OriginCodes
 from ...observers import get_observer_state
+from ...time import Timestamp
 from ...utils import get_perturber_state
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "testdata")
@@ -27,7 +27,7 @@ def test_get_observer_state_OriginCodes():
     ]
     for code in codes:
 
-        times = Time(np.arange(59000, 60000), format="mjd", scale="tdb")
+        times = Timestamp.from_mjd(np.arange(59000, 60000), scale="tdb")
         perturber_state = get_perturber_state(
             code, times, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER
         )
@@ -63,7 +63,7 @@ def test_get_observer_state(code, origin):
     # Get the observer state using adam_core
     states = get_observer_state(
         code,
-        states_expected.time.to_astropy(),
+        states_expected.time,
         frame=states_expected.frame,
         origin=origin_code,
     )
@@ -89,5 +89,5 @@ def test_get_observer_state_raises():
         # Get the observer state using adam_core
         get_observer_state(
             code,
-            Time([59000, 59001], format="mjd", scale="tdb"),
+            Timestamp.from_mjd([59000, 60000], scale="tdb"),
         )

@@ -14,6 +14,9 @@ SCALES = {
     "tdb",
 }
 
+# The Modified Julian Date of the J2000 epoch in TDB scale:
+_J2000_TDB_MJD = 51544.5
+
 
 class Timestamp(qv.Table):
     # Scale, the rate at which time passes:
@@ -42,6 +45,15 @@ class Timestamp(qv.Table):
 
     def mjd(self) -> pa.lib.DoubleArray:
         return pc.add(self.days, self.fractional_days())
+
+    def et(self) -> pa.lib.DoubleArray:
+        """
+        Returns the times as ET seconds in a pyarrow array.
+        """
+        tdb = self.to_tdb()
+
+        mjd = tdb.mjd()
+        return pc.multiply(pc.subtract(mjd, _J2000_TDB_MJD), 86400)
 
     def to_numpy(self) -> np.ndarray:
         """
@@ -312,6 +324,26 @@ class Timestamp(qv.Table):
 
         """
         return self.set_column("days", pc.add(self.days, days))
+
+    def add_fractional_days(
+        self, fractional_days: pa.lib.DoubleArray | float
+    ) -> Timestamp:
+        """
+        Add fractional days to the timestamp.
+
+        Parameters
+        ----------
+        fractional_days : The fractional days to add. Can be a scalar
+            or an array of the same length as the timestamp. Use
+            negative values to subtract fractional days.
+        """
+        day_part = pc.floor(fractional_days)
+        nano_part = pc.subtract(fractional_days, day_part)
+
+        days = pc.cast(day_part, pa.int64())
+        nanos = pc.cast(pc.multiply(nano_part, 86400 * 1e9), pa.int64())
+
+        return self.add_days(days).add_nanos(nanos)
 
     def difference_scalar(
         self, days: int, nanos: int

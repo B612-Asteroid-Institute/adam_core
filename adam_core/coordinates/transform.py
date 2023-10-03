@@ -1229,7 +1229,7 @@ def cartesian_to_origin(
 
     unique_origins = coords.origin.code.unique()
     vectors = np.empty(coords.values.shape, dtype=np.float64)
-    times = coords.time.to_astropy()
+    times = coords.time
 
     for origin_in in unique_origins:
 
@@ -1241,7 +1241,7 @@ def cartesian_to_origin(
 
             vectors[mask] = get_perturber_state(
                 OriginCodes[origin_in_str],
-                times[mask],
+                times.apply_mask(mask),
                 frame=coords.frame,
                 origin=origin,
             ).values
@@ -1250,7 +1250,7 @@ def cartesian_to_origin(
 
             vectors[mask] = get_observer_state(
                 origin_in_str,
-                times[mask],
+                times.apply_mask(mask),
                 frame=coords.frame,
                 origin=origin,
             ).values

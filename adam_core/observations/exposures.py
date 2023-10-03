@@ -54,7 +54,7 @@ class Exposures(qv.Table):
             exposures_for_code = self.apply_mask(mask)
             indices_for_code = pc.indices_nonzero(mask)
 
-            times_for_code = exposures_for_code.midpoint().to_astropy()
+            times_for_code = exposures_for_code.midpoint()
             coords_for_code = state.get_observer_state(
                 code, times_for_code, frame=frame, origin=origin
             )

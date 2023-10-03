@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import quivr as qv
-from astropy import units as u
 from astropy.time import Time
 
 from adam_core.observers import Observers
@@ -182,7 +181,7 @@ if __name__ == "__main__":
         )
 
         # Extract times from orbit and propagate +/- 30 days
-        times = orbit.coordinates.time.to_astropy() + dts * u.day
+        times = orbit.coordinates.time.add_fractional_days(dts)
 
         # Query for propagated Horizons state vectors
         propagated_orbit = query_horizons([prov_designation], times)

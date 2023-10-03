@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
-from astropy.time import Time
 
 from ...coordinates.origin import OriginCodes
 from ...observers import get_observer_state
+from ...time import Timestamp
 
 
 @pytest.mark.parametrize(
@@ -34,13 +34,13 @@ def test_benchmark_get_observer_state(benchmark, times, code, frame, origin):
     times_array = np.concatenate(
         [np.arange(60000, 60000 + np.minimum(times, 1000), 1) for i in range(repeats)]
     )
-    times_array = Time(np.sort(times_array), format="mjd", scale="tdb")
+    times = Timestamp.from_mjd(np.sort(times_array), scale="tdb")
 
     result = benchmark(
         get_observer_state,
         code,
-        times_array,
+        times,
         frame=frame,
         origin=origin,
     )
-    assert len(result) == len(times_array)
+    assert len(result) == len(times)
