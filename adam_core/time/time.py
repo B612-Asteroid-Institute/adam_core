@@ -397,6 +397,15 @@ class Timestamp(qv.Table):
         )
         return days2, nanos2
 
+    def unique(self) -> Timestamp:
+        """Return a new Timestamp table containing only the unique
+        elements from self. Order is not necessarily preserved.
+
+        """
+        uniqued = self.table.group_by(["days", "nanos"]).aggregate([])
+        uniqued = uniqued.replace_schema_metadata(self.table.schema.metadata)
+        return Timestamp.from_pyarrow(uniqued)
+
 
 def _duration_arrays_within_tolerance(
     delta_days: pa.Int64Array, delta_nanos: pa.Int64Array, max_nanos_deviation: int

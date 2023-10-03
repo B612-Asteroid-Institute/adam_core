@@ -471,3 +471,34 @@ def test_dataframe_roundtrip_nested():
 
     assert w == w2
     assert w.times.scale == w2.times.scale
+
+
+class TestUnique:
+    def test_empty(self):
+        t = Timestamp.empty(scale="tdb")
+        have = t.unique()
+        assert have.scale == "tdb"
+        assert len(have) == 0
+
+        t2 = Timestamp.empty(scale="utc")
+        have = t2.unique()
+        assert have.scale == "utc"
+        assert len(have) == 0
+
+    def test_one(self):
+        t = Timestamp.from_kwargs(days=[1], nanos=[2], scale="tdb")
+        have = t.unique()
+        assert have.scale == "tdb"
+        assert len(have) == 1
+        assert have.days.to_pylist() == [1]
+        assert have.nanos.to_pylist() == [2]
+
+    def test_multple(self):
+        t = Timestamp.from_kwargs(
+            days=[1, 1, 2, 2, 1, 1], nanos=[2, 3, 4, 5, 2, 3], scale="tdb"
+        )
+        have = t.unique()
+        assert have.scale == "tdb"
+        assert len(have) == 4
+        pairs = zip(have.days.to_pylist(), have.nanos.to_pylist())
+        assert sorted(list(pairs)) == [(1, 2), (1, 3), (2, 4), (2, 5)]
