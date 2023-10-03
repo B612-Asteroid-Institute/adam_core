@@ -1,5 +1,3 @@
-from astropy.time import Time
-
 from ...time import Timestamp
 from ..cartesian import CartesianCoordinates
 from ..origin import Origin
@@ -18,9 +16,7 @@ def test_cartesian_to_frame(orbital_elements, orbital_elements_equatorial):
         vx=orbital_elements["vx"].values,
         vy=orbital_elements["vy"].values,
         vz=orbital_elements["vz"].values,
-        time=Timestamp.from_astropy(
-            Time(orbital_elements["mjd_tdb"].values, format="mjd", scale="tdb")
-        ),
+        time=Timestamp.from_mjd(orbital_elements["mjd_tdb"].values, scale="tdb"),
         frame="ecliptic",
         origin=Origin.from_kwargs(code=["SUN" for i in range(len(orbital_elements))]),
     )
@@ -32,12 +28,8 @@ def test_cartesian_to_frame(orbital_elements, orbital_elements_equatorial):
         vx=orbital_elements_equatorial["vx"].values,
         vy=orbital_elements_equatorial["vy"].values,
         vz=orbital_elements_equatorial["vz"].values,
-        time=Timestamp.from_astropy(
-            Time(
-                orbital_elements_equatorial["mjd_tdb"].values,
-                format="mjd",
-                scale="tdb",
-            )
+        time=Timestamp.from_mjd(
+            orbital_elements_equatorial["mjd_tdb"].values, scale="tdb"
         ),
         frame="equatorial",
         origin=Origin.from_kwargs(
@@ -81,8 +73,9 @@ def test_transform_coordinates_frame(orbital_elements, orbital_elements_equatori
         vx=orbital_elements["vx"].values,
         vy=orbital_elements["vy"].values,
         vz=orbital_elements["vz"].values,
-        time=Timestamp.from_astropy(
-            Time(orbital_elements["mjd_tdb"].values, format="mjd", scale="tdb")
+        time=Timestamp.from_mjd(
+            orbital_elements["mjd_tdb"].values,
+            scale="tdb",
         ),
         frame="ecliptic",
         origin=Origin.from_kwargs(code=["SUN" for i in range(len(orbital_elements))]),
@@ -95,12 +88,9 @@ def test_transform_coordinates_frame(orbital_elements, orbital_elements_equatori
         vx=orbital_elements_equatorial["vx"].values,
         vy=orbital_elements_equatorial["vy"].values,
         vz=orbital_elements_equatorial["vz"].values,
-        time=Timestamp.from_astropy(
-            Time(
-                orbital_elements_equatorial["mjd_tdb"].values,
-                format="mjd",
-                scale="tdb",
-            )
+        time=Timestamp.from_mjd(
+            orbital_elements_equatorial["mjd_tdb"].values,
+            scale="tdb",
         ),
         frame="equatorial",
         origin=Origin.from_kwargs(

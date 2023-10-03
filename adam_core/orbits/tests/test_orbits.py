@@ -1,5 +1,3 @@
-from astropy.time import Time
-
 from ...coordinates import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...time import Timestamp
@@ -15,7 +13,7 @@ def test_orbits__init__():
         vx=[0.005],
         vy=[-0.005],
         vz=[0.0002],
-        time=Timestamp.from_astropy(Time([59000.0], scale="tdb", format="mjd")),
+        time=Timestamp.from_mjd([59000.0], scale="tdb"),
         origin=Origin.from_kwargs(code=["SUN"]),
         frame="ecliptic",
     )

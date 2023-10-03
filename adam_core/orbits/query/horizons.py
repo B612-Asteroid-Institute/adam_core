@@ -268,9 +268,7 @@ def query_horizons(
             aberrations=aberrations,
         )
 
-        times = Timestamp.from_astropy(
-            Time(vectors["datetime_jd"].values, scale="tdb", format="jd")
-        )
+        times = Timestamp.from_jd(vectors["datetime_jd"].values, scale="tdb")
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
         coordinates = CartesianCoordinates.from_kwargs(
@@ -299,8 +297,9 @@ def query_horizons(
             id_type=id_type,
         )
 
-        times = Timestamp.from_astropy(
-            Time(elements["datetime_jd"].values, scale="tdb", format="jd")
+        times = Timestamp.from_jd(
+            elements["datetime_jd"].values,
+            scale="tdb",
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
@@ -332,10 +331,8 @@ def query_horizons(
             id_type=id_type,
         )
 
-        tp = Time(elements["Tp_jd"].values, scale="tdb", format="jd")
-        times = Timestamp.from_astropy(
-            Time(elements["datetime_jd"].values, scale="tdb", format="jd")
-        )
+        tp = Timestamp.from_jd(elements["Tp_jd"].values, scale="tdb")
+        times = Timestamp.from_jd(elements["datetime_jd"].values, scale="tdb")
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
         coordinates = CometaryCoordinates.from_kwargs(
@@ -345,7 +342,7 @@ def query_horizons(
             i=elements["incl"].values,
             raan=elements["Omega"].values,
             ap=elements["w"].values,
-            tp=tp.tdb.mjd,
+            tp=tp.mjd(),
             origin=origin,
             frame=frame,
         )

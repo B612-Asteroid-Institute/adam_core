@@ -95,12 +95,9 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
             vx=cartesian_elements[:, 3],
             vy=cartesian_elements[:, 4],
             vz=cartesian_elements[:, 5],
-            time=Timestamp.from_astropy(
-                Time(
-                    t0,
-                    format="mjd",
-                    scale="tdb",
-                )
+            time=Timestamp.from_mjd(
+                t0,
+                scale="tdb",
             ),
             origin=Origin.from_kwargs(
                 code=["SUN" for i in range(len(cartesian_elements))]
@@ -168,12 +165,9 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
             vx=cartesian_elements[:, 3],
             vy=cartesian_elements[:, 4],
             vz=cartesian_elements[:, 5],
-            time=Timestamp.from_astropy(
-                Time(
-                    t0,
-                    format="mjd",
-                    scale="tdb",
-                )
+            time=Timestamp.from_mjd(
+                t0,
+                scale="tdb",
             ),
             origin=Origin.from_kwargs(
                 code=["SUN" for i in range(len(cartesian_elements))]
@@ -268,12 +262,9 @@ def test_benchmark_propagate_2body(benchmark, orbital_elements):
             vx=cartesian_elements[:, 3],
             vy=cartesian_elements[:, 4],
             vz=cartesian_elements[:, 5],
-            time=Timestamp.from_astropy(
-                Time(
-                    t0,
-                    format="mjd",
-                    scale="tdb",
-                )
+            time=Timestamp.from_mjd(
+                t0,
+                scale="tdb",
             ),
             origin=Origin.from_kwargs(
                 code=["SUN" for i in range(len(cartesian_elements))]

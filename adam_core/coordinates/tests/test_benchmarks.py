@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from astropy.time import Time
 
 from ...time import Timestamp
 from ..cartesian import CartesianCoordinates
@@ -39,9 +38,7 @@ def test_benchmark_transform_cartesian_coordinates(
         vx=np.array([1]),
         vy=np.array([1]),
         vz=np.array([1]),
-        time=Timestamp.from_astropy(
-            Time([50000], format="mjd"),
-        ),
+        time=Timestamp.from_mjd([50000]),
         origin=Origin.from_kwargs(code=["SUN"]),
     )
     benchmark(

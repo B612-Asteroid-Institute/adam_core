@@ -32,9 +32,7 @@ for code in observatory_codes:
 
         # Flip the signs of the state to get the state of the observer
         states = CartesianCoordinates.from_kwargs(
-            time=Timestamp.from_astropy(
-                Time(result["datetime_jd"].values, format="jd", scale="tdb")
-            ),
+            time=Timestamp.from_jd(result["datetime_jd"].values, scale="tdb"),
             covariance=CoordinateCovariances.nulls(len(result)),
             x=-result["x"].values,
             y=-result["y"].values,

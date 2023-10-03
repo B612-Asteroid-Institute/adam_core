@@ -206,7 +206,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         coords_cometary[i, 5] = Time(elements["tp"].value, scale="tdb", format="jd").mjd
 
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
-    times = Timestamp.from_astropy(Time(times, scale="tdb", format="jd"))
+    times = Timestamp.from_jd(times, scale="tdb")
     origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
     frame = "ecliptic"
     coordinates = CometaryCoordinates.from_kwargs(

@@ -2,7 +2,6 @@ from importlib.resources import files
 from typing import Optional
 
 import numpy as np
-from astropy.time import Time
 
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.keplerian import KeplerianCoordinates
@@ -73,12 +72,9 @@ def make_simple_orbits(num_orbits: int = 10) -> Orbits:
         sigmas[:, i] = np.round(0.01 * data[dim], 4)
 
     data["covariance"] = CoordinateCovariances.from_sigmas(sigmas)
-    data["time"] = Timestamp.from_astropy(
-        Time(
-            np.round(np.linspace(59000.0, 59000.0 + num_orbits, num_orbits), 3),
-            scale="tdb",
-            format="mjd",
-        )
+    data["time"] = Timestamp.from_mjd(
+        np.round(np.linspace(59000.0, 59000.0 + num_orbits, num_orbits), 3),
+        scale="tdb",
     )
     data["origin"] = Origin.from_kwargs(code=["SUN" for i in range(num_orbits)])
     data["frame"] = "ecliptic"

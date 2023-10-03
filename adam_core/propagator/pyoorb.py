@@ -267,8 +267,8 @@ class PYOORB(Propagator):
         )
 
         # Convert output epochs to TDB
-        times_ = Time(mjd_tt, format="mjd", scale="tt")
-        times_ = times_.tdb
+        times_ = Timestamp.from_mjd(mjd_tt, scale="tt")
+        times_ = times_.to_tdb()
 
         if isinstance(orbits, Orbits):
             # Map the object and orbit IDs back to the input arrays
@@ -285,7 +285,7 @@ class PYOORB(Propagator):
                     vx=vx,
                     vy=vy,
                     vz=vz,
-                    time=Timestamp.from_astropy(times_),
+                    time=times_,
                     origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
                     frame="ecliptic",
                 ),
@@ -311,7 +311,7 @@ class PYOORB(Propagator):
                     vx=vx,
                     vy=vy,
                     vz=vz,
-                    time=Timestamp.from_astropy(times_),
+                    time=times_,
                     origin=Origin.from_kwargs(code=["SUN" for i in range(len(times_))]),
                     frame="ecliptic",
                 ),
@@ -450,12 +450,9 @@ class PYOORB(Propagator):
                 orbit_id=orbit_ids,
                 object_id=object_ids,
                 coordinates=SphericalCoordinates.from_kwargs(
-                    time=Timestamp.from_astropy(
-                        Time(
-                            ephemeris[:, 0],
-                            scale="utc",
-                            format="mjd",
-                        )
+                    time=Timestamp.from_mjd(
+                        ephemeris[:, 0],
+                        scale="utc",
                     ),
                     rho=None,  # PYOORB rho (delta_au) is geocentric not topocentric
                     lon=ephemeris[:, 1],
@@ -473,12 +470,9 @@ class PYOORB(Propagator):
                     vx=ephemeris[:, 27],
                     vy=ephemeris[:, 28],
                     vz=ephemeris[:, 29],
-                    time=Timestamp.from_astropy(
-                        Time(
-                            ephemeris[:, 0],
-                            scale="utc",
-                            format="mjd",
-                        )
+                    time=Timestamp.from_mjd(
+                        ephemeris[:, 0],
+                        scale="utc",
                     ),
                     origin=Origin.from_kwargs(code=["SUN" for i in range(len(codes))]),
                     frame="ecliptic",

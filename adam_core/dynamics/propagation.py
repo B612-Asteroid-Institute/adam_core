@@ -163,9 +163,7 @@ def propagate_2body(
             vy=orbits_propagated[:, 4],
             vz=orbits_propagated[:, 5],
             covariance=cartesian_covariances,
-            time=Timestamp.from_astropy(
-                Time(t1_, scale="tdb", format="mjd"),
-            ),
+            time=Timestamp.from_mjd(t1_, scale="tdb"),
             origin=Origin.from_kwargs(code=origin_code),
             frame="ecliptic",
         ),
