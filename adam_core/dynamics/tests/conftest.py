@@ -19,16 +19,9 @@ def orbital_elements():
 
 @pytest.fixture
 def propagated_orbits():
-    propagated_orbits_file = files("adam_core.utils.helpers.data").joinpath(
-        "propagated_orbits.csv"
+    return Orbits.from_parquet(
+        files("adam_core.utils.helpers.data").joinpath("propagated_orbits.parquet")
     )
-    df = pd.read_csv(
-        propagated_orbits_file,
-        index_col=False,
-        float_precision="round_trip",
-        dtype={"orbit_id": str},
-    )
-    return Orbits.from_dataframe(df, frame="ecliptic")
 
 
 @pytest.fixture
