@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, TypeVar, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -7,8 +7,6 @@ import pyarrow.compute as pc
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
-from ..dynamics.barker import solve_barker
-from ..dynamics.kepler import calc_mean_anomaly, solve_kepler
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .keplerian import KeplerianCoordinates
@@ -25,26 +23,16 @@ TRANSFORM_EC2EQ = TRANSFORM_EQ2EC.T
 
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    "transform_coordinates",
-    "_cartesian_to_keplerian",
-    "_cartesian_to_keplerian6",
-    "cartesian_to_keplerian",
-    "_keplerian_to_cartesian_a",
-    "_keplerian_to_cartesian_p",
-    "_keplerian_to_cartesian_q",
-    "_cartesian_to_cometary",
-    "cartesian_to_cometary",
-    "_cometary_to_cartesian",
-    "cometary_to_cartesian",
-]
 
-CoordinateType = Union[
-    CartesianCoordinates,
-    KeplerianCoordinates,
-    CometaryCoordinates,
-    SphericalCoordinates,
-]
+CoordinateType = TypeVar(
+    "CoordinateType",
+    bound=Union[
+        CartesianCoordinates,
+        KeplerianCoordinates,
+        CometaryCoordinates,
+        SphericalCoordinates,
+    ],
+)
 CoordinatesClasses = (
     CartesianCoordinates,
     KeplerianCoordinates,
@@ -355,6 +343,8 @@ def _cartesian_to_keplerian(
     [1] Bate, R. R; Mueller, D. D; White, J. E. (1971). Fundamentals of Astrodynamics. 1st ed.,
         Dover Publications, Inc. ISBN-13: 978-0486600611
     """
+    from ..dynamics.kepler import calc_mean_anomaly
+
     coords_keplerian = jnp.zeros(13, dtype=jnp.float64)
     r = coords_cartesian[0:3]
     v = coords_cartesian[3:6]
@@ -622,6 +612,9 @@ def _keplerian_to_cartesian_p(
         vy : y-velocity in units of au per day.
         vz : z-velocity in units of au per day.
     """
+    from ..dynamics.barker import solve_barker
+    from ..dynamics.kepler import solve_kepler
+
     coords_cartesian = jnp.zeros(6, dtype=jnp.float64)
 
     p = coords_keplerian[0]

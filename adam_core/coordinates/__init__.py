@@ -26,13 +26,18 @@ from .transform import (
     _cartesian_to_cometary,
     _cartesian_to_keplerian,
     _cartesian_to_keplerian6,
+    _cartesian_to_spherical,
     _cometary_to_cartesian,
     _keplerian_to_cartesian_a,
     _keplerian_to_cartesian_p,
     _keplerian_to_cartesian_q,
+    _spherical_to_cartesian,
     cartesian_to_cometary,
     cartesian_to_keplerian,
+    cartesian_to_spherical,
     cometary_to_cartesian,
+    keplerian_to_cartesian,
+    spherical_to_cartesian,
     transform_coordinates,
 )
 from .variants import create_coordinate_variants
