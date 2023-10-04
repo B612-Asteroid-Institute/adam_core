@@ -28,12 +28,6 @@ class Timestamp(qv.Table):
     # Nanos since start of day:
     nanos = qv.Int64Column()
 
-    def to_tdb(self) -> Timestamp:
-        if self.scale == "tdb":
-            return self
-        else:
-            return Timestamp.from_astropy(self.to_astropy().tdb)
-
     def micros(self) -> pa.Int64Array:
         return pc.divide(self.nanos, 1_000)
 
@@ -50,7 +44,7 @@ class Timestamp(qv.Table):
         """
         Returns the times as ET seconds in a pyarrow array.
         """
-        tdb = self.to_tdb()
+        tdb = self.rescale("tdb")
 
         mjd = tdb.mjd()
         return pc.multiply(pc.subtract(mjd, _J2000_TDB_MJD), 86400)
@@ -59,7 +53,7 @@ class Timestamp(qv.Table):
         """
         Returns the times as TDB MJDs in a numpy array.
         """
-        return self.to_tdb().mjd().to_numpy(False)
+        return self.rescale("tdb").mjd().to_numpy(False)
 
     @classmethod
     def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
@@ -441,6 +435,22 @@ class Timestamp(qv.Table):
         uniqued = self.table.group_by(["days", "nanos"]).aggregate([])
         uniqued = uniqued.replace_schema_metadata(self.table.schema.metadata)
         return Timestamp.from_pyarrow(uniqued)
+
+    def rescale(self, new_scale: str) -> Timestamp:
+        if self.scale == new_scale:
+            return self
+        elif new_scale == "tai":
+            return Timestamp.from_astropy(self.to_astropy().tai)
+        elif new_scale == "utc":
+            return Timestamp.from_astropy(self.to_astropy().utc)
+        elif new_scale == "tt":
+            return Timestamp.from_astropy(self.to_astropy().tt)
+        elif new_scale == "ut1":
+            return Timestamp.from_astropy(self.to_astropy().ut1)
+        elif new_scale == "tdb":
+            return Timestamp.from_astropy(self.to_astropy().tdb)
+        else:
+            raise ValueError("Unknown scale: {}".format(new_scale))
 
 
 def _duration_arrays_within_tolerance(

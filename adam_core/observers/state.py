@@ -119,7 +119,7 @@ def get_observer_state(
             o_vec_ITRF93 = np.dot(R_EARTH, o_hat_ITRF93)
 
             # Warning! Converting times to ET will incur a loss of precision.
-            epochs_et = times.to_tdb().et()
+            epochs_et = times.rescale("tdb").et()
             unique_epochs_et_tdb = epochs_et.unique()
 
             N = len(epochs_et)

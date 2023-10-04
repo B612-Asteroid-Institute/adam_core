@@ -267,8 +267,7 @@ class PYOORB(Propagator):
         )
 
         # Convert output epochs to TDB
-        times_ = Timestamp.from_mjd(mjd_tt, scale="tt")
-        times_ = times_.to_tdb()
+        times_ = Timestamp.from_mjd(mjd_tt, scale="tt").rescale("tdb")
 
         if isinstance(orbits, Orbits):
             # Map the object and orbit IDs back to the input arrays

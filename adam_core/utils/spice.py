@@ -118,7 +118,7 @@ def get_perturber_state(
     setup_SPICE()
 
     # Convert epochs to ET in TDB
-    epochs_et = times.to_tdb().et()
+    epochs_et = times.rescale("tdb").et()
     unique_epochs_et = epochs_et.unique()
 
     # Get position of the body in km and km/s in the desired frame and measured from the desired origin
