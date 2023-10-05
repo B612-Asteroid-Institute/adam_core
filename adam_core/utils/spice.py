@@ -2,6 +2,7 @@ import os
 from typing import List, Literal
 
 import numpy as np
+import pyarrow as pa
 import spiceypy as sp
 from astropy.time import Time
 from naif_de440 import de440
@@ -13,6 +14,7 @@ from naif_leapseconds import leapseconds
 
 from ..constants import KM_P_AU, S_P_DAY
 from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.times import Times
 
@@ -121,9 +123,10 @@ def get_perturber_state(
     epochs_tdb = times.tdb.jd
     unique_epochs_tdb = np.unique(epochs_tdb)
     unique_epochs_et = _jd_tdb_to_et(unique_epochs_tdb)
+    N = len(epochs_tdb)
 
     # Get position of the body in km and km/s in the desired frame and measured from the desired origin
-    states = np.empty((len(epochs_tdb), 6), dtype=np.float64)
+    states = np.empty((N, 6), dtype=np.float64)
     for i, epoch in enumerate(unique_epochs_et):
         mask = np.where(epochs_tdb == unique_epochs_tdb[i])[0]
         state, lt = sp.spkez(perturber.value, epoch, frame_spice, "NONE", origin.value)
@@ -141,6 +144,11 @@ def get_perturber_state(
         vx=states[:, 3],
         vy=states[:, 4],
         vz=states[:, 5],
+        covariance=CoordinateCovariances.from_kwargs(
+            values=pa.ListArray.from_arrays(
+                pa.array(np.arange(0, 36 * (N + 1), 36)), pa.nulls(36 * N, pa.float64())
+            )
+        ),
         frame=frame,
-        origin=Origin.from_kwargs(code=[origin.name for i in range(len(states))]),
+        origin=Origin.from_kwargs(code=[origin.name for i in range(N)]),
     )
