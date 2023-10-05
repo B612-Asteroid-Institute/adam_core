@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from ...utils.helpers.orbits import make_real_orbits
 from ..covariances import (
@@ -151,3 +152,15 @@ def test_CoordinateCovariances_is_all_nan():
     covariances = np.ones((10, 6, 6)) * np.nan
     cov = CoordinateCovariances.from_matrix(covariances)
     assert cov.is_all_nan()
+
+
+def test_CoordinateCovariances_from_matrix_invalid_shape():
+    # Test that an error is raised when the shape of the input
+    # covariances is invalid
+    covariances = np.zeros((10, 6, 5))
+    with pytest.raises(ValueError):
+        CoordinateCovariances.from_matrix(covariances)
+
+    covariances = np.zeros((6, 5))
+    with pytest.raises(ValueError):
+        CoordinateCovariances.from_matrix(covariances)

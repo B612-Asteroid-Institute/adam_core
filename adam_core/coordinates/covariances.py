@@ -116,8 +116,16 @@ class CoordinateCovariances(qv.Table):
         -------
         covariances : `Covariances`
             Covariance matrices for N coordinates in 6 dimensions.
+
+        Raises
+        ------
+        ValueError : If the covariance matrices are not (N, 6, 6)
         """
         # cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
+        if covariances.shape[1:] != (6, 6):
+            raise ValueError(
+                f"Covariance matrices should have shape (N, 6, 6) but got {covariances.shape}"
+            )
         cov = covariances.flatten()
         offsets = np.arange(0, (len(covariances) + 1) * 36, 36, dtype=np.int64)
         return cls.from_kwargs(values=pa.ListArray.from_arrays(offsets, cov))
