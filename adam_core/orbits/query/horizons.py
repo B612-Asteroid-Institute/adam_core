@@ -2,7 +2,7 @@ from typing import List, Union
 
 import numpy.typing as npt
 import pandas as pd
-from astropy.time import Time
+import pyarrow as pa
 from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
@@ -16,7 +16,7 @@ from ..orbits import Orbits
 
 def _get_horizons_vectors(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     location: str = "@sun",
     id_type: str = "smallbody",
     aberrations: str = "geometric",
@@ -54,7 +54,7 @@ def _get_horizons_vectors(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.tdb.mjd,
+            epochs=times.rescale("tdb").mjd(),
             location=location,
             id_type=id_type,
         )
@@ -75,7 +75,7 @@ def _get_horizons_vectors(
 
 def _get_horizons_elements(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     location: str = "@sun",
     id_type: str = "smallbody",
     refplane: str = "ecliptic",
@@ -110,7 +110,7 @@ def _get_horizons_elements(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.tdb.mjd,
+            epochs=times.rescale("tdb").mjd(),
             location=location,
             id_type=id_type,
         )
@@ -131,7 +131,7 @@ def _get_horizons_elements(
 
 def _get_horizons_ephemeris(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     location: str,
     id_type: str = "smallbody",
 ) -> pd.DataFrame:
@@ -161,7 +161,7 @@ def _get_horizons_ephemeris(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.utc.mjd,
+            epochs=times.rescale("utc").mjd(),
             location=location,
             id_type=id_type,
         )
@@ -211,7 +211,7 @@ def query_horizons_ephemeris(
     for observatory_code, observers_i in observers.iterate_codes():
         ephemeris = _get_horizons_ephemeris(
             object_ids,
-            observers_i.coordinates.time.to_astropy(),
+            observers_i.coordinates.time,
             observatory_code,
         )
         dfs.append(ephemeris)
@@ -227,7 +227,7 @@ def query_horizons_ephemeris(
 
 def query_horizons(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     coordinate_type: str = "cartesian",
     location: str = "@sun",
     id_type: str = "smallbody",
@@ -240,7 +240,7 @@ def query_horizons(
     ----------
     object_ids : npt.ArrayLike (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time` (M)
+    times : Timestamp (M)
         Astropy time object at which to gather state vectors.
     coordinate_type : {'cartesian', 'keplerian', 'cometary'}
         Type of orbital elements to return.

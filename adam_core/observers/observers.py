@@ -80,9 +80,9 @@ class Observers(qv.Table):
         Examples
         --------
         >>> import numpy as np
-        >>> from astropy.time import Time
+        >>> from adam_core.time import Timestamp
         >>> from adam_core.observers import Observers
-        >>> times = Time(np.arange(59000, 59000 + 100), scale="tdb", format="mjd")
+        >>> times = Timestamp.from_mjd(np.arange(59000, 59000 + 100), scale="tdb")
         >>> observers = Observers.from_code("X05", times)
         """
         from .state import get_observer_state

@@ -3,7 +3,6 @@ from typing import List, OrderedDict
 
 import numpy as np
 import numpy.typing as npt
-from astropy.time import Time
 from astroquery.jplsbdb import SBDB
 
 from ...coordinates.cometary import CometaryCoordinates
@@ -203,7 +202,9 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         coords_cometary[i, 2] = elements["i"].value
         coords_cometary[i, 3] = elements["om"].value
         coords_cometary[i, 4] = elements["w"].value
-        coords_cometary[i, 5] = Time(elements["tp"].value, scale="tdb", format="jd").mjd
+        coords_cometary[i, 5] = (
+            Timestamp.from_jd([elements["tp"].value], scale="tdb").mjd()[0].as_py()
+        )
 
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
     times = Timestamp.from_jd(times, scale="tdb")

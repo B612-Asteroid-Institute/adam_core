@@ -2,7 +2,6 @@
 This code generates the dictionary of semi-major axes for the
 third body needed for the Tisserand parameter
 
-from astropy.time import Time
 from adam_core.orbits.query import _get_horizons_elements
 
 ids = ["199", "299", "399", "499", "599", "699", "799", "899"]

@@ -1,7 +1,6 @@
 import numpy as np
 import spiceypy as sp
 from astropy import units as u
-from astropy.time import Time
 
 from ...constants import Constants as c
 from ...coordinates.cartesian import CartesianCoordinates
@@ -107,19 +106,19 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
     )
 
     # Set propagation times (same for all orbits)
-    times = Time(
+    times = Timestamp.from_mjd(
         t0.min() + np.arange(0, 10000, 10),
-        format="mjd",
         scale="tdb",
     )
 
     # Propagate orbits with SPICE and accumulate results
     spice_propagated = []
+    times_mjd = times.mjd()
     for i, cartesian_i in enumerate(cartesian_elements):
 
         # Calculate dts from t0 for this orbit (each orbit's t0 is different)
         # but the final times we are propagating to are the same for all orbits
-        dts = times.tdb.mjd - t0[i]
+        dts = times_mjd - t0[i]
         spice_propagated_i = np.empty((len(dts), 6))
         for j, dt_i in enumerate(dts):
             spice_propagated_i[j] = sp.prop2b(
@@ -177,19 +176,19 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
     )
 
     # Set propagation times (same for all orbits)
-    times = Time(
+    times = Timestamp.from_mjd(
         t0.min() + np.arange(0, 10000, 10),
-        format="mjd",
         scale="tdb",
     )
 
     # Propagate orbits with SPICE and accumulate results
     spice_propagated = []
+    times_mjd = times.mjd()
     for i, cartesian_i in enumerate(cartesian_elements):
 
         # Calculate dts from t0 for this orbit (each orbit's t0 is different)
         # but the final times we are propagating to are the same for all orbits
-        dts = times.tdb.mjd - t0[i]
+        dts = times_mjd - t0[i]
         spice_propagated_i = np.empty((len(dts), 6))
         for j, dt_i in enumerate(dts):
             spice_propagated_i[j] = sp.prop2b(
@@ -272,9 +271,8 @@ def test_benchmark_propagate_2body(benchmark, orbital_elements):
             frame="ecliptic",
         ),
     )
-    times = Time(
+    times = Timestamp.from_mjd(
         [t0.min() + 1],
-        format="mjd",
         scale="tdb",
     )
     benchmark(propagate_2body, orbits[0], times=times)

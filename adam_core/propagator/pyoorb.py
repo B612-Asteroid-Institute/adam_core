@@ -10,7 +10,6 @@ from typing import Optional, Union
 
 import numpy as np
 import quivr as qv
-from astropy.time import Time
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin
@@ -174,7 +173,7 @@ class PYOORB(Propagator):
         epochs: np.ndarray, time_scale: OpenOrbTimescale
     ) -> np.ndarray:
         """
-        Convert an array of orbits into the format expected by PYOORB.
+        Convert an array of times into the format expected by PYOORB.
 
         Parameters
         ----------
@@ -195,7 +194,7 @@ class PYOORB(Propagator):
         )
         return epochs_pyoorb
 
-    def _propagate_orbits(self, orbits: OrbitType, times: Time) -> OrbitType:
+    def _propagate_orbits(self, orbits: OrbitType, times: Timestamp) -> OrbitType:
         """
         Propagate orbits using PYOORB.
 
@@ -203,7 +202,7 @@ class PYOORB(Propagator):
         ----------
         orbits : {`~adam_core.orbits.orbits.Orbits`, `~adam_core.orbits.orbits.VariantOrbits`} (N)
             Orbits to propagate.
-        times : `~astropy.time.core.Time` (M)
+        times : Timestamp (M)
             Times to which to propagate orbits.
 
         Returns
@@ -214,7 +213,7 @@ class PYOORB(Propagator):
         # Convert orbits into PYOORB format
         orbits_pyoorb = self._configure_orbits(
             orbits.coordinates.values,
-            orbits.coordinates.time.to_astropy().tt.mjd,
+            orbits.coordinates.time.rescale("tt").mjd(),
             OpenOrbOrbitType.CARTESIAN,
             OpenOrbTimescale.TT,
             magnitude=None,
@@ -222,7 +221,9 @@ class PYOORB(Propagator):
         )
 
         # Convert epochs into PYOORB format
-        epochs_pyoorb = self._configure_epochs(times.tt.mjd, OpenOrbTimescale.TT)
+        epochs_pyoorb = self._configure_epochs(
+            times.rescale("tt").mjd(), OpenOrbTimescale.TT
+        )
 
         # Propagate orbits to each epoch and append to list
         # of new states
@@ -339,7 +340,7 @@ class PYOORB(Propagator):
         # Convert orbits into PYOORB format
         orbits_pyoorb = self._configure_orbits(
             orbits.coordinates.values,
-            orbits.coordinates.time.to_astropy().tt.mjd,
+            orbits.coordinates.time.rescale("tt").mjd(),
             OpenOrbOrbitType.CARTESIAN,
             OpenOrbTimescale.TT,
             magnitude=None,
@@ -358,7 +359,7 @@ class PYOORB(Propagator):
                     vy=observers.coordinates.vy,
                     vz=observers.coordinates.vz,
                     covariance=observers.coordinates.covariance,
-                    time=observers.coordinates.time.to_scale("utc"),
+                    time=observers.coordinates.time.rescale("utc"),
                     origin=observers.coordinates.origin,
                     frame=observers.coordinates.frame,
                 ),
@@ -370,10 +371,10 @@ class PYOORB(Propagator):
         # Iterate over unique observatory codes and their times
         for code_i, observer_i in observers_utc.iterate_codes():
             # Extract obervation times
-            times_utc = observer_i.coordinates.time.to_astropy().utc.mjd
+            mjd_utc = observer_i.coordinates.time.mjd()
 
             # Convert epochs into PYOORB format (we want UTC as output)
-            epochs_pyoorb = self._configure_epochs(times_utc, OpenOrbTimescale.UTC)
+            epochs_pyoorb = self._configure_epochs(mjd_utc, OpenOrbTimescale.UTC)
 
             # Generate ephemeris
             ephemeris, err = oo.pyoorb.oorb_ephemeris_full(
@@ -393,7 +394,7 @@ class PYOORB(Propagator):
 
             # PYOORB returns ephemerides for each orbit, so lets reconstruct orbit IDs
             ids = np.arange(0, len(orbits))
-            orbit_ids_idx = np.repeat(ids, len(times_utc))
+            orbit_ids_idx = np.repeat(ids, len(mjd_utc))
             orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
             object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
 
@@ -440,9 +441,9 @@ class PYOORB(Propagator):
             # Check to make sure the desired times are within 1 microsecond
             # of the times returned by PYOORB
             _assert_times_almost_equal(
-                np.tile(times_utc, len(orbits)),
+                np.tile(mjd_utc, len(orbits)),
                 ephemeris[:, 0],
-                tolerance=0.001,
+                tolerance=0.001,  # FIXME: This is 0.001 days, which is 86.4 seconds, not 1 microsecond?
             )
 
             ephemeris = Ephemeris.from_kwargs(

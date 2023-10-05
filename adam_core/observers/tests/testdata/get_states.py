@@ -1,5 +1,3 @@
-import numpy as np
-from astropy.time import Time
 from astroquery.jplhorizons import Horizons
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -8,11 +6,6 @@ from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.time import Timestamp
 
 observatory_codes = ["I41", "X05", "F51", "W84", "000", "500"]
-times = Time(
-    np.arange(59000, 60000, 10),
-    format="mjd",
-    scale="utc",
-)
 
 for code in observatory_codes:
     for id in ["sun", "ssb"]:

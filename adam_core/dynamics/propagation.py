@@ -1,6 +1,5 @@
 import jax.numpy as jnp
 import numpy as np
-from astropy.time import Time
 from jax import config, jit, vmap
 
 from ..constants import Constants as c
@@ -76,7 +75,7 @@ _propagate_2body_vmap = jit(
 
 def propagate_2body(
     orbits: Orbits,
-    times: Time,
+    times: Timestamp,
     mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-14,
@@ -88,7 +87,7 @@ def propagate_2body(
     ----------
     orbits : `~jax.numpy.ndarray` (N, 6)
         Cartesian orbits with position in units of au and velocity in units of au per day.
-    times : `~astropy.time.core.Time` (M)
+    times : Timestamp (M)
         Epochs to which to propagate each orbit. If a single epoch is given, all orbits are propagated to this
         epoch. If multiple epochs are given, then each orbit to will be propagated to each epoch.
     mu : float, optional
@@ -108,8 +107,8 @@ def propagate_2body(
     """
     # Lets extract the cartesian orbits and times from the orbits object
     cartesian_orbits = orbits.coordinates.values
-    t0 = orbits.coordinates.time.to_astropy().tdb.mjd
-    t1 = times.tdb.mjd
+    t0 = orbits.coordinates.time.rescale("tdb").mjd()
+    t1 = times.rescale("tdb").mjd()
     orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)
     object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
 

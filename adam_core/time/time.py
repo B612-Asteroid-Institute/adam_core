@@ -40,6 +40,9 @@ class Timestamp(qv.Table):
     def mjd(self) -> pa.lib.DoubleArray:
         return pc.add(self.days, self.fractional_days())
 
+    def jd(self) -> pa.lib.DoubleArray:
+        return pc.add(self.mjd(), 2400000.5)
+
     def et(self) -> pa.lib.DoubleArray:
         """
         Returns the times as ET seconds in a pyarrow array.
@@ -54,6 +57,15 @@ class Timestamp(qv.Table):
         Returns the times as TDB MJDs in a numpy array.
         """
         return self.rescale("tdb").mjd().to_numpy(False)
+
+    @classmethod
+    def from_iso8601(
+        cls, iso: pa.lib.StringArray | list[str], scale="utc"
+    ) -> Timestamp:
+        """
+        Create a Timestamp from ISO 8601 strings (for example, '2020-01-02T14:15:16').
+        """
+        return cls.from_astropy(astropy.time.Time(iso, format="isot", scale=scale))
 
     @classmethod
     def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:

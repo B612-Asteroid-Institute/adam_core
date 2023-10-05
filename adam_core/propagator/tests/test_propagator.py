@@ -1,5 +1,4 @@
 import quivr
-from astropy.time import Time
 
 from ...orbits import Orbits
 from ...time import Timestamp
@@ -9,11 +8,11 @@ from ..propagator import Propagator
 
 class MockPropagator(Propagator):
     # MockPropagator propagates orbits by just setting the time of the orbits.
-    def _propagate_orbits(self, orbits: Orbits, times: Time) -> Orbits:
+    def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
         all_times = []
         for t in times:
-            repeated_time = Time([t] * len(orbits))
-            orbits.coordinates.time = Timestamp.from_astropy(repeated_time)
+            repeated_time = quivr.concatenate([t] * len(orbits))
+            orbits.coordinates.time = repeated_time
             all_times.append(orbits)
 
         return quivr.concatenate(all_times)
@@ -24,7 +23,7 @@ class MockPropagator(Propagator):
 
 def test_propagator_single_worker():
     orbits = make_real_orbits(10)
-    times = Time(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
+    times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
 
     prop = MockPropagator()
     have = prop.propagate_orbits(orbits, times, max_processes=1)
@@ -34,7 +33,7 @@ def test_propagator_single_worker():
 
 def test_propagator_multiple_workers():
     orbits = make_real_orbits(10)
-    times = Time(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
+    times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
 
     prop = MockPropagator()
     have = prop.propagate_orbits(orbits, times, max_processes=4)
