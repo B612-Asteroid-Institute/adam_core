@@ -149,6 +149,27 @@ class CoordinateCovariances(qv.Table):
         """
         return cls.from_matrix(sigmas_to_covariances(sigmas))
 
+    @classmethod
+    def nulls(cls, length: int) -> "CoordinateCovariances":
+        """
+        Create a Covariances object with all covariance matrix elements set to NaN.
+        Parameters
+        ----------
+        length : `int`
+            Number of coordinates.
+
+        Returns
+        -------
+        covariances : `CoordinateCovariances`
+            Covariance matrices for N coordinates in 6 dimensions.
+        """
+        return cls.from_kwargs(
+            values=pa.ListArray.from_arrays(
+                pa.array(np.arange(0, 36 * (length + 1), 36)),
+                pa.nulls(36 * length, pa.float64()),
+            )
+        )
+
     def is_all_nan(self) -> bool:
         """
         Check if all covariance matrix values are NaN.

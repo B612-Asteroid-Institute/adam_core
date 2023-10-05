@@ -2,7 +2,6 @@ import os
 from typing import List, Literal
 
 import numpy as np
-import pyarrow as pa
 import spiceypy as sp
 from astropy.time import Time
 from naif_de440 import de440
@@ -144,11 +143,7 @@ def get_perturber_state(
         vx=states[:, 3],
         vy=states[:, 4],
         vz=states[:, 5],
-        covariance=CoordinateCovariances.from_kwargs(
-            values=pa.ListArray.from_arrays(
-                pa.array(np.arange(0, 36 * (N + 1), 36)), pa.nulls(36 * N, pa.float64())
-            )
-        ),
+        covariance=CoordinateCovariances.nulls(N),
         frame=frame,
         origin=Origin.from_kwargs(code=[origin.name for i in range(N)]),
     )
