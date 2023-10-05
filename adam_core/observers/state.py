@@ -6,7 +6,6 @@ from astropy.time import Time
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.times import Times
 from ..utils.spice import _jd_tdb_to_et, get_perturber_state, setup_SPICE
@@ -160,7 +159,6 @@ def get_observer_state(
             vx=v_obs[:, 0],
             vy=v_obs[:, 1],
             vz=v_obs[:, 2],
-            covariance=CoordinateCovariances.nulls(N),
             frame=frame,
             origin=Origin.from_kwargs(code=[origin.name for i in range(len(times))]),
         )

@@ -13,7 +13,6 @@ from naif_leapseconds import leapseconds
 
 from ..constants import KM_P_AU, S_P_DAY
 from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.times import Times
 
@@ -143,7 +142,6 @@ def get_perturber_state(
         vx=states[:, 3],
         vy=states[:, 4],
         vz=states[:, 5],
-        covariance=CoordinateCovariances.nulls(N),
         frame=frame,
         origin=Origin.from_kwargs(code=[origin.name for i in range(N)]),
     )

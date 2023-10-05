@@ -39,7 +39,6 @@ for code in observatory_codes:
             vx=-result["vx"].values,
             vy=-result["vy"].values,
             vz=-result["vz"].values,
-            covariance=CoordinateCovariances.nulls(len(result)),
             origin=Origin.from_kwargs(code=[origin.name for _ in range(len(result))]),
             frame="ecliptic",
         )

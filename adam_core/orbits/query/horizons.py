@@ -7,7 +7,6 @@ from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
@@ -282,7 +281,6 @@ def query_horizons(
             vx=vectors["vx"].values,
             vy=vectors["vy"].values,
             vz=vectors["vz"].values,
-            covariance=CoordinateCovariances.nulls(len(vectors)),
             origin=origin,
             frame=frame,
         )
@@ -314,7 +312,6 @@ def query_horizons(
             raan=elements["Omega"].values,
             ap=elements["w"].values,
             M=elements["M"].values,
-            covariance=CoordinateCovariances.nulls(len(elements)),
             origin=origin,
             frame=frame,
         )
@@ -349,7 +346,6 @@ def query_horizons(
             raan=elements["Omega"].values,
             ap=elements["w"].values,
             tp=tp.tdb.mjd,
-            covariance=CoordinateCovariances.nulls(len(elements)),
             origin=origin,
             frame=frame,
         )
