@@ -2,14 +2,11 @@ import numpy as np
 import spiceypy as sp
 from astropy import units as u
 
-from ...constants import Constants as c
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...orbits import Orbits
 from ...time import Timestamp
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
-
-MU = c.MU
 
 
 def test__propagate_2body_against_spice_elliptical(orbital_elements):
@@ -18,17 +15,23 @@ def test__propagate_2body_against_spice_elliptical(orbital_elements):
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN" for i in range(len(cartesian_elements))])
+    mu = origin.mu()
 
     dts = np.arange(0, 10000, 10)
-    for t0_i, cartesian_i in zip(t0, cartesian_elements):
+    for i, (t0_i, cartesian_i) in enumerate(zip(t0, cartesian_elements)):
 
         spice_propagated = np.empty((len(dts), 6))
         cartesian_propagated = np.empty((len(dts), 6))
 
         for j, dt_i in enumerate(dts):
 
-            spice_propagated[j] = sp.prop2b(MU, np.ascontiguousarray(cartesian_i), dt_i)
-            cartesian_propagated[j] = _propagate_2body(cartesian_i, t0_i, t0_i + dt_i)
+            spice_propagated[j] = sp.prop2b(
+                mu[i], np.ascontiguousarray(cartesian_i), dt_i
+            )
+            cartesian_propagated[j] = _propagate_2body(
+                cartesian_i, t0_i, t0_i + dt_i, mu[i]
+            )
 
         # Calculate difference between SPICE and adam_core
         diff = cartesian_propagated - spice_propagated
@@ -50,17 +53,23 @@ def test__propagate_2body_against_spice_hyperbolic(orbital_elements):
     orbital_elements = orbital_elements[orbital_elements["e"] > 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN" for i in range(len(cartesian_elements))])
+    mu = origin.mu()
 
     dts = np.arange(0, 10000, 10)
-    for t0_i, cartesian_i in zip(t0, cartesian_elements):
+    for i, (t0_i, cartesian_i) in enumerate(zip(t0, cartesian_elements)):
 
         spice_propagated = np.empty((len(dts), 6))
         cartesian_propagated = np.empty((len(dts), 6))
 
         for j, dt_i in enumerate(dts):
 
-            spice_propagated[j] = sp.prop2b(MU, np.ascontiguousarray(cartesian_i), dt_i)
-            cartesian_propagated[j] = _propagate_2body(cartesian_i, t0_i, t0_i + dt_i)
+            spice_propagated[j] = sp.prop2b(
+                mu[i], np.ascontiguousarray(cartesian_i), dt_i
+            )
+            cartesian_propagated[j] = _propagate_2body(
+                cartesian_i, t0_i, t0_i + dt_i, mu[i]
+            )
 
         # Calculate difference between SPICE and adam_core
         diff = cartesian_propagated - spice_propagated
@@ -82,6 +91,8 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN" for i in range(len(cartesian_elements))])
+    mu = origin.mu()
 
     # Create orbits object
     orbits = Orbits.from_kwargs(
@@ -98,9 +109,7 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
                 t0,
                 scale="tdb",
             ),
-            origin=Origin.from_kwargs(
-                code=["SUN" for i in range(len(cartesian_elements))]
-            ),
+            origin=origin,
             frame="ecliptic",
         ),
     )
@@ -122,7 +131,7 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
         spice_propagated_i = np.empty((len(dts), 6))
         for j, dt_i in enumerate(dts):
             spice_propagated_i[j] = sp.prop2b(
-                MU, np.ascontiguousarray(cartesian_i), dt_i
+                mu[i], np.ascontiguousarray(cartesian_i), dt_i
             )
 
         spice_propagated.append(spice_propagated_i)
@@ -152,6 +161,8 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
     orbital_elements = orbital_elements[orbital_elements["e"] > 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN" for i in range(len(cartesian_elements))])
+    mu = origin.mu()
 
     # Create orbits object
     orbits = Orbits.from_kwargs(
@@ -168,9 +179,7 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
                 t0,
                 scale="tdb",
             ),
-            origin=Origin.from_kwargs(
-                code=["SUN" for i in range(len(cartesian_elements))]
-            ),
+            origin=origin,
             frame="ecliptic",
         ),
     )
@@ -192,7 +201,7 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
         spice_propagated_i = np.empty((len(dts), 6))
         for j, dt_i in enumerate(dts):
             spice_propagated_i[j] = sp.prop2b(
-                MU, np.ascontiguousarray(cartesian_i), dt_i
+                mu[i], np.ascontiguousarray(cartesian_i), dt_i
             )
 
         spice_propagated.append(spice_propagated_i)
@@ -231,13 +240,15 @@ def test_benchmark__propagate_2body_vmap(benchmark, orbital_elements):
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN" for i in range(len(orbital_elements))])
+    mu = origin.mu()
 
     benchmark(
         _propagate_2body_vmap,
         cartesian_elements[:1],
         t0[:1],
         t0[:1] + 1,
-        MU,
+        mu,
         1000,
         1e-14,
     )

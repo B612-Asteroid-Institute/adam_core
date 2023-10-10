@@ -1,6 +1,7 @@
 import numpy as np
 from astropy import units as u
 
+from ..origin import Origin
 from ..transform import cartesian_to_cometary, cometary_to_cartesian
 
 
@@ -18,8 +19,11 @@ def test_cometary_to_cartesian_elliptical(orbital_elements):
         ["x", "y", "z", "vx", "vy", "vz"]
     ].values
     t0_mjd = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
-    cartesian_elements_actual = cometary_to_cartesian(cometary_elements, t0_mjd)
+    cartesian_elements_actual = cometary_to_cartesian(
+        cometary_elements, t0_mjd, origin.mu()
+    )
     diff = cartesian_elements_actual - cartesian_elements_expected
 
     # Calculate offset in position in mm
@@ -49,8 +53,11 @@ def test_cometary_to_cartesian_hyperbolic(orbital_elements):
         ["x", "y", "z", "vx", "vy", "vz"]
     ].values
     t0_mjd = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
-    cartesian_elements_actual = cometary_to_cartesian(cometary_elements, t0_mjd)
+    cartesian_elements_actual = cometary_to_cartesian(
+        cometary_elements, t0_mjd, origin.mu()
+    )
     diff = cartesian_elements_actual - cartesian_elements_expected
 
     # Calculate offset in position in mm
@@ -78,10 +85,13 @@ def test_cartesian_to_cometary_elliptical(orbital_elements):
     ].values
     epochs = orbital_elements["mjd_tdb"].values
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
     # Cartesian to cometary returns an N, 13 array containing the cometary elements and cometary
     # elements, with some additional columns.
-    cometary_elements_actual = cartesian_to_cometary(cartesian_elements, epochs)
+    cometary_elements_actual = cartesian_to_cometary(
+        cartesian_elements, epochs, origin.mu()
+    )
 
     # Calculate the difference
     diff = cometary_elements_actual - cometary_elements_expected
@@ -132,10 +142,13 @@ def test_cartesian_to_cometary_hyperbolic(orbital_elements):
     ].values
     epochs = orbital_elements["mjd_tdb"].values
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
     # Cartesian to cometary returns an N, 13 array containing the cometary elements and cometary
     # elements, with some additional columns.
-    cometary_elements_actual = cartesian_to_cometary(cartesian_elements, epochs)
+    cometary_elements_actual = cartesian_to_cometary(
+        cartesian_elements, epochs, origin.mu()
+    )
 
     # Calculate the difference
     diff = cometary_elements_actual - cometary_elements_expected

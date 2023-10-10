@@ -1,6 +1,7 @@
 import numpy as np
 from astropy import units as u
 
+from ..origin import Origin
 from ..transform import cartesian_to_keplerian, keplerian_to_cartesian
 
 
@@ -15,8 +16,9 @@ def test_keplerian_to_cartesian_elliptical(orbital_elements):
     cartesian_elements_expected = orbital_elements[
         ["x", "y", "z", "vx", "vy", "vz"]
     ].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
-    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements)
+    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements, origin.mu())
     diff = cartesian_elements_actual - cartesian_elements_expected
 
     # Calculate offset in position in mm
@@ -41,8 +43,9 @@ def test_keplerian_to_cartesian_hyperbolic(orbital_elements):
     cartesian_elements_expected = orbital_elements[
         ["x", "y", "z", "vx", "vy", "vz"]
     ].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
-    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements)
+    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements, origin.mu())
     diff = cartesian_elements_actual - cartesian_elements_expected
 
     # Calculate offset in position in mm
@@ -68,10 +71,13 @@ def test_cartesian_to_keplerian_elliptical(orbital_elements):
     ].values
     epochs = orbital_elements["mjd_tdb"].values
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
     # Cartesian to keplerian returns an N, 13 array containing the keplerian elements and cometary
     # elements, with some additional columns.
-    keplerian_elements_actual = cartesian_to_keplerian(cartesian_elements, epochs)
+    keplerian_elements_actual = cartesian_to_keplerian(
+        cartesian_elements, epochs, origin.mu()
+    )
 
     # Remove semi-latus rectum
     keplerian_elements_actual = keplerian_elements_actual[
@@ -157,10 +163,13 @@ def test_cartesian_to_keplerian_hyperbolic(orbital_elements):
     ].values
     epochs = orbital_elements["mjd_tdb"].values
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
     # Cartesian to keplerian returns an N, 13 array containing the keplerian elements and cometary
     # elements, with some additional columns.
-    keplerian_elements_actual = cartesian_to_keplerian(cartesian_elements, epochs)
+    keplerian_elements_actual = cartesian_to_keplerian(
+        cartesian_elements, epochs, origin.mu()
+    )
 
     # Remove semi-latus rectum
     keplerian_elements_actual = keplerian_elements_actual[

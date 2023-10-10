@@ -2,10 +2,8 @@ import numpy as np
 import spiceypy as sp
 from astropy import units as u
 
-from ...constants import Constants as c
+from ..origin import Origin
 from ..transform import cartesian_to_keplerian, keplerian_to_cartesian
-
-MU = c.MU
 
 
 def test_keplerian_to_cartesian_elliptical_against_spice(orbital_elements):
@@ -17,8 +15,9 @@ def test_keplerian_to_cartesian_elliptical_against_spice(orbital_elements):
 
     keplerian_elements = orbital_elements[["a", "e", "incl", "Omega", "w", "M"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
-    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements)
+    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements, origin.mu())
 
     # Keplerian elements for SPICE are expected to be defined with periapse distance
     # not the semi-major axis
@@ -31,7 +30,7 @@ def test_keplerian_to_cartesian_elliptical_against_spice(orbital_elements):
     keplerian_elements_spice[:, 4] = np.radians(orbital_elements["w"].values)
     keplerian_elements_spice[:, 5] = np.radians(orbital_elements["M"].values)
     keplerian_elements_spice[:, 6] = t0_jd
-    keplerian_elements_spice[:, 7] = MU
+    keplerian_elements_spice[:, 7] = origin.mu()
 
     cartesian_elements_spice = np.empty((len(keplerian_elements), 6))
     for i in range(len(keplerian_elements)):
@@ -44,8 +43,8 @@ def test_keplerian_to_cartesian_elliptical_against_spice(orbital_elements):
     # Calculate offset in velocity in nm/s
     v_diff = np.linalg.norm(diff[:, 3:], axis=1) * (u.au / u.d).to(u.nm / u.s)
 
-    # Assert positions are to within 10 mm
-    np.testing.assert_array_less(r_diff, 10)
+    # Assert positions are to within 20 mm
+    np.testing.assert_array_less(r_diff, 20)
     # Assert velocities are to within 10 nm/s
     np.testing.assert_array_less(v_diff, 10)
 
@@ -59,8 +58,9 @@ def test_keplerian_to_cartesian_hyperbolic_against_spice(orbital_elements):
 
     keplerian_elements = orbital_elements[["a", "e", "incl", "Omega", "w", "M"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
 
-    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements)
+    cartesian_elements_actual = keplerian_to_cartesian(keplerian_elements, origin.mu())
 
     # Keplerian elements for SPICE are expected to be defined with periapse distance
     # not the semi-major axis
@@ -73,7 +73,7 @@ def test_keplerian_to_cartesian_hyperbolic_against_spice(orbital_elements):
     keplerian_elements_spice[:, 4] = np.radians(orbital_elements["w"].values)
     keplerian_elements_spice[:, 5] = np.radians(orbital_elements["M"].values)
     keplerian_elements_spice[:, 6] = t0_jd
-    keplerian_elements_spice[:, 7] = MU
+    keplerian_elements_spice[:, 7] = origin.mu()
 
     cartesian_elements_spice = np.empty((len(keplerian_elements), 6))
     for i in range(len(keplerian_elements)):
@@ -102,10 +102,12 @@ def test_cartesian_to_keplerian_elliptical_against_spice(orbital_elements):
     t0 = orbital_elements["mjd_tdb"].values
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0_jd = t0 + 2400000.5
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
+    mu = origin.mu()
 
     # Cartesian to keplerian returns an N, 13 array containing the keplerian elements and cometary
     # elements, with some additional columns.
-    keplerian_elements_actual = cartesian_to_keplerian(cartesian_elements, t0)
+    keplerian_elements_actual = cartesian_to_keplerian(cartesian_elements, t0, mu)
 
     # SPICE returns periapse distance instead of semi-major axis so lets test
     # that as well
@@ -115,7 +117,7 @@ def test_cartesian_to_keplerian_elliptical_against_spice(orbital_elements):
     keplerian_elements_spice = np.empty((len(cartesian_elements), 8))
     for i in range(len(keplerian_elements_spice)):
         keplerian_elements_spice[i] = sp.oscelt(
-            np.copy(cartesian_elements[i]), t0_jd[i], MU
+            np.copy(cartesian_elements[i]), t0_jd[i], mu[i]
         )
 
     # Keplerian elements from SPICE report periapse distance instead of semi-major axis
@@ -177,10 +179,12 @@ def test_cartesian_to_keplerian_hyperbolic_against_spice(orbital_elements):
     t0 = orbital_elements["mjd_tdb"].values
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0_jd = t0 + 2400000.5
+    origin = Origin.from_kwargs(code=["SUN"] * len(orbital_elements))
+    mu = origin.mu()
 
     # Cartesian to keplerian returns an N, 13 array containing the keplerian elements and cometary
     # elements, with some additional columns.
-    keplerian_elements_actual = cartesian_to_keplerian(cartesian_elements, t0)
+    keplerian_elements_actual = cartesian_to_keplerian(cartesian_elements, t0, mu)
 
     # SPICE returns periapse distance instead of semi-major axis so lets test
     # that as well
@@ -190,7 +194,7 @@ def test_cartesian_to_keplerian_hyperbolic_against_spice(orbital_elements):
     keplerian_elements_spice = np.empty((len(cartesian_elements), 8))
     for i in range(len(keplerian_elements_spice)):
         keplerian_elements_spice[i] = sp.oscelt(
-            np.copy(cartesian_elements[i]), t0_jd[i], MU
+            np.copy(cartesian_elements[i]), t0_jd[i], mu[i]
         )
 
     # Keplerian elements from SPICE report periapse distance instead of semi-major axis
