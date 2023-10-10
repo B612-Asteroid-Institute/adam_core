@@ -1,9 +1,8 @@
 import logging
 from enum import Enum
-from typing import Optional
 
 import numpy as np
-import pyarrow as pa
+import pyarrow.compute as pc
 import quivr as qv
 
 from ..constants import KM_P_AU, S_P_DAY
@@ -49,11 +48,37 @@ class OriginGravitationalParameters(float, Enum):
     SATURN_BARYCENTER = _convert_mu_units(37940584.841800)
     URANUS_BARYCENTER = _convert_mu_units(5794556.400000)
     NEPTUNE_BARYCENTER = _convert_mu_units(6836527.100580)
+    PLUTO_BARYCENTER = _convert_mu_units(975.500000)
     SUN = _convert_mu_units(132712440041.279419)
     MERCURY = _convert_mu_units(22031.868551)
     VENUS = _convert_mu_units(324858.592000)
     EARTH = _convert_mu_units(398600.435507)
     MOON = _convert_mu_units(4902.800118)
+
+    @classmethod
+    def SOLAR_SYSTEM_BARYCENTER(cls) -> float:
+        """
+        Return the gravitational parameter of the Solar System barycenter as approximated
+        by adding the gravitational parameters of the Sun, Mercury, Venus, Earth, Moon,
+        Mars, Jupiter, Uranus, and Neptune.
+
+        Returns
+        -------
+        mu : float
+            The gravitational parameter of the Solar System barycenter in au^3 / day^2.
+        """
+        return (
+            cls.SUN
+            + cls.MERCURY_BARYCENTER
+            + cls.VENUS_BARYCENTER
+            + cls.EARTH
+            + cls.MOON
+            + cls.MARS_BARYCENTER
+            + cls.JUPITER_BARYCENTER
+            + cls.URANUS_BARYCENTER
+            + cls.NEPTUNE_BARYCENTER
+            + cls.PLUTO_BARYCENTER
+        )
 
 
 # TODO: Replace with DictionaryColumn or similar
@@ -61,13 +86,6 @@ class OriginGravitationalParameters(float, Enum):
 class Origin(qv.Table):
 
     code = qv.StringColumn()
-
-    def __init__(self, table: pa.Table, mu: Optional[float] = None):
-        super().__init__(table)
-        self._mu = mu
-
-    def with_table(self, table: pa.Table) -> "Origin":
-        return super().with_table(table, mu=self.mu)
 
     def __eq__(self, other: object) -> np.ndarray:
         if isinstance(other, (str, np.ndarray)):
@@ -86,29 +104,29 @@ class Origin(qv.Table):
     def __ne__(self, other: object) -> np.ndarray:
         return ~self.__eq__(other)
 
-    @property
-    def mu(self):
-        if self._mu is None:
-            logger.debug(
-                "Origin.mu called without mu set. Finding mu in OriginGravitationalParameters."
-            )
-            codes = np.array(self.code)
-            if len(np.unique(codes)) > 1:
-                raise ValueError("Origin.mu called on table with multiple origins.")
+    def mu(self) -> np.ndarray:
+        """
+        Return the gravitational parameter of the origin.
 
-            try:
-                return OriginGravitationalParameters[codes[0]].value
-            except KeyError:
-                raise ValueError(
-                    "Origin.mu called on table with unrecognized origin code."
-                )
-        else:
-            return self._mu
+        Returns
+        -------
+        mu : `~numpy.ndarray` (N)
+            The gravitational parameter of the origin in au^3 / day^2.
 
-    @mu.setter
-    def mu(self, mu: float):
-        self._mu = mu
+        Raises
+        ------
+        ValueError
+            If the origin code is not recognized.
+        """
+        mu = np.empty(len(self.code), dtype=np.float64)
+        for code in pc.unique(self.code):
+            code = code.as_py()
+            mask = pc.equal(self.code, code).to_numpy(zero_copy_only=False)
+            if code == "SOLAR_SYSTEM_BARYCENTER":
+                mu[mask] = OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER()
+            elif code in OriginGravitationalParameters.__members__:
+                mu[mask] = OriginGravitationalParameters[code].value
+            else:
+                raise ValueError(f"Unknown origin code: {code}")
 
-    @mu.deleter
-    def mu(self):
-        self._mu = None
+        return mu
