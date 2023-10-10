@@ -2,21 +2,20 @@ from typing import List, Union
 
 import numpy.typing as npt
 import pandas as pd
-from astropy.time import Time
 from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
-from ...coordinates.times import Times
 from ...observers import Observers
+from ...time import Timestamp
 from ..orbits import Orbits
 
 
 def _get_horizons_vectors(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     location: str = "@sun",
     id_type: str = "smallbody",
     aberrations: str = "geometric",
@@ -30,8 +29,8 @@ def _get_horizons_vectors(
     ----------
     object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time` (M)
-        Astropy time object at which to gather state vectors.
+    times : Timestamp (M)
+        Time at which to gather state vectors.
     location : str, optional
         Location of the origin typically a NAIF code.
         ('0' or '@ssb' for solar system barycenter, '10' or '@sun' for heliocenter)
@@ -54,7 +53,7 @@ def _get_horizons_vectors(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.tdb.mjd,
+            epochs=times.rescale("tdb").mjd(),
             location=location,
             id_type=id_type,
         )
@@ -75,7 +74,7 @@ def _get_horizons_vectors(
 
 def _get_horizons_elements(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     location: str = "@sun",
     id_type: str = "smallbody",
     refplane: str = "ecliptic",
@@ -88,8 +87,8 @@ def _get_horizons_elements(
     ----------
     object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time`
-        Astropy time object at which to gather state vectors.
+    times : Timestamp
+        Time at which to gather state vectors.
     location : str, optional
         Location of the origin typically a NAIF code.
         ('0' or '@ssb' for solar system barycenter, '10' or '@sun' for heliocenter)
@@ -110,7 +109,7 @@ def _get_horizons_elements(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.tdb.mjd,
+            epochs=times.rescale("tdb").mjd(),
             location=location,
             id_type=id_type,
         )
@@ -131,7 +130,7 @@ def _get_horizons_elements(
 
 def _get_horizons_ephemeris(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     location: str,
     id_type: str = "smallbody",
 ) -> pd.DataFrame:
@@ -143,8 +142,8 @@ def _get_horizons_ephemeris(
     ----------
     object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time`
-        Astropy time object at which to gather state vectors.
+    times : Timestamp
+        Time at which to gather state vectors.
     location : str, optional
         Location of the origin typically a NAIF code or MPC observatory code
     id_type : {'majorbody', 'smallbody', 'designation',
@@ -161,7 +160,7 @@ def _get_horizons_ephemeris(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.utc.mjd,
+            epochs=times.rescale("utc").mjd(),
             location=location,
             id_type=id_type,
         )
@@ -211,7 +210,7 @@ def query_horizons_ephemeris(
     for observatory_code, observers_i in observers.iterate_codes():
         ephemeris = _get_horizons_ephemeris(
             object_ids,
-            observers_i.coordinates.time.to_astropy(),
+            observers_i.coordinates.time,
             observatory_code,
         )
         dfs.append(ephemeris)
@@ -227,7 +226,7 @@ def query_horizons_ephemeris(
 
 def query_horizons(
     object_ids: Union[List, npt.ArrayLike],
-    times: Time,
+    times: Timestamp,
     coordinate_type: str = "cartesian",
     location: str = "@sun",
     id_type: str = "smallbody",
@@ -240,8 +239,8 @@ def query_horizons(
     ----------
     object_ids : npt.ArrayLike (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time` (M)
-        Astropy time object at which to gather state vectors.
+    times : Timestamp (M)
+        Time at which to gather state vectors.
     coordinate_type : {'cartesian', 'keplerian', 'cometary'}
         Type of orbital elements to return.
     location : str, optional
@@ -268,9 +267,7 @@ def query_horizons(
             aberrations=aberrations,
         )
 
-        times = Times.from_astropy(
-            Time(vectors["datetime_jd"].values, scale="tdb", format="jd")
-        )
+        times = Timestamp.from_jd(vectors["datetime_jd"].values, scale="tdb")
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
         coordinates = CartesianCoordinates.from_kwargs(
@@ -299,8 +296,9 @@ def query_horizons(
             id_type=id_type,
         )
 
-        times = Times.from_astropy(
-            Time(elements["datetime_jd"].values, scale="tdb", format="jd")
+        times = Timestamp.from_jd(
+            elements["datetime_jd"].values,
+            scale="tdb",
         )
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
@@ -332,10 +330,8 @@ def query_horizons(
             id_type=id_type,
         )
 
-        tp = Time(elements["Tp_jd"].values, scale="tdb", format="jd")
-        times = Times.from_astropy(
-            Time(elements["datetime_jd"].values, scale="tdb", format="jd")
-        )
+        tp = Timestamp.from_jd(elements["Tp_jd"].values, scale="tdb")
+        times = Timestamp.from_jd(elements["datetime_jd"].values, scale="tdb")
         origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
         frame = "ecliptic"
         coordinates = CometaryCoordinates.from_kwargs(
@@ -345,7 +341,7 @@ def query_horizons(
             i=elements["incl"].values,
             raan=elements["Omega"].values,
             ap=elements["w"].values,
-            tp=tp.tdb.mjd,
+            tp=tp.mjd(),
             origin=origin,
             frame=frame,
         )

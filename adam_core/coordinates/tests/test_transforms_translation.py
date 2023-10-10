@@ -1,11 +1,10 @@
 import numpy as np
 from astropy import units as u
-from astropy.time import Time
 from quivr.concat import concatenate
 
+from ...time import Timestamp
 from ..cartesian import CartesianCoordinates
 from ..origin import Origin, OriginCodes
-from ..times import Times
 from ..transform import cartesian_to_origin, transform_coordinates
 
 
@@ -37,8 +36,9 @@ def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
         vx=orbital_elements["vx"].values,
         vy=orbital_elements["vy"].values,
         vz=orbital_elements["vz"].values,
-        time=Times.from_astropy(
-            Time(orbital_elements["mjd_tdb"].values, format="mjd", scale="tdb")
+        time=Timestamp.from_mjd(
+            orbital_elements["mjd_tdb"].values,
+            scale="tdb",
         ),
         frame="ecliptic",
         origin=Origin.from_kwargs(code=["SUN" for i in range(len(orbital_elements))]),
@@ -51,12 +51,9 @@ def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
         vx=orbital_elements_barycentric["vx"].values,
         vy=orbital_elements_barycentric["vy"].values,
         vz=orbital_elements_barycentric["vz"].values,
-        time=Times.from_astropy(
-            Time(
-                orbital_elements_barycentric["mjd_tdb"].values,
-                format="mjd",
-                scale="tdb",
-            )
+        time=Timestamp.from_mjd(
+            orbital_elements_barycentric["mjd_tdb"].values,
+            scale="tdb",
         ),
         frame="ecliptic",
         origin=Origin.from_kwargs(
@@ -137,8 +134,9 @@ def test_transform_coordinates_origin(orbital_elements, orbital_elements_barycen
         vx=orbital_elements["vx"].values,
         vy=orbital_elements["vy"].values,
         vz=orbital_elements["vz"].values,
-        time=Times.from_astropy(
-            Time(orbital_elements["mjd_tdb"].values, format="mjd", scale="tdb")
+        time=Timestamp.from_mjd(
+            orbital_elements["mjd_tdb"].values,
+            scale="tdb",
         ),
         frame="ecliptic",
         origin=Origin.from_kwargs(code=["SUN" for i in range(len(orbital_elements))]),
@@ -151,12 +149,9 @@ def test_transform_coordinates_origin(orbital_elements, orbital_elements_barycen
         vx=orbital_elements_barycentric["vx"].values,
         vy=orbital_elements_barycentric["vy"].values,
         vz=orbital_elements_barycentric["vz"].values,
-        time=Times.from_astropy(
-            Time(
-                orbital_elements_barycentric["mjd_tdb"].values,
-                format="mjd",
-                scale="tdb",
-            )
+        time=Timestamp.from_mjd(
+            orbital_elements_barycentric["mjd_tdb"].values,
+            scale="tdb",
         ),
         frame="ecliptic",
         origin=Origin.from_kwargs(

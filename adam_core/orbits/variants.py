@@ -104,13 +104,13 @@ class VariantOrbits(qv.Table):
             self,
             left_keys={
                 "orbit_id": orbits.orbit_id,
-                "jd1": orbits.coordinates.time.jd1,
-                "jd2": orbits.coordinates.time.jd2,
+                "day": orbits.coordinates.time.days,
+                "millis": orbits.coordinates.time.millis(),
             },
             right_keys={
                 "orbit_id": self.orbit_id,
-                "jd1": self.coordinates.time.jd1,
-                "jd2": self.coordinates.time.jd2,
+                "day": self.coordinates.time.days,
+                "millis": self.coordinates.time.millis(),
             },
         )
 
@@ -140,8 +140,8 @@ class VariantOrbits(qv.Table):
 
             key = link.key(
                 orbit_id=orbit.orbit_id[0].as_py(),
-                jd1=orbit.coordinates.time.jd1[0].as_py(),
-                jd2=orbit.coordinates.time.jd2[0].as_py(),
+                day=orbit.coordinates.time.days[0].as_py(),
+                millis=orbit.coordinates.time.millis()[0].as_py(),
             )
             variants = link.select_right(key)
 

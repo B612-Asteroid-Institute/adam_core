@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from astropy.time import Time
 
 from ...coordinates.origin import OriginCodes
+from ...time import Timestamp
 from ...utils import get_perturber_state
 
 
@@ -38,7 +38,7 @@ def test_benchmark_get_perturber_state(benchmark, times, perturber, frame, origi
     times_array = np.concatenate(
         [np.arange(60000, 60000 + np.minimum(times, 1000), 1) for i in range(repeats)]
     )
-    times_array = Time(np.sort(times_array), format="mjd", scale="tdb")
+    times_array = Timestamp.from_mjd(np.sort(times_array), scale="tdb")
 
     result = benchmark(
         get_perturber_state,

@@ -14,6 +14,9 @@ SCALES = {
     "tdb",
 }
 
+# The Modified Julian Date of the J2000 epoch in TDB scale:
+_J2000_TDB_MJD = 51544.5
+
 
 class Timestamp(qv.Table):
     # Scale, the rate at which time passes:
@@ -36,6 +39,44 @@ class Timestamp(qv.Table):
 
     def mjd(self) -> pa.lib.DoubleArray:
         return pc.add(self.days, self.fractional_days())
+
+    def jd(self) -> pa.lib.DoubleArray:
+        return pc.add(self.mjd(), 2400000.5)
+
+    def et(self) -> pa.lib.DoubleArray:
+        """
+        Returns the times as ET seconds in a pyarrow array.
+        """
+        tdb = self.rescale("tdb")
+
+        mjd = tdb.mjd()
+        return pc.multiply(pc.subtract(mjd, _J2000_TDB_MJD), 86400)
+
+    def to_numpy(self) -> np.ndarray:
+        """
+        Returns the times as TDB MJDs in a numpy array.
+        """
+        return self.rescale("tdb").mjd().to_numpy(False)
+
+    @classmethod
+    def from_iso8601(
+        cls, iso: pa.lib.StringArray | list[str], scale="utc"
+    ) -> Timestamp:
+        """
+        Create a Timestamp from ISO 8601 strings (for example, '2020-01-02T14:15:16').
+        """
+        return cls.from_astropy(astropy.time.Time(iso, format="isot", scale=scale))
+
+    @classmethod
+    def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
+        days = pc.floor(mjd)
+        fractional_days = pc.subtract(mjd, days)
+        nanos = pc.cast(pc.round(pc.multiply(fractional_days, 86400 * 1e9)), pa.int64())
+        return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
+
+    @classmethod
+    def from_jd(cls, jd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
+        return cls.from_mjd(pc.subtract(jd, 2400000.5), scale)
 
     def fractional_days(self) -> pa.lib.DoubleArray:
         return pc.divide(self.nanos, 86400 * 1e9)
@@ -224,7 +265,9 @@ class Timestamp(qv.Table):
         v2 = v1.set_column("nanos", nanos)
         return v2
 
-    def add_seconds(self, seconds: pa.lib.Int64Array | int) -> Timestamp:
+    def add_seconds(
+        self, seconds: pa.lib.Int64Array | int | pa.DoubleArray | float
+    ) -> Timestamp:
         """
         Add seconds to the timestamp. Negative seconds are supported.
 
@@ -239,7 +282,8 @@ class Timestamp(qv.Table):
             a 'check_range' parameter that allows the caller to disable range
             checking for performance reasons.
         """
-        return self.add_nanos(pc.multiply(seconds, 1_000_000_000))
+        nanos = pc.cast(pc.round(pc.multiply(seconds, 1_000_000_000)), pa.int64())
+        return self.add_nanos(nanos)
 
     def add_millis(self, millis: pa.lib.Int64Array | int) -> Timestamp:
         """
@@ -257,7 +301,8 @@ class Timestamp(qv.Table):
             a 'check_range' parameter that allows the caller to disable range
             checking for performance reasons.
         """
-        return self.add_nanos(pc.multiply(millis, 1_000_000))
+        nanos = pc.cast(pc.round(pc.multiply(millis, 1_000_000)), pa.int64())
+        return self.add_nanos(nanos)
 
     def add_micros(self, micros: pa.lib.Int64Array | int) -> Timestamp:
         """
@@ -275,7 +320,8 @@ class Timestamp(qv.Table):
             a 'check_range' parameter that allows the caller to disable range
             checking for performance reasons.
         """
-        return self.add_nanos(pc.multiply(micros, 1_000))
+        nanos = pc.cast(pc.round(pc.multiply(micros, 1_000)), pa.int64())
+        return self.add_nanos(nanos)
 
     def add_days(self, days: pa.lib.Int64Array | int) -> Timestamp:
         """Add days to the timestamp.
@@ -288,6 +334,26 @@ class Timestamp(qv.Table):
 
         """
         return self.set_column("days", pc.add(self.days, days))
+
+    def add_fractional_days(
+        self, fractional_days: pa.lib.DoubleArray | float
+    ) -> Timestamp:
+        """
+        Add fractional days to the timestamp.
+
+        Parameters
+        ----------
+        fractional_days : The fractional days to add. Can be a scalar
+            or an array of the same length as the timestamp. Use
+            negative values to subtract fractional days.
+        """
+        day_part = pc.floor(fractional_days)
+        nano_part = pc.subtract(fractional_days, day_part)
+
+        days = pc.cast(day_part, pa.int64())
+        nanos = pc.cast(pc.multiply(nano_part, 86400 * 1e9), pa.int64())
+
+        return self.add_days(days).add_nanos(nanos)
 
     def difference_scalar(
         self, days: int, nanos: int
@@ -372,6 +438,31 @@ class Timestamp(qv.Table):
             days1,
         )
         return days2, nanos2
+
+    def unique(self) -> Timestamp:
+        """Return a new Timestamp table containing only the unique
+        elements from self. Order is not necessarily preserved.
+
+        """
+        uniqued = self.table.group_by(["days", "nanos"]).aggregate([])
+        uniqued = uniqued.replace_schema_metadata(self.table.schema.metadata)
+        return Timestamp.from_pyarrow(uniqued)
+
+    def rescale(self, new_scale: str) -> Timestamp:
+        if self.scale == new_scale:
+            return self
+        elif new_scale == "tai":
+            return Timestamp.from_astropy(self.to_astropy().tai)
+        elif new_scale == "utc":
+            return Timestamp.from_astropy(self.to_astropy().utc)
+        elif new_scale == "tt":
+            return Timestamp.from_astropy(self.to_astropy().tt)
+        elif new_scale == "ut1":
+            return Timestamp.from_astropy(self.to_astropy().ut1)
+        elif new_scale == "tdb":
+            return Timestamp.from_astropy(self.to_astropy().tdb)
+        else:
+            raise ValueError("Unknown scale: {}".format(new_scale))
 
 
 def _duration_arrays_within_tolerance(

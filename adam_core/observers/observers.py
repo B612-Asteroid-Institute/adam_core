@@ -3,12 +3,12 @@ from typing import Union
 
 import pandas as pd
 import quivr as qv
-from astropy.time import Time
 from mpc_obscodes import mpc_obscodes
 from typing_extensions import Self
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
+from ..time import Timestamp
 
 
 class ObservatoryGeodetics(qv.Table):
@@ -53,7 +53,7 @@ class Observers(qv.Table):
     coordinates = CartesianCoordinates.as_column()
 
     @classmethod
-    def from_code(cls, code: Union[str, OriginCodes], times: Time) -> Self:
+    def from_code(cls, code: Union[str, OriginCodes], times: Timestamp) -> Self:
         """
         Instantiate an Observers table with a single code and multiple times.
         Times do not need to be unique. The observer state will be calculated
@@ -69,7 +69,7 @@ class Observers(qv.Table):
         ----------
         code : Union[str, OriginCodes]
             MPC observatory code or NAIF origin code for which to find the states.
-        times : `~astropy.time.core.Time` (N)
+        times : Timetamp (N)
             Epochs for which to find the observatory locations.
 
         Returns
@@ -80,9 +80,9 @@ class Observers(qv.Table):
         Examples
         --------
         >>> import numpy as np
-        >>> from astropy.time import Time
+        >>> from adam_core.time import Timestamp
         >>> from adam_core.observers import Observers
-        >>> times = Time(np.arange(59000, 59000 + 100), scale="tdb", format="mjd")
+        >>> times = Timestamp.from_mjd(np.arange(59000, 59000 + 100), scale="tdb")
         >>> observers = Observers.from_code("X05", times)
         """
         from .state import get_observer_state

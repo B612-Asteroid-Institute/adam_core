@@ -1,8 +1,6 @@
-from astropy.time import Time
-
 from ...coordinates import CartesianCoordinates
 from ...coordinates.origin import Origin
-from ...coordinates.times import Times
+from ...time import Timestamp
 from ...utils.helpers import orbits as orbits_helpers
 from ..orbits import Orbits
 
@@ -15,7 +13,7 @@ def test_orbits__init__():
         vx=[0.005],
         vy=[-0.005],
         vz=[0.0002],
-        time=Times.from_astropy(Time([59000.0], scale="tdb", format="mjd")),
+        time=Timestamp.from_mjd([59000.0], scale="tdb"),
         origin=Origin.from_kwargs(code=["SUN"]),
         frame="ecliptic",
     )
@@ -26,8 +24,8 @@ def test_orbits__init__():
 
     assert orbits.orbit_id[0].as_py() == "1"
     assert orbits.object_id[0].as_py() == "Test Orbit"
-    assert orbits.coordinates.time.jd1.to_numpy()[0] == 2459000.0
-    assert orbits.coordinates.time.jd2.to_numpy()[0] == 0.5
+    assert orbits.coordinates.time.days.to_numpy()[0] == 59000
+    assert orbits.coordinates.time.nanos.to_numpy()[0] == 0
     assert orbits.coordinates.time.scale == "tdb"
     assert orbits.coordinates.x.to_numpy()[0] == 0.5
     assert orbits.coordinates.y.to_numpy()[0] == 0.5

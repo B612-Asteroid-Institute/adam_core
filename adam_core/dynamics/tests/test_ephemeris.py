@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 import quivr as qv
 from astropy import units as u
-from astropy.time import Time
 
 from ...observers import Observers
+from ...time import Timestamp
 from ..ephemeris import generate_ephemeris_2body
 
 OBJECT_IDS = [
@@ -81,9 +81,8 @@ def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
         observatory_mask = ephemeris_orbit["observatory_code"] == observatory_code
         observer_i = Observers.from_code(
             observatory_code,
-            Time(
+            Timestamp.from_mjd(
                 ephemeris_orbit[observatory_mask]["mjd_utc"].values,
-                format="mjd",
                 scale="utc",
             ),
         )

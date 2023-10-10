@@ -14,17 +14,13 @@
 
 To define an orbit:
 ```python
-from astropy.time import Time
-
 from adam_core.coordinates import KeplerianCoordinates
-from adam_core.coordinates import Times
 from adam_core.coordinates import Origin
 from adam_core.orbits import Orbits
+from adam_core.time import Timestamp
 
 keplerian_elements = KeplerianCoordinates.from_kwargs(
-    time=Times.from_astropy(
-        Time([59000.0], scale="tdb", format="mjd")
-    ),
+    time=Timestamp.from_mjd([59000.0], scale="tdb"),
     a=[1.0],
     e=[0.002],
     i=[10.],
@@ -47,17 +43,13 @@ can be done on demand by calling `to_cartesian()` on the coordinates object.
 The underlying orbits class is 2 dimensional and can store elements and covariances for multiple orbits.
 
 ```python
-from astropy.time import Time
-
 from adam_core.coordinates import KeplerianCoordinates
-from adam_core.coordinates import Times
 from adam_core.coordinates import Origin
 from adam_core.orbits import Orbits
+from adam_core.time import Timestamp
 
 keplerian_elements = KeplerianCoordinates.from_kwargs(
-    time=Times.from_astropy(
-        Time([59000.0, 60000.0], scale="tdb", format="mjd")
-    ),
+    time=Timestamp.from_mjd([59000.0, 60000.0], scale="tdb"),
     a=[1.0, 3.0],
     e=[0.002, 0.0],
     i=[10., 30.],
@@ -85,18 +77,14 @@ orbits.to_dataframe()
 Orbits can also be defined with uncertainties.
 ```python
 import numpy as np
-from astropy.time import Time
-
 from adam_core.coordinates import KeplerianCoordinates
-from adam_core.coordinates import Times
 from adam_core.coordinates import Origin
 from adam_core.coordinates import CoordinateCovariances
 from adam_core.orbits import Orbits
+from adam_core.time import Timestamp
 
 keplerian_elements = KeplerianCoordinates.from_kwargs(
-    time=Times.from_astropy(
-        Time([59000.0], scale="tdb", format="mjd")
-    ),
+    time=Timestamp.from_mjd([59000.0], scale="tdb"),
     a=[1.0],
     e=[0.002],
     i=[10.],
@@ -122,11 +110,10 @@ orbits.to_dataframe(sigmas=True)
 
 To query orbits from JPL Horizons:
 ```python
-from astropy.time import Time
-
 from adam_core.orbits.query import query_horizons
+from adam_core.time import Timestamp
 
-times = Time([60000.0], scale="tdb", format="mjd")
+times = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, times)
 ```
@@ -160,14 +147,14 @@ The propagator class in `adam_core` provides a generalized interface to the supp
 To propagate orbits with PYOORB (here we grab some orbits from Horizons first):
 ```python
 import numpy as np
-from astropy.time import Time
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
 from adam_core.propagator import PYOORB
+from adam_core.time import Timestamp
 
 # Get orbits to propagate
-initial_time = Time([60000.0], scale="tdb", format="mjd")
+initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
@@ -175,7 +162,7 @@ orbits = query_horizons(object_ids, initial_time)
 propagator = PYOORB()
 
 # Define propagation times
-times = initial_time + np.arange(0, 100) * u.d
+times = initial_time.from_mjd(initial_time.mjd() + np.arange(0, 100))
 
 # Propagate orbits! This function supports multiprocessing for large
 # propagation jobs.
@@ -192,15 +179,15 @@ The propagator class can also be used to generate ephemerides for a set of orbit
 
 ```python
 import numpy as np
-from astropy.time import Time
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
 from adam_core.propagator import PYOORB
 from adam_core.observers import Observers
+from adam_core.time import Timestamp
 
 # Get orbits to propagate
-initial_time = Time([60000.0], scale="tdb", format="mjd")
+initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
@@ -208,7 +195,7 @@ orbits = query_horizons(object_ids, initial_time)
 propagator = PYOORB()
 
 # Define a set of observers and observation times
-times = initial_time + np.arange(0, 100) * u.d
+times = Timestamp.from_mjd(initial_time.mjd() + np.arange(0, 100))
 observers = Observers.from_code("I11", times)
 
 # Generate ephemerides! This function supports multiprocessing for large
@@ -228,14 +215,14 @@ ephemeris = propagator.generate_ephemeris(
 Getting the heliocentric ecliptic state vector of a DE440 body at a given set of times (in this case the barycenter of the Jovian system):
 ```python
 import numpy as np
-from astropy.time import Time
 
 from adam_core.coordinates import OriginCodes
 from adam_core.utils import get_perturber_state
+from adam_core.time import Timestamp
 
 states = get_perturber_state(
     OriginCodes.JUPITER_BARYCENTER,
-    Time(np.arange(59000, 60000), format="mjd", scale="tdb"),
+    Timetamp.from_mjd(np.arange(59000, 60000), scale="tdb"),
     frame="ecliptic",
     origin=OriginCodes.SUN,
 )
@@ -245,18 +232,18 @@ states = get_perturber_state(
 `adam_core` also has 2-body propagation functionality. To propagate any orbit with 2-body dynamics:
 ```python
 import numpy as np
-from astropy.time import Time
 from astropy import units as u
 
 from adam_core.orbits.query import query_sbdb
 from adam_core.dynamics import propagate_2body
+from adam_core.time import Timestamp
 
 # Get orbit to propagate
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_sbdb(object_ids)
 
 # Define propagation times
-times = Time(np.arange(59000, 60000), scale="tdb", format="mjd")
+times = Timestamp.from_mjd(np.arange(59000, 60000), scale="tdb")
 
 # Propagate orbits with 2-body dynamics
 propagated_orbits = propagate_2body(

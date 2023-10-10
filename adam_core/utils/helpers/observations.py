@@ -4,10 +4,10 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
-from ...coordinates import Times
 from ...observations.associations import Associations
 from ...observations.detections import PointSourceDetections
 from ...observations.exposures import Exposures
+from ...time import Timestamp
 
 
 def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]:
@@ -107,7 +107,7 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]
     # Create exposures table
     exposures = Exposures.from_kwargs(
         id=exposures["exposure_id"],
-        start_time=Times.from_mjd(exposures["exposure_start"].values, scale="utc"),
+        start_time=Timestamp.from_mjd(exposures["exposure_start"].values, scale="utc"),
         duration=exposures["duration"].values,
         filter=exposures["filter"].values,
         observatory_code=exposures["observatory_code"].values,
@@ -117,7 +117,7 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]
     detections = PointSourceDetections.from_kwargs(
         id=detections["detection_id"],
         exposure_id=detections["exposure_id"],
-        time=Times.from_mjd(detections["mjd_utc"].values, scale="utc"),
+        time=Timestamp.from_mjd(detections["mjd_utc"].values, scale="utc"),
         ra=detections["ra"].values,
         dec=detections["dec"].values,
         mag=detections["mag"].values,

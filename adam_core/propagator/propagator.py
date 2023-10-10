@@ -4,12 +4,12 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Union
 
 import quivr as qv
-from astropy.time import Time
 
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantOrbits
+from ..time import Timestamp
 from .utils import _iterate_chunks, sort_propagated_orbits
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ OrbitType = Union[Orbits, VariantOrbits]
 
 
 def propagation_worker(
-    orbits: OrbitType, times: Time, propagator: "Propagator"
+    orbits: OrbitType, times: Timestamp, propagator: "Propagator"
 ) -> Orbits:
     propagated = propagator._propagate_orbits(orbits, times)
     return propagated
@@ -44,7 +44,7 @@ class Propagator(ABC):
     """
 
     @abstractmethod
-    def _propagate_orbits(self, orbits: OrbitType, times: Time) -> OrbitType:
+    def _propagate_orbits(self, orbits: OrbitType, times: Timestamp) -> OrbitType:
         """
         Propagate orbits to times.
 
@@ -55,7 +55,7 @@ class Propagator(ABC):
     def propagate_orbits(
         self,
         orbits: Orbits,
-        times: Time,
+        times: Timestamp,
         covariance: bool = False,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
@@ -67,7 +67,7 @@ class Propagator(ABC):
         ----------
         orbits : `~adam_core.orbits.orbits.Orbits` (N)
             Orbits to propagate.
-        times : `~astropy.time.core.Time` (M)
+        times : Timestamp (M)
             Times to which to propagate orbits.
         covariance: bool, optional
             Propagate the covariance matrices of the orbits. This is done by sampling the

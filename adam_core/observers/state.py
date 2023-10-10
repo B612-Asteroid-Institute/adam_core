@@ -1,14 +1,14 @@
 from typing import Literal, Union
 
 import numpy as np
+import pyarrow.compute as pc
 import spiceypy as sp
-from astropy.time import Time
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
-from ..coordinates.times import Times
-from ..utils.spice import _jd_tdb_to_et, get_perturber_state, setup_SPICE
+from ..time import Timestamp
+from ..utils.spice import get_perturber_state, setup_SPICE
 from .observers import OBSERVATORY_CODES, OBSERVATORY_GEODETICS
 
 R_EARTH = c.R_EARTH
@@ -18,7 +18,7 @@ Z_AXIS = np.array([0, 0, 1])
 
 def get_observer_state(
     code: Union[str, OriginCodes],
-    times: Time,
+    times: Timestamp,
     frame: Literal["ecliptic", "equatorial"] = "ecliptic",
     origin: OriginCodes = OriginCodes.SUN,
 ) -> CartesianCoordinates:
@@ -40,7 +40,7 @@ def get_observer_state(
     ----------
     code : Union[str, OriginCodes]
         MPC observatory code or NAIF origin code for which to find the states.
-    observation_times : `~astropy.time.core.Time` (N)
+    times : Timestamp (N)
         Epochs for which to find the observatory locations.
     frame : {'equatorial', 'ecliptic'}
         Return observer state in the equatorial or ecliptic J2000 frames.
@@ -118,18 +118,16 @@ def get_observer_state(
             # Multiply pointing vector with Earth radius to get actual vector
             o_vec_ITRF93 = np.dot(R_EARTH, o_hat_ITRF93)
 
-            # Warning! Converting times to jd will incur a loss of precision.
-            epochs_tdb = times.tdb.jd
-            unique_epochs_tdb = np.unique(epochs_tdb)
+            # Warning! Converting times to ET will incur a loss of precision.
+            epochs_et = times.rescale("tdb").et()
+            unique_epochs_et_tdb = epochs_et.unique()
 
-            N = len(epochs_tdb)
+            N = len(epochs_et)
             r_obs = np.empty((N, 3), dtype=np.float64)
             v_obs = np.empty((N, 3), dtype=np.float64)
             r_geo = state.r
             v_geo = state.v
-            for epoch_tdb in unique_epochs_tdb:
-                # Convert MJD epoch in TDB to ET in TDB
-                epoch_et = _jd_tdb_to_et(epoch_tdb)
+            for epoch in unique_epochs_et_tdb:
                 # Grab rotation matrices from ITRF93 to ecliptic J2000
                 # The ITRF93 high accuracy Earth rotation model takes into account:
                 # Precession:  1976 IAU model from Lieske.
@@ -137,10 +135,10 @@ def get_observer_state(
                 # True sidereal time using accurate values of TAI-UT1
                 # Polar motion
 
-                rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch_et)
+                rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch.as_py())
 
                 # Find indices of epochs that match the current unique epoch
-                mask = np.where(epochs_tdb == epoch_tdb)[0]
+                mask = pc.equal(epochs_et, epoch).to_numpy(False)
 
                 # Add o_vec + r_geo to get r_obs (thank you numpy broadcasting)
                 r_obs[mask] = r_geo[mask] + rotation_matrix @ o_vec_ITRF93
@@ -152,7 +150,7 @@ def get_observer_state(
                 )
 
         return CartesianCoordinates.from_kwargs(
-            time=Times.from_astropy(times),
+            time=times,
             x=r_obs[:, 0],
             y=r_obs[:, 1],
             z=r_obs[:, 2],
