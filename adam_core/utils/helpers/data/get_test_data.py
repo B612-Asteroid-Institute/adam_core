@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import quivr as qv
-from astropy.time import Time
 
 from adam_core.observers import Observers
 from adam_core.orbits import Orbits
@@ -14,10 +13,11 @@ from adam_core.orbits.query.horizons import (
     _get_horizons_elements,
     _get_horizons_vectors,
 )
+from adam_core.time import Timestamp
 
 
 def _get_orbital_elements(
-    object_ids: List[str], time: Time, location: str, refplane: str = "ecliptic"
+    object_ids: List[str], time: Timestamp, location: str, refplane: str = "ecliptic"
 ) -> pd.DataFrame:
     """
     Get orbital elements as Cartesian, Cometary, and Keplerian representations from JPL Horizons.
@@ -26,7 +26,7 @@ def _get_orbital_elements(
     ----------
     object_id : List[str]
         Object IDs to
-    epoch : `~astropy.time.core.Time`
+    epoch : Timestamp
         Epoch at which to query orbital elements.
     location : str
         Location of the observer (in this case typically "@sun" or "@ssb"
@@ -78,12 +78,12 @@ def _get_orbital_elements(
     horizons_elements = vectors_df.merge(elements_df, on=["targetname", "datetime_jd"])
 
     horizons_elements.insert(
-        1, "mjd_tdb", Time(horizons_elements["datetime_jd"], format="jd").mjd
+        1, "mjd_tdb", Timestamp.from_jd(horizons_elements["datetime_jd"]).mjd()
     )
     horizons_elements.insert(
         len(horizons_elements.columns),
         "tp_mjd",
-        Time(horizons_elements["Tp_jd"], format="jd").mjd,
+        Timestamp.from_jd(horizons_elements["Tp_jd"]).mjd(),
     )
     horizons_elements.drop(columns=["datetime_jd", "Tp_jd"], inplace=True)
     return horizons_elements
@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
                 horizons_elements_df = _get_orbital_elements(
                     [prov_designation],
-                    orbit.coordinates.time.to_astropy(),
+                    orbit.coordinates.time,
                     location=origin,
                     refplane=refplane,
                 )

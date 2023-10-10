@@ -5,13 +5,12 @@ generated with the following code:
 
 ```python
 import numpy as np
-from astropy.time import Time
 from astroquery.jplhorizons import Horizons
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import Origin, OriginCodes
-from adam_core.coordinates.times import Times
+from adam_core.time import Timestamp
 
 observatory_codes = ["I41", "X05", "F51", "W84", "000", "500"]
 times = Time(
@@ -32,7 +31,7 @@ for code in observatory_codes:
 
         # Flip the signs of the state to get the state of the observer
         states = CartesianCoordinates.from_kwargs(
-            time=Times.from_astropy(Time(result["datetime_jd"].values, format="jd", scale="tdb")),
+            time=Timestamp.from_jd(result["datetime_jd"].values, scale="tdb"),
             x=-result["x"].values,
             y=-result["y"].values,
             z=-result["z"].values,

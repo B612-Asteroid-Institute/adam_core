@@ -30,8 +30,8 @@ def _get_horizons_vectors(
     ----------
     object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time` (M)
-        Astropy time object at which to gather state vectors.
+    times : Timestamp (M)
+        Time at which to gather state vectors.
     location : str, optional
         Location of the origin typically a NAIF code.
         ('0' or '@ssb' for solar system barycenter, '10' or '@sun' for heliocenter)
@@ -88,8 +88,8 @@ def _get_horizons_elements(
     ----------
     object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time`
-        Astropy time object at which to gather state vectors.
+    times : Timestamp
+        Time at which to gather state vectors.
     location : str, optional
         Location of the origin typically a NAIF code.
         ('0' or '@ssb' for solar system barycenter, '10' or '@sun' for heliocenter)
@@ -143,8 +143,8 @@ def _get_horizons_ephemeris(
     ----------
     object_ids : Union[List, `~numpy.ndarray`] (N)
         Object IDs / designations recognizable by HORIZONS.
-    times : `~astropy.core.time.Time`
-        Astropy time object at which to gather state vectors.
+    times : Timestamp
+        Time at which to gather state vectors.
     location : str, optional
         Location of the origin typically a NAIF code or MPC observatory code
     id_type : {'majorbody', 'smallbody', 'designation',
@@ -241,7 +241,7 @@ def query_horizons(
     object_ids : npt.ArrayLike (N)
         Object IDs / designations recognizable by HORIZONS.
     times : Timestamp (M)
-        Astropy time object at which to gather state vectors.
+        Time at which to gather state vectors.
     coordinate_type : {'cartesian', 'keplerian', 'cometary'}
         Type of orbital elements to return.
     location : str, optional

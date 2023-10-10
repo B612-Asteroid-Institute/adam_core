@@ -31,7 +31,7 @@ J2000_TDB_JD = 2451545.0
 
 def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
     """
-    Convert an astropy Time object to an ephemeris time (ET) in seconds.
+    Convert TDB-scaled JD times to an ephemeris time (ET) in seconds.
 
     Parameters
     ----------
