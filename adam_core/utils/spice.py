@@ -120,9 +120,9 @@ def get_perturber_state(
     # Convert epochs to ET in TDB
     epochs_et = times.rescale("tdb").et()
     unique_epochs_et = epochs_et.unique()
-
+    N = len(times)
     # Get position of the body in km and km/s in the desired frame and measured from the desired origin
-    states = np.empty((len(times), 6), dtype=np.float64)
+    states = np.empty((N, 6), dtype=np.float64)
 
     for i, epoch in enumerate(unique_epochs_et):
         mask = pc.equal(epochs_et, epoch).to_numpy(False)

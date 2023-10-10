@@ -2,7 +2,6 @@ from typing import List, Union
 
 import numpy.typing as npt
 import pandas as pd
-import pyarrow as pa
 from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
