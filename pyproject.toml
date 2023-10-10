@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "adam_core"
 version = "0.1.0"
@@ -17,9 +21,104 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+dependencies = [
+  "astropy",
+  "astroquery",
+  "healpy",
+  "jax",
+  "jaxlib",
+  "numpy==1.24.4",
+  "pyarrow>=13.0.0",
+
+  # Pending a release of oorb which includes https://github.com/oorb/oorb/pull/177:
+  "pyoorb@git+https://github.com/spenczar/oorb.git@python-sdist",
+
+  "pandas",
+  "requests",
+  "scipy",
+  "spiceypy",
+  "quivr>=0.7.1",
+  "mpc-obscodes",
+  "naif-de440",
+  "naif-leapseconds",
+  "naif-eop-high-prec",
+  "naif-eop-predict",
+  "naif-eop-historical",
+  "naif-earth-itrf93"
+]
+
 [project.urls]
 "Homepage" = "https://github.com/b612-asteroid-institute/adam_core"
 
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+[tool.hatch.build.targets.sdist]
+include = [
+  "/adam_core",
+]
+
+[tool.hatch.metadata]
+# Temporary while pyoorb is referenced via git direct ref
+allow-direct-references = true
+
+[tool.hatch.version]
+path = "adam_core/__version__.py"
+
+[tool.hatch.envs.dev]
+dependencies = [
+  "black",
+  "isort",
+  "mypy",
+  "pytest",
+  "pytest-cov",
+  "pytest-benchmark",
+  "pre-commit",
+  "ruff",
+  "ipython"
+]
+
+[tool.hatch.envs.dev.scripts]
+check = [
+  "lint",
+  "typecheck",
+  "test",
+]
+fix = [
+  "ruff ./adam_core --fix"
+]
+lint = [
+  "ruff ./adam_core",
+  "black --check ./adam_core",
+  "isort --check-only ./adam_core",
+]
+format = [
+  "black ./adam_core ./test",
+  "isort ./adam_core ./test"
+]
+typecheck = [
+  "mypy --strict ./adam_core"
+]
+test = [
+  "pytest --benchmark-disable ./adam_core {args}",
+]
+doctest = [
+  "pytest --doctest-modules ./adam_core {args}"
+]
+benchmark = [
+  "pytest --benchmark-only ./adam_core {args}"
+]
+
+[tool.black]
+line-length = 110
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+ignore = [
+  "W503",
+  "E203"
+]
+exclude = [
+  "build"
+]
