@@ -557,3 +557,57 @@ def test_Timestamp_link(rescale):
     assert left_table.nanos.to_pylist() == [4, 4]
     assert right_table.days.to_pylist() == [68020]
     assert right_table.nanos.to_pylist() == [4]
+
+
+def test_Timestamp_link_precision():
+    # Test that the link method works as expected with user defined precisions
+    time = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[9, 99, 999, 9_999, 99_999, 999_999, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+
+    # 1 nano per nano :)
+    time_ns = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[9, 99, 999, 9_999, 99_999, 999_999, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+    linkage = time.link(time_ns, precision="ns")
+    assert len(linkage.all_unique_values) == 8
+
+    # 1_000 nanos per micro
+    time_micros = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[0, 0, 0, 9_999, 99_999, 999_999, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+    linkage = time.link(time_micros, precision="us")
+    assert len(linkage.all_unique_values) == 6
+
+    # 1_000_000 nanos per milli
+    time_millis = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[0, 0, 0, 0, 0, 0, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+    linkage = time.link(time_millis, precision="ms")
+    assert len(linkage.all_unique_values) == 3
+
+    # 1_000_000_000 nanos per second
+    time_s = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ],
+        scale="tdb",
+    )
+    linkage = time.link(time_s, precision="s")
+    assert len(linkage.all_unique_values) == 1
