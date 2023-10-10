@@ -105,6 +105,9 @@ doctest = [
 benchmark = [
   "pytest --benchmark-only ./adam_core {args}"
 ]
+coverage = [
+  "pytest ./adam_core --cov --cov-report xml"
+]
 
 [tool.black]
 line-length = 110
