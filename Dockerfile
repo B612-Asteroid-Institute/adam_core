@@ -24,6 +24,12 @@ RUN pip install hatch
 
 # Install adam_core
 ADD . /code/
-RUN hatch run dev:test
-ENTRYPOINT hatch shell dev
+WORKDIR /code
+
+RUN apt-get update -y && apt-get install -y gfortran liblapack-dev
+
+# Force installation of deps by running a command in the 'dev' environment
+RUN hatch -v run dev true
+
+
 

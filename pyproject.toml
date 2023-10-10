@@ -27,7 +27,7 @@ dependencies = [
   "healpy",
   "jax",
   "jaxlib",
-  "numpy==1.24.4",
+  "numpy<1.25",
   "pyarrow>=13.0.0",
 
   # Pending a release of oorb which includes https://github.com/oorb/oorb/pull/177:
