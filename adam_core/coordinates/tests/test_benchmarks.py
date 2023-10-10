@@ -31,6 +31,11 @@ def test_benchmark_transform_cartesian_coordinates(
     if origin == OriginCodes.SOLAR_SYSTEM_BARYCENTER:
         pytest.skip("barycenter transform not yet implemented")
 
+    if frame == "ecliptic":
+        frame_in = "equatorial"
+    else:
+        frame_in = "ecliptic"
+
     from_coords = CartesianCoordinates.from_kwargs(
         x=np.array([1]),
         y=np.array([1]),
@@ -40,7 +45,7 @@ def test_benchmark_transform_cartesian_coordinates(
         vz=np.array([1]),
         time=Timestamp.from_mjd([50000]),
         origin=Origin.from_kwargs(code=["SUN"]),
-        frame="ecliptic",
+        frame=frame_in,
     )
     benchmark(
         transform_coordinates,

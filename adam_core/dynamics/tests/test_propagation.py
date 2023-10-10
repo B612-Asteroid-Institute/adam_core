@@ -230,8 +230,10 @@ def test_benchmark__propagate_2body(benchmark, orbital_elements):
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
     t0 = orbital_elements["mjd_tdb"].values
+    origin = Origin.from_kwargs(code=["SUN" for i in range(len(orbital_elements))])
+    mu = origin.mu()
 
-    benchmark(_propagate_2body, cartesian_elements[0], t0[0], t0[0] + 1)
+    benchmark(_propagate_2body, cartesian_elements[0], t0[0], t0[0] + 1, mu[0])
 
 
 def test_benchmark__propagate_2body_vmap(benchmark, orbital_elements):
@@ -248,7 +250,7 @@ def test_benchmark__propagate_2body_vmap(benchmark, orbital_elements):
         cartesian_elements[:1],
         t0[:1],
         t0[:1] + 1,
-        mu,
+        mu[:1],
         1000,
         1e-14,
     )
