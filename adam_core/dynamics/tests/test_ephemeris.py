@@ -4,8 +4,8 @@ import quivr as qv
 from astropy import units as u
 
 from ...observers import Observers
+from ...time import Timestamp
 from ..ephemeris import generate_ephemeris_2body
-from ..time import Timestamp
 
 OBJECT_IDS = [
     "594913 'Aylo'chaxnim (2020 AV2)",
