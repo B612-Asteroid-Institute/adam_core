@@ -464,6 +464,36 @@ class Timestamp(qv.Table):
         else:
             raise ValueError("Unknown scale: {}".format(new_scale))
 
+    def link(self, other: Timestamp) -> qv.MultiKeyLinkage[Timestamp, Timestamp]:
+        """
+        Link this Timestamp to another. This function assumes an exact integer match
+        between the days and nanos columns of the two Timestamps.
+
+        If the timescales are different, the other Timestamp will be rescaled to
+        this Timestamp's timescale.
+
+        Parameters
+        ----------
+        other : The Timestamp to link to.
+
+        Returns
+        -------
+        linkage : A MultiKeyLinkage object that can be used to join the two Timestamps.
+        """
+        if self.scale != other.scale:
+            other = other.rescale(self.scale)
+
+        left_keys = {
+            "days": self.days,
+            "nanos": self.nanos,
+        }
+        right_keys = {
+            "days": other.days,
+            "nanos": other.nanos,
+        }
+
+        return qv.MultiKeyLinkage(self, other, left_keys, right_keys)
+
 
 def _duration_arrays_within_tolerance(
     delta_days: pa.Int64Array, delta_nanos: pa.Int64Array, max_nanos_deviation: int

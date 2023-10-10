@@ -502,3 +502,58 @@ class TestUnique:
         assert len(have) == 4
         pairs = zip(have.days.to_pylist(), have.nanos.to_pylist())
         assert sorted(list(pairs)) == [(1, 2), (1, 3), (2, 4), (2, 5)]
+
+
+@pytest.mark.parametrize("rescale", [True, False])
+def test_Timestamp_link(rescale):
+    # Test that the link method works as expected
+    time = Timestamp.from_kwargs(
+        days=[68000, 68000, 68010, 68010, 68020, 68020],
+        nanos=[1, 2, 3, 3, 4, 4],
+        scale="tdb",
+    )
+
+    other = Timestamp.from_kwargs(
+        days=[68000, 68000, 68010, 68020], nanos=[1, 2, 3, 4], scale="tdb"
+    )
+    if rescale:
+        other = other.rescale("utc")
+
+    linkage = time.link(other)
+    assert len(linkage.all_unique_values) == 4
+
+    key = (68000, 1)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 1
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68000]
+    assert left_table.nanos.to_pylist() == [1]
+    assert right_table.days.to_pylist() == [68000]
+    assert right_table.nanos.to_pylist() == [1]
+
+    key = (68000, 2)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 1
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68000]
+    assert left_table.nanos.to_pylist() == [2]
+    assert right_table.days.to_pylist() == [68000]
+    assert right_table.nanos.to_pylist() == [2]
+
+    key = (68010, 3)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 2
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68010, 68010]
+    assert left_table.nanos.to_pylist() == [3, 3]
+    assert right_table.days.to_pylist() == [68010]
+    assert right_table.nanos.to_pylist() == [3]
+
+    key = (68020, 4)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 2
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68020, 68020]
+    assert left_table.nanos.to_pylist() == [4, 4]
+    assert right_table.days.to_pylist() == [68020]
+    assert right_table.nanos.to_pylist() == [4]
