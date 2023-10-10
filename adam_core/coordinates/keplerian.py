@@ -43,7 +43,7 @@ class KeplerianCoordinates(qv.Table):
     time = Timestamp.as_column(nullable=True)
     covariance = CoordinateCovariances.as_column(nullable=True)
     origin = Origin.as_column()
-    frame = qv.StringAttribute()
+    frame = qv.StringAttribute(default="unspecified")
 
     @property
     def values(self) -> np.ndarray:

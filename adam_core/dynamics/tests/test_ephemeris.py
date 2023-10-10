@@ -1,4 +1,5 @@
 import numpy as np
+import pyarrow.compute as pc
 import pytest
 import quivr as qv
 from astropy import units as u
@@ -126,3 +127,13 @@ def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
 
     # Assert that the range is less than the tolerance
     np.testing.assert_array_less(range_diff, range_tolerance)
+
+    # Ephemeris 2-body does not propagate the covariance or provide the
+    # aberrated state so the aberrated coordinates should be empty
+    assert ephemeris_orbit_2body.aberrated_coordinates.frame == "unspecified"
+    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.x)).as_py()
+    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.y)).as_py()
+    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.z)).as_py()
+    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vx)).as_py()
+    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vy)).as_py()
+    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vz)).as_py()
