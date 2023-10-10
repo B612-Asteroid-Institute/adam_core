@@ -502,3 +502,112 @@ class TestUnique:
         assert len(have) == 4
         pairs = zip(have.days.to_pylist(), have.nanos.to_pylist())
         assert sorted(list(pairs)) == [(1, 2), (1, 3), (2, 4), (2, 5)]
+
+
+@pytest.mark.parametrize("rescale", [True, False])
+def test_Timestamp_link(rescale):
+    # Test that the link method works as expected
+    time = Timestamp.from_kwargs(
+        days=[68000, 68000, 68010, 68010, 68020, 68020],
+        nanos=[1, 2, 3, 3, 4, 4],
+        scale="tdb",
+    )
+
+    other = Timestamp.from_kwargs(
+        days=[68000, 68000, 68010, 68020], nanos=[1, 2, 3, 4], scale="tdb"
+    )
+    if rescale:
+        other = other.rescale("utc")
+
+    linkage = time.link(other)
+    assert len(linkage.all_unique_values) == 4
+
+    key = (68000, 1)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 1
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68000]
+    assert left_table.nanos.to_pylist() == [1]
+    assert right_table.days.to_pylist() == [68000]
+    assert right_table.nanos.to_pylist() == [1]
+
+    key = (68000, 2)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 1
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68000]
+    assert left_table.nanos.to_pylist() == [2]
+    assert right_table.days.to_pylist() == [68000]
+    assert right_table.nanos.to_pylist() == [2]
+
+    key = (68010, 3)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 2
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68010, 68010]
+    assert left_table.nanos.to_pylist() == [3, 3]
+    assert right_table.days.to_pylist() == [68010]
+    assert right_table.nanos.to_pylist() == [3]
+
+    key = (68020, 4)
+    left_table, right_table = linkage.select(key)
+    assert len(left_table) == 2
+    assert len(right_table) == 1
+    assert left_table.days.to_pylist() == [68020, 68020]
+    assert left_table.nanos.to_pylist() == [4, 4]
+    assert right_table.days.to_pylist() == [68020]
+    assert right_table.nanos.to_pylist() == [4]
+
+
+def test_Timestamp_link_precision():
+    # Test that the link method works as expected with user defined precisions
+    time = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[9, 99, 999, 9_999, 99_999, 999_999, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+
+    # 1 nano per nano :)
+    time_ns = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[9, 99, 999, 9_999, 99_999, 999_999, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+    linkage = time.link(time_ns, precision="ns")
+    assert len(linkage.all_unique_values) == 8
+
+    # 1_000 nanos per micro
+    time_micros = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[0, 0, 0, 9_999, 99_999, 999_999, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+    linkage = time.link(time_micros, precision="us")
+    assert len(linkage.all_unique_values) == 6
+
+    # 1_000_000 nanos per milli
+    time_millis = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[0, 0, 0, 0, 0, 0, 9_999_999, 99_999_999],
+        scale="tdb",
+    )
+    linkage = time.link(time_millis, precision="ms")
+    assert len(linkage.all_unique_values) == 3
+
+    # 1_000_000_000 nanos per second
+    time_s = Timestamp.from_kwargs(
+        days=[1, 1, 1, 1, 1, 1, 1, 1],
+        nanos=[
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ],
+        scale="tdb",
+    )
+    linkage = time.link(time_s, precision="s")
+    assert len(linkage.all_unique_values) == 1

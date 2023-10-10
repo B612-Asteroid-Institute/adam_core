@@ -464,6 +464,36 @@ class Timestamp(qv.Table):
         else:
             raise ValueError("Unknown scale: {}".format(new_scale))
 
+    def link(
+        self, other: Timestamp, precision: str = "ns"
+    ) -> qv.MultiKeyLinkage[Timestamp, Timestamp]:
+        """
+        Link this Timestamp to another. The default precision is nanoseconds, but if
+        other precisions are desired then both this class and the other Timestamp will
+        be rounded to the desired precision.
+
+        If the timescales are different, the other Timestamp will be rescaled to
+        this Timestamp's timescale.
+
+        Parameters
+        ----------
+        other : The Timestamp to link to.
+        precision : The precision to use when linking. The default is 'ns'.
+
+        Returns
+        -------
+        linkage : A MultiKeyLinkage object that can be used to join the two Timestamps.
+        """
+        if self.scale != other.scale:
+            other = other.rescale(self.scale)
+
+        rounded = self.rounded(precision)
+        other_rounded = other.rounded(precision)
+
+        left_keys = {"days": rounded.days, "nanos": rounded.nanos}
+        right_keys = {"days": other_rounded.days, "nanos": other_rounded.nanos}
+        return qv.MultiKeyLinkage(self, other, left_keys, right_keys)
+
 
 def _duration_arrays_within_tolerance(
     delta_days: pa.Int64Array, delta_nanos: pa.Int64Array, max_nanos_deviation: int
