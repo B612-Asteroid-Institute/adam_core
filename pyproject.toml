@@ -4,7 +4,6 @@ build-backend = "hatchling.build"
 
 [project]
 name = "adam_core"
-version = "0.1.0"
 authors = [
   { name="Kathleen Kiker", email="kathleen@b612foundation.org" },
   { name="Alec Koumjian", email="alec@b612foundation.org" },
@@ -20,6 +19,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dynamic = [ "version" ]
 
 dependencies = [
   "astropy",
