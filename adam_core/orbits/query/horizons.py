@@ -2,13 +2,11 @@ from typing import List, Union
 
 import numpy.typing as npt
 import pandas as pd
-import pyarrow as pa
 from astropy.time import Time
 from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.times import Times
@@ -283,11 +281,6 @@ def query_horizons(
             vx=vectors["vx"].values,
             vy=vectors["vy"].values,
             vz=vectors["vz"].values,
-            covariance=CoordinateCovariances.from_kwargs(
-                values=pa.FixedSizeListArray.from_arrays(
-                    pa.nulls(36 * len(vectors), pa.float64()), 36
-                )
-            ),
             origin=origin,
             frame=frame,
         )
@@ -319,11 +312,6 @@ def query_horizons(
             raan=elements["Omega"].values,
             ap=elements["w"].values,
             M=elements["M"].values,
-            covariance=CoordinateCovariances.from_kwargs(
-                values=pa.FixedSizeListArray.from_arrays(
-                    pa.nulls(36 * len(elements), pa.float64()), 36
-                )
-            ),
             origin=origin,
             frame=frame,
         )
@@ -358,11 +346,6 @@ def query_horizons(
             raan=elements["Omega"].values,
             ap=elements["w"].values,
             tp=tp.tdb.mjd,
-            covariance=CoordinateCovariances.from_kwargs(
-                values=pa.FixedSizeListArray.from_arrays(
-                    pa.nulls(36 * len(elements), pa.float64()), 36
-                )
-            ),
             origin=origin,
             frame=frame,
         )

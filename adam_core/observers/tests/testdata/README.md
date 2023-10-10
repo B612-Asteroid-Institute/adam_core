@@ -41,7 +41,6 @@ for code in observatory_codes:
             vz=-result["vz"].values,
             origin=Origin.from_kwargs(code=[origin.name for _ in range(len(result))]),
             frame="ecliptic",
-            covariance=CoordinateCovariances.from_matrix(np.full((len(result), 6, 6), np.nan)),
         )
         states.to_parquet(f"{code}_{id}.parquet")
 ```

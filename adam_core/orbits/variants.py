@@ -149,7 +149,7 @@ class VariantOrbits(qv.Table):
             mean = orbit.coordinates.values[0]
             covariance = weighted_covariance(
                 mean, samples, variants.weights_cov.to_numpy()
-            )
+            ).reshape(1, 6, 6)
 
             orbit_collapsed = orbit.set_column(
                 "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)

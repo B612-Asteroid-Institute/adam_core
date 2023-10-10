@@ -44,9 +44,7 @@ class CoordinateCovariances(qv.Table):
     #      able to use this class for the covariance matrices of different
     #      measurments like projections (D = 4) and photometry (D = 1).
 
-    # This is temporary while we await the implementation of
-    # https://github.com/apache/arrow/issues/35599
-    values = qv.FixedSizeListColumn(pa.float64(), list_size=36, nullable=True)
+    values = qv.ListColumn(pa.float64(), nullable=True)
     # When fixed, we should revert to:
     # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
@@ -118,10 +116,19 @@ class CoordinateCovariances(qv.Table):
         -------
         covariances : `Covariances`
             Covariance matrices for N coordinates in 6 dimensions.
+
+        Raises
+        ------
+        ValueError : If the covariance matrices are not (N, 6, 6)
         """
         # cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
-        cov = covariances.reshape(-1, 36)
-        return cls.from_kwargs(values=list(cov))
+        if covariances.shape[1:] != (6, 6):
+            raise ValueError(
+                f"Covariance matrices should have shape (N, 6, 6) but got {covariances.shape}"
+            )
+        cov = covariances.flatten()
+        offsets = np.arange(0, (len(covariances) + 1) * 36, 36, dtype=np.int64)
+        return cls.from_kwargs(values=pa.ListArray.from_arrays(offsets, cov))
 
     @classmethod
     def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
@@ -141,6 +148,27 @@ class CoordinateCovariances(qv.Table):
             squares of the input sigmas.
         """
         return cls.from_matrix(sigmas_to_covariances(sigmas))
+
+    @classmethod
+    def nulls(cls, length: int) -> "CoordinateCovariances":
+        """
+        Create a Covariances object with all covariance matrix elements set to NaN.
+        Parameters
+        ----------
+        length : `int`
+            Number of coordinates.
+
+        Returns
+        -------
+        covariances : `CoordinateCovariances`
+            Covariance matrices for N coordinates in 6 dimensions.
+        """
+        return cls.from_kwargs(
+            values=pa.ListArray.from_arrays(
+                pa.array(np.arange(0, 36 * (length + 1), 36)),
+                pa.nulls(36 * length, pa.float64()),
+            )
+        )
 
     def is_all_nan(self) -> bool:
         """
