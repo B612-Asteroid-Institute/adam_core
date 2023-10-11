@@ -90,8 +90,8 @@ lint = [
   "isort --check-only ./adam_core",
 ]
 format = [
-  "black ./adam_core ./test",
-  "isort ./adam_core ./test"
+  "black ./adam_core",
+  "isort ./adam_core"
 ]
 typecheck = [
   "mypy --strict ./adam_core"
@@ -118,10 +118,7 @@ profile = "black"
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-ignore = [
-  "W503",
-  "E203"
-]
+ignore = []
 exclude = [
   "build"
 ]
