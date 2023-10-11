@@ -30,6 +30,10 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y gfortran liblapack-dev
+      - name: Install Hatch
+        run: |
+          pip install pip --upgrade
+          pip install hatch
       - name: Lint
         run: hatch run dev:lint
       - name: Test, with coverage report
