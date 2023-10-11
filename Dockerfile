@@ -29,7 +29,7 @@ WORKDIR /code
 RUN apt-get update -y && apt-get install -y gfortran liblapack-dev
 
 # Force installation of deps by running a command in the 'dev' environment
-RUN hatch -v run dev true
+RUN hatch -v run dev:true
 
 
 
