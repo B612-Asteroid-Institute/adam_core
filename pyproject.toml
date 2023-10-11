@@ -64,7 +64,7 @@ path = "adam_core/__version__.py"
 
 [tool.hatch.envs.dev]
 dependencies = [
-  "black",
+  "black==22.10.0",
   "isort",
   "mypy",
   "pytest",
