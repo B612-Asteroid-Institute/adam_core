@@ -110,7 +110,7 @@ coverage = [
 ]
 
 [tool.black]
-line-length = 110
+line-length = 88
 
 [tool.isort]
 profile = "black"
