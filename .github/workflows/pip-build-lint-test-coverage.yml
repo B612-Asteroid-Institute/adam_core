@@ -28,8 +28,8 @@ jobs:
 
       - name: Install openorb dependencies
         run: |
-          apt-get update -y
-          apt-get install -y gfortran liblapack-dev
+          sudo apt-get update -y
+          sudo apt-get install -y gfortran liblapack-dev
       - name: Lint
         run: hatch run dev:lint
       - name: Test, with coverage report
