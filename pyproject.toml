@@ -30,8 +30,12 @@ dependencies = [
   "numpy<1.25",
   "pyarrow>=13.0.0",
 
-  # Pending a release of oorb which includes https://github.com/oorb/oorb/pull/177:
-  "pyoorb@git+https://github.com/spenczar/oorb.git@python-sdist",
+  # On python<3.12 and arm, we can use the pyoorb wheel
+  "pyoorb ; python_version < '3.12' and platform_machine != 'arm64'",
+  # Otherwise, we need to build from source. The source distribution
+  # on PyPI doesn't work, so installf rom a fork, pending a release of
+  # oorb which includes https://github.com/oorb/oorb/pull/177:
+  "pyoorb@git+https://github.com/spenczar/oorb.git@python-sdist ; python_version > '3.12' or platform_machine == 'arm64'",
 
   "pandas",
   "requests",
