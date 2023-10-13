@@ -10,7 +10,7 @@ from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantOrbits
 from ..time import Timestamp
-from .utils import _iterate_chunks, sort_propagated_orbits
+from .utils import _iterate_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -140,12 +140,12 @@ class Propagator(ABC):
             else:
                 propagated_variants = None
 
-        propagated = sort_propagated_orbits(propagated)
-
         if propagated_variants is not None:
             propagated = propagated_variants.collapse(propagated)
 
-        return propagated
+        return propagated.sort_by(
+            ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
+        )
 
     @abstractmethod
     def _generate_ephemeris(
