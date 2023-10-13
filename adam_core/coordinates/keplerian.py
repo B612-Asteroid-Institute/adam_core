@@ -187,7 +187,7 @@ class KeplerianCoordinates(qv.Table):
         from .transform import _keplerian_to_cartesian_a, keplerian_to_cartesian
 
         # Extract gravitational parameter from origin
-        mu = self.origin.mu
+        mu = self.origin.mu()
 
         coords_cartesian = keplerian_to_cartesian(
             self.values,
@@ -203,7 +203,7 @@ class KeplerianCoordinates(qv.Table):
                 self.values,
                 covariances_keplerian,
                 _keplerian_to_cartesian_a,
-                in_axes=(0, None, None, None),
+                in_axes=(0, 0, None, None),
                 out_axes=0,
                 mu=mu,
                 max_iter=1000,
@@ -236,7 +236,7 @@ class KeplerianCoordinates(qv.Table):
         from .transform import _cartesian_to_keplerian6, cartesian_to_keplerian
 
         # Extract gravitational parameter from origin
-        mu = cartesian.origin.mu
+        mu = cartesian.origin.mu()
 
         coords_keplerian = cartesian_to_keplerian(
             cartesian.values,
@@ -251,7 +251,7 @@ class KeplerianCoordinates(qv.Table):
                 cartesian.values,
                 cartesian_covariances,
                 _cartesian_to_keplerian6,
-                in_axes=(0, 0, None),
+                in_axes=(0, 0, 0),
                 out_axes=0,
                 t0=cartesian.time.to_numpy(),
                 mu=mu,

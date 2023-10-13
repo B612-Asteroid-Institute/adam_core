@@ -41,7 +41,6 @@ CoordinatesClasses = (
 )
 
 
-MU = c.MU
 Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 FLOAT_TOLERANCE = 1e-15
 
@@ -291,7 +290,7 @@ def spherical_to_cartesian(
 def _cartesian_to_keplerian(
     coords_cartesian: Union[np.ndarray, jnp.ndarray],
     t0: float,
-    mu: float = MU,
+    mu: float,
 ) -> jnp.ndarray:
     """
     Convert a single Cartesian coordinate to a Keplerian coordinate.
@@ -316,7 +315,7 @@ def _cartesian_to_keplerian(
         vz : z-velocity in units of au per day.
     t0 : float (1)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : float, optional
+    mu : float (1)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
 
@@ -475,7 +474,7 @@ def _cartesian_to_keplerian(
 _cartesian_to_keplerian_vmap = jit(
     vmap(
         _cartesian_to_keplerian,
-        in_axes=(0, 0, None),
+        in_axes=(0, 0, 0),
     )
 )
 
@@ -484,7 +483,7 @@ _cartesian_to_keplerian_vmap = jit(
 def _cartesian_to_keplerian6(
     coords_cartesian: Union[np.ndarray, jnp.ndarray],
     t0: float,
-    mu: float = MU,
+    mu: float,
 ) -> jnp.ndarray:
     """
     Limit conversion of Cartesian coordinates to Keplerian 6 fundamental coordinates.
@@ -501,7 +500,7 @@ def _cartesian_to_keplerian6(
         vz : z-velocity in units of au per day.
     t0 : float (1)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : float, optional
+    mu : float (1)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
 
@@ -523,7 +522,7 @@ def _cartesian_to_keplerian6(
 def cartesian_to_keplerian(
     coords_cartesian: Union[np.ndarray, jnp.ndarray],
     t0: Union[np.ndarray, jnp.ndarray],
-    mu: float = MU,
+    mu: Union[np.ndarray, jnp.ndarray],
 ) -> jnp.ndarray:
     """
     Convert Cartesian coordinates to Keplerian coordinates.
@@ -540,7 +539,7 @@ def cartesian_to_keplerian(
         vz : z-velocity in units of au per day.
     t0 : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : float, optional
+    mu : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N, 6)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
 
@@ -569,7 +568,7 @@ def cartesian_to_keplerian(
 @jit
 def _keplerian_to_cartesian_p(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: float = MU,
+    mu: float,
     max_iter: int = 1000,
     tol: float = 1e-15,
 ) -> jnp.ndarray:
@@ -591,7 +590,7 @@ def _keplerian_to_cartesian_p(
         raan : Right ascension (longitude) of the ascending node in degrees.
         ap : argument of periapsis in degrees.
         M : mean anomaly in degrees.
-    mu : float, optional
+    mu : float
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
     max_iter : int, optional
@@ -697,7 +696,7 @@ def _keplerian_to_cartesian_p(
 _keplerian_to_cartesian_p_vmap = jit(
     vmap(
         _keplerian_to_cartesian_p,
-        in_axes=(0, None, None, None),
+        in_axes=(0, 0, None, None),
     )
 )
 
@@ -705,7 +704,7 @@ _keplerian_to_cartesian_p_vmap = jit(
 @jit
 def _keplerian_to_cartesian_a(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: float = MU,
+    mu: float,
     max_iter: int = 1000,
     tol: float = 1e-15,
 ) -> jnp.ndarray:
@@ -727,7 +726,7 @@ def _keplerian_to_cartesian_a(
         raan : Right ascension (longitude) of the ascending node in degrees.
         ap : argument of periapsis in degrees.
         M : mean anomaly in degrees.
-    mu : float, optional
+    mu : float (1)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
     max_iter : int, optional
@@ -780,7 +779,7 @@ def _keplerian_to_cartesian_a(
 _keplerian_to_cartesian_a_vmap = jit(
     vmap(
         _keplerian_to_cartesian_a,
-        in_axes=(0, None, None, None),
+        in_axes=(0, 0, None, None),
     )
 )
 
@@ -788,7 +787,7 @@ _keplerian_to_cartesian_a_vmap = jit(
 @jit
 def _keplerian_to_cartesian_q(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: float = MU,
+    mu: float,
     max_iter: int = 1000,
     tol: float = 1e-15,
 ) -> jnp.ndarray:
@@ -810,7 +809,7 @@ def _keplerian_to_cartesian_q(
         raan : Right ascension (longitude) of the ascending node in degrees.
         ap : argument of periapsis in degrees.
         M : mean anomaly in degrees.
-    mu : float, optional
+    mu : float (1)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
     max_iter : int, optional
@@ -863,14 +862,14 @@ def _keplerian_to_cartesian_q(
 _keplerian_to_cartesian_q_vmap = jit(
     vmap(
         _keplerian_to_cartesian_q,
-        in_axes=(0, None, None, None),
+        in_axes=(0, 0, None, None),
     )
 )
 
 
 def keplerian_to_cartesian(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: float = MU,
+    mu: Union[np.ndarray, jnp.ndarray],
     max_iter: int = 100,
     tol: float = 1e-15,
 ) -> jnp.ndarray:
@@ -892,7 +891,7 @@ def keplerian_to_cartesian(
         raan : Right ascension (longitude) of the ascending node in degrees.
         ap : argument of periapsis in degrees.
         M : mean anomaly in degrees.
-    mu : float, optional
+    mu : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
     max_iter : int, optional
@@ -958,7 +957,7 @@ def keplerian_to_cartesian(
 def _cartesian_to_cometary(
     coords_cartesian: Union[np.ndarray, jnp.ndarray],
     t0: float,
-    mu: float = MU,
+    mu: float,
 ) -> jnp.ndarray:
     """
     Convert Cartesian coordinates to Cometary coordinates.
@@ -975,7 +974,7 @@ def _cartesian_to_cometary(
         vz : z-velocity in units of au per day.
     t0 : float (1)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : float, optional
+    mu : float (1)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
 
@@ -998,7 +997,7 @@ def _cartesian_to_cometary(
 _cartesian_to_cometary_vmap = jit(
     vmap(
         _cartesian_to_cometary,
-        in_axes=(0, 0, None),
+        in_axes=(0, 0, 0),
     )
 )
 
@@ -1006,7 +1005,7 @@ _cartesian_to_cometary_vmap = jit(
 def cartesian_to_cometary(
     coords_cartesian: Union[np.ndarray, jnp.ndarray],
     t0: Union[np.ndarray, jnp.ndarray],
-    mu: float = MU,
+    mu: Union[np.ndarray, jnp.ndarray],
 ) -> jnp.ndarray:
     """
     Convert Cartesian coordinates to Keplerian coordinates.
@@ -1023,7 +1022,7 @@ def cartesian_to_cometary(
         vz : z-velocity in units of au per day.
     t0 : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : float, optional
+    mu : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
 
@@ -1046,7 +1045,7 @@ def cartesian_to_cometary(
 def _cometary_to_cartesian(
     coords_cometary: Union[np.ndarray, jnp.ndarray],
     t0: float,
-    mu: float = MU,
+    mu: float,
     max_iter: int = 100,
     tol: float = 1e-15,
 ) -> jnp.ndarray:
@@ -1065,7 +1064,7 @@ def _cometary_to_cartesian(
         tp : time of periapse passage in days.
     t0 : float (1)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : float, optional
+    mu : float
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
     max_iter : int, optional
@@ -1143,7 +1142,7 @@ def _cometary_to_cartesian(
 _cometary_to_cartesian_vmap = jit(
     vmap(
         _cometary_to_cartesian,
-        in_axes=(0, 0, None, None, None),
+        in_axes=(0, 0, 0, None, None),
     )
 )
 
@@ -1151,7 +1150,7 @@ _cometary_to_cartesian_vmap = jit(
 def cometary_to_cartesian(
     coords_cometary: Union[np.ndarray, jnp.ndarray],
     t0: Union[np.ndarray, jnp.ndarray],
-    mu: float = MU,
+    mu: Union[np.ndarray, jnp.ndarray],
     max_iter: int = 100,
     tol: float = 1e-15,
 ) -> jnp.ndarray:
@@ -1170,7 +1169,7 @@ def cometary_to_cartesian(
         tp : time of periapse passage in days.
     t0 : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : float, optional
+    mu : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
     max_iter : int, optional

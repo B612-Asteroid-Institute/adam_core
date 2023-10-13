@@ -68,10 +68,10 @@ orbits = Orbits.from_kwargs(
 
 Orbits can be easily converted to a pandas DataFrame:
 ```python
-orbits.to_dataframe()
- orbit_ids	object_ids	times.jd1	times.jd2	x	y	z	vx	vy	vz	...	cov_vy_y	cov_vy_z	cov_vy_vx	cov_vy_vy	cov_vz_x	cov_vz_y	cov_vz_z	cov_vz_vx	cov_vz_vy	cov_vz_vz
-0	1	Test Orbit 1	2459000.0	0.5	-0.166403	0.975273	0.133015	-0.016838	-0.003117	0.001921	...	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN
-1	2	Test Orbit 2	2460000.0	0.5	0.572777	-2.571820	-1.434457	0.009387	0.002900	-0.001452	...	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN	NaN
+orbits.to_dataframe()  
+  orbit_id     object_id  coordinates.x  coordinates.y  coordinates.z  coordinates.vx  coordinates.vy  coordinates.vz  coordinates.time.days  coordinates.time.nanos                      coordinates.covariance.values coordinates.origin.code  
+0        1  Test Orbit 1      -0.166403       0.975273       0.133015       -0.016838       -0.003117        0.001921                  59000                       0  [nan, nan, nan, nan, nan, nan, nan, nan, nan, ...                     SUN  
+1        2  Test Orbit 2       0.572777      -2.571820      -1.434457        0.009387        0.002900       -0.001452                  60000                       0  [nan, nan, nan, nan, nan, nan, nan, nan, nan, ...                     SUN
 ```
 
 Orbits can also be defined with uncertainties.
@@ -103,9 +103,19 @@ orbits = Orbits.from_kwargs(
     object_id=["Test Orbit with Uncertainties"],
     coordinates=keplerian_elements.to_cartesian(),
 )
-orbits.to_dataframe(sigmas=True)
- orbit_ids	object_ids	times.jd1	times.jd2	x	y	z	vx	vy	vz	...	cov_vy_y	cov_vy_z	cov_vy_vx	cov_vy_vy	cov_vz_x	cov_vz_y	cov_vz_z	cov_vz_vx	cov_vz_vy	cov_vz_vz
-0	1	Test Orbit with Uncertainties	2459000.0	0.5	-0.166403	0.975273	0.133015	-0.016838	-0.003117	0.001921	...	3.625729e-08	-1.059731e-08	-9.691716e-11	1.872922e-09	1.392222e-08	-1.759744e-09	-1.821839e-09	-7.865582e-11	2.237521e-10	3.971297e-11
+orbits.to_dataframe()  
+  orbit_id                      object_id  coordinates.x  coordinates.y  coordinates.z  coordinates.vx  coordinates.vy  coordinates.vz  coordinates.time.days  coordinates.time.nanos                      coordinates.covariance.values coordinates.origin.code  
+0        1  Test Orbit with Uncertainties      -0.166403       0.975273       0.133015       -0.016838       -0.003117        0.001921                  59000                       0  [6.654136535278775e-06, 1.2935845684776213e-06...                     SUN
+```
+
+The covariance matrices can be extracted in matrix form by using the `.to_matrix()` method:
+```python
+orbits.coordinates.covariance.to_matrix()
+```
+
+Similarly, if you just want to access the orbital elements you can do the following:
+```python
+orbits.coordinates.values
 ```
 
 To query orbits from JPL Horizons:
@@ -250,6 +260,69 @@ propagated_orbits = propagate_2body(
     orbits,
     times
 )
+```
+
+#### 2-body Ephemeris Generation
+This package also has functionality to generate ephemerides for a set of orbits. We do not recommend you use this with
+2-body propagated orbits as it will not be accurate for more than a few days. However, if you used a N-body propagator
+such as PYOORB, you can feed in the propagated orbits to this function to generate ephemerides. We call the ephemeris generator
+2-body because the light-time correction is applied using a 2-body propagator.
+
+Because the ephemeris generator was written in Jax, we can also map covariances directly to the sky-plane. To do this, we propagate
+the covariance matrices with the orbits. This is done by passing `covariance=True` to the propagator. The ephemeris generator will
+then automatically map the propagated covariance matrices to the sky-plane.
+
+```python
+import numpy as np
+from astropy import units as u
+
+from adam_core.orbits.query import query_sbdb
+from adam_core.propagator import PYOORB
+from adam_core.observers import Observers
+from adam_core.dynamics import generate_ephemeris_2body
+from adam_core.time import Timestamp
+
+# Get orbits to propagate
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_sbdb(object_ids)
+
+# Make sure PYOORB is ready
+propagator = PYOORB()
+
+# Define a set of observers and observation times
+times = Timestamp.from_mjd(np.arange(59000, 60000), scale="tdb")
+observers = Observers.from_code("I11", times)
+
+# Propagate orbits with PYOORB (note that we are propagating with covariances)
+propagated_orbits = propagator.propagate_orbits(
+    orbits,
+    times,
+    chunk_size=100,
+    max_processes=1,
+    covariance=True,
+)
+
+# Now generate ephemerides with the 2-body ephemeris generator
+ephemeris = generate_ephemeris_2body(
+    propagated_orbits,
+    observers,
+)
+```
+
+#### Gravitational parameter
+Both the 2-body propagation and 2-body ephemeris generation code will determine the correct graviational parameter
+to use from each orbit's origin.
+
+To see the gravitational parameter used for each orbit:
+```python
+from adam_core.orbits.query import query_sbdb
+
+# Get orbit to propagate
+object_ids = ["Duende", "Eros", "Ceres"]
+orbits = query_sbdb(object_ids)
+
+# Get the gravitational parameter (these will all be the same -- heliocentric)
+mu = orbits.coordinates.origin.mu()
 ```
 
 ## Package Structure

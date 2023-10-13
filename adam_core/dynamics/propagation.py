@@ -2,7 +2,6 @@ import jax.numpy as jnp
 import numpy as np
 from jax import config, jit, vmap
 
-from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import (
     CoordinateCovariances,
@@ -16,15 +15,12 @@ from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
 config.update("jax_enable_x64", True)
 
 
-MU = c.MU
-
-
 @jit
 def _propagate_2body(
     orbit: jnp.ndarray,
     t0: float,
     t1: float,
-    mu: float = MU,
+    mu: float,
     max_iter: int = 1000,
     tol: float = 1e-14,
 ) -> jnp.ndarray:
@@ -39,7 +35,7 @@ def _propagate_2body(
         Epoch in MJD at which the orbit are defined.
     t1 : float (N)
         Epochs to which to propagate the given orbit.
-    mu : float, optional
+    mu : float (1)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
     max_iter : int, optional
@@ -69,14 +65,13 @@ def _propagate_2body(
 
 # Vectorization Map: _propagate_2body
 _propagate_2body_vmap = jit(
-    vmap(_propagate_2body, in_axes=(0, 0, 0, None, None, None), out_axes=(0))
+    vmap(_propagate_2body, in_axes=(0, 0, 0, 0, None, None), out_axes=(0))
 )
 
 
 def propagate_2body(
     orbits: Orbits,
     times: Timestamp,
-    mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-14,
 ) -> Orbits:
@@ -90,9 +85,6 @@ def propagate_2body(
     times : Timestamp (M)
         Epochs to which to propagate each orbit. If a single epoch is given, all orbits are propagated to this
         epoch. If multiple epochs are given, then each orbit to will be propagated to each epoch.
-    mu : float, optional
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
     max_iter : int, optional
         Maximum number of iterations over which to converge. If number of iterations is
         exceeded, will return the value of the universal anomaly at the last iteration.
@@ -109,6 +101,7 @@ def propagate_2body(
     cartesian_orbits = orbits.coordinates.values
     t0 = orbits.coordinates.time.rescale("tdb").mjd()
     t1 = times.rescale("tdb").mjd()
+    mu = orbits.coordinates.origin.mu()
     orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)
     object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
 
@@ -119,6 +112,7 @@ def propagate_2body(
     orbit_ids_ = np.repeat(orbit_ids, n_times)
     object_ids_ = np.repeat(object_ids, n_times)
     orbits_array_ = np.repeat(cartesian_orbits, n_times, axis=0)
+    mu = np.repeat(mu, n_times)
     t0_ = np.repeat(t0, n_times)
     t1_ = np.tile(t1, n_orbits)
 
@@ -135,7 +129,7 @@ def propagate_2body(
             orbits_array_,
             covariances_array_,
             _propagate_2body,
-            in_axes=(0, 0, 0, None, None, None),
+            in_axes=(0, 0, 0, 0, None, None),
             out_axes=0,
             t0=t0_,
             t1=t1_,

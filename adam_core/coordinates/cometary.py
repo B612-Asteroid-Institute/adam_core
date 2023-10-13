@@ -199,7 +199,7 @@ class CometaryCoordinates(qv.Table):
             raise ValueError(err)
 
         # Extract gravitational parameter from origin
-        mu = self.origin.mu
+        mu = self.origin.mu()
 
         coords_cartesian = cometary_to_cartesian(
             self.values,
@@ -216,7 +216,7 @@ class CometaryCoordinates(qv.Table):
                 self.values,
                 cometary_covariances,
                 _cometary_to_cartesian,
-                in_axes=(0, 0, None, None, None),
+                in_axes=(0, 0, 0, None, None),
                 out_axes=0,
                 t0=self.time.to_numpy(),
                 mu=mu,
@@ -258,7 +258,7 @@ class CometaryCoordinates(qv.Table):
             raise ValueError(err)
 
         # Extract gravitational parameter from origin
-        mu = cartesian.origin.mu
+        mu = cartesian.origin.mu()
 
         coords_cometary = cartesian_to_cometary(
             cartesian.values,
@@ -273,7 +273,7 @@ class CometaryCoordinates(qv.Table):
                 cartesian.values,
                 cartesian_covariances,
                 _cartesian_to_cometary,
-                in_axes=(0, 0, None),
+                in_axes=(0, 0, 0),
                 out_axes=0,
                 t0=cartesian.time.to_numpy(),
                 mu=mu,

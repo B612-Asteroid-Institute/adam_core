@@ -5,7 +5,6 @@ import numpy as np
 import quivr as qv
 from jax import jit, lax, vmap
 
-from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import (
     CoordinateCovariances,
@@ -19,16 +18,14 @@ from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from .aberrations import _add_light_time, add_stellar_aberration
 
-MU = c.MU
-
 
 @jit
 def _generate_ephemeris_2body(
     propagated_orbit: np.ndarray,
     observation_time: float,
     observer_coordinates: jnp.ndarray,
+    mu: float,
     lt_tol: float = 1e-10,
-    mu: float = MU,
     max_iter: int = 100,
     tol: float = 1e-15,
     stellar_aberration: bool = False,
@@ -62,11 +59,11 @@ def _generate_ephemeris_2body(
         Epoch at which orbit and observer coordinates are defined.
     observer_coordinates : `~jax.numpy.ndarray` (3)
         Barycentric Cartesian observer coordinates.
-    lt_tol : float, optional
-        Calculate aberration to within this value in time (units of days).
-    mu : float, optional
+    mu : float (1)
         Gravitational parameter (GM) of the attracting body in units of
         AU**3 / d**2.
+    lt_tol : float, optional
+        Calculate aberration to within this value in time (units of days).
     max_iter : int, optional
         Maximum number of iterations over which to converge for propagation.
     tol : float, optional
@@ -119,7 +116,7 @@ def _generate_ephemeris_2body(
 _generate_ephemeris_2body_vmap = jit(
     vmap(
         _generate_ephemeris_2body,
-        in_axes=(0, 0, 0, None, None, None, None, None),
+        in_axes=(0, 0, 0, 0, None, None, None, None),
         out_axes=(0, 0),
     )
 )
@@ -129,7 +126,6 @@ def generate_ephemeris_2body(
     propagated_orbits: Orbits,
     observers: Observers,
     lt_tol: float = 1e-10,
-    mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-15,
     stellar_aberration: bool = False,
@@ -207,14 +203,16 @@ def generate_ephemeris_2body(
         observers_barycentric.coordinates.values, (num_orbits, 1)
     )
     observer_codes = np.tile(observers.code.to_numpy(zero_copy_only=False), num_orbits)
+    mu = observers_barycentric.coordinates.origin.mu()
+    mu = np.tile(mu, num_orbits)
 
     times = propagated_orbits.coordinates.time.to_astropy()
     ephemeris_spherical, light_time = _generate_ephemeris_2body_vmap(
         propagated_orbits_barycentric.coordinates.values,
         times.mjd,
         observer_coordinates,
-        lt_tol,
         mu,
+        lt_tol,
         max_iter,
         tol,
         stellar_aberration,
@@ -229,12 +227,12 @@ def generate_ephemeris_2body(
             propagated_orbits.coordinates.values,
             cartesian_covariances,
             _generate_ephemeris_2body,
-            in_axes=(0, 0, 0, None, None, None, None, None),
+            in_axes=(0, 0, 0, 0, None, None, None, None),
             out_axes=(0, 0),
             observation_times=times.utc.mjd,
             observer_coordinates=observer_coordinates,
-            lt_tol=lt_tol,
             mu=mu,
+            lt_tol=lt_tol,
             max_iter=max_iter,
             tol=tol,
             stellar_aberration=stellar_aberration,
