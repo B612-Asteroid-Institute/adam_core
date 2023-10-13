@@ -6,7 +6,9 @@ import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
+from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
+from .ephemeris import Ephemeris
 from .orbits import Orbits
 
 
@@ -118,7 +120,7 @@ class VariantOrbits(qv.Table):
         """
         Collapse the variants and recalculate the covariance matrix for each
         each orbit at each epoch. The mean state is taken from the orbits class and
-        is not calculate from the variants.
+        is not calculated from the variants.
 
         Parameters
         ----------
@@ -158,3 +160,93 @@ class VariantOrbits(qv.Table):
             orbits_list.append(orbit_collapsed)
 
         return qv.concatenate(orbits_list)
+
+
+class VariantEphemeris(qv.Table):
+
+    orbit_id = qv.StringColumn(default=lambda: uuid.uuid4().hex)
+    object_id = qv.StringColumn(nullable=True)
+    weights = qv.Float64Column(nullable=True)
+    weights_cov = qv.Float64Column(nullable=True)
+    coordinates = SphericalCoordinates.as_column()
+
+    def link_to_ephemeris(
+        self, ephemeris: Ephemeris
+    ) -> qv.MultiKeyLinkage[Ephemeris, "VariantEphemeris"]:
+        """
+        Link variants to the ephemeris for which they were generated.
+
+        Parameters
+        ----------
+        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
+            Ephemeris for which the variants were generated.
+
+        Returns
+        -------
+        linkage : `~quivr.MultiKeyLinkage[Ephemeris, EphemerisVariants]`
+            Linkage between variants and ephemeris.
+        """
+        assert ephemeris.coordinates.time.scale == self.coordinates.time.scale
+
+        # We might want to replace linking on jd1 and jd2 with just linking on mjd
+        # once the changes have been merged
+        return qv.MultiKeyLinkage(
+            ephemeris,
+            self,
+            left_keys={
+                "orbit_id": ephemeris.orbit_id,
+                "day": ephemeris.coordinates.time.days,
+                "millis": ephemeris.coordinates.time.millis(),
+            },
+            right_keys={
+                "orbit_id": self.orbit_id,
+                "day": self.coordinates.time.days,
+                "millis": self.coordinates.time.millis(),
+            },
+        )
+
+    def collapse(self, ephemeris: Ephemeris) -> Ephemeris:
+        """
+        Collapse the variants and recalculate the covariance matrix for each
+        each ephemeris at each epoch. The mean state is taken from the ephemeris class and
+        is not calculate from the variants.
+
+        Parameters
+        ----------
+        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
+            Ephemeris for which the variants were generated.
+
+        Returns
+        -------
+        collapsed_ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
+            The collapsed ephemeris (with covariance matrices calculated based
+            on the samples).
+        """
+        link = self.link_to_ephemeris(ephemeris)
+
+        # Iterate over the variants and calculate the mean state and covariance matrix
+        # for each orbit at each epoch then create a new orbit with the calculated covariance matrix
+        ephemeris_list = []
+        for ephemeris_i in ephemeris:
+            assert len(ephemeris_i) == 1
+
+            key = link.key(
+                orbit_id=ephemeris_i.orbit_id[0].as_py(),
+                day=ephemeris_i.coordinates.time.days[0].as_py(),
+                millis=ephemeris_i.coordinates.time.millis()[0].as_py(),
+            )
+            variants = link.select_right(key)
+
+            samples = variants.coordinates.values
+            mean = ephemeris_i.coordinates.values[0]
+            covariance = weighted_covariance(
+                mean, samples, variants.weights_cov.to_numpy()
+            ).reshape(1, 6, 6)
+
+            ephemeris_collapsed = ephemeris_i.set_column(
+                "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)
+            )
+
+            ephemeris_list.append(ephemeris_collapsed)
+
+        return qv.concatenate(ephemeris_list)
