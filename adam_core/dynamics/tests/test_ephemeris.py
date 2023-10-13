@@ -93,9 +93,6 @@ def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
 
     ephemeris_orbit_2body = generate_ephemeris_2body(propagated_orbit, observers)
 
-    # Extract only the ephemeris table
-    ephemeris_orbit_2body = ephemeris_orbit_2body.left_table
-
     # Get the tolerances for this orbit
     if object_id in TOLERANCES:
         range_tolerance, angular_tolerance, light_time_tolerance = TOLERANCES[object_id]

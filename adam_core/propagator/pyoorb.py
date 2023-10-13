@@ -319,22 +319,20 @@ class PYOORB(Propagator):
 
         return propagated_orbits
 
-    def _generate_ephemeris(
-        self, orbits: Orbits, observers: Observers
-    ) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
+    def _generate_ephemeris(self, orbits: OrbitType, observers: Observers) -> Ephemeris:
         """
         Generate ephemerides for orbits as viewed from observers using PYOORB.
 
         Parameters
         ----------
-        orbits : `~adam_core.orbits.orbits.Orbits` (N)
-            Orbits to generate ephemerides for.
+        orbits : {`~adam_core.orbits.orbits.Orbits`, `~adam_core.orbits.orbits.VariantOrbits`} (N)
+            Orbits to propagate.
         observers : `~adam_core.observers.observers.Observers` (M)
             Observers to generate ephemerides for.
 
         Returns
         -------
-        ephemeris : `~quivr.linkage.MultikeyLinkage` (M)
+        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (M)
             Ephemerides for each orbit as viewed from each observer.
         """
         # Convert orbits into PYOORB format
@@ -480,33 +478,4 @@ class PYOORB(Propagator):
             )
             ephemeris_list.append(ephemeris)
 
-        # Concatenate ephemeris into single table
-        ephemeris = qv.concatenate(ephemeris_list)
-
-        # We use mjd as the time linking key because openorb uses
-        # mjd. If we try to use coordinates.time.jd1 and jd2 directly,
-        # we will get loss-of-precision issues, and the keys won't
-        # align.
-        linkages = qv.MultiKeyLinkage(
-            left_table=ephemeris,
-            right_table=observers,
-            left_keys={
-                "code": ephemeris.coordinates.origin.code,
-                "mjd": ephemeris.coordinates.time.mjd(),
-            },
-            right_keys={
-                "code": observers_utc.code,
-                "mjd": observers_utc.coordinates.time.mjd(),
-            },
-        )
-
-        # Check to make sure we have the correct number of linkages
-        expected_length = len(observers)
-        actual_length = len(linkages.all_unique_values)
-        if expected_length != actual_length:
-            raise ValueError(
-                "Ephemerides were not correctly linked to observers. "
-                f"Expected {expected_length} unique keys, got {actual_length}."
-            )
-
-        return linkages
+        return qv.concatenate(ephemeris_list)

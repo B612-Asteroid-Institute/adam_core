@@ -2,7 +2,6 @@ from typing import Tuple
 
 import jax.numpy as jnp
 import numpy as np
-import quivr as qv
 from jax import jit, lax, vmap
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -129,7 +128,7 @@ def generate_ephemeris_2body(
     max_iter: int = 1000,
     tol: float = 1e-15,
     stellar_aberration: bool = False,
-) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
+) -> Ephemeris:
     """
     Generate on-sky ephemerides for each propagated orbit as viewed by the observers.
     This function calculates the light time delay between the propagated orbit and the observer,
@@ -174,7 +173,7 @@ def generate_ephemeris_2body(
 
     Returns
     -------
-    ephemeris : `~quivr.linkage.MultikeyLinkage` (N)
+    ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (N)
         Topocentric ephemerides for each propagated orbit as observed by the given observers.
     """
     # Transform both the orbits and observers to the barycenter if they are not already.
@@ -263,23 +262,9 @@ def generate_ephemeris_2body(
         spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
     )
 
-    ephems = Ephemeris.from_kwargs(
+    return Ephemeris.from_kwargs(
         orbit_id=propagated_orbits_barycentric.orbit_id,
         object_id=propagated_orbits_barycentric.object_id,
         coordinates=spherical_coordinates,
         light_time=light_time,
     )
-
-    linkages = qv.MultiKeyLinkage(
-        left_table=ephems,
-        right_table=observers,
-        left_keys={
-            "code": ephems.coordinates.origin.code,
-            "mjd": ephems.coordinates.time.mjd(),
-        },
-        right_keys={
-            "code": observers.code,
-            "mjd": observers.coordinates.time.mjd(),
-        },
-    )
-    return linkages
