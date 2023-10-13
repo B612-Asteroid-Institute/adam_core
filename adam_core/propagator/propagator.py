@@ -1,7 +1,7 @@
 import concurrent.futures
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
 import quivr as qv
 
@@ -58,6 +58,10 @@ class Propagator(ABC):
         orbits: Orbits,
         times: Timestamp,
         covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
     ) -> Orbits:
@@ -70,10 +74,15 @@ class Propagator(ABC):
             Orbits to propagate.
         times : Timestamp (M)
             Times to which to propagate orbits.
-        covariance: bool, optional
+        covariance : bool, optional
             Propagate the covariance matrices of the orbits. This is done by sampling the
             orbits from their covariance matrices and propagating each sample. The covariance
             of the propagated orbits is then the covariance of the samples.
+        covariance_method : {'sigma-point', 'monte-carlo', 'auto'}, optional
+            The method to use for sampling the covariance matrix. If 'auto' is selected then the method
+            will be automatically selected based on the covariance matrix. The default is 'monte-carlo'.
+        num_samples : int, optional
+            The number of samples to draw when sampling with monte-carlo.
         chunk_size : int, optional
             Number of orbits to send to each job.
         max_processes : int or None, optional
@@ -89,7 +98,9 @@ class Propagator(ABC):
         # Check if we need to propagate orbit variants so we can propagate covariance
         # matrices
         if not orbits.coordinates.covariance.is_all_nan() and covariance is True:
-            variants = VariantOrbits.create(orbits)
+            variants = VariantOrbits.create(
+                orbits, method=covariance_method, num_samples=num_samples
+            )
         else:
             variants = None
 
@@ -165,6 +176,10 @@ class Propagator(ABC):
         orbits: Orbits,
         observers: Observers,
         covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
     ) -> Ephemeris:
@@ -184,6 +199,11 @@ class Propagator(ABC):
             orbits from their covariance matrices and propagating each sample and for each
             sample also generating ephemerides. The covariance
             of the ephemerides is then the covariance of the samples.
+        covariance_method : {'sigma-point', 'monte-carlo', 'auto'}, optional
+            The method to use for sampling the covariance matrix. If 'auto' is selected then the method
+            will be automatically selected based on the covariance matrix. The default is 'monte-carlo'.
+        num_samples : int, optional
+            The number of samples to draw when sampling with monte-carlo.
         chunk_size : int, optional
             Number of orbits to send to each job.
         max_processes : int or None, optional
@@ -200,7 +220,9 @@ class Propagator(ABC):
         # Check if we need to propagate orbit variants so we can propagate covariance
         # matrices
         if not orbits.coordinates.covariance.is_all_nan() and covariance is True:
-            variants = VariantOrbits.create(orbits)
+            variants = VariantOrbits.create(
+                orbits, method=covariance_method, num_samples=num_samples
+            )
         else:
             variants = None
 
