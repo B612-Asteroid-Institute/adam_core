@@ -41,3 +41,10 @@ from .transform import (
     transform_coordinates,
 )
 from .variants import create_coordinate_variants
+
+__all__ = [
+    "CartesianCoordinates",
+    "KeplerianCoordinates",
+    "SphericalCoordinates",
+    "CometaryCoordinates",
+]
