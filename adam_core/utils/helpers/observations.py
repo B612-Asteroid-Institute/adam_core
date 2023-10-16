@@ -83,11 +83,11 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]
         on=["observatory_code", "exposure_start"],
     )
 
-    # Create detections
-    detections = ephemeris[
-        ["exposure_id", "observatory_code", "mjd_utc", "RA", "DEC", "V"]
+    # Create detections dataframe
+    detections_df = ephemeris[
+        ["exposure_id", "observatory_code", "mjd_utc", "RA", "DEC", "V", "targetname"]
     ].copy()
-    detections.rename(
+    detections_df.rename(
         columns={
             "RA": "ra",
             "DEC": "dec",
@@ -97,12 +97,18 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]
     )
 
     # Lets only report astrometric errors for one of the observatories
-    detections.loc[detections["observatory_code"] == "X05", "ra_sigma"] = 0.1 / 3600
-    detections.loc[detections["observatory_code"] == "X05", "dec_sigma"] = 0.1 / 3600
+    detections_df.loc[detections_df["observatory_code"] == "X05", "ra_sigma"] = (
+        0.1 / 3600
+    )
+    detections_df.loc[detections_df["observatory_code"] == "X05", "dec_sigma"] = (
+        0.1 / 3600
+    )
     # Lets report photometric errors for all observatories
-    detections["mag_sigma"] = 0.1
-    detections.sort_values(by="mjd_utc", inplace=True, ignore_index=True)
-    detections["detection_id"] = [f"obs_{i:04d}" for i in range(len(detections))]
+    detections_df["mag_sigma"] = 0.1
+    detections_df.sort_values(
+        by=["mjd_utc", "observatory_code"], inplace=True, ignore_index=True
+    )
+    detections_df["detection_id"] = [f"obs_{i:04d}" for i in range(len(detections_df))]
 
     # Create exposures table
     exposures = Exposures.from_kwargs(
@@ -115,20 +121,20 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]
 
     # Create detections table
     detections = PointSourceDetections.from_kwargs(
-        id=detections["detection_id"],
-        exposure_id=detections["exposure_id"],
-        time=Timestamp.from_mjd(detections["mjd_utc"].values, scale="utc"),
-        ra=detections["ra"].values,
-        dec=detections["dec"].values,
-        mag=detections["mag"].values,
-        ra_sigma=detections["ra_sigma"].values,
-        dec_sigma=detections["dec_sigma"].values,
-        mag_sigma=detections["mag_sigma"].values,
+        id=detections_df["detection_id"],
+        exposure_id=detections_df["exposure_id"],
+        time=Timestamp.from_mjd(detections_df["mjd_utc"].values, scale="utc"),
+        ra=detections_df["ra"].values,
+        dec=detections_df["dec"].values,
+        mag=detections_df["mag"].values,
+        ra_sigma=detections_df["ra_sigma"].values,
+        dec_sigma=detections_df["dec_sigma"].values,
+        mag_sigma=detections_df["mag_sigma"].values,
     )
 
     # Create associations table
     associations = Associations.from_kwargs(
         detection_id=detections.id,
-        object_id=ephemeris["targetname"],
+        object_id=detections_df["targetname"],
     )
     return exposures, detections, associations
