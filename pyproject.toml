@@ -126,3 +126,32 @@ ignore = []
 exclude = [
   "build"
 ]
+
+[tool.hatch.envs.docs]
+dependencies = [
+  "sphinx",
+  "sphinx-autodoc-typehints",
+  "sphinx-copybutton",
+  "quivr-sphinx-autodoc"  
+]
+
+[project.optional-dependencies]
+docs = [
+  "sphinx",
+  "sphinx-autodoc-typehints",
+  "sphinx-copybutton",
+  "quivr-sphinx-autodoc"
+]
+
+[tool.hatch.envs.docs.scripts]
+make-html = [
+  "make -C docs html"
+]
+
+clean = [
+  "make -C docs clean"
+]
+
+open-html = [
+  "open docs/build/html/index.html"
+]

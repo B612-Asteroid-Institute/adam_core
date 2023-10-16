@@ -30,9 +30,15 @@ logger = logging.getLogger(__name__)
 
 
 class CartesianCoordinates(qv.Table):
+    """ Represents coordinates in Cartesian space."""
 
+    #: x coordinatess
     x = qv.Float64Column(nullable=True)
+
+    #: y coordinates
     y = qv.Float64Column(nullable=True)
+
+    #: z coordinates
     z = qv.Float64Column(nullable=True)
     vx = qv.Float64Column(nullable=True)
     vy = qv.Float64Column(nullable=True)
@@ -170,14 +176,14 @@ class CartesianCoordinates(qv.Table):
 
         Parameters
         ----------
-        matrix : `~numpy.ndarray` (6, 6)
+        matrix : numpy.ndarray (6, 6)
             Rotation matrix.
         frame_out : str
             Name of the frame to which coordinates are being rotated.
 
         Returns
         -------
-        CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
+        CartesianCoordinates : adam_core.coordinates.cartesian.CartesianCoordinates
             Rotated Cartesian coordinates and their covariances.
         """
         # Extract coordinate values into a masked array and mask NaNss
@@ -234,18 +240,18 @@ class CartesianCoordinates(qv.Table):
     def translate(self, vector: np.ndarray, origin_out: str) -> "CartesianCoordinates":
         """
         Translate Cartesian coordinates by the given vector.
-
+        
         Parameters
         ----------
-        vector : `~numpy.ndarray` (6,) or (N, 6)
-            Translation vector. If a single vector is given, it is applied to all coordinates.
-            If an array of vectors is given, each vector is applied to the corresponding coordinate.
-        origin_out : str
+        
+        vector: 
+            6x1 or 6xN translation vector. If a 6x1 vector is given, it is applied to all coordinates.
+            If an 6xN array of vectors is given, each vector is applied to the corresponding coordinate.
+        origin_out:
             Name of the origin to which coordinates are being translated.
 
         Returns
         -------
-        CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
             Translated Cartesian coordinates and their covariances.
         """
         N = len(self)
