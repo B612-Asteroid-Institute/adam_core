@@ -49,6 +49,7 @@ def test_sample_covariance_random():
     # allows the state vector and its covariance to be reconstructed
     orbits = make_real_orbits()
 
+    np.random.seed(0)
     # Limit to first 10 orbits
     for orbit in orbits[:10]:
         mean = orbit.coordinates.values[0]

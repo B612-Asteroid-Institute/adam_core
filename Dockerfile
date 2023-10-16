@@ -16,25 +16,20 @@ RUN curl -fL -o /tmp/oorb_data.zip \
 RUN unzip -d /opt/oorb_data /tmp/oorb_data.zip
 ENV OORB_DATA=/opt/oorb_data
 
-# Install pyoorb
-RUN --mount=type=cache,target=/root/.cache/pip \
-    export WHEEL_NAME="${OORB_VERSION}-cp310-cp310-manylinux_2_17_$(uname -m).manylinux2014_$(uname -m).whl" && \
-    pip install "https://github.com/B612-Asteroid-Institute/oorb/releases/download/${OORB_TAG}/${WHEEL_NAME}"
+# Upgrade pip to the latest version
+RUN pip install --upgrade pip
 
-
-# Upgrade pip to the latest version and install pre-commit
-RUN pip install --upgrade pip pre-commit
-
-# Install pre-commit hooks (before adam_core is installed to cache this step)
-# Remove the .git directory after pre-commit is installed as adam_core's .git
-# will be added to the container
-RUN mkdir /code/
-COPY .pre-commit-config.yaml /code/
-WORKDIR /code/
-RUN git init . \
-	&& pre-commit install-hooks \
-	&& rm -rf .git
+# Install hatch
+RUN pip install hatch
 
 # Install adam_core
 ADD . /code/
-RUN pip install -e .[tests]
+WORKDIR /code
+
+RUN apt-get update -y && apt-get install -y gfortran liblapack-dev
+
+# Force installation of deps by running a command in the 'dev' environment
+RUN hatch -v run dev:true
+
+
+

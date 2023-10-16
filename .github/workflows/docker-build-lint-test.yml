@@ -24,6 +24,6 @@ jobs:
       - name: Build and Install
         run: docker build --load -t adam-core:$IMAGE_TAG .
       - name: Lint
-        run:  docker run -i adam-core:$IMAGE_TAG pre-commit run --all-files
+        run: docker run -i adam-core:$IMAGE_TAG hatch run dev:lint
       - name: Test
-        run: docker run -i adam-core:$IMAGE_TAG pytest . --cov
+        run: docker run -i adam-core:$IMAGE_TAG hatch run dev:test

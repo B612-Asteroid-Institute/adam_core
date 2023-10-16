@@ -1,6 +1,9 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "adam_core"
-version = "0.1.0"
 authors = [
   { name="Kathleen Kiker", email="kathleen@b612foundation.org" },
   { name="Alec Koumjian", email="alec@b612foundation.org" },
@@ -16,10 +19,110 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dynamic = [ "version" ]
+
+dependencies = [
+  "astropy",
+  "astroquery",
+  "healpy",
+  "jax",
+  "jaxlib",
+  "numpy<1.25",
+  "pyarrow>=13.0.0",
+
+  # On python<3.12 and arm, we can use the pyoorb wheel
+  "pyoorb ; python_version < '3.12' and platform_machine != 'arm64'",
+  # Otherwise, we need to build from source. The source distribution
+  # on PyPI doesn't work, so installf rom a fork, pending a release of
+  # oorb which includes https://github.com/oorb/oorb/pull/177:
+  "pyoorb@git+https://github.com/spenczar/oorb.git@python-sdist ; python_version >= '3.12' or platform_machine == 'arm64'",
+
+  "pandas",
+  "requests",
+  "scipy",
+  "spiceypy",
+  "quivr>=0.7.1",
+  "mpc-obscodes",
+  "naif-de440",
+  "naif-leapseconds",
+  "naif-eop-high-prec",
+  "naif-eop-predict",
+  "naif-eop-historical",
+  "naif-earth-itrf93"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/b612-asteroid-institute/adam_core"
 
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+[tool.hatch.build.targets.sdist]
+include = [
+  "/adam_core",
+]
+
+[tool.hatch.metadata]
+# Temporary while pyoorb is referenced via git direct ref
+allow-direct-references = true
+
+[tool.hatch.version]
+path = "adam_core/__version__.py"
+
+[tool.hatch.envs.dev]
+dependencies = [
+  "black==22.10.0",
+  "isort",
+  "mypy",
+  "pytest",
+  "pytest-cov",
+  "pytest-benchmark",
+  "pre-commit",
+  "ruff",
+  "ipython"
+]
+
+[tool.hatch.envs.dev.scripts]
+check = [
+  "lint",
+  "typecheck",
+  "test",
+]
+fix = [
+  "ruff ./adam_core --fix"
+]
+lint = [
+  "ruff ./adam_core",
+  "black --check ./adam_core",
+  "isort --check-only ./adam_core",
+]
+format = [
+  "black ./adam_core",
+  "isort ./adam_core"
+]
+typecheck = [
+  "mypy --strict ./adam_core"
+]
+test = [
+  "pytest --benchmark-disable ./adam_core {args}",
+]
+doctest = [
+  "pytest --doctest-modules ./adam_core {args}"
+]
+benchmark = [
+  "pytest --benchmark-only ./adam_core {args}"
+]
+coverage = [
+  "pytest ./adam_core --cov --cov-report xml"
+]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+ignore = []
+exclude = [
+  "build"
+]
