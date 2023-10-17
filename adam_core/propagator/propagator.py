@@ -26,7 +26,7 @@ def propagation_worker(
 
 def ephemeris_worker(
     orbits: Orbits, observers: Observers, propagator: "Propagator"
-) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
+) -> Ephemeris:
     ephemeris = propagator._generate_ephemeris(orbits, observers)
     return ephemeris
 
@@ -165,7 +165,7 @@ class Propagator(ABC):
         observers: Observers,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
-    ) -> qv.MultiKeyLinkage[Ephemeris, Observers]:
+    ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
         in observers.
@@ -186,7 +186,7 @@ class Propagator(ABC):
 
         Returns
         -------
-        ephemeris : List[`~quivr.linkage.MultiKeyLinkage`] (M)
+        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (M)
             Predicted ephemerides for each orbit observed by each
             observer.
         """
@@ -204,7 +204,16 @@ class Propagator(ABC):
                 for future in concurrent.futures.as_completed(futures):
                     ephemeris_list.append(future.result())
 
-            return qv.combine_multilinkages(ephemeris_list)
+            ephemeris = qv.concatenate(ephemeris_list)
 
         else:
-            return self._generate_ephemeris(orbits, observers)
+            ephemeris = self._generate_ephemeris(orbits, observers)
+
+        return ephemeris.sort_by(
+            [
+                "orbit_id",
+                "coordinates.time.days",
+                "coordinates.time.nanos",
+                "coordinates.origin.code",
+            ]
+        )
