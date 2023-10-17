@@ -31,9 +31,11 @@ def get_observer_state(
     For MPC observatory codes this function currently only supports ground-based observers on Earth.
     In this case, the Earth body-fixed frame used for calculations is the standard ITRF93,
     which takes into account:
-        - precession (IAU-1976)
-        - nutation (IAU-1980 with IERS corrections)
-        - polar motion
+
+      - precession (IAU-1976)
+      - nutation (IAU-1980 with IERS corrections)
+      - polar motion
+
     This frame is retrieved through SPICE.
 
     Parameters
