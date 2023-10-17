@@ -380,13 +380,13 @@ class Timestamp(qv.Table):
 
         Examples
         --------
-        >>> from pyarrow import Timestamp
+        >>> from adam_core.time import Timestamp
         >>> ts = Timestamp.from_kwargs(days=[0, 1, 2], nanos=[200, 0, 100])
         >>> have_days, have_nanos = ts.difference_scalar(1, 100)
-        >>> have_days.to_numpy()
-        array([-2, -1, 1])
-        >>> have_nanos.to_numpy()
-        array([100, 86399999999900, 0])
+        >>> have_days.to_pylist()
+        [-1, -1, 1]
+        >>> have_nanos.to_pylist()
+        [100, 86399999999900, 0]
 
         """
         days1 = pc.subtract(self.days, days)
