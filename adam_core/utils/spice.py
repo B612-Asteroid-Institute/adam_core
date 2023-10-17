@@ -1,5 +1,5 @@
 import os
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 import numpy as np
 import pyarrow.compute as pc
@@ -52,7 +52,7 @@ def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
     return et
 
 
-def setup_SPICE(kernels: List[str] = DEFAULT_KERNELS, force: bool = False):
+def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
     """
     Load SPICE kernels.
 
@@ -64,11 +64,24 @@ def setup_SPICE(kernels: List[str] = DEFAULT_KERNELS, force: bool = False):
     calculation (calling sp.furnsh multiple times will load the same kernel multiple times, which
     will cause an error.)
 
+    The default kernels loaded are those provided by the NAIF data packages:
+
+    - Leapsecond data (`naif-leapseconds <https://pypi.org/project/naif-leapseconds/>`_)
+    - DE440 ephemeris data (`naif-de440 <https://pypi.org/project/naif-de440/>`_)
+    - Longterm Earth Orientation Parameter Predictions (`naif-eop-predict <https://pypi.org/project/naif-eop-predict/>`_)
+    - Historical Earth Orientation Parameters (`naif-eop-historical <https://pypi.org/project/naif-eop-historical/>`_)
+    - High Precision Earth Orientation Parameters (`naif-eop-high-prec <https://pypi.org/project/naif-eop-high-prec/>`_)
+    - Earth Body-fixed Reference Frame/Body Association (`naif-earth-itrf93 <https://pypi.org/project/naif-earth-itrf93/>`_)
+
     Parameters
     ----------
-    kernels : list of str
-        List of SPICE kernels to load into SPICE.
+    kernels :
+        List of SPICE kernels to load into SPICE. If None, then the default kernels will be loaded.
+
     """
+    if kernels is None:
+        kernels = DEFAULT_KERNELS
+
     process_id = os.getpid()
     env_var = f"ADAM_CORE_SPICE_INITIALIZED_{process_id}"
     if env_var in os.environ and not force:
