@@ -1,6 +1,8 @@
 import astropy.time
 import astropy.units
+import numpy as np
 import numpy.testing as npt
+import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
@@ -86,6 +88,51 @@ class TestMJDConversions:
     def test_with_nulls(self):
         have = self.with_nulls.mjd()
         assert have.to_pylist() == [0, 10000.5, 20000.999999999999, None, None, None]
+
+    def test_from_list_ints(self):
+        data = [0, 10000, 20000]
+        have = Timestamp.from_mjd(data)
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 0, 0]
+
+    def test_from_list_floats(self):
+        data = [0.0, 10000.5, 20000.75]
+        have = Timestamp.from_mjd(data)
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 43200_000_000_000, 64800_000_000_000]
+
+    def test_from_numpy_ints(self):
+        data = np.array([0, 10000, 20000], dtype=np.int64)
+        have = Timestamp.from_mjd(data)
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 0, 0]
+
+    def test_from_numpy_floats(self):
+        data = np.array([0.0, 10000.5, 20000.75], dtype=np.float64)
+        have = Timestamp.from_mjd(data)
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 43200_000_000_000, 64800_000_000_000]
+
+    def test_from_pyarrow_ints(self):
+        data = pa.array([0, 10000, 20000], type=pa.int64())
+        have = Timestamp.from_mjd(data)
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 0, 0]
+
+    def test_from_pyarrow_floats(self):
+        data = pa.array([0.0, 10000.5, 20000.75], type=pa.float64())
+        have = Timestamp.from_mjd(data)
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 43200_000_000_000, 64800_000_000_000]
+
+    def test_from_pyarrow_table_float(self):
+        """
+        This test case exercises chunked arrays, which have slightly different behavior
+        """
+        data = pa.table({"mjd": [0.0, 10000.5, 20000.75]})
+        have = Timestamp.from_mjd(data["mjd"])
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 43200_000_000_000, 64800_000_000_000]
 
 
 class TestAstropyTime:
