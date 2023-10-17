@@ -125,6 +125,15 @@ class TestMJDConversions:
         assert have.days.to_pylist() == [0, 10000, 20000]
         assert have.nanos.to_pylist() == [0, 43200_000_000_000, 64800_000_000_000]
 
+    def test_from_pyarrow_table_float(self):
+        """
+        This test case exercises chunked arrays, which have slightly different behavior
+        """
+        data = pa.table({"mjd": [0.0, 10000.5, 20000.75]})
+        have = Timestamp.from_mjd(data["mjd"])
+        assert have.days.to_pylist() == [0, 10000, 20000]
+        assert have.nanos.to_pylist() == [0, 43200_000_000_000, 64800_000_000_000]
+
 
 class TestAstropyTime:
     ts = Timestamp.from_kwargs(
