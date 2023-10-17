@@ -14,6 +14,7 @@ adam_core
    :maxdepth: 2
 
    api/coordinates
+   api/observations
 
 Indices and tables
 ==================
