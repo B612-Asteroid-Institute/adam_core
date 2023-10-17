@@ -71,6 +71,7 @@ class Timestamp(qv.Table):
     def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
         days = pc.floor(mjd)
         fractional_days = pc.subtract(mjd, days)
+        days = pc.cast(days, pa.int64())
         nanos = pc.cast(pc.round(pc.multiply(fractional_days, 86400 * 1e9)), pa.int64())
         return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
 
