@@ -74,6 +74,7 @@ dependencies = [
   "pytest",
   "pytest-cov",
   "pytest-benchmark",
+  "pytest-doctestplus",
   "pre-commit",
   "ruff",
   "ipython"
@@ -104,7 +105,7 @@ test = [
   "pytest --benchmark-disable ./adam_core {args}",
 ]
 doctest = [
-  "pytest --doctest-modules ./adam_core {args}"
+  "pytest --doctest-plus ./adam_core --doctest-only"
 ]
 benchmark = [
   "pytest --benchmark-only ./adam_core {args}"
