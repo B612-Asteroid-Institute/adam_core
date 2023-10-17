@@ -16,6 +16,7 @@ adam_core
    api/coordinates
    api/observations
    api/observers
+   api/orbits
 
 Indices and tables
 ==================
