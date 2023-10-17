@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # flake8: noqa: F401
 from .cartesian import CARTESIAN_COLS, CARTESIAN_UNITS, CartesianCoordinates
 from .cometary import COMETARY_COLS, COMETARY_UNITS, CometaryCoordinates
@@ -40,11 +42,23 @@ from .transform import (
     spherical_to_cartesian,
     transform_coordinates,
 )
-from .variants import create_coordinate_variants
+from .types import Coordinates, CoordinateType
+from .variants import VariantCoordinatesTable, create_coordinate_variants
 
 __all__ = [
+    "Coordinates",
     "CartesianCoordinates",
     "KeplerianCoordinates",
     "SphericalCoordinates",
     "CometaryCoordinates",
+    "CoordinateCovariances",
+    "sample_covariance_random",
+    "sample_covariance_sigma_points",
+    "Origin",
+    "OriginCodes",
+    "Residuals",
+    "CoordinateType",
+    "transform_coordinates",
+    "VariantCoordinatesTable",
+    "create_coordinate_variants",
 ]

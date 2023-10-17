@@ -133,7 +133,8 @@ dependencies = [
   "sphinx",
   "sphinx-autodoc-typehints",
   "sphinx-copybutton",
-  "quivr-sphinx-autodoc"  
+  "sphinx-toolbox",
+  "quivr-sphinx-autodoc"
 ]
 
 [project.optional-dependencies]
@@ -141,6 +142,7 @@ docs = [
   "sphinx",
   "sphinx-autodoc-typehints",
   "sphinx-copybutton",
+  "sphinx-toolbox",
   "quivr-sphinx-autodoc"
 ]
 

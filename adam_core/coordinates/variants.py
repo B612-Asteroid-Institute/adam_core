@@ -1,9 +1,12 @@
-from typing import Generic, Literal, Protocol, TypeVar, Union
+from __future__ import annotations
+
+from typing import Generic, Literal, Protocol, TypeVar
 
 import numpy as np
 import pyarrow as pa
 import quivr as qv
 
+from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .covariances import (
@@ -15,18 +18,14 @@ from .covariances import (
 from .keplerian import KeplerianCoordinates
 from .spherical import SphericalCoordinates
 
-CoordinateType = Union[
-    CartesianCoordinates,
-    KeplerianCoordinates,
-    CometaryCoordinates,
-    SphericalCoordinates,
-]
-
-
-T = TypeVar("T", bound=CoordinateType, covariant=True)
+T = TypeVar("T", bound=types.CoordinateType, covariant=True)
 
 
 class VariantCoordinatesTable(Generic[T], Protocol):
+    """
+    A protocol for a generic table of variant coordinates.
+    """
+
     @property
     def index(self) -> pa.Int64Array:
         ...
@@ -45,53 +44,51 @@ class VariantCoordinatesTable(Generic[T], Protocol):
 
 
 def create_coordinate_variants(
-    coordinates: CoordinateType,
-    method: Literal["auto", "sigma-point", "monte-carlo"],
+    coordinates: types.CoordinateType,
+    method: Literal["auto", "sigma-point", "monte-carlo"] = "auto",
     num_samples: int = 10000,
     alpha: float = 1,
     beta: float = 0,
     kappa: float = 0,
-) -> VariantCoordinatesTable[T]:
+) -> VariantCoordinatesTable[types.CoordinateType]:
     """
     Sample and create variants for the given coordinates by sampling the covariance matrices.
     There are three supported methods:
-    - sigma-point: Sample the covariance matrix using sigma points. This is the fastest method,
-      but can be inaccurate if the covariance matrix is not well behaved.
-    - monte-carlo: Sample the covariance matrix using a monte carlo method.
-      This is the slowest method, but is the most accurate.
-    - auto: Automatically select the best method based on the covariance matrix.
-      If the covariance matrix is well behaved then sigma-point sampling will be used.
-      If the covariance matrix is not well behaved then monte-carlo sampling will be used.
+
+    1. sigma-point: Sample the covariance matrix using sigma points. This is the fastest method,
+       but can be inaccurate if the covariance matrix is not well behaved.
+    2. monte-carlo: Sample the covariance matrix using a monte carlo method.
+       This is the slowest method, but is the most accurate.
+    3. auto: Automatically select the best method based on the covariance matrix.
+       If the covariance matrix is well behaved then sigma-point sampling will be used.
+       If the covariance matrix is not well behaved then monte-carlo sampling will be used.
 
     When sampling with monte-carlo, 10k samples are drawn. Sigma-point sampling draws 13 samples
     for 6-dimensional coordinates.
 
-    TODO:
+    .. warning::
+
         This function does not yet handle sampling of covariances and coordinates with missing values.
 
     Parameters
     ----------
-    coordinates : {'~adam_core.coordinates.cartesian.CartesianCoordinates',
-                   '~adam_core.coordinates.keplerian.KeplerianCoordinates',
-                   '~adam_core.coordinates.cometary.CometaryCoordinates',
-                   '~adam_core.coordinates.spherical.SphericalCoordinates'}
+    coordinates :
         The coordinates to sample.
-    method : {'sigma-point', 'monte-carlo', 'auto'}, optional
+    method:
         The method to use for sampling the covariance matrix. If 'auto' is selected then the method
         will be automatically selected based on the covariance matrix. The default is 'auto'.
     num_samples : int, optional
         The number of samples to draw when sampling with monte-carlo.
-    alpha : float, optional
+    alpha:
         Spread of the sigma points between 1e^-2 and 1.
-    beta : float, optional
+    beta:
         Prior knowledge of the distribution when generating sigma points usually set to 2 for a Gaussian.
-    kappa : float, optional
+    kappa:
         Secondary scaling parameter when generating sigma points usually set to 0.
 
 
     Returns
     -------
-    variants : '~adam_core.coordinates.variants.VariantCoordinates'
         The variant coordinates.
 
     Raises

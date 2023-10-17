@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class CartesianCoordinates(qv.Table):
-    """ Represents coordinates in Cartesian space."""
+    """Represents coordinates in Cartesian space."""
 
     #: x coordinatess
     x = qv.Float64Column(nullable=True)
@@ -240,11 +240,11 @@ class CartesianCoordinates(qv.Table):
     def translate(self, vector: np.ndarray, origin_out: str) -> "CartesianCoordinates":
         """
         Translate Cartesian coordinates by the given vector.
-        
+
         Parameters
         ----------
-        
-        vector: 
+
+        vector:
             6x1 or 6xN translation vector. If a 6x1 vector is given, it is applied to all coordinates.
             If an 6xN array of vectors is given, each vector is applied to the corresponding coordinate.
         origin_out:

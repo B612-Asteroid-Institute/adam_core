@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import logging
-from typing import Literal, Optional, TypeVar, Union
+from typing import Literal, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -7,6 +9,7 @@ import pyarrow.compute as pc
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
+from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .keplerian import KeplerianCoordinates
@@ -24,15 +27,6 @@ TRANSFORM_EC2EQ = TRANSFORM_EQ2EC.T
 logger = logging.getLogger(__name__)
 
 
-CoordinateType = TypeVar(
-    "CoordinateType",
-    bound=Union[
-        CartesianCoordinates,
-        KeplerianCoordinates,
-        CometaryCoordinates,
-        SphericalCoordinates,
-    ],
-)
 CoordinatesClasses = (
     CartesianCoordinates,
     KeplerianCoordinates,
@@ -1290,11 +1284,11 @@ def cartesian_to_frame(
 
 
 def transform_coordinates(
-    coords: CoordinateType,
-    representation_out: Optional[CoordinateType] = None,
+    coords: types.CoordinateType,
+    representation_out: Optional[type[types.CoordinateType]] = None,
     frame_out: Optional[Literal["ecliptic", "equatorial"]] = None,
     origin_out: Optional[OriginCodes] = None,
-) -> CoordinateType:
+) -> types.CoordinateType:
     """
     Transform coordinates between frames ('ecliptic', 'equatorial'), origins,
     and/or representations ('cartesian', 'spherical', 'keplerian', 'cometary').
@@ -1304,9 +1298,9 @@ def transform_coordinates(
 
     Parameters
     ----------
-    coords : `~adam_core.coordinates.Coordinates`
+    coords:
         Coordinates to transform between representations and frames.
-    representation_out : `~adam_core.coordinates.Coordinates`
+    representation_out:
         Desired coordinate type or representation of the output coordinates. If None,
         the output coordinates will be the same type as the input coordinates.
     frame_out : {'ecliptic', 'equatorial'}
