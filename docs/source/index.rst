@@ -18,6 +18,7 @@ adam_core
    api/observers
    api/orbits
    api/propagator
+   api/time
 
 Indices and tables
 ==================
