@@ -1,7 +1,13 @@
 from copy import deepcopy
 from typing import List, Union
 
+import astropy.units
 import numpy as np
+
+from .types import Coordinates
+
+# This module is not maintained.
+__doctest_skip__ = ["*"]
 
 
 def _convert_coordinates_units(
@@ -92,26 +98,21 @@ def _convert_covariances_units(
 
 
 def convert_coordinates(
-    coords,
-    desired_units: Union[List, dict],
+    coords: Coordinates,
+    desired_units: Union[List[astropy.units.Unit], dict[str, astropy.units.Unit]],
 ):
     """
-    Convert coordinates to desired units.
+    Convert the units in a Coordinates object to desired units.
 
     Parameters
     ----------
-    coords : `~thor.coordinates.Coordinates` (N, D)
+    coords :
         Coordinates that need to be converted.
     desired_units : list, `~numpy.ndarray`, dict
         Desired units for each coordinate dimension expressed as an array-like
         or a dictionary keyed on coordinate dimensions and with values that represent
         the desired units. If a dictionary is passed, then only the coordinate dimensions
         that need to be converted need to be defined.
-
-        desired_units = {
-            "x" : u.km
-        }
-        coordinates_converted = convert_coordinates(coords, desired_units)
 
     Returns
     -------
@@ -122,6 +123,29 @@ def convert_coordinates(
     ------
     ValueError : If units or desired_units do not have length D.
     ValueError : If desired_units is not a list, `~numpy.ndarray`, dict
+
+    Examples
+    --------
+    >>> import astropy.units
+    >>> from adam_core.coordinates import CartesianCoordinates, convert_coordinates
+    >>> # By default, x, y, and z are in AU
+    >>> coords = CartesianCoordinates.from_kwargs(
+    ...    x=[1, 1, 1],
+    ...    y=[4, 5, 6],
+    ...    z=[7, 8, 9],
+    ...    vx=[10, 11, 12],
+    ...    vy=[13, 14, 15],
+    ...    vz=[16, 17, 18],
+    ... )
+    >>> desired_units = {
+    ...     "x" : astropy.units.km
+    ... }
+    >>> coordinates_converted = convert_coordinates(coords, desired_units)
+    >>> print(coordinates_converted.x.to_pylist())
+    [149597870.0, 149597870.0, 149597870.0]
+    >>> print(coordinates_converted.y.to_pylist())
+    [4.0, 5.0, 6.0]
+
     """
     N, D = coords.values.shape
 

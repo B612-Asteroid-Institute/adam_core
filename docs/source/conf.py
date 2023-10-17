@@ -24,6 +24,8 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.autodoc",
+    "sphinx_toolbox.more_autodoc.typehints",
+    "sphinx_toolbox.more_autodoc.typevars",
     "sphinx_autodoc_typehints",
     "quivr_sphinx_autodoc",
 ]
@@ -34,14 +36,19 @@ hide_none_rtype = True
 templates_path = ['_templates']
 exclude_patterns = []
 
-autodoc_type_aliases = {}
+autodoc_type_aliases = {
+    "Coordinates": "adam_core.coordinates.types.Coordinates",
+}
 
 autodoc_member_order = 'bysource'
+
+import quivr
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "pyarrow": ("https://arrow.apache.org/docs/", None),
     "pandas": ("https://pandas.pydata.org/docs/", None),
+    "quivr": (f"https://quivr.readthedocs.io/en/v{quivr.__version__}", None),
 }
 
 # -- Options for HTML output -------------------------------------------------
