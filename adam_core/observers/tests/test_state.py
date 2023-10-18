@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 
 from ...constants import KM_P_AU, S_P_DAY
-from ...coordinates import Residuals
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import OriginCodes
+from ...coordinates.residuals import Residuals
 from ...observers import get_observer_state
 from ...time import Timestamp
 from ...utils import get_perturber_state

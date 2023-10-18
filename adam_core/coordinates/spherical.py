@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import quivr as qv
-from astropy import units as u
 
 from ..time import Timestamp
 from .cartesian import CartesianCoordinates
@@ -17,19 +16,11 @@ if TYPE_CHECKING:
 __all__ = [
     "SphericalCoordinates",
     "SPHERICAL_COLS",
-    "SPHERICAL_UNITS",
 ]
 
 SPHERICAL_COLS = {}
-SPHERICAL_UNITS = {}
 for i in ["rho", "lon", "lat", "vrho", "vlon", "vlat"]:
     SPHERICAL_COLS[i] = i
-SPHERICAL_UNITS["rho"] = u.au
-SPHERICAL_UNITS["lon"] = u.deg
-SPHERICAL_UNITS["lat"] = u.deg
-SPHERICAL_UNITS["vrho"] = u.au / u.d
-SPHERICAL_UNITS["vlon"] = u.deg / u.d
-SPHERICAL_UNITS["vlat"] = u.deg / u.d
 
 
 class SphericalCoordinates(qv.Table):

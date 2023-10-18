@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import quivr as qv
-from astropy import units as u
 
 from ..time import Timestamp
 from .cartesian import CartesianCoordinates
@@ -17,19 +16,11 @@ if TYPE_CHECKING:
 __all__ = [
     "KeplerianCoordinates",
     "KEPLERIAN_COLS",
-    "KEPLERIAN_UNITS",
 ]
 
 KEPLERIAN_COLS = {}
-KEPLERIAN_UNITS = {}
 for i in ["a", "e", "i", "raan", "ap", "M"]:
     KEPLERIAN_COLS[i] = i
-KEPLERIAN_UNITS["a"] = u.au
-KEPLERIAN_UNITS["e"] = u.dimensionless_unscaled
-KEPLERIAN_UNITS["i"] = u.deg
-KEPLERIAN_UNITS["raan"] = u.deg
-KEPLERIAN_UNITS["ap"] = u.deg
-KEPLERIAN_UNITS["M"] = u.deg
 
 
 class KeplerianCoordinates(qv.Table):

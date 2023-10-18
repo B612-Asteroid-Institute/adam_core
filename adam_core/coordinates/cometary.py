@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import quivr as qv
-from astropy import units as u
 
 from ..time import Timestamp
 from .cartesian import CartesianCoordinates
@@ -17,19 +16,11 @@ if TYPE_CHECKING:
 __all__ = [
     "CometaryCoordinates",
     "COMETARY_COLS",
-    "COMETARY_UNITS",
 ]
 
 COMETARY_COLS = {}
-COMETARY_UNITS = {}
 for i in ["q", "e", "i", "raan", "ap", "tp"]:
     COMETARY_COLS[i] = i
-COMETARY_UNITS["q"] = u.au
-COMETARY_UNITS["e"] = u.dimensionless_unscaled
-COMETARY_UNITS["i"] = u.deg
-COMETARY_UNITS["raan"] = u.deg
-COMETARY_UNITS["ap"] = u.deg
-COMETARY_UNITS["tp"] = u.d
 
 
 class CometaryCoordinates(qv.Table):
