@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class CartesianCoordinates(qv.Table):
     """Represents coordinates in Cartesian space."""
 
-    #: x coordinatess
+    #: x coordinates
     x = qv.Float64Column(nullable=True)
 
     #: y coordinates
