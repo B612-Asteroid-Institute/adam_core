@@ -195,10 +195,14 @@ class Propagator(ABC):
                 max_workers=max_processes
             ) as executor:
                 futures = []
+                # Iterate off of all combined chunks of orbits and observers.
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
-                    futures.append(
-                        executor.submit(ephemeris_worker, orbit_chunk, observers, self)
-                    )
+                    for observers_chunk in _iterate_chunks(observers, 1):
+                        futures.append(
+                            executor.submit(
+                                ephemeris_worker, orbit_chunk, observers_chunk, self
+                            )
+                        )
 
                 ephemeris_list = []
                 for future in concurrent.futures.as_completed(futures):
