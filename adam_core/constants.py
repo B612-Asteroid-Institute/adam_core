@@ -4,7 +4,6 @@ __all__ = [
     "KM_P_AU",
     "S_P_DAY",
     "Constants",
-    "DE43X",
     "DE44X",
 ]
 
@@ -35,18 +34,6 @@ class _Constants:
         return
 
 
-DE43X_CONSTANTS = {
-    # Speed of Light : au / d (299792.458 km / s -- DE430/DE431)
-    "C": 299792.458 / KM_P_AU * S_P_DAY,
-    # Standard Gravitational Parameter -- Sun :  au**3 / d**2 (0.295912208285591100E-3 -- DE431/DE430)
-    "MU": 0.295912208285591100e-3,
-    # Earth Equatorial Radius: au (6378.1363 km -- DE431/DE430)
-    "R_Earth": 6378.1363 / KM_P_AU,
-    # Mean Obliquity at J2000: radians (84381.448 arcseconds -- DE431/DE430)
-    "Obliquity": 84381.448 * np.pi / (180.0 * 3600.0),
-}
-Constants = DE43X = _Constants(**DE43X_CONSTANTS)
-
 DE44X_CONSTANTS = {
     # Speed of Light : au / d (299792.458 km / s -- DE430/DE431)
     "C": 299792.458 / KM_P_AU * S_P_DAY,
@@ -57,4 +44,4 @@ DE44X_CONSTANTS = {
     # Mean Obliquity at J2000: radians (84381.448 arcseconds -- DE431/DE430)
     "Obliquity": 84381.448 * np.pi / (180.0 * 3600.0),
 }
-DE44X = _Constants(**DE44X_CONSTANTS)
+DE44X = Constants = _Constants(**DE44X_CONSTANTS)

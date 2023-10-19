@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import quivr as qv
-from astropy import units as u
 
 from ..time import Timestamp
 from .covariances import CoordinateCovariances
@@ -14,16 +13,7 @@ if TYPE_CHECKING:
     from .keplerian import KeplerianCoordinates
     from .spherical import SphericalCoordinates
 
-__all__ = ["CartesianCoordinates", "CARTESIAN_COLS", "CARTESIAN_UNITS"]
-
-CARTESIAN_COLS = {}
-CARTESIAN_UNITS = {}
-for i in ["x", "y", "z"]:
-    CARTESIAN_COLS[i] = i
-    CARTESIAN_UNITS[i] = u.au
-for i in ["vx", "vy", "vz"]:
-    CARTESIAN_COLS[i] = i
-    CARTESIAN_UNITS[i] = u.au / u.d
+__all__ = ["CartesianCoordinates"]
 
 COVARIANCE_ROTATION_TOLERANCE = 1e-25
 logger = logging.getLogger(__name__)

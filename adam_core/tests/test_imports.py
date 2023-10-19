@@ -9,7 +9,7 @@ def test_import_orbits():
 
 
 def test_import_dynamics():
-    from adam_core.dynamics import calc_chi, calc_stumpff, propagate_2body
+    from adam_core.dynamics import propagate_2body
 
 
 def test_import_coordinates():
@@ -20,9 +20,7 @@ def test_import_coordinates():
         KeplerianCoordinates,
         Origin,
         OriginCodes,
-        Residuals,
         SphericalCoordinates,
-        Times,
         transform_coordinates,
     )
 
