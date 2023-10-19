@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class CartesianCoordinates(qv.Table):
-    """Represents coordinates in Cartesian space.
-
-    """
+    """Represents coordinates in Cartesian space."""
 
     #: x coordinates in AU
     x = qv.Float64Column(nullable=True)
@@ -49,7 +47,7 @@ class CartesianCoordinates(qv.Table):
     #: Center of the coordinate system
     origin = Origin.as_column()
 
-    #: Frame of the coordinate system - 'ecliptic' or 'equatorial' or 'unspecified'. 
+    #: Frame of the coordinate system - 'ecliptic' or 'equatorial' or 'unspecified'.
     frame = qv.StringAttribute(default="unspecified")
 
     @property
@@ -244,7 +242,9 @@ class CartesianCoordinates(qv.Table):
         )
         return coords
 
-    def translate(self, vector: npt.NDArray[np.float64], origin_out: str) -> CartesianCoordinates:
+    def translate(
+        self, vector: npt.NDArray[np.float64], origin_out: str
+    ) -> CartesianCoordinates:
         """
         Translate Cartesian coordinates by the given vector.
 
