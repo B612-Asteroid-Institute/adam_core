@@ -1,17 +1,15 @@
+from __future__ import annotations
+
 import logging
-from typing import TYPE_CHECKING
 
 import numpy as np
+import numpy.typing as npt
 import quivr as qv
 
 from ..time import Timestamp
+from . import cometary, keplerian, spherical
 from .covariances import CoordinateCovariances
 from .origin import Origin
-
-if TYPE_CHECKING:
-    from .cometary import CometaryCoordinates
-    from .keplerian import KeplerianCoordinates
-    from .spherical import SphericalCoordinates
 
 __all__ = ["CartesianCoordinates"]
 
@@ -227,7 +225,7 @@ class CartesianCoordinates(qv.Table):
         )
         return coords
 
-    def translate(self, vector: np.ndarray, origin_out: str) -> "CartesianCoordinates":
+    def translate(self, vector: np.ndarray, origin_out: str) -> CartesianCoordinates:
         """
         Translate Cartesian coordinates by the given vector.
 
@@ -273,33 +271,45 @@ class CartesianCoordinates(qv.Table):
         )
         return coords
 
-    def to_cometary(self) -> "CometaryCoordinates":
-        from .cometary import CometaryCoordinates
-
-        return CometaryCoordinates.from_cartesian(self)
+    def to_cometary(self) -> cometary.CometaryCoordinates:
+        """
+        Converts the Cartesian coordinates to the cometary parameterization.
+        """
+        return cometary.CometaryCoordinates.from_cartesian(self)
 
     @classmethod
-    def from_cometary(cls, cometary: "CometaryCoordinates") -> "CartesianCoordinates":
+    def from_cometary(cls, cometary: cometary.CometaryCoordinates) -> CartesianCoordinates:
+        """
+        Constructs CartesianCoordinates from the cometary parameterization.
+        """
         return cometary.to_cartesian()
 
-    def to_keplerian(self) -> "KeplerianCoordinates":
-        from .keplerian import KeplerianCoordinates
-
-        return KeplerianCoordinates.from_cartesian(self)
+    def to_keplerian(self) -> keplerian.KeplerianCoordinates:
+        """
+        Converts the Cartesian coordinates to the Keplerian parameterization.
+        """
+        return keplerian.KeplerianCoordinates.from_cartesian(self)
 
     @classmethod
     def from_keplerian(
-        cls, keplerian: "KeplerianCoordinates"
-    ) -> "CartesianCoordinates":
+        cls, keplerian: keplerian.KeplerianCoordinates
+    ) -> CartesianCoordinates:
+        """
+        Constructs CartesianCoordinates from the Keplerian parameterization.
+        """
         return keplerian.to_cartesian()
 
-    def to_spherical(self) -> "SphericalCoordinates":
-        from .spherical import SphericalCoordinates
-
-        return SphericalCoordinates.from_cartesian(self)
+    def to_spherical(self) -> spherical.SphericalCoordinates:
+        """
+        Converts the Cartesian coordinates to the spherical parameterization.
+        """
+        return spherical.SphericalCoordinates.from_cartesian(self)
 
     @classmethod
     def from_spherical(
-        cls, spherical: "SphericalCoordinates"
-    ) -> "CartesianCoordinates":
+        cls, spherical: spherical.SphericalCoordinates
+    ) -> CartesianCoordinates:
+        """
+        Constructs CartesianCoordinates from the spherical parameterization.
+        """
         return spherical.to_cartesian()
