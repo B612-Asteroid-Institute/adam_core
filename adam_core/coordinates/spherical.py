@@ -4,10 +4,9 @@ import numpy as np
 import quivr as qv
 
 from ..time import Timestamp
+from . import cartesian, cometary, keplerian
 from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .origin import Origin
-from . import cartesian, cometary, keplerian
-
 
 __all__ = [
     "SphericalCoordinates",
@@ -167,7 +166,9 @@ class SphericalCoordinates(qv.Table):
         return coords
 
     @classmethod
-    def from_cartesian(cls, cartesian: cartesian.CartesianCoordinates) -> "SphericalCoordinates":
+    def from_cartesian(
+        cls, cartesian: cartesian.CartesianCoordinates
+    ) -> "SphericalCoordinates":
         from .transform import _cartesian_to_spherical, cartesian_to_spherical
 
         coords_spherical = cartesian_to_spherical(cartesian.values)

@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-import numpy.typing as npt
 import quivr as qv
 
 from ..time import Timestamp
@@ -278,7 +277,9 @@ class CartesianCoordinates(qv.Table):
         return cometary.CometaryCoordinates.from_cartesian(self)
 
     @classmethod
-    def from_cometary(cls, cometary: cometary.CometaryCoordinates) -> CartesianCoordinates:
+    def from_cometary(
+        cls, cometary: cometary.CometaryCoordinates
+    ) -> CartesianCoordinates:
         """
         Constructs CartesianCoordinates from the cometary parameterization.
         """
