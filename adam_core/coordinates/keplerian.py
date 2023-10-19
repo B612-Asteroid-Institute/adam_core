@@ -15,12 +15,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "KeplerianCoordinates",
-    "KEPLERIAN_COLS",
 ]
-
-KEPLERIAN_COLS = {}
-for i in ["a", "e", "i", "raan", "ap", "M"]:
-    KEPLERIAN_COLS[i] = i
 
 
 class KeplerianCoordinates(qv.Table):

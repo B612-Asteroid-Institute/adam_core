@@ -15,12 +15,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SphericalCoordinates",
-    "SPHERICAL_COLS",
 ]
-
-SPHERICAL_COLS = {}
-for i in ["rho", "lon", "lat", "vrho", "vlon", "vlat"]:
-    SPHERICAL_COLS[i] = i
 
 
 class SphericalCoordinates(qv.Table):

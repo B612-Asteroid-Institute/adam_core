@@ -15,12 +15,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CometaryCoordinates",
-    "COMETARY_COLS",
 ]
-
-COMETARY_COLS = {}
-for i in ["q", "e", "i", "raan", "ap", "tp"]:
-    COMETARY_COLS[i] = i
 
 
 class CometaryCoordinates(qv.Table):

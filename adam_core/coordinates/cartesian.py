@@ -15,12 +15,6 @@ if TYPE_CHECKING:
 
 __all__ = ["CartesianCoordinates"]
 
-CARTESIAN_COLS = {}
-for i in ["x", "y", "z"]:
-    CARTESIAN_COLS[i] = i
-for i in ["vx", "vy", "vz"]:
-    CARTESIAN_COLS[i] = i
-
 COVARIANCE_ROTATION_TOLERANCE = 1e-25
 logger = logging.getLogger(__name__)
 
