@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import astropy
+import astropy.time
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
