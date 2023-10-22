@@ -17,9 +17,9 @@ from ..coordinates.spherical import SphericalCoordinates
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
-from ..orbits.variants import VariantOrbits
+from ..orbits.variants import VariantEphemeris, VariantOrbits
 from ..time import Timestamp
-from .propagator import OrbitType, Propagator
+from .propagator import EphemerisType, OrbitType, Propagator
 from .utils import _assert_times_almost_equal
 
 
@@ -319,7 +319,9 @@ class PYOORB(Propagator):
 
         return propagated_orbits
 
-    def _generate_ephemeris(self, orbits: OrbitType, observers: Observers) -> Ephemeris:
+    def _generate_ephemeris(
+        self, orbits: OrbitType, observers: Observers
+    ) -> EphemerisType:
         """
         Generate ephemerides for orbits as viewed from observers using PYOORB.
 
@@ -375,7 +377,7 @@ class PYOORB(Propagator):
             epochs_pyoorb = self._configure_epochs(mjd_utc, OpenOrbTimescale.UTC)
 
             # Generate ephemeris
-            ephemeris, err = oo.pyoorb.oorb_ephemeris_full(
+            ephemeris_array_3D, err = oo.pyoorb.oorb_ephemeris_full(
                 in_orbits=orbits_pyoorb,
                 in_obscode=code_i,
                 in_date_ephems=epochs_pyoorb,
@@ -388,13 +390,11 @@ class PYOORB(Propagator):
                 )
 
             # Stack 3D ephemeris into single 2D array
-            ephemeris = np.vstack(ephemeris)
+            ephemeris_array = np.vstack(ephemeris_array_3D)
 
             # PYOORB returns ephemerides for each orbit, so lets reconstruct orbit IDs
             ids = np.arange(0, len(orbits))
             orbit_ids_idx = np.repeat(ids, len(mjd_utc))
-            orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
-            object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_idx]
 
             # Columns returned by PYOORB, we will only use a subset
             # columns = [
@@ -433,49 +433,100 @@ class PYOORB(Propagator):
             #     "obs_z",
             #     "TrueAnom",
             # ]
-            codes = np.empty(len(ephemeris), dtype=object)
+            codes = np.empty(len(ephemeris_array), dtype=object)
             codes[:] = code_i
 
             # Check to make sure the desired times are within 1 microsecond
             # of the times returned by PYOORB
             _assert_times_almost_equal(
                 np.tile(mjd_utc, len(orbits)),
-                ephemeris[:, 0],
+                ephemeris_array[:, 0],
                 tolerance=0.001,  # FIXME: This is 0.001 days, which is 86.4 seconds, not 1 microsecond?
             )
 
-            ephemeris = Ephemeris.from_kwargs(
-                orbit_id=orbit_ids,
-                object_id=object_ids,
-                coordinates=SphericalCoordinates.from_kwargs(
-                    time=Timestamp.from_mjd(
-                        ephemeris[:, 0],
-                        scale="utc",
+            if isinstance(orbits, Orbits):
+
+                # Map the object and orbit IDs back to the input arrays
+                orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[
+                    orbit_ids_idx
+                ]
+                object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[
+                    orbit_ids_idx
+                ]
+
+                ephemeris = Ephemeris.from_kwargs(
+                    orbit_id=orbit_ids,
+                    object_id=object_ids,
+                    coordinates=SphericalCoordinates.from_kwargs(
+                        time=Timestamp.from_mjd(
+                            ephemeris_array[:, 0],
+                            scale="utc",
+                        ),
+                        rho=None,  # PYOORB rho (delta_au) is geocentric not topocentric
+                        lon=ephemeris_array[:, 1],
+                        lat=ephemeris_array[:, 2],
+                        vlon=ephemeris_array[:, 3]
+                        / np.cos(np.radians(ephemeris_array[:, 2])),
+                        vlat=ephemeris_array[:, 4],
+                        vrho=None,  # PYOORB doesn't calculate observer velocity so it can't calulate vrho
+                        origin=Origin.from_kwargs(code=codes),
+                        frame="equatorial",
                     ),
-                    rho=None,  # PYOORB rho (delta_au) is geocentric not topocentric
-                    lon=ephemeris[:, 1],
-                    lat=ephemeris[:, 2],
-                    vlon=ephemeris[:, 3] / np.cos(np.radians(ephemeris[:, 2])),
-                    vlat=ephemeris[:, 4],
-                    vrho=None,  # PYOORB doesn't calculate observer velocity so it can't calulate vrho
-                    origin=Origin.from_kwargs(code=codes),
-                    frame="equatorial",
-                ),
-                aberrated_coordinates=CartesianCoordinates.from_kwargs(
-                    x=ephemeris[:, 24],
-                    y=ephemeris[:, 25],
-                    z=ephemeris[:, 26],
-                    vx=ephemeris[:, 27],
-                    vy=ephemeris[:, 28],
-                    vz=ephemeris[:, 29],
-                    time=Timestamp.from_mjd(
-                        ephemeris[:, 0],
-                        scale="utc",
+                    alpha=ephemeris_array[:, 5],
+                    aberrated_coordinates=CartesianCoordinates.from_kwargs(
+                        x=ephemeris_array[:, 24],
+                        y=ephemeris_array[:, 25],
+                        z=ephemeris_array[:, 26],
+                        vx=ephemeris_array[:, 27],
+                        vy=ephemeris_array[:, 28],
+                        vz=ephemeris_array[:, 29],
+                        time=Timestamp.from_mjd(
+                            ephemeris_array[:, 0],
+                            scale="utc",
+                        ),
+                        origin=Origin.from_kwargs(
+                            code=["SUN" for i in range(len(ephemeris_array))]
+                        ),
+                        frame="ecliptic",
                     ),
-                    origin=Origin.from_kwargs(code=["SUN" for i in range(len(codes))]),
-                    frame="ecliptic",
-                ),
-            )
-            ephemeris_list.append(ephemeris)
+                )
+
+                ephemeris_list.append(ephemeris)
+
+            elif isinstance(orbits, VariantOrbits):
+
+                # Map the object and orbit IDs back to the input arrays
+                object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[
+                    orbit_ids_idx
+                ]
+                orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[
+                    orbit_ids_idx
+                ]
+                weights = orbits.weights.to_numpy()[orbit_ids_idx]
+                weights_cov = orbits.weights_cov.to_numpy()[orbit_ids_idx]
+
+                variant_ephemeris = VariantEphemeris.from_kwargs(
+                    orbit_id=orbit_ids,
+                    object_id=object_ids,
+                    coordinates=SphericalCoordinates.from_kwargs(
+                        time=Timestamp.from_mjd(
+                            ephemeris_array[:, 0],
+                            scale="utc",
+                        ),
+                        rho=None,  # PYOORB rho (delta_au) is geocentric not topocentric
+                        lon=ephemeris_array[:, 1],
+                        lat=ephemeris_array[:, 2],
+                        vlon=ephemeris_array[:, 3]
+                        / np.cos(np.radians(ephemeris_array[:, 2])),
+                        vlat=ephemeris_array[:, 4],
+                        vrho=None,  # PYOORB doesn't calculate observer velocity so it can't calulate vrho
+                        origin=Origin.from_kwargs(code=codes),
+                        frame="equatorial",
+                    ),
+                    weights=weights,
+                    weights_cov=weights_cov,
+                )
+
+                ephemeris_list.append(variant_ephemeris)
 
         return qv.concatenate(ephemeris_list)

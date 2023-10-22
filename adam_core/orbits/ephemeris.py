@@ -20,6 +20,7 @@ class Ephemeris(qv.Table):
     # will be different from its actual geometric coordinates at the time of observation.
     # Aberrated coordinates are coordinates that account for the light travel time
     # from the time of emission/reflection to the time of observation
+    alpha = qv.Float64Column(nullable=True)
     light_time = qv.Float64Column(nullable=True)
     aberrated_coordinates = CartesianCoordinates.as_column(nullable=True)
 
