@@ -5,21 +5,21 @@ build-backend = "hatchling.build"
 [project]
 name = "adam_core"
 authors = [
-  { name="Kathleen Kiker", email="kathleen@b612foundation.org" },
-  { name="Alec Koumjian", email="alec@b612foundation.org" },
-  { name="Joachim Moeyens", email="moeyensj@uw.edu" },
-  { name="Spencer Nelson", email="spencer@b612foundation.org" },
-  { name="Nate Tellis", email="nate@b612foundation.org" }
+  { name = "Kathleen Kiker", email = "kathleen@b612foundation.org" },
+  { name = "Alec Koumjian", email = "alec@b612foundation.org" },
+  { name = "Joachim Moeyens", email = "moeyensj@uw.edu" },
+  { name = "Spencer Nelson", email = "spencer@b612foundation.org" },
+  { name = "Nate Tellis", email = "nate@b612foundation.org" },
 ]
 description = "Core libraries for the ADAM platform"
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
 ]
-dynamic = [ "version" ]
+dynamic = ["version"]
 
 dependencies = [
   "astropy",
@@ -30,12 +30,13 @@ dependencies = [
   "numpy<1.25",
   "pyarrow>=13.0.0",
 
+  # pyoorb can become a dependency once it's fully available on PyPI
   # On python<3.12 and arm, we can use the pyoorb wheel
-  "pyoorb ; python_version < '3.12' and platform_machine != 'arm64'",
+  # "pyoorb ; python_version < '3.12' and platform_machine != 'arm64'",
   # Otherwise, we need to build from source. The source distribution
   # on PyPI doesn't work, so installf rom a fork, pending a release of
   # oorb which includes https://github.com/oorb/oorb/pull/177:
-  "pyoorb@git+https://github.com/spenczar/oorb.git@python-sdist ; python_version >= '3.12' or platform_machine == 'arm64'",
+  # "pyoorb@git+https://github.com/spenczar/oorb.git@python-sdist ; python_version >= '3.12' or platform_machine == 'arm64'",
 
   "pandas",
   "requests",
@@ -48,16 +49,14 @@ dependencies = [
   "naif-eop-high-prec",
   "naif-eop-predict",
   "naif-eop-historical",
-  "naif-earth-itrf93"
+  "naif-earth-itrf93",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/b612-asteroid-institute/adam_core"
 
 [tool.hatch.build.targets.sdist]
-include = [
-  "/adam_core",
-]
+include = ["/adam_core"]
 
 [tool.hatch.metadata]
 # Temporary while pyoorb is referenced via git direct ref
@@ -77,42 +76,23 @@ dependencies = [
   "pytest-doctestplus",
   "pre-commit",
   "ruff",
-  "ipython"
+  "ipython",
 ]
 
 [tool.hatch.envs.dev.scripts]
-check = [
-  "lint",
-  "typecheck",
-  "test",
-]
-fix = [
-  "ruff ./adam_core --fix"
-]
+check = ["lint", "typecheck", "test"]
+fix = ["ruff ./adam_core --fix"]
 lint = [
   "ruff ./adam_core",
   "black --check ./adam_core",
   "isort --check-only ./adam_core",
 ]
-format = [
-  "black ./adam_core",
-  "isort ./adam_core"
-]
-typecheck = [
-  "mypy --strict ./adam_core"
-]
-test = [
-  "pytest --benchmark-disable ./adam_core {args}",
-]
-doctest = [
-  "pytest --doctest-plus ./adam_core --doctest-only"
-]
-benchmark = [
-  "pytest --benchmark-only ./adam_core {args}"
-]
-coverage = [
-  "pytest ./adam_core --cov --cov-report xml"
-]
+format = ["black ./adam_core", "isort ./adam_core"]
+typecheck = ["mypy --strict ./adam_core"]
+test = ["pytest --benchmark-disable ./adam_core {args}"]
+doctest = ["pytest --doctest-plus ./adam_core --doctest-only"]
+benchmark = ["pytest --benchmark-only ./adam_core {args}"]
+coverage = ["pytest ./adam_core --cov --cov-report xml"]
 
 [tool.black]
 line-length = 88
@@ -124,9 +104,7 @@ profile = "black"
 line-length = 110
 target-version = "py311"
 ignore = []
-exclude = [
-  "build"
-]
+exclude = ["build"]
 
 [tool.hatch.envs.docs]
 dependencies = [
@@ -134,7 +112,7 @@ dependencies = [
   "sphinx-autodoc-typehints",
   "sphinx-copybutton",
   "sphinx-toolbox",
-  "quivr-sphinx-autodoc"
+  "quivr-sphinx-autodoc",
 ]
 
 [project.optional-dependencies]
@@ -143,18 +121,12 @@ docs = [
   "sphinx-autodoc-typehints",
   "sphinx-copybutton",
   "sphinx-toolbox",
-  "quivr-sphinx-autodoc"
+  "quivr-sphinx-autodoc",
 ]
 
 [tool.hatch.envs.docs.scripts]
-make-html = [
-  "make -C docs html"
-]
+make-html = ["make -C docs html"]
 
-clean = [
-  "make -C docs clean"
-]
+clean = ["make -C docs clean"]
 
-open-html = [
-  "open docs/build/html/index.html"
-]
+open-html = ["open docs/build/html/index.html"]

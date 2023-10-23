@@ -344,6 +344,32 @@ ADAM Core is available on PyPI
 pip install adam_core
 ```
 
+### PYOORB Installation 
+In order to use the `adam_core.propagator.PYOORB` class, you will need to install PYOORB separately (for now). We are actively working on making this more seamless.
+
+You can do this with conda:
+
+```bash
+conda install -c conda-forge pyoorb
+```
+
+Or you can install from source:
+    
+```bash
+pip install -e git+https://github.com/oorb/oorb.git@main#egg=pyoorb
+```
+
+With this method you must download the data files separately.
+
+```
+cd [installation directory]/
+make ephem
+cd data/
+./getBC430
+./updateOBSCODE
+export OORB_DATA=[installation directory]/data
+```
+
 ## Development
 
 Development is made easy with our Docker container environment.
