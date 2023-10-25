@@ -3,6 +3,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import List, Literal, Optional, Type, Union
 
+import numpy as np
+import numpy.typing as npt
 import quivr as qv
 
 from ..observers.observers import Observers
@@ -16,6 +18,14 @@ logger = logging.getLogger(__name__)
 
 OrbitType = Union[Orbits, VariantOrbits]
 EphemerisType = Union[Ephemeris, VariantOrbits]
+
+RAY_INSTALLED = False
+try:
+    import ray
+
+    RAY_INSTALLED = True
+except ImportError:
+    pass
 
 
 def propagation_worker(
@@ -32,6 +42,35 @@ def ephemeris_worker(
     prop = propagator(**kwargs)
     ephemeris = prop._generate_ephemeris(orbits, observers)
     return ephemeris
+
+
+if RAY_INSTALLED:
+
+    @ray.remote
+    def propagation_worker_ray(
+        idx: npt.NDArray[np.int64],
+        orbits: Orbits,
+        times: Timestamp,
+        propagator: Type["Propagator"],
+        **kwargs,
+    ):
+        prop = propagator(**kwargs)
+        orbits_chunk = orbits.take(idx)
+        propagated = prop._propagate_orbits(orbits_chunk, times)
+        return propagated
+
+    @ray.remote
+    def ephemeris_worker_ray(
+        idx: npt.NDArray[np.int64],
+        orbits: Orbits,
+        observers: Observers,
+        propagator: Type["Propagator"],
+        **kwargs,
+    ):
+        prop = propagator(**kwargs)
+        orbits_chunk = orbits.take(idx)
+        ephemeris = prop._generate_ephemeris(orbits_chunk, observers)
+        return ephemeris
 
 
 class Propagator(ABC):
@@ -66,6 +105,7 @@ class Propagator(ABC):
         num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
+        parallel_backend: Literal["cf", "ray"] = "cf",
     ) -> Orbits:
         """
         Propagate each orbit in orbits to each time in times.
@@ -90,7 +130,11 @@ class Propagator(ABC):
         max_processes : int or None, optional
             Maximum number of processes to launch. If None then the number of
             processes will be equal to the number of cores on the machine. If 1
-            then no multiprocessing will be used.
+            then no multiprocessing will be used. If "ray" is the parallel_backend and a ray instance
+            is initialized already then this argument is ignored.
+        parallel_backend : {'cf', 'ray'}, optional
+            The parallel backend to use. 'cf' uses concurrent.futures and 'ray' uses ray. The default is 'cf'.
+            To use ray, ray must be installed.
 
         Returns
         -------
@@ -107,30 +151,104 @@ class Propagator(ABC):
             variants = None
 
         if max_processes is None or max_processes > 1:
-            with concurrent.futures.ProcessPoolExecutor(
-                max_workers=max_processes
-            ) as executor:
 
-                # Add orbits to propagate to futures
-                futures = []
-                for orbit_chunk in _iterate_chunks(orbits, chunk_size):
-                    futures.append(
-                        executor.submit(propagation_worker, orbit_chunk, times, self.__class__, **self.__dict__)
-                    )
+            propagated_list: List[Orbits] = []
+            variants_list: List[VariantOrbits] = []
 
-                # Add variants to propagate to futures
-                if variants is not None:
-                    for variant_chunk in _iterate_chunks(variants, chunk_size):
+            if parallel_backend == "cf":
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=max_processes
+                ) as executor:
+
+                    # Add orbits to propagate to futures
+                    futures = []
+                    for orbit_chunk in _iterate_chunks(orbits, chunk_size):
                         futures.append(
                             executor.submit(
-                                propagation_worker, variant_chunk, times, self.__class__, **self.__dict__
+                                propagation_worker,
+                                orbit_chunk,
+                                times,
+                                self.__class__,
+                                **self.__dict__,
                             )
                         )
 
-                propagated_list: List[Orbits] = []
-                variants_list: List[VariantOrbits] = []
-                for future in concurrent.futures.as_completed(futures):
-                    result = future.result()
+                    # Add variants to propagate to futures
+                    if variants is not None:
+                        for variant_chunk in _iterate_chunks(variants, chunk_size):
+                            futures.append(
+                                executor.submit(
+                                    propagation_worker,
+                                    variant_chunk,
+                                    times,
+                                    self.__class__,
+                                    **self.__dict__,
+                                )
+                            )
+
+                    for future in concurrent.futures.as_completed(futures):
+                        result = future.result()
+                        if isinstance(result, Orbits):
+                            propagated_list.append(result)
+                        elif isinstance(result, VariantOrbits):
+                            variants_list.append(result)
+                        else:
+                            raise ValueError(
+                                f"Unexpected result type from propagation worker: {type(result)}"
+                            )
+
+            elif parallel_backend == "ray":
+
+                if RAY_INSTALLED is False:
+                    raise ImportError(
+                        "Ray must be installed to use the ray parallel backend"
+                    )
+
+                if not ray.is_initialized():
+                    ray.init(num_cpus=max_processes)
+
+                # Add orbits and times to object store
+                times_ref = ray.put(times)
+                orbits_ref = ray.put(orbits)
+
+                # Create futures
+                futures = []
+                idx = np.arange(0, len(orbits))
+                for idx_chunk in _iterate_chunks(idx, chunk_size):
+                    futures.append(
+                        propagation_worker_ray.remote(
+                            idx_chunk,
+                            orbits_ref,
+                            times_ref,
+                            self.__class__,
+                            **self.__dict__,
+                        )
+                    )
+
+                # Add variants to futures (if we have any)
+                if variants is not None:
+
+                    # Add variants to object store
+                    variants_ref = ray.put(variants)
+
+                    idx = np.arange(0, len(variants))
+                    for variant_chunk in _iterate_chunks(idx, chunk_size):
+                        idx_chunk = ray.put(variant_chunk)
+                        futures.append(
+                            propagation_worker_ray.remote(
+                                idx_chunk,
+                                variants_ref,
+                                times_ref,
+                                self.__class__,
+                                **self.__dict__,
+                            )
+                        )
+
+                # Get results as they finish (we sort later)
+                unfinished = futures
+                while unfinished:
+                    finished, unfinished = ray.wait(unfinished, num_returns=1)
+                    result = ray.get(finished[0])
                     if isinstance(result, Orbits):
                         propagated_list.append(result)
                     elif isinstance(result, VariantOrbits):
@@ -140,6 +258,10 @@ class Propagator(ABC):
                             f"Unexpected result type from propagation worker: {type(result)}"
                         )
 
+            else:
+                raise ValueError(f"Unknown parallel backend: {parallel_backend}")
+
+            # Concatenate propagated orbits
             propagated = qv.concatenate(propagated_list)
             if len(variants_list) > 0:
                 propagated_variants = qv.concatenate(variants_list)
@@ -184,6 +306,7 @@ class Propagator(ABC):
         num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
+        parallel_backend: Literal["cf", "ray"] = "cf",
     ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -211,7 +334,11 @@ class Propagator(ABC):
         max_processes : int or None, optional
             Number of processes to launch. If None then the number of
             processes will be equal to the number of cores on the machine. If 1
-            then no multiprocessing will be used.
+            then no multiprocessing will be used. If "ray" is the parallel_backend and a ray instance
+            is initialized already then this argument is ignored.
+        parallel_backend : {'cf', 'ray'}, optional
+            The parallel backend to use. 'cf' uses concurrent.futures and 'ray' uses ray. The default is 'cf'.
+            To use ray, ray must be installed.
 
         Returns
         -------
@@ -229,30 +356,103 @@ class Propagator(ABC):
             variants = None
 
         if max_processes is None or max_processes > 1:
-            with concurrent.futures.ProcessPoolExecutor(
-                max_workers=max_processes
-            ) as executor:
 
-                # Add orbits to propagate to futures
-                futures = []
-                for orbit_chunk in _iterate_chunks(orbits, chunk_size):
-                    futures.append(
-                        executor.submit(ephemeris_worker, orbit_chunk, observers, self.__class__, **self.__dict__)
-                    )
+            ephemeris_list: List[Ephemeris] = []
+            variants_list: List[VariantEphemeris] = []
 
-                # Add variants to propagate to futures
-                if variants is not None:
-                    for variant_chunk in _iterate_chunks(variants, chunk_size):
+            if parallel_backend == "cf":
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=max_processes
+                ) as executor:
+
+                    # Add orbits to propagate to futures
+                    futures = []
+                    for orbit_chunk in _iterate_chunks(orbits, chunk_size):
                         futures.append(
                             executor.submit(
-                                ephemeris_worker, variant_chunk, observers, self.__class__, **self.__dict__
+                                ephemeris_worker,
+                                orbit_chunk,
+                                observers,
+                                self.__class__,
+                                **self.__dict__,
                             )
                         )
 
-                ephemeris_list: List[Ephemeris] = []
-                variants_list: List[VariantEphemeris] = []
-                for future in concurrent.futures.as_completed(futures):
-                    result = future.result()
+                    # Add variants to propagate to futures
+                    if variants is not None:
+                        for variant_chunk in _iterate_chunks(variants, chunk_size):
+                            futures.append(
+                                executor.submit(
+                                    ephemeris_worker,
+                                    variant_chunk,
+                                    observers,
+                                    self.__class__,
+                                    **self.__dict__,
+                                )
+                            )
+
+                    for future in concurrent.futures.as_completed(futures):
+                        result = future.result()
+                        if isinstance(result, Ephemeris):
+                            ephemeris_list.append(result)
+                        elif isinstance(result, VariantEphemeris):
+                            variants_list.append(result)
+                        else:
+                            raise ValueError(
+                                f"Unexpected result type from ephemeris worker: {type(result)}"
+                            )
+            elif parallel_backend == "ray":
+
+                if RAY_INSTALLED is False:
+                    raise ImportError(
+                        "Ray must be installed to use the ray parallel backend"
+                    )
+
+                if not ray.is_initialized():
+                    ray.init(num_cpus=max_processes)
+
+                # Add orbits and observers to object store
+                observers_ref = ray.put(observers)
+                orbits_ref = ray.put(orbits)
+
+                # Create futures
+                futures = []
+                idx = np.arange(0, len(orbits))
+                for idx_chunk in _iterate_chunks(idx, chunk_size):
+                    futures.append(
+                        ephemeris_worker_ray.remote(
+                            idx_chunk,
+                            orbits_ref,
+                            observers_ref,
+                            self.__class__,
+                            **self.__dict__,
+                        )
+                    )
+
+                # Add variants to futures (if we have any)
+                if variants is not None:
+
+                    # Add variants to object store
+                    variants_ref = ray.put(variants)
+
+                    idx = np.arange(0, len(variants))
+                    for variant_chunk in _iterate_chunks(idx, chunk_size):
+                        idx_chunk = ray.put(variant_chunk)
+                        futures.append(
+                            ephemeris_worker_ray.remote(
+                                idx_chunk,
+                                variants_ref,
+                                observers_ref,
+                                self.__class__,
+                                **self.__dict__,
+                            )
+                        )
+
+                # Get results as they finish (we sort later)
+                unfinished = futures
+                while unfinished:
+                    finished, unfinished = ray.wait(unfinished, num_returns=1)
+                    result = ray.get(finished[0])
                     if isinstance(result, Ephemeris):
                         ephemeris_list.append(result)
                     elif isinstance(result, VariantEphemeris):
@@ -261,6 +461,9 @@ class Propagator(ABC):
                         raise ValueError(
                             f"Unexpected result type from ephemeris worker: {type(result)}"
                         )
+
+            else:
+                raise ValueError(f"Unknown parallel backend: {parallel_backend}")
 
             ephemeris = qv.concatenate(ephemeris_list)
             if len(variants_list) > 0:
