@@ -1,7 +1,7 @@
 import concurrent.futures
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Union
+from typing import List, Literal, Optional, Type, Union
 
 import quivr as qv
 
@@ -19,16 +19,18 @@ EphemerisType = Union[Ephemeris, VariantOrbits]
 
 
 def propagation_worker(
-    orbits: OrbitType, times: Timestamp, propagator: "Propagator"
+    orbits: OrbitType, times: Timestamp, propagator: Type["Propagator"], **kwargs
 ) -> Orbits:
-    propagated = propagator._propagate_orbits(orbits, times)
+    prop = propagator(**kwargs)
+    propagated = prop._propagate_orbits(orbits, times)
     return propagated
 
 
 def ephemeris_worker(
-    orbits: Orbits, observers: Observers, propagator: "Propagator"
+    orbits: Orbits, observers: Observers, propagator: Type["Propagator"], **kwargs
 ) -> Ephemeris:
-    ephemeris = propagator._generate_ephemeris(orbits, observers)
+    prop = propagator(**kwargs)
+    ephemeris = prop._generate_ephemeris(orbits, observers)
     return ephemeris
 
 
@@ -113,7 +115,7 @@ class Propagator(ABC):
                 futures = []
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
                     futures.append(
-                        executor.submit(propagation_worker, orbit_chunk, times, self)
+                        executor.submit(propagation_worker, orbit_chunk, times, self.__class__, **self.__dict__)
                     )
 
                 # Add variants to propagate to futures
@@ -121,7 +123,7 @@ class Propagator(ABC):
                     for variant_chunk in _iterate_chunks(variants, chunk_size):
                         futures.append(
                             executor.submit(
-                                propagation_worker, variant_chunk, times, self
+                                propagation_worker, variant_chunk, times, self.__class__, **self.__dict__
                             )
                         )
 
@@ -235,7 +237,7 @@ class Propagator(ABC):
                 futures = []
                 for orbit_chunk in _iterate_chunks(orbits, chunk_size):
                     futures.append(
-                        executor.submit(ephemeris_worker, orbit_chunk, observers, self)
+                        executor.submit(ephemeris_worker, orbit_chunk, observers, self.__class__, **self.__dict__)
                     )
 
                 # Add variants to propagate to futures
@@ -243,7 +245,7 @@ class Propagator(ABC):
                     for variant_chunk in _iterate_chunks(variants, chunk_size):
                         futures.append(
                             executor.submit(
-                                ephemeris_worker, variant_chunk, observers, self
+                                ephemeris_worker, variant_chunk, observers, self.__class__, **self.__dict__
                             )
                         )
 
