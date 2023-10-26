@@ -68,6 +68,7 @@ path = "adam_core/__version__.py"
 
 [tool.hatch.envs.dev]
 dependencies = [
+  "ray", # TODO: Move to main dependencies once we are ready to move away from concurrent futures
   "black==22.10.0",
   "isort",
   "mypy",
