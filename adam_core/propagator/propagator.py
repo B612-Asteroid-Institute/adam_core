@@ -16,29 +16,38 @@ from .utils import _iterate_chunks
 
 logger = logging.getLogger(__name__)
 
-OrbitType = Union[Orbits, VariantOrbits]
-EphemerisType = Union[Ephemeris, VariantOrbits]
-
 RAY_INSTALLED = False
 try:
     import ray
+    from ray import ObjectRef
 
     RAY_INSTALLED = True
 except ImportError:
     pass
 
+TimestampType = Union[Timestamp, ObjectRef]
+OrbitType = Union[Orbits, VariantOrbits, ObjectRef]
+EphemerisType = Union[Ephemeris, VariantOrbits, ObjectRef]
+ObserverType = Union[Observers, ObjectRef]
+
 
 def propagation_worker(
-    orbits: OrbitType, times: Timestamp, propagator: Type["Propagator"], **kwargs
-) -> Orbits:
+    orbits: Union[Orbits, VariantOrbits],
+    times: Timestamp,
+    propagator: Type["Propagator"],
+    **kwargs,
+) -> Union[Orbits, VariantOrbits]:
     prop = propagator(**kwargs)
     propagated = prop._propagate_orbits(orbits, times)
     return propagated
 
 
 def ephemeris_worker(
-    orbits: Orbits, observers: Observers, propagator: Type["Propagator"], **kwargs
-) -> Ephemeris:
+    orbits: Union[Orbits, VariantOrbits],
+    observers: Observers,
+    propagator: Type["Propagator"],
+    **kwargs,
+) -> Union[Ephemeris, VariantOrbits]:
     prop = propagator(**kwargs)
     ephemeris = prop._generate_ephemeris(orbits, observers)
     return ephemeris
@@ -49,11 +58,11 @@ if RAY_INSTALLED:
     @ray.remote
     def propagation_worker_ray(
         idx: npt.NDArray[np.int64],
-        orbits: Orbits,
-        times: Timestamp,
+        orbits: OrbitType,
+        times: OrbitType,
         propagator: Type["Propagator"],
         **kwargs,
-    ):
+    ) -> OrbitType:
         prop = propagator(**kwargs)
         orbits_chunk = orbits.take(idx)
         propagated = prop._propagate_orbits(orbits_chunk, times)
@@ -62,11 +71,11 @@ if RAY_INSTALLED:
     @ray.remote
     def ephemeris_worker_ray(
         idx: npt.NDArray[np.int64],
-        orbits: Orbits,
-        observers: Observers,
+        orbits: OrbitType,
+        observers: ObserverType,
         propagator: Type["Propagator"],
         **kwargs,
-    ):
+    ) -> EphemerisType:
         prop = propagator(**kwargs)
         orbits_chunk = orbits.take(idx)
         ephemeris = prop._generate_ephemeris(orbits_chunk, observers)
@@ -86,7 +95,7 @@ class Propagator(ABC):
     """
 
     @abstractmethod
-    def _propagate_orbits(self, orbits: OrbitType, times: Timestamp) -> OrbitType:
+    def _propagate_orbits(self, orbits: OrbitType, times: TimestampType) -> OrbitType:
         """
         Propagate orbits to times.
 
@@ -96,8 +105,8 @@ class Propagator(ABC):
 
     def propagate_orbits(
         self,
-        orbits: Orbits,
-        times: Timestamp,
+        orbits: OrbitType,
+        times: TimestampType,
         covariance: bool = False,
         covariance_method: Literal[
             "auto", "sigma-point", "monte-carlo"
@@ -141,15 +150,6 @@ class Propagator(ABC):
         propagated : `~adam_core.orbits.orbits.Orbits`
             Propagated orbits.
         """
-        # Check if we need to propagate orbit variants so we can propagate covariance
-        # matrices
-        if not orbits.coordinates.covariance.is_all_nan() and covariance is True:
-            variants = VariantOrbits.create(
-                orbits, method=covariance_method, num_samples=num_samples
-            )
-        else:
-            variants = None
-
         if max_processes is None or max_processes > 1:
 
             propagated_list: List[Orbits] = []
@@ -174,7 +174,13 @@ class Propagator(ABC):
                         )
 
                     # Add variants to propagate to futures
-                    if variants is not None:
+                    if (
+                        covariance is True
+                        and not orbits.coordinates.covariance.is_all_nan()
+                    ):
+                        variants = VariantOrbits.create(
+                            orbits, method=covariance_method, num_samples=num_samples
+                        )
                         for variant_chunk in _iterate_chunks(variants, chunk_size):
                             futures.append(
                                 executor.submit(
@@ -207,9 +213,21 @@ class Propagator(ABC):
                 if not ray.is_initialized():
                     ray.init(num_cpus=max_processes)
 
-                # Add orbits and times to object store
-                times_ref = ray.put(times)
-                orbits_ref = ray.put(orbits)
+                # Add orbits and times to object store if
+                # they haven't already been added
+                if not isinstance(times, ObjectRef):
+                    times_ref = ray.put(times)
+                else:
+                    times_ref = times
+
+                if not isinstance(orbits, ObjectRef):
+                    orbits_ref = ray.put(orbits)
+                else:
+                    orbits_ref = orbits
+                    # We need to dereference the orbits ObjectRef so we can
+                    # check its length for chunking and determine
+                    # if we need to propagate variants
+                    orbits = ray.get(orbits_ref)
 
                 # Create futures
                 futures = []
@@ -225,10 +243,14 @@ class Propagator(ABC):
                         )
                     )
 
-                # Add variants to futures (if we have any)
-                if variants is not None:
-
-                    # Add variants to object store
+                # Add variants to propagate to futures
+                if (
+                    covariance is True
+                    and not orbits.coordinates.covariance.is_all_nan()
+                ):
+                    variants = VariantOrbits.create(
+                        orbits, method=covariance_method, num_samples=num_samples
+                    )
                     variants_ref = ray.put(variants)
 
                     idx = np.arange(0, len(variants))
@@ -271,7 +293,10 @@ class Propagator(ABC):
         else:
             propagated = self._propagate_orbits(orbits, times)
 
-            if variants is not None:
+            if covariance is True and not orbits.coordinates.covariance.is_all_nan():
+                variants = VariantOrbits.create(
+                    orbits, method=covariance_method, num_samples=num_samples
+                )
                 propagated_variants = self._propagate_orbits(variants, times)
             else:
                 propagated_variants = None
@@ -285,7 +310,7 @@ class Propagator(ABC):
 
     @abstractmethod
     def _generate_ephemeris(
-        self, orbits: Orbits, observers: Observers
+        self, orbits: EphemerisType, observers: ObserverType
     ) -> EphemerisType:
         """
         Generate ephemerides for the given orbits as observed by
@@ -297,8 +322,8 @@ class Propagator(ABC):
 
     def generate_ephemeris(
         self,
-        orbits: Orbits,
-        observers: Observers,
+        orbits: OrbitType,
+        observers: ObserverType,
         covariance: bool = False,
         covariance_method: Literal[
             "auto", "sigma-point", "monte-carlo"
@@ -348,12 +373,6 @@ class Propagator(ABC):
         """
         # Check if we need to propagate orbit variants so we can propagate covariance
         # matrices
-        if not orbits.coordinates.covariance.is_all_nan() and covariance is True:
-            variants = VariantOrbits.create(
-                orbits, method=covariance_method, num_samples=num_samples
-            )
-        else:
-            variants = None
 
         if max_processes is None or max_processes > 1:
 
@@ -379,7 +398,13 @@ class Propagator(ABC):
                         )
 
                     # Add variants to propagate to futures
-                    if variants is not None:
+                    if (
+                        covariance is True
+                        and not orbits.coordinates.covariance.is_all_nan()
+                    ):
+                        variants = VariantOrbits.create(
+                            orbits, method=covariance_method, num_samples=num_samples
+                        )
                         for variant_chunk in _iterate_chunks(variants, chunk_size):
                             futures.append(
                                 executor.submit(
@@ -411,9 +436,21 @@ class Propagator(ABC):
                 if not ray.is_initialized():
                     ray.init(num_cpus=max_processes)
 
-                # Add orbits and observers to object store
-                observers_ref = ray.put(observers)
-                orbits_ref = ray.put(orbits)
+                # Add orbits and observers to object store if
+                # they haven't already been added
+                if not isinstance(observers, ObjectRef):
+                    observers_ref = ray.put(observers)
+                else:
+                    observers_ref = observers
+
+                if not isinstance(orbits, ObjectRef):
+                    orbits_ref = ray.put(orbits)
+                else:
+                    orbits_ref = orbits
+                    # We need to dereference the orbits ObjectRef so we can
+                    # check its length for chunking and determine
+                    # if we need to propagate variants
+                    orbits = ray.get(orbits_ref)
 
                 # Create futures
                 futures = []
@@ -430,7 +467,13 @@ class Propagator(ABC):
                     )
 
                 # Add variants to futures (if we have any)
-                if variants is not None:
+                if (
+                    covariance is True
+                    and not orbits.coordinates.covariance.is_all_nan()
+                ):
+                    variants = VariantOrbits.create(
+                        orbits, method=covariance_method, num_samples=num_samples
+                    )
 
                     # Add variants to object store
                     variants_ref = ray.put(variants)
@@ -474,7 +517,10 @@ class Propagator(ABC):
         else:
             ephemeris = self._generate_ephemeris(orbits, observers)
 
-            if variants is not None:
+            if covariance is True and not orbits.coordinates.covariance.is_all_nan():
+                variants = VariantOrbits.create(
+                    orbits, method=covariance_method, num_samples=num_samples
+                )
                 ephemeris_variants = self._generate_ephemeris(variants, observers)
             else:
                 ephemeris_variants = None
