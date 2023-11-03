@@ -103,8 +103,14 @@ class Residuals(qv.Table):
             batch_indices, batch_dimensions, batch_coords, batch_covariances
         ):
             if not np.all(np.isnan(covariances)):
+                # Filter residuals by dimensions that have values
+                residuals_i = residuals[:, dimensions]
+
+                # Then filter by rows that belong to this batch
+                residuals_i = residuals_i[indices, :]
+
                 # Calculate the chi2 for each coordinate
-                chi2_values = calculate_chi2(residuals[indices], covariances)
+                chi2_values = calculate_chi2(residuals_i, covariances)
 
                 # Calculate the probability for each coordinate
                 p[indices] = 1 - chi2.cdf(np.sqrt(chi2_values), dof[indices])
