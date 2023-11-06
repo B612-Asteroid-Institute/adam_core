@@ -1,6 +1,7 @@
 from typing import List, Tuple, Union
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
 from scipy import stats
@@ -76,6 +77,14 @@ class Residuals(qv.Table):
                 "Observed and predicted coordinates must be the same type, "
                 f"not {type(observed)} and {type(predicted)}."
             )
+        if (observed.origin != predicted.origin).all():
+            raise ValueError(
+                "Observed and predicted coordinates must have the same origin."
+            )
+        if observed.frame != predicted.frame:
+            raise ValueError(
+                f"Observed ({observed.frame}) and predicted ({predicted.frame}) coordinates must have the same frame."
+            )
 
         N, D = observed.values.shape
         p = np.empty(N, dtype=np.float64)
@@ -137,6 +146,17 @@ class Residuals(qv.Table):
             dof=dof,
             probability=p,
         )
+
+    def to_array(self) -> npt.NDArray[np.float64]:
+        """
+        Convert the residuals to a numpy array.
+
+        Returns
+        -------
+        residuals : `~numpy.ndarray` (N, D)
+            Array of residuals.
+        """
+        return np.stack(self.values.to_numpy(zero_copy_only=False))
 
 
 def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray:
