@@ -1,17 +1,15 @@
+from __future__ import annotations
+
 import logging
-from typing import TYPE_CHECKING
 
 import numpy as np
+import numpy.typing as npt
 import quivr as qv
 
 from ..time import Timestamp
+from . import cometary, keplerian, spherical
 from .covariances import CoordinateCovariances
 from .origin import Origin
-
-if TYPE_CHECKING:
-    from .cometary import CometaryCoordinates
-    from .keplerian import KeplerianCoordinates
-    from .spherical import SphericalCoordinates
 
 __all__ = ["CartesianCoordinates"]
 
@@ -22,141 +20,159 @@ logger = logging.getLogger(__name__)
 class CartesianCoordinates(qv.Table):
     """Represents coordinates in Cartesian space."""
 
-    #: x coordinates
+    #: x coordinates in AU
     x = qv.Float64Column(nullable=True)
 
-    #: y coordinates
+    #: y coordinates in AU
     y = qv.Float64Column(nullable=True)
 
-    #: z coordinates
+    #: z coordinates in AU
     z = qv.Float64Column(nullable=True)
+
+    #: x velocity in AU/day
     vx = qv.Float64Column(nullable=True)
+
+    #: y velocity in AU/day
     vy = qv.Float64Column(nullable=True)
+
+    #: z velocity in AU/day
     vz = qv.Float64Column(nullable=True)
+
+    #: The instant at which the coordinates are valid
     time = Timestamp.as_column(nullable=True)
+
+    #: Covariance matrix for the x, y, z, vx, vy, and vz values
     covariance = CoordinateCovariances.as_column(nullable=True)
+
+    #: Center of the coordinate system
     origin = Origin.as_column()
+
+    #: Frame of the coordinate system - 'ecliptic' or 'equatorial' or 'unspecified'.
     frame = qv.StringAttribute(default="unspecified")
 
     @property
-    def values(self) -> np.ndarray:
+    def values(self) -> npt.NDArray[np.float64]:
+        """The x, y, z, vx, vy, and vz columns all in one 6-N matrix
+        of numpy float64 values. Nulls are converted to NaNs.
+
+        """
         return np.array(self.table.select(["x", "y", "z", "vx", "vy", "vz"]))
 
     @property
-    def r(self) -> np.ndarray:
+    def r(self) -> npt.NDArray[np.float64]:
         """
         Position vector.
         """
         return np.array(self.table.select(["x", "y", "z"]))
 
     @property
-    def r_mag(self) -> np.ndarray:
+    def r_mag(self) -> npt.NDArray[np.float64]:
         """
         Magnitude of the position vector.
         """
         return np.linalg.norm(self.r, axis=1)
 
     @property
-    def r_hat(self) -> np.ndarray:
+    def r_hat(self) -> npt.NDArray[np.float64]:
         """
         Unit vector in the direction of the position vector.
         """
         return self.r / self.r_mag[:, None]
 
     @property
-    def v(self) -> np.ndarray:
+    def v(self) -> npt.NDArray[np.float64]:
         """
         Velocity vector.
         """
         return np.array(self.table.select(["vx", "vy", "vz"]))
 
     @property
-    def v_mag(self) -> np.ndarray:
+    def v_mag(self) -> npt.NDArray[np.float64]:
         """
         Magnitude of the velocity vector.
         """
         return np.linalg.norm(self.v, axis=1)
 
     @property
-    def v_hat(self) -> np.ndarray:
+    def v_hat(self) -> npt.NDArray[np.float64]:
         """
         Unit vector in the direction of the velocity vector.
         """
         return self.v / self.v_mag[:, None]
 
     @property
-    def sigma_x(self) -> np.ndarray:
+    def sigma_x(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the X-coordinate.
         """
         return self.covariance.sigmas[:, 0]
 
     @property
-    def sigma_y(self) -> np.ndarray:
+    def sigma_y(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the Y-coordinate.
         """
         return self.covariance.sigmas[:, 1]
 
     @property
-    def sigma_z(self) -> np.ndarray:
+    def sigma_z(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the Z-coordinate.
         """
         return self.covariance.sigmas[:, 2]
 
     @property
-    def sigma_vx(self) -> np.ndarray:
+    def sigma_vx(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the X-coordinate velocity.
         """
         return self.covariance.sigmas[:, 3]
 
     @property
-    def sigma_vy(self) -> np.ndarray:
+    def sigma_vy(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the Y-coordinate velocity.
         """
         return self.covariance.sigmas[:, 4]
 
     @property
-    def sigma_vz(self) -> np.ndarray:
+    def sigma_vz(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the Z-coordinate velocity.
         """
         return self.covariance.sigmas[:, 5]
 
     @property
-    def sigma_r(self) -> np.ndarray:
+    def sigma_r(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainties in the position vector.
         """
         return self.covariance.sigmas[:, 0:3]
 
     @property
-    def sigma_r_mag(self) -> np.ndarray:
+    def sigma_r_mag(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the position.
         """
         return np.sqrt(np.sum(self.covariance.sigmas[:, 0:3] ** 2, axis=1))
 
     @property
-    def sigma_v(self) -> np.ndarray:
+    def sigma_v(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainties in the velocity vector.
         """
         return self.covariance.sigmas[:, 3:6]
 
     @property
-    def sigma_v_mag(self) -> np.ndarray:
+    def sigma_v_mag(self) -> npt.NDArray[np.float64]:
         """
         1-sigma uncertainty in the velocity vector.
         """
         return np.sqrt(np.sum(self.covariance.sigmas[:, 3:6] ** 2, axis=1))
 
     def rotate(
-        self, rotation_matrix: np.ndarray, frame_out: str
-    ) -> "CartesianCoordinates":
+        self, rotation_matrix: npt.NDArray[np.float64], frame_out: str
+    ) -> CartesianCoordinates:
         """
         Rotate Cartesian coordinates and their covariances by the given rotation matrix.
 
@@ -166,14 +182,13 @@ class CartesianCoordinates(qv.Table):
 
         Parameters
         ----------
-        matrix : numpy.ndarray (6, 6)
-            Rotation matrix.
-        frame_out : str
+        matrix:
+            6x6 rotation matrix.
+        frame_out: str
             Name of the frame to which coordinates are being rotated.
 
         Returns
         -------
-        CartesianCoordinates : adam_core.coordinates.cartesian.CartesianCoordinates
             Rotated Cartesian coordinates and their covariances.
         """
         # Extract coordinate values into a masked array and mask NaNss
@@ -227,7 +242,9 @@ class CartesianCoordinates(qv.Table):
         )
         return coords
 
-    def translate(self, vector: np.ndarray, origin_out: str) -> "CartesianCoordinates":
+    def translate(
+        self, vector: npt.NDArray[np.float64], origin_out: str
+    ) -> CartesianCoordinates:
         """
         Translate Cartesian coordinates by the given vector.
 
@@ -273,33 +290,47 @@ class CartesianCoordinates(qv.Table):
         )
         return coords
 
-    def to_cometary(self) -> "CometaryCoordinates":
-        from .cometary import CometaryCoordinates
-
-        return CometaryCoordinates.from_cartesian(self)
+    def to_cometary(self) -> cometary.CometaryCoordinates:
+        """
+        Converts the Cartesian coordinates to the cometary parameterization.
+        """
+        return cometary.CometaryCoordinates.from_cartesian(self)
 
     @classmethod
-    def from_cometary(cls, cometary: "CometaryCoordinates") -> "CartesianCoordinates":
+    def from_cometary(
+        cls, cometary: cometary.CometaryCoordinates
+    ) -> CartesianCoordinates:
+        """
+        Constructs CartesianCoordinates from the cometary parameterization.
+        """
         return cometary.to_cartesian()
 
-    def to_keplerian(self) -> "KeplerianCoordinates":
-        from .keplerian import KeplerianCoordinates
-
-        return KeplerianCoordinates.from_cartesian(self)
+    def to_keplerian(self) -> keplerian.KeplerianCoordinates:
+        """
+        Converts the Cartesian coordinates to the Keplerian parameterization.
+        """
+        return keplerian.KeplerianCoordinates.from_cartesian(self)
 
     @classmethod
     def from_keplerian(
-        cls, keplerian: "KeplerianCoordinates"
-    ) -> "CartesianCoordinates":
+        cls, keplerian: keplerian.KeplerianCoordinates
+    ) -> CartesianCoordinates:
+        """
+        Constructs CartesianCoordinates from the Keplerian parameterization.
+        """
         return keplerian.to_cartesian()
 
-    def to_spherical(self) -> "SphericalCoordinates":
-        from .spherical import SphericalCoordinates
-
-        return SphericalCoordinates.from_cartesian(self)
+    def to_spherical(self) -> spherical.SphericalCoordinates:
+        """
+        Converts the Cartesian coordinates to the spherical parameterization.
+        """
+        return spherical.SphericalCoordinates.from_cartesian(self)
 
     @classmethod
     def from_spherical(
-        cls, spherical: "SphericalCoordinates"
-    ) -> "CartesianCoordinates":
+        cls, spherical: spherical.SphericalCoordinates
+    ) -> CartesianCoordinates:
+        """
+        Constructs CartesianCoordinates from the spherical parameterization.
+        """
         return spherical.to_cartesian()
