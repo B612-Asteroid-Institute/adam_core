@@ -3,7 +3,7 @@ from typing import List, Tuple, Union
 import numpy as np
 import pyarrow as pa
 import quivr as qv
-from scipy.stats import chi2
+from scipy import stats
 
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
@@ -109,11 +109,19 @@ class Residuals(qv.Table):
                 # Then filter by rows that belong to this batch
                 residuals_i = residuals_i[indices, :]
 
-                # Calculate the chi2 for each coordinate
+                # Calculate the chi2 for each coordinate (this is actually
+                # calculating mahalanobis distance squared -- both are equivalent
+                # when the covariance matrix is diagonal, mahalanobis distance is more
+                # general as it allows for covariates between dimensions)
                 chi2_values = calculate_chi2(residuals_i, covariances)
 
-                # Calculate the probability for each coordinate
-                p[indices] = 1 - chi2.cdf(np.sqrt(chi2_values), dof[indices])
+                # For a normally distributed random variable, the mahalanobis distance
+                # squared in D dimesions follows a chi2 distribution with D degrees of freedom.
+                # So for each coordinate, calculate the probability that you would
+                # get a chi2 value greater than or equal to that coordinate's chi2 value.
+                # At a residual of zero this probability is 1.0, and at a residual of
+                # 1 sigma (for 1 degree of freedom) this probability is ~0.3173.
+                p[indices] = 1 - stats.chi2.cdf(chi2_values, dof[indices])
 
                 # Set the chi2 for each coordinate
                 chi2s[indices] = chi2_values
