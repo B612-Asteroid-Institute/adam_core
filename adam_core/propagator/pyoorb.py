@@ -6,7 +6,6 @@ except ImportError:
 import enum
 import logging
 import os
-import warnings
 from typing import Optional, Union
 
 import numpy as np
