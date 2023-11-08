@@ -30,7 +30,7 @@ dependencies = [
   "numpy<1.25",
   "pyarrow>=13.0.0",
   # This fork removes errors that occur with true anomaly values 
-  "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git",
+  "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
   "pandas",
   "requests",
   "scipy",
