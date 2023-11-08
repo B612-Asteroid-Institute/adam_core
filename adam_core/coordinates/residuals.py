@@ -1,9 +1,10 @@
 from typing import List, Tuple, Union
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
-from scipy.stats import chi2
+from scipy import stats
 
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
@@ -76,6 +77,14 @@ class Residuals(qv.Table):
                 "Observed and predicted coordinates must be the same type, "
                 f"not {type(observed)} and {type(predicted)}."
             )
+        if (observed.origin != predicted.origin).all():
+            raise ValueError(
+                "Observed and predicted coordinates must have the same origin."
+            )
+        if observed.frame != predicted.frame:
+            raise ValueError(
+                f"Observed ({observed.frame}) and predicted ({predicted.frame}) coordinates must have the same frame."
+            )
 
         N, D = observed.values.shape
         p = np.empty(N, dtype=np.float64)
@@ -103,11 +112,25 @@ class Residuals(qv.Table):
             batch_indices, batch_dimensions, batch_coords, batch_covariances
         ):
             if not np.all(np.isnan(covariances)):
-                # Calculate the chi2 for each coordinate
-                chi2_values = calculate_chi2(residuals[indices], covariances)
+                # Filter residuals by dimensions that have values
+                residuals_i = residuals[:, dimensions]
 
-                # Calculate the probability for each coordinate
-                p[indices] = 1 - chi2.cdf(np.sqrt(chi2_values), dof[indices])
+                # Then filter by rows that belong to this batch
+                residuals_i = residuals_i[indices, :]
+
+                # Calculate the chi2 for each coordinate (this is actually
+                # calculating mahalanobis distance squared -- both are equivalent
+                # when the covariance matrix is diagonal, mahalanobis distance is more
+                # general as it allows for covariates between dimensions)
+                chi2_values = calculate_chi2(residuals_i, covariances)
+
+                # For a normally distributed random variable, the mahalanobis distance
+                # squared in D dimesions follows a chi2 distribution with D degrees of freedom.
+                # So for each coordinate, calculate the probability that you would
+                # get a chi2 value greater than or equal to that coordinate's chi2 value.
+                # At a residual of zero this probability is 1.0, and at a residual of
+                # 1 sigma (for 1 degree of freedom) this probability is ~0.3173.
+                p[indices] = 1 - stats.chi2.cdf(chi2_values, dof[indices])
 
                 # Set the chi2 for each coordinate
                 chi2s[indices] = chi2_values
@@ -123,6 +146,17 @@ class Residuals(qv.Table):
             dof=dof,
             probability=p,
         )
+
+    def to_array(self) -> npt.NDArray[np.float64]:
+        """
+        Convert the residuals to a numpy array.
+
+        Returns
+        -------
+        residuals : `~numpy.ndarray` (N, D)
+            Array of residuals.
+        """
+        return np.stack(self.values.to_numpy(zero_copy_only=False))
 
 
 def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray:
