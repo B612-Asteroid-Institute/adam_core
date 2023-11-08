@@ -4,8 +4,8 @@ except ImportError:
     raise ImportError("PYOORB is not installed.")
 
 import enum
+import logging
 import os
-import warnings
 from typing import Optional, Union
 
 import numpy as np
@@ -22,6 +22,8 @@ from ..time import Timestamp
 from .propagator import EphemerisType, OrbitType, Propagator
 from .utils import _assert_times_almost_equal
 
+logger = logging.getLogger(__name__)
+
 
 class OpenOrbTimescale(enum.Enum):
     UTC = 1
@@ -36,37 +38,47 @@ class OpenOrbOrbitType(enum.Enum):
     KEPLERIAN = 3
 
 
+PYOORB_INIT_CACHCE = {}
+
+
+def process_safe_oorb_init(ephfile):
+    """
+    Initializes pyoorb only if it hasn't been initialized in this process before
+    """
+    pid = os.getpid()
+    if pid in PYOORB_INIT_CACHCE:
+        logger.debug(f"PYOORB already initialized for process {pid}")
+        return
+
+    logger.debug(f"Initializing PYOORB for process {pid}")
+    PYOORB_INIT_CACHCE[pid] = True
+    err = oo.pyoorb.oorb_init(ephfile)
+    if err != 0:
+        raise RuntimeError(f"PYOORB returned error code: {err}")
+
+
 class PYOORB(Propagator):
     def __init__(
         self, *, dynamical_model: str = "N", ephemeris_file: str = "de430.dat"
     ):
-
         self.dynamical_model = dynamical_model
         self.ephemeris_file = ephemeris_file
 
-        env_var = "ADAM_CORE_PYOORB_INITIALIZED"
-        if env_var in os.environ.keys() and os.environ[env_var] == "True":
-            pass
-        else:
-            if os.environ.get("OORB_DATA") is None:
-                if os.environ.get("CONDA_PREFIX") is None:
-                    raise RuntimeError(
-                        "Cannot find OORB_DATA directory. Please set the OORB_DATA environment variable."
-                    )
-                else:
-                    os.environ["OORB_DATA"] = os.path.join(
-                        os.environ["CONDA_PREFIX"], "share/openorb"
-                    )
-
-            oorb_data = os.environ["OORB_DATA"]
-
-            # Prepare pyoorb
-            ephfile = os.path.join(oorb_data, self.ephemeris_file)
-            err = oo.pyoorb.oorb_init(ephfile)
-            if err == 0:
-                os.environ[env_var] = "True"
+        if os.environ.get("OORB_DATA") is None:
+            if os.environ.get("CONDA_PREFIX") is None:
+                raise RuntimeError(
+                    "Cannot find OORB_DATA directory. Please set the OORB_DATA environment variable."
+                )
             else:
-                warnings.warn(f"PYOORB returned error code: {err}")
+                os.environ["OORB_DATA"] = os.path.join(
+                    os.environ["CONDA_PREFIX"], "share/openorb"
+                )
+
+        oorb_data = os.environ["OORB_DATA"]
+
+        # Prepare pyoorb
+        ephfile = os.path.join(oorb_data, self.ephemeris_file)
+        process_safe_oorb_init(ephfile)
 
         return
 
@@ -292,7 +304,6 @@ class PYOORB(Propagator):
             )
 
         elif isinstance(orbits, VariantOrbits):
-
             # Map the object and orbit IDs back to the input arrays
             object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[orbit_ids_]
             orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[orbit_ids_]
@@ -445,7 +456,6 @@ class PYOORB(Propagator):
             )
 
             if isinstance(orbits, Orbits):
-
                 # Map the object and orbit IDs back to the input arrays
                 orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)[
                     orbit_ids_idx
@@ -494,7 +504,6 @@ class PYOORB(Propagator):
                 ephemeris_list.append(ephemeris)
 
             elif isinstance(orbits, VariantOrbits):
-
                 # Map the object and orbit IDs back to the input arrays
                 object_ids = orbits.object_id.to_numpy(zero_copy_only=False)[
                     orbit_ids_idx
