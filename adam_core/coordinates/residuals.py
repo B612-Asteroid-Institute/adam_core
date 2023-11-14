@@ -31,6 +31,57 @@ __all__ = [
 ]
 
 
+def apply_cosine_latitude_correction(
+    lat: npt.NDArray[np.float64],
+    residuals: npt.NDArray[np.float64],
+    covariances: npt.NDArray[np.float64],
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Apply a correction factor of cosine latitude to the residuals and covariance matrix.
+    This is designed to account for the fact that longitudes get smaller as you approach
+    the poles.
+
+    Parameters
+    ----------
+    lat : `~numpy.ndarray` (N)
+        Latitudes in degrees.
+    residuals : `~numpy.ndarray` (N, D)
+        Spherical residuals.
+    covariances : `~numpy.ndarray` (N, D, D)
+        Covariance matrices for spherical residuals.
+
+    Returns
+    -------
+    residuals : `~numpy.ndarray` (N, D)
+        Spherical residuals with the correction factor applied.
+    covariances : `~numpy.ndarray` (N, D, D)
+        Covariance matrices for spherical residuals with the correction factor applied.
+    """
+    N = len(lat)
+    cos_lat = np.cos(np.radians(lat))
+
+    identity = np.identity(6, dtype=np.float64)
+
+    # Populate the diagonal of the matrix with cos(latitude) for
+    # the longitude and longitudinal velocity dimensions
+    diag = np.ones((N, 6))
+    diag[:, 1] = cos_lat
+    diag[:, 4] = cos_lat
+
+    # Calculate the cos(latitude) factor for the covariance matrix
+    cos_lat_cov = np.einsum("kj,ji->kij", diag, identity, order="C")
+
+    # Apply the cos(latitude) factor to the residuals in longitude
+    # and longitudinal velocity
+    residuals[:, 1] *= cos_lat
+    residuals[:, 4] *= cos_lat
+
+    # Apply the cos(latitude) factor to the covariance matrix
+    covariances = cos_lat_cov @ covariances @ cos_lat_cov.transpose(0, 2, 1)
+
+    return residuals, covariances
+
+
 def bound_longitude_residuals(
     observed: npt.NDArray[np.float64], residuals: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
