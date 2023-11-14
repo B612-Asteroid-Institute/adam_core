@@ -4,7 +4,12 @@ from scipy.spatial.distance import mahalanobis
 
 from ..cartesian import CartesianCoordinates, CoordinateCovariances
 from ..origin import Origin
-from ..residuals import Residuals, _batch_coords_and_covariances, calculate_chi2
+from ..residuals import (
+    Residuals,
+    _batch_coords_and_covariances,
+    bound_longitude_residuals,
+    calculate_chi2,
+)
 
 
 def test_calculate_chi2():
@@ -327,3 +332,34 @@ def test_Residuals_calculate_raises_origins():
 
     with pytest.raises(ValueError, match=r"coordinates must have the same origin."):
         Residuals.calculate(observed, predicted)
+
+
+def test_bound_longitude_residuals():
+    # Test that bound_longitude_residuals correctly bounds the longitude residuals
+    # to within -180 and 180 degrees and that it handles the signs correctly across the
+    # 0/360 degree boundary. Typically residuals that are positive mean that the observed
+    # value is greater than the predicted value, and vice versa for negative residuals.
+
+    # Observed  Predicted  Arithmetic  Expected
+    #    1        359        -358         -2
+    #  359          1         358          2
+    #   60        240        -180       -180
+    #  240         60         180        180
+    #   10        190        -180       -180
+    #  190         10         180        180
+    #   60        250        -190       -170
+    #  250         60         190        170
+    #   60        230        -170       -170
+    #  230         60         170        170
+    observed_array = np.ones((10, 6))
+    observed_array[:, 1] = np.array([1, 359, 60, 240, 10, 190, 60, 250, 60, 230])
+
+    predicted_array = np.ones((10, 6))
+    predicted_array[:, 1] = np.array([359, 1, 240, 60, 190, 10, 250, 60, 230, 60])
+
+    residuals_array = observed_array - predicted_array
+    residuals = bound_longitude_residuals(observed_array, residuals_array)
+
+    np.testing.assert_equal(
+        residuals[:, 1], np.array([-2, 2, -180, 180, -180, 180, -170, 170, -170, 170])
+    )

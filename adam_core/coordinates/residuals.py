@@ -31,6 +31,62 @@ __all__ = [
 ]
 
 
+def bound_longitude_residuals(
+    observed: npt.NDArray[np.float64], residuals: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    """
+    Bound the longitude residuals to the range [-180, 180] degrees and adjust the
+    signs of the residuals that cross the 0/360 degree boundary. By convention, we define
+    residuals that cross from <360 to >0 as a positive residual (355 - 5 = +10) and cross
+    from >0 to <360 as a negative residual (5 - 355 = -10).
+
+    Parameters
+    ----------
+    observed : `~numpy.ndarray` (N, D)
+        Observed coordinates in degrees. We use the observed coordinates to
+        determine whether the residuals cross the 0/360 degree boundary.
+    residuals : `~numpy.ndarray` (N, D)
+        Residuals in degrees.
+
+    Returns
+    -------
+    residuals : `~numpy.ndarray` (N, D)
+        Residuals wrapped to the range [-180, 180] degrees.
+    """
+    # Extract the observed longitude and residuals
+    observed_longitude = observed[:, 1]
+    longitude_residual = residuals[:, 1]
+
+    # Identify residuals that exceed a half circle
+    longitude_residual_g180 = longitude_residual > 180
+    longitude_residual_l180 = longitude_residual < -180
+
+    # Wrap the residuals to the range [-180, 180] degrees
+    longitude_residual = np.where(
+        longitude_residual_g180, longitude_residual - 360, longitude_residual
+    )
+    longitude_residual = np.where(
+        longitude_residual_l180, longitude_residual + 360, longitude_residual
+    )
+
+    # Adjust the signs of the residuals that cross the 0/360 degree boundary
+    # We want it so that crossing from <360 to >0 is a positive residual (355 - 5 = +10)
+    # and crossing from >0 to <360 is a negative residual (5 - 355 = -10)
+    longitude_residual = np.where(
+        longitude_residual_g180 & (observed_longitude > 180),
+        -longitude_residual,
+        longitude_residual,
+    )
+    longitude_residual = np.where(
+        longitude_residual_l180 & (observed_longitude < 180),
+        -longitude_residual,
+        longitude_residual,
+    )
+
+    residuals[:, 1] = longitude_residual
+    return residuals
+
+
 class Residuals(qv.Table):
 
     values = qv.ListColumn(pa.float64(), nullable=True)
