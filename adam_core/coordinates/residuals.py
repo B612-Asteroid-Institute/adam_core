@@ -150,7 +150,8 @@ class Residuals(qv.Table):
         cls, observed: CoordinateType, predicted: CoordinateType
     ) -> "Residuals":
         """
-        Calculate the residuals between the observed and predicted coordinates. The observed
+        Calculate the residuals between the observed and predicted coordinates. Residuals
+        are defined as the observed coordinates minus the predicted coordinates. The observed
         coordinate's covariance matrix is used to calculate the chi2 and degrees of freedom.
 
         TODO: We may want to add support for a single predicted coordinate and covariance
@@ -192,17 +193,36 @@ class Residuals(qv.Table):
             raise ValueError(
                 f"Observed ({observed.frame}) and predicted ({predicted.frame}) coordinates must have the same frame."
             )
+        # Extract the observed and predicted values
+        observed_values = observed.values
+        observed_covariances = observed.covariance.to_matrix()
+        predicted_values = predicted.values
 
-        N, D = observed.values.shape
+        # Create the output arrays
+        N, D = observed_values.shape
         p = np.empty(N, dtype=np.float64)
         chi2s = np.empty(N, dtype=np.float64)
 
-        # Caclulate the degrees of freedom for every coordinate
+        # Calculate the degrees of freedom for every coordinate
         # Number of coordinate dimensions less the number of quantities that are NaN
-        dof = D - np.sum(np.isnan(observed.values), axis=1)
+        dof = D - np.sum(np.isnan(observed_values), axis=1)
 
         # Calculate the array of residuals
-        residuals = observed.values - predicted.values
+        residuals = observed_values - predicted_values
+
+        # If the coordinates are spherical then we do some extra work:
+        # 1. Bound residuals in longitude to the range [-180, 180] degrees and
+        #    adjust the signs of the residuals that cross the 0/360 degree boundary.
+        # 2. Apply the cos(latitude) factor to the residuals in longitude and longitudinal
+        #    velocity
+        if isinstance(observed, SphericalCoordinates):
+            # Bound the longitude residuals to the range [-180, 180] degrees
+            residuals = bound_longitude_residuals(observed_values, residuals)
+
+            # Apply the cos(latitude) factor to the residuals and covariance matrix
+            residuals, observed_covariances = apply_cosine_latitude_correction(
+                observed_values[:, 2], residuals, observed_covariances
+            )
 
         # Batch the coordinates and covariances into groups that have the same
         # number of dimensions that have missing values (represented by NaNs)
@@ -211,9 +231,7 @@ class Residuals(qv.Table):
             batch_dimensions,
             batch_coords,
             batch_covariances,
-        ) = _batch_coords_and_covariances(
-            observed.values, observed.covariance.to_matrix()
-        )
+        ) = _batch_coords_and_covariances(observed_values, observed_covariances)
 
         for indices, dimensions, coords, covariances in zip(
             batch_indices, batch_dimensions, batch_coords, batch_covariances
@@ -266,7 +284,9 @@ class Residuals(qv.Table):
         return np.stack(self.values.to_numpy(zero_copy_only=False))
 
 
-def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray:
+def calculate_chi2(
+    residuals: npt.NDArray[np.float64], covariances: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """
     Calculate the vectorized normalized squared residual for each residual and covariance pair.
     This normalized residual is equivalent to the Mahalanobis distance squared.
@@ -296,8 +316,13 @@ def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray
 
 
 def _batch_coords_and_covariances(
-    coords: np.ndarray, covariances: np.ndarray
-) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+    coords: npt.NDArray[np.float64], covariances: npt.NDArray[np.float64]
+) -> Tuple[
+    List[npt.NDArray[np.float64]],
+    List[npt.NDArray[np.float64]],
+    List[npt.NDArray[np.float64]],
+    List[npt.NDArray[np.float64]],
+]:
     """
     Batch coordinates and covariances into groups that have the same
     number of dimensions that have missing values (represented by NaNs).
