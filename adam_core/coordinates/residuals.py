@@ -31,6 +31,113 @@ __all__ = [
 ]
 
 
+def apply_cosine_latitude_correction(
+    lat: npt.NDArray[np.float64],
+    residuals: npt.NDArray[np.float64],
+    covariances: npt.NDArray[np.float64],
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Apply a correction factor of cosine latitude to the residuals and covariance matrix.
+    This is designed to account for the fact that longitudes get smaller as you approach
+    the poles.
+
+    Parameters
+    ----------
+    lat : `~numpy.ndarray` (N)
+        Latitudes in degrees.
+    residuals : `~numpy.ndarray` (N, D)
+        Spherical residuals.
+    covariances : `~numpy.ndarray` (N, D, D)
+        Covariance matrices for spherical residuals.
+
+    Returns
+    -------
+    residuals : `~numpy.ndarray` (N, D)
+        Spherical residuals with the correction factor applied.
+    covariances : `~numpy.ndarray` (N, D, D)
+        Covariance matrices for spherical residuals with the correction factor applied.
+    """
+    N = len(lat)
+    cos_lat = np.cos(np.radians(lat))
+
+    identity = np.identity(6, dtype=np.float64)
+
+    # Populate the diagonal of the matrix with cos(latitude) for
+    # the longitude and longitudinal velocity dimensions
+    diag = np.ones((N, 6))
+    diag[:, 1] = cos_lat
+    diag[:, 4] = cos_lat
+
+    # Calculate the cos(latitude) factor for the covariance matrix
+    cos_lat_cov = np.einsum("kj,ji->kij", diag, identity, order="C")
+
+    # Apply the cos(latitude) factor to the residuals in longitude
+    # and longitudinal velocity
+    residuals[:, 1] *= cos_lat
+    residuals[:, 4] *= cos_lat
+
+    # Apply the cos(latitude) factor to the covariance matrix
+    covariances = cos_lat_cov @ covariances @ cos_lat_cov.transpose(0, 2, 1)
+
+    return residuals, covariances
+
+
+def bound_longitude_residuals(
+    observed: npt.NDArray[np.float64], residuals: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    """
+    Bound the longitude residuals to the range [-180, 180] degrees and adjust the
+    signs of the residuals that cross the 0/360 degree boundary. By convention, we define
+    residuals that cross from <360 to >0 as a positive residual (355 - 5 = +10) and cross
+    from >0 to <360 as a negative residual (5 - 355 = -10).
+
+    Parameters
+    ----------
+    observed : `~numpy.ndarray` (N, D)
+        Observed coordinates in degrees. We use the observed coordinates to
+        determine whether the residuals cross the 0/360 degree boundary.
+    residuals : `~numpy.ndarray` (N, D)
+        Residuals in degrees.
+
+    Returns
+    -------
+    residuals : `~numpy.ndarray` (N, D)
+        Residuals wrapped to the range [-180, 180] degrees.
+    """
+    # Extract the observed longitude and residuals
+    observed_longitude = observed[:, 1]
+    longitude_residual = residuals[:, 1]
+
+    # Identify residuals that exceed a half circle
+    longitude_residual_g180 = longitude_residual > 180
+    longitude_residual_l180 = longitude_residual < -180
+
+    # Wrap the residuals to the range [-180, 180] degrees
+    longitude_residual = np.where(
+        longitude_residual_g180, longitude_residual - 360, longitude_residual
+    )
+    longitude_residual = np.where(
+        longitude_residual_l180, longitude_residual + 360, longitude_residual
+    )
+
+    # Adjust the signs of the residuals that cross the 0/360 degree boundary
+    # We want it so that crossing from <360 to >0 is a positive residual (355 - 5 = +10)
+    # and crossing from >0 to <360 is a negative residual (5 - 355 = -10)
+    longitude_residual = np.where(
+        longitude_residual_g180 & (observed_longitude > 180),
+        -longitude_residual,
+        longitude_residual,
+    )
+    longitude_residual = np.where(
+        longitude_residual_l180 & (observed_longitude < 180),
+        -longitude_residual,
+        longitude_residual,
+    )
+
+    residuals[:, 1] = longitude_residual
+    return residuals
+
+
 class Residuals(qv.Table):
 
     values = qv.ListColumn(pa.float64(), nullable=True)
@@ -43,7 +150,8 @@ class Residuals(qv.Table):
         cls, observed: CoordinateType, predicted: CoordinateType
     ) -> "Residuals":
         """
-        Calculate the residuals between the observed and predicted coordinates. The observed
+        Calculate the residuals between the observed and predicted coordinates. Residuals
+        are defined as the observed coordinates minus the predicted coordinates. The observed
         coordinate's covariance matrix is used to calculate the chi2 and degrees of freedom.
 
         TODO: We may want to add support for a single predicted coordinate and covariance
@@ -85,17 +193,36 @@ class Residuals(qv.Table):
             raise ValueError(
                 f"Observed ({observed.frame}) and predicted ({predicted.frame}) coordinates must have the same frame."
             )
+        # Extract the observed and predicted values
+        observed_values = observed.values
+        observed_covariances = observed.covariance.to_matrix()
+        predicted_values = predicted.values
 
-        N, D = observed.values.shape
+        # Create the output arrays
+        N, D = observed_values.shape
         p = np.empty(N, dtype=np.float64)
         chi2s = np.empty(N, dtype=np.float64)
 
-        # Caclulate the degrees of freedom for every coordinate
+        # Calculate the degrees of freedom for every coordinate
         # Number of coordinate dimensions less the number of quantities that are NaN
-        dof = D - np.sum(np.isnan(observed.values), axis=1)
+        dof = D - np.sum(np.isnan(observed_values), axis=1)
 
         # Calculate the array of residuals
-        residuals = observed.values - predicted.values
+        residuals = observed_values - predicted_values
+
+        # If the coordinates are spherical then we do some extra work:
+        # 1. Bound residuals in longitude to the range [-180, 180] degrees and
+        #    adjust the signs of the residuals that cross the 0/360 degree boundary.
+        # 2. Apply the cos(latitude) factor to the residuals in longitude and longitudinal
+        #    velocity
+        if isinstance(observed, SphericalCoordinates):
+            # Bound the longitude residuals to the range [-180, 180] degrees
+            residuals = bound_longitude_residuals(observed_values, residuals)
+
+            # Apply the cos(latitude) factor to the residuals and covariance matrix
+            residuals, observed_covariances = apply_cosine_latitude_correction(
+                observed_values[:, 2], residuals, observed_covariances
+            )
 
         # Batch the coordinates and covariances into groups that have the same
         # number of dimensions that have missing values (represented by NaNs)
@@ -104,9 +231,7 @@ class Residuals(qv.Table):
             batch_dimensions,
             batch_coords,
             batch_covariances,
-        ) = _batch_coords_and_covariances(
-            observed.values, observed.covariance.to_matrix()
-        )
+        ) = _batch_coords_and_covariances(observed_values, observed_covariances)
 
         for indices, dimensions, coords, covariances in zip(
             batch_indices, batch_dimensions, batch_coords, batch_covariances
@@ -159,7 +284,9 @@ class Residuals(qv.Table):
         return np.stack(self.values.to_numpy(zero_copy_only=False))
 
 
-def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray:
+def calculate_chi2(
+    residuals: npt.NDArray[np.float64], covariances: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """
     Calculate the vectorized normalized squared residual for each residual and covariance pair.
     This normalized residual is equivalent to the Mahalanobis distance squared.
@@ -189,8 +316,13 @@ def calculate_chi2(residuals: np.ndarray, covariances: np.ndarray) -> np.ndarray
 
 
 def _batch_coords_and_covariances(
-    coords: np.ndarray, covariances: np.ndarray
-) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+    coords: npt.NDArray[np.float64], covariances: npt.NDArray[np.float64]
+) -> Tuple[
+    List[npt.NDArray[np.float64]],
+    List[npt.NDArray[np.float64]],
+    List[npt.NDArray[np.float64]],
+    List[npt.NDArray[np.float64]],
+]:
     """
     Batch coordinates and covariances into groups that have the same
     number of dimensions that have missing values (represented by NaNs).
