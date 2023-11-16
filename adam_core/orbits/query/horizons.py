@@ -53,7 +53,7 @@ def _get_horizons_vectors(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.rescale("tdb").mjd(),
+            epochs=times.rescale("tdb").mjd().to_numpy(zero_copy_only=False),
             location=location,
             id_type=id_type,
         )
@@ -109,7 +109,7 @@ def _get_horizons_elements(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.rescale("tdb").mjd(),
+            epochs=times.rescale("tdb").mjd().to_numpy(zero_copy_only=False),
             location=location,
             id_type=id_type,
         )
@@ -160,7 +160,7 @@ def _get_horizons_ephemeris(
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.rescale("utc").mjd(),
+            epochs=times.rescale("utc").mjd().to_numpy(zero_copy_only=False),
             location=location,
             id_type=id_type,
         )
