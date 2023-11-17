@@ -658,3 +658,35 @@ def test_Timestamp_link_precision():
     )
     linkage = time.link(time_s, precision="s")
     assert len(linkage.all_unique_values) == 1
+
+
+def test_Timestamp_max():
+    # Test that the max method correctly returns
+    # the maximum time
+    times = Timestamp.from_kwargs(
+        days=[5, 1, 3, 2, 4, 1, 2, 3, 4, 5],
+        nanos=[2, 2, 2, 2, 2, 1, 1, 1, 1, 1],
+    )
+    times = qv.concatenate([times for _ in range(10)])
+
+    max_time = times.max()
+    assert len(max_time) == 1
+    assert max_time.scale == times.scale
+    assert max_time.days.to_pylist() == [5]
+    assert max_time.nanos.to_pylist() == [2]
+
+
+def test_Timestamp_min():
+    # Test that the min method correctly returns
+    # the minimum time
+    times = Timestamp.from_kwargs(
+        days=[5, 1, 3, 2, 4, 1, 2, 3, 4, 5],
+        nanos=[2, 2, 2, 2, 2, 1, 1, 1, 1, 1],
+    )
+    times = qv.concatenate([times for _ in range(10)])
+
+    min_time = times.min()
+    assert len(min_time) == 1
+    assert min_time.scale == times.scale
+    assert min_time.days.to_pylist() == [1]
+    assert min_time.nanos.to_pylist() == [1]

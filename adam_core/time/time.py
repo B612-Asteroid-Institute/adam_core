@@ -144,6 +144,46 @@ class Timestamp(qv.Table):
             raise ValueError(f"Unsupported precision: {precision}")
         return _duration_arrays_within_tolerance(delta_days, delta_nanos, max_deviation)
 
+    def max(self) -> Timestamp:
+        """
+        Compute the maximum time.
+
+        Returns
+        -------
+        max_time : `~adam_core.time.Timestamp`
+            The maximum time. If there are multiple maximum times,
+            one of them is returned.
+        """
+        # Compute the maximum day
+        max_day = pc.max(self.days)
+        days_mask = pc.equal(self.days, max_day)
+
+        # Compute the maximum nanos for the maximum day
+        max_nanos = pc.max(self.nanos.filter(days_mask))
+        nanos_mask = pc.equal(self.nanos, max_nanos)
+
+        return self.apply_mask(pc.and_(days_mask, nanos_mask))[0]
+
+    def min(self) -> Timestamp:
+        """
+        Compute the minimum time.
+
+        Returns
+        -------
+        min_time : `~adam_core.time.Timestamp`
+            The minimum time. If there are multiple minimum times,
+            one of them is returned.
+        """
+        # Compute the minimum day
+        min_day = pc.min(self.days)
+        days_mask = pc.equal(self.days, min_day)
+
+        # Compute the minimum nanos for the minimum day
+        min_nanos = pc.min(self.nanos.filter(days_mask))
+        nanos_mask = pc.equal(self.nanos, min_nanos)
+
+        return self.apply_mask(pc.and_(days_mask, nanos_mask))[0]
+
     @classmethod
     def from_astropy(cls, astropy_time: astropy.time.Time) -> Timestamp:
         """Convert an astropy time to a quivr timestamp.
