@@ -7,6 +7,8 @@ import numpy as np
 import numpy.typing as npt
 import quivr as qv
 
+from adam_core.ray_cluster import initialize_ray
+
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
@@ -114,7 +116,7 @@ class Propagator(ABC):
         num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
-        parallel_backend: Literal["cf", "ray"] = "cf",
+        parallel_backend: Literal["cf", "ray"] = "ray",
     ) -> Orbits:
         """
         Propagate each orbit in orbits to each time in times.
@@ -151,7 +153,6 @@ class Propagator(ABC):
             Propagated orbits.
         """
         if max_processes is None or max_processes > 1:
-
             propagated_list: List[Orbits] = []
             variants_list: List[VariantOrbits] = []
 
@@ -159,7 +160,6 @@ class Propagator(ABC):
                 with concurrent.futures.ProcessPoolExecutor(
                     max_workers=max_processes
                 ) as executor:
-
                     # Add orbits to propagate to futures
                     futures = []
                     for orbit_chunk in _iterate_chunks(orbits, chunk_size):
@@ -204,14 +204,12 @@ class Propagator(ABC):
                             )
 
             elif parallel_backend == "ray":
-
                 if RAY_INSTALLED is False:
                     raise ImportError(
                         "Ray must be installed to use the ray parallel backend"
                     )
 
-                if not ray.is_initialized():
-                    ray.init(num_cpus=max_processes)
+                initialize_ray(num_cpus=max_processes)
 
                 # Add orbits and times to object store if
                 # they haven't already been added
@@ -375,7 +373,6 @@ class Propagator(ABC):
         # matrices
 
         if max_processes is None or max_processes > 1:
-
             ephemeris_list: List[Ephemeris] = []
             variants_list: List[VariantEphemeris] = []
 
@@ -383,7 +380,6 @@ class Propagator(ABC):
                 with concurrent.futures.ProcessPoolExecutor(
                     max_workers=max_processes
                 ) as executor:
-
                     # Add orbits to propagate to futures
                     futures = []
                     for orbit_chunk in _iterate_chunks(orbits, chunk_size):
@@ -427,14 +423,12 @@ class Propagator(ABC):
                                 f"Unexpected result type from ephemeris worker: {type(result)}"
                             )
             elif parallel_backend == "ray":
-
                 if RAY_INSTALLED is False:
                     raise ImportError(
                         "Ray must be installed to use the ray parallel backend"
                     )
 
-                if not ray.is_initialized():
-                    ray.init(num_cpus=max_processes)
+                initialize_ray(num_cpus=max_processes)
 
                 # Add orbits and observers to object store if
                 # they haven't already been added

@@ -32,6 +32,8 @@ dependencies = [
   # This fork removes errors that occur with true anomaly values 
   "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
   "pandas",
+  "psutil",
+  "ray",
   "requests",
   "scipy",
   "spiceypy",
@@ -60,7 +62,6 @@ path = "adam_core/__version__.py"
 
 [tool.hatch.envs.dev]
 dependencies = [
-  "ray",                # TODO: Move to main dependencies once we are ready to move away from concurrent futures
   "black==22.10.0",
   "isort",
   "mypy",
