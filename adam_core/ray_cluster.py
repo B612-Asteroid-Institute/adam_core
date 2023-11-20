@@ -30,7 +30,7 @@ def initialize_ray(
 ) -> None:
     # Initialize ray
     if not ray.is_initialized():
-        logger.debug(f"Ray is not initialized...")
+        logger.debug("Ray is not initialized...")
         # For some reason, ray does not seem to automatically
         # find existing local clusters without `address="auto"`
         # but it will fail if we use auto and there is no existing cluster.
