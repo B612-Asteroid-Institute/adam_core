@@ -60,6 +60,9 @@ allow-direct-references = true
 [tool.hatch.version]
 path = "adam_core/__version__.py"
 
+[tool.hatch.envs.default]
+python = "3.11"
+
 [tool.hatch.envs.dev]
 dependencies = [
   "black==22.10.0",
