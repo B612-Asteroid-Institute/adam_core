@@ -25,10 +25,17 @@ try:
 except ImportError:
     pass
 
-TimestampType = Union[Timestamp, ObjectRef]
-OrbitType = Union[Orbits, VariantOrbits, ObjectRef]
-EphemerisType = Union[Ephemeris, VariantOrbits, ObjectRef]
-ObserverType = Union[Observers, ObjectRef]
+
+TimestampType = Timestamp
+OrbitType = Union[Orbits, VariantOrbits]
+EphemerisType = Union[Ephemeris, VariantOrbits]
+ObserverType = Observers
+
+if RAY_INSTALLED:
+    TimestampType = Union[Timestamp, ObjectRef]
+    OrbitType = Union[Orbits, VariantOrbits, ObjectRef]
+    EphemerisType = Union[Ephemeris, VariantOrbits, ObjectRef]
+    ObserverType = Union[Observers, ObjectRef]
 
 
 def propagation_worker(
