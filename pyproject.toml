@@ -32,7 +32,6 @@ dependencies = [
   # This fork removes errors that occur with true anomaly values 
   "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
   "pandas",
-  "psutil",
   "ray",
   "requests",
   "scipy",
@@ -70,6 +69,7 @@ dependencies = [
   "pytest-cov",
   "pytest-benchmark",
   "pytest-doctestplus",
+  "pytest-mock",
   "pre-commit",
   "ruff",
   "ipython",

@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import quivr as qv
 
-from adam_core.ray_cluster import initialize_ray
+from adam_core.ray_cluster import initialize_use_ray
 
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
@@ -209,7 +209,7 @@ class Propagator(ABC):
                         "Ray must be installed to use the ray parallel backend"
                     )
 
-                initialize_ray(num_cpus=max_processes)
+                initialize_use_ray(num_cpus=max_processes)
 
                 # Add orbits and times to object store if
                 # they haven't already been added
@@ -428,7 +428,7 @@ class Propagator(ABC):
                         "Ray must be installed to use the ray parallel backend"
                     )
 
-                initialize_ray(num_cpus=max_processes)
+                initialize_use_ray(num_cpus=max_processes)
 
                 # Add orbits and observers to object store if
                 # they haven't already been added

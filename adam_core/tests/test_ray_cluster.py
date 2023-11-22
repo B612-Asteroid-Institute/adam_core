@@ -1,19 +1,4 @@
-import pytest
-
-from adam_core.ray_cluster import _determine_ray_memory, initialize_ray
-
-
-def test_determine_ray_memory():
-    # Test that if no memory is requested, we use ray default
-    assert _determine_ray_memory(None) is None
-
-    # Test that if memory is requested, but not available, we use available
-    assert _determine_ray_memory(1000) == 1000
-
-    # Test that if memory is requested, but not available, we use available
-    too_much = 10000000000000000000
-    have = _determine_ray_memory(too_much)
-    assert have < too_much
+from adam_core.ray_cluster import initialize_use_ray
 
 
 # Test that we are calling the correct ray init function using mocks
@@ -21,12 +6,28 @@ def test_initialize_ray(mocker):
     mock_ray = mocker.patch("adam_core.ray_cluster.ray")
 
     # Ensure we initialize ray with the correct values
-    initialize_ray(num_cpus=4, object_store_bytes=1000)
-    mock_ray.init.assert_called_once_with(num_cpus=4, object_store_memory=1000)
+    mock_ray.is_initialized.return_value = False
+    # Set mock to throw an error if init is called with address="auto"
+    # but not if called with other args
+    mock_ray.init.side_effect = [
+        ConnectionError,
+        None,
+    ]
 
-    # Ensure that if there is a ray cluster we connect to it with address="auto"
-    mock_ray.init.reset_mock()
-    initialize_ray()
+    initialize_use_ray(num_cpus=4, object_store_bytes=1000)
+    mock_ray.init.assert_called_with(address="auto")
+    mock_ray.init.assert_called_with(num_cpus=4, object_store_memory=1000)
+    mock_ray.init.call_count == 2
+
+    mock_ray.reset_mock(return_value=True, side_effect=True)
+    mock_ray.is_initialized.return_value = False
+    mock_ray.init.return_value = True
+    initialize_use_ray()
 
     mock_ray.init.assert_called_once_with(address="auto")
     assert mock_ray.init.call_count == 1
+
+    mock_ray.reset_mock(return_value=True, side_effect=True)
+    mock_ray.is_initialized.return_value = True
+    initialize_use_ray()
+    assert mock_ray.init.call_count == 0
