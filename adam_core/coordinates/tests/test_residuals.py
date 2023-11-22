@@ -203,9 +203,8 @@ def test_batch_coords_and_covariances_multiple_batches():
     np.testing.assert_equal(batch_covariances[1], np.array([[[3.0, 0.0], [0.0, 4.0]]]))
 
 
-def test_Residuals_calculate():
-    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
-    # and correctly identifies the dimensions that have valid values and those that do not.
+@pytest.fixture
+def observed_array():
     observed_array = np.array(
         [
             [0.2, np.nan, np.nan, np.nan, np.nan, np.nan],
@@ -214,6 +213,30 @@ def test_Residuals_calculate():
             [0.5, 3.0, 0.5, 4.5, 0.1, 0.1],
         ]
     )
+    return observed_array
+
+
+@pytest.fixture
+def predicted_array():
+    predicted_array = np.array(
+        [
+            [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+            [0.5, 1.1, 1.9, 0.2, 0.1, 0.1],
+            [0.5, 2.9, 0.2, 4.1, 0.1, 0.1],
+            [0.5, 3.0, 0.5, 4.5, 0.1, 0.1],
+        ]
+    )
+    return predicted_array
+
+
+@pytest.fixture
+def expected_residuals(observed_array, predicted_array):
+    return observed_array - predicted_array
+
+
+def test_Residuals_calculate(observed_array, predicted_array, expected_residuals):
+    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
+    # and correctly identifies the dimensions that have valid values and those that do not.
     observed = CartesianCoordinates.from_kwargs(
         x=observed_array[:, 0],
         y=observed_array[:, 1],
@@ -224,14 +247,6 @@ def test_Residuals_calculate():
         covariance=CoordinateCovariances.from_sigmas(np.full((4, 6), 0.1)),
         origin=Origin.from_kwargs(code=np.full(4, "SUN")),
         frame="ecliptic",
-    )
-    predicted_array = np.array(
-        [
-            [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-            [0.5, 1.1, 1.9, 0.2, 0.1, 0.1],
-            [0.5, 2.9, 0.2, 4.1, 0.1, 0.1],
-            [0.5, 3.0, 0.5, 4.5, 0.1, 0.1],
-        ]
     )
     predicted = CartesianCoordinates.from_kwargs(
         x=predicted_array[:, 0],
@@ -246,24 +261,173 @@ def test_Residuals_calculate():
 
     residuals = Residuals.calculate(observed, predicted)
 
-    # Calculate the expected residuals
-    desired_residuals = observed_array - predicted_array
+    assert len(residuals) == 4
+    assert residuals.to_array().shape == (4, 6)
+    np.testing.assert_equal(residuals.to_array(), expected_residuals)
+    assert residuals.dof.to_pylist() == [1, 3, 2, 6]
     np.testing.assert_almost_equal(
-        desired_residuals[0], np.array([-0.1, np.nan, np.nan, np.nan, np.nan, np.nan])
+        residuals.chi2.to_numpy(zero_copy_only=False), np.array([1, 3, 2, 0])
     )
-    np.testing.assert_almost_equal(
-        desired_residuals[1], np.array([0.1, -0.1, 0.1, np.nan, np.nan, np.nan])
+
+    # Test that the probabilities for the first and last case are correct (these are more well known examples)
+    actual_probabilities = residuals.probability.to_numpy(zero_copy_only=False)
+    np.testing.assert_almost_equal(actual_probabilities[0], 0.31731050786291415)
+    np.testing.assert_almost_equal(actual_probabilities[3], 1.0)
+
+
+def test_Residuals_calculate_missing_covariance_values(
+    observed_array, predicted_array, expected_residuals
+):
+    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
+    # and correctly identifies the dimensions that have valid values and those that do not.
+    # Here all covariance values (both variates and covariates) are defined
+    # for those dimensions that have values, the rest are NaN
+    observed_covariances = np.array(
+        [
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, 0.0, 0.0, np.nan, np.nan, np.nan],
+                [0.0, 0.01, 0.0, np.nan, np.nan, np.nan],
+                [0.0, 0.0, 0.01, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, 0.0, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.0, np.nan, 0.01, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.01, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.01, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.01, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.01, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.01],
+            ],
+        ]
     )
-    np.testing.assert_almost_equal(
-        desired_residuals[2], np.array([np.nan, 0.1, np.nan, -0.1, np.nan, np.nan])
+
+    observed = CartesianCoordinates.from_kwargs(
+        x=observed_array[:, 0],
+        y=observed_array[:, 1],
+        z=observed_array[:, 2],
+        vx=observed_array[:, 3],
+        vy=observed_array[:, 4],
+        vz=observed_array[:, 5],
+        covariance=CoordinateCovariances.from_matrix(observed_covariances),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
     )
-    np.testing.assert_almost_equal(
-        desired_residuals[3], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    predicted = CartesianCoordinates.from_kwargs(
+        x=predicted_array[:, 0],
+        y=predicted_array[:, 1],
+        z=predicted_array[:, 2],
+        vx=predicted_array[:, 3],
+        vy=predicted_array[:, 4],
+        vz=predicted_array[:, 5],
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
     )
+
+    residuals = Residuals.calculate(observed, predicted)
 
     assert len(residuals) == 4
     assert residuals.to_array().shape == (4, 6)
-    np.testing.assert_equal(residuals.to_array(), desired_residuals)
+    np.testing.assert_equal(residuals.to_array(), expected_residuals)
+    assert residuals.dof.to_pylist() == [1, 3, 2, 6]
+    np.testing.assert_almost_equal(
+        residuals.chi2.to_numpy(zero_copy_only=False), np.array([1, 3, 2, 0])
+    )
+
+    # Test that the probabilities for the first and last case are correct (these are more well known examples)
+    actual_probabilities = residuals.probability.to_numpy(zero_copy_only=False)
+    np.testing.assert_almost_equal(actual_probabilities[0], 0.31731050786291415)
+    np.testing.assert_almost_equal(actual_probabilities[3], 1.0)
+
+
+def test_Residuals_calculate_missing_covariate_values(
+    observed_array, predicted_array, expected_residuals
+):
+    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
+    # and correctly identifies the dimensions that have valid values and those that do not.
+    # Here only variance values are defined
+    # for those dimensions that have values, the covariates and the rest are NaN
+    observed_covariances = np.array(
+        [
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, 0.01, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, 0.01, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, 0.01, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, 0.01, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, 0.01, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, 0.01],
+            ],
+        ]
+    )
+
+    observed = CartesianCoordinates.from_kwargs(
+        x=observed_array[:, 0],
+        y=observed_array[:, 1],
+        z=observed_array[:, 2],
+        vx=observed_array[:, 3],
+        vy=observed_array[:, 4],
+        vz=observed_array[:, 5],
+        covariance=CoordinateCovariances.from_matrix(observed_covariances),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
+    )
+    predicted = CartesianCoordinates.from_kwargs(
+        x=predicted_array[:, 0],
+        y=predicted_array[:, 1],
+        z=predicted_array[:, 2],
+        vx=predicted_array[:, 3],
+        vy=predicted_array[:, 4],
+        vz=predicted_array[:, 5],
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
+    )
+
+    residuals = Residuals.calculate(observed, predicted)
+
+    assert len(residuals) == 4
+    assert residuals.to_array().shape == (4, 6)
+    np.testing.assert_equal(residuals.to_array(), expected_residuals)
     assert residuals.dof.to_pylist() == [1, 3, 2, 6]
     np.testing.assert_almost_equal(
         residuals.chi2.to_numpy(zero_copy_only=False), np.array([1, 3, 2, 0])
