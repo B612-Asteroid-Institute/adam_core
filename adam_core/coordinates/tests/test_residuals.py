@@ -38,6 +38,49 @@ def test_calculate_chi2():
     np.testing.assert_allclose(calculate_chi2(residuals, covariances), [9])
 
 
+def test_calculate_chi2_missing_diagonal_covariance_values():
+    # Lets make sure we raise an error if the covariance matrix has NaNs on the diagonal
+    residuals = np.array(
+        [
+            [1, 2, 3],
+            [2, 1, 1],
+        ]
+    )
+    covariances = np.array(
+        [
+            [[np.nan, 0, 0], [0, np.nan, 0], [0, 0, 1]],
+            [[np.nan, 0, 0], [0, np.nan, 0], [0, 0, 1]],
+        ]
+    )
+
+    with pytest.raises(
+        ValueError, match=r"Covariance matrix has NaNs on the diagonal."
+    ):
+        calculate_chi2(residuals, covariances)
+
+
+def test_calculate_chi2_missing_off_diagonal_covariance_values():
+    # Lets make sure we raise an error if the covariance matrix has NaNs on the off-diagonal
+    residuals = np.array(
+        [
+            [1, 2, 3],
+            [2, 1, 1],
+        ]
+    )
+    covariances = np.array(
+        [
+            [[1, np.nan, 0], [np.nan, 1, 0], [0, 0, 1]],
+            [[1, np.nan, 0], [np.nan, 1, 0], [0, 0, 1]],
+        ]
+    )
+
+    with pytest.warns(
+        UserWarning,
+        match=r"Covariance matrix has NaNs on the off-diagonal \(these will be assumed to be 0.0\).",
+    ):
+        np.testing.assert_allclose(calculate_chi2(residuals, covariances), [14, 6])
+
+
 def test_calculate_chi2_mahalanobis():
     # Test that the calculate_chi2 is equivalent to the Mahalanobis distance squared
     observed = np.array([[1, 1, 1], [2, 2, 2]])
@@ -357,7 +400,7 @@ def test_Residuals_calculate_missing_covariance_values(
     np.testing.assert_almost_equal(actual_probabilities[3], 1.0)
 
 
-def test_Residuals_calculate_missing_covariate_values(
+def test_Residuals_calculate_missing_off_diagonal_covariance_values(
     observed_array, predicted_array, expected_residuals
 ):
     # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
@@ -423,7 +466,11 @@ def test_Residuals_calculate_missing_covariate_values(
         frame="ecliptic",
     )
 
-    residuals = Residuals.calculate(observed, predicted)
+    with pytest.warns(
+        UserWarning,
+        match=r"Covariance matrix has NaNs on the off-diagonal \(these will be assumed to be 0.0\).",
+    ):
+        residuals = Residuals.calculate(observed, predicted)
 
     assert len(residuals) == 4
     assert residuals.to_array().shape == (4, 6)
