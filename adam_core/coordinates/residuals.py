@@ -1,3 +1,4 @@
+import warnings
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -76,9 +77,22 @@ def apply_cosine_latitude_correction(
     residuals[:, 1] *= cos_lat
     residuals[:, 4] *= cos_lat
 
-    # Apply the cos(latitude) factor to the covariance matrix
-    covariances = cos_lat_cov @ covariances @ cos_lat_cov.transpose(0, 2, 1)
+    # Identify locations where the covariance matrix is NaN and set
+    # those values to 0.0
+    nan_cov = np.isnan(covariances)
+    covariances_masked = np.where(nan_cov, 0.0, covariances)
 
+    # Apply the cos(latitude) factor to the covariance matrix.
+    covariances_masked = (
+        cos_lat_cov @ covariances_masked @ cos_lat_cov.transpose(0, 2, 1)
+    )
+
+    # Set the covariance matrix to nan where it was nan before.
+    # Note that when we apply cos(latitude) to the covariance matrix in the previous statement,
+    # we are only modifying the longitude and longitudinal velocity dimensions. The remaining
+    # dimensions are left unchanged which is why we can use a mask to reset the
+    # the missing values in the resulting matrix to NaN.
+    covariances = np.where(nan_cov, np.nan, covariances_masked)
     return residuals, covariances
 
 
@@ -293,6 +307,9 @@ def calculate_chi2(
     For residuals with no covariance (all non-diagonal covariance elements are zero) this
     is exactly equivalent to chi2.
 
+    If the off-diagonal covariance elements (the covariate terms) are missing (represented by NaNs),
+    then they will assumed to be 0.0.
+
     Parameters
     ----------
     residuals : `~numpy.ndarray` (N, D)
@@ -310,6 +327,18 @@ def calculate_chi2(
     [1] Carpino, M. et al. (2003). Error statistics of asteroid optical astrometric observations.
         Icarus, 166, 248-270. https://doi.org/10.1016/S0019-1035(03)00051-4
     """
+    # Raise error if any of the diagonal elements are nan
+    if np.any(np.isnan(np.diagonal(covariances, axis1=1, axis2=2))):
+        raise ValueError("Covariance matrix has NaNs on the diagonal.")
+
+    # Warn if any of the non-diagonal elements are nan
+    if np.any(np.isnan(covariances)):
+        warnings.warn(
+            "Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).",
+            UserWarning,
+        )
+        covariances = np.where(np.isnan(covariances), 0.0, covariances)
+
     W = np.linalg.inv(covariances)
     chi2 = np.einsum("ij,ji->i", np.einsum("ij,ijk->ik", residuals, W), residuals.T)
     return chi2

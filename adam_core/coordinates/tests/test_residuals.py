@@ -38,6 +38,49 @@ def test_calculate_chi2():
     np.testing.assert_allclose(calculate_chi2(residuals, covariances), [9])
 
 
+def test_calculate_chi2_missing_diagonal_covariance_values():
+    # Lets make sure we raise an error if the covariance matrix has NaNs on the diagonal
+    residuals = np.array(
+        [
+            [1, 2, 3],
+            [2, 1, 1],
+        ]
+    )
+    covariances = np.array(
+        [
+            [[np.nan, 0, 0], [0, np.nan, 0], [0, 0, 1]],
+            [[np.nan, 0, 0], [0, np.nan, 0], [0, 0, 1]],
+        ]
+    )
+
+    with pytest.raises(
+        ValueError, match=r"Covariance matrix has NaNs on the diagonal."
+    ):
+        calculate_chi2(residuals, covariances)
+
+
+def test_calculate_chi2_missing_off_diagonal_covariance_values():
+    # Lets make sure we raise an error if the covariance matrix has NaNs on the off-diagonal
+    residuals = np.array(
+        [
+            [1, 2, 3],
+            [2, 1, 1],
+        ]
+    )
+    covariances = np.array(
+        [
+            [[1, np.nan, 0], [np.nan, 1, 0], [0, 0, 1]],
+            [[1, np.nan, 0], [np.nan, 1, 0], [0, 0, 1]],
+        ]
+    )
+
+    with pytest.warns(
+        UserWarning,
+        match=r"Covariance matrix has NaNs on the off-diagonal \(these will be assumed to be 0.0\).",
+    ):
+        np.testing.assert_allclose(calculate_chi2(residuals, covariances), [14, 6])
+
+
 def test_calculate_chi2_mahalanobis():
     # Test that the calculate_chi2 is equivalent to the Mahalanobis distance squared
     observed = np.array([[1, 1, 1], [2, 2, 2]])
@@ -203,9 +246,8 @@ def test_batch_coords_and_covariances_multiple_batches():
     np.testing.assert_equal(batch_covariances[1], np.array([[[3.0, 0.0], [0.0, 4.0]]]))
 
 
-def test_Residuals_calculate():
-    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
-    # and correctly identifies the dimensions that have valid values and those that do not.
+@pytest.fixture
+def observed_array():
     observed_array = np.array(
         [
             [0.2, np.nan, np.nan, np.nan, np.nan, np.nan],
@@ -214,6 +256,30 @@ def test_Residuals_calculate():
             [0.5, 3.0, 0.5, 4.5, 0.1, 0.1],
         ]
     )
+    return observed_array
+
+
+@pytest.fixture
+def predicted_array():
+    predicted_array = np.array(
+        [
+            [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+            [0.5, 1.1, 1.9, 0.2, 0.1, 0.1],
+            [0.5, 2.9, 0.2, 4.1, 0.1, 0.1],
+            [0.5, 3.0, 0.5, 4.5, 0.1, 0.1],
+        ]
+    )
+    return predicted_array
+
+
+@pytest.fixture
+def expected_residuals(observed_array, predicted_array):
+    return observed_array - predicted_array
+
+
+def test_Residuals_calculate(observed_array, predicted_array, expected_residuals):
+    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
+    # and correctly identifies the dimensions that have valid values and those that do not.
     observed = CartesianCoordinates.from_kwargs(
         x=observed_array[:, 0],
         y=observed_array[:, 1],
@@ -224,14 +290,6 @@ def test_Residuals_calculate():
         covariance=CoordinateCovariances.from_sigmas(np.full((4, 6), 0.1)),
         origin=Origin.from_kwargs(code=np.full(4, "SUN")),
         frame="ecliptic",
-    )
-    predicted_array = np.array(
-        [
-            [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-            [0.5, 1.1, 1.9, 0.2, 0.1, 0.1],
-            [0.5, 2.9, 0.2, 4.1, 0.1, 0.1],
-            [0.5, 3.0, 0.5, 4.5, 0.1, 0.1],
-        ]
     )
     predicted = CartesianCoordinates.from_kwargs(
         x=predicted_array[:, 0],
@@ -246,24 +304,177 @@ def test_Residuals_calculate():
 
     residuals = Residuals.calculate(observed, predicted)
 
-    # Calculate the expected residuals
-    desired_residuals = observed_array - predicted_array
+    assert len(residuals) == 4
+    assert residuals.to_array().shape == (4, 6)
+    np.testing.assert_equal(residuals.to_array(), expected_residuals)
+    assert residuals.dof.to_pylist() == [1, 3, 2, 6]
     np.testing.assert_almost_equal(
-        desired_residuals[0], np.array([-0.1, np.nan, np.nan, np.nan, np.nan, np.nan])
+        residuals.chi2.to_numpy(zero_copy_only=False), np.array([1, 3, 2, 0])
     )
-    np.testing.assert_almost_equal(
-        desired_residuals[1], np.array([0.1, -0.1, 0.1, np.nan, np.nan, np.nan])
+
+    # Test that the probabilities for the first and last case are correct (these are more well known examples)
+    actual_probabilities = residuals.probability.to_numpy(zero_copy_only=False)
+    np.testing.assert_almost_equal(actual_probabilities[0], 0.31731050786291415)
+    np.testing.assert_almost_equal(actual_probabilities[3], 1.0)
+
+
+def test_Residuals_calculate_missing_covariance_values(
+    observed_array, predicted_array, expected_residuals
+):
+    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
+    # and correctly identifies the dimensions that have valid values and those that do not.
+    # Here all covariance values (both variates and covariates) are defined
+    # for those dimensions that have values, the rest are NaN
+    observed_covariances = np.array(
+        [
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, 0.0, 0.0, np.nan, np.nan, np.nan],
+                [0.0, 0.01, 0.0, np.nan, np.nan, np.nan],
+                [0.0, 0.0, 0.01, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, 0.0, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.0, np.nan, 0.01, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.01, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.01, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.01, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.01, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.01],
+            ],
+        ]
     )
-    np.testing.assert_almost_equal(
-        desired_residuals[2], np.array([np.nan, 0.1, np.nan, -0.1, np.nan, np.nan])
+
+    observed = CartesianCoordinates.from_kwargs(
+        x=observed_array[:, 0],
+        y=observed_array[:, 1],
+        z=observed_array[:, 2],
+        vx=observed_array[:, 3],
+        vy=observed_array[:, 4],
+        vz=observed_array[:, 5],
+        covariance=CoordinateCovariances.from_matrix(observed_covariances),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
     )
-    np.testing.assert_almost_equal(
-        desired_residuals[3], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    predicted = CartesianCoordinates.from_kwargs(
+        x=predicted_array[:, 0],
+        y=predicted_array[:, 1],
+        z=predicted_array[:, 2],
+        vx=predicted_array[:, 3],
+        vy=predicted_array[:, 4],
+        vz=predicted_array[:, 5],
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
     )
+
+    residuals = Residuals.calculate(observed, predicted)
 
     assert len(residuals) == 4
     assert residuals.to_array().shape == (4, 6)
-    np.testing.assert_equal(residuals.to_array(), desired_residuals)
+    np.testing.assert_equal(residuals.to_array(), expected_residuals)
+    assert residuals.dof.to_pylist() == [1, 3, 2, 6]
+    np.testing.assert_almost_equal(
+        residuals.chi2.to_numpy(zero_copy_only=False), np.array([1, 3, 2, 0])
+    )
+
+    # Test that the probabilities for the first and last case are correct (these are more well known examples)
+    actual_probabilities = residuals.probability.to_numpy(zero_copy_only=False)
+    np.testing.assert_almost_equal(actual_probabilities[0], 0.31731050786291415)
+    np.testing.assert_almost_equal(actual_probabilities[3], 1.0)
+
+
+def test_Residuals_calculate_missing_off_diagonal_covariance_values(
+    observed_array, predicted_array, expected_residuals
+):
+    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
+    # and correctly identifies the dimensions that have valid values and those that do not.
+    # Here only variance values are defined
+    # for those dimensions that have values, the covariates and the rest are NaN
+    observed_covariances = np.array(
+        [
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, 0.01, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, 0.01, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            ],
+            [
+                [0.01, np.nan, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 0.01, np.nan, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, 0.01, np.nan, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, 0.01, np.nan, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, 0.01, np.nan],
+                [np.nan, np.nan, np.nan, np.nan, np.nan, 0.01],
+            ],
+        ]
+    )
+
+    observed = CartesianCoordinates.from_kwargs(
+        x=observed_array[:, 0],
+        y=observed_array[:, 1],
+        z=observed_array[:, 2],
+        vx=observed_array[:, 3],
+        vy=observed_array[:, 4],
+        vz=observed_array[:, 5],
+        covariance=CoordinateCovariances.from_matrix(observed_covariances),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
+    )
+    predicted = CartesianCoordinates.from_kwargs(
+        x=predicted_array[:, 0],
+        y=predicted_array[:, 1],
+        z=predicted_array[:, 2],
+        vx=predicted_array[:, 3],
+        vy=predicted_array[:, 4],
+        vz=predicted_array[:, 5],
+        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        frame="ecliptic",
+    )
+
+    with pytest.warns(
+        UserWarning,
+        match=r"Covariance matrix has NaNs on the off-diagonal \(these will be assumed to be 0.0\).",
+    ):
+        residuals = Residuals.calculate(observed, predicted)
+
+    assert len(residuals) == 4
+    assert residuals.to_array().shape == (4, 6)
+    np.testing.assert_equal(residuals.to_array(), expected_residuals)
     assert residuals.dof.to_pylist() == [1, 3, 2, 6]
     np.testing.assert_almost_equal(
         residuals.chi2.to_numpy(zero_copy_only=False), np.array([1, 3, 2, 0])
@@ -376,8 +587,8 @@ def test_apply_cosine_latitude_correction():
     # vlon_rho (:,4,0), vlon_lon (:,4,1), vlon_lat (:,4,2), vlon_vrho (:,4,3), vlon_vlon (:,4,4), vlon_vlat (:,4,5)
     # vlat_rho (:,5,0), vlat_lon (:,5,1), vlat_lat (:,5,2), vlat_vrho (:,5,3), vlat_vlon (:,5,4), vlat_vlat (:,5,5)
     # The only elements that should change are those rows and columns containing longitude and longitudinal velocity
-    # Not that for cov_lon_lon and cov_vlon_vlon the correction is applied twice as expected (we touch both quantities as
-    # rows and columns)
+    # Not that for cov_lon_lon and cov_vlon_vlon the correction is applied twice as expected (we touch both quantities
+    # as rows and columns)
     expected_covariance = np.ones_like(covariance_array)
     expected_covariance[:, :, 1] *= cos_latitude[:, np.newaxis]
     expected_covariance[:, :, 4] *= cos_latitude[:, np.newaxis]
@@ -540,6 +751,72 @@ def test_apply_cosine_latitude_correction():
     # Test cov_vlat_vlat (36)
     np.testing.assert_almost_equal(
         corrected_covariances[:, 5, 5], expected_variates_unchanged, decimal=15
+    )
+
+
+def test_apply_cosine_latitude_correction_missing_off_diagonal_covariance_values():
+    # Test that apply_cosine_latitude_correction correctly applies the cosine latitude correction
+    # to the residuals and covariances as a function of the latitude. Specifically, lets make sure
+    # that if the covariance matrix has NaNs on the off-diagonal that these are correctly handled
+    residual_array = np.array(
+        [
+            [0, 10, 0, 0, 1, 0],
+            [0, 10, 0, 0, 1, 0],
+            [0, 10, 0, 0, 1, 0],
+            [0, 10, 0, 0, 1, 0],
+        ],
+        dtype=np.float64,
+    )
+
+    # Create covariances that only have the diagonal defined
+    covariance_array = np.full((4, 6, 6), np.nan, dtype=np.float64)
+    covariance_array[:, np.arange(6), np.arange(6)] = 1.0
+
+    # Cosine of 0 degrees is 1
+    # Cosine of 45 degrees is 1/sqrt(2)
+    # Cosien of 60 degrees is 1/2
+    # Cosine of 90 degrees is 0
+    # The latter represents an unphysical case
+    latitude_array = np.array([0, 45, 60, 90])
+    cos_latitude = np.cos(np.radians(latitude_array))
+    expected_residual_array = np.array(
+        [
+            [0, 10, 0, 0, 1, 0],
+            [0, 10 / np.sqrt(2), 0, 0, 1 / np.sqrt(2), 0],
+            [0, 5, 0, 0, 1 / 2, 0],
+            [0, 0, 0, 0, 0, 0],
+        ],
+        dtype=np.float64,
+    )
+
+    # Covariance matrix elements
+    # rho_rho  (:,0,0), rho_lon  (: 0,1), rho_lat  (:,0,2), rho_vrho  (:,0,3), rho_vlon  (:,0,4), rho_vlat  (:,0,5)
+    # lon_rho  (:,1,0), lon_lon  (:,1,1), lon_lat  (:,1,2), lon_vrho  (:,1,3), lon_vlon  (:,1,4), lon_vlat  (:,1,5)
+    # lat_rho  (:,2,0), lat_lon  (:,2,1), lat_lat  (:,2,2), lat_vrho  (:,2,3), lat_vlon  (:,2,4), lat_vlat  (:,2,5)
+    # vrho_rho (:,3,0), vrho_lon (:,3,1), vrho_lat (:,3,2), vrho_vrho (:,3,3), vrho_vlon (:,3,4), vrho_vlat (:,3,5)
+    # vlon_rho (:,4,0), vlon_lon (:,4,1), vlon_lat (:,4,2), vlon_vrho (:,4,3), vlon_vlon (:,4,4), vlon_vlat (:,4,5)
+    # vlat_rho (:,5,0), vlat_lon (:,5,1), vlat_lat (:,5,2), vlat_vrho (:,5,3), vlat_vlon (:,5,4), vlat_vlat (:,5,5)
+    # The only elements that should change are those rows and columns containing longitude and longitudinal velocity
+    # Not that for cov_lon_lon and cov_vlon_vlon the correction is applied twice as expected (we touch both quantities
+    # as rows and columns)
+    expected_covariance = covariance_array.copy()
+    expected_covariance[:, :, 1] *= cos_latitude[:, np.newaxis]
+    expected_covariance[:, :, 4] *= cos_latitude[:, np.newaxis]
+    expected_covariance[:, 1, :] *= cos_latitude[:, np.newaxis]
+    expected_covariance[:, 4, :] *= cos_latitude[:, np.newaxis]
+
+    corrected_residuals, corrected_covariances = apply_cosine_latitude_correction(
+        latitude_array, residual_array, covariance_array
+    )
+
+    # Test that the residuals are corrected correctly
+    np.testing.assert_almost_equal(
+        corrected_residuals, expected_residual_array, decimal=15
+    )
+
+    # Test that the covariances are corrected correctly
+    np.testing.assert_almost_equal(
+        corrected_covariances, expected_covariance, decimal=15
     )
 
 
