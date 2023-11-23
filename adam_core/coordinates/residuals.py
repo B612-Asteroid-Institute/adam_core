@@ -77,9 +77,22 @@ def apply_cosine_latitude_correction(
     residuals[:, 1] *= cos_lat
     residuals[:, 4] *= cos_lat
 
-    # Apply the cos(latitude) factor to the covariance matrix
-    covariances = cos_lat_cov @ covariances @ cos_lat_cov.transpose(0, 2, 1)
+    # Identify locations where the covariance matrix is NaN and set
+    # those values to 0.0
+    nan_cov = np.isnan(covariances)
+    covariances_masked = np.where(nan_cov, 0.0, covariances)
 
+    # Apply the cos(latitude) factor to the covariance matrix.
+    covariances_masked = (
+        cos_lat_cov @ covariances_masked @ cos_lat_cov.transpose(0, 2, 1)
+    )
+
+    # Set the covariance matrix to nan where it was nan before.
+    # Note that when we apply cos(latitude) to the covariance matrix in the previous statement,
+    # we are only modifying the longitude and longitudinal velocity dimensions. The remaining
+    # dimensions are left unchanged which is why we can use a mask to reset the
+    # the missing values in the resulting matrix to NaN.
+    covariances = np.where(nan_cov, np.nan, covariances_masked)
     return residuals, covariances
 
 

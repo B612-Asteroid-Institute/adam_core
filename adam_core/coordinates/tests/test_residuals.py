@@ -587,8 +587,8 @@ def test_apply_cosine_latitude_correction():
     # vlon_rho (:,4,0), vlon_lon (:,4,1), vlon_lat (:,4,2), vlon_vrho (:,4,3), vlon_vlon (:,4,4), vlon_vlat (:,4,5)
     # vlat_rho (:,5,0), vlat_lon (:,5,1), vlat_lat (:,5,2), vlat_vrho (:,5,3), vlat_vlon (:,5,4), vlat_vlat (:,5,5)
     # The only elements that should change are those rows and columns containing longitude and longitudinal velocity
-    # Not that for cov_lon_lon and cov_vlon_vlon the correction is applied twice as expected (we touch both quantities as
-    # rows and columns)
+    # Not that for cov_lon_lon and cov_vlon_vlon the correction is applied twice as expected (we touch both quantities
+    # as rows and columns)
     expected_covariance = np.ones_like(covariance_array)
     expected_covariance[:, :, 1] *= cos_latitude[:, np.newaxis]
     expected_covariance[:, :, 4] *= cos_latitude[:, np.newaxis]
@@ -751,6 +751,72 @@ def test_apply_cosine_latitude_correction():
     # Test cov_vlat_vlat (36)
     np.testing.assert_almost_equal(
         corrected_covariances[:, 5, 5], expected_variates_unchanged, decimal=15
+    )
+
+
+def test_apply_cosine_latitude_correction_missing_off_diagonal_covariance_values():
+    # Test that apply_cosine_latitude_correction correctly applies the cosine latitude correction
+    # to the residuals and covariances as a function of the latitude. Specifically, lets make sure
+    # that if the covariance matrix has NaNs on the off-diagonal that these are correctly handled
+    residual_array = np.array(
+        [
+            [0, 10, 0, 0, 1, 0],
+            [0, 10, 0, 0, 1, 0],
+            [0, 10, 0, 0, 1, 0],
+            [0, 10, 0, 0, 1, 0],
+        ],
+        dtype=np.float64,
+    )
+
+    # Create covariances that only have the diagonal defined
+    covariance_array = np.full((4, 6, 6), np.nan, dtype=np.float64)
+    covariance_array[:, np.arange(6), np.arange(6)] = 1.0
+
+    # Cosine of 0 degrees is 1
+    # Cosine of 45 degrees is 1/sqrt(2)
+    # Cosien of 60 degrees is 1/2
+    # Cosine of 90 degrees is 0
+    # The latter represents an unphysical case
+    latitude_array = np.array([0, 45, 60, 90])
+    cos_latitude = np.cos(np.radians(latitude_array))
+    expected_residual_array = np.array(
+        [
+            [0, 10, 0, 0, 1, 0],
+            [0, 10 / np.sqrt(2), 0, 0, 1 / np.sqrt(2), 0],
+            [0, 5, 0, 0, 1 / 2, 0],
+            [0, 0, 0, 0, 0, 0],
+        ],
+        dtype=np.float64,
+    )
+
+    # Covariance matrix elements
+    # rho_rho  (:,0,0), rho_lon  (: 0,1), rho_lat  (:,0,2), rho_vrho  (:,0,3), rho_vlon  (:,0,4), rho_vlat  (:,0,5)
+    # lon_rho  (:,1,0), lon_lon  (:,1,1), lon_lat  (:,1,2), lon_vrho  (:,1,3), lon_vlon  (:,1,4), lon_vlat  (:,1,5)
+    # lat_rho  (:,2,0), lat_lon  (:,2,1), lat_lat  (:,2,2), lat_vrho  (:,2,3), lat_vlon  (:,2,4), lat_vlat  (:,2,5)
+    # vrho_rho (:,3,0), vrho_lon (:,3,1), vrho_lat (:,3,2), vrho_vrho (:,3,3), vrho_vlon (:,3,4), vrho_vlat (:,3,5)
+    # vlon_rho (:,4,0), vlon_lon (:,4,1), vlon_lat (:,4,2), vlon_vrho (:,4,3), vlon_vlon (:,4,4), vlon_vlat (:,4,5)
+    # vlat_rho (:,5,0), vlat_lon (:,5,1), vlat_lat (:,5,2), vlat_vrho (:,5,3), vlat_vlon (:,5,4), vlat_vlat (:,5,5)
+    # The only elements that should change are those rows and columns containing longitude and longitudinal velocity
+    # Not that for cov_lon_lon and cov_vlon_vlon the correction is applied twice as expected (we touch both quantities
+    # as rows and columns)
+    expected_covariance = covariance_array.copy()
+    expected_covariance[:, :, 1] *= cos_latitude[:, np.newaxis]
+    expected_covariance[:, :, 4] *= cos_latitude[:, np.newaxis]
+    expected_covariance[:, 1, :] *= cos_latitude[:, np.newaxis]
+    expected_covariance[:, 4, :] *= cos_latitude[:, np.newaxis]
+
+    corrected_residuals, corrected_covariances = apply_cosine_latitude_correction(
+        latitude_array, residual_array, covariance_array
+    )
+
+    # Test that the residuals are corrected correctly
+    np.testing.assert_almost_equal(
+        corrected_residuals, expected_residual_array, decimal=15
+    )
+
+    # Test that the covariances are corrected correctly
+    np.testing.assert_almost_equal(
+        corrected_covariances, expected_covariance, decimal=15
     )
 
 
