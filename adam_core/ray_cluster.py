@@ -16,7 +16,7 @@ def initialize_use_ray(
     if num_cpus is None or num_cpus > 1:
         # Initialize ray
         if not ray.is_initialized():
-            logger.info(f"Ray is not initialized. Initializing...")
+            logger.info("Ray is not initialized. Initializing...")
             # For some reason, ray does not seem to automatically
             # find existing local clusters without `address="auto"`
             # but it will fail if we use auto and there is no existing cluster.
