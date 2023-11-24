@@ -13,7 +13,7 @@ authors = [
 ]
 description = "Core libraries for the ADAM platform"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
@@ -32,6 +32,7 @@ dependencies = [
   # This fork removes errors that occur with true anomaly values 
   "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
   "pandas",
+  "ray",
   "requests",
   "scipy",
   "spiceypy",
@@ -58,9 +59,9 @@ allow-direct-references = true
 [tool.hatch.version]
 path = "adam_core/__version__.py"
 
+
 [tool.hatch.envs.dev]
 dependencies = [
-  "ray",                # TODO: Move to main dependencies once we are ready to move away from concurrent futures
   "black==22.10.0",
   "isort",
   "mypy",
@@ -68,6 +69,7 @@ dependencies = [
   "pytest-cov",
   "pytest-benchmark",
   "pytest-doctestplus",
+  "pytest-mock",
   "pre-commit",
   "ruff",
   "ipython",
