@@ -31,6 +31,7 @@ def initialize_use_ray(
                     f"Attempting ray with {num_cpus} cpus and {object_store_bytes} bytes."
                 )
                 ray.init(
+                    dashboard_host="0.0.0.0",
                     num_cpus=num_cpus,
                     object_store_memory=object_store_bytes,
                 )
