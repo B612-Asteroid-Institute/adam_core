@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def initialize_use_ray(
-    num_cpus: Optional[int] = None, object_store_bytes: Optional[int] = None
+    num_cpus: Optional[int] = None, object_store_bytes: Optional[int] = None, **kwargs
 ) -> bool:
     """
     Ensures we use existing local cluster, or starts new one with desired resources
@@ -34,6 +34,7 @@ def initialize_use_ray(
                     dashboard_host="0.0.0.0",
                     num_cpus=num_cpus,
                     object_store_memory=object_store_bytes,
+                    **kwargs,
                 )
 
         logger.info(f"Ray Resources: {ray.cluster_resources()}")
