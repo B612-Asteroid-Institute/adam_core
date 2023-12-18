@@ -15,7 +15,9 @@ def test_initialize_ray_no_cluster(mocker):
     ]
 
     initialize_use_ray(num_cpus=4, object_store_bytes=1000)
-    mock_ray.init.assert_called_with(num_cpus=4, object_store_memory=1000)
+    mock_ray.init.assert_called_with(
+        dashboard_host="0.0.0.0", num_cpus=4, object_store_memory=1000
+    )
     mock_ray.init.call_count == 1
 
 

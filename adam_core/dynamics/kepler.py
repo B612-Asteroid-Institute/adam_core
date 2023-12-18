@@ -1,12 +1,139 @@
 from typing import Tuple
 
 import jax.numpy as jnp
+import jax.typing as jnpt
 from jax import config, jit, lax
 
 from .barker import solve_barker
 
 config.update("jax_enable_x64", True)
 config.update("jax_platform_name", "cpu")
+
+
+@jit
+def calc_period(a: jnpt.ArrayLike, mu: jnpt.ArrayLike) -> jnpt.ArrayLike:
+    """
+    Calculate the period of an orbit given the semi-major axis and
+    gravitational parameter.
+
+    Parameters
+    ----------
+    a
+        Semi-major axis.
+    mu
+        Gravitational parameter.
+
+    Returns
+    -------
+    P
+        Period.
+    """
+    return jnp.where(a < 0.0, jnp.inf, 2 * jnp.pi * jnp.sqrt(a**3 / mu))
+
+
+@jit
+def calc_periapsis_distance(a: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
+    """
+    Calculate the periapsis distance of an orbit given the semi-major axis and
+    eccentricity.
+
+    Parameters
+    ----------
+    a
+        Semi-major axis.
+    e
+        Eccentricity.
+
+    Returns
+    -------
+    q
+        Periapsis distance.
+    """
+    return a * (1 - e)
+
+
+@jit
+def calc_apoapsis_distance(a: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
+    """
+    Calculate the apoapsis distance of an orbit given the semi-major axis and
+    eccentricity.
+
+    Parameters
+    ----------
+    a
+        Semi-major axis.
+    e
+        Eccentricity.
+
+    Returns
+    -------
+    Q
+        Apoapsis distance.
+    """
+    return jnp.where(e >= 1.0, jnp.inf, a * (1 + e))
+
+
+@jit
+def calc_semi_major_axis(q: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
+    """
+    Calculate the semi-major axis of an orbit given the periapsis distance and
+    eccentricity.
+
+    Parameters
+    ----------
+    q
+        Periapsis distance.
+    e
+        Eccentricity.
+
+    Returns
+    -------
+    a
+        Semi-major axis.
+    """
+    return q / (1 - e)
+
+
+@jit
+def calc_semi_latus_rectum(a: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
+    """
+    Calculate the semi-latus rectum of an orbit given the semi-major axis and
+    eccentricity.
+
+    Parameters
+    ----------
+    a
+        Semi-major axis.
+    e
+        Eccentricity.
+
+    Returns
+    -------
+    p
+        Semi-latus rectum.
+    """
+    return a * (1 - e**2)
+
+
+@jit
+def calc_mean_motion(a: jnpt.ArrayLike, mu: jnpt.ArrayLike) -> jnpt.ArrayLike:
+    """
+    Calculate the mean motion of an orbit given the semi-major axis and
+    gravitational parameter.
+
+    Parameters
+    ----------
+    a
+        Semi-major axis.
+    mu
+        Gravitational parameter.
+
+    Returns
+    -------
+    n
+        Mean motion in radians per unit time.
+    """
+    return jnp.sqrt(mu / jnp.abs(a) ** 3)
 
 
 @jit
