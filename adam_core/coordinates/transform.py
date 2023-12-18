@@ -336,7 +336,11 @@ def _cartesian_to_keplerian(
     [1] Bate, R. R; Mueller, D. D; White, J. E. (1971). Fundamentals of Astrodynamics. 1st ed.,
         Dover Publications, Inc. ISBN-13: 978-0486600611
     """
-    from ..dynamics.kepler import calc_mean_anomaly
+    from ..dynamics.kepler import (
+        calc_mean_anomaly,
+        calc_mean_motion,
+        calc_periapsis_distance,
+    )
 
     coords_keplerian = jnp.zeros(13, dtype=jnp.float64)
     r = coords_cartesian[0:3]
@@ -410,7 +414,7 @@ def _cartesian_to_keplerian(
     q = jnp.where(
         (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
         p / 2,
-        a * (1 - e),
+        calc_periapsis_distance(a, e),
     )
 
     # Calculate the apoapsis distance (infinite for
@@ -424,7 +428,7 @@ def _cartesian_to_keplerian(
     n = lax.cond(
         (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
         lambda a, q: jnp.sqrt(mu / (2 * q**3)),
-        lambda a, q: jnp.sqrt(mu / jnp.abs(a) ** 3),
+        lambda a, q: calc_mean_motion(a, mu),
         a,
         q,
     )

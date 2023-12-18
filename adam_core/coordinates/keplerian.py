@@ -77,7 +77,9 @@ class KeplerianCoordinates(qv.Table):
         """
         Periapsis distance.
         """
-        return self.a.to_numpy() * (1 - self.e.to_numpy())
+        from ..dynamics.kepler import calc_periapsis_distance
+
+        return np.array(calc_periapsis_distance(self.a.to_numpy(), self.e.to_numpy()))
 
     @q.setter
     def q(self, value):
@@ -100,7 +102,9 @@ class KeplerianCoordinates(qv.Table):
         """
         Apoapsis distance.
         """
-        return self.a.to_numpy() * (1 + self.e.to_numpy())
+        from ..dynamics.kepler import calc_apoapsis_distance
+
+        return np.array(calc_apoapsis_distance(self.a.to_numpy(), self.e.to_numpy()))
 
     @Q.setter
     def Q(self, value):
@@ -123,7 +127,9 @@ class KeplerianCoordinates(qv.Table):
         """
         Semi-latus rectum.
         """
-        return self.a.to_numpy() / (1 - self.e.to_numpy() ** 2)
+        from ..dynamics.kepler import calc_semi_latus_rectum
+
+        return np.array(calc_semi_latus_rectum(self.a.to_numpy(), self.e.to_numpy()))
 
     @p.setter
     def p(self, value):
@@ -146,7 +152,9 @@ class KeplerianCoordinates(qv.Table):
         """
         Period.
         """
-        return np.sqrt(4 * np.pi**2 * self.a.to_numpy() ** 3 / self.origin.mu)
+        from ..dynamics.kepler import calc_period
+
+        return np.array(calc_period(self.a.to_numpy(), self.origin.mu()))
 
     @P.setter
     def P(self, value):
@@ -160,6 +168,33 @@ class KeplerianCoordinates(qv.Table):
     def P(self):
         err = (
             "Cannot delete period (P) as it is"
+            " derived from semi-major axis (a) and gravitational parameter (mu)."
+        )
+        raise ValueError(err)
+
+    @property
+    def n(self):
+        """
+        Mean motion in degrees.
+        """
+        from ..dynamics.kepler import calc_mean_motion
+
+        return np.degrees(
+            np.array(calc_mean_motion(self.a.to_numpy(), self.origin.mu()))
+        )
+
+    @n.setter
+    def n(self, value):
+        err = (
+            "Cannot set mean motion (n) as it is"
+            " derived from semi-major axis (a) and gravitational parameter (mu)."
+        )
+        raise ValueError(err)
+
+    @n.deleter
+    def n(self):
+        err = (
+            "Cannot delete mean motion (n) as it is"
             " derived from semi-major axis (a) and gravitational parameter (mu)."
         )
         raise ValueError(err)
