@@ -168,7 +168,7 @@ class CometaryCoordinates(qv.Table):
         )
         raise ValueError(err)
 
-    @p.deleter
+    @P.deleter
     def P(self):
         err = (
             "Cannot delete period (P) as it is"
