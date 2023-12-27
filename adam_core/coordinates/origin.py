@@ -84,7 +84,7 @@ class OriginGravitationalParameters(float, Enum):
 # TODO: Replace with DictionaryColumn or similar
 #       Investigate whether this class is even necessary
 class Origin(qv.Table):
-    code = qv.StringColumn()
+    code = qv.LargeStringColumn()
 
     def __eq__(self, other: object) -> np.ndarray:
         if isinstance(other, (str, np.ndarray)):

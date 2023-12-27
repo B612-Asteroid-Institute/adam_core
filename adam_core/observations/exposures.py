@@ -17,12 +17,12 @@ class Exposures(qv.Table):
     Exposures is a table of data about exposures that provide point source observations.
     """
 
-    id = qv.StringColumn()
+    id = qv.LargeStringColumn()
     start_time = Timestamp.as_column()
     duration = qv.Float64Column(validator=and_(ge(0), le(3600)))
     filter = qv.DictionaryColumn(index_type=pa.int32(), value_type=pa.string())
 
-    observatory_code = qv.StringColumn()
+    observatory_code = qv.LargeStringColumn()
 
     def group_by_observatory_code(self) -> Iterator[tuple[str, Exposures]]:
         """

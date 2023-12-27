@@ -12,11 +12,11 @@ from ..time import Timestamp
 
 
 class ObservatoryGeodetics(qv.Table):
-    code = qv.StringColumn()
+    code = qv.LargeStringColumn()
     longitude = qv.Float64Column()
     cos_phi = qv.Float64Column()
     sin_phi = qv.Float64Column()
-    name = qv.StringColumn()
+    name = qv.LargeStringColumn()
 
 
 # Read MPC extended observatory codes file
@@ -49,7 +49,7 @@ OBSERVATORY_CODES = {
 
 
 class Observers(qv.Table):
-    code = qv.StringColumn(nullable=False)
+    code = qv.LargeStringColumn(nullable=False)
     coordinates = CartesianCoordinates.as_column()
 
     @classmethod

@@ -10,12 +10,12 @@ from .detections import PointSourceDetections
 
 class Associations(qv.Table):
 
-    detection_id = qv.StringColumn()
-    object_id = qv.StringColumn(nullable=True)
+    detection_id = qv.LargeStringColumn()
+    object_id = qv.LargeStringColumn(nullable=True)
 
     # TODO: We may want to create a derivative class called "ProbabilisticAssociations" that
     # includes residuals with respect to an orbit
-    # orbit_id = qv.StringColumn(nullable=True)
+    # orbit_id = qv.LargeStringColumn(nullable=True)
     # residuals = Residuals.as_column(nullable=True) # from adam_core.coordinates.residuals import Residuals
 
     def group_by_object(self) -> Iterator["Associations"]:
