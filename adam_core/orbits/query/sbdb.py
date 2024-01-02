@@ -223,8 +223,8 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
         frame=frame,
     )
 
-    orbit_ids = np.array(orbit_ids)
-    object_ids = np.array(object_ids)
+    orbit_ids = np.array(orbit_ids, dtype='object')
+    object_ids = np.array(object_ids, dtype='object')
     classes = np.array(classes)
 
     return Orbits.from_kwargs(

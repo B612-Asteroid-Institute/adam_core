@@ -142,7 +142,7 @@ def propagate_2body(
     else:
         cartesian_covariances = None
 
-    origin_code = np.empty(n_orbits * n_times, dtype="U3")
+    origin_code = np.empty(n_orbits * n_times, dtype="object")
     origin_code.fill("SUN")
 
     orbits_propagated = Orbits.from_kwargs(
