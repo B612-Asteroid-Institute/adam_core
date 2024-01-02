@@ -11,7 +11,7 @@ from ..time import Timestamp
 
 
 class Wrapper(qv.Table):
-    id = qv.StringColumn()
+    id = qv.LargeStringColumn()
     times = Timestamp.as_column(nullable=True)
 
 

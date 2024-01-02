@@ -234,7 +234,9 @@ def test_calc_period(orbital_elements):
     # Our test data from JPL Horizons uses a value of 1e99 for infinite
     P_desired = np.where(P_desired > 1e99, np.inf, P_desired)
     a = orbital_elements["a"].values
-    origin = Origin.from_kwargs(code=np.full(len(orbital_elements), "SUN"))
+    origin = Origin.from_kwargs(
+        code=np.full(len(orbital_elements), "SUN", dtype="object")
+    )
     mu = origin.mu()
 
     P_actual = calc_period(a, mu)
@@ -288,7 +290,9 @@ def test_calc_mean_motion(orbital_elements):
     # Test mean motion calculations
     n_desired = orbital_elements["n"]
     a = orbital_elements["a"].values
-    origin = Origin.from_kwargs(code=np.full(len(orbital_elements), "SUN"))
+    origin = Origin.from_kwargs(
+        code=np.full(len(orbital_elements), "SUN", dtype="object")
+    )
     mu = origin.mu()
 
     n_actual = np.degrees(calc_mean_motion(a, mu))

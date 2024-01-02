@@ -20,9 +20,9 @@ class PointSourceDetections(qv.Table):
 
     """
 
-    id = qv.StringColumn()
+    id = qv.LargeStringColumn()
 
-    exposure_id = qv.StringColumn(nullable=True)
+    exposure_id = qv.LargeStringColumn(nullable=True)
 
     # Some, but not all, point source data may include times for
     # individual observations within an exposure.

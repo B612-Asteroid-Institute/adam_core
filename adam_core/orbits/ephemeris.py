@@ -10,8 +10,8 @@ from ..observers.observers import Observers
 
 class Ephemeris(qv.Table):
 
-    orbit_id = qv.StringColumn()
-    object_id = qv.StringColumn(nullable=True)
+    orbit_id = qv.LargeStringColumn()
+    object_id = qv.LargeStringColumn(nullable=True)
     coordinates = SphericalCoordinates.as_column()
 
     # The coordinates as observed by the observer will be the result of

@@ -14,8 +14,8 @@ from .orbits import Orbits
 
 class VariantOrbits(qv.Table):
 
-    orbit_id = qv.StringColumn(default=lambda: uuid.uuid4().hex)
-    object_id = qv.StringColumn(nullable=True)
+    orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
+    object_id = qv.LargeStringColumn(nullable=True)
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = CartesianCoordinates.as_column()
@@ -164,8 +164,8 @@ class VariantOrbits(qv.Table):
 
 class VariantEphemeris(qv.Table):
 
-    orbit_id = qv.StringColumn(default=lambda: uuid.uuid4().hex)
-    object_id = qv.StringColumn(nullable=True)
+    orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
+    object_id = qv.LargeStringColumn(nullable=True)
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = SphericalCoordinates.as_column()

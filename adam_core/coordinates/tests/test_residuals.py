@@ -288,7 +288,7 @@ def test_Residuals_calculate(observed_array, predicted_array, expected_residuals
         vy=observed_array[:, 4],
         vz=observed_array[:, 5],
         covariance=CoordinateCovariances.from_sigmas(np.full((4, 6), 0.1)),
-        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
         frame="ecliptic",
     )
     predicted = CartesianCoordinates.from_kwargs(
@@ -298,7 +298,7 @@ def test_Residuals_calculate(observed_array, predicted_array, expected_residuals
         vx=predicted_array[:, 3],
         vy=predicted_array[:, 4],
         vz=predicted_array[:, 5],
-        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
         frame="ecliptic",
     )
 
@@ -370,7 +370,7 @@ def test_Residuals_calculate_missing_covariance_values(
         vy=observed_array[:, 4],
         vz=observed_array[:, 5],
         covariance=CoordinateCovariances.from_matrix(observed_covariances),
-        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
         frame="ecliptic",
     )
     predicted = CartesianCoordinates.from_kwargs(
@@ -380,7 +380,7 @@ def test_Residuals_calculate_missing_covariance_values(
         vx=predicted_array[:, 3],
         vy=predicted_array[:, 4],
         vz=predicted_array[:, 5],
-        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
         frame="ecliptic",
     )
 
@@ -452,7 +452,7 @@ def test_Residuals_calculate_missing_off_diagonal_covariance_values(
         vy=observed_array[:, 4],
         vz=observed_array[:, 5],
         covariance=CoordinateCovariances.from_matrix(observed_covariances),
-        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
         frame="ecliptic",
     )
     predicted = CartesianCoordinates.from_kwargs(
@@ -462,7 +462,7 @@ def test_Residuals_calculate_missing_off_diagonal_covariance_values(
         vx=predicted_array[:, 3],
         vy=predicted_array[:, 4],
         vz=predicted_array[:, 5],
-        origin=Origin.from_kwargs(code=np.full(4, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
         frame="ecliptic",
     )
 
@@ -496,7 +496,7 @@ def test_Residuals_calculate_raises_frames():
         vx=observed_array[:, 3],
         vy=observed_array[:, 4],
         vz=observed_array[:, 5],
-        origin=Origin.from_kwargs(code=np.full(10, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(10, "SUN", dtype="object")),
         frame="ecliptic",
     )
 
@@ -508,7 +508,7 @@ def test_Residuals_calculate_raises_frames():
         vx=predicted_array[:, 3],
         vy=predicted_array[:, 4],
         vz=predicted_array[:, 5],
-        origin=Origin.from_kwargs(code=np.full(10, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(10, "SUN", dtype="object")),
         frame="equatorial",
     )
 
@@ -526,7 +526,7 @@ def test_Residuals_calculate_raises_origins():
         vx=observed_array[:, 3],
         vy=observed_array[:, 4],
         vz=observed_array[:, 5],
-        origin=Origin.from_kwargs(code=np.full(10, "SUN")),
+        origin=Origin.from_kwargs(code=np.full(10, "SUN", dtype="object")),
         frame="equatorial",
     )
 
@@ -538,7 +538,7 @@ def test_Residuals_calculate_raises_origins():
         vx=predicted_array[:, 3],
         vy=predicted_array[:, 4],
         vz=predicted_array[:, 5],
-        origin=Origin.from_kwargs(code=np.full(10, "EARTH")),
+        origin=Origin.from_kwargs(code=np.full(10, "EARTH", dtype="object")),
         frame="equatorial",
     )
 
