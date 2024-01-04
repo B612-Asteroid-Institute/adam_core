@@ -10,6 +10,7 @@ from ..residuals import (
     apply_cosine_latitude_correction,
     bound_longitude_residuals,
     calculate_chi2,
+    calculate_reduced_chi2,
 )
 
 
@@ -849,3 +850,42 @@ def test_bound_longitude_residuals():
     np.testing.assert_equal(
         residuals[:, 1], np.array([-2, 2, -180, 180, -180, 180, -170, 170, -170, 170])
     )
+
+
+def test_calculate_reduced_chi2(observed_array, predicted_array):
+    # Test that Residuals.calculate correctly identifies the number of degrees of freedom,
+    # and correctly identifies the dimensions that have valid values and those that do not.
+    observed = CartesianCoordinates.from_kwargs(
+        x=observed_array[:, 0],
+        y=observed_array[:, 1],
+        z=observed_array[:, 2],
+        vx=observed_array[:, 3],
+        vy=observed_array[:, 4],
+        vz=observed_array[:, 5],
+        covariance=CoordinateCovariances.from_sigmas(np.full((4, 6), 0.1)),
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
+        frame="ecliptic",
+    )
+    predicted = CartesianCoordinates.from_kwargs(
+        x=predicted_array[:, 0],
+        y=predicted_array[:, 1],
+        z=predicted_array[:, 2],
+        vx=predicted_array[:, 3],
+        vy=predicted_array[:, 4],
+        vz=predicted_array[:, 5],
+        origin=Origin.from_kwargs(code=np.full(4, "SUN", dtype="object")),
+        frame="ecliptic",
+    )
+
+    residuals = Residuals.calculate(observed, predicted)
+
+    assert residuals.dof.to_pylist() == [1, 3, 2, 6]
+    np.testing.assert_almost_equal(
+        residuals.chi2.to_numpy(zero_copy_only=False), np.array([1, 3, 2, 0])
+    )
+
+    reduced_chi2 = calculate_reduced_chi2(residuals, 6)
+    np.testing.assert_almost_equal(reduced_chi2, 6 / 6)
+
+    reduced_chi2 = calculate_reduced_chi2(residuals, 4)
+    np.testing.assert_almost_equal(reduced_chi2, 6 / 8)

@@ -344,6 +344,27 @@ def calculate_chi2(
     return chi2
 
 
+def calculate_reduced_chi2(residuals: Residuals, parameters: int) -> float:
+    """
+    Calculate the reduced chi2 for a set of residuals.
+
+    Parameters
+    ----------
+    residuals : `~adam_core.coordinates.residuals.Residuals`
+        Residuals.
+    parameters : int
+        Number of parameters in the model.
+
+    Returns
+    -------
+    reduced_chi2 : float
+        Reduced chi2.
+    """
+    chi2_total = residuals.chi2.to_numpy().sum()
+    dof_total = residuals.dof.to_numpy().sum() - parameters
+    return chi2_total / dof_total
+
+
 def _batch_coords_and_covariances(
     coords: npt.NDArray[np.float64], covariances: npt.NDArray[np.float64]
 ) -> Tuple[
