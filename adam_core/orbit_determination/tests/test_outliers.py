@@ -44,9 +44,12 @@ def test_remove_lowest_probability_observation():
         observers=Observers.from_code("500", time),
     )
 
-    observations = remove_lowest_probability_observation(orbit_members, observations)
+    obs_id, observations = remove_lowest_probability_observation(
+        orbit_members, observations
+    )
     assert len(observations) == 3
     assert observations.id.tolist() == ["obs01", "obs02", "obs04"]
+    assert obs_id == "obs03"
 
 
 def test_remove_lowest_probability_observation_multiple():
@@ -83,9 +86,12 @@ def test_remove_lowest_probability_observation_multiple():
         observers=Observers.from_code("500", time),
     )
 
-    observations = remove_lowest_probability_observation(orbit_members, observations)
+    obs_id, observations = remove_lowest_probability_observation(
+        orbit_members, observations
+    )
     assert len(observations) == 3
     assert observations.id.tolist() == ["obs01", "obs03", "obs04"]
+    assert obs_id == "obs02"
 
 
 def test_remove_lowest_probability_observation_assertions():
@@ -122,7 +128,7 @@ def test_remove_lowest_probability_observation_assertions():
     with pytest.raises(
         AssertionError, match=r"Orbit members must only contain one orbit"
     ):
-        observations = remove_lowest_probability_observation(
+        obs_id, observations = remove_lowest_probability_observation(
             orbit_members, observations
         )
 
@@ -146,6 +152,6 @@ def test_remove_lowest_probability_observation_assertions():
     with pytest.raises(
         AssertionError, match=r"Observations must contain all orbit member observations"
     ):
-        observations = remove_lowest_probability_observation(
+        obs_id, observations = remove_lowest_probability_observation(
             orbit_members, observations
         )
