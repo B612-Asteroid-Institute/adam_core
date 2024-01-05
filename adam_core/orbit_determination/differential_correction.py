@@ -117,7 +117,8 @@ def fit_least_squares(
     # TODO: Investigate whether we want to add fitting for the epoch as well
     # Set up least squares problem
     parameters = 6
-    epoch = observations.coordinates.time.mjd().to_numpy()
+    # Extract epoch and state vector from orbit
+    epoch = orbit.coordinates.time.mjd().to_numpy()
     state_vector = orbit.coordinates.values[0]
     args = (epoch[0], observations, propagator)
 
