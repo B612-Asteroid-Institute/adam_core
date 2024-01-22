@@ -247,7 +247,15 @@ def fit_least_squares(
     # Extract solution state vector and covariance matrix
     mjd_tdb = epoch[0]
     x, y, z, vx, vy, vz = solution.x
-    covariance_matrix = np.linalg.inv(solution.jac.T @ solution.jac)
+    try:
+        covariance_matrix = np.linalg.inv(solution.jac.T @ solution.jac)
+    except np.linalg.LinAlgError:
+        warnings.warn(
+            "The covariance matrix could not be computed. The solution may be "
+            "unreliable.",
+            category=RuntimeWarning,
+        )
+        covariance_matrix = np.full((6, 6), np.nan)
 
     # Create orbit with solution state vector and use it to generate ephemeris
     # and calculate the residuals with respect to the observations
