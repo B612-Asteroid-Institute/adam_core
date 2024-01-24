@@ -150,7 +150,7 @@ class VariantOrbits(qv.Table):
             samples = variants.coordinates.values
             mean = orbit.coordinates.values[0]
             covariance = weighted_covariance(
-                mean, samples, variants.weights_cov.to_numpy()
+                mean, samples, variants.weights_cov.to_numpy(zero_copy_only=False)
             ).reshape(1, 6, 6)
 
             orbit_collapsed = orbit.set_column(
@@ -240,7 +240,7 @@ class VariantEphemeris(qv.Table):
             samples = variants.coordinates.values
             mean = ephemeris_i.coordinates.values[0]
             covariance = weighted_covariance(
-                mean, samples, variants.weights_cov.to_numpy()
+                mean, samples, variants.weights_cov.to_numpy(zero_copy_only=False)
             ).reshape(1, 6, 6)
 
             ephemeris_collapsed = ephemeris_i.set_column(
