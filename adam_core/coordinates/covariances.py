@@ -125,7 +125,7 @@ class CoordinateCovariances(qv.Table):
             )
         cov = covariances.flatten()
         offsets = np.arange(0, (len(covariances) + 1) * 36, 36, dtype=np.int64)
-        return cls.from_kwargs(values=pa.ListArray.from_arrays(offsets, cov))
+        return cls.from_kwargs(values=pa.BigListArray.from_arrays(offsets, cov))
 
     @classmethod
     def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
