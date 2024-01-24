@@ -41,7 +41,7 @@ class CoordinateCovariances(qv.Table):
     #      able to use this class for the covariance matrices of different
     #      measurments like projections (D = 4) and photometry (D = 1).
 
-    values = qv.ListColumn(pa.float64(), nullable=True)
+    values = qv.LargeListColumn(pa.float64(), nullable=True)
     # When fixed, we should revert to:
     # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
@@ -125,7 +125,7 @@ class CoordinateCovariances(qv.Table):
             )
         cov = covariances.flatten()
         offsets = np.arange(0, (len(covariances) + 1) * 36, 36, dtype=np.int64)
-        return cls.from_kwargs(values=pa.ListArray.from_arrays(offsets, cov))
+        return cls.from_kwargs(values=pa.LargeListArray.from_arrays(offsets, cov))
 
     @classmethod
     def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
