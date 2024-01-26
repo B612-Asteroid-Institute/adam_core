@@ -1,115 +1,21 @@
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
-import quivr as qv
 from scipy.optimize import least_squares
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin
-from ..coordinates.residuals import Residuals, calculate_reduced_chi2
-from ..coordinates.spherical import SphericalCoordinates
-from ..observers.observers import Observers
+from ..coordinates.residuals import Residuals
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ..time.time import Timestamp
+from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-
-
-class OrbitDeterminationObservations(qv.Table):
-
-    id = qv.LargeStringColumn()
-    coordinates = SphericalCoordinates.as_column()
-    observers = Observers.as_column()
-
-
-def evaluate_orbit(
-    orbit: Union[Orbits, FittedOrbits],
-    observations: OrbitDeterminationObservations,
-    propagator: Propagator,
-    parameters: int = 6,
-    ignore: Optional[List[str]] = None,
-) -> Tuple["FittedOrbits", "FittedOrbitMembers"]:
-    """
-    Creates a fitted orbit and fitted orbit members from an input orbit and observations
-    believed to belong to that orbit. This function takes the input orbit and calculates
-    the residuals with respect to the observations. It then computes the chi2 and reduced
-    chi2 values for the orbit. If outliers are provided, they are ignored when calculating
-    the chi2, reduced chi2, and arc length values.
-
-    Parameters
-    ----------
-    orbit : `~adam_core.orbits.Orbits` (1)
-        Orbit to calculate residuals with respect to the observations for.
-    observations : `~adam_core.orbit_determination.DifferentialCorrectionObservations` (N)
-        Observations believed to belong to the input orbit.
-    propagator : `~adam_core.propagator.Propagator`
-        Propagator to use to generate ephemeris.
-    parameters : int
-        Number of parameters that were initially fit to the observations. This is typically
-        6 for an orbit fit to observations (assuming the epoch was not fit).
-    ignore : list of str
-        List of observation IDs to ignore when calculating chi2 and reduced chi2 values. This
-        is typically a list of outlier observation IDs.
-
-    Returns
-    -------
-    fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)
-        Fitted orbit.
-    fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)
-        Fitted orbit members.
-    """
-    if isinstance(orbit, FittedOrbits):
-        orbit = orbit.to_orbits()
-
-    # Compute ephemeris and residuals
-    ephemeris = propagator.generate_ephemeris(
-        orbit, observations.observers, max_processes=1
-    )
-    residuals = Residuals.calculate(observations.coordinates, ephemeris.coordinates)
-
-    # If outliers are provided, we need to mask them out of the residuals and observations
-    # before we compute the chi2, reduced chi2, and arc length values.
-    if ignore is not None:
-        mask = pc.invert(pc.is_in(observations.id, pa.array(ignore)))
-        observations_to_include = observations.apply_mask(mask)
-        residuals_to_include = residuals.apply_mask(mask)
-    else:
-        mask = pa.repeat(True, len(observations))
-        observations_to_include = observations
-        residuals_to_include = residuals
-
-    # Compute arc length
-    arc_length = (
-        observations_to_include.coordinates.time.max().mjd()[0].as_py()
-        - observations_to_include.coordinates.time.min().mjd()[0].as_py()
-    )
-
-    # Now we create a fitted orbit and fitted orbit members from the solution orbit
-    # and residuals. We also need to compute the chi2 and reduced chi2 values.
-    fitted_orbit = FittedOrbits.from_kwargs(
-        orbit_id=orbit.orbit_id,
-        object_id=orbit.object_id,
-        coordinates=orbit.coordinates,
-        arc_length=[arc_length],
-        num_obs=[len(observations_to_include)],
-        chi2=[pc.sum(residuals_to_include.chi2)],
-        reduced_chi2=[calculate_reduced_chi2(residuals_to_include, parameters)],
-    )
-    fitted_orbit_members = FittedOrbitMembers.from_kwargs(
-        orbit_id=np.full(
-            len(observations), fitted_orbit.orbit_id[0].as_py(), dtype="object"
-        ),
-        obs_id=observations.id,
-        residuals=residuals,
-        outlier=pc.invert(mask),
-    )
-
-    return fitted_orbit, fitted_orbit_members
 
 
 def residual_function(
@@ -281,7 +187,7 @@ def fit_least_squares(
     # Evaluate the solution orbit and return it as a fitted orbit and fitted orbit members
     # which contain the residuals with respect to the observations and the overall
     # quality of the fit
-    fitted_orbit, fitted_orbit_members = evaluate_orbit(
+    fitted_orbit, fitted_orbit_members = evaluate_orbits(
         orbit,
         observations,
         propagator,
