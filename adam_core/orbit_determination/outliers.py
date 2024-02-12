@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 import pyarrow.compute as pc
 
@@ -7,7 +9,7 @@ from .fitted_orbits import FittedOrbitMembers
 
 def remove_lowest_probability_observation(
     orbit_members: FittedOrbitMembers, observations: OrbitDeterminationObservations
-) -> OrbitDeterminationObservations:
+) -> Tuple[str, OrbitDeterminationObservations]:
     """
     Remove the observation with the worst residual from the observations. The probability is defined to be
     the probability of drawing a more extreme residual than the one observed. If multiple observations
@@ -22,6 +24,8 @@ def remove_lowest_probability_observation(
 
     Returns
     -------
+    obs_id : str
+        The ID of the observation that was removed.
     filtered_observations : OrbitDeterminationObservations
         The observations with the worst residual removed.
     """
@@ -47,9 +51,12 @@ def remove_lowest_probability_observation(
         index = np.nansum(worst_outlier.residuals.to_array() ** 2, axis=1).argmax()
         worst_outlier = worst_outlier.take([index])
 
+    # Grab the observation ID of the worst outlier
+    obs_id = worst_outlier.obs_id[0].as_py()
+
     # Grab the surviving observation IDs
     obs_ids = orbit_members.apply_mask(
-        pc.invert(pc.is_in(orbit_members.obs_id, worst_outlier.obs_id))
+        pc.invert(pc.equal(orbit_members.obs_id, obs_id))
     ).obs_id
 
-    return observations.apply_mask(pc.is_in(observations.id, obs_ids))
+    return obs_id, observations.apply_mask(pc.is_in(observations.id, obs_ids))

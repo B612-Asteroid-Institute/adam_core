@@ -1,29 +1,21 @@
 import warnings
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
+import pyarrow as pa
 import pyarrow.compute as pc
-import quivr as qv
 from scipy.optimize import least_squares
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin
-from ..coordinates.residuals import Residuals, calculate_reduced_chi2
-from ..coordinates.spherical import SphericalCoordinates
-from ..observers.observers import Observers
+from ..coordinates.residuals import Residuals
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ..time.time import Timestamp
+from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-
-
-class OrbitDeterminationObservations(qv.Table):
-
-    id = qv.LargeStringColumn()
-    coordinates = SphericalCoordinates.as_column()
-    observers = Observers.as_column()
 
 
 def residual_function(
@@ -82,6 +74,7 @@ def fit_least_squares(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
+    ignore: Optional[List[str]] = None,
     **kwargs
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
@@ -95,6 +88,9 @@ def fit_least_squares(
         Observations.
     propagator : `~adam_core.propagator.Propagator`
         Propagator to use to generate ephemeris.
+    ignore : list of str
+        List of observation IDs to ignore when fitting the orbit with least squares.
+        These observations will be marked as outliers in the fitted orbit members.
     **kwargs
         Additional keyword arguments to pass to `~scipy.optimize.least_squares`.
         Some of these parameters if not specified will be set to sensible defaults.
@@ -116,10 +112,17 @@ def fit_least_squares(
 
     # TODO: Investigate whether we want to add fitting for the epoch as well
     # Set up least squares problem
+    if ignore is not None:
+        mask = pc.invert(pc.is_in(observations.id, pa.array(ignore)))
+        observations_to_include = observations.apply_mask(mask)
+    else:
+        observations_to_include = observations
+
     parameters = 6
-    epoch = observations.coordinates.time.mjd().to_numpy()
+    # Extract epoch and state vector from orbit
+    epoch = orbit.coordinates.time.mjd().to_numpy()
     state_vector = orbit.coordinates.values[0]
-    args = (epoch[0], observations, propagator)
+    args = (epoch[0], observations_to_include, propagator)
 
     # Define some sensible defaults for the least squares fitting procedure
     if "xtol" not in kwargs:
@@ -150,7 +153,15 @@ def fit_least_squares(
     # Extract solution state vector and covariance matrix
     mjd_tdb = epoch[0]
     x, y, z, vx, vy, vz = solution.x
-    covariance_matrix = np.linalg.inv(solution.jac.T @ solution.jac)
+    try:
+        covariance_matrix = np.linalg.inv(solution.jac.T @ solution.jac)
+    except np.linalg.LinAlgError:
+        warnings.warn(
+            "The covariance matrix could not be computed. The solution may be "
+            "unreliable.",
+            category=RuntimeWarning,
+        )
+        covariance_matrix = np.full((6, 6), np.nan)
 
     # Create orbit with solution state vector and use it to generate ephemeris
     # and calculate the residuals with respect to the observations
@@ -173,40 +184,23 @@ def fit_least_squares(
         ),
     )
 
-    # Compute ephemeris and residuals
-    ephemeris = propagator.generate_ephemeris(
-        orbit, observations.observers, max_processes=1
+    # Evaluate the solution orbit and return it as a fitted orbit and fitted orbit members
+    # which contain the residuals with respect to the observations and the overall
+    # quality of the fit
+    fitted_orbit, fitted_orbit_members = evaluate_orbits(
+        orbit,
+        observations,
+        propagator,
+        parameters=parameters,
+        ignore=ignore,
     )
-    residuals = Residuals.calculate(observations.coordinates, ephemeris.coordinates)
-
-    # Compute arc length
-    arc_length = (
-        observations.coordinates.time.max().mjd()[0].as_py()
-        - observations.coordinates.time.min().mjd()[0].as_py()
+    fitted_orbit = (
+        fitted_orbit.set_column("iterations", [solution.nfev])
+        .set_column("success", [solution.success])
+        .set_column("status_code", [solution.status])
     )
-
-    # Now we create a fitted orbit and fitted orbit members from the solution orbit
-    # and residuals. We also need to compute the chi2 and reduced chi2 values.
-    fitted_orbit = FittedOrbits.from_kwargs(
-        orbit_id=orbit.orbit_id,
-        object_id=orbit.object_id,
-        coordinates=orbit.coordinates,
-        arc_length=[arc_length],
-        num_obs=[len(observations)],
-        chi2=[pc.sum(residuals.chi2)],
-        reduced_chi2=[calculate_reduced_chi2(residuals, parameters)],
-        iterations=[solution.nfev],
-        success=[solution.success],
-        status_code=[solution.status],
-    )
-    fitted_orbit_members = FittedOrbitMembers.from_kwargs(
-        orbit_id=np.full(
-            len(observations), fitted_orbit.orbit_id[0].as_py(), dtype="object"
-        ),
-        obs_id=observations.id,
-        residuals=residuals,
-        solution=np.full(len(observations), True),
-        outlier=np.full(len(observations), False),
+    fitted_orbit_members = fitted_orbit_members.set_column(
+        "solution", pc.invert(fitted_orbit_members.outlier)
     )
 
     return fitted_orbit, fitted_orbit_members

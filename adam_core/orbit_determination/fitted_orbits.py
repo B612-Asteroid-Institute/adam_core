@@ -16,9 +16,9 @@ class FittedOrbits(qv.Table):
     num_obs = qv.Int64Column()
     chi2 = qv.Float64Column()
     reduced_chi2 = qv.Float64Column()
-    iterations = qv.Int64Column()
-    success = qv.BooleanColumn()
-    status_code = qv.Int64Column()
+    iterations = qv.Int64Column(nullable=True)
+    success = qv.BooleanColumn(nullable=True)
+    status_code = qv.Int64Column(nullable=True)
 
     def to_orbits(self) -> Orbits:
         """
