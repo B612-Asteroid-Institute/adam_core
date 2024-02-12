@@ -29,14 +29,14 @@ dependencies = [
   "jaxlib",
   "numpy<1.25",
   "pyarrow>=13.0.0",
-  # This fork removes errors that occur with true anomaly values 
+  # This fork removes errors that occur with true anomaly values
   "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
   "pandas",
   "ray",
   "requests",
   "scipy",
   "spiceypy",
-  "quivr>=0.7.1",
+  "quivr@git+https://github.com/moeyensj/quivr@concatenate-empty-attributes",
   "mpc-obscodes",
   "naif-de440",
   "naif-leapseconds",
