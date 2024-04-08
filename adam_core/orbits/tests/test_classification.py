@@ -41,6 +41,13 @@ def sbdb_df_to_keplerian(df):
     )
 
 
+def ieo_sample():
+    df = pd.read_csv(dynamical_classes_dir / "ieo.csv")
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("IEO", len(df))
+
+
 def ate_sample():
     df = pd.read_csv(dynamical_classes_dir / "ate.csv")
     cometary = sbdb_df_to_cometary(df)
@@ -126,6 +133,7 @@ def ast_sample():
 
 
 SAMPLES = [
+    ieo_sample(),
     ate_sample(),
     apo_sample(),
     amo_sample(),
