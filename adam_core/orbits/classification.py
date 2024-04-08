@@ -8,7 +8,7 @@ from ..coordinates.keplerian import KeplerianCoordinates
 
 def calc_orbit_class(
     elements: Union[KeplerianCoordinates, CometaryCoordinates]
-) -> dict:
+) -> np.ndarray:
     """
     Calculate the orbital class for each Keplerian or Cometary orbit.
 
