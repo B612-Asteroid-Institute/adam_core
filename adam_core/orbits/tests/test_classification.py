@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from ...coordinates.cometary import CometaryCoordinates
+from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...time.time import Timestamp
 from ..classification import calc_orbit_class
@@ -26,84 +27,135 @@ def sbdb_df_to_cometary(df):
     )
 
 
+def sbdb_df_to_keplerian(df):
+    return KeplerianCoordinates.from_kwargs(
+        a=df["a"],
+        e=df["e"],
+        i=df["i"],
+        raan=df["om"],
+        ap=df["w"],
+        M=df["ma"],
+        time=Timestamp.from_mjd(df["epoch_mjd"].values, scale="tdb"),
+        origin=Origin.from_kwargs(code=["SUN" for i in range(len(df))]),
+        frame="ecliptic",
+    )
+
+
 def ate_sample():
     df = pd.read_csv(dynamical_classes_dir / "ate.csv")
-    return sbdb_df_to_cometary(df), np.repeat("ATE", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("ATE", len(df))
 
 
 def apo_sample():
     df = pd.read_csv(dynamical_classes_dir / "apo.csv")
-    return sbdb_df_to_cometary(df), np.repeat("APO", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("APO", len(df))
 
 
 def amo_sample():
     df = pd.read_csv(dynamical_classes_dir / "amo.csv")
-    return sbdb_df_to_cometary(df), np.repeat("AMO", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("AMO", len(df))
 
 
 def mca_sample():
     df = pd.read_csv(dynamical_classes_dir / "mca.csv")
-    return sbdb_df_to_cometary(df), np.repeat("MCA", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("MCA", len(df))
 
 
 def imb_sample():
     df = pd.read_csv(dynamical_classes_dir / "imb.csv")
-    return sbdb_df_to_cometary(df), np.repeat("IMB", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("IMB", len(df))
 
 
 def mba_sample():
     df = pd.read_csv(dynamical_classes_dir / "mba.csv")
-    return sbdb_df_to_cometary(df), np.repeat("MBA", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("MBA", len(df))
 
 
 def omb_sample():
     df = pd.read_csv(dynamical_classes_dir / "omb.csv")
-    return sbdb_df_to_cometary(df), np.repeat("OMB", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("OMB", len(df))
 
 
 def tjn_sample():
     df = pd.read_csv(dynamical_classes_dir / "tjn.csv")
-    return sbdb_df_to_cometary(df), np.repeat("TJN", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("TJN", len(df))
 
 
 def cen_sample():
     df = pd.read_csv(dynamical_classes_dir / "cen.csv")
-    return sbdb_df_to_cometary(df), np.repeat("CEN", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("CEN", len(df))
 
 
 def tno_sample():
     df = pd.read_csv(dynamical_classes_dir / "tno.csv")
-    return sbdb_df_to_cometary(df), np.repeat("TNO", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("TNO", len(df))
 
 
 def hya_sample():
     df = pd.read_csv(dynamical_classes_dir / "hya.csv")
-    return sbdb_df_to_cometary(df), np.repeat("HYA", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("HYA", len(df))
 
 
 def ast_sample():
     df = pd.read_csv(dynamical_classes_dir / "ast.csv")
-    return sbdb_df_to_cometary(df), np.repeat("AST", len(df))
+    cometary = sbdb_df_to_cometary(df)
+    keplerian = sbdb_df_to_keplerian(df)
+    return cometary, keplerian, np.repeat("AST", len(df))
+
+
+SAMPLES = [
+    ate_sample(),
+    apo_sample(),
+    amo_sample(),
+    mca_sample(),
+    imb_sample(),
+    mba_sample(),
+    omb_sample(),
+    tjn_sample(),
+    cen_sample(),
+    tno_sample(),
+    hya_sample(),
+    ast_sample(),
+]
 
 
 @pytest.mark.parametrize(
     "sample",
-    [
-        ate_sample(),
-        apo_sample(),
-        amo_sample(),
-        mca_sample(),
-        imb_sample(),
-        mba_sample(),
-        omb_sample(),
-        tjn_sample(),
-        cen_sample(),
-        tno_sample(),
-        hya_sample(),
-        ast_sample(),
-    ],
+    SAMPLES,
 )
-def test_calc_orbit_class(sample):
-    orbits, expected_classes = sample
-    classes = calc_orbit_class(orbits)
+def test_calc_orbit_class_cometary(sample):
+    cometary, _, expected_classes = sample
+    classes = calc_orbit_class(cometary)
+    np.testing.assert_array_equal(classes, expected_classes)
+
+
+@pytest.mark.parametrize(
+    "sample",
+    SAMPLES,
+)
+def test_calc_orbit_class_keplerian(sample):
+    _, keplerian, expected_classes = sample
+    classes = calc_orbit_class(keplerian)
     np.testing.assert_array_equal(classes, expected_classes)
