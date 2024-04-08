@@ -20,7 +20,7 @@ def sbdb_df_to_cometary(df):
         i=df["i"],
         raan=df["om"],
         ap=df["w"],
-        tp=df["tp"],
+        tp=df["tp"] - 2400000.5,
         time=Timestamp.from_mjd(df["epoch_mjd"].values, scale="tdb"),
         origin=Origin.from_kwargs(code=["SUN" for i in range(len(df))]),
         frame="ecliptic",
