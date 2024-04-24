@@ -17,7 +17,7 @@ class EarthImpacts(qv.Table):
     # Distance from earth center in km
     distance = qv.Float64Column()
     coordinates = CartesianCoordinates.as_column()
-    variant_id = qv.StringColumn()
+    variant_id = qv.LargeStringColumn()
 
 
 def calculate_impacts(orbits, num_days, propagator, num_samples: int = 1000):
@@ -40,34 +40,22 @@ def calculate_impacts(orbits, num_days, propagator, num_samples: int = 1000):
 
     """
 
-    earth_impacts = None
+    impact_list = []
     variants = VariantOrbits.create(
                                 orbits, method='monte-carlo', num_samples=num_samples, 
                             )
     for i, var_orbit in enumerate(variants):
-        variant_id = f"{var_orbit.orbit_id[0]}_var{i}"
-        var_orbit.variant_id = variant_id
         results, impact = propagator._propagate_orbits_inner(var_orbit, var_orbit.coordinates.time.add_days(num_days)[0], detect_impacts=True, adaptive_mode=2, min_dt=1e-15)   
         if impact is not None:
-            if earth_impacts is None:
-                print(impact.orbit_id, impact.distance, impact.coordinates)
-                print(variant_id)
-                earth_impacts = EarthImpacts.from_kwargs(
-                    orbit_id=impact.orbit_id,
-                    distance=impact.distance,
-                    coordinates=impact.coordinates,
-                    variant_id=[variant_id],
-                )
-            else:
-                earth_impacts = qv.concatenate(
-                    earth_impacts,
-                    EarthImpacts.from_kwargs(
-                        orbit_id=impact.orbit_id,
-                        distance=impact.distance,
-                        coordinates=impact.coordinates,
-                        variant_id=[variant_id],
-                    ),
-                )
+            earth_impact = EarthImpacts.from_kwargs(
+                variant_id=[var_orbit.variant_id[0]],
+                orbit_id=impact.orbit_id,
+                distance=impact.distance,
+                coordinates=impact.coordinates,
+            )
+            impact_list.append(earth_impact)
+
+    earth_impacts = qv.concatenate(impact_list)
 
     return variants, earth_impacts
 
@@ -92,14 +80,7 @@ def calculate_impact_probabilities(variants, impacts):
     # Count the number of impacts for each variant orbit.
     impact_counts = Counter(impacts.variant_id)
 
-    # Calculate the impact probabilities for each variant orbit.
-    impact_probabilities = qv.Table(
-        variant_id=variants.variant_id,
-        impact_probability=[
-            impact_counts.get(variant_id, 0) / len(variants)
-            for variant_id in variants.variant_id
-        ],
-    )
 
-    return impact_probabilities
+
+    return 
 
