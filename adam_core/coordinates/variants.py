@@ -97,6 +97,7 @@ def create_coordinate_variants(
         If the covariance matrices are all undefined.
         If the input coordinates are not supported.
     """
+
     if coordinates.covariance.is_all_nan():
         raise ValueError(
             "Cannot sample coordinate covariances when covariances are all undefined."
@@ -107,6 +108,7 @@ def create_coordinate_variants(
         sample = coordinates.as_column()
         weight = qv.Float64Column()
         weight_cov = qv.Float64Column()
+        variant_id = qv.LargeStringColumn()
 
     if isinstance(coordinates, CartesianCoordinates):
         dimensions = ["x", "y", "z", "vx", "vy", "vz"]
@@ -165,7 +167,7 @@ def create_coordinate_variants(
                 )
 
         else:
-            raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
+            raise ValueError(f"Unknown coordinate covariance sampling method: {method}")      
 
         variants_list.append(
             VariantCoordinates.from_kwargs(
@@ -182,6 +184,7 @@ def create_coordinate_variants(
                 ),
                 weight=W,
                 weight_cov=W_cov,
+                variant_id=[f"var_{j}" for j in range(len(samples))]
             )
         )
 

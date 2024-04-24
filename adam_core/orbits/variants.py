@@ -76,6 +76,7 @@ class VariantOrbits(qv.Table):
         return cls.from_kwargs(
             orbit_id=pc.take(orbits.orbit_id, variant_coordinates.index),
             object_id=pc.take(orbits.object_id, variant_coordinates.index),
+            variant_id=variant_coordinates.variant_id,
             weights=variant_coordinates.weight,
             weights_cov=variant_coordinates.weight_cov,
             coordinates=variant_coordinates.sample,
