@@ -50,11 +50,13 @@ def calculate_impacts(orbits, num_days, propagator, num_samples: int = 1000):
         results, impact = propagator._propagate_orbits_inner(var_orbit, var_orbit.coordinates.time.add_days(num_days)[0], detect_impacts=True, adaptive_mode=2, min_dt=1e-15)   
         if impact is not None:
             if earth_impacts is None:
+                print(impact.orbit_id, impact.distance, impact.coordinates)
+                print(variant_id)
                 earth_impacts = EarthImpacts.from_kwargs(
                     orbit_id=impact.orbit_id,
                     distance=impact.distance,
                     coordinates=impact.coordinates,
-                    variant_id=variant_id,
+                    variant_id=[variant_id],
                 )
             else:
                 earth_impacts = qv.concatenate(
@@ -63,7 +65,7 @@ def calculate_impacts(orbits, num_days, propagator, num_samples: int = 1000):
                         orbit_id=impact.orbit_id,
                         distance=impact.distance,
                         coordinates=impact.coordinates,
-                        variant_id=variant_id,
+                        variant_id=[variant_id],
                     ),
                 )
 
