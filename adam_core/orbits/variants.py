@@ -11,11 +11,10 @@ from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_va
 from .ephemeris import Ephemeris
 from .orbits import Orbits
 
-
 class VariantOrbits(qv.Table):
-
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.LargeStringColumn(nullable=True)
+    variant_id = qv.LargeStringColumn(nullable=True)
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = CartesianCoordinates.as_column()
@@ -73,6 +72,7 @@ class VariantOrbits(qv.Table):
             beta=beta,
             kappa=kappa,
         )
+
         return cls.from_kwargs(
             orbit_id=pc.take(orbits.orbit_id, variant_coordinates.index),
             object_id=pc.take(orbits.object_id, variant_coordinates.index),
@@ -80,6 +80,7 @@ class VariantOrbits(qv.Table):
             weights_cov=variant_coordinates.weight_cov,
             coordinates=variant_coordinates.sample,
         )
+
 
     def link_to_orbits(
         self, orbits: Orbits
@@ -166,6 +167,7 @@ class VariantEphemeris(qv.Table):
 
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.LargeStringColumn(nullable=True)
+    variant_id = qv.LargeStringColumn(nullable=True)
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = SphericalCoordinates.as_column()
