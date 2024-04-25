@@ -2,6 +2,8 @@ from .variants import VariantOrbits
 import quivr as qv
 from typing import Optional
 from adam_core.propagator.propagator import Propagator
+import pyarrow as pa
+import pyarrow.compute as pc
 
 import numpy as np
 from astropy.time import Time
@@ -77,8 +79,18 @@ def calculate_impact_probabilities(variants, impacts):
         Impact probabilities for the variant orbits.
     """
 
+    #Loop through the unique set of orbit_ids within variants using quivr
+    unique_orbits = pc.unique(variants.orbit_id)
+    print(unique_orbits)
+
+    for orbit_id in unique_orbits:
+        variant_count = len(variants.select(variants.orbit_id == orbit_id))
+        print(variant_count)
+
     # Count the number of impacts for each variant orbit.
     impact_counts = Counter(impacts.variant_id)
+
+    print(impact_counts)
 
 
 
