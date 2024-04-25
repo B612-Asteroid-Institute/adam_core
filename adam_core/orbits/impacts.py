@@ -83,16 +83,20 @@ def calculate_impact_probabilities(variants, impacts):
     unique_orbits = pc.unique(variants.orbit_id)
     print(unique_orbits)
 
+    ip_dict = {}
+
     for orbit_id in unique_orbits:
-        variant_count = len(variants.select(variants.orbit_id == orbit_id))
-        print(variant_count)
+        mask = pc.equal(variants.orbit_id, orbit_id)
+        variant_masked = variants.table.filter(mask)
+        variant_count = len(variant_masked)
+        impacts_mask = pc.equal(impacts.orbit_id, orbit_id)
+        impacts_maked = impacts.table.filter(impacts_mask)
+        impact_count = len(impacts_mask)
+        #join the variant_masked with the impacts table
+        #joined = qv.join(variant_masked, impacts, 'variant_id', 'variant_id')
+        ip = impact_count/variant_count
 
-    # Count the number of impacts for each variant orbit.
-    impact_counts = Counter(impacts.variant_id)
+        ip_dict[orbit_id] = ip
 
-    print(impact_counts)
-
-
-
-    return 
+    return ip_dict
 
