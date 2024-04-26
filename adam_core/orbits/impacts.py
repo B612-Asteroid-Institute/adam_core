@@ -92,11 +92,39 @@ def calculate_impact_probabilities(variants, impacts):
         impacts_mask = pc.equal(impacts.orbit_id, orbit_id)
         impacts_maked = impacts.table.filter(impacts_mask)
         impact_count = len(impacts_mask)
-        #join the variant_masked with the impacts table
-        #joined = qv.join(variant_masked, impacts, 'variant_id', 'variant_id')
         ip = impact_count/variant_count
 
         ip_dict[orbit_id] = ip
+        print(ip_dict)
 
     return ip_dict
+
+
+def return_impacting_variants(variants, impacts):
+    """
+    Link variants to the orbits from which they were generated.
+
+    Parameters
+    ----------
+    orbits : `~adam_core.orbits.orbits.Orbits`
+        Orbits from which the variants were generated.
+
+    Returns
+    -------
+    linkage : `~quivr.MultiKeyLinkage[Orbits, VariantOrbits]`
+        Linkage between variants and orbits.
+    """
+
+    return qv.MultiKeyLinkage(
+        variants,
+        impacts,
+        left_keys={
+            "orbit_id": variants.orbit_id,
+            "variant_id": variants.variant_id,
+        },
+        right_keys={
+            "orbit_id": impacts.orbit_id,
+            "variant_id": impacts.variant_id,
+        },
+    )
 
