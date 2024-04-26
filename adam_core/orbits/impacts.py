@@ -15,7 +15,7 @@ from collections import Counter
 from adam_core.coordinates import CartesianCoordinates
 
 class EarthImpacts(qv.Table):
-    orbit_id = qv.StringColumn()
+    orbit_id = qv.LargeStringColumn()
     # Distance from earth center in km
     distance = qv.Float64Column()
     coordinates = CartesianCoordinates.as_column()
