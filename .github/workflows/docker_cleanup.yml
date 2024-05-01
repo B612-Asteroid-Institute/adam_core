@@ -1,7 +1,12 @@
 name: Docker Cleanup
 
 on:
-  workflow_dispatch:  # This allows manual triggering of the workflow
+  push:
+    branches: 
+      - '*'
+  pull_request:
+    branches: 
+      - '*'
 
 jobs:
   cleanup:
