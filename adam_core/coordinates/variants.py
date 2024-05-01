@@ -167,7 +167,7 @@ def create_coordinate_variants(
                 )
 
         else:
-            raise ValueError(f"Unknown coordinate covariance sampling method: {method}")      
+            raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
 
         variants_list.append(
             VariantCoordinates.from_kwargs(
@@ -184,7 +184,7 @@ def create_coordinate_variants(
                 ),
                 weight=W,
                 weight_cov=W_cov,
-                variant_id=[f"var_{j}" for j in range(len(samples))]
+                variant_id=[f"var_{j}" for j in range(len(samples))],
             )
         )
 
