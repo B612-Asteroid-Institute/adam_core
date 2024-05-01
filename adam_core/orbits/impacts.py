@@ -4,8 +4,7 @@ import pyarrow.compute as pc
 import quivr as qv
 
 from adam_core.coordinates import CartesianCoordinates
-from adam_core.coordinates.residuals import calculate_chi2
-from adam_core.coordinates.residuals import Residuals
+from adam_core.coordinates.residuals import Residuals, calculate_chi2
 
 from .variants import VariantOrbits
 
