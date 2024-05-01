@@ -9,6 +9,7 @@ from .variants import VariantOrbits
 __all__ = [
     "calculate_impacts",
     "calculate_impact_probabilities",
+    "calculate_mahalanobis_distance",
     "return_impacting_variants" "Ephemeris",
     "Orbits",
     "VariantOrbits",
