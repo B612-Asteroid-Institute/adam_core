@@ -153,7 +153,7 @@ def calculate_mahalanobis_distance(
         Mahalanobis distance between the observed and predicted orbits.
     """
 
-    residuals = Residuals.calculate(observed_orbit, predicted_orbit)
+    residuals = Residuals.calculate(observed_orbit.coordinates, predicted_orbit.coordinates)
     mahalanobis_distance2 = calculate_chi2(residuals, observed_covariance)
     mahalanobis_distance = math.sqrt(mahalanobis_distance2)
 
