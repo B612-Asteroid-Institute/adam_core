@@ -38,15 +38,17 @@ def test_get_observer_state_OriginCodes():
 
 
 expected_precision = {
+    # Units of m and mm/s
     "X05": {"r": 15, "v": 2},
     "I41": {"r": 10, "v": 2},
     "W84": {"r": 10, "v": 2},
+    "F51": {"r": 15, "v": 2},
     "000": {"r": 10, "v": 2},
     "500": {"r": 0.10, "v": 0.01},
 }
 
 
-@pytest.mark.parametrize("code", ["X05", "I41", "W84"])
+@pytest.mark.parametrize("code", expected_precision.keys())
 @pytest.mark.parametrize("origin", ["sun", "ssb"])
 def test_get_observer_state(code, origin):
     # Test that we can get the observer state for X05 to within 15 m and 2 mm/s
