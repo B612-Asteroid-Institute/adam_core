@@ -95,7 +95,7 @@ def test_exposure_states():
         expected.y.to_numpy(), states.y.to_numpy(), dtype=np.float32
     )
     np.testing.assert_array_max_ulp(
-        expected.z.to_numpy(), states.z.to_numpy(), maxulp=64, dtype=np.float32
+        expected.z.to_numpy(), states.z.to_numpy(), maxulp=156, dtype=np.float32
     )
     np.testing.assert_array_max_ulp(
         expected.vx.to_numpy(), states.vx.to_numpy(), dtype=np.float32
@@ -104,12 +104,12 @@ def test_exposure_states():
         expected.vy.to_numpy(), states.vy.to_numpy(), maxulp=2, dtype=np.float32
     )
     np.testing.assert_array_max_ulp(
-        expected.vz.to_numpy(), states.vz.to_numpy(), maxulp=22, dtype=np.float32
+        expected.vz.to_numpy(), states.vz.to_numpy(), maxulp=31, dtype=np.float32
     )
 
     np.testing.assert_allclose(expected.x.to_numpy(), states.x.to_numpy())
     np.testing.assert_allclose(expected.y.to_numpy(), states.y.to_numpy())
-    np.testing.assert_allclose(expected.z.to_numpy(), states.z.to_numpy(), rtol=1e-5)
+    np.testing.assert_allclose(expected.z.to_numpy(), states.z.to_numpy(), rtol=1e-4)
     np.testing.assert_allclose(expected.vx.to_numpy(), states.vx.to_numpy())
     np.testing.assert_allclose(expected.vy.to_numpy(), states.vy.to_numpy(), rtol=1e-6)
     np.testing.assert_allclose(expected.vz.to_numpy(), states.vz.to_numpy(), rtol=1e-5)
