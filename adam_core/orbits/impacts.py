@@ -60,7 +60,10 @@ def calculate_impacts(orbits, num_days, propagator, num_samples: int = 1000):
             )
             impact_list.append(earth_impact)
 
-    earth_impacts = qv.concatenate(impact_list)
+    if impact_list:
+       earth_impacts = qv.concatenate(impact_list)
+    else:
+        earth_impacts = EarthImpacts.empty()
 
     return variants, earth_impacts
 
@@ -84,7 +87,6 @@ def calculate_impact_probabilities(variants, impacts):
 
     # Loop through the unique set of orbit_ids within variants using quivr
     unique_orbits = pc.unique(variants.orbit_id)
-    print(unique_orbits)
 
     ip_dict = {}
 
@@ -96,9 +98,7 @@ def calculate_impact_probabilities(variants, impacts):
         impacts_masked = impacts.table.filter(impacts_mask)
         impact_count = len(impacts_masked)
         ip = impact_count / variant_count
-
         ip_dict[orbit_id] = ip
-        print(ip_dict)
 
     return ip_dict
 
@@ -154,7 +154,7 @@ def calculate_mahalanobis_distance(
     """
 
     residuals = Residuals.calculate(observed_orbit.coordinates, predicted_orbit.coordinates)
-    mahalanobis_distance2 = calculate_chi2(residuals, observed_covariance)
+    mahalanobis_distance2 = calculate_chi2(residuals.to_array(), observed_covariance)
     mahalanobis_distance = math.sqrt(mahalanobis_distance2)
 
     return mahalanobis_distance
