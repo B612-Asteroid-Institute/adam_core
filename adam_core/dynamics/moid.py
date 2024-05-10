@@ -1,7 +1,10 @@
 """
 Implementation of SGD-MOID
 
-
+References
+----------
+[1] Hedo, J. M. et al. (2019). Minimum orbital intersection distance: an asymptotic approach.
+    Astronomy & Astrophysics, 633, A22. https://doi.org/10.1051/0004-6361/201936502
 
 Algorithm 1:
 From an arbitrary point P_0 on the primary ellipse,
