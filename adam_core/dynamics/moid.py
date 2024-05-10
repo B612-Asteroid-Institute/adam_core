@@ -17,7 +17,6 @@ Algorithm 2:
 3. After finding the point with the lowest distance,
 search for the overall minimum.
 """
-
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import minimize_scalar
@@ -25,6 +24,7 @@ from scipy.optimize import minimize_scalar
 from ..coordinates import CartesianCoordinates, KeplerianCoordinates
 from ..dynamics.propagation import _propagate_2body
 from ..orbits import Orbits
+from ..time import Timestamp
 
 
 def project_point_on_plane(
@@ -73,6 +73,7 @@ def minimize_distance_from_coplanar_point_to_ellipse(
         lambda u: coplanar_distance_to_ellipse(P, keplerian_coordinates, u),
         bounds=(0, 2 * np.pi),
         method="bounded",
+        tol=1e-12,
     )
     return result.fun
 
@@ -112,7 +113,7 @@ def calculate_moid_for_dt(
         primary_ellipse.coordinates.values[0],
         t_0,
         t_0 + dt,
-        primary_ellipse.coordinates.origin.mu()[0]
+        primary_ellipse.coordinates.origin.mu()[0],
     )
     P0 = primary_ellipse_propagated[:3]
     distance_to_secondary_ellipse = calculate_distance_from_point_to_ellipse(
@@ -121,17 +122,32 @@ def calculate_moid_for_dt(
     return distance_to_secondary_ellipse
 
 
-
 # Now for Algorithm 1, where we discretize the primary ellipse and run Algorithm 1 for each point
-def calculate_moid(primary_ellipse: Orbits, secondary_ellipse: Orbits):
+def calculate_moid(
+    primary_ellipse: Orbits, secondary_ellipse: Orbits
+) -> tuple[float, Timestamp]:
     """
     Calculate the Minimum Orbit Intersection Distance (MOID) between two orbits.
     """
-    period = primary_ellipse.coordinates.to_keplerian().P[0]
-    bounds = (0, period)
-    moid = minimize_scalar(
+    keplerian = primary_ellipse.coordinates.to_keplerian()
+    period = keplerian.P[0]
+    e = keplerian.e[0].as_py()
+    if e < 1:
+        bounds = (0, period)
+    else:
+        bounds = (0, 10000)
+
+    result = minimize_scalar(
         lambda dt: calculate_moid_for_dt(primary_ellipse, secondary_ellipse, dt),
         bounds=bounds,
         method="bounded",
+        tol=1e-12,
     )
-    return moid.fun, moid.x
+    moid = result.fun
+    moid_time = Timestamp.from_mjd(
+        [primary_ellipse.coordinates.time.mjd()[0].as_py() + result.x], scale="tdb"
+    )
+    if result.status != 0:
+        raise ValueError("MOID calculation did not converge.")
+
+    return moid, moid_time
