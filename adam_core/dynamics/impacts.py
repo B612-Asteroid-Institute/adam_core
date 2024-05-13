@@ -61,7 +61,7 @@ class ImpactMixin:
     """
 
     @abstractmethod
-    def _detect_impacts(self, orbits: Orbits, num_days: float) -> Orbits:
+    def _detect_impacts(self, orbits: Orbits, num_days: float) -> Tuple[OrbitType, EarthImpacts]:
         """
         Detect impacts for the given orbits.
 
