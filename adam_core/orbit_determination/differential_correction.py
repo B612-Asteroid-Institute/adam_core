@@ -75,7 +75,7 @@ def fit_least_squares(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
-    **kwargs
+    **kwargs,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Differentially correct a fitted orbit using least squares. correct a fitted orbit using least squares.

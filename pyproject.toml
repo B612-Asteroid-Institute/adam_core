@@ -79,7 +79,7 @@ dependencies = [
 check = ["lint", "typecheck", "test"]
 fix = ["ruff ./adam_core --fix"]
 lint = [
-  "ruff ./adam_core",
+  "ruff check ./adam_core",
   "black --check ./adam_core",
   "isort --check-only ./adam_core",
 ]
@@ -99,7 +99,7 @@ profile = "black"
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-ignore = []
+lint.ignore = []
 exclude = ["build"]
 
 [tool.hatch.envs.docs]

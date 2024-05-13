@@ -1,6 +1,7 @@
 import uuid
-from typing import Literal
+from typing import Literal, Optional
 
+import numpy as np
 import pyarrow.compute as pc
 import quivr as qv
 
@@ -13,9 +14,9 @@ from .orbits import Orbits
 
 
 class VariantOrbits(qv.Table):
-
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.LargeStringColumn(nullable=True)
+    variant_id = qv.LargeStringColumn(nullable=True)
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = CartesianCoordinates.as_column()
@@ -29,6 +30,7 @@ class VariantOrbits(qv.Table):
         alpha: float = 1,
         beta: float = 0,
         kappa: float = 0,
+        seed: Optional[int] = None,
     ) -> "VariantOrbits":
         """
         Sample and create variants for the given orbits by sampling the covariance matrices.
@@ -72,10 +74,15 @@ class VariantOrbits(qv.Table):
             alpha=alpha,
             beta=beta,
             kappa=kappa,
+            seed=seed,
         )
+
         return cls.from_kwargs(
             orbit_id=pc.take(orbits.orbit_id, variant_coordinates.index),
             object_id=pc.take(orbits.object_id, variant_coordinates.index),
+            variant_id=np.array(
+                np.arange(len(variant_coordinates)).astype(str), dtype="object"
+            ),
             weights=variant_coordinates.weight,
             weights_cov=variant_coordinates.weight_cov,
             coordinates=variant_coordinates.sample,
@@ -166,6 +173,7 @@ class VariantEphemeris(qv.Table):
 
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.LargeStringColumn(nullable=True)
+    variant_id = qv.LargeStringColumn(nullable=True)
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = SphericalCoordinates.as_column()

@@ -10,10 +10,10 @@ from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
 from ...time.time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
-from ..propagator import Propagator
+from ..propagator import EphemerisMixin, Propagator
 
 
-class MockPropagator(Propagator):
+class MockPropagator(Propagator, EphemerisMixin):
     # MockPropagator propagates orbits by just setting the time of the orbits.
     def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
         all_times = []
@@ -68,21 +68,6 @@ def test_propagator_single_worker():
     assert len(have) == len(orbits) * len(times)
 
 
-def test_propagator_multiple_workers_cf():
-    orbits = make_real_orbits(10)
-    times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
-
-    prop = MockPropagator()
-    have = prop.propagate_orbits(orbits, times, max_processes=4, parallel_backend="cf")
-
-    assert len(have) == len(orbits) * len(times)
-
-    observers = Observers.from_code("X05", times)
-    have = prop.generate_ephemeris(orbits, observers)
-
-    assert len(have) == len(orbits) * len(times)
-
-
 RAY_INSTALLED = False
 try:
     import ray
@@ -99,14 +84,12 @@ def test_propagator_multiple_workers_ray():
     times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
 
     prop = MockPropagator()
-    have = prop.propagate_orbits(orbits, times, max_processes=4, parallel_backend="ray")
+    have = prop.propagate_orbits(orbits, times, max_processes=4)
 
     assert len(have) == len(orbits) * len(times)
 
     observers = Observers.from_code("X05", times)
-    have = prop.generate_ephemeris(
-        orbits, observers, max_processes=4, parallel_backend="ray"
-    )
+    have = prop.generate_ephemeris(orbits, observers, max_processes=4)
 
     assert len(have) == len(orbits) * len(times)
 
@@ -114,15 +97,11 @@ def test_propagator_multiple_workers_ray():
     orbits_ref = ray.put(orbits)
     time_ref = ray.put(times)
 
-    have = prop.propagate_orbits(
-        orbits_ref, time_ref, max_processes=4, parallel_backend="ray"
-    )
+    have = prop.propagate_orbits(orbits_ref, time_ref, max_processes=4)
 
     assert len(have) == len(orbits) * len(times)
 
     observers_ref = ray.put(observers)
-    have = prop.generate_ephemeris(
-        orbits_ref, observers_ref, max_processes=4, parallel_backend="ray"
-    )
+    have = prop.generate_ephemeris(orbits_ref, observers_ref, max_processes=4)
 
     assert len(have) == len(orbits) * len(times)
