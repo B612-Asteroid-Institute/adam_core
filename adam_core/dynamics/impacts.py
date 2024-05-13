@@ -253,7 +253,7 @@ def return_impacting_variants(variants, impacts):
     )
 
 
-def calculate_mahalanobis_distance(observed_orbit, predicted_orbit):
+def calculate_mahalanobis_distance(observed_orbit: OrbitType, predicted_orbit: OrbitType) -> npt.NDArray[np.float64]:
     """
     Calculate the Mahalanobis distance between an observed orbit and a predicted orbit.
     Parameters
