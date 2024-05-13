@@ -153,7 +153,7 @@ def calculate_impacts(
     num_samples: int = 1000,
     processes: Optional[int] = None,
     seed: Optional[int] = None,
-):
+) -> Tuple[Orbits, EarthImpacts]:
     """
     Calculate the impacts for each variant orbit generated from the input orbits.
 
