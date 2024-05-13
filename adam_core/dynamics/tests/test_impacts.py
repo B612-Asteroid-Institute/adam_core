@@ -26,8 +26,6 @@ class MockImpactPropagator(Propagator, ImpactMixin):
 
         # Pick random orbit to impact
         impacted = orbits[0]
-        print(impacted.coordinates.x)
-        print(impacted)
         impact = EarthImpacts.from_kwargs(
             orbit_id=impacted.orbit_id,
             variant_id=impacted.variant_id,
