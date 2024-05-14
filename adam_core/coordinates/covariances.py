@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 import pyarrow as pa
@@ -180,7 +180,10 @@ class CoordinateCovariances(qv.Table):
 
 
 def sample_covariance_random(
-    mean: np.ndarray, cov: np.ndarray, num_samples: int = 10000
+    mean: np.ndarray,
+    cov: np.ndarray,
+    num_samples: int = 10000,
+    seed: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sample a multivariate Gaussian distribution with given
@@ -209,7 +212,7 @@ def sample_covariance_random(
     W_cov: `~numpy.ndarray` (num_samples)
         Weights of the samples to reconstruct covariance matrix.
     """
-    normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
+    normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True, seed=seed)
     samples = normal.rvs(num_samples)
     W = np.full(num_samples, 1 / num_samples)
     W_cov = np.full(num_samples, 1 / num_samples)

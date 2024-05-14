@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Generic, Literal, Protocol, TypeVar
+from typing import Generic, Literal, Optional, Protocol, TypeVar
 
 import numpy as np
 import pyarrow as pa
@@ -50,6 +50,7 @@ def create_coordinate_variants(
     alpha: float = 1,
     beta: float = 0,
     kappa: float = 0,
+    seed: Optional[int] = None,
 ) -> VariantCoordinatesTable[types.CoordinateType]:
     """
     Sample and create variants for the given coordinates by sampling the covariance matrices.
@@ -97,6 +98,7 @@ def create_coordinate_variants(
         If the covariance matrices are all undefined.
         If the input coordinates are not supported.
     """
+
     if coordinates.covariance.is_all_nan():
         raise ValueError(
             "Cannot sample coordinate covariances when covariances are all undefined."
@@ -141,7 +143,7 @@ def create_coordinate_variants(
 
         elif method == "monte-carlo":
             samples, W, W_cov = sample_covariance_random(
-                mean, cov, num_samples=num_samples
+                mean, cov, num_samples=num_samples, seed=seed
             )
 
         elif method == "auto":

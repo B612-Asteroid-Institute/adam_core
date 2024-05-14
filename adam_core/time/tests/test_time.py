@@ -459,7 +459,7 @@ class TestTimeMath:
             {"in_days": 2, "in_nanos": 200, "out_days": 1, "out_nanos": 100},
         ]
 
-        for (i, c) in enumerate(cases):
+        for i, c in enumerate(cases):
             t1 = Timestamp.from_kwargs(
                 days=[c["in_days"]],
                 nanos=[c["in_nanos"]],

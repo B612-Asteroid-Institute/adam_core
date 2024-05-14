@@ -6,11 +6,12 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'adam_core'
-copyright = '2023, B612 Asteroid Institute'
-author = 'B612 Asteroid Institute'
+project = "adam_core"
+copyright = "2023, B612 Asteroid Institute"
+author = "B612 Asteroid Institute"
 
 import adam_core
+
 version = adam_core.__version__
 release = adam_core.__version__
 
@@ -33,16 +34,17 @@ extensions = [
 # From sphinx_toolbox.more_autodoc.typehints
 hide_none_rtype = True
 
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = []
 
 autodoc_type_aliases = {
     "Coordinates": "adam_core.coordinates.types.Coordinates",
 }
 
-autodoc_member_order = 'bysource'
+autodoc_member_order = "bysource"
 
 import quivr
+
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
@@ -68,4 +70,3 @@ intersphinx_mapping = {
 
 #     ("py:mod", "pyarrow.compute"),
 # }
-

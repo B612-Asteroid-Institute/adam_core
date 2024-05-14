@@ -19,7 +19,7 @@ from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
 from ..time import Timestamp
-from .propagator import EphemerisType, OrbitType, Propagator
+from .propagator import EphemerisMixin, EphemerisType, OrbitType, Propagator
 from .utils import _assert_times_almost_equal
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ def process_safe_oorb_init(ephfile):
         raise RuntimeError(f"PYOORB returned error code: {err}")
 
 
-class PYOORB(Propagator):
+class PYOORB(Propagator, EphemerisMixin):
     def __init__(
         self, *, dynamical_model: str = "N", ephemeris_file: str = "de430.dat"
     ):
