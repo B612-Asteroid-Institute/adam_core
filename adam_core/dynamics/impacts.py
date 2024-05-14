@@ -4,6 +4,7 @@ from abc import abstractmethod
 from typing import List, Optional, Tuple
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
 
@@ -54,6 +55,7 @@ class EarthImpacts(qv.Table):
     coordinates = CartesianCoordinates.as_column()
     variant_id = qv.LargeStringColumn(nullable=True)
 
+
 class ImpactProbabilities(qv.Table):
     orbit_id = qv.LargeStringColumn()
     impacts = qv.Int64Column()
@@ -70,7 +72,9 @@ class ImpactMixin:
     """
 
     @abstractmethod
-    def _detect_impacts(self, orbits: Orbits, num_days: float) -> Tuple[OrbitType, EarthImpacts]:
+    def _detect_impacts(
+        self, orbits: Orbits, num_days: float
+    ) -> Tuple[OrbitType, EarthImpacts]:
         """
         Detect impacts for the given orbits.
 
@@ -202,7 +206,9 @@ def calculate_impacts(
     return results, impacts
 
 
-def calculate_impact_probabilities(variants: VariantOrbits, impacts: EarthImpacts) -> ImpactProbabilities:
+def calculate_impact_probabilities(
+    variants: VariantOrbits, impacts: EarthImpacts
+) -> ImpactProbabilities:
     """
     Calculate the impact probabilities for each variant orbit generated from the input orbits.
     Parameters
@@ -230,7 +236,6 @@ def calculate_impact_probabilities(variants: VariantOrbits, impacts: EarthImpact
         impacts_masked = impacts.select("orbit_id", orbit_id)
         impact_count = len(impacts_masked)
 
-
         ip = ImpactProbabilities.from_kwargs(
             orbit_id=[orbit_id],
             impacts=[impact_count],
@@ -241,7 +246,9 @@ def calculate_impact_probabilities(variants: VariantOrbits, impacts: EarthImpact
         if earth_impact_probabilities is None:
             earth_impact_probabilities = ip
         else:
-            earth_impact_probabilities = qv.concatenate([earth_impact_probabilities, ip])
+            earth_impact_probabilities = qv.concatenate(
+                [earth_impact_probabilities, ip]
+            )
 
     return earth_impact_probabilities
 
@@ -273,7 +280,9 @@ def link_impacting_variants(variants, impacts):
     )
 
 
-def calculate_mahalanobis_distance(observed_orbit: OrbitType, predicted_orbit: OrbitType) -> npt.NDArray[np.float64]:
+def calculate_mahalanobis_distance(
+    observed_orbit: OrbitType, predicted_orbit: OrbitType
+) -> npt.NDArray[np.float64]:
     """
     Calculate the Mahalanobis distance between an observed orbit and a predicted orbit.
     Parameters

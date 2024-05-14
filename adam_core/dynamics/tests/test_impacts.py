@@ -136,7 +136,6 @@ def test_calculate_impact_probabilities():
     )
 
 
-
 def test_calculate_mahalanobis_distance():
     """ """
     observed_orbit = Orbits.from_kwargs(
