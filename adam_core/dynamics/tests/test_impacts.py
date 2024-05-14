@@ -8,6 +8,7 @@ from ...time import Timestamp
 from ..impacts import (
     EarthImpacts,
     ImpactMixin,
+    ImpactProbabilities,
     calculate_impact_probabilities,
     calculate_impacts,
     calculate_mahalanobis_distance,
@@ -126,9 +127,14 @@ def test_calculate_impact_probabilities():
     )
 
     ip = calculate_impact_probabilities(variants, impacts)
-    assert ip["1"] == 0.3333333333333333
-    assert ip["2"] == 0.6666666666666666
-    assert ip["3"] == 0.0
+
+    assert ip == ImpactProbabilities.from_kwargs(
+        orbit_id=["1", "2", "3"],
+        impacts=[1, 2, 0],
+        variants=[3, 3, 3],
+        cumulative_probability=[1 / 3, 2 / 3, 0.0],
+    )
+
 
 
 def test_calculate_mahalanobis_distance():

@@ -16,6 +16,7 @@ from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..propagator.propagator import OrbitType
 from ..propagator.utils import _iterate_chunks
+from ..time import Timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,14 @@ class EarthImpacts(qv.Table):
     distance = qv.Float64Column()
     coordinates = CartesianCoordinates.as_column()
     variant_id = qv.LargeStringColumn(nullable=True)
+
+class ImpactProbabilities(qv.Table):
+    orbit_id = qv.LargeStringColumn()
+    impacts = qv.Int64Column()
+    variants = qv.Int64Column()
+    cumulative_probability = qv.Float64Column()
+    minimum_impact_time = Timestamp.as_column(nullable=True)
+    maximum_impact_time = Timestamp.as_column(nullable=True)
 
 
 class ImpactMixin:
@@ -193,7 +202,7 @@ def calculate_impacts(
     return results, impacts
 
 
-def calculate_impact_probabilities(variants, impacts):
+def calculate_impact_probabilities(variants: VariantOrbits, impacts: EarthImpacts) -> ImpactProbabilities:
     """
     Calculate the impact probabilities for each variant orbit generated from the input orbits.
     Parameters
@@ -211,22 +220,33 @@ def calculate_impact_probabilities(variants, impacts):
     # Loop through the unique set of orbit_ids within variants using quivr
     unique_orbits = pc.unique(variants.orbit_id).to_pylist()
 
-    ip_dict = {}
+    earth_impact_probabilities = None
 
     for orbit_id in unique_orbits:
-        mask = pc.equal(variants.orbit_id, orbit_id)
-        variant_masked = variants.table.filter(mask)
+        # mask = pc.equal(variants.orbit_id, orbit_id)
+        variant_masked = variants.select("orbit_id", orbit_id)
         variant_count = len(variant_masked)
-        impacts_mask = pc.equal(impacts.orbit_id, orbit_id)
-        impacts_masked = impacts.table.filter(impacts_mask)
+
+        impacts_masked = impacts.select("orbit_id", orbit_id)
         impact_count = len(impacts_masked)
-        ip = impact_count / variant_count
-        ip_dict[orbit_id] = ip
-
-    return ip_dict
 
 
-def return_impacting_variants(variants, impacts):
+        ip = ImpactProbabilities.from_kwargs(
+            orbit_id=[orbit_id],
+            impacts=[impact_count],
+            variants=[variant_count],
+            cumulative_probability=[impact_count / variant_count],
+        )
+
+        if earth_impact_probabilities is None:
+            earth_impact_probabilities = ip
+        else:
+            earth_impact_probabilities = qv.concatenate([earth_impact_probabilities, ip])
+
+    return earth_impact_probabilities
+
+
+def link_impacting_variants(variants, impacts):
     """
     Link variants to the orbits from which they were generated.
     Parameters
