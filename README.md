@@ -150,8 +150,9 @@ spherical_elements = orbits.coordinates.to_spherical()
 ```
 
 ### Propagator
-The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. By default,
-`adam_core` ships with PYOORB.
+The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. The propagator class is designed to be used with the `Orbits` class and can handle multiple orbits and times. 
+
+You will need to install either adam_core[pyoorb] or adam_core[assist], or another compatible propagator in order to use propagation, ephemeris generation, or impact analysis.
 
 #### Propagation
 To propagate orbits with PYOORB (here we grab some orbits from Horizons first):

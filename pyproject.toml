@@ -29,8 +29,7 @@ dependencies = [
   "jaxlib",
   "numpy<1.25",
   "pyarrow>=13.0.0",
-  # This fork removes errors that occur with true anomaly values
-  "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
+  # "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
   "pandas",
   "ray",
   "requests",
@@ -67,6 +66,7 @@ dependencies = [
   "mypy",
   "pytest",
   "pytest-cov",
+  "adam-pyoorb@git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@master",
   "pytest-benchmark",
   "pytest-doctestplus",
   "pytest-mock",
