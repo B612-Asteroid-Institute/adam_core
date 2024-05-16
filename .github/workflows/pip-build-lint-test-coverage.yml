@@ -30,16 +30,15 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y gfortran liblapack-dev
-      - name: Install Hatch
+      - name: Install Testing Dependencies
         run: |
           pip install pip --upgrade
-          pip install hatch
+          pip install ".[dev]"
       - name: Lint
-        run: hatch run dev:lint
-      - name: Test, with coverage report
-        run: hatch run dev:coverage
+        run: pdm run lint
+      - name: Test with coverage
+        run: pdm run coverage
       - name: Coverage report to coveralls
         uses: coverallsapp/github-action@v2.0.0
         with:
-          github-token: ${{ secrets.COVERALLS_TOKEN }}
           path-to-lcov: coverage.xml

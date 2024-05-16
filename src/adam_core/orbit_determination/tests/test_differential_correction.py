@@ -2,7 +2,8 @@ import os
 
 import pytest
 
-from ...propagator.pyoorb import PYOORB
+from adam_core.propagator.adam_pyoorb import PYOORB
+
 from ..differential_correction import fit_least_squares
 
 

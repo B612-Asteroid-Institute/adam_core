@@ -72,9 +72,9 @@ def make_observations() -> Tuple[Exposures, PointSourceDetections, Associations]
         + [f"{i:04d}" for i in range(len(exposures))],
     )
     for observatory_code in exposures["observatory_code"].unique():
-        exposures.loc[
-            exposures["observatory_code"] == observatory_code, "duration"
-        ] = exposure_times[observatory_code]
+        exposures.loc[exposures["observatory_code"] == observatory_code, "duration"] = (
+            exposure_times[observatory_code]
+        )
     exposures["filter"] = "V"
 
     # Attached exposure IDs to the ephemerides

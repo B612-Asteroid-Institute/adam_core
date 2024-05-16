@@ -5,7 +5,8 @@ import pyarrow as pa
 import pytest
 import quivr as qv
 
-from ...propagator.pyoorb import PYOORB
+from adam_core.propagator.adam_pyoorb import PYOORB
+
 from ..evaluate import evaluate_orbits
 
 
