@@ -22,7 +22,7 @@ dependencies = [
   "healpy",
   "jax",
   "jaxlib",
-  "numpy<1.25",
+  "numpy>=1.20,<1.25",
   "pyarrow>=13.0.0",
   "pandas",
   "ray",
