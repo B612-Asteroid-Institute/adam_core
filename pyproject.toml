@@ -1,21 +1,42 @@
 [project]
-name = "adam-assist"
+name = "adam_core"
 version = "0.1.0"
-description = 'ADAM Core Propagator class using ASSIST'
 authors = [
-    { name = "Alec Koumjian", email = "akoumjian@gmail.com" },
-    { name = "Kathleen Kiker" }
+  { name = "Kathleen Kiker", email = "kathleen@b612foundation.org" },
+  { name = "Alec Koumjian", email = "alec@b612foundation.org" },
+  { name = "Joachim Moeyens", email = "moeyensj@uw.edu" },
+  { name = "Spencer Nelson", email = "spencer@b612foundation.org" },
+  { name = "Nate Tellis", email = "nate@b612foundation.org" },
 ]
+description = "Core libraries for the ADAM platform"
 readme = "README.md"
-keywords = []
-requires-python = ">=3.11,<4.0"
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
 dependencies = [
-    "adam-core @ git+https://github.com/B612-Asteroid-Institute/adam_core.git@main",
-    "assist",
-    "naif-de440",
-    "numpy",
-    "ray",
-    "spiceypy>=6.0.0"
+  "astropy",
+  "astroquery",
+  "healpy",
+  "jax",
+  "jaxlib",
+  "numpy<1.25",
+  "pyarrow>=13.0.0",
+  "pandas",
+  "ray",
+  "requests",
+  "scipy",
+  "spiceypy",
+  "quivr@git+https://github.com/moeyensj/quivr@concatenate-empty-attributes",
+  "mpc-obscodes",
+  "naif-de440",
+  "naif-leapseconds",
+  "naif-eop-high-prec",
+  "naif-eop-predict",
+  "naif-eop-historical",
+  "naif-earth-itrf93",
 ]
 
 [build-system]
@@ -38,9 +59,9 @@ coverage = "pytest --cov --cov-report xml"
 
 
 [project.urls]
-"Documentation" = "https://github.com/unknown/adam-assist#readme"
-"Issues" = "https://github.com/unknown/adam-assist/issues"
-"Source" = "https://github.com/unknown/adam-assist"
+"Documentation" = "https://github.com/B612-Asteroid-Institute/adam_core#README.md"
+"Issues" = "https://github.com/B612-Asteroid-Institute/adam_core/issues"
+"Source" = "https://github.com/B612-Asteroid-Institute/adam_core"
 
 
 [project.optional-dependencies]
@@ -69,6 +90,11 @@ line-length = 88
 [tool.isort]
 profile = "black"
 
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+lint.ignore = []
+exclude = ["build"]
 
 [tool.pytest.ini_options]
 # In order for namespace packages to work during tests,
