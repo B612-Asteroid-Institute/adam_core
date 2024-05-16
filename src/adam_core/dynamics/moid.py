@@ -20,6 +20,7 @@ Algorithm 2:
 3. After finding the point with the lowest distance,
 search for the overall minimum.
 """
+
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import minimize_scalar
