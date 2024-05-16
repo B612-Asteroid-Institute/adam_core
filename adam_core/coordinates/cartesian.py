@@ -170,6 +170,20 @@ class CartesianCoordinates(qv.Table):
         """
         return np.sqrt(np.sum(self.covariance.sigmas[:, 3:6] ** 2, axis=1))
 
+    @property
+    def h(self) -> npt.NDArray[np.float64]:
+        """
+        Specific angular momentum vector.
+        """
+        return np.cross(self.r, self.v)
+
+    @property
+    def h_mag(self) -> npt.NDArray[np.float64]:
+        """
+        Magnitude of the specific angular momentum vector.
+        """
+        return np.linalg.norm(self.h, axis=1)
+
     def rotate(
         self, rotation_matrix: npt.NDArray[np.float64], frame_out: str
     ) -> CartesianCoordinates:

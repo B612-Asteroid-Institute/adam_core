@@ -8,6 +8,8 @@
 * Danby, J. M. A. (1992). Fundamentals of Celestial Mechanics. 2nd ed.,  
     William-Bell, Inc. ISBN-13: 978-0943396200
     Notes: of particular interest is Danby's fantastic chapter on universal variables (6.9)
+* Hedo, J. M. et al. (2019). Minimum orbital intersection distance: an asymptotic approach.  
+    Astronomy & Astrophysics, 633, A22. https://doi.org/10.1051/0004-6361/201936502
 * Urban, S. E; Seidelmann, P. K. (2013) Explanatory Supplement to the Astronomical Almanac. 3rd ed.,  
     University Science Books. ISBN-13: 978-1891389856
 * Wan, E. A; Van Der Merwe, R. (2000). The unscented Kalman filter for nonlinear estimation.  
