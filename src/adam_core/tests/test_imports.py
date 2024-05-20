@@ -25,9 +25,6 @@ def test_import_coordinates():
     )
 
 
-# def test_import_propagator():
-#     from adam_core.propagator import PYOORB, Propagator
-
 
 def test_import_observations():
     from adam_core.observations import Associations, Exposures, PointSourceDetections
