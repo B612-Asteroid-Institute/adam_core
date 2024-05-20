@@ -55,7 +55,7 @@ typecheck = "mypy --strict ./src/adam_core"
 test = "pytest --benchmark-disable {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only"
-coverage = "pytest --cov --cov-report xml"
+coverage = "pytest --cov=adam_core --cov-report=xml"
 
 
 [project.urls]
@@ -66,22 +66,18 @@ coverage = "pytest --cov --cov-report xml"
 
 [project.optional-dependencies]
 dev = [
-    "pdm",
-    "pytest",
-    "pytest-cov",
-    "pytest-benchmark",
-    "ruff",
+    "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
     "black",
+    "ipython",
     "isort",
     "mypy",
-    "pytest",
-    "pytest-cov",
+    "pdm",
     "pytest-benchmark",
+    "pytest-cov",
     "pytest-doctestplus",
     "pytest-mock",
+    "pytest",
     "ruff",
-    "ipython",
-    "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
 ]
 
 [tool.black]
