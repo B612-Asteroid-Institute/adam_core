@@ -29,7 +29,7 @@ dependencies = [
   "requests",
   "scipy",
   "spiceypy",
-  "quivr@git+https://github.com/moeyensj/quivr@concatenate-empty-attributes",
+  "quivr==0.7.3a1",
   "mpc-obscodes",
   "naif-de440",
   "naif-leapseconds",
