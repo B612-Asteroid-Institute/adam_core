@@ -25,7 +25,6 @@ def test_import_coordinates():
     )
 
 
-
 def test_import_observations():
     from adam_core.observations import Associations, Exposures, PointSourceDetections
 
