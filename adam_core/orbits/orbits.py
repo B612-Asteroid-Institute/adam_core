@@ -2,10 +2,12 @@ import logging
 import uuid
 from typing import Iterable, Tuple
 
+import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
+from .classification import calc_orbit_class
 
 logger = logging.getLogger(__name__)
 
@@ -31,3 +33,16 @@ class Orbits(qv.Table):
         for orbit_id in unique_orbit_ids:
             mask = pc.equal(self.orbit_id, orbit_id)
             yield orbit_id, self.apply_mask(mask)
+
+    def dynamical_class(self) -> npt.NDArray[str]:
+        """
+        Compute dynamical classes of orbits. Currently
+        limited to asteroid dynamical classes.
+
+        Returns
+        -------
+        dynamical_classes : `~numpy.ndarray`
+            Dynamical classes of orbits.
+        """
+        keplerian = self.coordinates.to_keplerian()
+        return calc_orbit_class(keplerian)
