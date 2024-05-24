@@ -1,4 +1,4 @@
-name: hatch - Build Lint Test and Coverage
+name: Build Lint Test and Coverage
 
 on:
   push:
