@@ -7,5 +7,4 @@ __all__ = [
     "EphemerisMixin",
     "OrbitType",
     "EphemerisType",
-    "PYOORB",
 ]

@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from adam_core.propagator.adam_pyoorb import PYOORB
+from adam_core.propagator.adam_pyoorb import PYOORBPropagator
 
 from ..differential_correction import fit_least_squares
 
@@ -15,7 +15,7 @@ def test_fit_least_squares_pure_iod_orbit(pure_iod_orbit):
     # process using least squares
 
     orbit, orbit_members, observations = pure_iod_orbit
-    propagator = PYOORB()
+    propagator = PYOORBPropagator()
 
     fitted_orbit, fitted_orbit_members = fit_least_squares(
         orbit, observations, propagator
