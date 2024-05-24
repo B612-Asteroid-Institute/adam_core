@@ -32,7 +32,9 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y gfortran liblapack-dev
-          wget -r -np -nH --cut-dirs=1 -P /tmp/oorb/data https://storage.googleapis.com/oorb-data/data/
+          wget  -P /tmp/ https://storage.googleapis.com/oorb-data/oorb_data.tar.gz
+          mkdir -p /tmp/oorb/
+          tar -xvf /tmp/oorb_data.tar.gz -C /tmp/oorb/      
       - name: Install Testing Dependencies
         run: |
           pip install pip --upgrade

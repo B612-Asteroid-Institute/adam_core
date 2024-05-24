@@ -1,6 +1,6 @@
 [project]
 name = "adam_core"
-version = "0.1.0"
+version = "0.0.0"
 authors = [
   { name = "Kathleen Kiker", email = "kathleen@b612foundation.org" },
   { name = "Alec Koumjian", email = "alec@b612foundation.org" },
@@ -17,33 +17,37 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "astropy",
-  "astroquery",
-  "healpy",
-  "jax",
-  "jaxlib",
-  "numpy>=1.20,<1.25",
-  "pyarrow>=13.0.0",
-  "pandas",
-  "ray",
-  "requests",
-  "scipy",
-  "spiceypy",
-  "quivr==0.7.3a1",
-  "mpc-obscodes",
-  "naif-de440",
-  "naif-leapseconds",
-  "naif-eop-high-prec",
-  "naif-eop-predict",
-  "naif-eop-historical",
-  "naif-earth-itrf93",
+    "astropy",
+    "astroquery",
+    "healpy",
+    "jax",
+    "jaxlib",
+    "numpy>=1.20,<1.25",
+    "pyarrow>=13.0.0",
+    "pandas",
+    "ray",
+    "requests",
+    "scipy",
+    "spiceypy",
+    "quivr==0.7.3a1",
+    "mpc-obscodes",
+    "naif-de440",
+    "naif-leapseconds",
+    "naif-eop-high-prec",
+    "naif-eop-predict",
+    "naif-eop-historical",
+    "naif-earth-itrf93",
 ]
 
 [build-system]
-requires = ["pdm-backend"]
+requires = ["pdm-backend", "setuptools_scm"]
 build-backend = "pdm.backend"
 [tool.pdm.build]
 includes = ["src/adam_core/"]
+
+[tool.setuptools_scm]
+write_to = "src/adam_core/_version.py"
+
 
 [tool.pdm.scripts]
 check = {composite = ["lint", "typecheck", "test"]}
@@ -65,6 +69,18 @@ coverage = "pytest --cov=adam_core --cov-report=xml"
 
 
 [project.optional-dependencies]
+assist = [
+  "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main",
+]
+pyoorb = [
+  "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
+]
+all = [
+  "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main",
+  "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
+]
+
+
 dev = [
     "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
     "black",
