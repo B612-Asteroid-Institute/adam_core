@@ -20,12 +20,12 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.11"
-    - name: Install Hatch
+    - name: Install Development Dependencies
       run: |
         pip install pip --upgrade
-        pip install hatch
+        pip install ".[dev]"
     - name: Build Source Distribution and Wheel
-      run: hatch build
+      run: pdm build
     - name: Publish adam_core to Test PyPI
       if: ${{ inputs.test_pypi }}
       uses: pypa/gh-action-pypi-publish@release/v1
