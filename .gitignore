@@ -104,3 +104,4 @@ dmypy.json
 
 # Ignore lock files
 pdm.lock
+.pdm-build/*

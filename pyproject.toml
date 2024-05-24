@@ -1,6 +1,6 @@
 [project]
 name = "adam_core"
-version = "0.0.0"
+dynamic = ["version"]
 authors = [
   { name = "Kathleen Kiker", email = "kathleen@b612foundation.org" },
   { name = "Alec Koumjian", email = "alec@b612foundation.org" },
@@ -40,13 +40,16 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["pdm-backend", "setuptools_scm"]
+requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 [tool.pdm.build]
 includes = ["src/adam_core/"]
 
-[tool.setuptools_scm]
-write_to = "src/adam_core/_version.py"
+[tool.pdm.version]
+source = "scm"
+write_to = "adam_core/_version.py"
+write_template = "__version__ = '{}'"
+
 
 
 [tool.pdm.scripts]
