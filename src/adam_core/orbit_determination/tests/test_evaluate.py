@@ -5,7 +5,8 @@ import pyarrow as pa
 import pytest
 import quivr as qv
 
-from ...propagator.pyoorb import PYOORB
+from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+
 from ..evaluate import evaluate_orbits
 
 
@@ -16,7 +17,7 @@ def test_evaluate_orbits(pure_iod_orbit):
     # Test that evaluate_orbit correctly calculates residuals and other
     # parameters for an input orbit
     orbit, orbit_members, observations = pure_iod_orbit
-    propagator = PYOORB()
+    propagator = PYOORBPropagator()
 
     # Concatenate the orbit three times to test we can handle multiple orbits
     orbits = qv.concatenate([orbit, orbit, orbit])
@@ -63,7 +64,7 @@ def test_evaluate_orbits_outliers(pure_iod_orbit):
     # Test that evaluate_orbit correctly calculates residuals and other
     # parameters for an input orbit with outliers defined
     orbit, orbit_members, observations = pure_iod_orbit
-    propagator = PYOORB()
+    propagator = PYOORBPropagator()
 
     # Lets remove the last two observations
     outliers = observations.id.tolist()[-2:]

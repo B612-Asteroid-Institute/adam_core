@@ -150,17 +150,19 @@ spherical_elements = orbits.coordinates.to_spherical()
 ```
 
 ### Propagator
-The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. By default,
-`adam_core` ships with PYOORB.
+The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. The propagator class is designed to be used with the `Orbits` class and can handle multiple orbits and times. 
+
+You will need to install either adam_core[pyoorb] or adam_core[assist], or another compatible propagator in order to use propagation, ephemeris generation, or impact analysis.
 
 #### Propagation
 To propagate orbits with PYOORB (here we grab some orbits from Horizons first):
+
 ```python
 import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
-from adam_core.propagator import PYOORB
+from adam_core.propagator import PYOORBPropagator
 from adam_core.time import Timestamp
 
 # Get orbits to propagate
@@ -169,7 +171,7 @@ object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
 # Make sure PYOORB is ready
-propagator = PYOORB()
+propagator = PYOORBPropagator()
 
 # Define propagation times
 times = initial_time.from_mjd(initial_time.mjd() + np.arange(0, 100))
@@ -185,14 +187,21 @@ propagated_orbits = propagator.propagate_orbits(
 ```
 
 #### Ephemeris Generation
-The propagator class can also be used to generate ephemerides for a set of orbits and observers.
+Ephemeris generation requires a propagator that implements the EphemerisMixin interface. This is currently only implemented by the PYOORB propagator. The ephemeris generator will automatically map the propagated covariance matrices to the sky-plane.
+
+You will need to install adam-pyoorb in order to use the ephemeris generator.
+
+```sh
+pip install adam-core[pyoorb]
+```
+
 
 ```python
 import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
-from adam_core.propagator import PYOORB
+from adam_core.propagator import PYOORBPropagator
 from adam_core.observers import Observers
 from adam_core.time import Timestamp
 
@@ -202,7 +211,7 @@ object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
 # Make sure PYOORB is ready
-propagator = PYOORB()
+propagator = PYOORBPropagator()
 
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(initial_time.mjd() + np.arange(0, 100))
@@ -277,7 +286,7 @@ import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_sbdb
-from adam_core.propagator import PYOORB
+from adam_core.propagator import PYOORBPropagator
 from adam_core.observers import Observers
 from adam_core.dynamics import generate_ephemeris_2body
 from adam_core.time import Timestamp
@@ -287,7 +296,7 @@ object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_sbdb(object_ids)
 
 # Make sure PYOORB is ready
-propagator = PYOORB()
+propagator = PYOORBPropagator()
 
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(np.arange(59000, 60000), scale="tdb")

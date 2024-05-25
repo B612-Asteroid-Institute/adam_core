@@ -101,3 +101,7 @@ dmypy.json
 
 # Convenience file for docker development
 .docker_bash_history.txt
+
+# Ignore lock files
+pdm.lock
+.pdm-build/*

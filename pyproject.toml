@@ -1,9 +1,6 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "adam_core"
+dynamic = ["version"]
 authors = [
   { name = "Kathleen Kiker", email = "kathleen@b612foundation.org" },
   { name = "Alec Koumjian", email = "alec@b612foundation.org" },
@@ -19,76 +16,88 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
-dynamic = ["version"]
-
 dependencies = [
-  "astropy",
-  "astroquery",
-  "healpy",
-  "jax",
-  "jaxlib",
-  "numpy<1.25",
-  "pyarrow>=13.0.0",
-  # This fork removes errors that occur with true anomaly values
-  "pyoorb@git+https://github.com/B612-Asteroid-Institute/oorb.git@fork",
-  "pandas",
-  "ray",
-  "requests",
-  "scipy",
-  "spiceypy",
-  "quivr@git+https://github.com/moeyensj/quivr@concatenate-empty-attributes",
-  "mpc-obscodes",
-  "naif-de440",
-  "naif-leapseconds",
-  "naif-eop-high-prec",
-  "naif-eop-predict",
-  "naif-eop-historical",
-  "naif-earth-itrf93",
+    "astropy",
+    "astroquery",
+    "healpy",
+    "jax",
+    "jaxlib",
+    "numpy>=1.20,<1.25",
+    "pyarrow>=13.0.0",
+    "pandas",
+    "ray",
+    "requests",
+    "scipy",
+    "spiceypy",
+    "quivr==0.7.3a1",
+    "mpc-obscodes",
+    "naif-de440",
+    "naif-leapseconds",
+    "naif-eop-high-prec",
+    "naif-eop-predict",
+    "naif-eop-historical",
+    "naif-earth-itrf93",
 ]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+[tool.pdm.build]
+includes = ["src/adam_core/"]
+
+[tool.pdm.version]
+source = "scm"
+write_to = "adam_core/_version.py"
+write_template = "__version__ = '{}'"
+
+
+
+[tool.pdm.scripts]
+check = {composite = ["lint", "typecheck", "test"]}
+format = { composite = ["black ./src/adam_core", "isort ./src/adam_core"]}
+lint = { composite = ["ruff check ./src/adam_core", "black --check ./src/adam_core", "isort --check-only ./src/adam_core"] }
+fix = "ruff ./src/adam_core --fix"
+typecheck = "mypy --strict ./src/adam_core"
+
+test = "pytest --benchmark-disable {args}"
+doctest = "pytest --doctest-plus --doctest-only"
+benchmark = "pytest --benchmark-only"
+coverage = "pytest --cov=adam_core --cov-report=xml"
+
 
 [project.urls]
-"Homepage" = "https://github.com/b612-asteroid-institute/adam_core"
-
-[tool.hatch.build.targets.sdist]
-include = ["/adam_core"]
-
-[tool.hatch.metadata]
-# Temporary while pyoorb is referenced via git direct ref
-allow-direct-references = true
-
-[tool.hatch.version]
-path = "adam_core/__version__.py"
+"Documentation" = "https://github.com/B612-Asteroid-Institute/adam_core#README.md"
+"Issues" = "https://github.com/B612-Asteroid-Institute/adam_core/issues"
+"Source" = "https://github.com/B612-Asteroid-Institute/adam_core"
 
 
-[tool.hatch.envs.dev]
-dependencies = [
-  "black==22.10.0",
-  "isort",
-  "mypy",
-  "pytest",
-  "pytest-cov",
-  "pytest-benchmark",
-  "pytest-doctestplus",
-  "pytest-mock",
-  "pre-commit",
-  "ruff",
-  "ipython",
+[project.optional-dependencies]
+assist = [
+  "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main",
+]
+pyoorb = [
+  "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
+]
+all = [
+  "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main",
+  "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
 ]
 
-[tool.hatch.envs.dev.scripts]
-check = ["lint", "typecheck", "test"]
-fix = ["ruff ./adam_core --fix"]
-lint = [
-  "ruff check ./adam_core",
-  "black --check ./adam_core",
-  "isort --check-only ./adam_core",
+
+dev = [
+    "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
+    "black",
+    "ipython",
+    "isort",
+    "mypy",
+    "pdm",
+    "pytest-benchmark",
+    "pytest-cov",
+    "pytest-doctestplus",
+    "pytest-mock",
+    "pytest",
+    "ruff",
 ]
-format = ["black ./adam_core", "isort ./adam_core"]
-typecheck = ["mypy --strict ./adam_core"]
-test = ["pytest --benchmark-disable ./adam_core {args}"]
-doctest = ["pytest --doctest-plus ./adam_core --doctest-only"]
-benchmark = ["pytest --benchmark-only ./adam_core {args}"]
-coverage = ["pytest ./adam_core --cov --cov-report xml"]
 
 [tool.black]
 line-length = 88
@@ -102,27 +111,9 @@ target-version = "py311"
 lint.ignore = []
 exclude = ["build"]
 
-[tool.hatch.envs.docs]
-dependencies = [
-  "sphinx",
-  "sphinx-autodoc-typehints",
-  "sphinx-copybutton",
-  "sphinx-toolbox",
-  "quivr-sphinx-autodoc",
+[tool.pytest.ini_options]
+# In order for namespace packages to work during tests,
+# we need to import from the installed modules instead of local source
+addopts = [
+    "--pyargs", "adam_core",
 ]
-
-[project.optional-dependencies]
-docs = [
-  "sphinx",
-  "sphinx-autodoc-typehints",
-  "sphinx-copybutton",
-  "sphinx-toolbox",
-  "quivr-sphinx-autodoc",
-]
-
-[tool.hatch.envs.docs.scripts]
-make-html = ["make -C docs html"]
-
-clean = ["make -C docs clean"]
-
-open-html = ["open docs/build/html/index.html"]
