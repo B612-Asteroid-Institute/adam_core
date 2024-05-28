@@ -83,16 +83,8 @@ coverage = "pytest --cov=adam_core --cov-report=xml"
 
 
 [project.optional-dependencies]
-assist = [
-  "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main",
-]
-pyoorb = [
-  "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
-]
-all = [
-  "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main",
-  "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
-]
+
+
 
 
 dev = [
