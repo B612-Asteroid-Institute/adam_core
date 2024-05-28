@@ -2,13 +2,19 @@ import os
 
 import pytest
 
-from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+try:
+    from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+except ImportError:
+    PYOORBPropagator = None
 
 from ..differential_correction import fit_least_squares
 
 
 @pytest.mark.skipif(
     os.environ.get("OORB_DATA") is None, reason="OORB_DATA environment variable not set"
+)
+@pytest.mark.skipif(
+    PYOORBPropagator is None, reason="PYOORBPropagator not available"
 )
 def test_fit_least_squares_pure_iod_orbit(pure_iod_orbit):
     # Test that fit_least_squares can fit and improve a pure orbit from an IOD

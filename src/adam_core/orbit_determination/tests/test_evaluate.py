@@ -5,13 +5,19 @@ import pyarrow as pa
 import pytest
 import quivr as qv
 
-from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+try:
+    from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+except ImportError:
+    PYOORBPropagator = None
 
 from ..evaluate import evaluate_orbits
 
 
 @pytest.mark.skipif(
     os.environ.get("OORB_DATA") is None, reason="OORB_DATA environment variable not set"
+)
+@pytest.mark.skipif(
+    PYOORBPropagator is None, reason="PYOORBPropagator not available"
 )
 def test_evaluate_orbits(pure_iod_orbit):
     # Test that evaluate_orbit correctly calculates residuals and other
@@ -59,6 +65,9 @@ def test_evaluate_orbits(pure_iod_orbit):
 
 @pytest.mark.skipif(
     os.environ.get("OORB_DATA") is None, reason="OORB_DATA environment variable not set"
+)
+@pytest.mark.skipif(
+    PYOORBPropagator is None, reason="PYOORBPropagator not available"
 )
 def test_evaluate_orbits_outliers(pure_iod_orbit):
     # Test that evaluate_orbit correctly calculates residuals and other
