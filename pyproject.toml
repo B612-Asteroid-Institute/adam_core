@@ -84,11 +84,7 @@ coverage = "pytest --cov=adam_core --cov-report=xml"
 
 [project.optional-dependencies]
 
-
-
-
 dev = [
-  "adam-pyoorb @ git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main",
   "black",
   "ipython",
   "isort",
