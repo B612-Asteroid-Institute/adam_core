@@ -39,6 +39,8 @@ jobs:
         run: |
           pip install pip --upgrade
           pip install ".[dev]"
+          # Install pyoorb propagator from source
+          pip install git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git@main
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
