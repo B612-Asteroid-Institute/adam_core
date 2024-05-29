@@ -2,9 +2,7 @@
 #### A Python package by the Asteroid Institute, a program of the B612 Foundation
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
-[![docker - Build, Lint, and Test](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/docker-build-lint-test.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/docker-build-lint-test.yml)
-[![pip - Build, Lint, Test, and Coverage](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml)  
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
+[![pip - Build, Lint, Test, and Coverage](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml)
 
 `adam_core` is used by a variety of library and services at the Asteroid Institute. Sharing these common classes, types, and conversions amongst our tools ensures consistency and accuracy.
 
@@ -178,7 +176,7 @@ initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
-# Make sure PYOORB is ready
+# Download ephemeris files used by propagator and initialize
 download_jpl_ephemeris_files()
 propagator = ASSISTPropagator()
 
