@@ -8,6 +8,14 @@
 
 `adam_core` is used by a variety of library and services at the Asteroid Institute. Sharing these common classes, types, and conversions amongst our tools ensures consistency and accuracy.
 
+## Installation
+
+ADAM Core is available on PyPI
+
+```bash
+pip install adam_core
+```
+
 ## Usage
 
 ### Orbits
@@ -152,17 +160,17 @@ spherical_elements = orbits.coordinates.to_spherical()
 ### Propagator
 The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. The propagator class is designed to be used with the `Orbits` class and can handle multiple orbits and times. 
 
-You will need to install either adam_core[pyoorb] or adam_core[assist], or another compatible propagator in order to use propagation, ephemeris generation, or impact analysis.
+You will need to install either adam_core[assist], or another compatible propagator in order to use propagation, ephemeris generation, or impact analysis.
 
 #### Propagation
-To propagate orbits with PYOORB (here we grab some orbits from Horizons first):
+To propagate orbits with ASSIST (here we grab some orbits from Horizons first):
 
 ```python
 import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
-from adam_core.propagator import PYOORBPropagator
+from adam_core.propagator.adam_assist import ASSISTPropagator, download_jpl_ephemeris_files
 from adam_core.time import Timestamp
 
 # Get orbits to propagate
@@ -171,7 +179,8 @@ object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
 # Make sure PYOORB is ready
-propagator = PYOORBPropagator()
+download_jpl_ephemeris_files()
+propagator = ASSISTPropagator()
 
 # Define propagation times
 times = initial_time.from_mjd(initial_time.mjd() + np.arange(0, 100))
@@ -189,10 +198,10 @@ propagated_orbits = propagator.propagate_orbits(
 #### Ephemeris Generation
 Ephemeris generation requires a propagator that implements the EphemerisMixin interface. This is currently only implemented by the PYOORB propagator. The ephemeris generator will automatically map the propagated covariance matrices to the sky-plane.
 
-You will need to install adam-pyoorb in order to use the ephemeris generator.
+You will need to install adam-pyoorb in order to use the ephemeris generator, which is currently only available on GitHub.
 
 ```sh
-pip install adam-core[pyoorb]
+pip install git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git
 ```
 
 
@@ -201,7 +210,7 @@ import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
-from adam_core.propagator import PYOORBPropagator
+from adam_core.propagator.adam_pyoorb import PYOORBPropagator
 from adam_core.observers import Observers
 from adam_core.time import Timestamp
 
@@ -286,7 +295,7 @@ import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_sbdb
-from adam_core.propagator import PYOORBPropagator
+from adam_core.propagator.adam_pyoorb import PYOORBPropagator
 from adam_core.observers import Observers
 from adam_core.dynamics import generate_ephemeris_2body
 from adam_core.time import Timestamp
@@ -345,25 +354,4 @@ adam_core
 └── utils         # Utility classes like Indexable or conversions like times_from_df
 ```
 
-## Installation
 
-ADAM Core is available on PyPI
-
-```bash
-pip install adam_core
-```
-
-## Development
-
-Development is made easy with our Docker container environment.
-
-```bash
-# Build the container
-docker compose build
-
-# Run tests in the container
-docker compose run adam_core pytest .
-
-# Run a shell in the container
-docker compose run adam_core bash
-```
