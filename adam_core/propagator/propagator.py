@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Type, Union
+from typing import List, Literal, Optional, Type, Union, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -30,6 +30,10 @@ TimestampType = Union[Timestamp, ObjectRef]
 OrbitType = Union[Orbits, VariantOrbits, ObjectRef]
 EphemerisType = Union[Ephemeris, VariantOrbits, ObjectRef]
 ObserverType = Union[Observers, ObjectRef]
+from ..constants import Constants as c
+
+MU = c.MU
+C = c.C
 
 
 def propagation_worker(
@@ -88,6 +92,42 @@ class EphemerisMixin:
     Mixin with signature for generating ephemerides.
     Subclasses should implement the _generate_ephemeris method.
     """
+
+    def add_light_time(
+        self, 
+        orbits: OrbitType,
+        observers: ObserverType,
+        lt_tol: float = 1e-10,
+    ) -> Tuple[OrbitType, npt.NDArray[np.float64]]:
+        
+        orbits_aberrated = orbits.empty()
+        lts = np.zeros(len(orbits))
+        for i, (orbit, observer) in enumerate(zip(orbit, observers)):
+            while dlt > lt_tol:
+                observer_position = observer.coordinates.values[0,:3]
+                orbit_i = orbits[0]
+                t0 = orbit_i.coordinates.time.mjd().as_py()
+                lt0 = 0
+                dlt = 1
+
+                rho = np.linalg.norm(orbit_i[:3] - observer_position)
+
+                lt = rho / C
+
+                dlt = np.abs(lt - lt0)
+
+                t1 = t0 - lt
+                t1 = Timestamp.from_mjd(t1, scale="tdb")
+                orbit_propagated = self._propagate_orbits(orbit, t1)
+
+                orbit = orbit_propagated
+                t0 = t1
+                lt0 = lt
+                dlt = dlt
+            orbits_aberrated = qv.concatenate([orbits_aberrated, orbit])
+            lts[i] = lt
+
+        return orbits_aberrated, lts
 
     @abstractmethod
     def _generate_ephemeris(
