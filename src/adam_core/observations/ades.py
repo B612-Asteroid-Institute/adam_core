@@ -1,4 +1,3 @@
-import os
 from dataclasses import asdict, dataclass
 from typing import Optional
 
@@ -163,129 +162,128 @@ class ADESObservations(qv.Table):
     astCat = qv.LargeStringColumn()
     remarks = qv.LargeStringColumn(nullable=True)
 
-    def to_psv(
-        self,
-        file_out: str,
-        obs_contexts: dict[str, ObsContext],
-        seconds_precision: int = 3,
-        columns_precision: dict[str, int] = {
+
+def ADES_to_string(
+    observations: ADESObservations,
+    obs_contexts: dict[str, ObsContext],
+    seconds_precision: int = 3,
+    columns_precision: dict[str, int] = {
+        "ra": 8,
+        "dec": 8,
+        "rmsRA": 4,
+        "rmsDec": 4,
+        "mag": 2,
+        "rmsMag": 2,
+    },
+) -> str:
+    """
+    Write ADES observations to a string.
+
+    Parameters
+    ----------
+    observations : ADESObservations
+        The observations to write to a string.
+    obs_contexts : dict[str, ObsContext]
+        A dictionary of observatory codes and their corresponding ObsContexts to use
+        as the context headers for the different observatory codes in the observations.
+    seconds_precision : int, optional
+        The precision to use for the seconds in the obsTime field, by default 3.
+    columns_precision : dict[str, int], optional
+        A dictionary of column names and their corresponding precision to use when writing
+        the observations to the file, by default {
             "ra": 8,
             "dec": 8,
-            "rmsRA": 4,
-            "rmsDec": 4,
+            "rmsRA" : 4,
+            "rmsDec" : 4,
             "mag": 2,
             "rmsMag": 2,
-        },
-    ):
-        """
-        Save observations to a MPC-submittable ADES psv file.
+        }
+        The MPC enforces strict limits on these and submitters may need permission to send
+        high-precision data.
 
-        Parameters
-        ----------
-        file_out : str
-            The file to save the observations to.
-        obs_contexts : dict[str, ObsContext]
-            A dictionary of observatory codes and their corresponding ObsContexts to use
-            as the context headers for the different observatory codes in the observations.
-        seconds_precision : int, optional
-            The precision to use for the seconds in the obsTime field, by default 3.
-        columns_precision : dict[str, int], optional
-            A dictionary of column names and their corresponding precision to use when writing
-            the observations to the file, by default {
-                "ra": 8,
-                "dec": 8,
-                "rmsRA" : 4,
-                "rmsDec" : 4,
-                "mag": 2,
-                "rmsMag": 2,
-            }
-            The MPC enforces strict limits on these and submitters may need permission to send
-            high-precision data.
-        """
-        if os.path.exists(file_out):
-            raise FileExistsError(f"{file_out} already exists.")
+    Returns
+    -------
+    ades_string : str
+        The ADES observations as a string.
+    """
+    ades_string = "# version=2022\n"
 
-        with open(file_out, "a") as f:
+    unique_observatories = observations.stn.unique().to_numpy(zero_copy_only=False)
+    unique_observatories.sort()
 
-            unique_observatories = self.stn.unique().to_numpy(zero_copy_only=False)
-            unique_observatories.sort()
+    for obs in unique_observatories:
+        if obs not in obs_contexts:
+            raise ValueError(f"Observatory {obs} not found in obs_contexts")
 
-            f.writelines(["# version=2022\n"])
+        observations_obscode = observations.select("stn", obs)
+        observations_obscode = observations_obscode.sort_by(
+            [
+                ("provID", "ascending"),
+                ("permID", "ascending"),
+                ("trkSub", "ascending"),
+                ("obsTime.days", "ascending"),
+                ("obsTime.nanos", "ascending"),
+            ]
+        )
 
-            for obs in unique_observatories:
-                if obs not in obs_contexts:
-                    raise ValueError(f"Observatory {obs} not found in obs_contexts")
+        id_present = False
+        if not pc.all(pc.is_null(observations_obscode.permID)).as_py():
+            id_present = True
+        if not pc.all(pc.is_null(observations_obscode.provID)).as_py():
+            id_present = True
+        if not pc.all(pc.is_null(observations_obscode.trkSub)).as_py():
+            id_present = True
 
-                observations_obscode = self.select("stn", obs)
-                observations_obscode = observations_obscode.sort_by(
-                    [
-                        ("provID", "ascending"),
-                        ("permID", "ascending"),
-                        ("trkSub", "ascending"),
-                        ("obsTime.days", "ascending"),
-                        ("obsTime.nanos", "ascending"),
-                    ]
-                )
+        if not id_present:
+            err = (
+                "At least one of permID, provID, or trkSub should\n"
+                "be present in observations."
+            )
+            raise ValueError(err)
 
-                id_present = False
-                if not pc.all(pc.is_null(observations_obscode.permID)).as_py():
-                    id_present = True
-                if not pc.all(pc.is_null(observations_obscode.provID)).as_py():
-                    id_present = True
-                if not pc.all(pc.is_null(observations_obscode.trkSub)).as_py():
-                    id_present = True
+        # Write the observatory context block
+        obs_context = obs_contexts[obs]
+        ades_string += obs_context.to_string()
 
-                if not id_present:
-                    err = (
-                        "At least one of permID, provID, or trkSub should\n"
-                        "be present in observations."
-                    )
-                    raise ValueError(err)
+        # Write the observations block (we first convert
+        # to a pandas dataframe)
+        ades = observations_obscode.to_dataframe()
 
-                # Write the observatory context block
-                obs_context = obs_contexts[obs]
-                f.writelines([obs_context.to_string()])
+        # Convert the timestamp to ISOT with the desired precision
+        observation_times = Time(
+            observations_obscode.obsTime.rescale("utc")
+            .mjd()
+            .to_numpy(zero_copy_only=False),
+            format="mjd",
+            precision=seconds_precision,
+        )
+        ades.insert(
+            4,
+            "obsTime",
+            np.array([i + "Z" for i in observation_times.utc.isot]),
+        )
+        ades.drop(columns=["obsTime.days", "obsTime.nanos"], inplace=True)
 
-                # Write the observations block
-                ades = observations_obscode.to_dataframe()
+        # Multiply rmsRA by cos(dec) since ADES wants the random component in rmsRAcosDec
+        ades.loc[:, "rmsRA"] *= np.cos(np.radians(ades["dec"]))
 
-                # Convert the timestamp to ISOT with the desired precision
-                observation_times = Time(
-                    observations_obscode.obsTime.rescale("utc")
-                    .mjd()
-                    .to_numpy(zero_copy_only=False),
-                    format="mjd",
-                    precision=seconds_precision,
-                )
-                ades.insert(
-                    4,
-                    "obsTime",
-                    np.array([i + "Z" for i in observation_times.utc.isot]),
-                )
-                ades.drop(columns=["obsTime.days", "obsTime.nanos"], inplace=True)
+        # Convert rmsRA and rmsDec to arcseconds
+        ades.loc[:, "rmsRA"] *= 3600
+        ades.loc[:, "rmsDec"] *= 3600
 
-                # Multiply rmsRA by cos(dec) since ADES wants the random component in rmsRAcosDec
-                ades.loc[:, "rmsRA"] *= np.cos(np.radians(ades["dec"]))
+        ades.dropna(how="all", axis=1, inplace=True)
 
-                # Convert rmsRA and rmsDec to arcseconds
-                ades.loc[:, "rmsRA"] *= 3600
-                ades.loc[:, "rmsDec"] *= 3600
+        # Change the precision of some of the columns to conform
+        # to MPC standards
+        for col, prec_col in columns_precision.items():
+            if col in ades.columns:
+                ades[col] = [
+                    f"{i:.{prec_col}f}" if i is not None or not np.isnan(i) else ""
+                    for i in ades[col]
+                ]
 
-                ades.dropna(how="all", axis=1, inplace=True)
+        ades_string += ades.to_csv(
+            sep="|", header=True, index=False, float_format="%.16f"
+        )
 
-                # Change the precision of some of the columns to conform
-                # to MPC standards
-                for col, prec_col in columns_precision.items():
-                    print(col)
-                    if col in ades.columns:
-                        ades[col] = [
-                            f"{i:.{prec_col}f}"
-                            if i is not None or not np.isnan(i)
-                            else ""
-                            for i in ades[col]
-                        ]
-
-                # This will append to the file since the file is opened in append mode
-                ades.to_csv(f, sep="|", header=True, index=False, float_format="%.16f")
-
-        return
+    return ades_string

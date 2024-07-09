@@ -1,9 +1,8 @@
-from importlib.resources import files
-
 import pytest
 
 from ...time import Timestamp
 from ..ades import (
+    ADES_to_string,
     ADESObservations,
     ObsContext,
     ObservatoryObsContext,
@@ -168,7 +167,7 @@ def test_ObsContext_to_string(ades_obscontext):
 ! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
-"""
+"""  # noqa: E501
     )
 
     V00 = ades_obscontext["V00"]
@@ -208,28 +207,238 @@ def test_ObsContext_to_string(ades_obscontext):
 ! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
-"""
+"""  # noqa: E501
     )
 
 
-@pytest.fixture
-def ades_psv(ades_obscontext, ades_observations):
-    actual = files("adam_core.observations.tests.testdata").joinpath(
-        "sample_ades_actual.psv"
+def test_ADES_to_string(ades_observations, ades_obscontext):
+
+    desired = """# version=2022
+# observatory
+! mpcCode 695
+! name Kitt Peak National Observatory - Mayall + Mosaic3
+# submitter
+! name J. Moeyens
+! institution B612 Asteroid Institute
+# observers
+! name M. L. Survey
+# measurers
+! name J. Moeyens
+! name M. Juric
+! name S. Nelson
+! name A. Koumjian
+! name K. Kiker
+! name N. Tellis
+! name D. Veronese-Milin
+! name A. Posner
+! name E. Lu
+! name C. Fiaschetti
+! name D. Remy
+# telescope
+! name Mayall 4m
+! design Reflector
+! aperture 4.0
+! detector CCD
+# software
+! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
+# fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
+# comment
+! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
+! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
+! line using the institute's ADAM::THOR discovery service running on Google Cloud.
+permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
+3001|a2345b|obs04|2024-05-05T04:48:00.000Z|15.05000000|10.05000000|21.40|r|695|CCD|Gaia2|This is the fourth dummy observation
+# observatory
+! mpcCode V00
+! name Kitt Peak National Observatory - Bok + 90Prime
+# submitter
+! name J. Moeyens
+! institution B612 Asteroid Institute
+# observers
+! name B. A. S. Survey
+# measurers
+! name J. Moeyens
+! name M. Juric
+! name S. Nelson
+! name A. Koumjian
+! name K. Kiker
+! name N. Tellis
+! name D. Veronese-Milin
+! name A. Posner
+! name E. Lu
+! name C. Fiaschetti
+! name D. Remy
+# telescope
+! name Bok 2.3m
+! design Reflector
+! aperture 2.3
+! detector CCD
+# software
+! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
+# fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
+# comment
+! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
+! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
+! line using the institute's ADAM::THOR discovery service running on Google Cloud.
+permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
+3001|a2345b|obs03|2024-05-05T00:00:00.000Z|15.00000000|10.00000000|V00|CCD|Gaia2
+# observatory
+! mpcCode W84
+! name Cerro Tololo - Blanco + DECam
+# submitter
+! name J. Moeyens
+! institution B612 Asteroid Institute
+# observers
+! name D. E. Survey
+# measurers
+! name J. Moeyens
+! name M. Juric
+! name S. Nelson
+! name A. Koumjian
+! name K. Kiker
+! name N. Tellis
+! name D. Veronese-Milin
+! name A. Posner
+! name E. Lu
+! name C. Fiaschetti
+! name D. Remy
+# telescope
+! name Blanco 4m
+! design Reflector
+! aperture 4.0
+! detector CCD
+# software
+! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
+# fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
+# comment
+! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
+! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
+! line using the institute's ADAM::THOR discovery service running on Google Cloud.
+permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|remarks
+3000|a1234b|obs01|2024-05-04T00:00:00.000Z|240.00000000|-15.00000000|0.9659|1.0000|20.00|r|W84|CCD|Gaia2|This is a dummy observation
+3000|a1234b|obs02|2024-05-04T02:24:00.000Z|240.05000000|-15.05000000|0.9657|1.0000|20.30|g|W84|CCD|Gaia2|This is another dummy observation
+"""  # noqa: E501
+
+    actual = ADES_to_string(ades_observations, ades_obscontext)
+    assert desired == actual
+
+    desired = """# version=2022
+# observatory
+! mpcCode 695
+! name Kitt Peak National Observatory - Mayall + Mosaic3
+# submitter
+! name J. Moeyens
+! institution B612 Asteroid Institute
+# observers
+! name M. L. Survey
+# measurers
+! name J. Moeyens
+! name M. Juric
+! name S. Nelson
+! name A. Koumjian
+! name K. Kiker
+! name N. Tellis
+! name D. Veronese-Milin
+! name A. Posner
+! name E. Lu
+! name C. Fiaschetti
+! name D. Remy
+# telescope
+! name Mayall 4m
+! design Reflector
+! aperture 4.0
+! detector CCD
+# software
+! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
+# fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
+# comment
+! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
+! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
+! line using the institute's ADAM::THOR discovery service running on Google Cloud.
+permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
+3001|a2345b|obs04|2024-05-05T04:48:00.0Z|15.050000|10.050000|21.4|r|695|CCD|Gaia2|This is the fourth dummy observation
+# observatory
+! mpcCode V00
+! name Kitt Peak National Observatory - Bok + 90Prime
+# submitter
+! name J. Moeyens
+! institution B612 Asteroid Institute
+# observers
+! name B. A. S. Survey
+# measurers
+! name J. Moeyens
+! name M. Juric
+! name S. Nelson
+! name A. Koumjian
+! name K. Kiker
+! name N. Tellis
+! name D. Veronese-Milin
+! name A. Posner
+! name E. Lu
+! name C. Fiaschetti
+! name D. Remy
+# telescope
+! name Bok 2.3m
+! design Reflector
+! aperture 2.3
+! detector CCD
+# software
+! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
+# fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
+# comment
+! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
+! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
+! line using the institute's ADAM::THOR discovery service running on Google Cloud.
+permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
+3001|a2345b|obs03|2024-05-05T00:00:00.0Z|15.000000|10.000000|V00|CCD|Gaia2
+# observatory
+! mpcCode W84
+! name Cerro Tololo - Blanco + DECam
+# submitter
+! name J. Moeyens
+! institution B612 Asteroid Institute
+# observers
+! name D. E. Survey
+# measurers
+! name J. Moeyens
+! name M. Juric
+! name S. Nelson
+! name A. Koumjian
+! name K. Kiker
+! name N. Tellis
+! name D. Veronese-Milin
+! name A. Posner
+! name E. Lu
+! name C. Fiaschetti
+! name D. Remy
+# telescope
+! name Blanco 4m
+! design Reflector
+! aperture 4.0
+! detector CCD
+# software
+! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
+# fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
+# comment
+! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
+! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
+! line using the institute's ADAM::THOR discovery service running on Google Cloud.
+permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|remarks
+3000|a1234b|obs01|2024-05-04T00:00:00.0Z|240.000000|-15.000000|0.9659|1.0000|20.0|r|W84|CCD|Gaia2|This is a dummy observation
+3000|a1234b|obs02|2024-05-04T02:24:00.0Z|240.050000|-15.050000|0.9657|1.0000|20.3|g|W84|CCD|Gaia2|This is another dummy observation
+"""  # noqa: E501
+
+    actual = ADES_to_string(
+        ades_observations,
+        ades_obscontext,
+        seconds_precision=1,
+        columns_precision={
+            "ra": 6,
+            "dec": 6,
+            "rmsRA": 4,
+            "rmsDec": 4,
+            "mag": 1,
+            "rmsMag": 1,
+        },
     )
-    ades_observations.to_psv(actual, ades_obscontext)
-    yield actual
-    actual.unlink()
-
-
-def test_ADESObservations_to_psv(ades_psv):
-    # Test that we can convert ADESObservations to a PSV file
-    desired = files("adam_core.observations.tests.testdata").joinpath("sample_ades.psv")
-
-    with open(desired, "r") as f:
-        desired_lines = f.readlines()
-
-    with open(ades_psv, "r") as f:
-        actual_lines = f.readlines()
-
-    assert desired_lines == actual_lines
+    assert desired == actual
