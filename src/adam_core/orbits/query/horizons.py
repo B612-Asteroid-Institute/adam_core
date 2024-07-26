@@ -157,10 +157,11 @@ def _get_horizons_ephemeris(
         as seen from the observer location at the given times.
     """
     dfs = []
+    mjd_utc = times.rescale("utc").mjd().to_numpy(zero_copy_only=False)
     for i, obj_id in enumerate(object_ids):
         obj = Horizons(
             id=obj_id,
-            epochs=times.rescale("utc").mjd().to_numpy(zero_copy_only=False),
+            epochs=mjd_utc,
             location=location,
             id_type=id_type,
         )
@@ -171,7 +172,7 @@ def _get_horizons_ephemeris(
             cache=False,
         ).to_pandas()
         ephemeris.insert(0, "orbit_id", f"{i:05d}")
-        ephemeris.insert(2, "mjd_utc", times.utc.mjd)
+        ephemeris.insert(2, "mjd_utc", mjd_utc)
         ephemeris.insert(3, "observatory_code", location)
 
         dfs.append(ephemeris)
