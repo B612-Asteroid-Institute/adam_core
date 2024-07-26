@@ -1368,7 +1368,7 @@ def transform_coordinates(
     # `~adam_core.coordinates.origin.OriginCodes` so we can compare them directly.
     # If its not an OriginCodes enum then origin_out will be an array of strings which
     # also can be checked for equality.
-    if type(coords) == representation_out_:
+    if type(coords) is representation_out_:
         if coord_frame == frame_out and np.all(coord_origin == origin_out):
             return coords
 
