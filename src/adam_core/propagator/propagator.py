@@ -94,7 +94,7 @@ class EphemerisMixin:
     """
 
     def _add_light_time(
-        self, 
+        self,
         orbits,
         observers,
         lt_tol: float = 1e-10,
@@ -116,11 +116,13 @@ class EphemerisMixin:
                 iterations += 1
                 if iterations > 3:
                     break
-                observer_position = observer.coordinates.values[0,:3]
+                observer_position = observer.coordinates.values[0, :3]
                 orbit_i = orbit
                 t0 = orbit_i.coordinates.time.mjd()[0].as_py()
 
-                rho = np.linalg.norm(orbit_i.coordinates.values[0,:3] - observer_position)
+                rho = np.linalg.norm(
+                    orbit_i.coordinates.values[0, :3] - observer_position
+                )
 
                 lt = rho / C
 
@@ -142,7 +144,6 @@ class EphemerisMixin:
     def _generate_ephemeris(
         self, orbits: OrbitType, observers: ObserverType, lt_tol: float = 1e-10
     ) -> EphemerisType:
-        
         """
         A generic ephemeris implementation, which can be used or overridden by subclasses.
         """
@@ -153,9 +154,7 @@ class EphemerisMixin:
             ephemeris_total = VariantEphemeris.empty()
 
         for orbit in orbits:
-            propagated_orbits = self.propagate_orbits(
-                orbit, observers.coordinates.time
-            )
+            propagated_orbits = self.propagate_orbits(orbit, observers.coordinates.time)
 
             # Transform both the orbits and observers to the barycenter if they are not already.
             propagated_orbits_barycentric = propagated_orbits.set_column(
