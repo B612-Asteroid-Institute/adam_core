@@ -95,7 +95,9 @@ class Origin(qv.Table):
         OriginCodes
             Origin codes as an `~adam_core.coordinates.origin.OriginCodes` object.
         """
-        assert len(self.code.unique()) == 1, "Only one origin code can be converted at a time."
+        assert (
+            len(self.code.unique()) == 1
+        ), "Only one origin code can be converted at a time."
         return OriginCodes[self.code.unique()[0].as_py()]
 
     def __eq__(self, other: object) -> np.ndarray:

@@ -94,18 +94,18 @@ class EphemerisMixin:
     """
 
     def _add_light_time(
-            self,
-            orbits,
-            observers,
-            lt_tol: float = 1e-12,
-            max_iter: int = 10,
-        ):
+        self,
+        orbits,
+        observers,
+        lt_tol: float = 1e-12,
+        max_iter: int = 10,
+    ):
         orbits_aberrated = orbits.empty()
         lts = np.zeros(len(orbits))
         for i, (orbit, observer) in enumerate(zip(orbits, observers)):
             # Set the running variables
             lt_prev = 0
-            dlt = float('inf')
+            dlt = float("inf")
             orbit_i = orbit
             lt = 0
 
@@ -116,7 +116,6 @@ class EphemerisMixin:
             # Calculate the orbit's current epoch (the epoch from which
             # the light travel time will be calculated)
             t0 = orbit_i.coordinates.time.rescale("tdb").mjd()[0].as_py()
-
 
             iterations = 0
             while dlt > lt_tol and iterations < max_iter:
@@ -132,7 +131,9 @@ class EphemerisMixin:
                 dlt = np.abs(lt - lt_prev)
 
                 # Calculate the new epoch and propagate the initial orbit to that epoch
-                orbit_i = self.propagate_orbits(orbit, Timestamp.from_mjd([t0 - lt], scale="tdb"))
+                orbit_i = self.propagate_orbits(
+                    orbit, Timestamp.from_mjd([t0 - lt], scale="tdb")
+                )
 
                 # Update the previous light travel time to this iteration's light travel time
                 lt_prev = lt
@@ -141,8 +142,6 @@ class EphemerisMixin:
             lts[i] = lt
 
         return orbits_aberrated, lts
-
-
 
     def _generate_ephemeris(
         self, orbits: OrbitType, observers: ObserverType, lt_tol: float = 1e-10
@@ -214,7 +213,7 @@ class EphemerisMixin:
             spherical_coordinates = SphericalCoordinates.from_cartesian(
                 topocentric_coordinates
             )
-            
+
             light_time = np.array(light_time)
 
             spherical_coordinates = transform_coordinates(
