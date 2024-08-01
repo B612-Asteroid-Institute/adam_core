@@ -392,8 +392,10 @@ class Timestamp(qv.Table):
         nano_part = pc.subtract(fractional_days, day_part)
 
         days = pc.cast(day_part, pa.int64())
-        nanos = pc.cast(pc.multiply(nano_part, 86400 * 1e9), pa.int64())
-
+        nanos = pc.cast(
+            pc.multiply(nano_part, 86400 * 1e9),
+            options=pc.CastOptions(target_type=pa.int64(), allow_float_truncate=True),
+        )
         return self.add_days(days).add_nanos(nanos)
 
     def difference_scalar(

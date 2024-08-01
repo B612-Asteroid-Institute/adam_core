@@ -6,16 +6,22 @@ import numpy as np
 import numpy.typing as npt
 import quivr as qv
 
-from adam_core.ray_cluster import initialize_use_ray
-
+from ..constants import Constants as c
+from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.origin import Origin, OriginCodes
+from ..coordinates.spherical import SphericalCoordinates
+from ..coordinates.transform import transform_coordinates
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
+from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from .utils import _iterate_chunks
 
 logger = logging.getLogger(__name__)
+
+C = c.C
 
 RAY_INSTALLED = False
 try:
@@ -89,17 +95,162 @@ class EphemerisMixin:
     Subclasses should implement the _generate_ephemeris method.
     """
 
-    @abstractmethod
+    def _add_light_time(
+        self,
+        orbits,
+        observers,
+        lt_tol: float = 1e-12,
+        max_iter: int = 10,
+    ):
+        orbits_aberrated = orbits.empty()
+        lts = np.zeros(len(orbits))
+        for i, (orbit, observer) in enumerate(zip(orbits, observers)):
+            # Set the running variables
+            lt_prev = 0
+            dlt = float("inf")
+            orbit_i = orbit
+            lt = 0
+
+            # Extract the observer's position which remains
+            # constant for all iterations
+            observer_position = observer.coordinates.r
+
+            # Calculate the orbit's current epoch (the epoch from which
+            # the light travel time will be calculated)
+            t0 = orbit_i.coordinates.time.rescale("tdb").mjd()[0].as_py()
+
+            iterations = 0
+            while dlt > lt_tol and iterations < max_iter:
+                iterations += 1
+
+                # Calculate the topocentric distance
+                rho = np.linalg.norm(orbit_i.coordinates.r - observer_position)
+
+                # Calculate the light travel time
+                lt = rho / C
+
+                # Calculate the change in light travel time since the previous iteration
+                dlt = np.abs(lt - lt_prev)
+
+                # Calculate the new epoch and propagate the initial orbit to that epoch
+                orbit_i = self.propagate_orbits(
+                    orbit, Timestamp.from_mjd([t0 - lt], scale="tdb")
+                )
+
+                # Update the previous light travel time to this iteration's light travel time
+                lt_prev = lt
+
+            orbits_aberrated = qv.concatenate([orbits_aberrated, orbit_i])
+            lts[i] = lt
+
+        return orbits_aberrated, lts
+
     def _generate_ephemeris(
-        self, orbits: EphemerisType, observers: ObserverType
+        self, orbits: OrbitType, observers: ObserverType
     ) -> EphemerisType:
         """
-        Generate ephemerides for the given orbits as observed by
-        the observers.
-
-        THIS FUNCTION SHOULD BE DEFINED BY THE USER.
+        A generic ephemeris implementation, which can be used or overridden by subclasses.
         """
-        pass
+
+        if isinstance(orbits, Orbits):
+            ephemeris_total = Ephemeris.empty()
+        elif isinstance(orbits, VariantOrbits):
+            ephemeris_total = VariantEphemeris.empty()
+
+        for orbit in orbits:
+            propagated_orbits = self.propagate_orbits(orbit, observers.coordinates.time)
+
+            # Transform both the orbits and observers to the barycenter if they are not already.
+            propagated_orbits_barycentric = propagated_orbits.set_column(
+                "coordinates",
+                transform_coordinates(
+                    propagated_orbits.coordinates,
+                    CartesianCoordinates,
+                    frame_out="ecliptic",
+                    origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                ),
+            )
+            observers_barycentric = observers.set_column(
+                "coordinates",
+                transform_coordinates(
+                    observers.coordinates,
+                    CartesianCoordinates,
+                    frame_out="ecliptic",
+                    origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                ),
+            )
+            num_orbits = len(propagated_orbits_barycentric.orbit_id.unique())
+
+            observer_codes = np.tile(
+                observers.code.to_numpy(zero_copy_only=False), num_orbits
+            )
+
+            propagated_orbits_aberrated, light_time = self._add_light_time(
+                propagated_orbits_barycentric,
+                observers_barycentric,
+                lt_tol=1e-12,
+            )
+
+            topocentric_state = (
+                propagated_orbits_aberrated.coordinates.values
+                - observers_barycentric.coordinates.values
+            )
+            topocentric_coordinates = CartesianCoordinates.from_kwargs(
+                x=topocentric_state[:, 0],
+                y=topocentric_state[:, 1],
+                z=topocentric_state[:, 2],
+                vx=topocentric_state[:, 3],
+                vy=topocentric_state[:, 4],
+                vz=topocentric_state[:, 5],
+                covariance=None,
+                # The ephemeris times are at the point of the observer,
+                # not the aberrated orbit
+                time=observers.coordinates.time,
+                origin=Origin.from_kwargs(code=observer_codes),
+                frame="ecliptic",
+            )
+
+            spherical_coordinates = SphericalCoordinates.from_cartesian(
+                topocentric_coordinates
+            )
+
+            light_time = np.array(light_time)
+
+            spherical_coordinates = transform_coordinates(
+                spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
+            )
+
+            # Ephemeris are generally compared in UTC, so rescale the time
+            spherical_coordinates = spherical_coordinates.set_column(
+                "time",
+                spherical_coordinates.time.rescale("utc"),
+            )
+
+            if isinstance(orbits, Orbits):
+
+                ephemeris = Ephemeris.from_kwargs(
+                    orbit_id=propagated_orbits_barycentric.orbit_id,
+                    object_id=propagated_orbits_barycentric.object_id,
+                    coordinates=spherical_coordinates,
+                    light_time=light_time,
+                    aberrated_coordinates=propagated_orbits_aberrated.coordinates,
+                )
+
+            elif isinstance(orbits, VariantOrbits):
+                weights = orbits.weights
+                weights_cov = orbits.weights_cov
+
+                ephemeris = VariantEphemeris.from_kwargs(
+                    orbit_id=propagated_orbits_barycentric.orbit_id,
+                    object_id=propagated_orbits_barycentric.object_id,
+                    coordinates=spherical_coordinates,
+                    weights=weights,
+                    weights_cov=weights_cov,
+                )
+
+            ephemeris_total = qv.concatenate([ephemeris_total, ephemeris])
+
+        return ephemeris_total
 
     def generate_ephemeris(
         self,
@@ -261,7 +412,7 @@ class EphemerisMixin:
         )
 
 
-class Propagator(ABC):
+class Propagator(ABC, EphemerisMixin):
     """
     Abstract class for propagating orbits and related functions.
 

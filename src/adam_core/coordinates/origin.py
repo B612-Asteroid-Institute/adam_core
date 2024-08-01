@@ -86,6 +86,20 @@ class OriginGravitationalParameters(float, Enum):
 class Origin(qv.Table):
     code = qv.LargeStringColumn()
 
+    def as_OriginCodes(self) -> OriginCodes:
+        """
+        Convert the origin codes to an `~adam_core.coordinates.origin.OriginCodes` object.
+
+        Returns
+        -------
+        OriginCodes
+            Origin codes as an `~adam_core.coordinates.origin.OriginCodes` object.
+        """
+        assert (
+            len(self.code.unique()) == 1
+        ), "Only one origin code can be converted at a time."
+        return OriginCodes[self.code.unique()[0].as_py()]
+
     def __eq__(self, other: object) -> np.ndarray:
         if isinstance(other, (str, np.ndarray)):
             codes = self.code.to_numpy(zero_copy_only=False)

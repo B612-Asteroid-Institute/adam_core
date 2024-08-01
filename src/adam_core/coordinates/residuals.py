@@ -194,7 +194,7 @@ class Residuals(qv.Table):
             raise TypeError(
                 f"Predicted coordinates must be one of {SUPPORTED_COORDINATES}, not {type(predicted)}."
             )
-        if type(observed) != type(predicted):
+        if type(observed) is not type(predicted):
             raise TypeError(
                 "Observed and predicted coordinates must be the same type, "
                 f"not {type(observed)} and {type(predicted)}."
