@@ -94,52 +94,55 @@ class EphemerisMixin:
     """
 
     def _add_light_time(
-        self,
-        orbits,
-        observers,
-        lt_tol: float = 1e-10,
-    ):
-        """
-        Accounts for light time correction in the ephemeris generation.
-
-        This differs from the _add_light_time method in the aberrations module
-        in that is uses the underlying propagator to propagate the orbits as opposed
-        to the _propagate_2body function.
-        """
+            self,
+            orbits,
+            observers,
+            lt_tol: float = 1e-12,
+            max_iter: int = 10,
+        ):
         orbits_aberrated = orbits.empty()
         lts = np.zeros(len(orbits))
         for i, (orbit, observer) in enumerate(zip(orbits, observers)):
-            lt0 = 0
-            dlt = 1
+            # Set the running variables
+            lt_prev = 0
+            dlt = float('inf')
+            orbit_i = orbit
+            lt = 0
+
+            # Extract the observer's position which remains
+            # constant for all iterations
+            observer_position = observer.coordinates.r
+
+            # Calculate the orbit's current epoch (the epoch from which
+            # the light travel time will be calculated)
+            t0 = orbit_i.coordinates.time.rescale("tdb").mjd()[0].as_py()
+
+
             iterations = 0
-            while dlt > lt_tol:
+            while dlt > lt_tol and iterations < max_iter:
                 iterations += 1
-                if iterations > 3:
-                    break
-                observer_position = observer.coordinates.values[0, :3]
-                orbit_i = orbit
-                t0 = orbit_i.coordinates.time.mjd()[0].as_py()
 
-                rho = np.linalg.norm(
-                    orbit_i.coordinates.values[0, :3] - observer_position
-                )
+                # Calculate the topocentric distance
+                rho = np.linalg.norm(orbit_i.coordinates.r - observer_position)
 
+                # Calculate the light travel time
                 lt = rho / C
 
-                dlt = np.abs(lt - lt0)
+                # Calculate the change in light travel time since the previous iteration
+                dlt = np.abs(lt - lt_prev)
 
-                t1 = t0 - lt
-                t1 = Timestamp.from_mjd([t1], scale="tdb")
-                orbit_propagated = self.propagate_orbits(orbit, t1)
+                # Calculate the new epoch and propagate the initial orbit to that epoch
+                orbit_i = self.propagate_orbits(orbit, Timestamp.from_mjd([t0 - lt], scale="tdb"))
 
-                orbit_i = orbit_propagated
-                t0 = t1
-                lt0 = lt
-                dlt = dlt
-            orbits_aberrated = qv.concatenate([orbits_aberrated, orbit])
+                # Update the previous light travel time to this iteration's light travel time
+                lt_prev = lt
+
+            orbits_aberrated = qv.concatenate([orbits_aberrated, orbit_i])
             lts[i] = lt
 
         return orbits_aberrated, lts
+
+
 
     def _generate_ephemeris(
         self, orbits: OrbitType, observers: ObserverType, lt_tol: float = 1e-10
@@ -175,7 +178,6 @@ class EphemerisMixin:
                     origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
                 ),
             )
-
             num_orbits = len(propagated_orbits_barycentric.orbit_id.unique())
 
             observer_codes = np.tile(
@@ -202,7 +204,9 @@ class EphemerisMixin:
                 vz=propagated_orbits_aberrated.coordinates.values[:, 5]
                 - observers_barycentric.coordinates.values[:, 5],
                 covariance=None,
-                time=propagated_orbits_aberrated.coordinates.time,
+                # The ephemeris times are at the point of the observer,
+                # not the aberated orbit
+                time=observers.coordinates.time,
                 origin=Origin.from_kwargs(code=observer_codes),
                 frame="ecliptic",
             )
@@ -210,6 +214,7 @@ class EphemerisMixin:
             spherical_coordinates = SphericalCoordinates.from_cartesian(
                 topocentric_coordinates
             )
+            
             light_time = np.array(light_time)
 
             spherical_coordinates = transform_coordinates(
@@ -379,7 +384,7 @@ class EphemerisMixin:
                 ephemeris_variants = None
 
         else:
-            ephemeris = self._generate_ephemeris(orbits, observers)
+            ephemeris = self._generate_ephemeris(orbits, observers, lt_tol=1e-20)
 
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
