@@ -226,9 +226,6 @@ def query_horizons_ephemeris(
         ignore_index=True,
     )
 
-    # Horizons produces UTC but we use tdb everywhere
-    epochs = Timestamp.from_jd(pa.array(dfs["datetime_jd"]), scale="utc").rescale("tdb")
-
     ephemeris = Ephemeris.from_kwargs(
         orbit_id=dfs["orbit_id"],
         object_id=dfs["targetname"],
@@ -236,7 +233,7 @@ def query_horizons_ephemeris(
         light_time=dfs["lighttime"] / 1440,
         alpha=dfs["alpha"],
         coordinates=SphericalCoordinates.from_kwargs(
-            time=epochs,
+            time=Timestamp.from_jd(pa.array(dfs["datetime_jd"]), scale="utc"),
             lon=dfs["RA"],
             lat=dfs["DEC"],
             origin=Origin.from_kwargs(code=dfs["observatory_code"]),

@@ -220,6 +220,12 @@ class EphemerisMixin:
                 spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
             )
 
+            # Ephemeris are generally compared in UTC, so rescale the time
+            spherical_coordinates = spherical_coordinates.set_column(
+                "time",
+                spherical_coordinates.time.rescale("utc"),
+            )
+
             if isinstance(orbits, Orbits):
 
                 ephemeris = Ephemeris.from_kwargs(
