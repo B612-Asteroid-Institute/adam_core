@@ -11,8 +11,6 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-
-C = c.C
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
@@ -22,6 +20,8 @@ from ..time import Timestamp
 from .utils import _iterate_chunks
 
 logger = logging.getLogger(__name__)
+
+C = c.C
 
 RAY_INSTALLED = False
 try:
