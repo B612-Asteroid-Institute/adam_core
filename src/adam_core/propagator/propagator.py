@@ -191,22 +191,17 @@ class EphemerisMixin:
                 lt_tol=lt_tol,
             )
 
+            topocentric_state = propagated_orbits_aberrated.coordinates.values - observers_barycentric.coordinates.values
             topocentric_coordinates = CartesianCoordinates.from_kwargs(
-                x=propagated_orbits_aberrated.coordinates.values[:, 0]
-                - observers_barycentric.coordinates.values[:, 0],
-                y=propagated_orbits_aberrated.coordinates.values[:, 1]
-                - observers_barycentric.coordinates.values[:, 1],
-                z=propagated_orbits_aberrated.coordinates.values[:, 2]
-                - observers_barycentric.coordinates.values[:, 2],
-                vx=propagated_orbits_aberrated.coordinates.values[:, 3]
-                - observers_barycentric.coordinates.values[:, 3],
-                vy=propagated_orbits_aberrated.coordinates.values[:, 4]
-                - observers_barycentric.coordinates.values[:, 4],
-                vz=propagated_orbits_aberrated.coordinates.values[:, 5]
-                - observers_barycentric.coordinates.values[:, 5],
+                x=topocentric_state[:, 0],
+                y=topocentric_state[:, 1],
+                z=topocentric_state[:, 2],
+                vx=topocentric_state[:, 3],
+                vy=topocentric_state[:, 4],
+                vz=topocentric_state[:, 5],
                 covariance=None,
                 # The ephemeris times are at the point of the observer,
-                # not the aberated orbit
+                # not the aberrated orbit
                 time=observers.coordinates.time,
                 origin=Origin.from_kwargs(code=observer_codes),
                 frame="ecliptic",
