@@ -10,7 +10,9 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from ..dynamics.aberrations import C
+from ..constants import Constants as c
+
+C = c.C
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
