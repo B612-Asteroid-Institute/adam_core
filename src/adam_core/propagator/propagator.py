@@ -6,11 +6,11 @@ import numpy as np
 import numpy.typing as npt
 import quivr as qv
 
+from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from ..constants import Constants as c
 
 C = c.C
 from ..observers.observers import Observers
@@ -146,7 +146,7 @@ class EphemerisMixin:
         return orbits_aberrated, lts
 
     def _generate_ephemeris(
-        self, orbits: OrbitType, observers: ObserverType, lt_tol: float = 1e-10
+        self, orbits: OrbitType, observers: ObserverType
     ) -> EphemerisType:
         """
         A generic ephemeris implementation, which can be used or overridden by subclasses.
@@ -188,10 +188,13 @@ class EphemerisMixin:
             propagated_orbits_aberrated, light_time = self._add_light_time(
                 propagated_orbits_barycentric,
                 observers_barycentric,
-                lt_tol=lt_tol,
+                lt_tol=1e-12,
             )
 
-            topocentric_state = propagated_orbits_aberrated.coordinates.values - observers_barycentric.coordinates.values
+            topocentric_state = (
+                propagated_orbits_aberrated.coordinates.values
+                - observers_barycentric.coordinates.values
+            )
             topocentric_coordinates = CartesianCoordinates.from_kwargs(
                 x=topocentric_state[:, 0],
                 y=topocentric_state[:, 1],
@@ -380,7 +383,7 @@ class EphemerisMixin:
                 ephemeris_variants = None
 
         else:
-            ephemeris = self._generate_ephemeris(orbits, observers, lt_tol=1e-20)
+            ephemeris = self._generate_ephemeris(orbits, observers)
 
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
