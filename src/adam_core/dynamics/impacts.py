@@ -21,13 +21,6 @@ from ..time import Timestamp
 
 logger = logging.getLogger(__name__)
 
-# Test to see that at least one impact-enabled propagator is
-# installed and if not print a warning
-if importlib.util.find_spec("adam_core.propagator.adam_assist") is None:
-    logger.warning(
-        "No impact-enabled propagator installed. Impact calculations will not be possible."
-    )
-
 RAY_INSTALLED = False
 try:
     import ray
