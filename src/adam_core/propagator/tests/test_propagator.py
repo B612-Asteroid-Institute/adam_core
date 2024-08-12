@@ -23,16 +23,16 @@ class MockPropagator(Propagator, EphemerisMixin):
             orbits.coordinates.time = repeated_time
             all_times.append(orbits)
         all_times = qv.concatenate(all_times)
-        
+
         # Artifically change origin to test that it is preserved in the final output
         output = all_times.set_column(
-                "coordinates",
-                transform_coordinates(
-                    all_times.coordinates,
-                    origin_out=OriginCodes["SATURN_BARYCENTER"],
-                    frame_out="equatorial",
-                ),
-            )
+            "coordinates",
+            transform_coordinates(
+                all_times.coordinates,
+                origin_out=OriginCodes["SATURN_BARYCENTER"],
+                frame_out="equatorial",
+            ),
+        )
 
         return output
 
@@ -135,17 +135,27 @@ def test_propagate_different_origins():
             vz=[1, 1],
             time=Timestamp.from_mjd([60000, 60000], scale="tdb"),
             frame="ecliptic",
-            origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER", "EARTH_MOON_BARYCENTER"]),
+            origin=Origin.from_kwargs(
+                code=["SOLAR_SYSTEM_BARYCENTER", "EARTH_MOON_BARYCENTER"]
+            ),
         ),
     )
 
     prop = MockPropagator()
-    propagated_orbits = prop.propagate_orbits(orbits, Timestamp.from_mjd([60001, 60002, 60003], scale="tdb"))
+    propagated_orbits = prop.propagate_orbits(
+        orbits, Timestamp.from_mjd([60001, 60002, 60003], scale="tdb")
+    )
     orbit_one_results = propagated_orbits.select("orbit_id", "1")
     orbit_two_results = propagated_orbits.select("orbit_id", "2")
     # Assert that the origin codes for each set of results is unique
     # and that it matches the original input
     assert len(orbit_one_results.coordinates.origin.code.unique()) == 1
-    assert orbit_one_results.coordinates.origin.code.unique()[0].as_py() == "SOLAR_SYSTEM_BARYCENTER"
+    assert (
+        orbit_one_results.coordinates.origin.code.unique()[0].as_py()
+        == "SOLAR_SYSTEM_BARYCENTER"
+    )
     assert len(orbit_two_results.coordinates.origin.code.unique()) == 1
-    assert orbit_two_results.coordinates.origin.code.unique()[0].as_py() == "EARTH_MOON_BARYCENTER"
+    assert (
+        orbit_two_results.coordinates.origin.code.unique()[0].as_py()
+        == "EARTH_MOON_BARYCENTER"
+    )

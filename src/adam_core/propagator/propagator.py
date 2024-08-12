@@ -481,8 +481,6 @@ class Propagator(ABC, EphemerisMixin):
             Propagated orbits.
         """
 
-
-
         if max_processes is None or max_processes > 1:
             propagated_list: List[Orbits] = []
             variants_list: List[VariantOrbits] = []
