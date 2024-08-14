@@ -584,8 +584,8 @@ class Propagator(ABC, EphemerisMixin):
         unique_origins = pc.unique(orbits.coordinates.origin.code)
         for origin_code in unique_origins:
             origin_orbits = orbits.select("coordinates.origin.code", origin_code)
-            result_origin_orbits = propagated.where(
-                pc.field("orbit_id").isin(origin_orbits.orbit_id)
+            result_origin_orbits = propagated.apply_mask(
+                pc.is_in(propagated.orbit_id, origin_orbits.orbit_id)
             )
             partial_results = result_origin_orbits.set_column(
                 "coordinates",
