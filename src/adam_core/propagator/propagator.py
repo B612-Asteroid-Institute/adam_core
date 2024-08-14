@@ -4,6 +4,7 @@ from typing import List, Literal, Optional, Type, Union
 
 import numpy as np
 import numpy.typing as npt
+import pyarrow.compute as pc
 import quivr as qv
 
 from ..constants import Constants as c
@@ -479,6 +480,7 @@ class Propagator(ABC, EphemerisMixin):
         propagated : `~adam_core.orbits.orbits.Orbits`
             Propagated orbits.
         """
+
         if max_processes is None or max_processes > 1:
             propagated_list: List[Orbits] = []
             variants_list: List[VariantOrbits] = []
@@ -575,6 +577,29 @@ class Propagator(ABC, EphemerisMixin):
         if propagated_variants is not None:
             propagated = propagated_variants.collapse(propagated)
 
-        return propagated.sort_by(
+        # Return the results with the original origin and frame
+        # Preserve the original output origin for the input orbits
+        # by orbit id
+        final_results = None
+        unique_origins = pc.unique(orbits.coordinates.origin.code)
+        for origin_code in unique_origins:
+            origin_orbits = orbits.select("coordinates.origin.code", origin_code)
+            result_origin_orbits = propagated.apply_mask(
+                pc.is_in(propagated.orbit_id, origin_orbits.orbit_id)
+            )
+            partial_results = result_origin_orbits.set_column(
+                "coordinates",
+                transform_coordinates(
+                    result_origin_orbits.coordinates,
+                    origin_out=OriginCodes[origin_code.as_py()],
+                    frame_out=orbits.coordinates.frame,
+                ),
+            )
+            if final_results is None:
+                final_results = partial_results
+            else:
+                final_results = qv.concatenate([final_results, partial_results])
+
+        return final_results.sort_by(
             ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
         )

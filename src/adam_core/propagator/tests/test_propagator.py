@@ -4,7 +4,8 @@ import pytest
 import quivr as qv
 
 from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.origin import Origin
+from ...coordinates.origin import Origin, OriginCodes
+from ...coordinates.transform import transform_coordinates
 from ...observers.observers import Observers
 from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
@@ -21,8 +22,19 @@ class MockPropagator(Propagator, EphemerisMixin):
             repeated_time = qv.concatenate([t] * len(orbits))
             orbits.coordinates.time = repeated_time
             all_times.append(orbits)
+        all_times = qv.concatenate(all_times)
 
-        return qv.concatenate(all_times)
+        # Artifically change origin to test that it is preserved in the final output
+        output = all_times.set_column(
+            "coordinates",
+            transform_coordinates(
+                all_times.coordinates,
+                origin_out=OriginCodes["SATURN_BARYCENTER"],
+                frame_out="equatorial",
+            ),
+        )
+
+        return output
 
     # MockPropagator generated ephemeris by just subtracting the state from
     # the state of the observers
@@ -105,3 +117,45 @@ def test_propagator_multiple_workers_ray():
     have = prop.generate_ephemeris(orbits_ref, observers_ref, max_processes=4)
 
     assert len(have) == len(orbits) * len(times)
+
+
+def test_propagate_different_origins():
+    """
+    Test that we are returning propagated orbits with their original origins
+    """
+    orbits = Orbits.from_kwargs(
+        orbit_id=["1", "2"],
+        object_id=["1", "2"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1, 1],
+            y=[1, 1],
+            z=[1, 1],
+            vx=[1, 1],
+            vy=[1, 1],
+            vz=[1, 1],
+            time=Timestamp.from_mjd([60000, 60000], scale="tdb"),
+            frame="ecliptic",
+            origin=Origin.from_kwargs(
+                code=["SOLAR_SYSTEM_BARYCENTER", "EARTH_MOON_BARYCENTER"]
+            ),
+        ),
+    )
+
+    prop = MockPropagator()
+    propagated_orbits = prop.propagate_orbits(
+        orbits, Timestamp.from_mjd([60001, 60002, 60003], scale="tdb")
+    )
+    orbit_one_results = propagated_orbits.select("orbit_id", "1")
+    orbit_two_results = propagated_orbits.select("orbit_id", "2")
+    # Assert that the origin codes for each set of results is unique
+    # and that it matches the original input
+    assert len(orbit_one_results.coordinates.origin.code.unique()) == 1
+    assert (
+        orbit_one_results.coordinates.origin.code.unique()[0].as_py()
+        == "SOLAR_SYSTEM_BARYCENTER"
+    )
+    assert len(orbit_two_results.coordinates.origin.code.unique()) == 1
+    assert (
+        orbit_two_results.coordinates.origin.code.unique()[0].as_py()
+        == "EARTH_MOON_BARYCENTER"
+    )
