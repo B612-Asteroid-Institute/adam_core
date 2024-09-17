@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import Literal, Optional, Union
 
 import jax.numpy as jnp
@@ -563,7 +564,7 @@ def cartesian_to_keplerian(
     return coords_keplerian
 
 
-@jit
+@partial(jit, static_argnames=("max_iter", "tol"))
 def _keplerian_to_cartesian_p(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
     mu: float,
@@ -699,7 +700,7 @@ _keplerian_to_cartesian_p_vmap = jit(
 )
 
 
-@jit
+@partial(jit, static_argnames=("max_iter", "tol"))
 def _keplerian_to_cartesian_a(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
     mu: float,
@@ -782,7 +783,7 @@ _keplerian_to_cartesian_a_vmap = jit(
 )
 
 
-@jit
+@partial(jit, static_argnames=("max_iter", "tol"))
 def _keplerian_to_cartesian_q(
     coords_keplerian: Union[np.ndarray, jnp.ndarray],
     mu: float,
@@ -1039,7 +1040,7 @@ def cartesian_to_cometary(
     return coords_cometary
 
 
-@jit
+@partial(jit, static_argnames=("max_iter", "tol"))
 def _cometary_to_cartesian(
     coords_cometary: Union[np.ndarray, jnp.ndarray],
     t0: float,

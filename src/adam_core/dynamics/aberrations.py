@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Tuple
 
 import jax.numpy as jnp
@@ -12,7 +13,7 @@ MU = c.MU
 C = c.C
 
 
-@jit
+@partial(jit, static_argnames=("lt_tol", "mu", "tol", "max_iter"))
 def _add_light_time(
     orbit: jnp.ndarray,
     t0: float,
@@ -108,7 +109,7 @@ _add_light_time_vmap = jit(
 )
 
 
-@jit
+@partial(jit, static_argnames=("lt_tol", "mu", "tol", "max_iter"))
 def add_light_time(
     orbits: jnp.ndarray,
     t0: jnp.ndarray,

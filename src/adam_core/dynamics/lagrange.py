@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Tuple
 
 import jax.numpy as jnp
@@ -14,7 +15,7 @@ MU = C.MU
 LAGRANGE_TYPES = Tuple[jnp.float64, jnp.float64, jnp.float64, jnp.float64]
 
 
-@jit
+@partial(jit, static_argnames=("mu", "max_iter", "tol"))
 def calc_lagrange_coefficients(
     r: jnp.ndarray,
     v: jnp.ndarray,

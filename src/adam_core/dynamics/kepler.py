@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Tuple
 
 import jax.numpy as jnp
@@ -194,7 +195,7 @@ def _calc_parabolic_anomalies(nu: float, e: float) -> Tuple[float, float]:
     return D, M
 
 
-@jit
+@partial(jit, static_argnames=("max_iter", "tol"))
 def solve_kepler(e: float, M: float, max_iter: int = 100, tol: float = 1e-15) -> float:
     """
     Solve Kepler's equation for true anomaly (nu) given eccentricity
