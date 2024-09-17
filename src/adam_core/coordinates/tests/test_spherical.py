@@ -11,10 +11,10 @@ def test_SphericalCoordinates_to_unit_sphere():
     # that have NaN values for rho will be set to 1.0 and coordinates
     # that have NaN values for vrho will be set to 0.0.
     coords = SphericalCoordinates.from_kwargs(
-        rho=[1.0, np.NaN, 3.0],
+        rho=[1.0, np.nan, 3.0],
         lon=[30.0, 45.0, 60.0],
         lat=[-60, 0.0, 60.0],
-        vrho=[np.NaN, 0.002, -0.01],
+        vrho=[np.nan, 0.002, -0.01],
         vlon=[0.005, 0.006, 0.007],
         vlat=[-0.0005, 0.0006, -0.007],
         origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),

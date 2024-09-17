@@ -206,7 +206,7 @@ class CartesianCoordinates(qv.Table):
             Rotated Cartesian coordinates and their covariances.
         """
         # Extract coordinate values into a masked array and mask NaNss
-        masked_coords = np.ma.masked_array(self.values, fill_value=np.NaN)
+        masked_coords = np.ma.masked_array(self.values, fill_value=np.nan)
         masked_coords.mask = np.isnan(masked_coords.data)
 
         # Rotate coordinates
@@ -223,7 +223,7 @@ class CartesianCoordinates(qv.Table):
             rotation_matrix @ masked_covariances.filled() @ rotation_matrix.T
         )
         # Reset the mask to the original mask
-        covariances_rotated[masked_covariances.mask] = np.NaN
+        covariances_rotated[masked_covariances.mask] = np.nan
 
         # Check if any covariance elements are near zero, if so set them to zero
         near_zero = len(
@@ -284,7 +284,7 @@ class CartesianCoordinates(qv.Table):
             raise ValueError(f"Expected vector to have shape (6,) or ({N}, 6).")
 
         # Extract coordinate values into a masked array and mask NaNss
-        masked_coords = np.ma.masked_array(self.values, fill_value=np.NaN)
+        masked_coords = np.ma.masked_array(self.values, fill_value=np.nan)
         masked_coords.mask = np.isnan(masked_coords.data)
 
         # Translate coordinates
