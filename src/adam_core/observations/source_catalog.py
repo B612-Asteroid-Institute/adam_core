@@ -119,7 +119,7 @@ class SourceCatalog(qv.Table):
             seeing=self.exposure_seeing,
             depth_5sigma=self.exposure_depth_5sigma,
         )
-        # exposures = exposures.drop_duplicates(subset=["id"])
+        exposures = exposures.drop_duplicates(subset=["id"])
         return exposures
 
     def associations(self) -> Associations:
