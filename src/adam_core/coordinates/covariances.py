@@ -11,7 +11,7 @@ from .jacobian import calc_jacobian
 
 logger = logging.getLogger(__name__)
 
-COVARIANCE_FILL_VALUE = np.NaN
+COVARIANCE_FILL_VALUE = np.nan
 
 
 def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:

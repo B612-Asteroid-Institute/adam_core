@@ -143,8 +143,8 @@ def test_batch_coords_and_covariances_single_batch_missing_values():
     # Single batch, one dimension has no values
     coords = np.array(
         [
-            [1.0, np.NaN, 3.0],
-            [2.0, np.NaN, 4.0],
+            [1.0, np.nan, 3.0],
+            [2.0, np.nan, 4.0],
         ]
     )
     covariances = np.array(
@@ -178,8 +178,8 @@ def test_batch_coords_and_covariances_single_batch_missing_values():
     # Single batch, two dimensions have no values
     coords = np.array(
         [
-            [np.NaN, np.NaN, 3.0],
-            [np.NaN, np.NaN, 4.0],
+            [np.nan, np.nan, 3.0],
+            [np.nan, np.nan, 4.0],
         ]
     )
     covariances = np.array(
@@ -212,8 +212,8 @@ def test_batch_coords_and_covariances_multiple_batches():
     # Multiple batches, different rows have different missing values
     coords = np.array(
         [
-            [1.0, np.NaN, 3.0],
-            [np.NaN, 3.0, 4.0],
+            [1.0, np.nan, 3.0],
+            [np.nan, 3.0, 4.0],
         ]
     )
     covariances = np.array(

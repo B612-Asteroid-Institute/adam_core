@@ -121,13 +121,13 @@ def test_CoordinateCovariances_to_from_matrix():
     covariances = [None, np.ones((6, 6)).flatten()]
     cov = CoordinateCovariances.from_kwargs(values=covariances)
     cov_expected = np.ones((2, 6, 6))
-    cov_expected[0, :, :] = np.NaN
+    cov_expected[0, :, :] = np.nan
     np.testing.assert_equal(cov.to_matrix(), cov_expected)
 
     # Test when covariances are only None
     covariances = [None, None]
     cov = CoordinateCovariances.from_kwargs(values=covariances)
-    cov_expected = np.full((2, 6, 6), np.NaN)
+    cov_expected = np.full((2, 6, 6), np.nan)
     np.testing.assert_equal(cov.to_matrix(), cov_expected)
 
 
