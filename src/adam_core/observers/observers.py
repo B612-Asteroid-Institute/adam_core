@@ -2,6 +2,7 @@ import warnings
 from typing import Union
 
 import pandas as pd
+import pyarrow as pa
 import quivr as qv
 from mpc_obscodes import mpc_obscodes
 from typing_extensions import Self
@@ -51,6 +52,28 @@ OBSERVATORY_CODES = {
 class Observers(qv.Table):
     code = qv.LargeStringColumn(nullable=False)
     coordinates = CartesianCoordinates.as_column()
+
+    @classmethod
+    def from_codes(cls, codes: pa.Array, times: Timestamp) -> Self:
+        """
+        Create an Observers table from a list of codes and times. The codes and times
+        do not need to be unique. The observer state will be calculated for each time
+        and correctly matched to the input times and replicated for duplicate times.
+
+        Parameters
+        ----------
+        codes : pa.Array (N)
+            MPC observatory codes for which to find the states.
+        times : Timestamp (N)
+            Epochs for which to find the observatory locations.
+
+        Returns
+        -------
+        observers : `~adam_core.observers.observers.Observers` (N)
+            The observer and its state at each time.
+        """
+        assert len(codes) == len(times)
+        raise NotImplementedError
 
     @classmethod
     def from_code(cls, code: Union[str, OriginCodes], times: Timestamp) -> Self:

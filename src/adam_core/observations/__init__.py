@@ -13,9 +13,13 @@ from .ades import (
 from .associations import Associations
 from .detections import PointSourceDetections
 from .exposures import Exposures
+from .photometry import Photometry
+from .source_catalog import SourceCatalog
 
 __all__ = [
     "Associations",
     "Exposures",
     "PointSourceDetections",
+    "Photometry",
+    "SourceCatalog",
 ]

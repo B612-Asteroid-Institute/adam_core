@@ -21,14 +21,8 @@ class PointSourceDetections(qv.Table):
     """
 
     id = qv.LargeStringColumn()
-
     exposure_id = qv.LargeStringColumn(nullable=True)
-
-    # Some, but not all, point source data may include times for
-    # individual observations within an exposure.
-    time = Timestamp.as_column(nullable=True)
-
-    # Should this be a SphericalCoordinates instead?
+    time = Timestamp.as_column()
 
     ra = qv.Float64Column(validator=and_(ge(0), le(360)))
     ra_sigma = qv.Float64Column(nullable=True)
@@ -36,7 +30,7 @@ class PointSourceDetections(qv.Table):
     dec = qv.Float64Column(validator=and_(ge(-90), le(90)))
     dec_sigma = qv.Float64Column(nullable=True)
 
-    mag = qv.Float64Column(validator=and_(ge(-10), le(30)))
+    mag = qv.Float64Column(nullable=True, validator=and_(ge(-10), le(30)))
     mag_sigma = qv.Float64Column(nullable=True)
 
     def group_by_exposure(self) -> Iterator["PointSourceDetections"]:

@@ -20,9 +20,10 @@ class Exposures(qv.Table):
     id = qv.LargeStringColumn()
     start_time = Timestamp.as_column()
     duration = qv.Float64Column(validator=and_(ge(0), le(3600)))
-    filter = qv.DictionaryColumn(index_type=pa.int32(), value_type=pa.string())
-
+    filter = qv.LargeStringColumn()
     observatory_code = qv.LargeStringColumn()
+    seeing = qv.Float64Column(nullable=True)
+    depth_5sigma = qv.Float64Column(nullable=True)
 
     def group_by_observatory_code(self) -> Iterator[tuple[str, Exposures]]:
         """
