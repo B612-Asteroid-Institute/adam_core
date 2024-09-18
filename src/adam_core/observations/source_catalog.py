@@ -1,4 +1,6 @@
+import healpy as hp
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
@@ -225,3 +227,28 @@ class SourceCatalog(qv.Table):
                 self.observatory_code,
                 self.time,
             )
+
+    def healpixels(self, nside: int = 16, nest: bool = True) -> npt.NDArray[np.int64]:
+        """
+        Return the healpixels for the source catalog.
+
+        Parameters
+        ----------
+        nside : int
+            The nside parameter for the healpix grid.
+        nest : bool
+            If True, the healpix grid is in the nested format.
+            If False, the healpix grid is in the ring format.
+
+        Returns
+        -------
+        healpixels : np.ndarray
+            The healpixels for the source catalog.
+        """
+        return hp.ang2pix(
+            nside,
+            self.ra.to_numpy(zero_copy_only=False),
+            self.dec.to_numpy(zero_copy_only=False),
+            lonlat=True,
+            nest=nest,
+        )

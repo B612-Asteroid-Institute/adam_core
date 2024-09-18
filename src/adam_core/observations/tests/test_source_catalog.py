@@ -224,3 +224,14 @@ def test_SourceCatalog_observers(source_catalog: SourceCatalog) -> None:
         pc.equal(observers_actual.code, ["X05", "X05", "I41", "I41", "X05", "I41"])
     ).as_py()
 
+
+def test_SourceCatalog_healpixels(source_catalog: SourceCatalog) -> None:
+    # Test the healpixels method of the SourceCatalog class
+    # returns the healpixels for each observation
+    healpixels_actual = source_catalog.healpixels(nside=16)
+    healpixels_expected = np.array([1087, 1087, 1085, 1085, 1085, 1079])
+    np.testing.assert_array_equal(healpixels_actual, healpixels_expected)
+
+    healpixels_actual = source_catalog.healpixels(nside=2)
+    healpixels_expected = np.array([16, 16, 16, 16, 16, 16])
+    np.testing.assert_array_equal(healpixels_actual, healpixels_expected)
