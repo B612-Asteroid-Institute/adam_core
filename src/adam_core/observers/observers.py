@@ -1,7 +1,11 @@
 import warnings
 from typing import Union
 
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 import quivr as qv
 from mpc_obscodes import mpc_obscodes
 from typing_extensions import Self
@@ -51,6 +55,64 @@ OBSERVATORY_CODES = {
 class Observers(qv.Table):
     code = qv.LargeStringColumn(nullable=False)
     coordinates = CartesianCoordinates.as_column()
+
+    @classmethod
+    def from_codes(
+        cls, codes: Union[list, npt.NDArray[np.str_], pa.Array], times: Timestamp
+    ) -> Self:
+        """
+        Create an Observers table from a list of codes and times. The codes and times
+        do not need to be unique and are assumed to belong to each other in an element-wise fashion.
+        The observer state will be calculated  correctly matched to the input times and
+        replicated for duplicate times.
+
+        Parameters
+        ----------
+        codes : Union[list, npt.NDArray[np.str], pa.Array] (N)
+            MPC observatory codes for which to find the states.
+        times : Timestamp (N)
+            Epochs for which to find the observatory locations.
+
+        Returns
+        -------
+        observers : `~adam_core.observers.observers.Observers` (N)
+            The observer and its state at each time.
+        """
+        if len(codes) != len(times):
+            raise ValueError("codes and times must have the same length.")
+
+        if not isinstance(codes, pa.Array):
+            codes = pa.array(codes, type=pa.large_string())
+
+        class IndexedObservers(qv.Table):
+            index = qv.UInt64Column()
+            observers = Observers.as_column()
+
+        indexed_observers = IndexedObservers.empty()
+
+        # Loop through each unique code and calculate the observer's
+        # state for each time (these can be non-unique as cls.from_code
+        # will handle this)
+        for code in pc.unique(codes):
+
+            indices = pc.indices_nonzero(pc.equal(codes, code))
+            times_code = times.take(indices)
+
+            observers_i = cls.from_code(
+                code.as_py(),
+                times_code,
+            )
+
+            indexed_observers_i = IndexedObservers.from_kwargs(
+                index=indices,
+                observers=observers_i,
+            )
+
+            indexed_observers = qv.concatenate([indexed_observers, indexed_observers_i])
+            if indexed_observers.fragmented():
+                indexed_observers = qv.defragment(indexed_observers)
+
+        return indexed_observers.sort_by("index").observers
 
     @classmethod
     def from_code(cls, code: Union[str, OriginCodes], times: Timestamp) -> Self:
