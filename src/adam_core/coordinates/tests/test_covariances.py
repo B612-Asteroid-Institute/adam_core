@@ -46,7 +46,6 @@ def test_sample_covariance_sigma_points():
 
 
 def test_make_positive_semidefinite():
-    # make a 6x6 matrix that is not positive semidefinite
     non_psd_matrix = np.array(
         [
             [1e-10, 0, 0, 0, 0, 0],
@@ -60,7 +59,6 @@ def test_make_positive_semidefinite():
 
     psd_matrix = make_positive_semidefinite(non_psd_matrix, 1e-15)
 
-    # check that the matrix is now positive semidefinite
     assert np.all(np.linalg.eigvals(psd_matrix) >= 0)
 
 
