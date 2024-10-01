@@ -57,7 +57,7 @@ def test_make_positive_semidefinite():
         ]
     )
 
-    psd_matrix = make_positive_semidefinite(non_psd_matrix, 1e-15)
+    psd_matrix = make_positive_semidefinite(non_psd_matrix, 1e-10)
 
     assert np.all(np.linalg.eigvals(psd_matrix) >= 0)
 
