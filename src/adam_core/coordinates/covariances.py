@@ -179,11 +179,37 @@ class CoordinateCovariances(qv.Table):
         return np.all(np.isnan(self.to_matrix()))
 
 
+def make_positive_semidefinite(cov: np.ndarray, tol: float = 1e-15) -> np.ndarray:
+    """
+    Adjust a covariance matrix that is non positive semidefinite
+    within a given tolerance, by flipping the sign of the negative
+    eigenvalues.
+
+    Parameters
+    ----------
+    cov : `~numpy.ndarray` (D, D)
+        Covariance matrix to adjust.
+    tol : float, optional
+        Tolerance for eigenvalues close to zero.
+
+    Returns
+    -------
+    cov_psd : `~numpy.ndarray` (D, D)
+        Positive semidefinite covariance matrix.
+    """
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
+    mask = (eigenvalues < 0) & (np.abs(eigenvalues) < tol)
+    eigenvalues[mask] = -eigenvalues[mask]
+    cov_psd = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
+    return cov_psd
+
+
 def sample_covariance_random(
     mean: np.ndarray,
     cov: np.ndarray,
     num_samples: int = 10000,
     seed: Optional[int] = None,
+    tol: Optional[float] = 1e-15,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sample a multivariate Gaussian distribution with given
@@ -211,7 +237,25 @@ def sample_covariance_random(
         Weights of the samples.
     W_cov: `~numpy.ndarray` (num_samples)
         Weights of the samples to reconstruct covariance matrix.
+
+    Raises
+    ------
+    ValueError : If the covariance matrix is not positive semidefinite, within the given tolerance.
+
     """
+    #check in non positive semi definite
+    print("in sample_covariance_random now")
+    print("cov:", cov)
+    print("eigenvalues:", np.linalg.eigvals(cov))
+    print(np.linalg.eigvals(cov))
+    if np.any(np.linalg.eigvals(cov) < 0):
+        if np.any(np.linalg.eigvals(cov) < -1*tol):
+            raise ValueError(f"Covariance matrix is not positive semidefinite, below the tolerance of: {tol}")
+        else:
+            print("Covariance matrix is not positive semidefinite, but within tolerance, adjusting...")
+            logger.warning("Covariance matrix is not positive semidefinite, but within tolerance, adjusting...")
+            cov = make_positive_semidefinite(cov)
+            print("new cov:", cov)
     normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True, seed=seed)
     samples = normal.rvs(num_samples)
     W = np.full(num_samples, 1 / num_samples)
