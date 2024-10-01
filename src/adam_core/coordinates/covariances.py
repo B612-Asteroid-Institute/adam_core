@@ -243,17 +243,23 @@ def sample_covariance_random(
     ValueError : If the covariance matrix is not positive semidefinite, within the given tolerance.
 
     """
-    #check in non positive semi definite
+    # check in non positive semi definite
     print("in sample_covariance_random now")
     print("cov:", cov)
     print("eigenvalues:", np.linalg.eigvals(cov))
     print(np.linalg.eigvals(cov))
     if np.any(np.linalg.eigvals(cov) < 0):
-        if np.any(np.linalg.eigvals(cov) < -1*tol):
-            raise ValueError(f"Covariance matrix is not positive semidefinite, below the tolerance of: {tol}")
+        if np.any(np.linalg.eigvals(cov) < -1 * tol):
+            raise ValueError(
+                f"Covariance matrix is not positive semidefinite, below the tolerance of: {tol}"
+            )
         else:
-            print("Covariance matrix is not positive semidefinite, but within tolerance, adjusting...")
-            logger.warning("Covariance matrix is not positive semidefinite, but within tolerance, adjusting...")
+            print(
+                "Covariance matrix is not positive semidefinite, but within tolerance, adjusting..."
+            )
+            logger.warning(
+                "Covariance matrix is not positive semidefinite, but within tolerance, adjusting..."
+            )
             cov = make_positive_semidefinite(cov)
             print("new cov:", cov)
     normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True, seed=seed)

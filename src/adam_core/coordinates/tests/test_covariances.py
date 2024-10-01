@@ -4,11 +4,11 @@ import pytest
 from ...utils.helpers.orbits import make_real_orbits
 from ..covariances import (
     CoordinateCovariances,
+    make_positive_semidefinite,
     sample_covariance_random,
     sample_covariance_sigma_points,
     weighted_covariance,
     weighted_mean,
-    make_positive_semidefinite,
 )
 
 
@@ -46,23 +46,22 @@ def test_sample_covariance_sigma_points():
 
 
 def test_make_positive_semidefinite():
-    #make a 6x6 matrix that is not positive semidefinite
+    # make a 6x6 matrix that is not positive semidefinite
     non_psd_matrix = np.array(
         [
-            [ 1e-10, 0, 0, 0, 0, 0],
-            [ 0, -1e-11, 0, 0, 0, 0],
-            [ 0, 0, -5e-12, 0, 0, 0],
-            [ 0, 0, 0, 1, 0, 0],
-            [ 0, 0, 0, 0, 1.5, 0],
-            [ 0, 0, 0, 0, 0, 2]
+            [1e-10, 0, 0, 0, 0, 0],
+            [0, -1e-11, 0, 0, 0, 0],
+            [0, 0, -5e-12, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 1.5, 0],
+            [0, 0, 0, 0, 0, 2],
         ]
     )
 
     psd_matrix = make_positive_semidefinite(non_psd_matrix, 1e-15)
 
-    #check that the matrix is now positive semidefinite
+    # check that the matrix is now positive semidefinite
     assert np.all(np.linalg.eigvals(psd_matrix) >= 0)
-
 
 
 def test_sample_covariance_random():
