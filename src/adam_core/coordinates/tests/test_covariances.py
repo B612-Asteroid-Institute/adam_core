@@ -61,9 +61,24 @@ def test_make_positive_semidefinite():
 
     assert np.all(np.linalg.eigvals(psd_matrix) >= 0)
 
+    # Case where eigenvalues exceed the tolerance and should not be flipped
+    non_psd_matrix_fail = np.array(
+        [
+            [1e-8, 0, 0, 0, 0, 0],
+            [0, -1e-5, 0, 0, 0, 0],
+            [0, 0, -5e-12, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 1.5, 0],
+            [0, 0, 0, 0, 0, 2],
+        ]
+    )
+
+    with pytest.raises(ValueError, match=r"Covariance matrix is not positive semidefinite, above the tolerance of:"):
+        make_positive_semidefinite(non_psd_matrix_fail, semidef_tol=1e-10)
+
 
 def test_sample_covariance_random():
-    # Get a sample of real orbits
+    # Get a sample of real orbits and test that random sampling
     # allows the state vector and its covariance to be reconstructed
     orbits = make_real_orbits()
 

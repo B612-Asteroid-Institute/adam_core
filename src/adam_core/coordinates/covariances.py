@@ -198,6 +198,11 @@ def make_positive_semidefinite(cov: np.ndarray, semidef_tol: float = 1e-15) -> n
         Positive semidefinite covariance matrix.
     """
     eigenvalues, eigenvectors = np.linalg.eigh(cov)
+    #if any eigenvalues are above the tolerance, throw an error
+    if np.any(np.abs(eigenvalues) > semidef_tol):
+        raise ValueError(
+            f"Covariance matrix is not positive semidefinite, above the tolerance of: {semidef_tol}"
+        )
     mask = (eigenvalues < 0) & (np.abs(eigenvalues) < semidef_tol)
     eigenvalues[mask] = -eigenvalues[mask]
     cov_psd = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
