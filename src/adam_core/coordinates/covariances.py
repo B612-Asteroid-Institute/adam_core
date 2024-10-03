@@ -179,7 +179,7 @@ class CoordinateCovariances(qv.Table):
         return np.all(np.isnan(self.to_matrix()))
 
 
-def make_positive_semidefinite(cov: np.ndarray, tol: float = 1e-15) -> np.ndarray:
+def make_positive_semidefinite(cov: np.ndarray, semidef_tol: float = 1e-15) -> np.ndarray:
     """
     Adjust a covariance matrix that is non positive semidefinite
     within a given tolerance, by flipping the sign of the negative
@@ -198,7 +198,7 @@ def make_positive_semidefinite(cov: np.ndarray, tol: float = 1e-15) -> np.ndarra
         Positive semidefinite covariance matrix.
     """
     eigenvalues, eigenvectors = np.linalg.eigh(cov)
-    mask = (eigenvalues < 0) & (np.abs(eigenvalues) < tol)
+    mask = (eigenvalues < 0) & (np.abs(eigenvalues) < semidef_tol)
     eigenvalues[mask] = -eigenvalues[mask]
     cov_psd = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
     return cov_psd
@@ -209,7 +209,7 @@ def sample_covariance_random(
     cov: np.ndarray,
     num_samples: int = 10000,
     seed: Optional[int] = None,
-    tol: Optional[float] = 1e-15,
+    semidef_tol: Optional[float] = 1e-15,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sample a multivariate Gaussian distribution with given
@@ -244,9 +244,9 @@ def sample_covariance_random(
 
     """
     if np.any(np.linalg.eigvals(cov) < 0):
-        if np.any(np.linalg.eigvals(cov) < -1 * tol):
+        if np.any(np.linalg.eigvals(cov) < -1 * semidef_tol):
             raise ValueError(
-                f"Covariance matrix is not positive semidefinite, below the tolerance of: {tol}"
+                f"Covariance matrix is not positive semidefinite, below the tolerance of: {semidef_tol}"
             )
         else:
             logger.warning(
