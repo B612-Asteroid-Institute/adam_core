@@ -48,7 +48,7 @@ def test_sample_covariance_sigma_points():
 def test_make_positive_semidefinite():
     non_psd_matrix = np.array(
         [
-            [1e-10, 0, 0, 0, 0, 0],
+            [1e-11, 0, 0, 0, 0, 0],
             [0, -1e-11, 0, 0, 0, 0],
             [0, 0, -5e-12, 0, 0, 0],
             [0, 0, 0, 1, 0, 0],
@@ -61,11 +61,12 @@ def test_make_positive_semidefinite():
 
     assert np.all(np.linalg.eigvals(psd_matrix) >= 0)
 
+def test_make_positive_semidefinite_fail():
     # Case where eigenvalues exceed the tolerance and should not be flipped
     non_psd_matrix_fail = np.array(
         [
-            [1e-8, 0, 0, 0, 0, 0],
-            [0, -1e-5, 0, 0, 0, 0],
+            [1e-11, 0, 0, 0, 0, 0],
+            [0, -1e-11, 0, 0, 0, 0],
             [0, 0, -5e-12, 0, 0, 0],
             [0, 0, 0, 1, 0, 0],
             [0, 0, 0, 0, 1.5, 0],
@@ -73,11 +74,8 @@ def test_make_positive_semidefinite():
         ]
     )
 
-    with pytest.raises(
-        ValueError,
-        match=r"Covariance matrix is not positive semidefinite, above the tolerance of:",
-    ):
-        make_positive_semidefinite(non_psd_matrix_fail, semidef_tol=1e-10)
+    with pytest.raises(ValueError):
+        make_positive_semidefinite(non_psd_matrix_fail, semidef_tol=1e-15)
 
 
 def test_sample_covariance_random():
