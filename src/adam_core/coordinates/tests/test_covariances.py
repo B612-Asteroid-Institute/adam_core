@@ -73,7 +73,10 @@ def test_make_positive_semidefinite():
         ]
     )
 
-    with pytest.raises(ValueError, match=r"Covariance matrix is not positive semidefinite, above the tolerance of:"):
+    with pytest.raises(
+        ValueError,
+        match=r"Covariance matrix is not positive semidefinite, above the tolerance of:",
+    ):
         make_positive_semidefinite(non_psd_matrix_fail, semidef_tol=1e-10)
 
 

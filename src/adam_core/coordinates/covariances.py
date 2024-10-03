@@ -179,11 +179,15 @@ class CoordinateCovariances(qv.Table):
         return np.all(np.isnan(self.to_matrix()))
 
 
-def make_positive_semidefinite(cov: np.ndarray, semidef_tol: float = 1e-15) -> np.ndarray:
+def make_positive_semidefinite(
+    cov: np.ndarray, semidef_tol: float = 1e-15
+) -> np.ndarray:
     """
     Adjust a covariance matrix that is non positive semidefinite
     within a given tolerance, by flipping the sign of the negative
-    eigenvalues.
+    eigenvalues. This can occur when the covariance matrix inludes
+    values that are close to zero, which results in very small
+    negative numbers.
 
     Parameters
     ----------
@@ -198,7 +202,6 @@ def make_positive_semidefinite(cov: np.ndarray, semidef_tol: float = 1e-15) -> n
         Positive semidefinite covariance matrix.
     """
     eigenvalues, eigenvectors = np.linalg.eigh(cov)
-    #if any eigenvalues are above the tolerance, throw an error
     if np.any(np.abs(eigenvalues) > semidef_tol):
         raise ValueError(
             f"Covariance matrix is not positive semidefinite, above the tolerance of: {semidef_tol}"
@@ -233,6 +236,10 @@ def sample_covariance_random(
         Multivariate variance-covariance matrix of the Gaussian distribution.
     num_samples : int, optional
         Number of samples to draw from the distribution.
+    seed : int, optional
+        Seed for the random number generator.
+    semidef_tol : float, optional
+        Tolerance for eigenvalues close to zero.
 
     Returns
     -------
@@ -242,12 +249,14 @@ def sample_covariance_random(
         Weights of the samples.
     W_cov: `~numpy.ndarray` (num_samples)
         Weights of the samples to reconstruct covariance matrix.
-
     Raises
     ------
     ValueError : If the covariance matrix is not positive semidefinite, within the given tolerance.
-
     """
+    # Check if the covariance matrix is non positive semidefinite. This is usually a sign
+    # that something has gone wrong with the covariance. However, when the negative eigenvalues
+    # are very close to zero, they can be flipped to positive without an issue. This is due to
+    # the way the covariance matrix is calculated.
     if np.any(np.linalg.eigvals(cov) < 0):
         if np.any(np.linalg.eigvals(cov) < -1 * semidef_tol):
             raise ValueError(
