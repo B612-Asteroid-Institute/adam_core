@@ -61,6 +61,7 @@ def test_make_positive_semidefinite():
 
     assert np.all(np.linalg.eigvals(psd_matrix) >= 0)
 
+
 def test_make_positive_semidefinite_fail():
     # Case where eigenvalues exceed the tolerance and should not be flipped
     non_psd_matrix_fail = np.array(
