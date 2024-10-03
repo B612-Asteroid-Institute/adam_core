@@ -63,7 +63,8 @@ def test_make_positive_semidefinite():
 
 
 def test_sample_covariance_random():
-    # Get a sample of real orbits    # allows the state vector and its covariance to be reconstructed
+    # Get a sample of real orbits
+    # allows the state vector and its covariance to be reconstructed
     orbits = make_real_orbits()
 
     np.random.seed(0)
