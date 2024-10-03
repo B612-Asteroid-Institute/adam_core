@@ -243,7 +243,6 @@ def sample_covariance_random(
     ValueError : If the covariance matrix is not positive semidefinite, within the given tolerance.
 
     """
-    print(np.linalg.eigvals(cov))
     if np.any(np.linalg.eigvals(cov) < 0):
         if np.any(np.linalg.eigvals(cov) < -1 * tol):
             raise ValueError(
