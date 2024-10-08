@@ -45,6 +45,7 @@ dependencies = [
   "naif-eop-predict",
   "naif-eop-historical",
   "naif-earth-itrf93",
+  "timezonefinder",
 ]
 
 [build-system]
