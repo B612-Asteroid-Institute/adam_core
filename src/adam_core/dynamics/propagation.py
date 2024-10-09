@@ -1,3 +1,5 @@
+from functools import partial
+
 import jax.numpy as jnp
 import numpy as np
 from jax import config, jit, vmap
@@ -15,7 +17,7 @@ from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
 config.update("jax_enable_x64", True)
 
 
-@jit
+@partial(jit, static_argnames=("max_iter", "tol"))
 def _propagate_2body(
     orbit: jnp.ndarray,
     t0: float,

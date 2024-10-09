@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Tuple
 
 import jax.numpy as jnp
@@ -12,7 +13,7 @@ config.update("jax_enable_x64", True)
 MU = c.MU
 
 
-@jit
+@partial(jit, static_argnames=("mu", "max_iter", "tol"))
 def calc_chi(
     r: jnp.ndarray,
     v: jnp.ndarray,
