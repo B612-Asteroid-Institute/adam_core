@@ -8,19 +8,79 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 from mpc_obscodes import mpc_obscodes
+from timezonefinder import TimezoneFinder
 from typing_extensions import Self
 
+from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..time import Timestamp
 
+R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
+R_EARTH_POLAR = c.R_EARTH_POLAR
+E_EARTH = np.sqrt(1 - (R_EARTH_POLAR / R_EARTH_EQUATORIAL) ** 2)
 
-class ObservatoryGeodetics(qv.Table):
+
+class ObservatoryParallaxCoefficients(qv.Table):
     code = qv.LargeStringColumn()
     longitude = qv.Float64Column()
     cos_phi = qv.Float64Column()
     sin_phi = qv.Float64Column()
     name = qv.LargeStringColumn()
+
+    def lon_lat(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        """
+        Return the longitude and latitude of the observatories in degrees.
+
+        This is only valid for Earth-based observatories.
+
+        Returns
+        -------
+        longitude : np.ndarray
+            The longitude of the observatories in degrees. In the range -180 to 180 degrees,
+            with positive values east of the prime meridian.
+        latitude : np.ndarray
+            The latitude of the observatories in degrees. In the range -90 to 90 degrees,
+            with positive values north of the equator.
+        """
+        # Filter out Space-based observatories
+        mask = pc.is_nan(self.longitude).to_numpy(zero_copy_only=False)
+
+        longitude = np.where(
+            mask, np.nan, self.longitude.to_numpy(zero_copy_only=False)
+        )
+        tan_phi_geo = np.where(
+            mask,
+            np.nan,
+            self.sin_phi.to_numpy(zero_copy_only=False)
+            / self.cos_phi.to_numpy(zero_copy_only=False),
+        )
+        latitude_geodetic = np.arctan(tan_phi_geo / (1 - E_EARTH**2))
+
+        # Scale longitude to -180 to 180
+        longitude = np.where(longitude > 180, longitude - 360, longitude)
+
+        return longitude, np.degrees(latitude_geodetic)
+
+    def timezone(self) -> npt.NDArray[np.str_]:
+        """
+        Return the timezone of the observatories in hours.
+
+        Returns
+        -------
+        timezone : np.ndarray
+            The timezone of the observatories in hours.
+        """
+        tf = TimezoneFinder()
+        lon, lat = self.lon_lat()
+        time_zones = np.array(
+            [
+                tz if not np.isnan(lon_i) else "None"
+                for lon_i, lat_i in zip(lon, lat)
+                for tz in [tf.timezone_at(lng=lon_i, lat=lat_i)]
+            ]
+        )
+        return time_zones
 
 
 # Read MPC extended observatory codes file
@@ -39,7 +99,7 @@ with warnings.catch_warnings():
     )
     OBSCODES.reset_index(inplace=True, names=["code"])
 
-OBSERVATORY_GEODETICS = ObservatoryGeodetics.from_kwargs(
+OBSERVATORY_PARALLAX_COEFFICIENTS = ObservatoryParallaxCoefficients.from_kwargs(
     code=OBSCODES["code"].values,
     longitude=OBSCODES["Longitude"].values,
     cos_phi=OBSCODES["cos"].values,
@@ -48,7 +108,7 @@ OBSERVATORY_GEODETICS = ObservatoryGeodetics.from_kwargs(
 )
 
 OBSERVATORY_CODES = {
-    x for x in OBSERVATORY_GEODETICS.code.to_numpy(zero_copy_only=False)
+    x for x in OBSERVATORY_PARALLAX_COEFFICIENTS.code.to_numpy(zero_copy_only=False)
 }
 
 

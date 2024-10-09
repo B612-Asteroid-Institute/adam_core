@@ -14,11 +14,19 @@ S_P_DAY = 86400.0
 
 
 class _Constants:
-    def __init__(self, C=None, MU=None, R_Earth=None, Obliquity=None):
+    def __init__(
+        self,
+        C=None,
+        MU=None,
+        R_EARTH_EQUATORIAL=None,
+        R_EARTH_POLAR=None,
+        OBLIQUITY=None,
+    ):
         self.C = C
         self.MU = MU
-        self.R_EARTH = R_Earth
-        self.OBLIQUITY = Obliquity
+        self.R_EARTH_EQUATORIAL = R_EARTH_EQUATORIAL
+        self.R_EARTH_POLAR = R_EARTH_POLAR
+        self.OBLIQUITY = OBLIQUITY
 
         # Transformation matrix from Equatorial J2000 to Ecliptic J2000
         self.TRANSFORM_EQ2EC = np.array(
@@ -40,8 +48,10 @@ DE44X_CONSTANTS = {
     # Standard Gravitational Parameter -- Sun :  au**3 / d**2 (0.29591220828411956E-03 -- DE441/DE440)
     "MU": 0.29591220828411956e-03,
     # Earth Equatorial Radius: au (6378.1363 km -- DE431/DE430)
-    "R_Earth": 6378.1363 / KM_P_AU,
+    "R_EARTH_EQUATORIAL": 6378.1363 / KM_P_AU,
+    # Earth Polar Radius: au (6356.7523 km)
+    "R_EARTH_POLAR": 6356.7523 / KM_P_AU,
     # Mean Obliquity at J2000: radians (84381.448 arcseconds -- DE431/DE430)
-    "Obliquity": 84381.448 * np.pi / (180.0 * 3600.0),
+    "OBLIQUITY": 84381.448 * np.pi / (180.0 * 3600.0),
 }
 DE44X = Constants = _Constants(**DE44X_CONSTANTS)
