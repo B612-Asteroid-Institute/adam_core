@@ -89,17 +89,17 @@ assist = [
 ]
 
 dev = [
-  "black",
-  "ipython",
-  "isort",
-  "mypy",
-  "pdm",
-  "pytest-benchmark",
-  "pytest-cov",
-  "pytest-doctestplus",
-  "pytest-mock",
-  "pytest",
-  "ruff",
+    "black",
+    "ipython>=8.28.0",
+    "isort",
+    "mypy",
+    "pdm",
+    "pytest-benchmark",
+    "pytest-cov",
+    "pytest-doctestplus",
+    "pytest-mock",
+    "pytest",
+    "ruff",
 ]
 
 [tool.black]
