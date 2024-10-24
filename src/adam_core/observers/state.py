@@ -9,9 +9,9 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
 from ..utils.spice import get_perturber_state, setup_SPICE
-from .observers import OBSERVATORY_CODES, OBSERVATORY_GEODETICS
+from .observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS
 
-R_EARTH = c.R_EARTH
+R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
 OMEGA_EARTH = 2 * np.pi / 0.997269675925926
 Z_AXIS = np.array([0, 0, 1])
 
@@ -77,17 +77,17 @@ def get_observer_state(
     # If it not an origin code then lets get the state vector
     else:
         # Get observatory geodetic information
-        geodetics = OBSERVATORY_GEODETICS.select("code", code)
-        if len(geodetics) == 0:
+        parallax_coeffs = OBSERVATORY_PARALLAX_COEFFICIENTS.select("code", code)
+        if len(parallax_coeffs) == 0:
             raise ValueError(
-                f"Observatory code '{code}' not found in the observatory geodetics table."
+                f"Observatory code '{code}' not found in the observatory parallax coefficients table."
             )
-        geodetics = geodetics.table.to_pylist()[0]
+        parallax_coeffs = parallax_coeffs.table.to_pylist()[0]
 
         # Unpack geodetic information
-        longitude = geodetics["longitude"]
-        cos_phi = geodetics["cos_phi"]
-        sin_phi = geodetics["sin_phi"]
+        longitude = parallax_coeffs["longitude"]
+        cos_phi = parallax_coeffs["cos_phi"]
+        sin_phi = parallax_coeffs["sin_phi"]
 
         if np.any(np.isnan([longitude, cos_phi, sin_phi])):
             err = (
@@ -118,7 +118,7 @@ def get_observer_state(
             )
 
             # Multiply pointing vector with Earth radius to get actual vector
-            o_vec_ITRF93 = np.dot(R_EARTH, o_hat_ITRF93)
+            o_vec_ITRF93 = np.dot(R_EARTH_EQUATORIAL, o_hat_ITRF93)
 
             # Warning! Converting times to ET will incur a loss of precision.
             epochs_et = times.rescale("tdb").et()
@@ -136,7 +136,6 @@ def get_observer_state(
                 # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
                 # True sidereal time using accurate values of TAI-UT1
                 # Polar motion
-
                 rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch.as_py())
 
                 # Find indices of epochs that match the current unique epoch
@@ -148,7 +147,7 @@ def get_observer_state(
                 # Calculate the velocity (thank you numpy broadcasting)
                 rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
                 v_obs[mask] = v_geo[mask] + rotation_matrix @ (
-                    -OMEGA_EARTH * R_EARTH * rotation_direction
+                    -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
                 )
 
         return CartesianCoordinates.from_kwargs(
