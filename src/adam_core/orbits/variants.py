@@ -167,7 +167,7 @@ class VariantOrbits(qv.Table):
             orbits_list.append(orbit_collapsed)
 
         return qv.concatenate(orbits_list)
-    
+
     def collapse_by_object_id(self) -> Orbits:
         """
         Collapse the variant orbits into a mean and covariance matrix.
@@ -189,9 +189,9 @@ class VariantOrbits(qv.Table):
 
             # Calculate the mean
             mean = np.average(
-                object_variants.coordinates.values, axis=0,
+                object_variants.coordinates.values,
+                axis=0,
             )
-
 
             # Calculate the covariance matrix
             covariance = weighted_covariance(
@@ -216,7 +216,7 @@ class VariantOrbits(qv.Table):
                 ),
             )
             orbits = qv.concatenate([orbits, orbit])
-        
+
         return orbits
 
 
