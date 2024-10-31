@@ -73,6 +73,8 @@ fix = "ruff ./src/adam_core --fix"
 typecheck = "mypy --strict ./src/adam_core"
 
 test = "pytest --benchmark-disable {args}"
+test_iod = "pytest --benchmark-disable {args} -k test_iod_function"
+test_od = "pytest --benchmark-disable {args} -k test_od "
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only"
 coverage = "pytest --cov=adam_core --cov-report=xml"

@@ -10,61 +10,63 @@ except ImportError:
 
 import os
 
-from ...coordinates import CartesianCoordinates
-from ...propagator import Propagator
+import pyarrow.compute as pc
+
+from ...coordinates import CoordinateCovariances, SphericalCoordinates
+from ...coordinates.origin import Origin
+from ...observers import Observers
+from ...utils.helpers.observations import make_observations
+from ...utils.helpers.orbits import make_real_orbits
 from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 from ..od import od
 
 
 @pytest.fixture
-def mock_data():
-    # Create mock observations
-    observations = OrbitDeterminationObservations(
-        id=np.array([1, 2, 3]),
-        coordinates=CartesianCoordinates(
-            x=np.array([1.0, 2.0, 3.0]),
-            y=np.array([1.0, 2.0, 3.0]),
-            z=np.array([1.0, 2.0, 3.0]),
-            vx=np.array([0.1, 0.2, 0.3]),
-            vy=np.array([0.1, 0.2, 0.3]),
-            vz=np.array([0.1, 0.2, 0.3]),
-            time=np.array([2451545.0, 2451546.0, 2451547.0]),
-            origin="SSB",
-            frame="ICRF",
-        ),
-        observers=np.array(["Earth", "Earth", "Earth"]),
+def real_data():
+    # Generate real observations and orbits
+    exposures, detections, associations = make_observations()
+    orbits = make_real_orbits(num_orbits=1)
+
+    # Select a specific object ID for testing
+    object_id = orbits.object_id[0].as_py()
+    orbit = orbits.select("object_id", object_id)
+
+    # Filter observations for the selected object ID
+    associations_i = associations.select("object_id", object_id)
+    detections_i = detections.apply_mask(
+        pc.is_in(detections.id, associations_i.detection_id)
     )
 
-    # Create a mock starting orbit
-    starting_orbit = FittedOrbits.from_kwargs(
-        orbit_id=np.array(["test_orbit"]),
-        object_id=np.array(["test_object"]),
-        coordinates=CartesianCoordinates(
-            x=np.array([1.0]),
-            y=np.array([1.0]),
-            z=np.array([1.0]),
-            vx=np.array([0.1]),
-            vy=np.array([0.1]),
-            vz=np.array([0.1]),
-            time=np.array([2451545.0]),
-            origin="SSB",
-            frame="ICRF",
-        ),
-        arc_length=np.array([1.0]),
-        num_obs=np.array([3]),
-        chi2=np.array([0.0]),
-        reduced_chi2=np.array([0.0]),
-        iterations=np.array([0]),
-        success=np.array([False]),
-        status_code=np.array([0]),
+    exposures_i = exposures.apply_mask(pc.is_in(exposures.id, detections_i.exposure_id))
+
+    sigmas = np.full((len(detections_i.ra_sigma), 6), np.nan)
+    sigmas[:, 1] = detections_i.ra_sigma.to_numpy(zero_copy_only=False) / 3600
+    sigmas[:, 2] = detections_i.dec_sigma.to_numpy(zero_copy_only=False) / 3600
+
+    coordinates = SphericalCoordinates.from_kwargs(
+        lon=detections_i.ra.to_numpy(),
+        lat=detections_i.dec.to_numpy(),
+        covariance=CoordinateCovariances.from_sigmas(sigmas),
+        origin=Origin.from_kwargs(code=exposures_i.observatory_code),
+        frame="equatorial",  # Assuming the frame is equatorial
     )
 
-    # Mock the propagator
-    propagator = MagicMock(spec=Propagator)
-    propagator.generate_ephemeris.return_value = observations
+    # Generate Observers from exposures start_time and observatory codes
+    observers = Observers.from_codes(
+        times=exposures_i.start_time, codes=exposures_i.observatory_code
+    )
 
-    return starting_orbit, observations, propagator
+    observations = OrbitDeterminationObservations.from_kwargs(
+        id=detections_i.id.to_numpy(zero_copy_only=False),
+        coordinates=coordinates,
+        observers=observers,
+    )
+
+    # Use the first orbit as the starting orbit
+    starting_orbit = orbit
+
+    return starting_orbit, observations
 
 
 @pytest.mark.skipif(
@@ -72,14 +74,14 @@ def mock_data():
     reason="ASSIST_DATA_DIR environment variable not set",
 )
 @pytest.mark.skipif(ASSISTPropagator is None, reason="ASSISTPropagator not available")
-def test_od(mock_data):
-    starting_orbit, observations, propagator = mock_data
+def test_od(real_data):
+    starting_orbit, observations = real_data
 
     # Run the orbit determination
     od_orbit, od_orbit_members = od(
         orbit=starting_orbit,
         observations=observations,
-        propagator=propagator,
+        propagator=ASSISTPropagator,
         rchi2_threshold=100,
         min_obs=3,
         min_arc_length=1.0,
