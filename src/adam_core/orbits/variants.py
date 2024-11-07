@@ -168,6 +168,57 @@ class VariantOrbits(qv.Table):
 
         return qv.concatenate(orbits_list)
 
+    def collapse_by_object_id(self) -> Orbits:
+        """
+        Collapse the variant orbits into a mean and covariance matrix.
+
+        Returns
+        -------
+        collapsed_orbits : `~adam_core.orbits.orbits.Orbits`
+            The collapsed orbits.
+        """
+        # Group the variants by object_id
+        unique_object_ids = self.object_id.unique()
+
+        orbits = Orbits.empty()
+        for object_id in unique_object_ids:
+            object_variants = self.select("object_id", object_id)
+
+            # All the variants must have the same epoch
+            assert len(object_variants.coordinates.time.unique()) == 1
+
+            # Calculate the mean
+            mean = np.average(
+                object_variants.coordinates.values,
+                axis=0,
+            )
+
+            # Calculate the covariance matrix
+            covariance = weighted_covariance(
+                mean,
+                object_variants.coordinates.values,
+                np.ones(len(object_variants), dtype=np.float64) / len(object_variants),
+            ).reshape(1, 6, 6)
+
+            # Create the collapsed orbit
+            orbit = Orbits.from_kwargs(
+                orbit_id=[uuid.uuid4().hex],
+                object_id=[object_id],
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=[mean[0]],
+                    y=[mean[1]],
+                    z=[mean[2]],
+                    vx=[mean[3]],
+                    vy=[mean[4]],
+                    vz=[mean[5]],
+                    covariance=CoordinateCovariances.from_matrix(covariance),
+                    time=object_variants.coordinates.time[0],
+                ),
+            )
+            orbits = qv.concatenate([orbits, orbit])
+
+        return orbits
+
 
 class VariantEphemeris(qv.Table):
 
