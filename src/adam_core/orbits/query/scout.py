@@ -156,7 +156,7 @@ def scout_orbits_to_variant_orbits(
         i=pc.cast(scout_orbits.inc, pa.float64()),
         raan=pc.cast(scout_orbits.om, pa.float64()),
         ap=pc.cast(scout_orbits.w, pa.float64()),
-        tp=pc.cast(scout_orbits.tp, pa.float64()),
+        tp=pc.subtract(pc.cast(scout_orbits.tp, pa.float64()), 2400000.5),
         time=Timestamp.from_jd(pc.cast(scout_orbits.epoch, pa.float64())),
         origin=Origin.from_kwargs(code=pa.repeat("SUN", len(scout_orbits))),
     )

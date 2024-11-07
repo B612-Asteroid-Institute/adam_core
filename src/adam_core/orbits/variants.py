@@ -197,7 +197,7 @@ class VariantOrbits(qv.Table):
             covariance = weighted_covariance(
                 mean,
                 object_variants.coordinates.values,
-                np.ones(len(object_variants), dtype=np.float64),
+                np.ones(len(object_variants), dtype=np.float64) / len(object_variants),
             ).reshape(1, 6, 6)
 
             # Create the collapsed orbit
