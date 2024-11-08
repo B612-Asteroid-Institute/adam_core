@@ -168,7 +168,7 @@ import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
-from adam_core.propagator.adam_assist import ASSISTPropagator, download_jpl_ephemeris_files
+from adam_core.propagator.adam_assist import ASSISTPropagator
 from adam_core.time import Timestamp
 
 # Get orbits to propagate
@@ -176,8 +176,7 @@ initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
-# Download ephemeris files used by propagator and initialize
-download_jpl_ephemeris_files()
+# initialize the propagator
 propagator = ASSISTPropagator()
 
 # Define propagation times
