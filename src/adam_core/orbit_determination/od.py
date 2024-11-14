@@ -180,7 +180,7 @@ def od(
         # Calculate chi2 for residuals on the given observations
         # for the current orbit, the goal is for the orbit to improve
         # such that the chi2 improves
-        orbit_prev_ = orbit.to_orbits()
+        orbit_prev_ = orbit
 
         ephemeris_prev_ = prop.generate_ephemeris(
             orbit_prev_, observers, chunk_size=1, max_processes=1
@@ -534,7 +534,9 @@ def od(
         od_orbit_members = FittedOrbitMembers.empty()
 
     else:
-        obs_times = observations.coordinates.time.mjd().to_numpy()[ids_mask]
+        obs_times = observations.coordinates.time.mjd().to_numpy(zero_copy_only=False)[
+            ids_mask
+        ]
         arc_length_ = obs_times.max() - obs_times.min()
         assert arc_length == arc_length_
 

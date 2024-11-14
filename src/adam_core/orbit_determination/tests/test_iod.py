@@ -1,10 +1,10 @@
+import importlib.util
 import os
+import sys
 
 import numpy as np
 import pyarrow.compute as pc
 import pytest
-
-from adam_core.propagator.adam_assist import ASSISTPropagator
 
 from ...coordinates import CoordinateCovariances, SphericalCoordinates
 from ...coordinates.origin import Origin
@@ -14,15 +14,32 @@ from ...utils.helpers.orbits import make_real_orbits
 from ..evaluate import OrbitDeterminationObservations
 from ..iod import iod
 
+# Specify the path to `adam_assist` in `site-packages`
+# site_packages_path = next(p for p in sys.path if "__pypackages__/3.11/lib" in p)
+site_packages_path = "/Users/natetellis/code/adam_core/__pypackages__/3.11/lib"
+assist_path = os.path.join(
+    site_packages_path, "adam_core", "propagator", "adam_assist.py"
+)
+
+# Import `adam_assist` from `site-packages`
+spec = importlib.util.spec_from_file_location(
+    "adam_core.propagator.adam_assist", assist_path
+)
+adam_assist = importlib.util.module_from_spec(spec)
+sys.modules["adam_core.propagator.adam_assist"] = adam_assist
+spec.loader.exec_module(adam_assist)
+from adam_core.propagator.adam_assist import ASSISTPropagator
+
 
 @pytest.fixture
 def real_data():
     # Generate real observations and orbits
     exposures, detections, associations = make_observations()
-    orbits = make_real_orbits(num_orbits=1)
+    orbits = make_real_orbits(num_orbits=18)
+    orbits.to_dataframe().to_csv("orbits.csv")
 
     # Select a specific object ID for testing
-    object_id = orbits.object_id[0].as_py()
+    object_id = orbits.object_id[-1].as_py()
     orbit = orbits.select("object_id", object_id)
 
     # Filter observations for the selected object ID
@@ -34,20 +51,21 @@ def real_data():
     exposures_i = exposures.apply_mask(pc.is_in(exposures.id, detections_i.exposure_id))
 
     sigmas = np.full((len(detections_i.ra_sigma), 6), np.nan)
-    sigmas[:, 1] = detections_i.ra_sigma.to_numpy(zero_copy_only=False) / 3600
-    sigmas[:, 2] = detections_i.dec_sigma.to_numpy(zero_copy_only=False) / 3600
+    sigmas[:, 1] = detections_i.ra_sigma.to_numpy(zero_copy_only=False)
+    sigmas[:, 2] = detections_i.dec_sigma.to_numpy(zero_copy_only=False)
 
     coordinates = SphericalCoordinates.from_kwargs(
         lon=detections_i.ra.to_numpy(),
         lat=detections_i.dec.to_numpy(),
         covariance=CoordinateCovariances.from_sigmas(sigmas),
         origin=Origin.from_kwargs(code=exposures_i.observatory_code),
+        time=exposures_i.midpoint(),
         frame="equatorial",  # Assuming the frame is equatorial
     )
 
     # Generate Observers from exposures start_time and observatory codes
     observers = Observers.from_codes(
-        times=exposures_i.start_time, codes=exposures_i.observatory_code
+        times=exposures_i.midpoint(), codes=exposures_i.observatory_code
     )
 
     observations = OrbitDeterminationObservations.from_kwargs(
@@ -66,21 +84,25 @@ def real_data():
 @pytest.mark.skipif(ASSISTPropagator is None, reason="ASSISTPropagator not available")
 def test_iod(real_data):
     orbit, observations = real_data
-
+    observations.to_dataframe().to_csv("observations.csv")
+    observations.to_parquet("observations.parquet")
     # Call the iod function
     fitted_orbits, fitted_orbit_members = iod(
-        observations,
+        observations[:10],
         min_obs=6,
         min_arc_length=1.0,
-        rchi2_threshold=200,
+        rchi2_threshold=1000,
         observation_selection_method="combinations",
         iterate=False,
         light_time=True,
         propagator=ASSISTPropagator,
     )
+    # save these out as parquet
+    fitted_orbits.to_parquet("fitted_orbits.parquet")
+    fitted_orbit_members.to_parquet("fitted_orbit_members.parquet")
 
     # Assertions
-    assert len(fitted_orbits) > 0, "No orbits were fitted"
-    assert len(fitted_orbit_members) > 0, "No orbit members were fitted"
+    assert len(fitted_orbits) == 1, "No orbits were fitted"
+    assert len(fitted_orbit_members) == 10, "No orbit members were fitted"
     assert fitted_orbits.orbit_id[0].as_py() is not None, "Orbit ID is None"
     assert fitted_orbits.coordinates is not None, "Coordinates are None"

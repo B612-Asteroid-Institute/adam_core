@@ -450,7 +450,6 @@ def iod(
             times,
             coords_obs,
             light_time=light_time,
-            iterate=iterate,
             max_iter=100,
             tol=1e-15,
         )
