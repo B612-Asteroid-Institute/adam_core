@@ -1,6 +1,7 @@
 import importlib.util
 import os
 import sys
+import sysconfig
 
 import numpy as np
 import pyarrow.compute as pc
@@ -15,8 +16,13 @@ from ..evaluate import OrbitDeterminationObservations
 from ..iod import iod
 
 # Specify the path to `adam_assist` in `site-packages`
-# site_packages_path = next(p for p in sys.path if "__pypackages__/3.11/lib" in p)
-site_packages_path = "/Users/natetellis/code/adam_core/__pypackages__/3.11/lib"
+site_packages_path = next(
+    (p for p in sys.path if "__pypackages__" in p and p.endswith("lib")), None
+)
+
+if site_packages_path is None:
+    raise ImportError("Could not find the __pypackages__ directory in sys.path")
+
 assist_path = os.path.join(
     site_packages_path, "adam_core", "propagator", "adam_assist.py"
 )
@@ -36,7 +42,6 @@ def real_data():
     # Generate real observations and orbits
     exposures, detections, associations = make_observations()
     orbits = make_real_orbits(num_orbits=18)
-    orbits.to_dataframe().to_csv("orbits.csv")
 
     # Select a specific object ID for testing
     object_id = orbits.object_id[-1].as_py()
@@ -84,8 +89,6 @@ def real_data():
 @pytest.mark.skipif(ASSISTPropagator is None, reason="ASSISTPropagator not available")
 def test_iod(real_data):
     orbit, observations = real_data
-    observations.to_dataframe().to_csv("observations.csv")
-    observations.to_parquet("observations.parquet")
     # Call the iod function
     fitted_orbits, fitted_orbit_members = iod(
         observations[:10],
@@ -98,8 +101,6 @@ def test_iod(real_data):
         propagator=ASSISTPropagator,
     )
     # save these out as parquet
-    fitted_orbits.to_parquet("fitted_orbits.parquet")
-    fitted_orbit_members.to_parquet("fitted_orbit_members.parquet")
 
     # Assertions
     assert len(fitted_orbits) == 1, "No orbits were fitted"

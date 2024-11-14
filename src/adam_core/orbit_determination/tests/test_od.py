@@ -17,8 +17,13 @@ from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 from ..od import od
 
 # Specify the path to `adam_assist` in `site-packages`
-# site_packages_path = next(p for p in sys.path if "__pypackages__/3.11/lib" in p)
-site_packages_path = "/Users/natetellis/code/adam_core/__pypackages__/3.11/lib"
+site_packages_path = next(
+    (p for p in sys.path if "__pypackages__" in p and p.endswith("lib")), None
+)
+
+if site_packages_path is None:
+    raise ImportError("Could not find the __pypackages__ directory in sys.path")
+
 assist_path = os.path.join(
     site_packages_path, "adam_core", "propagator", "adam_assist.py"
 )
