@@ -1,7 +1,6 @@
 import importlib.util
 import os
 import sys
-from unittest.mock import MagicMock
 
 import numpy as np
 import pyarrow.compute as pc
@@ -21,21 +20,21 @@ site_packages_path = next(
     (p for p in sys.path if "__pypackages__" in p and p.endswith("lib")), None
 )
 
-if site_packages_path is None:
-    raise ImportError("Could not find the __pypackages__ directory in sys.path")
-
-assist_path = os.path.join(
-    site_packages_path, "adam_core", "propagator", "adam_assist.py"
-)
-
-# Import `adam_assist` from `site-packages`
-spec = importlib.util.spec_from_file_location(
-    "adam_core.propagator.adam_assist", assist_path
-)
-adam_assist = importlib.util.module_from_spec(spec)
-sys.modules["adam_core.propagator.adam_assist"] = adam_assist
-spec.loader.exec_module(adam_assist)
-from adam_core.propagator.adam_assist import ASSISTPropagator
+try:
+    assist_path = os.path.join(
+        site_packages_path, "adam_core", "propagator", "adam_assist.py"
+    )
+    # Import `adam_assist` from `site-packages`
+    spec = importlib.util.spec_from_file_location(
+        "adam_core.propagator.adam_assist", assist_path
+    )
+    adam_assist = importlib.util.module_from_spec(spec)
+    sys.modules["adam_core.propagator.adam_assist"] = adam_assist
+    spec.loader.exec_module(adam_assist)
+    from adam_core.propagator.adam_assist import ASSISTPropagator  # noqa: E402
+except Exception as e:
+    ASSISTPropagator = None
+    print(e)
 
 
 @pytest.fixture
