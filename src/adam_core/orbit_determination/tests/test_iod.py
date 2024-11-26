@@ -81,10 +81,6 @@ def real_data():
     return orbit, observations
 
 
-@pytest.mark.skipif(
-    os.environ.get("ASSIST_DATA_DIR") is None,
-    reason="ASSIST_DATA_DIR environment variable not set",
-)
 @pytest.mark.skipif(ASSISTPropagator is None, reason="ASSISTPropagator not available")
 def test_iod(real_data):
     orbit, observations = real_data

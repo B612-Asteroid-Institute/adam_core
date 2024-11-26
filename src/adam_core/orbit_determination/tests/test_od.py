@@ -44,7 +44,7 @@ def real_data():
     orbits = make_real_orbits(num_orbits=18)
 
     # Select Ivezic for testing
-    object_id = orbits.object_id[17].as_py()
+    object_id = "202930 Ivezic (1998 SG172)"
     orbit = orbits.select("object_id", object_id)
 
     # Filter observations for the selected object ID
@@ -62,14 +62,14 @@ def real_data():
         lon=detections_i.ra.to_numpy(),
         lat=detections_i.dec.to_numpy(),
         covariance=CoordinateCovariances.from_sigmas(sigmas),
-        time=exposures_i.midpoint(),
+        time=detections_i.time,
         origin=Origin.from_kwargs(code=exposures_i.observatory_code),
         frame="equatorial",  # Assuming the frame is equatorial
     )
 
     # Generate Observers from exposures start_time and observatory codes
     observers = Observers.from_codes(
-        times=exposures_i.start_time, codes=exposures_i.observatory_code
+        times=detections_i.time, codes=exposures_i.observatory_code
     )
 
     observations = OrbitDeterminationObservations.from_kwargs(
@@ -84,10 +84,6 @@ def real_data():
     return starting_orbit, observations
 
 
-@pytest.mark.skipif(
-    os.environ.get("ASSIST_DATA_DIR") is None,
-    reason="ASSIST_DATA_DIR environment variable not set",
-)
 @pytest.mark.skipif(ASSISTPropagator is None, reason="ASSISTPropagator not available")
 def test_od(real_data):
     starting_orbit, observations = real_data

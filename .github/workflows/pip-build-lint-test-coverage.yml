@@ -27,10 +27,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip' # caching pip dependencies 
-      - name: Install Testing Dependencies
+      - name: Install PDM
         run: |
           pip install pip --upgrade
-          pip install ".[dev]"
+          pip install pdm
+      - name: Install Testing Dependencies
+        run: |
+          pdm install -G dev -G test
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
