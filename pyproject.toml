@@ -30,7 +30,9 @@ dependencies = [
   "healpy",
   "jax",
   "jaxlib",
+  "numba",
   "numpy>=2.0.0",
+  "pdm",
   "pyarrow>=13.0.0",
   "pandas",
   "ray",
@@ -51,6 +53,43 @@ dependencies = [
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+[project.urls]
+"Documentation" = "https://github.com/B612-Asteroid-Institute/adam_core#README.md"
+"Issues" = "https://github.com/B612-Asteroid-Institute/adam_core/issues"
+"Source" = "https://github.com/B612-Asteroid-Institute/adam_core"
+
+
+[dependency-groups]
+dev = ["ipython>=8.28.0"]
+test = [
+    "pytest-benchmark",
+    "pytest-cov",
+    "pytest-doctestplus",
+    "pytest-mock",
+    "pytest",
+    "isort",
+    "mypy",
+    "ruff",
+    "black"
+]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+lint.ignore = []
+exclude = ["build"]
+
+[tool.pytest.ini_options]
+# In order for namespace packages to work during tests,
+# we need to import from the installed modules instead of local source
+addopts = ["--pyargs", "adam_core"]
+
 [tool.pdm.build]
 includes = ["src/adam_core/"]
 
@@ -77,44 +116,5 @@ benchmark = "pytest --benchmark-only"
 coverage = "pytest --cov=adam_core --cov-report=xml"
 
 
-[project.urls]
-"Documentation" = "https://github.com/B612-Asteroid-Institute/adam_core#README.md"
-"Issues" = "https://github.com/B612-Asteroid-Institute/adam_core/issues"
-"Source" = "https://github.com/B612-Asteroid-Institute/adam_core"
-
-
-[project.optional-dependencies]
-assist = [
-  "adam-assist>=0.1.2"
-]
-
-dev = [
-    "black",
-    "ipython>=8.28.0",
-    "isort",
-    "mypy",
-    "pdm",
-    "pytest-benchmark",
-    "pytest-cov",
-    "pytest-doctestplus",
-    "pytest-mock",
-    "pytest",
-    "ruff",
-]
-
-[tool.black]
-line-length = 88
-
-[tool.isort]
-profile = "black"
-
-[tool.ruff]
-line-length = 110
-target-version = "py311"
-lint.ignore = []
-exclude = ["build"]
-
-[tool.pytest.ini_options]
-# In order for namespace packages to work during tests,
-# we need to import from the installed modules instead of local source
-addopts = ["--pyargs", "adam_core"]
+[tool.pdm.dev-dependencies]
+dev = ["-e git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main#egg=adam-assist"]

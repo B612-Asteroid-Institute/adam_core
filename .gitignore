@@ -26,6 +26,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*_version.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -105,3 +106,4 @@ dmypy.json
 # Ignore lock files
 pdm.lock
 .pdm-build/*
+.pdm-python
