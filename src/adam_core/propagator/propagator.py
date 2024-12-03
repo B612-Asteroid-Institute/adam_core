@@ -227,8 +227,7 @@ class EphemerisMixin:
                 spherical_coordinates.time.rescale("utc"),
             )
 
-            if isinstance(orbits, Orbits):
-
+            if isinstance(orbit, Orbits):
                 ephemeris = Ephemeris.from_kwargs(
                     orbit_id=propagated_orbits_barycentric.orbit_id,
                     object_id=propagated_orbits_barycentric.object_id,
@@ -236,17 +235,13 @@ class EphemerisMixin:
                     light_time=light_time,
                     aberrated_coordinates=propagated_orbits_aberrated.coordinates,
                 )
-
-            elif isinstance(orbits, VariantOrbits):
-                weights = orbits.weights
-                weights_cov = orbits.weights_cov
-
+            elif isinstance(orbit, VariantOrbits):
                 ephemeris = VariantEphemeris.from_kwargs(
                     orbit_id=propagated_orbits_barycentric.orbit_id,
                     object_id=propagated_orbits_barycentric.object_id,
                     coordinates=spherical_coordinates,
-                    weights=weights,
-                    weights_cov=weights_cov,
+                    weights=np.repeat(orbit.weights[0], len(observers)),
+                    weights_cov=np.repeat(orbit.weights_cov[0], len(observers)),
                 )
 
             ephemeris_total = qv.concatenate([ephemeris_total, ephemeris])
