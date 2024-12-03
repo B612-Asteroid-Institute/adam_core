@@ -69,6 +69,26 @@ _propagate_2body_vmap = jit(
 )
 
 
+def pad_to_fixed_size(array, target_shape, pad_value=0):
+    """
+    Pad an array to a fixed shape with a specified pad value.
+    """
+    pad_width = [(0, max(0, t - s)) for s, t in zip(array.shape, target_shape)]
+    return jnp.pad(array, pad_width, constant_values=pad_value)
+
+
+def process_in_chunks(array, chunk_size):
+    """
+    Yield chunks of the array with a fixed size, padding the last chunk if necessary.
+    """
+    n = array.shape[0]
+    for i in range(0, n, chunk_size):
+        chunk = array[i:i + chunk_size]
+        if chunk.shape[0] < chunk_size:
+            chunk = pad_to_fixed_size(chunk, (chunk_size,) + chunk.shape[1:])
+        yield chunk
+
+
 def propagate_2body(
     orbits: Orbits,
     times: Timestamp,
@@ -80,7 +100,7 @@ def propagate_2body(
 
     Parameters
     ----------
-    orbits : `~jax.numpy.ndarray` (N, 6)
+    orbits : `~adam_core.orbits.orbits.Orbits` (N)
         Cartesian orbits with position in units of au and velocity in units of au per day.
     times : Timestamp (M)
         Epochs to which to propagate each orbit. If a single epoch is given, all orbits are propagated to this
@@ -97,7 +117,7 @@ def propagate_2body(
     orbits : `~adam_core.orbits.orbits.Orbits` (N*M)
         Orbits propagated to each MJD.
     """
-    # Lets extract the cartesian orbits and times from the orbits object
+    # Extract and prepare data
     cartesian_orbits = orbits.coordinates.values
     t0 = orbits.coordinates.time.rescale("tdb").mjd()
     t1 = times.rescale("tdb").mjd()
@@ -105,8 +125,11 @@ def propagate_2body(
     orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)
     object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
 
-    # Lets stack the orbits into a single array shaped by the number of orbits and number of times
-    # and then pass this to the vectorized map version of _propagate_2body
+    # Define chunk size
+    chunk_size = 50  # Example chunk size
+
+    # Prepare arrays for chunk processing
+    # This creates a n x m matrix where n is the number of orbits and m is the number of times
     n_orbits = cartesian_orbits.shape[0]
     n_times = len(times)
     orbit_ids_ = np.repeat(orbit_ids, n_times)
@@ -116,10 +139,24 @@ def propagate_2body(
     t0_ = np.repeat(t0, n_times)
     t1_ = np.tile(t1, n_orbits)
 
-    orbits_propagated = _propagate_2body_vmap(
-        orbits_array_, t0_, t1_, mu, max_iter, tol
-    )
-    orbits_propagated = np.array(orbits_propagated)
+    # Process in chunks
+    orbits_propagated_chunks = []
+    for orbits_chunk, t0_chunk, t1_chunk, mu_chunk in zip(
+        process_in_chunks(orbits_array_, chunk_size),
+        process_in_chunks(t0_, chunk_size),
+        process_in_chunks(t1_, chunk_size),
+        process_in_chunks(mu, chunk_size)
+    ):
+        orbits_propagated_chunk = _propagate_2body_vmap(
+            orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
+        )
+        orbits_propagated_chunks.append(orbits_propagated_chunk)
+
+    # Concatenate all chunks
+    orbits_propagated = jnp.concatenate(orbits_propagated_chunks, axis=0)
+
+    # Remove padding
+    orbits_propagated = orbits_propagated[:n_orbits * n_times]
 
     if not orbits.coordinates.covariance.is_all_nan():
         cartesian_covariances = orbits.coordinates.covariance.to_matrix()
@@ -144,6 +181,9 @@ def propagate_2body(
 
     origin_code = np.empty(n_orbits * n_times, dtype="object")
     origin_code.fill("SUN")
+
+    # Convert from the jax array to a numpy array
+    orbits_propagated = np.asarray(orbits_propagated)
 
     orbits_propagated = Orbits.from_kwargs(
         orbit_id=orbit_ids_,
