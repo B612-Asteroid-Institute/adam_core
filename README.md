@@ -168,7 +168,7 @@ import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
-from adam_core.propagator.adam_assist import ASSISTPropagator
+from adam_assist import ASSISTPropagator
 from adam_core.time import Timestamp
 
 # Get orbits to propagate

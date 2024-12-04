@@ -33,7 +33,7 @@ jobs:
           pip install pdm
       - name: Install Testing Dependencies
         run: |
-          pdm install -G dev -G test
+          pdm install -G test
       - name: Lint
         run: pdm run lint
       - name: Test with coverage

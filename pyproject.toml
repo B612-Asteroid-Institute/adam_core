@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Core libraries for the ADAM platform"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 classifiers = [
   "Operating System :: OS Independent",
   "Development Status :: 4 - Beta",
@@ -60,7 +60,6 @@ build-backend = "pdm.backend"
 
 
 [dependency-groups]
-dev = ["ipython>=8.28.0"]
 test = [
     "pytest-benchmark",
     "pytest-cov",
@@ -70,7 +69,8 @@ test = [
     "isort",
     "mypy",
     "ruff",
-    "black"
+    "black",
+    "adam-assist>=0.2.0",
 ]
 
 [tool.black]
@@ -84,11 +84,6 @@ line-length = 110
 target-version = "py311"
 lint.ignore = []
 exclude = ["build"]
-
-[tool.pytest.ini_options]
-# In order for namespace packages to work during tests,
-# we need to import from the installed modules instead of local source
-addopts = ["--pyargs", "adam_core"]
 
 [tool.pdm.build]
 includes = ["src/adam_core/"]
@@ -110,11 +105,9 @@ lint = { composite = [
 fix = "ruff ./src/adam_core --fix"
 typecheck = "mypy --strict ./src/adam_core"
 
-test = "pytest --benchmark-disable {args}"
+test = "pytest --benchmark-disable -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only"
-coverage = "pytest --cov=adam_core --cov-report=xml"
+coverage = "pytest --cov=adam_core -m 'not profile' --cov-report=xml"
 
 
-[tool.pdm.dev-dependencies]
-dev = ["-e git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main#egg=adam-assist"]

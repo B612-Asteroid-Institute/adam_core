@@ -1,10 +1,7 @@
-import importlib.util
-import os
-import sys
-
 import numpy as np
 import pyarrow.compute as pc
 import pytest
+from adam_assist import ASSISTPropagator
 
 from ...coordinates import CoordinateCovariances, SphericalCoordinates
 from ...coordinates.origin import Origin
@@ -13,27 +10,6 @@ from ...utils.helpers.observations import make_observations
 from ...utils.helpers.orbits import make_real_orbits
 from ..evaluate import OrbitDeterminationObservations
 from ..iod import iod
-
-# Specify the path to `adam_assist` in `site-packages`
-site_packages_path = next(
-    (p for p in sys.path if "__pypackages__" in p and p.endswith("lib")), None
-)
-
-try:
-    assist_path = os.path.join(
-        site_packages_path, "adam_core", "propagator", "adam_assist.py"
-    )
-    # Import `adam_assist` from `site-packages`
-    spec = importlib.util.spec_from_file_location(
-        "adam_core.propagator.adam_assist", assist_path
-    )
-    adam_assist = importlib.util.module_from_spec(spec)
-    sys.modules["adam_core.propagator.adam_assist"] = adam_assist
-    spec.loader.exec_module(adam_assist)
-    from adam_core.propagator.adam_assist import ASSISTPropagator  # noqa: E402
-except Exception as e:
-    ASSISTPropagator = None
-    print(e)
 
 
 @pytest.fixture
@@ -81,7 +57,6 @@ def real_data():
     return orbit, observations
 
 
-@pytest.mark.skipif(ASSISTPropagator is None, reason="ASSISTPropagator not available")
 def test_iod(real_data):
     orbit, observations = real_data
     # Call the iod function

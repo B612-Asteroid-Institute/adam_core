@@ -16,6 +16,7 @@ from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from .aberrations import _add_light_time, add_stellar_aberration
+from .propagation import process_in_chunks
 
 
 @jit
@@ -176,6 +177,11 @@ def generate_ephemeris_2body(
     ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (N)
         Topocentric ephemerides for each propagated orbit as observed by the given observers.
     """
+    num_entries = len(observers)
+    assert (
+        len(propagated_orbits) == num_entries
+    ), "Orbits and observers must be paired and orbits must be propagated to observer times."
+
     # Transform both the orbits and observers to the barycenter if they are not already.
     propagated_orbits_barycentric = propagated_orbits.set_column(
         "coordinates",
@@ -196,26 +202,41 @@ def generate_ephemeris_2body(
         ),
     )
 
-    # Stack the observer coordinates and codes for each orbit in the propagated orbits
-    num_orbits = len(propagated_orbits_barycentric.orbit_id.unique())
-    observer_coordinates = np.tile(
-        observers_barycentric.coordinates.values, (num_orbits, 1)
-    )
-    observer_codes = np.tile(observers.code.to_numpy(zero_copy_only=False), num_orbits)
+    observer_coordinates = observers_barycentric.coordinates.values
+    observer_codes = observers_barycentric.code.to_numpy(zero_copy_only=False)
     mu = observers_barycentric.coordinates.origin.mu()
-    mu = np.tile(mu, num_orbits)
+    times = propagated_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
-    times = propagated_orbits.coordinates.time.to_astropy()
-    ephemeris_spherical, light_time = _generate_ephemeris_2body_vmap(
-        propagated_orbits_barycentric.coordinates.values,
-        times.mjd,
-        observer_coordinates,
-        mu,
-        lt_tol,
-        max_iter,
-        tol,
-        stellar_aberration,
-    )
+    # Define chunk size
+    chunk_size = 50
+
+    # Process in chunks
+    ephemeris_chunks = []
+    light_time_chunks = []
+
+    for orbits_chunk, times_chunk, observer_coords_chunk, mu_chunk in zip(
+        process_in_chunks(propagated_orbits_barycentric.coordinates.values, chunk_size),
+        process_in_chunks(times, chunk_size),
+        process_in_chunks(observer_coordinates, chunk_size),
+        process_in_chunks(mu, chunk_size),
+    ):
+        ephemeris_chunk, light_time_chunk = _generate_ephemeris_2body_vmap(
+            orbits_chunk,
+            times_chunk,
+            observer_coords_chunk,
+            mu_chunk,
+            lt_tol,
+            max_iter,
+            tol,
+            stellar_aberration,
+        )
+        ephemeris_chunks.append(ephemeris_chunk)
+        light_time_chunks.append(light_time_chunk)
+
+    # Concatenate chunks and remove padding
+    ephemeris_spherical = jnp.concatenate(ephemeris_chunks, axis=0)[:num_entries]
+    light_time = jnp.concatenate(light_time_chunks, axis=0)[:num_entries]
+
     ephemeris_spherical = np.array(ephemeris_spherical)
     light_time = np.array(light_time)
 

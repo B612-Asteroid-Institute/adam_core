@@ -1,3 +1,6 @@
+import cProfile
+
+import jax
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -7,6 +10,7 @@ from astropy import units as u
 from ...observers import Observers
 from ...time import Timestamp
 from ..ephemeris import generate_ephemeris_2body
+from ..propagation import propagate_2body
 
 OBJECT_IDS = [
     "594913 'Aylo'chaxnim (2020 AV2)",
@@ -134,3 +138,48 @@ def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
     assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vx)).as_py()
     assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vy)).as_py()
     assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vz)).as_py()
+
+
+@pytest.mark.profile
+def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
+    """Profile the generate_ephemeris_2body function with different combinations of orbits,
+    observers and times. Results are saved to a stats file that can be visualized with snakeviz.
+    """
+    # Clear the jax cache
+    jax.clear_caches()
+    # Create profiler
+    profiler = cProfile.Profile(subcalls=True, builtins=True)
+    profiler.bias = 0
+
+    n_entries = [1, 10, 100, 1000]
+
+    # create 1000 times, observers, and propagate orbits to those times
+    times = Timestamp.from_mjd(
+        np.arange(60000, 60000 + 1000, 1),
+        scale="tdb",
+    )
+    observers = Observers.from_code(
+        "X05",
+        times=times,
+    )
+    propagated_orbits = propagate_2body(
+        propagated_orbits[0],
+        times,
+    )
+
+    def to_profile():
+        for n_entries_i in n_entries:
+            generate_ephemeris_2body(
+                propagated_orbits[:n_entries_i],
+                observers[:n_entries_i],
+            )
+
+    # Run profiling
+    profiler.enable()
+    to_profile()
+    profiler.disable()
+
+    # Save and print results
+    stats_file = tmp_path / "ephemeris_profile.prof"
+    profiler.dump_stats(stats_file)
+    print(f"Run 'snakeviz {stats_file}' to view the profile results.")
