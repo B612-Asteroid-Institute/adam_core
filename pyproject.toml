@@ -85,11 +85,6 @@ target-version = "py311"
 lint.ignore = []
 exclude = ["build"]
 
-[tool.pytest.ini_options]
-# In order for namespace packages to work during tests,
-# we need to import from the installed modules instead of local source
-addopts = ["--pyargs", "adam_core"]
-
 [tool.pdm.build]
 includes = ["src/adam_core/"]
 
