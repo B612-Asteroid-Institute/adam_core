@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Core libraries for the ADAM platform"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 classifiers = [
   "Operating System :: OS Independent",
   "Development Status :: 4 - Beta",
@@ -60,7 +60,6 @@ build-backend = "pdm.backend"
 
 
 [dependency-groups]
-dev = ["ipython>=8.28.0"]
 test = [
     "pytest-benchmark",
     "pytest-cov",
@@ -70,7 +69,8 @@ test = [
     "isort",
     "mypy",
     "ruff",
-    "black"
+    "black",
+    "adam-assist>=0.2.0",
 ]
 
 [tool.black]
@@ -116,5 +116,3 @@ benchmark = "pytest --benchmark-only"
 coverage = "pytest --cov=adam_core --cov-report=xml"
 
 
-[tool.pdm.dev-dependencies]
-dev = ["-e git+https://github.com/B612-Asteroid-Institute/adam-assist.git@main#egg=adam-assist"]
