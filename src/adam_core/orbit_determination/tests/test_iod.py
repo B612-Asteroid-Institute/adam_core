@@ -1,7 +1,3 @@
-import importlib.util
-import os
-import sys
-
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -59,6 +55,7 @@ def real_data():
     )
 
     return orbit, observations
+
 
 def test_iod(real_data):
     orbit, observations = real_data

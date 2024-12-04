@@ -136,7 +136,9 @@ class EphemerisMixin:
 
                 # Calculate the new epoch and propagate the initial orbit to that epoch
                 # Should be sufficient to use 2body propagation for this
-                orbit_i = propagate_2body(orbit, Timestamp.from_mjd([t0 - lt], scale="tdb"))
+                orbit_i = propagate_2body(
+                    orbit, Timestamp.from_mjd([t0 - lt], scale="tdb")
+                )
 
                 # Update the previous light travel time to this iteration's light travel time
                 lt_prev = lt

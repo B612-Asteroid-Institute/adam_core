@@ -110,9 +110,9 @@ lint = { composite = [
 fix = "ruff ./src/adam_core --fix"
 typecheck = "mypy --strict ./src/adam_core"
 
-test = "pytest --benchmark-disable {args}"
+test = "pytest --benchmark-disable -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only"
-coverage = "pytest --cov=adam_core --cov-report=xml"
+coverage = "pytest --cov=adam_core -m 'not profile' --cov-report=xml"
 
 

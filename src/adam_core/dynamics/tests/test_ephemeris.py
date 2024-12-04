@@ -1,5 +1,4 @@
 import cProfile
-import itertools
 
 import jax
 import numpy as np
@@ -140,9 +139,12 @@ def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
     assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vy)).as_py()
     assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vz)).as_py()
 
+
+@pytest.mark.profile
 def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
-    """Profile the generate_ephemeris_2body function with different combinations of orbits, 
-    observers and times. Results are saved to a stats file that can be visualized with snakeviz."""
+    """Profile the generate_ephemeris_2body function with different combinations of orbits,
+    observers and times. Results are saved to a stats file that can be visualized with snakeviz.
+    """
     # Clear the jax cache
     jax.clear_caches()
     # Create profiler
@@ -176,7 +178,7 @@ def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
     profiler.enable()
     to_profile()
     profiler.disable()
-    
+
     # Save and print results
     stats_file = tmp_path / "ephemeris_profile.prof"
     profiler.dump_stats(stats_file)

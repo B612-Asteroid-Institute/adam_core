@@ -1,7 +1,3 @@
-import importlib.util
-import os
-import sys
-
 import numpy as np
 import pyarrow.compute as pc
 import pytest

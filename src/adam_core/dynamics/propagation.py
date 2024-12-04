@@ -83,7 +83,7 @@ def process_in_chunks(array, chunk_size):
     """
     n = array.shape[0]
     for i in range(0, n, chunk_size):
-        chunk = array[i:i + chunk_size]
+        chunk = array[i : i + chunk_size]
         if chunk.shape[0] < chunk_size:
             chunk = pad_to_fixed_size(chunk, (chunk_size,) + chunk.shape[1:])
         yield chunk
@@ -145,7 +145,7 @@ def propagate_2body(
         process_in_chunks(orbits_array_, chunk_size),
         process_in_chunks(t0_, chunk_size),
         process_in_chunks(t1_, chunk_size),
-        process_in_chunks(mu, chunk_size)
+        process_in_chunks(mu, chunk_size),
     ):
         orbits_propagated_chunk = _propagate_2body_vmap(
             orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
@@ -156,7 +156,7 @@ def propagate_2body(
     orbits_propagated = jnp.concatenate(orbits_propagated_chunks, axis=0)
 
     # Remove padding
-    orbits_propagated = orbits_propagated[:n_orbits * n_times]
+    orbits_propagated = orbits_propagated[: n_orbits * n_times]
 
     if not orbits.coordinates.covariance.is_all_nan():
         cartesian_covariances = orbits.coordinates.covariance.to_matrix()

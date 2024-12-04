@@ -1,7 +1,5 @@
 import cProfile
 import itertools
-import pstats
-from pstats import SortKey
 
 import jax
 import numpy as np
@@ -449,11 +447,10 @@ def test_benchmark_propagate_2body(benchmark, orbital_elements):
 
 
 @pytest.mark.benchmark(group="propagate_2body")
-def test_benchmark_propagate_2body_matrix(
-    benchmark, propagated_orbits
-):
+def test_benchmark_propagate_2body_matrix(benchmark, propagated_orbits):
     # Clear the jax cache
     jax.clear_caches()
+
     def benchmark_function():
         n_orbits = [1, 5, 20]
         n_times = [1, 10, 100]
@@ -468,12 +465,13 @@ def test_benchmark_propagate_2body_matrix(
     benchmark(benchmark_function)
 
 
+@pytest.mark.profile
 def test_profile_propagate_2body_matrix(propagated_orbits, tmp_path):
     """Profile the propagate_2body function with different combinations of orbits and times.
     Results are saved to a stats file that can be visualized with snakeviz."""
     # Clear the jax cache
     jax.clear_caches()
-    
+
     # Create profiler
     profiler = cProfile.Profile(subcalls=True, builtins=True)
     profiler.bias = 0
@@ -488,7 +486,7 @@ def test_profile_propagate_2body_matrix(propagated_orbits, tmp_path):
         )
         propagate_2body(propagated_orbits[:n_orbits_i], times=times)
     profiler.disable()
-    
+
     # Save and print results
     stats_file = tmp_path / "precovery_profile.prof"
     profiler.dump_stats(stats_file)
