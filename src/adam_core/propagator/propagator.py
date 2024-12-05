@@ -104,7 +104,7 @@ class EphemerisMixin:
         lt_tol: float = 1e-12,
         max_iter: int = 10,
     ):
-        orbits_aberrated = orbits.empty()
+        orbits_aberrated = Orbits.empty()
         lts = np.zeros(len(orbits))
         for i, (orbit, observer) in enumerate(zip(orbits, observers)):
             # Set the running variables
