@@ -24,9 +24,10 @@ from ..transform import transform_coordinates
     [OriginCodes.SUN, OriginCodes.SOLAR_SYSTEM_BARYCENTER],
     ids=lambda x: f"origin={x.name},",
 )
+@pytest.mark.parametrize("size", [1, 50, 100])
 @pytest.mark.benchmark(group="coord_transforms")
 def test_benchmark_transform_cartesian_coordinates(
-    benchmark, representation, frame, origin
+    benchmark, representation, frame, origin, size
 ):
     if origin == OriginCodes.SOLAR_SYSTEM_BARYCENTER:
         pytest.skip("barycenter transform not yet implemented")
@@ -37,14 +38,14 @@ def test_benchmark_transform_cartesian_coordinates(
         frame_in = "ecliptic"
 
     from_coords = CartesianCoordinates.from_kwargs(
-        x=np.array([1]),
-        y=np.array([1]),
-        z=np.array([1]),
-        vx=np.array([1]),
-        vy=np.array([1]),
-        vz=np.array([1]),
-        time=Timestamp.from_mjd([50000]),
-        origin=Origin.from_kwargs(code=["SUN"]),
+        x=np.array([1] * size),
+        y=np.array([1] * size),
+        z=np.array([1] * size),
+        vx=np.array([1] * size),
+        vy=np.array([1] * size),
+        vz=np.array([1] * size),
+        time=Timestamp.from_mjd([50000] * size),
+        origin=Origin.from_kwargs(code=[OriginCodes.SUN] * size),
         frame=frame_in,
     )
     benchmark(
