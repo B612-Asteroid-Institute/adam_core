@@ -15,8 +15,8 @@ from ..coordinates.transform import _cartesian_to_spherical, transform_coordinat
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
+from ..utils.chunking import process_in_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
-from .propagation import process_in_chunks
 
 
 @jit
