@@ -164,7 +164,7 @@ def cartesian_to_spherical(
     """
     # Define chunk size
     chunk_size = 50
-    
+
     # Process in chunks
     coords_spherical_chunks = []
     for cartesian_chunk in process_in_chunks(coords_cartesian, chunk_size):
@@ -173,7 +173,7 @@ def cartesian_to_spherical(
 
     # Concatenate chunks and remove padding
     coords_spherical = jnp.concatenate(coords_spherical_chunks, axis=0)
-    coords_spherical = coords_spherical[:len(coords_cartesian)]
+    coords_spherical = coords_spherical[: len(coords_cartesian)]
 
     return coords_spherical
 
@@ -289,7 +289,7 @@ def spherical_to_cartesian(
         vy : y-velocity in the same units of y per arbitrary unit of time.
         vz : z-velocity in the same units of z per arbitrary unit of time.
     """
-    # Define chunk size  
+    # Define chunk size
     chunk_size = 50
 
     # Process in chunks
@@ -300,7 +300,7 @@ def spherical_to_cartesian(
 
     # Concatenate chunks and remove padding
     coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
-    coords_cartesian = coords_cartesian[:len(coords_spherical)]
+    coords_cartesian = coords_cartesian[: len(coords_spherical)]
 
     return coords_cartesian
 
@@ -601,7 +601,7 @@ def cartesian_to_keplerian(
 
     # Concatenate chunks and remove padding
     coords_keplerian = jnp.concatenate(coords_keplerian_chunks, axis=0)
-    coords_keplerian = coords_keplerian[:len(coords_cartesian)]
+    coords_keplerian = coords_keplerian[: len(coords_cartesian)]
 
     return coords_keplerian
 
@@ -995,7 +995,7 @@ def keplerian_to_cartesian(
     coords_cartesian_chunks = []
     for keplerian_chunk, mu_chunk in zip(
         process_in_chunks(coords_keplerian, chunk_size),
-        process_in_chunks(mu, chunk_size)
+        process_in_chunks(mu, chunk_size),
     ):
         coords_cartesian_chunk = _keplerian_to_cartesian_a_vmap(
             keplerian_chunk, mu_chunk, max_iter, tol
@@ -1004,7 +1004,7 @@ def keplerian_to_cartesian(
 
     # Concatenate chunks and remove padding
     coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
-    coords_cartesian = coords_cartesian[:len(coords_keplerian)]
+    coords_cartesian = coords_cartesian[: len(coords_keplerian)]
 
     return coords_cartesian
 
@@ -1254,7 +1254,7 @@ def cometary_to_cartesian(
     for cometary_chunk, t0_chunk, mu_chunk in zip(
         process_in_chunks(coords_cometary, chunk_size),
         process_in_chunks(t0, chunk_size),
-        process_in_chunks(mu, chunk_size)
+        process_in_chunks(mu, chunk_size),
     ):
         coords_cartesian_chunk = _cometary_to_cartesian_vmap(
             cometary_chunk, t0_chunk, mu_chunk, max_iter, tol
@@ -1263,7 +1263,7 @@ def cometary_to_cartesian(
 
     # Concatenate chunks and remove padding
     coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
-    coords_cartesian = coords_cartesian[:len(coords_cometary)]
+    coords_cartesian = coords_cartesian[: len(coords_cometary)]
 
     return coords_cartesian
 

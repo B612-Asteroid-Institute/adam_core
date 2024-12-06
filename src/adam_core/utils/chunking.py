@@ -44,4 +44,4 @@ def process_in_chunks(array, chunk_size):
         chunk = array[i : i + chunk_size]
         if chunk.shape[0] < chunk_size:
             chunk = pad_to_fixed_size(chunk, (chunk_size,) + chunk.shape[1:])
-        yield chunk 
+        yield chunk
