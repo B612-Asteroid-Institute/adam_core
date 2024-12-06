@@ -107,7 +107,7 @@ def propagate_2body(
     object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
 
     # Define chunk size
-    chunk_size = 50  # Example chunk size
+    chunk_size = 200  # Changed from 1000
 
     # Prepare arrays for chunk processing
     # This creates a n x m matrix where n is the number of orbits and m is the number of times

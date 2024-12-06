@@ -208,7 +208,7 @@ def generate_ephemeris_2body(
     times = propagated_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
     # Define chunk size
-    chunk_size = 50
+    chunk_size = 200
 
     # Process in chunks
     ephemeris_chunks = []

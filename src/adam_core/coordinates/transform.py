@@ -163,7 +163,7 @@ def cartesian_to_spherical(
             (same unit of time as the x, y, and z velocities).
     """
     # Define chunk size
-    chunk_size = 50
+    chunk_size = 200
 
     # Process in chunks
     coords_spherical_chunks = []
@@ -290,7 +290,7 @@ def spherical_to_cartesian(
         vz : z-velocity in the same units of z per arbitrary unit of time.
     """
     # Define chunk size
-    chunk_size = 50
+    chunk_size = 200
 
     # Process in chunks
     coords_cartesian_chunks = []
@@ -585,7 +585,7 @@ def cartesian_to_keplerian(
         tp : time of periapsis passage in days.
     """
     # Define chunk size
-    chunk_size = 50
+    chunk_size = 200
 
     # Process in chunks
     coords_keplerian_chunks = []
@@ -989,7 +989,7 @@ def keplerian_to_cartesian(
         raise ValueError(err)
 
     # Define chunk size
-    chunk_size = 50
+    chunk_size = 200
 
     # Process in chunks
     coords_cartesian_chunks = []
@@ -1247,7 +1247,7 @@ def cometary_to_cartesian(
         vz : z-velocity in units of au per day.
     """
     # Define chunk size
-    chunk_size = 50
+    chunk_size = 200
 
     # Process in chunks
     coords_cartesian_chunks = []
