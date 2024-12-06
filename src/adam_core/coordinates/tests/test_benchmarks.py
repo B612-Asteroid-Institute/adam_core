@@ -45,7 +45,7 @@ def test_benchmark_transform_cartesian_coordinates(
         vy=np.array([1] * size),
         vz=np.array([1] * size),
         time=Timestamp.from_mjd([50000] * size),
-        origin=Origin.from_kwargs(code=[OriginCodes.SUN] * size),
+        origin=Origin.from_kwargs(code=["SUN"] * size),
         frame=frame_in,
     )
     benchmark(
