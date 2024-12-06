@@ -9,6 +9,7 @@ import pyarrow.compute as pc
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
+from ..utils.chunking import process_in_chunks
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
@@ -161,7 +162,19 @@ def cartesian_to_spherical(
         vlat : Latitudinal velocity in degrees per arbitrary unit of time.
             (same unit of time as the x, y, and z velocities).
     """
-    coords_spherical = _cartesian_to_spherical_vmap(coords_cartesian)
+    # Define chunk size
+    chunk_size = 50
+
+    # Process in chunks
+    coords_spherical_chunks = []
+    for cartesian_chunk in process_in_chunks(coords_cartesian, chunk_size):
+        coords_spherical_chunk = _cartesian_to_spherical_vmap(cartesian_chunk)
+        coords_spherical_chunks.append(coords_spherical_chunk)
+
+    # Concatenate chunks and remove padding
+    coords_spherical = jnp.concatenate(coords_spherical_chunks, axis=0)
+    coords_spherical = coords_spherical[: len(coords_cartesian)]
+
     return coords_spherical
 
 
@@ -276,7 +289,19 @@ def spherical_to_cartesian(
         vy : y-velocity in the same units of y per arbitrary unit of time.
         vz : z-velocity in the same units of z per arbitrary unit of time.
     """
-    coords_cartesian = _spherical_to_cartesian_vmap(coords_spherical)
+    # Define chunk size
+    chunk_size = 50
+
+    # Process in chunks
+    coords_cartesian_chunks = []
+    for spherical_chunk in process_in_chunks(coords_spherical, chunk_size):
+        coords_cartesian_chunk = _spherical_to_cartesian_vmap(spherical_chunk)
+        coords_cartesian_chunks.append(coords_cartesian_chunk)
+
+    # Concatenate chunks and remove padding
+    coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
+    coords_cartesian = coords_cartesian[: len(coords_spherical)]
+
     return coords_cartesian
 
 
@@ -537,7 +562,7 @@ def cartesian_to_keplerian(
         vz : z-velocity in units of au per day.
     t0 : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Epoch at which cometary elements are defined in MJD TDB.
-    mu : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N, 6)
+    mu : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N)
         Gravitational parameter (GM) of the attracting body in units of
         au**3 / d**2.
 
@@ -559,7 +584,25 @@ def cartesian_to_keplerian(
         P : period in days.
         tp : time of periapsis passage in days.
     """
-    coords_keplerian = _cartesian_to_keplerian_vmap(coords_cartesian, t0, mu)
+    # Define chunk size
+    chunk_size = 50
+
+    # Process in chunks
+    coords_keplerian_chunks = []
+    for cartesian_chunk, t0_chunk, mu_chunk in zip(
+        process_in_chunks(coords_cartesian, chunk_size),
+        process_in_chunks(t0, chunk_size),
+        process_in_chunks(mu, chunk_size),
+    ):
+        coords_keplerian_chunk = _cartesian_to_keplerian_vmap(
+            cartesian_chunk, t0_chunk, mu_chunk
+        )
+        coords_keplerian_chunks.append(coords_keplerian_chunk)
+
+    # Concatenate chunks and remove padding
+    coords_keplerian = jnp.concatenate(coords_keplerian_chunks, axis=0)
+    coords_keplerian = coords_keplerian[: len(coords_cartesian)]
+
     return coords_keplerian
 
 
@@ -945,9 +988,24 @@ def keplerian_to_cartesian(
         )
         raise ValueError(err)
 
-    coords_cartesian = _keplerian_to_cartesian_a_vmap(
-        coords_keplerian, mu, max_iter, tol
-    )
+    # Define chunk size
+    chunk_size = 50
+
+    # Process in chunks
+    coords_cartesian_chunks = []
+    for keplerian_chunk, mu_chunk in zip(
+        process_in_chunks(coords_keplerian, chunk_size),
+        process_in_chunks(mu, chunk_size),
+    ):
+        coords_cartesian_chunk = _keplerian_to_cartesian_a_vmap(
+            keplerian_chunk, mu_chunk, max_iter, tol
+        )
+        coords_cartesian_chunks.append(coords_cartesian_chunk)
+
+    # Concatenate chunks and remove padding
+    coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
+    coords_cartesian = coords_cartesian[: len(coords_keplerian)]
+
     return coords_cartesian
 
 
@@ -1188,9 +1246,25 @@ def cometary_to_cartesian(
         vy : y-velocity in units of au per day.
         vz : z-velocity in units of au per day.
     """
-    coords_cartesian = _cometary_to_cartesian_vmap(
-        coords_cometary, t0, mu, max_iter, tol
-    )
+    # Define chunk size
+    chunk_size = 50
+
+    # Process in chunks
+    coords_cartesian_chunks = []
+    for cometary_chunk, t0_chunk, mu_chunk in zip(
+        process_in_chunks(coords_cometary, chunk_size),
+        process_in_chunks(t0, chunk_size),
+        process_in_chunks(mu, chunk_size),
+    ):
+        coords_cartesian_chunk = _cometary_to_cartesian_vmap(
+            cometary_chunk, t0_chunk, mu_chunk, max_iter, tol
+        )
+        coords_cartesian_chunks.append(coords_cartesian_chunk)
+
+    # Concatenate chunks and remove padding
+    coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
+    coords_cartesian = coords_cartesian[: len(coords_cometary)]
+
     return coords_cartesian
 
 
