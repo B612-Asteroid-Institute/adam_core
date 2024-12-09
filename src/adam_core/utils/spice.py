@@ -131,10 +131,9 @@ def get_perturber_state(
     setup_SPICE()
 
     # Convert epochs to ET in TDB
-    epochs_et = times.rescale("tdb").et()
+    epochs_et = times.et()
     unique_epochs_et = epochs_et.unique()
     N = len(times)
-    # Get position of the body in km and km/s in the desired frame and measured from the desired origin
     states = np.empty((N, 6), dtype=np.float64)
 
     for i, epoch in enumerate(unique_epochs_et):
@@ -144,9 +143,9 @@ def get_perturber_state(
         )
         states[mask, :] = state
 
-    # Convert to AU and AU per day
+    # Convert units (vectorized operations)
     states = states / KM_P_AU
-    states[:, 3:] = states[:, 3:] * S_P_DAY
+    states[:, 3:] *= S_P_DAY
 
     return CartesianCoordinates.from_kwargs(
         time=times,
@@ -157,5 +156,5 @@ def get_perturber_state(
         vy=states[:, 4],
         vz=states[:, 5],
         frame=frame,
-        origin=Origin.from_kwargs(code=[origin.name for i in range(N)]),
+        origin=Origin.from_kwargs(code=[origin.name] * N),
     )
