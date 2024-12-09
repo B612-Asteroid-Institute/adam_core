@@ -211,8 +211,8 @@ def generate_ephemeris_2body(
     chunk_size = 200
 
     # Process in chunks
-    ephemeris_chunks = []
-    light_time_chunks = []
+    ephemeris_spherical: np.ndarray = np.empty((0, 6))
+    light_time: np.ndarray = np.empty((0,))
 
     for orbits_chunk, times_chunk, observer_coords_chunk, mu_chunk in zip(
         process_in_chunks(propagated_orbits_barycentric.coordinates.values, chunk_size),
@@ -230,15 +230,14 @@ def generate_ephemeris_2body(
             tol,
             stellar_aberration,
         )
-        ephemeris_chunks.append(ephemeris_chunk)
-        light_time_chunks.append(light_time_chunk)
+        ephemeris_spherical = np.concatenate(
+            (ephemeris_spherical, np.asarray(ephemeris_chunk))
+        )
+        light_time = np.concatenate((light_time, np.asarray(light_time_chunk)))
 
     # Concatenate chunks and remove padding
-    ephemeris_spherical = jnp.concatenate(ephemeris_chunks, axis=0)[:num_entries]
-    light_time = jnp.concatenate(light_time_chunks, axis=0)[:num_entries]
-
-    ephemeris_spherical = np.array(ephemeris_spherical)
-    light_time = np.array(light_time)
+    ephemeris_spherical = np.array(ephemeris_spherical)[:num_entries]
+    light_time = np.array(light_time)[:num_entries]
 
     if not propagated_orbits.coordinates.covariance.is_all_nan():
 

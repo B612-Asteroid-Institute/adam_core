@@ -121,7 +121,7 @@ def get_observer_state(
             o_vec_ITRF93 = np.dot(R_EARTH_EQUATORIAL, o_hat_ITRF93)
 
             # Warning! Converting times to ET will incur a loss of precision.
-            epochs_et = times.rescale("tdb").et()
+            epochs_et = times.et()
             unique_epochs_et_tdb = epochs_et.unique()
 
             N = len(epochs_et)
@@ -150,7 +150,7 @@ def get_observer_state(
                     -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
                 )
 
-        return CartesianCoordinates.from_kwargs(
+        observer_states = CartesianCoordinates.from_kwargs(
             time=times,
             x=r_obs[:, 0],
             y=r_obs[:, 1],
@@ -161,3 +161,5 @@ def get_observer_state(
             frame=frame,
             origin=Origin.from_kwargs(code=[origin.name for i in range(len(times))]),
         )
+
+        return observer_states

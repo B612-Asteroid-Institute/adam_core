@@ -131,9 +131,7 @@ _cartesian_to_spherical_vmap = jit(
 )
 
 
-def cartesian_to_spherical(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray]
-) -> jnp.ndarray:
+def cartesian_to_spherical(coords_cartesian: np.ndarray) -> np.ndarray:
     """
     Convert Cartesian coordinates to a spherical coordinates.
 
@@ -165,14 +163,15 @@ def cartesian_to_spherical(
     # Define chunk size
     chunk_size = 200
 
-    # Process in chunks
-    coords_spherical_chunks = []
+    # Process in chunk
+    coords_spherical: np.ndarray = np.empty((0, 6))
     for cartesian_chunk in process_in_chunks(coords_cartesian, chunk_size):
         coords_spherical_chunk = _cartesian_to_spherical_vmap(cartesian_chunk)
-        coords_spherical_chunks.append(coords_spherical_chunk)
+        coords_spherical = np.concatenate(
+            (coords_spherical, np.asarray(coords_spherical_chunk))
+        )
 
     # Concatenate chunks and remove padding
-    coords_spherical = jnp.concatenate(coords_spherical_chunks, axis=0)
     coords_spherical = coords_spherical[: len(coords_cartesian)]
 
     return coords_spherical
@@ -293,13 +292,14 @@ def spherical_to_cartesian(
     chunk_size = 200
 
     # Process in chunks
-    coords_cartesian_chunks = []
+    coords_cartesian: np.ndarray = np.empty((0, 6))
     for spherical_chunk in process_in_chunks(coords_spherical, chunk_size):
         coords_cartesian_chunk = _spherical_to_cartesian_vmap(spherical_chunk)
-        coords_cartesian_chunks.append(coords_cartesian_chunk)
+        coords_cartesian = np.concatenate(
+            (coords_cartesian, np.asarray(coords_cartesian_chunk))
+        )
 
-    # Concatenate chunks and remove padding
-    coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
+    # Remove padding
     coords_cartesian = coords_cartesian[: len(coords_spherical)]
 
     return coords_cartesian

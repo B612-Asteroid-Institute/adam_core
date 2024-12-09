@@ -1,4 +1,4 @@
-import jax.numpy as jnp
+import numpy as np
 
 
 def pad_to_fixed_size(array, target_shape, pad_value=0):
@@ -20,7 +20,7 @@ def pad_to_fixed_size(array, target_shape, pad_value=0):
         Padded array with desired shape
     """
     pad_width = [(0, max(0, t - s)) for s, t in zip(array.shape, target_shape)]
-    return jnp.pad(array, pad_width, constant_values=pad_value)
+    return np.pad(array, pad_width, constant_values=pad_value)
 
 
 def process_in_chunks(array, chunk_size):

@@ -121,7 +121,7 @@ def propagate_2body(
     t1_ = np.tile(t1, n_orbits)
 
     # Process in chunks
-    orbits_propagated_chunks = []
+    orbits_propagated: np.ndarray = np.empty((0, 6))
     for orbits_chunk, t0_chunk, t1_chunk, mu_chunk in zip(
         process_in_chunks(orbits_array_, chunk_size),
         process_in_chunks(t0_, chunk_size),
@@ -131,10 +131,9 @@ def propagate_2body(
         orbits_propagated_chunk = _propagate_2body_vmap(
             orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
         )
-        orbits_propagated_chunks.append(orbits_propagated_chunk)
-
-    # Concatenate all chunks
-    orbits_propagated = jnp.concatenate(orbits_propagated_chunks, axis=0)
+        orbits_propagated = np.concatenate(
+            (orbits_propagated, np.asarray(orbits_propagated_chunk))
+        )
 
     # Remove padding
     orbits_propagated = orbits_propagated[: n_orbits * n_times]

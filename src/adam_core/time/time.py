@@ -48,7 +48,6 @@ class Timestamp(qv.Table):
         Returns the times as ET seconds in a pyarrow array.
         """
         tdb = self.rescale("tdb")
-
         mjd = tdb.mjd()
         return pc.multiply(pc.subtract(mjd, _J2000_TDB_MJD), 86400)
 
