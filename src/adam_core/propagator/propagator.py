@@ -433,8 +433,8 @@ class Propagator(ABC, EphemerisMixin):
 
     def propagate_orbits(
         self,
-        orbits: OrbitType,
-        times: TimestampType,
+        orbits: Union[OrbitType, ObjectRef],
+        times: Union[TimestampType, ObjectRef],
         covariance: bool = False,
         covariance_method: Literal[
             "auto", "sigma-point", "monte-carlo"
@@ -495,6 +495,7 @@ class Propagator(ABC, EphemerisMixin):
                 times_ref = ray.put(times)
             else:
                 times_ref = times
+                times = ray.get(times_ref)
 
             if not isinstance(orbits, ObjectRef):
                 orbits_ref = ray.put(orbits)

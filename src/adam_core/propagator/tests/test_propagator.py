@@ -90,7 +90,6 @@ except ImportError:
     pass
 
 
-@pytest.mark.skipif(RAY_INSTALLED is False, reason="Ray is not installed.")
 def test_propagator_multiple_workers_ray():
     orbits = make_real_orbits(10)
     times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
