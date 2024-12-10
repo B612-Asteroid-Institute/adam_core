@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import astropy.time
+import hifitime
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -16,7 +17,9 @@ SCALES = {
 
 # The Modified Julian Date of the J2000 epoch in TDB scale:
 _J2000_TDB_MJD = 51544.5
-
+MJD_EPOCH_IN_TDB = hifitime.Epoch("1858-11-17T00:00:00 TDB")
+MJD_EPOCH_IN_TAI = hifitime.Epoch("1858-11-17T00:00:00 TAI")
+MJD_EPOCH_IN_UTC = hifitime.Epoch("1858-11-17T00:00:00 UTC")
 
 class Timestamp(qv.Table):
     # Scale, the rate at which time passes:
@@ -493,18 +496,37 @@ class Timestamp(qv.Table):
     def rescale(self, new_scale: str) -> Timestamp:
         if self.scale == new_scale:
             return self
-        elif new_scale == "tai":
-            return Timestamp.from_astropy(self.to_astropy().tai)
+        
+        # For TT and UT1, use astropy to do the conversions
+        if self.scale in ["tt", "ut1"] or new_scale in ["tt", "ut1"]:
+            return Timestamp.from_astropy(getattr(self.to_astropy(), new_scale))
+
+        # Get only the values needed based on the input scale
+        if self.scale == "tdb":
+            day_values = self.jd().to_numpy()
+            init_epoch_fn = lambda val: hifitime.Epoch.init_from_jde_tdb(float(val))
+        else:  # tai or utc
+            day_values = self.mjd().to_numpy()
+            if self.scale == "tai":
+                init_epoch_fn = lambda val: hifitime.Epoch.init_from_mjd_tai(float(val))
+            else:  # utc
+                init_epoch_fn = lambda val: hifitime.Epoch.init_from_mjd_utc(float(val))
+
+        # Determine the result calculation based on the new scale
+        if new_scale == "tai":
+            calculate_result = lambda epoch: epoch.to_mjd_tai_days()
         elif new_scale == "utc":
-            return Timestamp.from_astropy(self.to_astropy().utc)
-        elif new_scale == "tt":
-            return Timestamp.from_astropy(self.to_astropy().tt)
-        elif new_scale == "ut1":
-            return Timestamp.from_astropy(self.to_astropy().ut1)
+            calculate_result = lambda epoch: epoch.to_mjd_utc_days()
         elif new_scale == "tdb":
-            return Timestamp.from_astropy(self.to_astropy().tdb)
+            calculate_result = lambda epoch: epoch.timedelta(MJD_EPOCH_IN_TDB).to_unit(hifitime.Unit.Day)
         else:
-            raise ValueError("Unknown scale: {}".format(new_scale))
+            raise ValueError(f"Unknown scale: {new_scale}")
+
+        # Process each timestamp individually
+        result_values = [calculate_result(init_epoch_fn(val)) for val in day_values]
+
+        # Convert result list back to a Timestamp
+        return self.from_mjd(pa.array(result_values), scale=new_scale)
 
     def link(
         self, other: Timestamp, precision: str = "ns"
@@ -531,6 +553,8 @@ class Timestamp(qv.Table):
 
         rounded = self.rounded(precision)
         other_rounded = other.rounded(precision)
+
+        import pdb; pdb.set_trace()
 
         left_keys = {"days": rounded.days, "nanos": rounded.nanos}
         right_keys = {"days": other_rounded.days, "nanos": other_rounded.nanos}
