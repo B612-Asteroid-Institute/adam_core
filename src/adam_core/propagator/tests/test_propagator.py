@@ -1,6 +1,5 @@
 import numpy as np
 import pyarrow as pa
-import pytest
 import quivr as qv
 
 from ...coordinates.cartesian import CartesianCoordinates

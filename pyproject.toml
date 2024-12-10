@@ -102,7 +102,7 @@ lint = { composite = [
   "black --check ./src/adam_core",
   "isort --check-only ./src/adam_core",
 ] }
-fix = "ruff ./src/adam_core --fix"
+fix = "ruff check ./src/adam_core --fix"
 typecheck = "mypy --strict ./src/adam_core"
 
 test = "pytest --benchmark-skip -m 'not profile' {args}"
