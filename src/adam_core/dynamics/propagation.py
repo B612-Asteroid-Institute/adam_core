@@ -159,8 +159,9 @@ def propagate_2body(
     else:
         cartesian_covariances = None
 
-    origin_code = np.empty(n_orbits * n_times, dtype="object")
-    origin_code.fill("SUN")
+    origin_code = np.repeat(
+        orbits.coordinates.origin.code.to_numpy(zero_copy_only=False), n_times
+    )
 
     # Convert from the jax array to a numpy array
     orbits_propagated = np.asarray(orbits_propagated)

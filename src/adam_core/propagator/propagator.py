@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Type, Union
+from typing import List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -103,7 +103,7 @@ class EphemerisMixin:
         observers,
         lt_tol: float = 1e-12,
         max_iter: int = 10,
-    ):
+    ) -> Tuple[Orbits, np.ndarray]:
         orbits_aberrated = Orbits.empty()
         lts = np.zeros(len(orbits))
         for i, (orbit, observer) in enumerate(zip(orbits, observers)):
@@ -433,8 +433,8 @@ class Propagator(ABC, EphemerisMixin):
 
     def propagate_orbits(
         self,
-        orbits: OrbitType,
-        times: TimestampType,
+        orbits: Union[OrbitType, ObjectRef],
+        times: Union[TimestampType, ObjectRef],
         covariance: bool = False,
         covariance_method: Literal[
             "auto", "sigma-point", "monte-carlo"
@@ -495,6 +495,7 @@ class Propagator(ABC, EphemerisMixin):
                 times_ref = ray.put(times)
             else:
                 times_ref = times
+                times = ray.get(times_ref)
 
             if not isinstance(orbits, ObjectRef):
                 orbits_ref = ray.put(orbits)
@@ -573,6 +574,12 @@ class Propagator(ABC, EphemerisMixin):
 
         if propagated_variants is not None:
             propagated = propagated_variants.collapse(propagated)
+
+        # Preserve the time scale of the requested times
+        propagated = propagated.set_column(
+            "coordinates.time",
+            propagated.coordinates.time.rescale(times.scale),
+        )
 
         # Return the results with the original origin and frame
         # Preserve the original output origin for the input orbits
