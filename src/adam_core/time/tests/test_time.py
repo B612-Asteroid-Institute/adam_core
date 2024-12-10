@@ -690,3 +690,23 @@ def test_Timestamp_min():
     assert min_time.scale == times.scale
     assert min_time.days.to_pylist() == [1]
     assert min_time.nanos.to_pylist() == [1]
+
+
+@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt", "ut1"])
+@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt", "ut1"])
+def test_Timestamp_rescale(scale1, scale2):
+    """
+    Test rescaling by using round trip calculations
+    """
+    times = Timestamp.from_kwargs(
+        days=[-57023, 0, 51544, 103088, 164178, 68000, 68000, 68010, 68020],  # Spans from ~1702 to ~2308
+        nanos=[100_000_000, 200_000_000, 300_000_000, 400_000_000, 500_000_000, 1, 2, 3, 4],
+        scale=scale1,
+    )
+    rescaled = times.rescale(scale2)
+    round_tripped = rescaled.rescale(scale1)
+    assert rescaled.scale == scale2
+    assert round_tripped.scale == scale1
+    print(times.difference(round_tripped))
+    assert pc.all(times.equals(round_tripped, precision="us")).as_py()
+
