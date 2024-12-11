@@ -127,12 +127,23 @@ class EphemerisMixin:
 
                 # Calculate the topocentric distance
                 rho = np.linalg.norm(orbit_i.coordinates.r - observer_position)
+                # If rho becomes too large, we are probably simulating a close encounter
+                # and our propagation will break
+                if np.isnan(rho) or rho > 1e12:
+                    raise ValueError(
+                        "Distance from observer is NaN or too large and propagation will break."
+                    )
 
                 # Calculate the light travel time
                 lt = rho / C
 
                 # Calculate the change in light travel time since the previous iteration
                 dlt = np.abs(lt - lt_prev)
+
+                if np.isnan(lt) or lt > 1e12:
+                    raise ValueError(
+                        "Light travel time is NaN or too large and propagation will break."
+                    )
 
                 # Calculate the new epoch and propagate the initial orbit to that epoch
                 # Should be sufficient to use 2body propagation for this
@@ -160,7 +171,24 @@ class EphemerisMixin:
         elif isinstance(orbits, VariantOrbits):
             ephemeris_total = VariantEphemeris.empty()
 
+        # Sort observers by time and code to ensure consistent ordering
+        # As further propagation will order by time as well
+        observers = observers.sort_by(
+            ["coordinates.time.days", "coordinates.time.nanos", "code"]
+        )
+
+        observers_barycentric = observers.set_column(
+            "coordinates",
+            transform_coordinates(
+                observers.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            ),
+        )
+
         for orbit in orbits:
+            # Propagate orbits to sorted observer times
             propagated_orbits = self.propagate_orbits(orbit, observers.coordinates.time)
 
             # Transform both the orbits and observers to the barycenter if they are not already.
@@ -173,15 +201,7 @@ class EphemerisMixin:
                     origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
                 ),
             )
-            observers_barycentric = observers.set_column(
-                "coordinates",
-                transform_coordinates(
-                    observers.coordinates,
-                    CartesianCoordinates,
-                    frame_out="ecliptic",
-                    origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
-                ),
-            )
+
             num_orbits = len(propagated_orbits_barycentric.orbit_id.unique())
 
             observer_codes = np.tile(
@@ -247,6 +267,15 @@ class EphemerisMixin:
                 )
 
             ephemeris_total = qv.concatenate([ephemeris_total, ephemeris])
+
+        ephemeris_total = ephemeris_total.sort_by(
+            [
+                "orbit_id",
+                "coordinates.time.days",
+                "coordinates.time.nanos",
+                "coordinates.origin.code",
+            ]
+        )
 
         return ephemeris_total
 
