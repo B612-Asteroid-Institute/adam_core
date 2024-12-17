@@ -6,7 +6,8 @@ from ...orbits import Orbits, VariantOrbits
 from ...propagator import Propagator
 from ...time import Timestamp
 from ..impacts import (
-    EarthImpacts,
+    CollisionConditions,
+    CollisionEvent,
     ImpactMixin,
     ImpactProbabilities,
     calculate_impact_probabilities,
@@ -19,7 +20,9 @@ class MockImpactPropagator(Propagator, ImpactMixin):
     def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
         return orbits
 
-    def _detect_impacts(self, orbits: Orbits, num_days: float) -> Orbits:
+    def _detect_collisions(
+        self, orbits: Orbits, num_days: float, conditions: CollisionConditions
+    ) -> Orbits:
         # Artificially set the orbits.coordinates.times to the end time
         # except for the orbits who impacted
         new_times = orbits.coordinates.time.add_days(num_days)
@@ -27,7 +30,7 @@ class MockImpactPropagator(Propagator, ImpactMixin):
 
         # Pick random orbit to impact
         impacted = orbits[0]
-        impact = EarthImpacts.from_kwargs(
+        impact = CollisionEvent.from_kwargs(
             orbit_id=impacted.orbit_id,
             variant_id=impacted.variant_id,
             coordinates=CartesianCoordinates.from_kwargs(
@@ -42,6 +45,10 @@ class MockImpactPropagator(Propagator, ImpactMixin):
                 frame=impacted.coordinates.frame,
             ),
             distance=[0.0],
+            condition_id=["1"],
+            collision_object_name=["Earth"],
+            collision_distance=[1.0],
+            stopping_condition=[False],
         )
 
         return orbits, impact
@@ -109,7 +116,7 @@ def test_calculate_impact_probabilities():
         ),
     )
 
-    impacts = EarthImpacts.from_kwargs(
+    impacts = CollisionEvent.from_kwargs(
         orbit_id=["1", "2", "2"],
         variant_id=["1", "1", "2"],
         coordinates=CartesianCoordinates.from_kwargs(
@@ -124,11 +131,23 @@ def test_calculate_impact_probabilities():
             frame="ecliptic",
         ),
         distance=[0.0, 0.0, 0.0],
+        condition_id=["1", "1", "1"],
+        collision_object_name=["Earth", "Earth", "Earth"],
+        collision_distance=[1.0, 1.0, 1.0],
+        stopping_condition=[False, False, False],
     )
 
-    ip = calculate_impact_probabilities(variants, impacts)
+    impact_conditions = CollisionConditions.from_kwargs(
+        condition_id=["1"],
+        collision_object_name=["Earth"],
+        collision_distance=[1.0],
+        stopping_condition=[False],
+    )
+
+    ip = calculate_impact_probabilities(variants, impacts, conditions=impact_conditions)
 
     assert ip == ImpactProbabilities.from_kwargs(
+        condition_id=["1", "1", "1"],
         orbit_id=["1", "2", "3"],
         impacts=[1, 2, 0],
         variants=[3, 3, 3],
