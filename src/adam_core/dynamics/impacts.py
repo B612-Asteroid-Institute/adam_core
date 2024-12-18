@@ -44,16 +44,9 @@ if RAY_INSTALLED:
     def impact_worker_ray(idx_chunk, orbits, propagator_class, num_days):
         prop = propagator_class()
         orbits_chunk = orbits.take(idx_chunk)
-        variants, impacts = prop._detect_impacts(orbits_chunk, num_days)
+        variants, impacts = prop._detect_collisions(orbits_chunk, num_days)
         return variants, impacts
 
-
-class EarthImpacts(qv.Table):
-    orbit_id = qv.StringColumn()
-    # Distance from earth center in km
-    distance = qv.Float64Column()
-    coordinates = CartesianCoordinates.as_column()
-    variant_id = qv.LargeStringColumn(nullable=True)
 
 
 class ImpactProbabilities(qv.Table):
@@ -87,19 +80,9 @@ class CollisionEvent(qv.Table):
 class ImpactMixin:
     """
     `~adam_core.propagator.Propagator` mixin with signature for detecting Earth impacts.
-    Subclasses should implement the _detect_impacts method.
+    Subclasses should implement the _detect_collisions method.
     """
 
-    @abstractmethod
-    def _detect_impacts(
-        self, orbits: Orbits, num_days: float
-    ) -> Tuple[OrbitType, EarthImpacts]:
-        """
-        Detect impacts for the given orbits.
-
-        THIS FUNCTION SHOULD BE DEFINED BY THE USER.
-        """
-        pass
 
     @abstractmethod
     def _detect_collisions(
@@ -115,82 +98,6 @@ class ImpactMixin:
         """
         pass
 
-    def detect_impacts(
-        self,
-        orbits: OrbitType,
-        num_days: int,
-        max_processes: Optional[int] = 1,
-        chunk_size: int = 100,
-    ) -> Tuple[OrbitType, EarthImpacts]:
-        """
-        Detect impacts for each orbit in orbits after num_days.
-
-        Parameters
-        ----------
-        orbits : `~adam_core.orbits.orbits.Orbits` (N)
-            Orbits for which to detect impacts.
-        num_days : int
-            Number of days after which to detect impacts.
-        max_processes : int or None, optional
-            Maximum number of processes to launch. If None then the number of
-            processes will be equal to the number of cores on the machine. If 1
-            then no multiprocessing will be used.
-
-        Returns
-        -------
-        propagated : `~adam_core.orbits.OrbitType`
-            The input orbits propagated to the end of simulation.
-        impacts : `~adam_core.orbits.earth_impacts.EarthImpacts`
-            Impacts detected for the orbits.
-        """
-        if max_processes is None or max_processes > 1:
-            impact_list: List[EarthImpacts] = []
-            propagated_list: List[OrbitType] = []
-
-            if RAY_INSTALLED is False:
-                raise ImportError(
-                    "Ray must be installed to use the ray parallel backend"
-                )
-
-            initialize_use_ray(num_cpus=max_processes)
-
-            # Add orbits to object store if
-            # they haven't already been added
-            if not isinstance(orbits, ObjectRef):
-                orbits_ref = ray.put(orbits)
-            else:
-                orbits_ref = orbits
-                # We need to dereference the orbits ObjectRef so we can
-                # check its length for chunking and determine
-                # if we need to propagate variants
-                orbits = ray.get(orbits_ref)
-
-            # Create futures
-            futures = []
-            idx = np.arange(0, len(orbits))
-            for idx_chunk in _iterate_chunks(idx, chunk_size):
-                futures.append(
-                    impact_worker_ray.remote(
-                        idx_chunk, orbits_ref, self.__class__, num_days
-                    )
-                )
-
-            # Get results as they finish (we sort later)
-            unfinished = futures
-            while unfinished:
-                finished, unfinished = ray.wait(unfinished, num_returns=1)
-                (propagated, impacts) = ray.get(finished[0])
-                propagated_list.append(propagated)
-                impact_list.append(impacts)
-
-            propagated = qv.concatenate(propagated_list)
-            impacts = qv.concatenate(impact_list)
-
-        else:
-            propagated, impacts = self._detect_impacts(orbits, num_days)
-
-        return propagated, impacts
-
     def detect_collisions(
         self,
         orbits: OrbitType,
@@ -198,7 +105,7 @@ class ImpactMixin:
         conditions: Optional[CollisionConditions] = None,
         max_processes: Optional[int] = 1,
         chunk_size: Optional[int] = 100,
-    ) -> Tuple[OrbitType, EarthImpacts]:
+    ) -> Tuple[OrbitType, CollisionConditions]:
         """
         Detect collisions for each orbit in orbits after num_days.
 
@@ -209,7 +116,11 @@ class ImpactMixin:
         num_days : int
             Number of days after which to detect impacts.
         conditions : `~adam_core.orbits.earth_impacts.CollisionConditions`
-            Conditions for detecting collisions.
+            Conditions for detecting collisions, including:
+            - condition_id: Unique identifier for the condition.
+            - collision_object_name: Name of the object with which to detect collisions.
+            - collision_distance: Distance from the object at which to detect collisions.
+            - stopping_condition: Whether to stop propagation after a collision.
         max_processes : int or None, optional
             Maximum number of processes to launch. If None then the number of
             processes will be equal to the number of cores on the machine. If 1
@@ -219,11 +130,19 @@ class ImpactMixin:
         -------
         propagated : `~adam_core.orbits.OrbitType`
             The input orbits propagated to the end of simulation.
-        impacts : `~adam_core.orbits.earth_impacts.EarthImpacts`
-            Impacts detected for the orbits.
+        impacts : `~adam_core.orbits.earth_impacts.CollisionEvent`
+            Impacts/collisions detected for the orbits. Includes:
+            - orbit_id: Unique identifier for the orbit.
+            - distance: Distance from the collision object.
+            - coordinates: Cartesian coordinates of the impact.
+            - variant_id: Unique identifier for the variant.
+            - condition_id: Unique identifier for the condition.
+            - collision_object_name: Name of the object with which collisions were detected.
+            - collision_distance: Distance from the object at which collisions were detected.
+            - stopping_condition: Whether the propagation was stopped after a collision.
         """
         if max_processes is None or max_processes > 1:
-            impact_list: List[EarthImpacts] = []
+            impact_list: List[CollisionConditions] = []
             propagated_list: List[OrbitType] = []
 
             if RAY_INSTALLED is False:
