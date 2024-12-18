@@ -48,7 +48,6 @@ if RAY_INSTALLED:
         return variants, impacts
 
 
-
 class ImpactProbabilities(qv.Table):
     condition_id = qv.LargeStringColumn()
     orbit_id = qv.LargeStringColumn()
@@ -82,7 +81,6 @@ class ImpactMixin:
     `~adam_core.propagator.Propagator` mixin with signature for detecting Earth impacts.
     Subclasses should implement the _detect_collisions method.
     """
-
 
     @abstractmethod
     def _detect_collisions(
