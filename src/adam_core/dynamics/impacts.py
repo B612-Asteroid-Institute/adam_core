@@ -76,6 +76,14 @@ class CollisionEvent(qv.Table):
     stopping_condition = qv.BooleanColumn()
 
 
+class EarthImpacts(qv.Table):
+    orbit_id = qv.StringColumn()
+    # Distance from earth center in km
+    distance = qv.Float64Column()
+    coordinates = CartesianCoordinates.as_column()
+    variant_id = qv.LargeStringColumn(nullable=True)
+
+
 class ImpactMixin:
     """
     `~adam_core.propagator.Propagator` mixin with signature for detecting Earth impacts.
