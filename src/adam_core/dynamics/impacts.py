@@ -7,6 +7,8 @@ import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
 
+from adam_core.constants import KM_P_AU
+from adam_core.constants import Constants as c
 from adam_core.coordinates import CartesianCoordinates
 from adam_core.ray_cluster import initialize_use_ray
 
@@ -19,6 +21,12 @@ from ..propagator.utils import _iterate_chunks
 from ..time import Timestamp
 
 logger = logging.getLogger(__name__)
+
+C = c.C
+
+# Use the Earth's equatorial radius as used in DE4XX ephemerides
+# adam_core defines it in au but we need it in km
+EARTH_RADIUS_KM = c.R_EARTH_EQUATORIAL * KM_P_AU
 
 RAY_INSTALLED = False
 try:
@@ -36,19 +44,12 @@ if RAY_INSTALLED:
     def impact_worker_ray(idx_chunk, orbits, propagator_class, num_days):
         prop = propagator_class()
         orbits_chunk = orbits.take(idx_chunk)
-        variants, impacts = prop._detect_impacts(orbits_chunk, num_days)
+        variants, impacts = prop._detect_collisions(orbits_chunk, num_days)
         return variants, impacts
 
 
-class EarthImpacts(qv.Table):
-    orbit_id = qv.StringColumn()
-    # Distance from earth center in km
-    distance = qv.Float64Column()
-    coordinates = CartesianCoordinates.as_column()
-    variant_id = qv.LargeStringColumn(nullable=True)
-
-
 class ImpactProbabilities(qv.Table):
+    condition_id = qv.LargeStringColumn()
     orbit_id = qv.LargeStringColumn()
     impacts = qv.Int64Column()
     variants = qv.Int64Column()
@@ -57,32 +58,63 @@ class ImpactProbabilities(qv.Table):
     maximum_impact_time = Timestamp.as_column(nullable=True)
 
 
+class CollisionConditions(qv.Table):
+    condition_id = qv.LargeStringColumn()
+    collision_object_name = qv.LargeStringColumn()
+    collision_distance = qv.Float64Column()
+    stopping_condition = qv.BooleanColumn()
+
+
+class CollisionEvent(qv.Table):
+    orbit_id = qv.LargeStringColumn()
+    distance = qv.Float64Column()  # Distance from collision object in km
+    coordinates = CartesianCoordinates.as_column()
+    variant_id = qv.LargeStringColumn(nullable=True)
+    condition_id = qv.LargeStringColumn()
+    collision_object_name = qv.LargeStringColumn()
+    collision_distance = qv.Float64Column()
+    stopping_condition = qv.BooleanColumn()
+
+
+# Can be removed after updates to adam-assist
+class EarthImpacts(qv.Table):
+    orbit_id = qv.StringColumn()
+    # Distance from earth center in km
+    distance = qv.Float64Column()
+    coordinates = CartesianCoordinates.as_column()
+    variant_id = qv.LargeStringColumn(nullable=True)
+
+
 class ImpactMixin:
     """
     `~adam_core.propagator.Propagator` mixin with signature for detecting Earth impacts.
-    Subclasses should implement the _detect_impacts method.
+    Subclasses should implement the _detect_collisions method.
     """
 
     @abstractmethod
-    def _detect_impacts(
-        self, orbits: Orbits, num_days: float
-    ) -> Tuple[OrbitType, EarthImpacts]:
+    def _detect_collisions(
+        self,
+        orbits: Orbits,
+        num_days: float,
+        conditions: Optional[CollisionConditions] = None,
+    ) -> Tuple[OrbitType, CollisionEvent]:
         """
-        Detect impacts for the given orbits.
+        Detect collisions for the given orbits.
 
-        THIS FUNCTION SHOULD BE DEFINED BY THE USER.
+        THIS FUNCTION SHOULD NOT BE OVERRIDDEN BY THE USER.
         """
         pass
 
-    def detect_impacts(
+    def detect_collisions(
         self,
         orbits: OrbitType,
         num_days: int,
+        conditions: Optional[CollisionConditions] = None,
         max_processes: Optional[int] = 1,
-        chunk_size: int = 100,
-    ) -> Tuple[OrbitType, EarthImpacts]:
+        chunk_size: Optional[int] = 100,
+    ) -> Tuple[OrbitType, CollisionConditions]:
         """
-        Detect impacts for each orbit in orbits after num_days.
+        Detect collisions for each orbit in orbits after num_days.
 
         Parameters
         ----------
@@ -90,6 +122,12 @@ class ImpactMixin:
             Orbits for which to detect impacts.
         num_days : int
             Number of days after which to detect impacts.
+        conditions : `~adam_core.orbits.earth_impacts.CollisionConditions`
+            Conditions for detecting collisions, including:
+            - condition_id: Unique identifier for the condition.
+            - collision_object_name: Name of the object with which to detect collisions.
+            - collision_distance: Distance from the object at which to detect collisions.
+            - stopping_condition: Whether to stop propagation after a collision.
         max_processes : int or None, optional
             Maximum number of processes to launch. If None then the number of
             processes will be equal to the number of cores on the machine. If 1
@@ -99,11 +137,19 @@ class ImpactMixin:
         -------
         propagated : `~adam_core.orbits.OrbitType`
             The input orbits propagated to the end of simulation.
-        impacts : `~adam_core.orbits.earth_impacts.EarthImpacts`
-            Impacts detected for the orbits.
+        impacts : `~adam_core.orbits.earth_impacts.CollisionEvent`
+            Impacts/collisions detected for the orbits. Includes:
+            - orbit_id: Unique identifier for the orbit.
+            - distance: Distance from the collision object.
+            - coordinates: Cartesian coordinates of the impact.
+            - variant_id: Unique identifier for the variant.
+            - condition_id: Unique identifier for the condition.
+            - collision_object_name: Name of the object with which collisions were detected.
+            - collision_distance: Distance from the object at which collisions were detected.
+            - stopping_condition: Whether the propagation was stopped after a collision.
         """
         if max_processes is None or max_processes > 1:
-            impact_list: List[EarthImpacts] = []
+            impact_list: List[CollisionConditions] = []
             propagated_list: List[OrbitType] = []
 
             if RAY_INSTALLED is False:
@@ -146,7 +192,9 @@ class ImpactMixin:
             impacts = qv.concatenate(impact_list)
 
         else:
-            propagated, impacts = self._detect_impacts(orbits, num_days)
+            propagated, impacts = self._detect_collisions(
+                orbits, num_days, conditions=conditions
+            )
 
         return propagated, impacts
 
@@ -158,7 +206,8 @@ def calculate_impacts(
     num_samples: int = 1000,
     processes: Optional[int] = None,
     seed: Optional[int] = None,
-) -> Tuple[Orbits, EarthImpacts]:
+    impact_conditions: Optional[CollisionConditions] = None,
+) -> Tuple[OrbitType, CollisionEvent]:
     """
     Calculate the impacts for each variant orbit generated from the input orbits.
 
@@ -188,18 +237,28 @@ def calculate_impacts(
     variants = VariantOrbits.create(
         orbits, method="monte-carlo", num_samples=num_samples, seed=seed
     )
+    if impact_conditions is None:
+        impact_conditions = CollisionConditions.from_kwargs(
+            condition_id=["Default"],
+            collision_object_name=["Earth"],
+            collision_distance=[EARTH_RADIUS_KM],
+            stopping_condition=[True],
+        )
     logger.info("Detecting impacts...")
-    results, impacts = propagator.detect_impacts(
+    results, collisions = propagator.detect_collisions(
         variants,
         num_days,
+        impact_conditions,
         max_processes=processes,
     )
 
-    return results, impacts
+    return results, collisions
 
 
 def calculate_impact_probabilities(
-    variants: VariantOrbits, impacts: EarthImpacts
+    variants: VariantOrbits,
+    collision_events: CollisionEvent,
+    conditions: Optional[CollisionConditions] = None,
 ) -> ImpactProbabilities:
     """
     Calculate the impact probabilities for each variant orbit generated from the input orbits.
@@ -215,34 +274,45 @@ def calculate_impact_probabilities(
         Impact probabilities for the variant orbits.
     """
 
+    if conditions is None:
+        conditions = CollisionConditions.from_kwargs(
+            condition_id=["Default"],
+            collision_object_name=["Earth"],
+            collision_distance=[EARTH_RADIUS_KM],
+            stopping_condition=[True],
+        )
+
     # Loop through the unique set of orbit_ids within variants using quivr
     unique_orbits = pc.unique(variants.orbit_id).to_pylist()
 
-    earth_impact_probabilities = None
+    impact_probabilities = None
 
     for orbit_id in unique_orbits:
-        # mask = pc.equal(variants.orbit_id, orbit_id)
         variant_masked = variants.select("orbit_id", orbit_id)
         variant_count = len(variant_masked)
 
-        impacts_masked = impacts.select("orbit_id", orbit_id)
-        impact_count = len(impacts_masked)
+        impacts_masked = collision_events.select("orbit_id", orbit_id)
 
-        ip = ImpactProbabilities.from_kwargs(
-            orbit_id=[orbit_id],
-            impacts=[impact_count],
-            variants=[variant_count],
-            cumulative_probability=[impact_count / variant_count],
-        )
+        for unique_condition in conditions:
+            impacts_per_condition = impacts_masked.select(
+                "condition_id", unique_condition.condition_id[0]
+            )
+            impact_count = len(impacts_per_condition)
 
-        if earth_impact_probabilities is None:
-            earth_impact_probabilities = ip
-        else:
-            earth_impact_probabilities = qv.concatenate(
-                [earth_impact_probabilities, ip]
+            ip = ImpactProbabilities.from_kwargs(
+                condition_id=[unique_condition.condition_id[0]],
+                orbit_id=[orbit_id],
+                impacts=[impact_count],
+                variants=[variant_count],
+                cumulative_probability=[impact_count / variant_count],
             )
 
-    return earth_impact_probabilities
+            if impact_probabilities is None:
+                impact_probabilities = ip
+            else:
+                impact_probabilities = qv.concatenate([impact_probabilities, ip])
+
+    return impact_probabilities
 
 
 def link_impacting_variants(variants, impacts):
