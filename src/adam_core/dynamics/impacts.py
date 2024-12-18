@@ -75,7 +75,7 @@ class CollisionEvent(qv.Table):
     collision_distance = qv.Float64Column()
     stopping_condition = qv.BooleanColumn()
 
-
+#Can be removed after updates to adam-assist
 class EarthImpacts(qv.Table):
     orbit_id = qv.StringColumn()
     # Distance from earth center in km
