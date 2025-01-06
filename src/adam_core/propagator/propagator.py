@@ -471,6 +471,7 @@ class Propagator(ABC, EphemerisMixin):
         num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
+        seed: Optional[int] = None,
     ) -> Orbits:
         """
         Propagate each orbit in orbits to each time in times.
@@ -552,7 +553,7 @@ class Propagator(ABC, EphemerisMixin):
             # Add variants to propagate to futures
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
-                    orbits, method=covariance_method, num_samples=num_samples
+                    orbits, method=covariance_method, num_samples=num_samples, seed=seed
                 )
                 variants_ref = ray.put(variants)
 
