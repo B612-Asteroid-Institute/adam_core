@@ -290,6 +290,7 @@ class EphemerisMixin:
         num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
+        seed: Optional[int] = None,
     ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -376,18 +377,20 @@ class EphemerisMixin:
             # Add variants to futures (if we have any)
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
-                    orbits, method=covariance_method, num_samples=num_samples
+                    orbits,
+                    method=covariance_method,
+                    num_samples=num_samples,
+                    seed=seed,
                 )
 
                 # Add variants to object store
                 variants_ref = ray.put(variants)
 
                 idx = np.arange(0, len(variants))
-                for variant_chunk in _iterate_chunks(idx, chunk_size):
-                    idx_chunk = ray.put(variant_chunk)
+                for variant_chunk_idx in _iterate_chunks(idx, chunk_size):
                     futures.append(
                         ephemeris_worker_ray.remote(
-                            idx_chunk,
+                            variant_chunk_idx,
                             variants_ref,
                             observers_ref,
                             self.__class__,
@@ -420,7 +423,10 @@ class EphemerisMixin:
 
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
-                    orbits, method=covariance_method, num_samples=num_samples
+                    orbits,
+                    method=covariance_method,
+                    num_samples=num_samples,
+                    seed=seed,
                 )
                 ephemeris_variants = self._generate_ephemeris(variants, observers)
             else:
@@ -553,16 +559,19 @@ class Propagator(ABC, EphemerisMixin):
             # Add variants to propagate to futures
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
-                    orbits, method=covariance_method, num_samples=num_samples, seed=seed
+                    orbits,
+                    method=covariance_method,
+                    num_samples=num_samples,
+                    seed=seed,
                 )
+
                 variants_ref = ray.put(variants)
 
                 idx = np.arange(0, len(variants))
-                for variant_chunk in _iterate_chunks(idx, chunk_size):
-                    idx_chunk = ray.put(variant_chunk)
+                for variant_chunk_idx in _iterate_chunks(idx, chunk_size):
                     futures.append(
                         propagation_worker_ray.remote(
-                            idx_chunk,
+                            variant_chunk_idx,
                             variants_ref,
                             times_ref,
                             self.__class__,
@@ -588,6 +597,10 @@ class Propagator(ABC, EphemerisMixin):
             propagated = qv.concatenate(propagated_list)
             if len(variants_list) > 0:
                 propagated_variants = qv.concatenate(variants_list)
+                # sort by variant_id and time
+                propagated_variants = propagated_variants.sort_by(
+                    ["variant_id", "coordinates.time.days", "coordinates.time.nanos"]
+                )
             else:
                 propagated_variants = None
 
@@ -596,9 +609,17 @@ class Propagator(ABC, EphemerisMixin):
 
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
-                    orbits, method=covariance_method, num_samples=num_samples
+                    orbits,
+                    method=covariance_method,
+                    num_samples=num_samples,
+                    seed=seed,
                 )
+
                 propagated_variants = self._propagate_orbits(variants, times)
+                # sort by variant_id and time
+                propagated_variants = propagated_variants.sort_by(
+                    ["variant_id", "coordinates.time.days", "coordinates.time.nanos"]
+                )
             else:
                 propagated_variants = None
 
