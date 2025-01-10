@@ -119,7 +119,11 @@ def test_calculate_impact_probabilities():
             vx=[1.0, 2.0, 3.0],
             vy=[1.0, 2.0, 3.0],
             vz=[1.0, 2.0, 3.0],
-            time=Timestamp.from_iso8601(["2020-01-01T00:00:00"] * 3),
+            time=Timestamp.from_kwargs(
+                days=[59200, 59200, 59200],
+                nanos=[0, 0, 43200 * 1e9],
+                scale="utc",
+            ),
             origin=Origin.from_kwargs(code=["SUN"] * 3),
             frame="ecliptic",
         ),
@@ -128,12 +132,33 @@ def test_calculate_impact_probabilities():
 
     ip = calculate_impact_probabilities(variants, impacts)
 
-    assert ip == ImpactProbabilities.from_kwargs(
+    desired = ImpactProbabilities.from_kwargs(
         orbit_id=["1", "2", "3"],
         impacts=[1, 2, 0],
         variants=[3, 3, 3],
         cumulative_probability=[1 / 3, 2 / 3, 0.0],
+        mean_impact_time=Timestamp.from_kwargs(
+            days=[59200, 59200, None],
+            nanos=[0, 43200 * 1e9 / 2, None],
+            scale="utc",
+            permit_nulls=True,
+        ),
+        stddev_impact_time=[0.0, 0.25, None],
+        minimum_impact_time=Timestamp.from_kwargs(
+            days=[59200, 59200, None],
+            nanos=[0, 0, None],
+            scale="utc",
+            permit_nulls=True,
+        ),
+        maximum_impact_time=Timestamp.from_kwargs(
+            days=[59200, 59200, None],
+            nanos=[0, 43200 * 1e9, None],
+            scale="utc",
+            permit_nulls=True,
+        ),
     )
+
+    assert ip == desired
 
 
 def test_calculate_mahalanobis_distance():
