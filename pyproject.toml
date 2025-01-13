@@ -39,7 +39,7 @@ dependencies = [
   "requests",
   "scipy",
   "spiceypy",
-  "quivr @ git+https://github.com/B612-Asteroid-Institute/quivr@33cfa199cc281688558b56db7b7d82162195c000",
+  "quivr>=0.7.5",
   "mpc-obscodes",
   "naif-de440",
   "naif-leapseconds",
