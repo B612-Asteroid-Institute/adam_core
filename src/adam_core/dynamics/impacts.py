@@ -53,6 +53,8 @@ class ImpactProbabilities(qv.Table):
     impacts = qv.Int64Column()
     variants = qv.Int64Column()
     cumulative_probability = qv.Float64Column()
+    mean_impact_time = Timestamp.as_column(nullable=True)
+    stddev_impact_time = qv.Float64Column(nullable=True)
     minimum_impact_time = Timestamp.as_column(nullable=True)
     maximum_impact_time = Timestamp.as_column(nullable=True)
 
@@ -218,7 +220,7 @@ def calculate_impact_probabilities(
     # Loop through the unique set of orbit_ids within variants using quivr
     unique_orbits = pc.unique(variants.orbit_id).to_pylist()
 
-    earth_impact_probabilities = None
+    earth_impact_probabilities = ImpactProbabilities.empty()
 
     for orbit_id in unique_orbits:
         # mask = pc.equal(variants.orbit_id, orbit_id)
@@ -228,19 +230,34 @@ def calculate_impact_probabilities(
         impacts_masked = impacts.select("orbit_id", orbit_id)
         impact_count = len(impacts_masked)
 
+        if len(impacts_masked) > 0:
+            impact_mjds = impacts_masked.coordinates.time.mjd().to_numpy(
+                zero_copy_only=False
+            )
+            mean_mjd = Timestamp.from_mjd(
+                [np.mean(impact_mjds)], scale=impacts_masked.coordinates.time.scale
+            )
+            stddev = np.std(impact_mjds)
+            min_mjd = impacts_masked.coordinates.time.min()
+            max_mjd = impacts_masked.coordinates.time.max()
+        else:
+            mean_mjd = Timestamp.nulls(1, scale=impacts_masked.coordinates.time.scale)
+            stddev = None
+            min_mjd = Timestamp.nulls(1, scale=impacts_masked.coordinates.time.scale)
+            max_mjd = Timestamp.nulls(1, scale=impacts_masked.coordinates.time.scale)
+
         ip = ImpactProbabilities.from_kwargs(
             orbit_id=[orbit_id],
             impacts=[impact_count],
             variants=[variant_count],
             cumulative_probability=[impact_count / variant_count],
+            mean_impact_time=mean_mjd,
+            stddev_impact_time=[stddev],
+            minimum_impact_time=min_mjd,
+            maximum_impact_time=max_mjd,
         )
 
-        if earth_impact_probabilities is None:
-            earth_impact_probabilities = ip
-        else:
-            earth_impact_probabilities = qv.concatenate(
-                [earth_impact_probabilities, ip]
-            )
+        earth_impact_probabilities = qv.concatenate([earth_impact_probabilities, ip])
 
     return earth_impact_probabilities
 
