@@ -12,6 +12,7 @@ from .classification import calc_orbit_class
 logger = logging.getLogger(__name__)
 
 
+
 class Orbits(qv.Table):
 
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
@@ -46,3 +47,11 @@ class Orbits(qv.Table):
         """
         keplerian = self.coordinates.to_keplerian()
         return calc_orbit_class(keplerian)
+    
+    def preview(self, propagator: "Propagator") -> None:
+        """
+        For a single orbit, render a plotly plot of the orbit.
+        """
+        from ..propagator import Propagator
+        from .plots import plot_orbit
+        plot_orbit(self, propagator)
