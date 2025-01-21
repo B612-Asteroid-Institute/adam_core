@@ -14,7 +14,9 @@ except ImportError:
     raise ImportError("Please install adam_core[plots] to use this feature.")
 
 
-def plot_orbit(orbit: Orbits, propagator: Propagator, start_time: Optional[Timestamp] = None) -> None:
+def plot_orbit(
+    orbit: Orbits, propagator: Propagator, start_time: Optional[Timestamp] = None
+) -> None:
     """
     Plot an orbit.
     """
@@ -35,13 +37,11 @@ def plot_orbit(orbit: Orbits, propagator: Propagator, start_time: Optional[Times
     sample_dates_mjd = np.arange(
         start_time.mjd()[0].as_py(), propagation_end_date + 5, 5
     )
-    sample_dates = Timestamp.from_mjd(
-        sample_dates_mjd, scale=start_time.scale
-    )
+    sample_dates = Timestamp.from_mjd(sample_dates_mjd, scale=start_time.scale)
 
     # Propagate the orbit in cartesian space
     propagated_orbits = propagator.propagate_orbits(orbit, sample_dates)
-    
+
     max_r = np.max(np.abs(propagated_orbits.coordinates.r))
 
     # Give a default max_r if the orbits are smaller than the inner planets
@@ -68,18 +68,48 @@ def plot_orbit(orbit: Orbits, propagator: Propagator, start_time: Optional[Times
 
     traces = []
 
-    fig = go.Figure(layout=dict(width=800, height=800))
-    
+    # Create figure with black background and appropriate styling
+    fig = go.Figure(
+        layout=dict(
+            paper_bgcolor="black",
+            plot_bgcolor="black",
+            scene=dict(
+                bgcolor="black",
+            ),
+        )
+    )
+
+    # Define a color scheme for planets with transparency
+    planet_colors = {
+        "Mercury": "rgba(160, 82, 45, 0.6)",  # Brown with alpha
+        "Venus": "rgba(218, 165, 32, 0.6)",  # Goldenrod with alpha
+        "Earth": "rgba(65, 105, 225, 0.6)",  # Royal Blue with alpha
+        "Mars": "rgba(205, 92, 92, 0.6)",  # Indian Red with alpha
+        "Jupiter": "rgba(222, 184, 135, 0.6)",  # Burlywood with alpha
+        "Saturn": "rgba(244, 164, 96, 0.6)",  # Sandy Brown with alpha
+        "Uranus": "rgba(135, 206, 235, 0.6)",  # Sky Blue with alpha
+        "Neptune": "rgba(30, 144, 255, 0.6)",  # Dodger Blue with alpha
+    }
+
     for planet, state in planet_states.items():
         traces.append(
-            go.Scatter3d(x=state.x, y=state.y, z=state.z, mode="lines", name=planet)
+            go.Scatter3d(
+                x=state.x,
+                y=state.y,
+                z=state.z,
+                mode="lines",
+                name=planet,
+                line=dict(width=1, color=planet_colors[planet]),
+            )
         )
+
+    # Use bright green for all non-planet orbits
+    orbit_color = "#00FF00"  # Bright green
 
     for orbit_id in orbit.orbit_id.unique():
         propagated_orbit = propagated_orbits.select("orbit_id", orbit_id)
         cartesian = propagated_orbit.coordinates
         isot_time = propagated_orbit.coordinates.time.to_astropy().isot
-        # Make sure to add teh timestamp as mjd to the hover data
         traces.append(
             go.Scatter3d(
                 x=cartesian.x,
@@ -88,6 +118,7 @@ def plot_orbit(orbit: Orbits, propagator: Propagator, start_time: Optional[Times
                 mode="lines",
                 name=f"{propagated_orbit.orbit_id[0].as_py()} {propagated_orbit.object_id[0].as_py()}",
                 hovertext=isot_time,
+                line=dict(width=2, color=orbit_color),
             )
         )
 
@@ -99,28 +130,40 @@ def plot_orbit(orbit: Orbits, propagator: Propagator, start_time: Optional[Times
             z=[0],
             mode="markers",
             name="Sun",
-            marker=dict(size=10, color="yellow"),
+            marker=dict(size=1, color="yellow"),
         )
     )
 
     for trace in traces:
         fig.add_trace(trace)
 
-
     max_r_padded = max_r * 1.1
     fig.update(
         layout=dict(
             scene=dict(
-                xaxis=dict(range=[-max_r_padded, max_r_padded]),
-                yaxis=dict(range=[-max_r_padded, max_r_padded]),
-                zaxis=dict(range=[-max_r_padded, max_r_padded]),
+                xaxis=dict(
+                    range=[-max_r_padded, max_r_padded],
+                    gridcolor="rgba(128, 128, 128, 0.2)",
+                    showbackground=False,
+                    color="white",
+                ),
+                yaxis=dict(
+                    range=[-max_r_padded, max_r_padded],
+                    gridcolor="rgba(128, 128, 128, 0.2)",
+                    showbackground=False,
+                    color="white",
+                ),
+                zaxis=dict(
+                    range=[-max_r_padded, max_r_padded],
+                    gridcolor="rgba(128, 128, 128, 0.2)",
+                    showbackground=False,
+                    color="white",
+                ),
                 xaxis_title="x [au]",
                 yaxis_title="y [au]",
                 zaxis_title="z [au]",
-            )
-        ),
+            ),
+            font=dict(color="white"),  # Make all text white
+        )
     )
-    with open("debug.json", "w") as f:
-        f.write(str(fig.to_plotly_json()))
-
     fig.show()
