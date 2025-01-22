@@ -668,3 +668,40 @@ permID|obsTime|ra|dec|raStar|decStar|stn|mode|astCat
     assert parsed_observations.permID[1].as_py() == "5678"
     assert parsed_observations.ra[1].as_py() == 190.0
     assert parsed_observations.dec[1].as_py() == 10.0
+
+
+def test_ADES_string_to_tables_null_handling():
+    """Test parsing an ADES string with null fields represented as empty or whitespace."""
+    ades_string = """# version=2022
+# observatory
+! mpcCode 695
+# submitter
+! name J. Moeyens
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! design Reflector
+permID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
+1234|2024-01-01T00:00:00.000Z|180.0|0.0||r|695|CCD|Gaia2|First observation
+5678|2024-01-01T00:00:00.000Z|190.0|10.0| |g|695|CCD|Gaia2|Second observation
+9012|2024-01-01T00:00:00.000Z|200.0|20.0|   ||695|CCD|Gaia2|Third observation
+"""
+
+    parsed_contexts, parsed_observations = ADES_string_to_tables(ades_string)
+
+    # Test that we got the observations
+    assert len(parsed_observations) == 3
+
+    # Test that empty and whitespace fields are converted to None
+    assert parsed_observations.mag[0].as_py() is None  # Empty field
+    assert parsed_observations.mag[1].as_py() is None  # Single space
+    assert parsed_observations.mag[2].as_py() is None  # Multiple spaces
+    assert parsed_observations.band[2].as_py() is None  # Empty field
+
+    # Test that non-null fields are preserved
+    assert parsed_observations.ra[0].as_py() == 180.0
+    assert parsed_observations.band[0].as_py() == "r"
+    assert parsed_observations.remarks[0].as_py() == "First observation"
