@@ -311,9 +311,7 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
 
     # Convert every value that is empty string or whitespace to None
     for col in data_dict:
-        data_dict[col] = [
-            None if x == "" or x.isspace() else x for x in data_dict[col]
-        ]
+        data_dict[col] = [None if x == "" or x.isspace() else x for x in data_dict[col]]
 
     numeric_cols = ["ra", "dec", "rmsRA", "rmsDec", "mag", "rmsMag"]
     # Do all the data conversions and then initialize the new table and concatenate
