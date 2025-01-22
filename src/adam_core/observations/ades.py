@@ -1,5 +1,6 @@
+import logging
 from dataclasses import asdict, dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import pyarrow.compute as pc
@@ -10,6 +11,8 @@ from ..time import Timestamp
 
 STRING100 = 100
 STRING25 = 25
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -111,7 +114,6 @@ class ObsContext:
         if self.fundingSource is not None:
             assert len(self.fundingSource) <= STRING100
         if self.comments is not None:
-            assert len(self.comments) > 0
             for comment in self.comments:
                 assert len(comment) <= STRING100
 
@@ -137,9 +139,10 @@ class ObsContext:
                     elif k == "fundingSource":
                         lines.append(f"# fundingSource {v}")
                     elif k == "comments":
-                        lines.append("# comment")
-                        for comment in v:
-                            lines.append(f"! line {comment}")
+                        if len(v) > 0:
+                            lines.append("# comment")
+                            for comment in v:
+                                lines.append(f"! line {comment}")
         return "\n".join(lines) + "\n"
 
 
@@ -152,8 +155,16 @@ class ADESObservations(qv.Table):
     obsTime = Timestamp.as_column()
     ra = qv.Float64Column()
     dec = qv.Float64Column()
-    rmsRA = qv.Float64Column(nullable=True)
-    rmsDec = qv.Float64Column(nullable=True)
+    # ADES uses arcseconds for rmsRA and rmsDec
+    # rmsRA is also multiplied by cos(dec)
+    rmsRACosDec = qv.Float64Column(
+        nullable=True,
+        validator=qv.validators.and_(qv.validators.ge(10e-8), qv.validators.lt(1e2)),
+    )
+    rmsDec = qv.Float64Column(
+        nullable=True,
+        validator=qv.validators.and_(qv.validators.ge(10e-8), qv.validators.lt(1e2)),
+    )
     mag = qv.Float64Column(nullable=True)
     rmsMag = qv.Float64Column(nullable=True)
     band = qv.LargeStringColumn(nullable=True)
@@ -170,7 +181,7 @@ def ADES_to_string(
     columns_precision: dict[str, int] = {
         "ra": 8,
         "dec": 8,
-        "rmsRA": 4,
+        "rmsRACosDec": 4,
         "rmsDec": 4,
         "mag": 2,
         "rmsMag": 2,
@@ -193,8 +204,8 @@ def ADES_to_string(
         the observations to the file, by default {
             "ra": 8,
             "dec": 8,
-            "rmsRA" : 4,
-            "rmsDec" : 4,
+            "rmsRACosDec": 4,
+            "rmsDec": 4,
             "mag": 2,
             "rmsMag": 2,
         }
@@ -264,13 +275,6 @@ def ADES_to_string(
         )
         ades.drop(columns=["obsTime.days", "obsTime.nanos"], inplace=True)
 
-        # Multiply rmsRA by cos(dec) since ADES wants the random component in rmsRAcosDec
-        ades.loc[:, "rmsRA"] *= np.cos(np.radians(ades["dec"]))
-
-        # Convert rmsRA and rmsDec to arcseconds
-        ades.loc[:, "rmsRA"] *= 3600
-        ades.loc[:, "rmsDec"] *= 3600
-
         ades.dropna(how="all", axis=1, inplace=True)
 
         # Change the precision of some of the columns to conform
@@ -282,8 +286,200 @@ def ADES_to_string(
                     for i in ades[col]
                 ]
 
+        # Rename the columns to match the ADES format
+        ades.rename(columns={"rmsRACosDec": "rmsRA"}, inplace=True)
+
         ades_string += ades.to_csv(
             sep="|", header=True, index=False, float_format="%.16f"
         )
 
     return ades_string
+
+
+def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
+    if not data_dict:
+        return ADESObservations.empty()
+
+    # Get the set of known columns from ADESObservations
+    known_columns = set(ADESObservations.empty().table.column_names)
+    # Check for unknown columns
+    unknown_columns = set(data_dict.keys()) - known_columns
+    if unknown_columns:
+        logger.warning(
+            f"Found unknown ADES columns that will be ignored: {unknown_columns}"
+        )
+
+    # Convert every value that is empty string or whitespace to None
+    for col in data_dict:
+        data_dict[col] = [None if x == "" or x.isspace() else x for x in data_dict[col]]
+
+    numeric_cols = ["ra", "dec", "rmsRA", "rmsDec", "mag", "rmsMag"]
+    # Do all the data conversions and then initialize the new table and concatenate
+    for col in numeric_cols:
+        if col in data_dict:
+            data_dict[col] = [
+                float(x) if x is not None else None for x in data_dict[col]
+            ]
+    if "obsTime" in data_dict:
+        # Remove 'Z' from timestamps and convert to MJD
+        times = [t[:-1] if t is not None else None for t in data_dict["obsTime"]]
+        data_dict["obsTime"] = Timestamp.from_iso8601(times, scale="utc")
+
+    # Update the rmsRACosDec column name to be simply rmsRA
+    if "rmsRA" in data_dict:
+        data_dict["rmsRACosDec"] = data_dict["rmsRA"]
+        data_dict.pop("rmsRA")
+
+    # Only keep keys that are in ADESObservations
+    data_dict = {k: v for k, v in data_dict.items() if k in known_columns}
+
+    return ADESObservations.from_kwargs(**data_dict)
+
+
+def ADES_string_to_tables(
+    ades_string: str,
+) -> Tuple[dict[str, ObsContext], ADESObservations]:
+    """
+    Parse an ADES format string into ObsContext and ADESObservations objects.
+
+    Parameters
+    ----------
+    ades_string : str
+        The ADES format string to parse.
+
+    Returns
+    -------
+    tuple[dict[str, ObsContext], ADESObservations]
+        A tuple containing:
+        - A dictionary mapping observatory codes to their ObsContext objects
+        - An ADESObservations table containing the observations
+    """
+    # Split the string into lines and remove empty lines
+    lines = [line.strip() for line in ades_string.split("\n") if line.strip()]
+
+    # Start by parsing the data lines
+    current_data = {}
+    observations = ADESObservations.empty()
+    for line in lines:
+        # Skip over metadata lines
+        if line.startswith("#") or line.startswith("!"):
+            continue
+
+        # Detect if it's a header line by looking for permID, provID, or trkSub
+        if "permID" in line or "provID" in line or "trkSub" in line:
+            observations = qv.concatenate(
+                [observations, _data_dict_to_table(current_data)]
+            )
+            new_headers = [header.strip() for header in line.split("|")]
+            current_data = {header: [] for header in new_headers}
+            continue
+
+        # Add the data line to the current data dictionary
+        data_line = line.split("|")
+        for header, value in zip(current_data.keys(), data_line):
+            current_data[header].append(value)
+
+    # Add the last data dictionary to the observations table
+    observations = qv.concatenate([observations, _data_dict_to_table(current_data)])
+
+    # Now we parse the metadata sections
+    # Initialize variables
+    obs_contexts = {}
+    current_obs_context = {}
+    current_section_key = None
+    current_context_code = None
+
+    for line in lines:
+        if line.startswith("#"):
+            line = line[1:].strip()
+            if line.startswith("version"):
+                continue
+            current_section_key, *value = [x.strip() for x in line.split(" ")]
+            if current_section_key == "observatory":
+                # Only build obs context if current_obs_context is not empty
+                if current_obs_context:
+                    obs_contexts[current_context_code] = _build_obs_context(
+                        current_obs_context
+                    )
+                current_obs_context = {}
+                current_context_code = None
+
+            # Some sections specify the value in the same line as the section key
+            if len(value) > 0:
+                current_obs_context[current_section_key] = " ".join(value)
+            continue
+
+        if line.startswith("!"):
+            line = line[1:].strip()
+            key, *value = [x.strip() for x in line.split(" ")]
+            value = " ".join(value)
+            if key == "mpcCode":
+                current_context_code = value
+            current_section = current_obs_context.setdefault(current_section_key, {})
+            if current_section_key in ["observers", "measurers", "comment"]:
+                current_key_values = current_section.setdefault(key, [])
+                current_key_values.append(value)
+            else:
+                current_section[key] = value
+
+    if current_obs_context:
+        obs_contexts[current_context_code] = _build_obs_context(current_obs_context)
+
+    return obs_contexts, observations
+
+
+def _build_obs_context(context_dict: dict) -> ObsContext:
+    """Helper function to build an ObsContext from parsed dictionary data."""
+    # Extract observatory data
+    observatory = ObservatoryObsContext(
+        mpcCode=context_dict["observatory"]["mpcCode"],
+        name=context_dict["observatory"].get("name"),
+    )
+
+    # Extract submitter data
+    submitter = SubmitterObsContext(
+        name=context_dict["submitter"]["name"],
+        institution=context_dict["submitter"].get("institution"),
+    )
+
+    # Extract telescope data
+    telescope_data = context_dict.get("telescope", {})
+    telescope = TelescopeObsContext(
+        name=telescope_data["name"],
+        design=telescope_data["design"],
+        aperture=(
+            float(telescope_data["aperture"]) if "aperture" in telescope_data else None
+        ),
+        detector=telescope_data.get("detector"),
+        fRatio=float(telescope_data["fRatio"]) if "fRatio" in telescope_data else None,
+        filter=telescope_data.get("filter"),
+        arraySize=telescope_data.get("arraySize"),
+        pixelSize=(
+            float(telescope_data["pixelSize"])
+            if "pixelSize" in telescope_data
+            else None
+        ),
+    )
+
+    # Extract software data
+    software_data = context_dict.get("software", {})
+    software = None
+    if software_data:
+        software = SoftwareObsContext(
+            astrometry=software_data.get("astrometry"),
+            fitOrder=software_data.get("fitOrder"),
+            photometry=software_data.get("photometry"),
+            objectDetection=software_data.get("objectDetection"),
+        )
+
+    # Build ObsContext
+    return ObsContext(
+        observatory=observatory,
+        submitter=submitter,
+        observers=context_dict["observers"]["name"],
+        measurers=context_dict["measurers"]["name"],
+        telescope=telescope,
+        software=software,
+        fundingSource=context_dict.get("fundingSource"),
+        comments=context_dict.get("comment", {}).get("line", []),
+    )

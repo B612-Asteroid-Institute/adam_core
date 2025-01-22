@@ -1,7 +1,9 @@
+import numpy as np
 import pytest
 
 from ...time import Timestamp
 from ..ades import (
+    ADES_string_to_tables,
     ADES_to_string,
     ADESObservations,
     ObsContext,
@@ -111,8 +113,8 @@ def ades_observations():
         ),
         ra=[240.00, 240.05, 15.00, 15.05],
         dec=[-15.00, -15.05, 10.00, 10.05],
-        rmsRA=[1 / 3600, 1 / 3600, None, None],
-        rmsDec=[1 / 3600, 1 / 3600, None, None],
+        rmsRACosDec=[0.9659, 0.9657, None, None],
+        rmsDec=[1.0, 1.0, None, None],
         mag=[20.0, 20.3, None, 21.4],
         band=["r", "g", None, "r"],
         stn=["W84", "W84", "V00", "695"],
@@ -435,10 +437,271 @@ permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|rema
         columns_precision={
             "ra": 6,
             "dec": 6,
-            "rmsRA": 4,
+            "rmsRACosDec": 4,
             "rmsDec": 4,
             "mag": 1,
             "rmsMag": 1,
         },
     )
     assert desired == actual
+
+
+def test_ADES_string_to_tables(ades_observations, ades_obscontext):
+    # Create the ADES string that we'll parse
+    ades_string = ADES_to_string(ades_observations, ades_obscontext)
+    # Parse the string back into objects
+    parsed_contexts, parsed_observations = ADES_string_to_tables(ades_string)
+
+    # Test that we got the same observatory contexts back
+    assert set(parsed_contexts.keys()) == set(ades_obscontext.keys())
+    for code in ades_obscontext:
+        expected = ades_obscontext[code]
+        actual = parsed_contexts[code]
+
+        # Test each field of the ObsContext
+        assert actual.observatory.mpcCode == expected.observatory.mpcCode
+        assert actual.observatory.name == expected.observatory.name
+
+        assert actual.submitter.name == expected.submitter.name
+        assert actual.submitter.institution == expected.submitter.institution
+
+        assert actual.observers == expected.observers
+        assert actual.measurers == expected.measurers
+
+        assert actual.telescope.name == expected.telescope.name
+        assert actual.telescope.design == expected.telescope.design
+        assert actual.telescope.aperture == expected.telescope.aperture
+        assert actual.telescope.detector == expected.telescope.detector
+
+        if expected.software is not None:
+            assert actual.software.objectDetection == expected.software.objectDetection
+            assert actual.software.astrometry == expected.software.astrometry
+            assert actual.software.fitOrder == expected.software.fitOrder
+            assert actual.software.photometry == expected.software.photometry
+        else:
+            assert actual.software is None
+
+        assert actual.fundingSource == expected.fundingSource
+        assert actual.comments == expected.comments
+
+    # Order the observations by mpc code and obsTime
+    ades_observations = ades_observations.sort_by(
+        ["stn", "obsTime.days", "obsTime.nanos"]
+    )
+    parsed_observations = parsed_observations.sort_by(
+        ["stn", "obsTime.days", "obsTime.nanos"]
+    )
+
+    # Test that we got the same observations back
+    # First convert timestamps to MJD for comparison since that's what we use internally
+    expected_mjd = ades_observations.obsTime.mjd().to_numpy(zero_copy_only=False)
+    parsed_mjd = parsed_observations.obsTime.mjd().to_numpy(zero_copy_only=False)
+    np.testing.assert_array_almost_equal(parsed_mjd, expected_mjd)
+
+    # Test all other columns
+    for col in [
+        "permID",
+        "provID",
+        "trkSub",
+        "obsSubID",
+        "ra",
+        "dec",
+        "rmsRACosDec",
+        "rmsDec",
+        "mag",
+        "band",
+        "stn",
+        "mode",
+        "astCat",
+        "remarks",
+    ]:
+        if hasattr(ades_observations, col):
+            expected = getattr(ades_observations, col).to_numpy(zero_copy_only=False)
+            actual = getattr(parsed_observations, col).to_numpy(zero_copy_only=False)
+            np.testing.assert_array_equal(actual, expected, err_msg=f"{col} not equal")
+
+
+def test_ADES_string_to_tables_minimal():
+    """Test parsing a minimal ADES string with just required fields."""
+    minimal_string = """# version=2022
+# observatory
+! mpcCode 695
+# submitter
+! name J. Moeyens
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! design Reflector
+permID|obsTime|ra|dec|stn|mode|astCat
+1234|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
+"""
+
+    parsed_contexts, parsed_observations = ADES_string_to_tables(minimal_string)
+
+    # Test observatory context
+    assert len(parsed_contexts) == 1
+    assert "695" in parsed_contexts
+    context = parsed_contexts["695"]
+
+    assert context.observatory.mpcCode == "695"
+    assert context.observatory.name is None
+    assert context.submitter.name == "J. Moeyens"
+    assert context.submitter.institution is None
+    assert context.observers == ["Observer1"]
+    assert context.measurers == ["Measurer1"]
+    assert context.telescope.name == "Telescope1"
+    assert context.telescope.design == "Reflector"
+    assert context.software is None
+    assert context.fundingSource is None
+    assert context.comments == []
+
+    # Test observations
+    assert len(parsed_observations) == 1
+    assert parsed_observations.permID[0].as_py() == "1234"
+    assert parsed_observations.ra[0].as_py() == 180.0
+    assert parsed_observations.dec[0].as_py() == 0.0
+    assert parsed_observations.stn[0].as_py() == "695"
+    assert parsed_observations.mode[0].as_py() == "CCD"
+    assert parsed_observations.astCat[0].as_py() == "Gaia2"
+
+
+def test_ADES_string_to_tables_empty_observations():
+    """Test parsing an ADES string with metadata but no observations."""
+    empty_string = """# version=2022
+# observatory
+! mpcCode 695
+# submitter
+! name J. Moeyens
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! design Reflector
+permID|obsTime|ra|dec|stn|mode|astCat
+"""
+
+    parsed_contexts, parsed_observations = ADES_string_to_tables(empty_string)
+
+    # Test that we got the context but no observations
+    assert len(parsed_contexts) == 1
+    assert "695" in parsed_contexts
+    assert len(parsed_observations) == 0
+
+
+def test_ADES_string_to_tables_multiple_observatories():
+    """Test parsing an ADES string with multiple observatory contexts."""
+    multi_obs_string = """# version=2022
+# observatory
+! mpcCode 695
+# submitter
+! name J. Moeyens
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! design Reflector
+# observatory
+! mpcCode W84
+# submitter
+! name J. Moeyens
+# observers
+! name Observer2
+# measurers
+! name Measurer2
+# telescope
+! name Telescope2
+! design Reflector
+permID|obsTime|ra|dec|stn|mode|astCat
+1234|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
+5678|2024-01-01T00:00:00.000Z|190.0|10.0|W84|CCD|Gaia2
+"""
+
+    parsed_contexts, parsed_observations = ADES_string_to_tables(multi_obs_string)
+
+    # Test that we got both observatory contexts
+    assert len(parsed_contexts) == 2
+    assert set(parsed_contexts.keys()) == {"695", "W84"}
+
+    # Test that we got observations from both observatories
+    assert len(parsed_observations) == 2
+    assert set(parsed_observations.stn.to_numpy(zero_copy_only=False)) == {"695", "W84"}
+
+
+def test_ADES_string_to_tables_unknown_columns():
+    """Test parsing an ADES string with columns we don't currently support."""
+    ades_string = """# version=2022
+# observatory
+! mpcCode 695
+# submitter
+! name J. Moeyens
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! design Reflector
+permID|obsTime|ra|dec|raStar|decStar|stn|mode|astCat
+1234|2024-01-01T00:00:00.000Z|180.0|0.0|180.1|0.1|695|CCD|Gaia2
+5678|2024-01-01T00:00:00.000Z|190.0|10.0|190.1|10.1|695|CCD|Gaia2
+"""
+
+    parsed_contexts, parsed_observations = ADES_string_to_tables(ades_string)
+
+    # Test that we got the basic data correctly
+    assert len(parsed_observations) == 2
+    assert parsed_observations.permID[0].as_py() == "1234"
+    assert parsed_observations.ra[0].as_py() == 180.0
+    assert parsed_observations.dec[0].as_py() == 0.0
+    assert parsed_observations.stn[0].as_py() == "695"
+    assert parsed_observations.mode[0].as_py() == "CCD"
+    assert parsed_observations.astCat[0].as_py() == "Gaia2"
+
+    # Test that we got the second row correctly too
+    assert parsed_observations.permID[1].as_py() == "5678"
+    assert parsed_observations.ra[1].as_py() == 190.0
+    assert parsed_observations.dec[1].as_py() == 10.0
+
+
+def test_ADES_string_to_tables_null_handling():
+    """Test parsing an ADES string with null fields represented as empty or whitespace."""
+    ades_string = """# version=2022
+# observatory
+! mpcCode 695
+# submitter
+! name J. Moeyens
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! design Reflector
+permID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
+1234|2024-01-01T00:00:00.000Z|180.0|0.0||r|695|CCD|Gaia2|First observation
+5678|2024-01-01T00:00:00.000Z|190.0|10.0| |g|695|CCD|Gaia2|Second observation
+9012|2024-01-01T00:00:00.000Z|200.0|20.0|   ||695|CCD|Gaia2|Third observation
+"""
+
+    parsed_contexts, parsed_observations = ADES_string_to_tables(ades_string)
+
+    # Test that we got the observations
+    assert len(parsed_observations) == 3
+
+    # Test that empty and whitespace fields are converted to None
+    assert parsed_observations.mag[0].as_py() is None  # Empty field
+    assert parsed_observations.mag[1].as_py() is None  # Single space
+    assert parsed_observations.mag[2].as_py() is None  # Multiple spaces
+    assert parsed_observations.band[2].as_py() is None  # Empty field
+
+    # Test that non-null fields are preserved
+    assert parsed_observations.ra[0].as_py() == 180.0
+    assert parsed_observations.band[0].as_py() == "r"
+    assert parsed_observations.remarks[0].as_py() == "First observation"
