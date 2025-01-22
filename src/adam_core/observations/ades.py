@@ -305,7 +305,9 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
     # Check for unknown columns
     unknown_columns = set(data_dict.keys()) - known_columns
     if unknown_columns:
-        logger.warning(f"Found unknown ADES columns that will be ignored: {unknown_columns}")
+        logger.warning(
+            f"Found unknown ADES columns that will be ignored: {unknown_columns}"
+        )
 
     numeric_cols = ["ra", "dec", "rmsRA", "rmsDec", "mag", "rmsMag"]
     # Do all the data conversions and then initialize the new table and concatenate
@@ -333,7 +335,7 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
 
 def ADES_string_to_tables(
     ades_string: str,
-) -> tuple[dict[str, ObsContext], ADESObservations]:
+) -> Tuple[dict[str, ObsContext], ADESObservations]:
     """
     Parse an ADES format string into ObsContext and ADESObservations objects.
 
