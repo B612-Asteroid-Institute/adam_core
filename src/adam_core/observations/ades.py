@@ -330,9 +330,8 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
         data_dict["rmsRACosDec"] = data_dict["rmsRA"]
         data_dict.pop("rmsRA")
 
-    # Remove unknown columns before creating the table
-    for col in unknown_columns:
-        data_dict.pop(col)
+    # Only keep keys that are in ADESObservations
+    data_dict = {k: v for k, v in data_dict.items() if k in known_columns}
 
     return ADESObservations.from_kwargs(**data_dict)
 

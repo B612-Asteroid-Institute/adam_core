@@ -358,7 +358,7 @@ permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|rema
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
 permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
-3001|a2345b|obs04|2024-05-05T04:48:00.Z|15.050000|10.050000|21.4|r|695|CCD|Gaia2|This is the fourth dummy observation
+3001|a2345b|obs04|2024-05-05T04:48:00.0Z|15.050000|10.050000|21.4|r|695|CCD|Gaia2|This is the fourth dummy observation
 # observatory
 ! mpcCode V00
 ! name Kitt Peak National Observatory - Bok + 90Prime
@@ -392,7 +392,7 @@ permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
 permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
-3001|a2345b|obs03|2024-05-05T00:00:00.Z|15.000000|10.000000|V00|CCD|Gaia2
+3001|a2345b|obs03|2024-05-05T00:00:00.0Z|15.000000|10.000000|V00|CCD|Gaia2
 # observatory
 ! mpcCode W84
 ! name Cerro Tololo - Blanco + DECam
@@ -426,8 +426,8 @@ permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
 permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|remarks
-3000|a1234b|obs01|2024-05-04T00:00:00.Z|240.000000|-15.000000|0.9659|1.0000|20.0|r|W84|CCD|Gaia2|This is a dummy observation
-3000|a1234b|obs02|2024-05-04T02:24:00.Z|240.050000|-15.050000|0.9657|1.0000|20.3|g|W84|CCD|Gaia2|This is another dummy observation
+3000|a1234b|obs01|2024-05-04T00:00:00.0Z|240.000000|-15.000000|0.9659|1.0000|20.0|r|W84|CCD|Gaia2|This is a dummy observation
+3000|a1234b|obs02|2024-05-04T02:24:00.0Z|240.050000|-15.050000|0.9657|1.0000|20.3|g|W84|CCD|Gaia2|This is another dummy observation
 """  # noqa: E501
 
     actual = ADES_to_string(
