@@ -365,8 +365,7 @@ class EphemerisMixin:
                         idx_chunk,
                         orbits_ref,
                         observers_ref,
-                        self.__class__,
-                        **self.__dict__,
+                        self,
                     )
                 )
 
@@ -389,8 +388,7 @@ class EphemerisMixin:
                             variant_chunk_idx,
                             variants_ref,
                             observers_ref,
-                            self.__class__,
-                            **self.__dict__,
+                            self,
                         )
                     )
 

@@ -17,6 +17,14 @@ from ..propagator import EphemerisMixin, Propagator
 
 
 class MockPropagator(Propagator, EphemerisMixin):
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
     # MockPropagator propagates orbits by just setting the time of the orbits.
     def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
         all_times = []
