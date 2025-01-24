@@ -16,6 +16,13 @@ from ..impacts import (
 
 
 class MockImpactPropagator(Propagator, ImpactMixin):
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
     def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
         return orbits
 
