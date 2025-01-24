@@ -460,7 +460,6 @@ class Propagator(ABC, EphemerisMixin):
         """
         pass
 
-    @abstractmethod
     def __getstate__(self):
         """
         Get the state of the propagator.
@@ -474,9 +473,15 @@ class Propagator(ABC, EphemerisMixin):
             state.pop("_stateful_attribute_that_is_not_pickleable")
             return state
         """
-        pass
+        raise NotImplementedError(
+            "Propagator must implement __getstate__ for multiprocessing serialization.\n"
+            "Example implementation: \n"
+            "def __getstate__(self):\n"
+            "    state = self.__dict__.copy()\n"
+            "    state.pop('_stateful_attribute_that_is_not_pickleable')\n"
+            "    return state"
+        )
 
-    @abstractmethod
     def __setstate__(self, state):
         """
         Set the state of the propagator.
@@ -489,7 +494,13 @@ class Propagator(ABC, EphemerisMixin):
             self.__dict__.update(state)
             self._stateful_attribute_that_is_not_pickleable = None
         """
-        pass
+        raise NotImplementedError(
+            "Propagator must implement __setstate__ for multiprocessing serialization.\n"
+            "Example implementation: \n"
+            "def __setstate__(self, state):\n"
+            "    self.__dict__.update(state)\n"
+            "    self._stateful_attribute_that_is_not_pickleable = None"
+        )
 
     def propagate_orbits(
         self,
