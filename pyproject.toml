@@ -70,7 +70,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.2.0",
+    "adam-assist>=0.2.2",
 ]
 
 [tool.black]
