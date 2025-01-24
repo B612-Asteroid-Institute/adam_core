@@ -36,7 +36,7 @@ class Exposures(qv.Table):
 
     def observers(
         self,
-        frame: Literal["ecliptic", "equatorial"] = "ecliptic",
+        frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
         origin: OriginCodes = OriginCodes.SUN,
     ) -> observers.Observers:
         """

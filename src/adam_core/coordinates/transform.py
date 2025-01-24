@@ -6,6 +6,8 @@ from typing import Literal, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 import pyarrow.compute as pc
+import quivr as qv
+import spiceypy as sp
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
@@ -1332,8 +1334,100 @@ def cartesian_to_origin(
     return coords.translate(vectors, origin.name)
 
 
+def apply_time_varying_rotation(
+    coords: CartesianCoordinates, frame_out: Literal["ecliptic", "equatorial", "itrf93"]
+) -> CartesianCoordinates:
+    """
+    Apply a time-varying rotation to the Cartesian coordinates. At the moment only
+    rotations between itrf93 and ecliptic/equatorial are supported.
+
+    Parameters
+    ----------
+    coords : CartesianCoordinates
+        The coordinates to rotate and translate to the desired frame.
+    frame_out : Literal["ecliptic", "equatorial", "itrf93"]
+        The desired output frame.
+
+    Returns
+    -------
+    CartesianCoordinates
+        The rotated coordinates.
+    """
+    from ..utils.spice import setup_SPICE
+
+    setup_SPICE()
+
+    if coords.frame == "ecliptic" and frame_out == "equatorial":
+        logger.warning(
+            "Rotations between ecliptic and equatorial are not time-varying."
+        )
+    elif coords.frame == "equatorial" and frame_out == "ecliptic":
+        logger.warning(
+            "Rotations between equatorial and ecliptic are not time-varying."
+        )
+
+    assert len(pc.unique(coords.origin.code)) == 1
+
+    # Transform to geocentric coordinates in the input frame
+    if frame_out == "itrf93":
+        frame_spice_out = "ITRF93"
+    elif frame_out == "ecliptic":
+        frame_spice_out = "ECLIPJ2000"
+    elif frame_out == "equatorial":
+        frame_spice_out = "J2000"
+    else:
+        raise ValueError("Unsupported frame: {}".format(frame_out))
+
+    frame_in = coords.frame
+    if frame_in == "itrf93":
+        frame_spice_in = "ITRF93"
+    elif frame_in == "ecliptic":
+        frame_spice_in = "ECLIPJ2000"
+    elif frame_in == "equatorial":
+        frame_spice_in = "J2000"
+    else:
+        raise ValueError("Unsupported frame: {}".format(frame_in))
+
+    # Loop over unique times and then rotate each coordinate
+    coords_rotated = CartesianCoordinates.empty()
+    indices = []
+    for time in coords.time.unique():
+
+        # Filter to coordinates defined at the same time
+        time_mask = pc.and_(
+            pc.equal(coords.time.days, time.days[0]),
+            pc.equal(coords.time.nanos, time.nanos[0]),
+        )
+
+        # Compute the indices of the coordinates that match the time
+        indices_time = pc.indices_nonzero(time_mask)
+
+        # Store the indices so we can use to sort the coordinates later
+        indices.extend(indices_time.to_pylist())
+
+        rotation_matrix_3x3 = sp.pxform(
+            frame_spice_in, frame_spice_out, time.et().to_numpy(zero_copy_only=False)[0]
+        )
+        # Create 6x6 rotation matrix for position and velocity
+        rotation_matrix_6x6 = np.zeros((6, 6))
+        rotation_matrix_6x6[:3, :3] = rotation_matrix_3x3
+        rotation_matrix_6x6[3:, 3:] = rotation_matrix_3x3
+
+        # Rotate the coordinates
+        coords_rotated_time = coords.apply_mask(time_mask).rotate(
+            rotation_matrix_6x6, frame_out
+        )
+
+        # Add the rotated coordinates to the total coordinates
+        coords_rotated = qv.concatenate([coords_rotated, coords_rotated_time])
+
+    coords_rotated = coords_rotated.take(indices)
+
+    return coords_rotated
+
+
 def cartesian_to_frame(
-    coords: CartesianCoordinates, frame: Literal["ecliptic", "equatorial"]
+    coords: CartesianCoordinates, frame: Literal["ecliptic", "equatorial", "itrf93"]
 ) -> "CartesianCoordinates":
     """
     Rotate Cartesian coordinates and their covariances to the given frame.
@@ -1342,7 +1436,7 @@ def cartesian_to_frame(
     ----------
     coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Cartesian coordinates and optionally their covariances.
-    frame : {'ecliptic', 'equatorial'}
+    frame : {'ecliptic', 'equatorial', 'itrf93'}
         Desired reference frame of the output coordinates.
 
     Returns
@@ -1350,25 +1444,29 @@ def cartesian_to_frame(
     CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Rotated Cartesian coordinates and their covariances.
     """
-    if frame == "ecliptic" and coords.frame != "ecliptic":
+    if frame == "ecliptic" and coords.frame == "equatorial":
         return coords.rotate(TRANSFORM_EQ2EC, "ecliptic")
-    elif frame == "equatorial" and coords.frame != "equatorial":
+    elif frame == "equatorial" and coords.frame == "ecliptic":
         return coords.rotate(TRANSFORM_EC2EQ, "equatorial")
+    elif frame == "itrf93" and coords.frame != "itrf93":
+        return apply_time_varying_rotation(coords, frame)
+    elif frame != "itrf93" and coords.frame == "itrf93":
+        return apply_time_varying_rotation(coords, frame)
     elif frame == coords.frame:
         return coords
     else:
-        err = "frame should be one of {'ecliptic', 'equatorial'}"
+        err = "frame should be one of {'ecliptic', 'equatorial', 'itrf93'}"
         raise ValueError(err)
 
 
 def transform_coordinates(
     coords: types.CoordinateType,
     representation_out: Optional[type[types.CoordinateType]] = None,
-    frame_out: Optional[Literal["ecliptic", "equatorial"]] = None,
+    frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,
     origin_out: Optional[OriginCodes] = None,
 ) -> types.CoordinateType:
     """
-    Transform coordinates between frames ('ecliptic', 'equatorial'), origins,
+    Transform coordinates between frames ('ecliptic', 'equatorial', 'itrf93'), origins,
     and/or representations ('cartesian', 'spherical', 'keplerian', 'cometary').
 
     Input coordinates may be defined from multiple origins but if origin_out is
