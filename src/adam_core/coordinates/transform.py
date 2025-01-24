@@ -1388,6 +1388,8 @@ def apply_time_varying_rotation(
     else:
         raise ValueError("Unsupported frame: {}".format(frame_in))
 
+    from ..constants import KM_P_AU, S_P_DAY
+
     # Loop over unique times and then rotate each coordinate
     coords_rotated = CartesianCoordinates.empty()
     indices = []
@@ -1405,24 +1407,35 @@ def apply_time_varying_rotation(
         # Store the indices so we can use to sort the coordinates later
         indices.extend(indices_time.to_pylist())
 
-        rotation_matrix_3x3 = sp.pxform(
+        # The units of the transformation matrix are km and km/s and while
+        # our states are in au and au/d. So we need to convert the transformation
+        # matrix to the correct units.
+        rotation_matrix_6x6_kms = sp.sxform(
             frame_spice_in, frame_spice_out, time.et().to_numpy(zero_copy_only=False)[0]
         )
-        # Create 6x6 rotation matrix for position and velocity
-        rotation_matrix_6x6 = np.zeros((6, 6))
-        rotation_matrix_6x6[:3, :3] = rotation_matrix_3x3
-        rotation_matrix_6x6[3:, 3:] = rotation_matrix_3x3
+
+        # Compute unit conversion matrix to convert from km to au and km/s to au/d
+        rotation_unit_conversion = np.zeros((6, 6))
+        rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
+        rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
+
+        rotation_matrix_6x6_aud = (
+            np.linalg.inv(rotation_unit_conversion)
+            @ rotation_matrix_6x6_kms
+            @ rotation_unit_conversion
+        )
 
         # Rotate the coordinates
-        coords_rotated_time = coords.apply_mask(time_mask).rotate(
-            rotation_matrix_6x6, frame_out
-        )
+        coords_time = coords.apply_mask(time_mask)
+        coords_rotated_time = coords_time.rotate(rotation_matrix_6x6_aud, frame_out)
 
         # Add the rotated coordinates to the total coordinates
         coords_rotated = qv.concatenate([coords_rotated, coords_rotated_time])
 
-    coords_rotated = coords_rotated.take(indices)
-
+    # Compute the indices that would sort the new coordinates
+    # to match the original coordinates
+    sorted_indices = np.argsort(indices)
+    coords_rotated = coords_rotated.take(sorted_indices)
     return coords_rotated
 
 
@@ -1506,7 +1519,7 @@ def transform_coordinates(
     if not isinstance(coords, CoordinatesClasses):
         raise TypeError("Unsupported coordinate type: {}".format(type(coords)))
 
-    if frame_out not in {None, "equatorial", "ecliptic"}:
+    if frame_out not in {None, "equatorial", "ecliptic", "itrf93"}:
         raise ValueError("Unsupported frame_out: {}".format(frame_out))
 
     if origin_out is not None and not isinstance(origin_out, OriginCodes):
