@@ -69,12 +69,10 @@ if RAY_INSTALLED:
         idx: npt.NDArray[np.int64],
         orbits: OrbitType,
         times: OrbitType,
-        propagator: Type["Propagator"],
-        **kwargs,
+        propagator: "Propagator",
     ) -> OrbitType:
-        prop = propagator(**kwargs)
         orbits_chunk = orbits.take(idx)
-        propagated = prop._propagate_orbits(orbits_chunk, times)
+        propagated = propagator._propagate_orbits(orbits_chunk, times)
         return propagated
 
     @ray.remote
@@ -82,12 +80,10 @@ if RAY_INSTALLED:
         idx: npt.NDArray[np.int64],
         orbits: OrbitType,
         observers: ObserverType,
-        propagator: Type["Propagator"],
-        **kwargs,
+        propagator: "Propagator",
     ) -> EphemerisType:
-        prop = propagator(**kwargs)
         orbits_chunk = orbits.take(idx)
-        ephemeris = prop._generate_ephemeris(orbits_chunk, observers)
+        ephemeris = propagator._generate_ephemeris(orbits_chunk, observers)
         return ephemeris
 
 
@@ -466,6 +462,37 @@ class Propagator(ABC, EphemerisMixin):
         """
         pass
 
+    @abstractmethod
+    def __getstate__(self):
+        """
+        Get the state of the propagator.
+
+        Subclasses need to define what is picklable for multiprocessing.
+
+        e.g.
+
+        def __getstate__(self):
+            state = self.__dict__.copy()
+            state.pop("_stateful_attribute_that_is_not_pickleable")
+            return state
+        """
+        pass
+
+    @abstractmethod
+    def __setstate__(self, state):
+        """
+        Set the state of the propagator.
+
+        Subclasses need to define what is unpicklable for multiprocessing.
+
+        e.g.
+
+        def __setstate__(self, state):
+            self.__dict__.update(state)
+            self._stateful_attribute_that_is_not_pickleable = None
+        """
+        pass
+
     def propagate_orbits(
         self,
         orbits: Union[OrbitType, ObjectRef],
@@ -551,8 +578,7 @@ class Propagator(ABC, EphemerisMixin):
                         idx_chunk,
                         orbits_ref,
                         times_ref,
-                        self.__class__,
-                        **self.__dict__,
+                        self,
                     )
                 )
 
@@ -574,8 +600,7 @@ class Propagator(ABC, EphemerisMixin):
                             variant_chunk_idx,
                             variants_ref,
                             times_ref,
-                            self.__class__,
-                            **self.__dict__,
+                            self,
                         )
                     )
 
