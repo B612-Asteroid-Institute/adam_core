@@ -7,7 +7,7 @@ import pyarrow.compute as pc
 import pytest
 import quivr as qv
 
-from ..time import Timestamp
+from ..time import NANOS_PER_DAY, Timestamp
 
 
 class Wrapper(qv.Table):
@@ -690,3 +690,28 @@ def test_Timestamp_min():
     assert min_time.scale == times.scale
     assert min_time.days.to_pylist() == [1]
     assert min_time.nanos.to_pylist() == [1]
+
+
+@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt", "ut1"])
+@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt", "ut1"])
+def test_Timestamp_rescale(scale1, scale2):
+    """
+    Test rescaling by using round trip calculations
+    """
+    times = Timestamp.from_kwargs(
+        days=[-57032, -36525, -2, -1, 0, 51544, 103088, 164178, 68000, 68000, 68010, 68020],  # Spans from ~1702 to ~2308
+        nanos=[50_000, 0, 123, 100_000_000, 200_000_000, 300_000_000, 400_000_000, 500_000_000, 1, 2, 3, 4],
+        scale=scale1,
+    )
+    rescaled = times.rescale(scale2)
+    round_tripped = rescaled.rescale(scale1)
+    assert rescaled.scale == scale2
+    assert round_tripped.scale == scale1
+    print(scale1, scale2)
+    mjds = list(zip(times.mjd().to_pylist(), rescaled.mjd().to_pylist(), round_tripped.mjd().to_pylist()))
+    days_diff, nanos_diff = times.difference(round_tripped)
+    diff = list(zip(days_diff.to_pylist(), nanos_diff.to_pylist()))
+    for i in range(len(mjds)):
+        print(mjds[i], diff[i])
+    assert pc.all(times.equals(round_tripped, precision="ns")).as_py()
+

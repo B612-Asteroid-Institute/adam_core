@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import astropy.time
+import hifitime
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -16,7 +17,13 @@ SCALES = {
 
 # The Modified Julian Date of the J2000 epoch in TDB scale:
 _J2000_TDB_MJD = 51544.5
+MJD_EPOCH_IN_TDB = hifitime.Epoch("1858-11-17T00:00:00 TDB")
+MJD_EPOCH_IN_TAI = hifitime.Epoch("1858-11-17T00:00:00 TAI")
+MJD_EPOCH_IN_UTC = hifitime.Epoch("1858-11-17T00:00:00 UTC")
 
+DAYS_PER_CENTURY = 36_525
+NANOS_PER_DAY = 86_400_000_000_000
+NANOS_PER_CENTURY = DAYS_PER_CENTURY * NANOS_PER_DAY
 
 class Timestamp(qv.Table):
     # Scale, the rate at which time passes:
@@ -493,18 +500,50 @@ class Timestamp(qv.Table):
     def rescale(self, new_scale: str) -> Timestamp:
         if self.scale == new_scale:
             return self
-        elif new_scale == "tai":
-            return Timestamp.from_astropy(self.to_astropy().tai)
+        
+        # For TT and UT1, use astropy to do the conversions
+        if self.scale in ["tt", "ut1"] or new_scale in ["tt", "ut1"]:
+            return Timestamp.from_astropy(getattr(self.to_astropy(), new_scale))
+
+        # Get only the values needed based on the input scale
+        if self.scale == "tdb":
+            def init_epoch_fn(days, nanos):
+                total_nanos = int(days) * NANOS_PER_DAY + int(nanos)
+                duration_since_mjd_epoch = hifitime.Duration.from_total_nanoseconds(total_nanos)
+                epoch = MJD_EPOCH_IN_TDB + duration_since_mjd_epoch
+                return epoch
+        else:  # tai or utc
+            if self.scale == "tai":
+                def init_epoch_fn(days, nanos):
+                    total_nanos = int(days) * NANOS_PER_DAY + int(nanos)
+                    duration_since_mjd_epoch = hifitime.Duration.from_total_nanoseconds(total_nanos)
+                    epoch = MJD_EPOCH_IN_TAI + duration_since_mjd_epoch
+                    return epoch
+            else:  # utc
+                def init_epoch_fn(days, nanos):
+                    total_nanos = int(days) * NANOS_PER_DAY + int(nanos)
+                    duration_since_mjd_epoch = hifitime.Duration.from_total_nanoseconds(total_nanos)
+                    epoch = MJD_EPOCH_IN_UTC + duration_since_mjd_epoch
+                    return epoch
+
+        # Determine the result calculation based on the new scale
+        if new_scale == "tai":
+            calculate_result = _calculate_tai_result
         elif new_scale == "utc":
-            return Timestamp.from_astropy(self.to_astropy().utc)
-        elif new_scale == "tt":
-            return Timestamp.from_astropy(self.to_astropy().tt)
-        elif new_scale == "ut1":
-            return Timestamp.from_astropy(self.to_astropy().ut1)
+            calculate_result = _calculate_utc_result
         elif new_scale == "tdb":
-            return Timestamp.from_astropy(self.to_astropy().tdb)
+            calculate_result = _calculate_tdb_result
         else:
-            raise ValueError("Unknown scale: {}".format(new_scale))
+            raise ValueError(f"Unknown scale: {new_scale}")
+
+        # Process each timestamp individually
+        inputs = zip(self.days.to_numpy(), self.nanos.to_numpy())
+        init_epochs = [init_epoch_fn(*val) for val in inputs]
+        result_values = [calculate_result(init_epoch, self.scale) for init_epoch in init_epochs]
+        result_days = [val[0] for val in result_values]
+        result_nanos = [val[1] for val in result_values]
+        # Convert result list back to a Timestamp
+        return self.from_kwargs(days=result_days, nanos=result_nanos, scale=new_scale)
 
     def link(
         self, other: Timestamp, precision: str = "ns"
@@ -558,3 +597,59 @@ def _duration_arrays_within_tolerance(
         pc.greater_equal(pc.abs(delta_nanos), 86400 * 1e9 - max_nanos_deviation),
     )
     return pc.or_(cond1, cond2)
+
+def _calculate_tai_result(epoch, from_scale: str):
+    epoch_new_time_scale = epoch.to_time_scale(hifitime.TimeScale.TAI)
+    tai_duration_since_mjd_epoch = epoch_new_time_scale.timedelta(MJD_EPOCH_IN_TAI)
+    
+    total_nanos = tai_duration_since_mjd_epoch.total_nanoseconds()
+    
+    # Integer division rounds towards negative infinity for negative numbers
+    days = total_nanos // NANOS_PER_DAY
+    
+    if days < -36525:
+        total_nanos += NANOS_PER_CENTURY
+        days = total_nanos // NANOS_PER_DAY
+
+    # Modulo will give us a positive remainder
+    nanos = total_nanos % NANOS_PER_DAY
+    
+    return int(days), int(nanos)
+
+def _calculate_utc_result(epoch, from_scale: str):
+    epoch_new_time_scale = epoch.to_time_scale(hifitime.TimeScale.UTC)
+    utc_duration_since_mjd_epoch = epoch_new_time_scale.timedelta(MJD_EPOCH_IN_UTC)
+    
+    total_nanos = utc_duration_since_mjd_epoch.total_nanoseconds()
+    
+    # Integer division rounds towards negative infinity for negative numbers
+    days = total_nanos // NANOS_PER_DAY
+
+    # Special case for the Julian century boundary
+    if days < -36525:
+        total_nanos += NANOS_PER_CENTURY
+        days = total_nanos // NANOS_PER_DAY
+
+    # Modulo will give us a positive remainder
+    nanos = total_nanos % NANOS_PER_DAY
+    
+    return int(days), int(nanos)
+
+def _calculate_tdb_result(epoch, from_scale: str):
+    epoch_new_time_scale = epoch.to_time_scale(hifitime.TimeScale.TDB)
+    tdb_duration_since_mjd_epoch = epoch_new_time_scale.timedelta(MJD_EPOCH_IN_TDB)
+    
+    total_nanos = tdb_duration_since_mjd_epoch.total_nanoseconds()
+    
+    # Integer division rounds towards negative infinity for negative numbers
+    days = total_nanos // NANOS_PER_DAY
+    
+    # Special case for the Julian century boundary
+    if days < -36525:
+        total_nanos += NANOS_PER_CENTURY
+        days = total_nanos // NANOS_PER_DAY
+    
+    # Modulo will give us a positive remainder
+    nanos = total_nanos % NANOS_PER_DAY
+    
+    return int(days), int(nanos)
