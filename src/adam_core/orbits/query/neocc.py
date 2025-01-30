@@ -209,52 +209,47 @@ def query_neocc(
         # Clean object ID so that there are no spaces
         object_id = object_id.replace(" ", "")
 
-        try:
-            params = {"file": f"{object_id}.{orbit_type}{orbit_epoch}"}
+        params = {"file": f"{object_id}.{orbit_type}{orbit_epoch}"}
 
-            response = requests.get(base_url, params=params)
-            response.raise_for_status()
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
 
-            data = _parse_oef(response.text)
-            if orbit_type == "ke":
+        data = _parse_oef(response.text)
+        if orbit_type == "ke":
 
-                time_scale = data["time_system"]
-                if time_scale == "TDT":
-                    time_scale = "TT"
-                else:
-                    raise ValueError(f"Unsupported time scale: {time_scale}")
+            time_scale = data["time_system"]
+            if time_scale == "TDT":
+                time_scale = "TT"
+            else:
+                raise ValueError(f"Unsupported time scale: {time_scale}")
 
-                if data["header"]["refsys"] != "ECLM J2000":
-                    raise ValueError(
-                        f"Unsupported reference system: {data['header']['refsys']}"
-                    )
-
-                orbit = Orbits.from_kwargs(
-                    orbit_id=[data["object_id"]],
-                    object_id=[data["object_id"]],
-                    coordinates=KeplerianCoordinates.from_kwargs(
-                        a=[data["elements"]["a"]],
-                        e=[data["elements"]["e"]],
-                        i=[data["elements"]["i"]],
-                        raan=[data["elements"]["node"]],
-                        ap=[data["elements"]["peri"]],
-                        M=[data["elements"]["M"]],
-                        time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
-                        covariance=CoordinateCovariances.from_matrix(
-                            data["covariance"].reshape(
-                                1,
-                                6,
-                                6,
-                            )
-                        ),
-                        frame="ecliptic",
-                        origin=Origin.from_kwargs(code=["SUN"]),
-                    ).to_cartesian(),
+            if data["header"]["refsys"] != "ECLM J2000":
+                raise ValueError(
+                    f"Unsupported reference system: {data['header']['refsys']}"
                 )
-                orbits = qv.concatenate([orbits, orbit])
 
-        except requests.RequestException as e:
-            print(f"Error querying NEOCC database: {e}")
-            return None
+            orbit = Orbits.from_kwargs(
+                orbit_id=[data["object_id"]],
+                object_id=[data["object_id"]],
+                coordinates=KeplerianCoordinates.from_kwargs(
+                    a=[data["elements"]["a"]],
+                    e=[data["elements"]["e"]],
+                    i=[data["elements"]["i"]],
+                    raan=[data["elements"]["node"]],
+                    ap=[data["elements"]["peri"]],
+                    M=[data["elements"]["M"]],
+                    time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
+                    covariance=CoordinateCovariances.from_matrix(
+                        data["covariance"].reshape(
+                            1,
+                            6,
+                            6,
+                        )
+                    ),
+                    frame="ecliptic",
+                    origin=Origin.from_kwargs(code=["SUN"]),
+                ).to_cartesian(),
+            )
+            orbits = qv.concatenate([orbits, orbit])
 
     return orbits
