@@ -219,7 +219,7 @@ def query_neocc(
 
             time_scale = data["time_system"]
             if time_scale == "TDT":
-                time_scale = "TT"
+                time_scale = "tt"
             else:
                 raise ValueError(f"Unsupported time scale: {time_scale}")
 

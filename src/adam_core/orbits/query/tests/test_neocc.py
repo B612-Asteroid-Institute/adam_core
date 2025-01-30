@@ -158,6 +158,9 @@ def test_query_neocc(mocker):
     assert orbits.object_id[0].as_py() == "2024YR4"
     assert orbits.orbit_id[1].as_py() == "2022OB5"
     assert orbits.object_id[1].as_py() == "2022OB5"
+    assert orbits.coordinates.time.days[0].as_py() == 60800
+    assert orbits.coordinates.time.days[1].as_py() == 60600
+    assert orbits.coordinates.time.scale == "tt"
     assert np.all(~np.isnan(orbits.coordinates.values))
     assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
 
@@ -187,6 +190,9 @@ def test_query_neocc(mocker):
     assert orbits.object_id[0].as_py() == "2024YR4"
     assert orbits.orbit_id[1].as_py() == "2022OB5"
     assert orbits.object_id[1].as_py() == "2022OB5"
+    assert orbits.coordinates.time.days[0].as_py() == 60688
+    assert orbits.coordinates.time.days[1].as_py() == 59792
+    assert orbits.coordinates.time.scale == "tt"
     assert np.all(~np.isnan(orbits.coordinates.values))
     assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
 
