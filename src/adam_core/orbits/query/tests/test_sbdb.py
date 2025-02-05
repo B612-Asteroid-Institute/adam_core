@@ -8,7 +8,6 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 from astroquery.jplsbdb import SBDB
-from astroquery.query import BaseQuery
 
 from ..sbdb import NotFoundError, _convert_SBDB_covariances, query_sbdb
 
@@ -94,7 +93,6 @@ def test_query_sbdb_for_missing_value():
     with pytest.raises(NotFoundError):
         with mock_sbdb_query("missing.json"):
             query_sbdb(["missing"])
-
 
 
 @contextmanager
