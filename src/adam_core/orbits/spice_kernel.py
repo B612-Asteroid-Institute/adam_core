@@ -1,6 +1,7 @@
 from typing import Optional
 
 import numpy as np
+import quivr as qv
 import spiceypy as sp
 from naif_de440 import de440
 from naif_earth_itrf93 import earth_itrf93
@@ -56,14 +57,12 @@ def fit_chebyshev(
         coefficients has shape (6, degree+1)
     """
     # Get states for this window and convert to km and km/s
-    mask = (coordinates.time.et() >= window_start) & (
-        coordinates.time.et() <= window_end
-    )
+    et_times = coordinates.time.et().to_numpy()
+    mask = (et_times >= window_start) & (et_times <= window_end)
     states = coordinates.values[mask].copy()
     states[:, :3] *= 149597870.7  # au to km
     states[:, 3:] *= 149597870.7 / 86400.0  # au/day to km/s
-
-    times = coordinates.time.et()[mask]
+    times = coordinates.time.et().to_numpy()[mask]
 
     # Scale time to [-1, 1] interval
     mid_time = (window_end + window_start) / 2
@@ -111,9 +110,13 @@ def orbits_to_spk(
     orbits = orbits.set_column("coordinates", ssb_coordinates)
 
     # Generate propagation times
-    num_steps = int((end_time.mjd() - start_time.mjd()) / step_days) + 1
-    times = start_time.add_fractional_days(np.arange(num_steps) * step_days)
+    num_steps = (
+        int((end_time.mjd().to_numpy() - start_time.mjd().to_numpy()) / step_days) + 1
+    )
 
+    times = qv.concatenate(
+        [start_time.add_fractional_days(i * step_days) for i in range(num_steps)]
+    )
     # Propagate orbits if propagator provided
     if propagator is not None:
         orbits = propagator.propagate_orbits(orbits, times)
@@ -155,12 +158,11 @@ def orbits_to_spk(
         # Convert to numpy arrays
         cheby_coeffs = np.array(cheby_coeffs)
         window_starts = np.array(window_starts)
-
         # Write Type 2 SPK segment
         sp.spkw02(
             handle,
             target_id,
-            orbits.coordinates.origin.code[0],
+            orbits.coordinates.origin.as_OriginCodes().value,
             "J2000",
             orbit_start,
             orbit_end,
@@ -168,7 +170,7 @@ def orbits_to_spk(
             window_seconds,
             len(cheby_coeffs),
             cheby_degree,
-            cheby_coeffs,
+            cheby_coeffs.flatten(),
             window_starts[0],
         )
 
