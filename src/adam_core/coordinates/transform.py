@@ -42,7 +42,7 @@ FLOAT_TOLERANCE = 1e-15
 
 @jit
 def _cartesian_to_spherical(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray]
+    coords_cartesian: Union[np.ndarray, jnp.ndarray],
 ) -> jnp.ndarray:
     """
     Convert a single Cartesian coordinate to a spherical coordinate.
@@ -179,7 +179,7 @@ def cartesian_to_spherical(coords_cartesian: np.ndarray) -> np.ndarray:
 
 @jit
 def _spherical_to_cartesian(
-    coords_spherical: Union[np.ndarray, jnp.ndarray]
+    coords_spherical: Union[np.ndarray, jnp.ndarray],
 ) -> jnp.ndarray:
     """
     Convert a single spherical coordinate to a Cartesian coordinate.
@@ -258,7 +258,7 @@ _spherical_to_cartesian_vmap = jit(
 
 
 def spherical_to_cartesian(
-    coords_spherical: Union[np.ndarray, jnp.ndarray]
+    coords_spherical: Union[np.ndarray, jnp.ndarray],
 ) -> jnp.ndarray:
     """
     Convert spherical coordinates to Cartesian coordinates.

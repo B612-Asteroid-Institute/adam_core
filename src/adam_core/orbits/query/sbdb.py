@@ -95,6 +95,7 @@ def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
         List of dictionaries containing orbital elements and other object properties.
     """
     results = []
+    SBDB.clear_cache()  # Yikes!
     for obj_id in obj_ids:
         result = SBDB.query(
             obj_id,
