@@ -4,7 +4,7 @@ import spiceypy as sp
 from naif_de440 import de440
 
 from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.origin import Origin
+from ...coordinates.origin import Origin, OriginCodes
 from ...time import Timestamp
 from ...utils.spice import get_perturber_state, setup_SPICE
 from ..orbits import Orbits
@@ -71,27 +71,45 @@ def test_orbits_to_spk(tmp_path):
 
 
 def test_chebyshev_fit_against_spice_earth():
-
     # Get the segment info for Earth from DE440
     handle = sp.spklef(de440)
 
     # Find Earth Barycenter segment (ID = 3)
-    handle, descr, identifier = sp.spksfs(
-        3, 0.0, 100
-    )  # body=3, et=0, idlen=100 for segment ID
-
-    # Get the coefficients and time info from the segment
-    print(descr)
-    dc = sp.dafgda(handle, descr[3], descr[4])  # Get entire segment data
-    start_et = dc[0]  # Start time of segment
-    end_et = dc[1]  # End time of segment
-
+    # First find the segment
+    dladsc = sp.spksfs(3, 0.0, 100)  # body=3, et=0, idlen=100 for segment ID
+    print(f"DLADSC: {dladsc}")
+    
+    spkuds = sp.spkuds(dladsc[1])
+    print(f"SPKUDS: {spkuds}")
+    # Unpack the values:
+    # body, center, frame, type, first_epoch, last_epoch, begin_addr, end_addr = spkuds
+    spkuds = sp.spkuds(dladsc[1])
+    body, center, frame, spk_type, start_et, end_et, begin_addr, end_addr = spkuds
+    print(f"Body ID: {body}")
+    print(f"Center ID: {center}")
+    print(f"Frame ID: {frame}")
+    print(f"SPK Type: {spk_type}")  # Should be 2 for Chebyshev
+    print(f"Time range: {start_et} to {end_et}")
+    
+    # Read the raw data
+    init_data = sp.dafgda(handle, begin_addr, begin_addr + 10)
+    print(f"Init data: {init_data}")
+    raw_data = sp.dafgda(handle, begin_addr, end_addr)
+    
+    # First few values in raw_data should be metadata about the polynomials
+    print(f"First few values of raw data: {raw_data[:10]}")
+    
+    
+    setup_SPICE(force=True)
+    
+    print(f"Start ET: {start_et}")
+    print(f"End ET: {end_et}")
     # Get Earth states at times matching the DE440 segment
     num_points = 100  # Number of points to sample within window
     times = Timestamp.from_et(np.linspace(start_et, end_et, num_points))
 
     earth_coordinates = get_perturber_state(
-        perturber="EARTH", times=times, origin="SSB", frame="J2000"
+        perturber=OriginCodes.EARTH_MOON_BARYCENTER, times=times, origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER, frame="equatorial"
     )
 
     # Fit Chebyshev polynomials using our function
@@ -101,7 +119,7 @@ def test_chebyshev_fit_against_spice_earth():
 
     # Get the actual coefficients from DE440
     # Each component has degree+1 coefficients
-    spice_coeffs = np.array(dc[2:]).reshape(-1, 3)  # Reshape into position components
+    spice_coeffs = np.array(raw_data).reshape(-1, 3)  # Reshape into position components
 
     # Compare position coefficients directly - they should be in the same units (km)
     pos_diff = np.abs(coeffs[:3] - spice_coeffs)
@@ -109,5 +127,4 @@ def test_chebyshev_fit_against_spice_earth():
     # Assert position coefficients match within 1 meter
     assert np.all(pos_diff < 1e-3)  # km -> m
 
-    # Clean up
-    sp.spkuef(handle)
+
