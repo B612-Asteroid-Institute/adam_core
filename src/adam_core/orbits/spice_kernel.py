@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, Optional
 
 import numpy as np
@@ -28,6 +29,8 @@ DEFAULT_KERNELS = [
     earth_itrf93,
 ]
 
+# Add after DEFAULT_KERNELS
+logger = logging.getLogger(__name__)
 
 J2000_TDB_JD = 2451545.0
 
@@ -93,7 +96,7 @@ def orbits_to_spk(
     end_time: Timestamp,
     propagator: Optional[Propagator] = None,
     max_processes: Optional[int] = None,
-    step_days: float = 1.0 / 12,  # Every 2 hours
+    step_days: float = 1.0 / 4,  # Every 6 hours
     target_id_start: int = 1000000,
     window_days: float = 32.0,
     comment: str = "SPK file generated from adam_core Orbits",
@@ -102,6 +105,9 @@ def orbits_to_spk(
     """
     Convert Orbits object to a SPICE SPK file using Chebyshev polynomials (Type 3).
     """
+    logger.info(f"Creating SPK file: {output_file}")
+    logger.info(f"Time range: {start_time.to_astropy().isot} to {end_time.to_astropy().isot}")
+    logger.info(f"Kernel type: {kernel_type}")
 
     # ensure SPICE is ready to go
     setup_SPICE()
@@ -113,40 +119,41 @@ def orbits_to_spk(
     num_steps = (
         int((end_time.mjd().to_numpy() - start_time.mjd().to_numpy()) / step_days) + 1
     )
+    logger.debug(f"Generated {num_steps} time steps with step size {step_days} days")
 
     times = qv.concatenate(
         [start_time.add_fractional_days(i * step_days) for i in range(num_steps)]
     )
     # Propagate orbits if propagator provided
     if propagator is not None:
-        orbits = propagator.propagate_orbits(orbits, times, max_processes=max_processes)
+        logger.debug("Propagating orbits...")
+        orbits = propagator.propagate_orbits(orbits, times, max_processes=max_processes, chunk_size=1)
+        logger.debug("Orbit propagation complete")
 
     # Transform everything to a Sun origin and
     # ecliptic frame
     # Verify all orbits have the same origin
-    sun_coordinates = transform_coordinates(
+    ssb_coordinates = transform_coordinates(
         orbits.coordinates,
         frame_out="equatorial",
         origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
     )
 
-    orbits = orbits.set_column("coordinates", sun_coordinates)
+    orbits = orbits.set_column("coordinates", ssb_coordinates)
 
     # Create the SPK file
     handle = sp.spkopn(output_file, comment, 0)
-
-    # Add each orbit as a separate segment
-    window_seconds = window_days * 86400.0
-
     target_id_mappings = {}
 
     for i, (orbit_id, orbit) in enumerate(orbits.group_by_orbit_id()):
+        logger.debug(f"Processing orbit {orbit_id} ({i} / ({len(orbits.orbit_id.unique())})")
         # ensure orbit is sorted by time
         orbit = orbit.sort_by(["coordinates.time.days", "coordinates.time.nanos"])
 
         target_id = target_id_start + i
 
         target_id_mappings[orbit_id] = target_id
+        logger.debug(f"Orbit {orbit_id} -> Target ID: {target_id}")
 
         # Get time range for this orbit
         orbit_start = orbit.coordinates.time.min().et()[0].as_py()
@@ -159,7 +166,7 @@ def orbits_to_spk(
                 target_id,
                 orbit_start,
                 orbit_end,
-                window_seconds,
+                window_days * 86400.0,
                 cheby_degree,
             )
         elif kernel_type == "w09":
@@ -175,6 +182,7 @@ def orbits_to_spk(
 
     # Close the SPK file
     sp.spkcls(handle)
+    logger.info(f"Successfully created SPK file: {output_file}")
 
     return target_id_mappings
 
@@ -188,6 +196,7 @@ def write_spkw03_segment(
     window_seconds: float = 86400.0,
     cheby_degree: int = 15,
 ) -> None:
+    logger.debug(f"Writing SPK type 03 segment for target ID {target_id}")
     # assert orbit id is unique
     assert propagated_orbit.orbit_id.unique()
 
@@ -207,6 +216,7 @@ def write_spkw03_segment(
     segment_id = segment_id[:40]
 
     num_windows = int(np.ceil((end_time - start_time) / window_seconds))
+    logger.debug(f"Fitting {num_windows} Chebyshev windows")
 
     # Initialize arrays for SPKW03
     cheby_coeffs = []
@@ -255,6 +265,7 @@ def write_spkw09_segment(
     start_time: float,
     end_time: float,
 ) -> None:
+    logger.debug(f"Writing SPK type 09 segment for target ID {target_id}")
     # assert orbit id is unique
     assert propagated_orbit.orbit_id.unique()
 

@@ -6,22 +6,32 @@ import os
 import shutil
 from typing import Optional, Type
 
+import numpy as np
+
+from ..coordinates.keplerian import KeplerianCoordinates
 from ..orbits import Orbits
 from ..propagator import Propagator
 from ..time import Timestamp
 from .spice_kernel import orbits_to_spk
 
 
+def _safe_orbital_period(keplerian: KeplerianCoordinates) -> float:
+    """
+    Compute the orbital period of an orbit.
+    """
+    orbital_period = float(keplerian.P[0])
+    # Use a default value if orbital period is infinite or NaN
+    if np.isnan(orbital_period) or np.isinf(orbital_period):
+        return 1000.0
+    return orbital_period
+
+
 def generate_openspace_asset(
     orbits: Orbits,
+    spice_kernel_path: str,
     output_dir: str,
-    start_time: Timestamp,
-    end_time: Timestamp,
-    propagator: Propagator,
+    target_id_mappings: dict,
     trail_color: tuple = (1.0, 1.0, 1.0),
-    max_processes: Optional[int] = None,
-    target_id_start: int = 1000000,
-    kernel_type: str = "w03",
 ) -> None:
     """
     Generate an OpenSpace Asset file from an Orbits object
@@ -30,54 +40,26 @@ def generate_openspace_asset(
     ----------
     orbits : Orbits
         The orbits to generate assets for
-    output_file : str
-        Path to output the OpenSpace asset file
-    start_time : Timestamp
-        The start time of the orbits
-    end_time : Timestamp
-        The end time of the orbits
-    propagator : Propagator
-        The propagator to use to generate the orbits
-    target_id_start : int
-        The starting target ID for the SPK file
-    kernel_type : str
-        The type of kernel to use for the SPK file
+    spice_kernel_path : str
+        The path to the SPICE kernel file generated for these orbits
+    output_dir : str
+        The directory to output the asset files
+    target_id_mappings : dict
+        A dictionary mapping orbit IDs to target IDs
+    trail_color : tuple
+        The color of the trail
     """
 
-    # Remove existing output directory
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-
-    # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-
-    # Generate SPK file with same name but .bsp extension
-    spk_file = os.path.join(output_dir, "orbits.bsp")
-    target_id_mappings = orbits_to_spk(
-        orbits,
-        spk_file,
-        start_time,
-        end_time,
-        propagator,
-        max_processes,
-        step_days=1.0,
-        target_id_start=target_id_start,
-        kernel_type=kernel_type,
-    )
 
     # Write out an asset file for each orbit
     for i, (orbit_id, orbit) in enumerate(orbits.group_by_orbit_id()):
         keplerian = orbit.coordinates.to_keplerian()
-        # orbital_period = float(keplerian.P[0])  # Convert to days
-
-        # For now, hard code period to nominal orbit because we have
-        # impactors which are hyperbolic
-        orbital_period = 1113.0
+        orbital_period = _safe_orbital_period(keplerian)
 
         identifier = f"{orbit.object_id[0].as_py()}_{orbit.orbit_id[0].as_py()}"
         # Remove all parenthesis
         identifier = identifier.replace("(", "").replace(")", "").replace(" ", "_")
-        print(f"Generating asset for {identifier}")
         asset_file = os.path.join(output_dir, f"{identifier}.asset")
 
         # Write the asset file
@@ -103,8 +85,6 @@ def generate_openspace_asset(
             )
             f.write(head + "\n\n")
 
-            relative_spk_file = os.path.relpath(spk_file, output_dir)
-
             # Register on initialize and remove on deinitialize
             initialization = (
                 f"asset.onInitialize(function()\n"
@@ -123,14 +103,18 @@ def generate_openspace_asset(
 
     # Write out a master asset file
     master_asset_file = os.path.join(output_dir, "orbits.asset")
+    relative_spk_file = os.path.relpath(spice_kernel_path, output_dir)
+
+
     # For now we hardcode the path.
     with open(master_asset_file, "w") as f:
         load_kernel = (
             f"asset.onInitialize(function()\n"
-            f'  openspace.spice.loadKernel(openspace.absPath("../data/assets/scene/solarsystem/adam/orbits.bsp"))\n'
+            f"  local kernelResource = openspace.resource('{relative_spk_file}')\n"
+            f'  openspace.spice.loadKernel(kernelResource)\n'
             f"end)\n"
             f"asset.onDeinitialize(function()\n"
-            f'  openspace.spice.unloadKernel(openspace.absPath("../data/assets/scene/solarsystem/adam/orbits.bsp"))\n'
+            f'  openspace.spice.unloadKernel(kernelResource)\n'
             f"end)\n"
         )
         f.write(load_kernel)
