@@ -49,7 +49,6 @@ def test_orbits_to_spk(tmp_path):
         propagator=ASSISTPropagator(),
         step_days=1.0,
         window_days=10.0,
-        cheby_degree=14,
     )
 
     # Verify file exists
@@ -90,12 +89,12 @@ def test_orbits_to_spk(tmp_path):
 #     num_points = 100
 #     times = Timestamp.from_et(np.linspace(record_start_et, record_end_et, num_points))
 #     earth_coordinates = get_perturber_state(
-#         perturber=OriginCodes.EARTH_MOON_BARYCENTER, 
+#         perturber=OriginCodes.EARTH_MOON_BARYCENTER,
 #         times=times,
 #         origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
 #         frame="equatorial"
 #     )
-    
+
 #     # Fit Chebyshev polynomials using your function.
 #     # (Assume that fit_chebyshev returns coefficients, a mid time, and a half-interval.)
 #     fitted_coeffs, mid_time, half_interval = fit_chebyshev(
@@ -104,10 +103,10 @@ def test_orbits_to_spk(tmp_path):
 #         record_end_et,
 #         degree=degree
 #     )
-    
+
 #     # Compare only the position coefficients (first 3 components)
 #     pos_diff = np.abs(fitted_coeffs[:3] - spice_coeffs[:3])
 #     print("Position coefficient differences:", pos_diff)
-    
+
 #     # Assert that the position coefficients match within 1 meter (1e-3 km)
 #     assert np.all(pos_diff < 1e-3)

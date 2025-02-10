@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import numpy as np
 import quivr as qv
 import spiceypy as sp
+from astropy import units as u
 from naif_de440 import de440
 from naif_earth_itrf93 import earth_itrf93
 from naif_eop_high_prec import eop_high_prec
@@ -16,6 +17,7 @@ from ..coordinates.transform import transform_coordinates
 from ..orbits import Orbits
 from ..propagator import Propagator
 from ..time import Timestamp
+from ..utils.spice import setup_SPICE
 
 DEFAULT_KERNELS = [
     leapseconds,
@@ -91,15 +93,23 @@ def orbits_to_spk(
     end_time: Timestamp,
     propagator: Optional[Propagator] = None,
     max_processes: Optional[int] = None,
-    step_days: float = 1.0 / 12, # Every 2 hours
+    step_days: float = 1.0 / 12,  # Every 2 hours
     target_id_start: int = 1000000,
-    cheby_degree: int = 15,
     window_days: float = 32.0,
     comment: str = "SPK file generated from adam_core Orbits",
+    # remove me later
+    kernel_type: str = "w03",
 ) -> Dict[str, int]:
     """
     Convert Orbits object to a SPICE SPK file using Chebyshev polynomials (Type 3).
     """
+
+    # ensure SPICE is ready to go
+    setup_SPICE()
+
+    # default to a chebyshev degree of 15
+    cheby_degree = 15
+
     # Generate propagation times
     num_steps = (
         int((end_time.mjd().to_numpy() - start_time.mjd().to_numpy()) / step_days) + 1
@@ -110,13 +120,11 @@ def orbits_to_spk(
     )
     # Propagate orbits if propagator provided
     if propagator is not None:
-        orbits = propagator.propagate_orbits(
-            orbits, times, max_processes=max_processes
-        )
+        orbits = propagator.propagate_orbits(orbits, times, max_processes=max_processes)
 
     print(orbits.coordinates.origin.as_OriginCodes().value)
     print(orbits.coordinates.frame)
-    
+
     # Transform everything to a Sun origin and
     # ecliptic frame
     # Verify all orbits have the same origin
@@ -151,46 +159,148 @@ def orbits_to_spk(
         orbit_start = orbit.coordinates.time.min().et()[0].as_py()
         orbit_end = orbit.coordinates.time.max().et()[0].as_py()
 
-        num_windows = int(np.ceil((orbit_end - orbit_start) / window_seconds))
-
-
-        # Initialize arrays for SPKW02
-        cheby_coeffs = []
-        window_starts = []
-
-        for w in range(num_windows):
-            start_time = orbit_start + w * window_seconds
-            end_time = min(start_time + window_seconds, orbit_end)
-
-            # Fit Chebyshev polynomials
-            coeffs, mid_time, half_interval = fit_chebyshev(
-                orbit.coordinates, start_time, end_time, cheby_degree
+        if kernel_type == "w03":
+            write_spkw03_segment(
+                orbit,
+                handle,
+                target_id,
+                orbit_start,
+                orbit_end,
+                window_seconds,
+                cheby_degree,
             )
-
-            cheby_coeffs.append(coeffs.flatten())
-            window_starts.append(start_time)
-
-        # Convert to numpy arrays
-        cheby_coeffs = np.array(cheby_coeffs)
-        window_starts = np.array(window_starts)
-        # Write Type 3 SPK segment
-        spk_frame = "J2000" if orbits.coordinates.frame == "equatorial" else "ECLIPJ2000"
-        sp.spkw03(
-            handle,
-            target_id,
-            orbits.coordinates.origin.as_OriginCodes().value,
-            spk_frame,
-            orbit_start,
-            orbit_end,
-            str(orbit_id),
-            window_seconds,
-            len(cheby_coeffs),
-            cheby_degree,
-            cheby_coeffs.flatten(),
-            window_starts[0],
-        )
+        elif kernel_type == "w09":
+            write_spkw09_segment(
+                orbit,
+                handle,
+                target_id,
+                orbit_start,
+                orbit_end,
+            )
+        else:
+            raise ValueError(f"Invalid kernel type: {kernel_type}")
 
     # Close the SPK file
     sp.spkcls(handle)
 
     return target_id_mappings
+
+
+def write_spkw03_segment(
+    propagated_orbit: Orbits,
+    handle: int,
+    target_id: int,
+    start_time: float,
+    end_time: float,
+    window_seconds: float = 86400.0,
+    cheby_degree: int = 15,
+) -> None:
+    # assert orbit id is unique
+    assert propagated_orbit.orbit_id.unique()
+
+    spk_frame = (
+        "J2000" if propagated_orbit.coordinates.frame == "equatorial" else "ECLIPJ2000"
+    )
+
+    segment_id = (
+        str(propagated_orbit.orbit_id[0].as_py())
+        + "_"
+        + str(start_time)
+        + "_"
+        + str(end_time)
+    )
+
+    # SPICE has a limit of 40 characters for the segment id
+    segment_id = segment_id[:40]
+
+    num_windows = int(np.ceil((end_time - start_time) / window_seconds))
+
+    # Initialize arrays for SPKW03
+    cheby_coeffs = []
+    window_starts = []
+
+    for w in range(num_windows):
+
+        start_time_window = start_time + w * window_seconds
+        end_time_window = min(start_time_window + window_seconds, end_time)
+
+        coeffs, mid_time, half_interval = fit_chebyshev(
+            propagated_orbit.coordinates,
+            start_time_window,
+            end_time_window,
+            cheby_degree,
+        )
+
+        cheby_coeffs.append(coeffs.flatten())
+        window_starts.append(start_time)
+
+    # Convert to numpy arrays
+    cheby_coeffs = np.array(cheby_coeffs)
+    window_starts = np.array(window_starts)
+
+    # Write the SPKW03 segment
+    sp.spkw03(
+        handle,
+        target_id,
+        propagated_orbit.coordinates.origin.as_OriginCodes().value,
+        spk_frame,
+        start_time,
+        end_time,
+        segment_id,
+        window_seconds,
+        len(cheby_coeffs),
+        cheby_degree,
+        cheby_coeffs.flatten(),
+        window_starts[0],
+    )
+
+
+def write_spkw09_segment(
+    propagated_orbit: Orbits,
+    handle: int,
+    target_id: int,
+    start_time: float,
+    end_time: float,
+) -> None:
+    # assert orbit id is unique
+    assert propagated_orbit.orbit_id.unique()
+
+    spk_frame = (
+        "J2000" if propagated_orbit.coordinates.frame == "equatorial" else "ECLIPJ2000"
+    )
+
+    segment_id = (
+        str(propagated_orbit.orbit_id[0].as_py())
+        + "_"
+        + str(start_time)
+        + "_"
+        + str(end_time)
+    )
+
+    # SPICE has a limit of 40 characters for the segment id
+    segment_id = segment_id[:40]
+
+    epochs_tdb = (
+        propagated_orbit.coordinates.time.rescale("tdb")
+        .jd()
+        .to_numpy(zero_copy_only=False)
+    )
+    epochs_et = np.array([sp.str2et(f"JD {i:.15f} TDB".format(i)) for i in epochs_tdb])
+
+    states = propagated_orbit.coordinates.values
+    states[:, 0:6] *= u.au.to(u.km)
+    states[:, 3:6] /= (u.d).to(u.s)
+
+    sp.spkw09(
+        handle,
+        target_id,
+        propagated_orbit.coordinates.origin.as_OriginCodes().value,
+        spk_frame,
+        epochs_et[0],
+        epochs_et[-1],
+        segment_id,
+        15,
+        len(epochs_et),
+        np.ascontiguousarray(states),
+        epochs_et,
+    )

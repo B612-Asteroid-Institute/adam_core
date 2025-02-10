@@ -20,6 +20,8 @@ def generate_openspace_asset(
     propagator: Propagator,
     trail_color: tuple = (1.0, 1.0, 1.0),
     max_processes: Optional[int] = None,
+    target_id_start: int = 1000000,
+    kernel_type: str = "w03",
 ) -> None:
     """
     Generate an OpenSpace Asset file from an Orbits object
@@ -48,7 +50,14 @@ def generate_openspace_asset(
     # Generate SPK file with same name but .bsp extension
     spk_file = os.path.join(output_dir, "orbits.bsp")
     target_id_mappings = orbits_to_spk(
-        orbits, spk_file, start_time, end_time, propagator, max_processes, step_days=1.0
+        orbits,
+        spk_file,
+        start_time,
+        end_time,
+        propagator,
+        max_processes,
+        step_days=1.0,
+        kernel_type=kernel_type,
     )
 
     # Write out an asset file for each orbit
@@ -101,8 +110,8 @@ def generate_openspace_asset(
                 f"  openspace.removeSceneGraphNode(Trail)\n"
                 f"  openspace.removeSceneGraphNode(Head)\n"
                 f"end)\n"
-                f"asset.export(\"trail_{identifier}\", Trail)\n"
-                f"asset.export(\"head_{identifier}\", Head)\n"
+                f'asset.export("trail_{identifier}", Trail)\n'
+                f'asset.export("head_{identifier}", Head)\n'
             )
 
             f.write(initialization)
@@ -113,10 +122,10 @@ def generate_openspace_asset(
     with open(master_asset_file, "w") as f:
         load_kernel = (
             f"asset.onInitialize(function()\n"
-            f"  openspace.spice.loadKernel(openspace.absPath(\"../data/assets/scene/solarsystem/adam/orbits.bsp\"))\n"
+            f'  openspace.spice.loadKernel(openspace.absPath("../data/assets/scene/solarsystem/adam/orbits.bsp"))\n'
             f"end)\n"
             f"asset.onDeinitialize(function()\n"
-            f"  openspace.spice.unloadKernel(openspace.absPath(\"../data/assets/scene/solarsystem/adam/orbits.bsp\"))\n"
+            f'  openspace.spice.unloadKernel(openspace.absPath("../data/assets/scene/solarsystem/adam/orbits.bsp"))\n'
             f"end)\n"
         )
         f.write(load_kernel)
@@ -124,7 +133,7 @@ def generate_openspace_asset(
             identifier = f"{orbit.object_id[0].as_py()}_{orbit.orbit_id[0].as_py()}"
             # Remove all parenthesis
             identifier = identifier.replace("(", "").replace(")", "").replace(" ", "_")
-            f.write(f"asset.require(\"./{identifier}.asset\")\n")
+            f.write(f'asset.require("./{identifier}.asset")\n')
 
 
 def add_renderable_trail_orbit(
