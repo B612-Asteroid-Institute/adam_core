@@ -38,6 +38,10 @@ def generate_openspace_asset(
         The end time of the orbits
     propagator : Propagator
         The propagator to use to generate the orbits
+    target_id_start : int
+        The starting target ID for the SPK file
+    kernel_type : str
+        The type of kernel to use for the SPK file
     """
 
     # Remove existing output directory
@@ -57,6 +61,7 @@ def generate_openspace_asset(
         propagator,
         max_processes,
         step_days=1.0,
+        target_id_start=target_id_start,
         kernel_type=kernel_type,
     )
 

@@ -97,7 +97,6 @@ def orbits_to_spk(
     target_id_start: int = 1000000,
     window_days: float = 32.0,
     comment: str = "SPK file generated from adam_core Orbits",
-    # remove me later
     kernel_type: str = "w03",
 ) -> Dict[str, int]:
     """
@@ -122,9 +121,6 @@ def orbits_to_spk(
     if propagator is not None:
         orbits = propagator.propagate_orbits(orbits, times, max_processes=max_processes)
 
-    print(orbits.coordinates.origin.as_OriginCodes().value)
-    print(orbits.coordinates.frame)
-
     # Transform everything to a Sun origin and
     # ecliptic frame
     # Verify all orbits have the same origin
@@ -135,9 +131,6 @@ def orbits_to_spk(
     )
 
     orbits = orbits.set_column("coordinates", sun_coordinates)
-
-    print(orbits.coordinates.origin.as_OriginCodes().value)
-    print(orbits.coordinates.frame)
 
     # Create the SPK file
     handle = sp.spkopn(output_file, comment, 0)
