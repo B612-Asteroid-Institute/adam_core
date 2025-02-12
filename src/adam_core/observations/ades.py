@@ -228,6 +228,16 @@ def ADES_to_string(
     # Obscontexts are optional for strict == False, but easier to handle it as empty dict.
     obs_contexts = obs_contexts or {}
 
+    if not pc.all(pc.is_null(observations.obsSubID)).as_py():
+        # Check if any obsSubID is longer than 25 characters using pyarrow compute
+        if pc.any(pc.greater(pc.utf8_length(observations.obsSubID), 25)).as_py():
+            raise ValueError("Found obsSubID longer than 25 characters")
+
+    if not pc.all(pc.is_null(observations.trkSub)).as_py():
+        # Check if any trkSub is longer than 8 characters using pyarrow compute
+        if pc.any(pc.greater(pc.utf8_length(observations.trkSub), 8)).as_py():
+            raise ValueError("Found trkSub longer than 8 characters")
+
     for obs in unique_observatories:
         if obs not in obs_contexts:
             if strict:
