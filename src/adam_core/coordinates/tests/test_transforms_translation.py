@@ -11,6 +11,8 @@ from ..transform import cartesian_to_origin, transform_coordinates
 def assert_coords_equal(
     have: CartesianCoordinates,
     want: CartesianCoordinates,
+    position_tol_mm: float = 10,
+    velocity_tol_nm_s: float = 10,
 ):
     diff = want.values - have.values
 
@@ -19,10 +21,10 @@ def assert_coords_equal(
     # Calculate offset in velocity in nm/s
     v_diff = np.linalg.norm(diff[:, 3:], axis=1) * (u.au / u.d).to(u.nm / u.s)
 
-    # Assert positions are to within 10 mm
-    np.testing.assert_array_less(r_diff, 10)
-    # Assert velocities are to within 10 nm/s
-    np.testing.assert_array_less(v_diff, 10)
+    # Assert positions are to within desired mm
+    np.testing.assert_array_less(r_diff, position_tol_mm)
+    # Assert velocities are to within desired nm/s
+    np.testing.assert_array_less(v_diff, velocity_tol_nm_s)
 
 
 def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):

@@ -96,7 +96,7 @@ def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
 def get_perturber_state(
     perturber: OriginCodes,
     times: Timestamp,
-    frame: Literal["ecliptic", "equatorial"] = "ecliptic",
+    frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
     origin: OriginCodes = OriginCodes.SUN,
 ) -> CartesianCoordinates:
     """
@@ -108,7 +108,7 @@ def get_perturber_state(
         The NAIF ID of the perturber.
     times : Timestamp (N)
         Times at which to get state vectors.
-    frame : {'equatorial', 'ecliptic'}
+    frame : {'equatorial', 'ecliptic', 'itrf93'}
         Return perturber state in the equatorial or ecliptic J2000 frames.
     origin :  OriginCodes
         The NAIF ID of the origin.
@@ -123,8 +123,10 @@ def get_perturber_state(
         frame_spice = "ECLIPJ2000"
     elif frame == "equatorial":
         frame_spice = "J2000"
+    elif frame == "itrf93":
+        frame_spice = "ITRF93"
     else:
-        err = "frame should be one of {'equatorial', 'ecliptic'}"
+        err = "frame should be one of {'equatorial', 'ecliptic', 'itrf93'}"
         raise ValueError(err)
 
     # Make sure SPICE is ready to roll

@@ -19,7 +19,7 @@ Z_AXIS = np.array([0, 0, 1])
 def get_observer_state(
     code: Union[str, OriginCodes],
     times: Timestamp,
-    frame: Literal["ecliptic", "equatorial"] = "ecliptic",
+    frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
     origin: OriginCodes = OriginCodes.SUN,
 ) -> CartesianCoordinates:
     """

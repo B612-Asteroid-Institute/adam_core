@@ -8,10 +8,11 @@ import quivr as qv
 
 from adam_core.observers import Observers
 from adam_core.orbits import Orbits
-from adam_core.orbits.query import query_horizons, query_horizons_ephemeris, query_sbdb
+from adam_core.orbits.query import query_horizons, query_sbdb
 from adam_core.orbits.query.horizons import (
     _get_horizons_elements,
     _get_horizons_vectors,
+    query_horizons_ephemeris,
 )
 from adam_core.time import Timestamp
 
@@ -31,6 +32,8 @@ def _get_orbital_elements(
     location : str
         Location of the observer (in this case typically "@sun" or "@ssb"
         for barycentric or heliocentric elements, respectively).
+    refplane : str
+        Reference plane for the orbital elements.
 
     Returns
     -------
@@ -78,12 +81,12 @@ def _get_orbital_elements(
     horizons_elements = vectors_df.merge(elements_df, on=["targetname", "datetime_jd"])
 
     horizons_elements.insert(
-        1, "mjd_tdb", Timestamp.from_jd(horizons_elements["datetime_jd"]).mjd()
+        1, "mjd_tdb", Timestamp.from_jd(horizons_elements["datetime_jd"].values).mjd()
     )
     horizons_elements.insert(
         len(horizons_elements.columns),
         "tp_mjd",
-        Timestamp.from_jd(horizons_elements["Tp_jd"]).mjd(),
+        Timestamp.from_jd(horizons_elements["Tp_jd"].values).mjd(),
     )
     horizons_elements.drop(columns=["datetime_jd", "Tp_jd"], inplace=True)
     return horizons_elements
@@ -103,10 +106,13 @@ if __name__ == "__main__":
     object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
     orbits = orbits.set_column(
         "object_id",
-        np.where(
-            object_ids == "'Oumuamua (A/2017 U1)",
-            "1I/'Oumuamua (A/2017 U1)",
-            object_ids,
+        pa.array(
+            np.where(
+                object_ids == "'Oumuamua (A/2017 U1)",
+                "1I/'Oumuamua (A/2017 U1)",
+                object_ids,
+            ),
+            pa.large_string(),
         ),
     )
 
