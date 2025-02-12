@@ -705,3 +705,110 @@ permID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
     assert parsed_observations.ra[0].as_py() == 180.0
     assert parsed_observations.band[0].as_py() == "r"
     assert parsed_observations.remarks[0].as_py() == "First observation"
+
+
+def test_ADES_to_string_no_contexts():
+    """Test that ADES_to_string works without observatory contexts when strict=False."""
+    # Create minimal observations
+    observations = ADESObservations.from_kwargs(
+        permID=["3000", "3001"],
+        obsTime=Timestamp.from_mjd([60434.0, 60435.0], scale="utc"),
+        ra=[240.00, 15.00],
+        dec=[-15.00, 10.00],
+        stn=["W84", "695"],
+        mode=["CCD", "CCD"],
+        astCat=["Gaia2", "Gaia2"],
+    )
+
+    # Call ADES_to_string without obs_contexts and strict=False
+    ades_string = ADES_to_string(
+        observations=observations,
+        obs_contexts=None,
+        strict=False,
+    )
+
+    # Verify the output contains the expected data
+    # First verify the version header
+    assert ades_string.startswith("# version=2022\n")
+
+    # Split into lines for easier testing
+    lines = ades_string.strip().split("\n")
+
+    assert len(lines) == 5
+
+    # Verify warning messages were logged (can check the logs)
+    # Verify the data lines are present and formatted correctly
+    assert any("permID|obsTime|ra|dec|stn|mode|astCat" in line for line in lines)
+    
+    # Verify both observations are present with correct formatting
+    data_lines = [line for line in lines if "|" in line and not "permID" in line]
+    assert len(data_lines) == 2
+    
+    # Check second observation
+    obs2 = data_lines[0].split("|")
+    assert obs2[0] == "3001"  # permID
+    assert "2024-05-05T00:00:00.000Z" in obs2[1]  # obsTime
+    assert "15.00000000" in obs2[2]  # ra
+    assert "10.00000000" in obs2[3]  # dec
+    assert obs2[4] == "695"  # stn
+    assert obs2[5] == "CCD"  # mode
+    assert obs2[6] == "Gaia2"  # astCat
+
+    # Check first observation
+    obs1 = data_lines[1].split("|")
+    assert obs1[0] == "3000"  # permID
+    assert "2024-05-04T00:00:00.000Z" in obs1[1]  # obsTime
+    assert "240.00000000" in obs1[2]  # ra
+    assert "-15.00000000" in obs1[3]  # dec
+    assert obs1[4] == "W84"  # stn
+    assert obs1[5] == "CCD"  # mode
+    assert obs1[6] == "Gaia2"  # astCat
+
+
+
+
+def test_ADES_to_string_partial_contexts():
+    """Test that ADES_to_string works with partial observatory contexts when strict=False."""
+    # Create minimal observations
+    observations = ADESObservations.from_kwargs(
+        permID=["3000", "3001"],
+        obsTime=Timestamp.from_mjd([60434.0, 60435.0], scale="utc"),
+        ra=[240.00, 15.00],
+        dec=[-15.00, 10.00],
+        stn=["W84", "695"],
+        mode=["CCD", "CCD"],
+        astCat=["Gaia2", "Gaia2"],
+    )
+
+    # Create partial observatory contexts
+    obs_contexts = {
+        "W84": ObsContext(
+            observatory=ObservatoryObsContext(mpcCode="W84"),
+            submitter=SubmitterObsContext(name="J. Moeyens"),
+            observers=["D. E. Survey"],
+            measurers=["J. Moeyens"],
+            telescope=TelescopeObsContext(name="Blanco 4m", design="Reflector"),
+        ),
+        # Intentionally no context for 695
+    }
+
+    ades_string = ADES_to_string(
+        observations=observations,
+        obs_contexts=obs_contexts,
+        strict=False,
+    )
+
+    # Verify the output contains the expected data
+    # First verify the version header
+    assert ades_string.startswith("# version=2022\n")
+
+    print(ades_string)
+
+    # Split into lines for easier testing
+    lines = ades_string.strip().split("\n") 
+
+    # Verify we have the context header for W84
+    assert any("# observatory" in line for line in lines)
+    assert any("! mpcCode W84" in line for line in lines)
+
+    assert len(lines) == 16

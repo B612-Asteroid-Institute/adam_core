@@ -176,7 +176,7 @@ class ADESObservations(qv.Table):
 
 def ADES_to_string(
     observations: ADESObservations,
-    obs_contexts: dict[str, ObsContext],
+    obs_contexts: Optional[dict[str, ObsContext]] = None,
     seconds_precision: int = 3,
     columns_precision: dict[str, int] = {
         "ra": 8,
@@ -186,6 +186,7 @@ def ADES_to_string(
         "mag": 2,
         "rmsMag": 2,
     },
+    strict: bool = True,
 ) -> str:
     """
     Write ADES observations to a string.
@@ -211,6 +212,8 @@ def ADES_to_string(
         }
         The MPC enforces strict limits on these and submitters may need permission to send
         high-precision data.
+    strict : bool, optional
+        If True, raise an error if obs_contexts is not provided, by default True.
 
     Returns
     -------
@@ -222,9 +225,15 @@ def ADES_to_string(
     unique_observatories = observations.stn.unique().to_numpy(zero_copy_only=False)
     unique_observatories.sort()
 
+    # Obscontexts are optional for strict == False, but easier to handle it as empty dict.
+    obs_contexts = obs_contexts or {}
+
     for obs in unique_observatories:
         if obs not in obs_contexts:
-            raise ValueError(f"Observatory {obs} not found in obs_contexts")
+            if strict:
+                raise ValueError(f"Observatory {obs} not found in obs_contexts")
+            else:
+                logger.warning(f"Observatory {obs} not found in obs_contexts")
 
         observations_obscode = observations.select("stn", obs)
         observations_obscode = observations_obscode.sort_by(
@@ -253,8 +262,9 @@ def ADES_to_string(
             raise ValueError(err)
 
         # Write the observatory context block
-        obs_context = obs_contexts[obs]
-        ades_string += obs_context.to_string()
+        obs_context = obs_contexts.get(obs, None)
+        if obs_context is not None:
+            ades_string += obs_context.to_string()
 
         # Write the observations block (we first convert
         # to a pandas dataframe)
