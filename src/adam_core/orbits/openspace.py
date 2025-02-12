@@ -3,16 +3,11 @@ Utilities for generating and reading OpenSpace Asset files
 """
 
 import os
-import shutil
-from typing import Optional, Type
 
 import numpy as np
 
 from ..coordinates.keplerian import KeplerianCoordinates
 from ..orbits import Orbits
-from ..propagator import Propagator
-from ..time import Timestamp
-from .spice_kernel import orbits_to_spk
 
 
 def _safe_orbital_period(keplerian: KeplerianCoordinates) -> float:
@@ -105,16 +100,15 @@ def generate_openspace_asset(
     master_asset_file = os.path.join(output_dir, "orbits.asset")
     relative_spk_file = os.path.relpath(spice_kernel_path, output_dir)
 
-
     # For now we hardcode the path.
     with open(master_asset_file, "w") as f:
         load_kernel = (
             f"asset.onInitialize(function()\n"
             f"  local kernelResource = openspace.resource('{relative_spk_file}')\n"
-            f'  openspace.spice.loadKernel(kernelResource)\n'
+            f"  openspace.spice.loadKernel(kernelResource)\n"
             f"end)\n"
             f"asset.onDeinitialize(function()\n"
-            f'  openspace.spice.unloadKernel(kernelResource)\n'
+            f"  openspace.spice.unloadKernel(kernelResource)\n"
             f"end)\n"
         )
         f.write(load_kernel)

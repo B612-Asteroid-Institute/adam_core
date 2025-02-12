@@ -106,7 +106,9 @@ def orbits_to_spk(
     Convert Orbits object to a SPICE SPK file using Chebyshev polynomials (Type 3).
     """
     logger.info(f"Creating SPK file: {output_file}")
-    logger.info(f"Time range: {start_time.to_astropy().isot} to {end_time.to_astropy().isot}")
+    logger.info(
+        f"Time range: {start_time.to_astropy().isot} to {end_time.to_astropy().isot}"
+    )
     logger.info(f"Kernel type: {kernel_type}")
 
     # ensure SPICE is ready to go
@@ -127,7 +129,9 @@ def orbits_to_spk(
     # Propagate orbits if propagator provided
     if propagator is not None:
         logger.debug("Propagating orbits...")
-        orbits = propagator.propagate_orbits(orbits, times, max_processes=max_processes, chunk_size=1)
+        orbits = propagator.propagate_orbits(
+            orbits, times, max_processes=max_processes, chunk_size=1
+        )
         logger.debug("Orbit propagation complete")
 
     # Transform everything to a Sun origin and
@@ -146,7 +150,9 @@ def orbits_to_spk(
     target_id_mappings = {}
 
     for i, (orbit_id, orbit) in enumerate(orbits.group_by_orbit_id()):
-        logger.debug(f"Processing orbit {orbit_id} ({i} / ({len(orbits.orbit_id.unique())})")
+        logger.debug(
+            f"Processing orbit {orbit_id} ({i} / ({len(orbits.orbit_id.unique())})"
+        )
         # ensure orbit is sorted by time
         orbit = orbit.sort_by(["coordinates.time.days", "coordinates.time.nanos"])
 

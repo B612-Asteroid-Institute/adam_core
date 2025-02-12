@@ -1,18 +1,12 @@
-from pathlib import Path
-from typing import List, Tuple
-
 import numpy as np
-import pytest
 import spiceypy as sp
 from adam_assist import ASSISTPropagator
-from naif_de440 import de440
 
 from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.origin import Origin, OriginCodes
+from ...coordinates.origin import Origin
 from ...time import Timestamp
-from ...utils.spice import get_perturber_state, setup_SPICE
 from ..orbits import Orbits
-from ..spice_kernel import fit_chebyshev, orbits_to_spk
+from ..spice_kernel import orbits_to_spk
 
 
 def test_orbits_to_spk(tmp_path):
