@@ -739,11 +739,11 @@ def test_ADES_to_string_no_contexts():
     # Verify warning messages were logged (can check the logs)
     # Verify the data lines are present and formatted correctly
     assert any("permID|obsTime|ra|dec|stn|mode|astCat" in line for line in lines)
-    
+
     # Verify both observations are present with correct formatting
-    data_lines = [line for line in lines if "|" in line and not "permID" in line]
+    data_lines = [line for line in lines if "|" in line and "permID" not in line]
     assert len(data_lines) == 2
-    
+
     # Check second observation
     obs2 = data_lines[0].split("|")
     assert obs2[0] == "3001"  # permID
@@ -763,8 +763,6 @@ def test_ADES_to_string_no_contexts():
     assert obs1[4] == "W84"  # stn
     assert obs1[5] == "CCD"  # mode
     assert obs1[6] == "Gaia2"  # astCat
-
-
 
 
 def test_ADES_to_string_partial_contexts():
@@ -805,7 +803,7 @@ def test_ADES_to_string_partial_contexts():
     print(ades_string)
 
     # Split into lines for easier testing
-    lines = ades_string.strip().split("\n") 
+    lines = ades_string.strip().split("\n")
 
     # Verify we have the context header for W84
     assert any("# observatory" in line for line in lines)
