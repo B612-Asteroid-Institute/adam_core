@@ -78,6 +78,10 @@ class Timestamp(qv.Table):
     def from_jd(cls, jd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
         return cls.from_mjd(pc.subtract(jd, 2400000.5), scale)
 
+    @classmethod
+    def from_et(cls, et: pa.lib.DoubleArray, scale: str = "tdb") -> Timestamp:
+        return cls.from_mjd(pc.divide(et, 86400), scale)
+
     def fractional_days(self) -> pa.lib.DoubleArray:
         return pc.divide(self.nanos, 86400 * 1e9)
 
