@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1738787367818,
+  "lastUpdate": 1739371462570,
   "repoUrl": "https://github.com/B612-Asteroid-Institute/adam_core",
   "entries": {
     "Python Benchmark": [
@@ -11328,6 +11328,485 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00028942436129291023",
             "extra": "mean: 51.84924909999893 msec\nrounds: 20"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "akoumjian@users.noreply.github.com",
+            "name": "Alec Koumjian",
+            "username": "akoumjian"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c04569c1d1e8de4dd0f37c74ddd2eb0df551a5d1",
+          "message": "Generate spice kernel (#143)",
+          "timestamp": "2025-02-12T09:40:04-05:00",
+          "tree_id": "f89af37a06158d857bd13d89c732df2771a0e23a",
+          "url": "https://github.com/B612-Asteroid-Institute/adam_core/commit/c04569c1d1e8de4dd0f37c74ddd2eb0df551a5d1"
+        },
+        "date": 1739371462317,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[1-origin=SUN,-frame=equatorial,-to=SphericalCoordinates,]",
+            "value": 429.8997882089564,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008723996798379697",
+            "extra": "mean: 2.3261235000049396 msec\nrounds: 8"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[1-origin=SUN,-frame=equatorial,-to=KeplerianCoordinates,]",
+            "value": 290.7592240878621,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00021032317123981695",
+            "extra": "mean: 3.439271800016286 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[1-origin=SUN,-frame=equatorial,-to=CometaryCoordinates,]",
+            "value": 309.6218903676608,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00017411433518338222",
+            "extra": "mean: 3.229745799990269 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[1-origin=SUN,-frame=ecliptic,-to=SphericalCoordinates,]",
+            "value": 425.0447392650553,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001602436967289225",
+            "extra": "mean: 2.352693511109206 msec\nrounds: 405"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[1-origin=SUN,-frame=ecliptic,-to=KeplerianCoordinates,]",
+            "value": 295.65919854259784,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00024710770848675374",
+            "extra": "mean: 3.3822725791361523 msec\nrounds: 278"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[1-origin=SUN,-frame=ecliptic,-to=CometaryCoordinates,]",
+            "value": 320.2133014377543,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005014895261079971",
+            "extra": "mean: 3.122918365695649 msec\nrounds: 309"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[50-origin=SUN,-frame=equatorial,-to=SphericalCoordinates,]",
+            "value": 417.39050780468517,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00003076677625011627",
+            "extra": "mean: 2.3958379055135164 msec\nrounds: 381"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[50-origin=SUN,-frame=equatorial,-to=KeplerianCoordinates,]",
+            "value": 256.48172261596596,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005673535815013107",
+            "extra": "mean: 3.8989133018937006 msec\nrounds: 53"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[50-origin=SUN,-frame=equatorial,-to=CometaryCoordinates,]",
+            "value": 260.4430229574628,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00015323746440398168",
+            "extra": "mean: 3.839611400007925 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[50-origin=SUN,-frame=ecliptic,-to=SphericalCoordinates,]",
+            "value": 411.1708230706094,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007720048229390211",
+            "extra": "mean: 2.432079184344927 msec\nrounds: 396"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[50-origin=SUN,-frame=ecliptic,-to=KeplerianCoordinates,]",
+            "value": 255.71669581331986,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001276005745894701",
+            "extra": "mean: 3.910577668069148 msec\nrounds: 238"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[50-origin=SUN,-frame=ecliptic,-to=CometaryCoordinates,]",
+            "value": 264.11551638218174,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005276578101010145",
+            "extra": "mean: 3.7862220807692912 msec\nrounds: 260"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[100-origin=SUN,-frame=equatorial,-to=SphericalCoordinates,]",
+            "value": 396.75576997794775,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00002955936323805609",
+            "extra": "mean: 2.520442235926604 msec\nrounds: 373"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[100-origin=SUN,-frame=equatorial,-to=KeplerianCoordinates,]",
+            "value": 227.23849972694026,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004072637038328213",
+            "extra": "mean: 4.400662745096644 msec\nrounds: 51"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[100-origin=SUN,-frame=equatorial,-to=CometaryCoordinates,]",
+            "value": 227.35561906450417,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00018051145700604697",
+            "extra": "mean: 4.3983958000012535 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[100-origin=SUN,-frame=ecliptic,-to=SphericalCoordinates,]",
+            "value": 397.1334120191322,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005530142701691068",
+            "extra": "mean: 2.518045497395279 msec\nrounds: 384"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[100-origin=SUN,-frame=ecliptic,-to=KeplerianCoordinates,]",
+            "value": 224.29470040829574,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00017088959694316525",
+            "extra": "mean: 4.458420097218731 msec\nrounds: 216"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_transform_cartesian_coordinates[100-origin=SUN,-frame=ecliptic,-to=CometaryCoordinates,]",
+            "value": 233.2304131210599,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005210648241068389",
+            "extra": "mean: 4.287605491145543 msec\nrounds: 226"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_CoordinateCovariances_to_matrix",
+            "value": 676.7853056740768,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010422378830166675",
+            "extra": "mean: 1.4775734514566654 msec\nrounds: 618"
+          },
+          {
+            "name": "src/adam_core/coordinates/tests/test_benchmarks.py::test_benchmark_CoordinateCovariances_from_matrix",
+            "value": 10735.87684768289,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000007316592650077406",
+            "extra": "mean: 93.14562882824319 usec\nrounds: 3004"
+          },
+          {
+            "name": "src/adam_core/dynamics/tests/test_propagation.py::test_benchmark__propagate_2body",
+            "value": 39176.595048963034,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000012817590246436418",
+            "extra": "mean: 25.525444433090644 usec\nrounds: 9"
+          },
+          {
+            "name": "src/adam_core/dynamics/tests/test_propagation.py::test_benchmark__propagate_2body_vmap",
+            "value": 34197.7214528082,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001020187869568517",
+            "extra": "mean: 29.24171428730915 usec\nrounds: 7"
+          },
+          {
+            "name": "src/adam_core/dynamics/tests/test_propagation.py::test_benchmark_propagate_2body",
+            "value": 326.1579490537324,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010798536279891738",
+            "extra": "mean: 3.0659991666652786 msec\nrounds: 6"
+          },
+          {
+            "name": "src/adam_core/dynamics/tests/test_propagation.py::test_benchmark_propagate_2body_matrix",
+            "value": 3.9111820953460237,
+            "unit": "iter/sec",
+            "range": "stddev: 0.002370414895513165",
+            "extra": "mean: 255.67717780000976 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=equatorial,-code=X05,-times=1,]",
+            "value": 550.1514038377001,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000021613345735913424",
+            "extra": "mean: 1.8176814473693674 msec\nrounds: 114"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=equatorial,-code=X05,-times=10000,]",
+            "value": 4.725830159883607,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0009652409962403713",
+            "extra": "mean: 211.60303399998384 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=equatorial,-code=500,-times=1,]",
+            "value": 1122.59861334853,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000035685342164254444",
+            "extra": "mean: 890.7903395828735 usec\nrounds: 960"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=equatorial,-code=500,-times=10000,]",
+            "value": 17.353129663884367,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0012396070684713683",
+            "extra": "mean: 57.62649270587872 msec\nrounds: 17"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=ecliptic,-code=X05,-times=1,]",
+            "value": 554.0615427421295,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000627713068438209",
+            "extra": "mean: 1.8048536540739812 msec\nrounds: 503"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=ecliptic,-code=X05,-times=10000,]",
+            "value": 4.725757215427361,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0005758504179147442",
+            "extra": "mean: 211.6063001999919 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=ecliptic,-code=500,-times=1,]",
+            "value": 1132.9927889852468,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00002213433308230779",
+            "extra": "mean: 882.6181505494308 usec\nrounds: 910"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SUN,-frame=ecliptic,-code=500,-times=10000,]",
+            "value": 17.241074503338194,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00020277345521688223",
+            "extra": "mean: 58.001025388897965 msec\nrounds: 18"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-code=X05,-times=1,]",
+            "value": 557.0409483059454,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000229521200025056",
+            "extra": "mean: 1.7952001608520287 msec\nrounds: 516"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-code=X05,-times=10000,]",
+            "value": 4.754158056046563,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0007935231316186138",
+            "extra": "mean: 210.34218639999835 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-code=500,-times=1,]",
+            "value": 1130.2867785054736,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00003369348244875439",
+            "extra": "mean: 884.7312195602731 usec\nrounds: 1002"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-code=500,-times=10000,]",
+            "value": 17.744567780789836,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0002301415127054906",
+            "extra": "mean: 56.35527516666786 msec\nrounds: 18"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-code=X05,-times=1,]",
+            "value": 556.3957661005301,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00003685498833562372",
+            "extra": "mean: 1.7972818287393637 msec\nrounds: 508"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-code=X05,-times=10000,]",
+            "value": 4.720538917643891,
+            "unit": "iter/sec",
+            "range": "stddev: 0.001386016116643871",
+            "extra": "mean: 211.84021940001685 msec\nrounds: 5"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-code=500,-times=1,]",
+            "value": 1120.9474951494751,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000018330243739589735",
+            "extra": "mean: 892.102443983474 usec\nrounds: 964"
+          },
+          {
+            "name": "src/adam_core/observers/tests/test_benchmarks.py::test_benchmark_get_observer_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-code=500,-times=10000,]",
+            "value": 17.545194982107922,
+            "unit": "iter/sec",
+            "range": "stddev: 0.001321572392089721",
+            "extra": "mean: 56.995661833326494 msec\nrounds: 18"
+          },
+          {
+            "name": "src/adam_core/orbits/tests/test_benchmarks.py::test_benchmark_iterate_real_orbits",
+            "value": 19713.276955418343,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000003031355965249944",
+            "extra": "mean: 50.72723333931259 usec\nrounds: 15771"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=equatorial,-perturber=EARTH,-times=1,]",
+            "value": 1380.9218891650655,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000032788644424150996",
+            "extra": "mean: 724.1539205411692 usec\nrounds: 1032"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=equatorial,-perturber=EARTH,-times=10000,]",
+            "value": 17.506849333536145,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000162768539041991",
+            "extra": "mean: 57.12050072221726 msec\nrounds: 18"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=equatorial,-perturber=SUN,-times=1,]",
+            "value": 1395.3487239700912,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000027350133725245145",
+            "extra": "mean: 716.6667248275885 usec\nrounds: 1301"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=equatorial,-perturber=SUN,-times=10000,]",
+            "value": 19.498401327101433,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00021868226485075184",
+            "extra": "mean: 51.28625589473682 msec\nrounds: 19"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=equatorial,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=1,]",
+            "value": 1386.4445239748281,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000015309979493270545",
+            "extra": "mean: 721.2693928301424 usec\nrounds: 1311"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=equatorial,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=10000,]",
+            "value": 18.31452911547873,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0004470386847018174",
+            "extra": "mean: 54.60145842105428 msec\nrounds: 19"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=ecliptic,-perturber=EARTH,-times=1,]",
+            "value": 1380.6059730815707,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001571182073143579",
+            "extra": "mean: 724.3196244964505 usec\nrounds: 1241"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=ecliptic,-perturber=EARTH,-times=10000,]",
+            "value": 17.304471529569742,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0013631269599639164",
+            "extra": "mean: 57.78853161110457 msec\nrounds: 18"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=ecliptic,-perturber=SUN,-times=1,]",
+            "value": 1389.7151567134897,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000027625050657602534",
+            "extra": "mean: 719.5719174315408 usec\nrounds: 1308"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=ecliptic,-perturber=SUN,-times=10000,]",
+            "value": 19.401831955702605,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0002717882767525971",
+            "extra": "mean: 51.541524649999815 msec\nrounds: 20"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=ecliptic,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=1,]",
+            "value": 1384.803450843386,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00001749601178512374",
+            "extra": "mean: 722.1241392711512 usec\nrounds: 1235"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SUN,-frame=ecliptic,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=10000,]",
+            "value": 18.126792922875392,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00028570764778027577",
+            "extra": "mean: 55.1669566842149 msec\nrounds: 19"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-perturber=EARTH,-times=1,]",
+            "value": 1386.1481188657046,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000020391576295355395",
+            "extra": "mean: 721.4236244957051 usec\nrounds: 1241"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-perturber=EARTH,-times=10000,]",
+            "value": 17.696444864748607,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0004677942358243614",
+            "extra": "mean: 56.50852516665673 msec\nrounds: 18"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-perturber=SUN,-times=1,]",
+            "value": 1390.2493206301704,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000029749343551382983",
+            "extra": "mean: 719.2954423072268 usec\nrounds: 1300"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-perturber=SUN,-times=10000,]",
+            "value": 18.38215195752665,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00016521905250906977",
+            "extra": "mean: 54.400594789477076 msec\nrounds: 19"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=1,]",
+            "value": 1392.5223641678097,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000015225913751424273",
+            "extra": "mean: 718.1213212310695 usec\nrounds: 1267"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=equatorial,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=10000,]",
+            "value": 19.126028295367107,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0017260797881562615",
+            "extra": "mean: 52.284770500011746 msec\nrounds: 20"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-perturber=EARTH,-times=1,]",
+            "value": 1374.1140915269539,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000018941865368715312",
+            "extra": "mean: 727.7416090601124 usec\nrounds: 1192"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-perturber=EARTH,-times=10000,]",
+            "value": 17.448692230832894,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0025510713195883664",
+            "extra": "mean: 57.31088535294007 msec\nrounds: 17"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-perturber=SUN,-times=1,]",
+            "value": 1391.3216424359314,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000028164709669637922",
+            "extra": "mean: 718.7410656885894 usec\nrounds: 1294"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-perturber=SUN,-times=10000,]",
+            "value": 18.179958848401956,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001828149741678595",
+            "extra": "mean: 55.00562505882138 msec\nrounds: 17"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=1,]",
+            "value": 1403.4149524665377,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000015881396469212704",
+            "extra": "mean: 712.5476312208833 usec\nrounds: 1326"
+          },
+          {
+            "name": "src/adam_core/utils/tests/test_benchmarks.py::test_benchmark_get_perturber_state[origin=SOLAR_SYSTEM_BARYCENTER,-frame=ecliptic,-perturber=SOLAR_SYSTEM_BARYCENTER,-times=10000,]",
+            "value": 19.200905969402598,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0013416744374564898",
+            "extra": "mean: 52.08087585000101 msec\nrounds: 20"
           }
         ]
       }
