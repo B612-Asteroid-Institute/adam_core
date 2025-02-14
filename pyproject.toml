@@ -72,6 +72,7 @@ test = [
     "black",
     "adam-assist>=0.2.2",
     "ipython>=8.32.0",
+    "ipykernel>=6.29.5",
 ]
 
 [tool.black]
