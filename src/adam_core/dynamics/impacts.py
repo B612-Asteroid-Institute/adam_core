@@ -11,6 +11,7 @@ from adam_core.coordinates import CartesianCoordinates
 from adam_core.ray_cluster import initialize_use_ray
 
 from ..coordinates.residuals import Residuals
+from ..coordinates.spherical import SphericalCoordinates
 from ..orbits import Orbits
 from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
@@ -41,11 +42,14 @@ if RAY_INSTALLED:
 
 
 class EarthImpacts(qv.Table):
+    #: Orbit ID
     orbit_id = qv.StringColumn()
-    # Distance from earth center in km
-    distance = qv.Float64Column()
-    coordinates = CartesianCoordinates.as_column()
+    #: Variant ID
     variant_id = qv.LargeStringColumn(nullable=True)
+    #: Cartesian state vector of the orbit at the time of impact
+    coordinates = CartesianCoordinates.as_column()
+    #: Earth-centered, Earth-fixed coordinates [ECEF - ITRF93] of the impact
+    impact_coordinates = SphericalCoordinates.as_column()
 
 
 class ImpactProbabilities(qv.Table):
