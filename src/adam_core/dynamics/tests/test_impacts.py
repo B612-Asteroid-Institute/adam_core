@@ -1,7 +1,14 @@
 import numpy as np
 import pyarrow.compute as pc
 
-from ...coordinates import CartesianCoordinates, CoordinateCovariances, Origin
+from ...coordinates import (
+    CartesianCoordinates,
+    CoordinateCovariances,
+    Origin,
+    OriginCodes,
+    SphericalCoordinates,
+    transform_coordinates,
+)
 from ...orbits import Orbits, VariantOrbits
 from ...propagator import Propagator
 from ...time import Timestamp
@@ -48,7 +55,12 @@ class MockImpactPropagator(Propagator, ImpactMixin):
                 origin=impacted.coordinates.origin,
                 frame=impacted.coordinates.frame,
             ),
-            distance=[0.0],
+            impact_coordinates=transform_coordinates(
+                impacted.coordinates,
+                representation_out=SphericalCoordinates,
+                origin_out=OriginCodes.EARTH,
+                frame_out="itrf93",
+            ),
         )
 
         return orbits, impact
@@ -134,7 +146,6 @@ def test_calculate_impact_probabilities():
             origin=Origin.from_kwargs(code=["SUN"] * 3),
             frame="ecliptic",
         ),
-        distance=[0.0, 0.0, 0.0],
     )
 
     ip = calculate_impact_probabilities(variants, impacts)
