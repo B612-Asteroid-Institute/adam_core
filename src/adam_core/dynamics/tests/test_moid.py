@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 
 from ...coordinates.keplerian import KeplerianCoordinates
@@ -7,7 +9,7 @@ from ...time import Timestamp
 from ..moid import calculate_moid
 
 
-def test_calculate_moid_circular_orbits():
+def test_calculate_moid_circular_orbits() -> None:
     # Test for two coplanar circular orbits that their MOID
     # is equal to the difference of their semi-major axes
     circular_1 = Orbits.from_kwargs(
@@ -89,8 +91,7 @@ def test_calculate_moid_circular_orbits():
     np.testing.assert_allclose(moid_13, moid_31, rtol=0, atol=1e-12)
 
 
-def test_calculate_moid_noncircular_orbits():
-
+def test_calculate_moid_noncircular_orbits() -> None:
     # Test that the MOID of two coplanar but non-circular orbits located on
     # the x-axis at same time is equal to the difference
     # of their periapse distances

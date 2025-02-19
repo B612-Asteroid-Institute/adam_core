@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -18,11 +20,11 @@ from ..propagator import EphemerisMixin, Propagator
 
 class MockPropagator(Propagator, EphemerisMixin):
 
-    def __getstate__(self):
+    def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
 
     # MockPropagator propagates orbits by just setting the time of the orbits.
@@ -77,7 +79,7 @@ class MockPropagator(Propagator, EphemerisMixin):
         return qv.concatenate(ephemeris_list)
 
 
-def test_propagator_single_worker():
+def test_propagator_single_worker() -> None:
     orbits = make_real_orbits(10)
     times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
 
@@ -102,7 +104,7 @@ except ImportError:
     pass
 
 
-def test_propagator_multiple_workers_ray():
+def test_propagator_multiple_workers_ray() -> None:
     orbits = make_real_orbits(10)
     times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
 
@@ -130,7 +132,7 @@ def test_propagator_multiple_workers_ray():
     assert len(have) == len(orbits) * len(times)
 
 
-def test_propagate_different_origins():
+def test_propagate_different_origins() -> None:
     """
     Test that we are returning propagated orbits with their original origins
     """
@@ -172,7 +174,7 @@ def test_propagate_different_origins():
     )
 
 
-def test_light_time_distance_threshold():
+def test_light_time_distance_threshold() -> None:
     """
     Test that _add_light_time raises a ValueError when an object gets too far from the observer.
     """
@@ -220,7 +222,7 @@ def test_light_time_distance_threshold():
 
 
 @pytest.mark.parametrize("max_processes", [1, 4])
-def test_generate_ephemeris_unordered_observers(max_processes):
+def test_generate_ephemeris_unordered_observers(max_processes: int) -> None:
     """
     Test that ephemeris generation works correctly even when observers
     are not ordered by time, verifying that physical positions don't get mixed up

@@ -21,6 +21,8 @@ Algorithm 2:
 search for the overall minimum.
 """
 
+from typing import Tuple, Union
+
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import minimize_scalar
@@ -32,8 +34,8 @@ from ..time import Timestamp
 
 
 def project_point_on_plane(
-    P0: npt.NDArray, plane_coordinates: CartesianCoordinates
-) -> npt.NDArray:
+    P0: npt.NDArray[np.float64], plane_coordinates: CartesianCoordinates
+) -> npt.NDArray[np.float64]:
     """
     Take a point P0 (from the secondary ellipse) and project it onto the plane of the primary ellipse.
     """
@@ -45,7 +47,7 @@ def project_point_on_plane(
 
 
 def coplanar_distance_to_ellipse(
-    P: npt.NDArray, keplerian_coordinates: KeplerianCoordinates, u: float
+    P: npt.NDArray[np.float64], keplerian_coordinates: KeplerianCoordinates, u: float
 ) -> float:
     """
     Calculate the distance from point P on the plane to the ellipse.
@@ -65,8 +67,8 @@ def coplanar_distance_to_ellipse(
 
 
 def minimize_distance_from_coplanar_point_to_ellipse(
-    P: npt.NDArray, keplerian_coordinates: KeplerianCoordinates
-):
+    P: npt.NDArray[np.float64], keplerian_coordinates: KeplerianCoordinates
+) -> float:
     """
     Find the minimum distance to the ellipse from planar point P
 
@@ -83,7 +85,7 @@ def minimize_distance_from_coplanar_point_to_ellipse(
 
 
 def distance_from_point_to_ellipse(
-    P0: npt.NDArray, P: npt.NDArray, d_parallel: float
+    P0: npt.NDArray[np.float64], P: npt.NDArray[np.float64], d_parallel: float
 ) -> float:
     """
     Takes the parallel and perpendicular distances from the point to the ellipse and calculates the total distance
@@ -93,7 +95,9 @@ def distance_from_point_to_ellipse(
     return distance
 
 
-def calculate_distance_from_point_to_ellipse(P0: npt.NDArray, primary_ellipse: Orbits):
+def calculate_distance_from_point_to_ellipse(
+    P0: npt.NDArray[np.float64], primary_ellipse: Orbits
+) -> float:
     """
     Calculate the distance from point P0 (from first ellipse) to the closest point on the ellipse
     """
@@ -110,7 +114,7 @@ def calculate_distance_from_point_to_ellipse(P0: npt.NDArray, primary_ellipse: O
 
 def calculate_moid_for_dt(
     primary_ellipse: Orbits, secondary_ellipse: Orbits, dt: float
-):
+) -> float:
     # Propagate the primary ellipse by dt
     t_0 = primary_ellipse.coordinates.time.mjd()[0].as_py()
     primary_ellipse_propagated = _propagate_2body(
@@ -129,7 +133,7 @@ def calculate_moid_for_dt(
 # Now for Algorithm 1, where we discretize the primary ellipse and run Algorithm 1 for each point
 def calculate_moid(
     primary_ellipse: Orbits, secondary_ellipse: Orbits
-) -> tuple[float, Timestamp]:
+) -> Tuple[float, Timestamp]:
     """
     Calculate the Minimum Orbit Intersection Distance (MOID) between two orbits.
     """

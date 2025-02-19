@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 import pytest
 
@@ -11,7 +13,7 @@ from ..fitted_orbits import FittedOrbitMembers
 from ..outliers import remove_lowest_probability_observation
 
 
-def test_remove_lowest_probability_observation():
+def test_remove_lowest_probability_observation() -> None:
     # Test that remove lowest probability observation correctly identifies and
     # removes the worst outlier
 
@@ -52,7 +54,7 @@ def test_remove_lowest_probability_observation():
     assert obs_id == "obs03"
 
 
-def test_remove_lowest_probability_observation_multiple():
+def test_remove_lowest_probability_observation_multiple() -> None:
     # Test that remove lowest probability observation correctly identifies and
     # removes the worst outlier when there are multiple observations with the same
     # probability
@@ -94,8 +96,7 @@ def test_remove_lowest_probability_observation_multiple():
     assert obs_id == "obs02"
 
 
-def test_remove_lowest_probability_observation_assertions():
-
+def test_remove_lowest_probability_observation_assertions() -> None:
     # Create observations with 4 observations
     time = Timestamp.from_mjd(np.arange(59000, 59004), scale="utc")
     observations = OrbitDeterminationObservations.from_kwargs(

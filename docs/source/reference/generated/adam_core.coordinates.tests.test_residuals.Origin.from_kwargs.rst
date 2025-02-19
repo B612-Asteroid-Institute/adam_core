@@ -1,0 +1,6 @@
+adam\_core.coordinates.tests.test\_residuals.Origin.from\_kwargs
+================================================================
+
+.. currentmodule:: adam_core.coordinates.tests.test_residuals
+
+.. automethod:: Origin.from_kwargs

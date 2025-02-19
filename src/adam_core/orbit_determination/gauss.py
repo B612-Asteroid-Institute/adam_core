@@ -1,4 +1,7 @@
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
+import numpy.typing as npt
 from numba import jit
 from numpy import roots
 
@@ -31,7 +34,11 @@ C = c.C
 
 
 @jit("f8(f8[:], f8[:], f8[:])", nopython=True, cache=True)
-def _calcV(rho1_hat, rho2_hat, rho3_hat):
+def _calcV(
+    rho1_hat: npt.NDArray[np.float64],
+    rho2_hat: npt.NDArray[np.float64],
+    rho3_hat: npt.NDArray[np.float64],
+) -> float:
     # Vector triple product that gives the area of
     # the "volume of the parallelepiped" or according to
     # to Milani et al. 2008: 3x volume of the pyramid with vertices q, r1, r2, r3.
@@ -40,7 +47,16 @@ def _calcV(rho1_hat, rho2_hat, rho3_hat):
 
 
 @jit("f8(f8[:], f8[:], f8[:], f8[:], f8[:], f8, f8, f8)", nopython=True, cache=True)
-def _calcA(q1, q2, q3, rho1_hat, rho3_hat, t31, t32, t21):
+def _calcA(
+    q1: npt.NDArray[np.float64],
+    q2: npt.NDArray[np.float64],
+    q3: npt.NDArray[np.float64],
+    rho1_hat: npt.NDArray[np.float64],
+    rho3_hat: npt.NDArray[np.float64],
+    t31: float,
+    t32: float,
+    t21: float,
+) -> float:
     # Equation 21 from Milani et al. 2008
     return np.linalg.norm(q2) ** 3 * np.dot(
         np.cross(rho1_hat, rho3_hat), (t32 * q1 - t31 * q2 + t21 * q3)
@@ -48,7 +64,16 @@ def _calcA(q1, q2, q3, rho1_hat, rho3_hat, t31, t32, t21):
 
 
 @jit("f8(f8[:], f8[:], f8[:], f8[:], f8, f8, f8, f8)", nopython=True, cache=True)
-def _calcB(q1, q3, rho1_hat, rho3_hat, t31, t32, t21, mu=MU):
+def _calcB(
+    q1: npt.NDArray[np.float64],
+    q3: npt.NDArray[np.float64],
+    rho1_hat: npt.NDArray[np.float64],
+    rho3_hat: npt.NDArray[np.float64],
+    t31: float,
+    t32: float,
+    t21: float,
+    mu: float = MU,
+) -> float:
     # Equation 19 from Milani et al. 2008
     return (
         mu
@@ -60,7 +85,9 @@ def _calcB(q1, q3, rho1_hat, rho3_hat, t31, t32, t21, mu=MU):
 
 
 @jit("UniTuple(f8, 2)(f8, f8, f8, f8, f8)", nopython=True, cache=True)
-def _calcLambdas(r2_mag, t31, t32, t21, mu=MU):
+def _calcLambdas(
+    r2_mag: float, t31: float, t32: float, t21: float, mu: float = MU
+) -> Tuple[float, float]:
     # Equations 16 and 17 from Milani et al. 2008
     lambda1 = t32 / t31 * (1 + mu / (6 * r2_mag**3) * (t31**2 - t32**2))
     lambda3 = t21 / t31 * (1 + mu / (6 * r2_mag**3) * (t31**2 - t21**2))
@@ -72,7 +99,17 @@ def _calcLambdas(r2_mag, t31, t32, t21, mu=MU):
     nopython=True,
     cache=True,
 )
-def _calcRhos(lambda1, lambda3, q1, q2, q3, rho1_hat, rho2_hat, rho3_hat, V):
+def _calcRhos(
+    lambda1: float,
+    lambda3: float,
+    q1: npt.NDArray[np.float64],
+    q2: npt.NDArray[np.float64],
+    q3: npt.NDArray[np.float64],
+    rho1_hat: npt.NDArray[np.float64],
+    rho2_hat: npt.NDArray[np.float64],
+    rho3_hat: npt.NDArray[np.float64],
+    V: float,
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     # This can be derived by taking a series of scalar products of the coplanarity condition equation
     # with cross products of unit vectors in the direction of the observer, in particular, see Chapter 9 in
     # Milani's book on the theory of orbit determination
@@ -87,14 +124,23 @@ def _calcRhos(lambda1, lambda3, q1, q2, q3, rho1_hat, rho2_hat, rho3_hat, V):
 
 
 @jit("UniTuple(f8, 2)(f8, f8, f8)", nopython=True, cache=True)
-def approxLangrangeCoeffs(r_mag, dt, mu=MU):
+def approxLangrangeCoeffs(
+    r_mag: float, dt: float, mu: float = MU
+) -> Tuple[float, float]:
     # Calculate the Lagrange coefficients (Gauss f and g series)
     f = 1 - (1 / 2) * mu / r_mag**3 * dt**2
     g = dt - (1 / 6) * mu / r_mag**3 * dt**2
     return f, g
 
 
-def calcGauss(r1, r2, r3, t1, t2, t3):
+def calcGauss(
+    r1: npt.NDArray[np.float64],
+    r2: npt.NDArray[np.float64],
+    r3: npt.NDArray[np.float64],
+    t1: float,
+    t2: float,
+    t3: float,
+) -> npt.NDArray[np.float64]:
     """
     Calculates the velocity vector at the location of the second position vector (r2) with Gauss's
     original method.
@@ -150,15 +196,15 @@ def calcGauss(r1, r2, r3, t1, t2, t3):
 
 
 def gaussIOD(
-    coords,
-    observation_times,
-    coords_obs,
-    velocity_method="gibbs",
-    light_time=True,
-    mu=MU,
-    max_iter=10,
-    tol=1e-15,
-):
+    coords: npt.NDArray[np.float64],
+    observation_times: npt.NDArray[np.float64],
+    coords_obs: npt.NDArray[np.float64],
+    velocity_method: str = "gibbs",
+    light_time: bool = True,
+    mu: float = MU,
+    max_iter: int = 10,
+    tol: float = 1e-15,
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     Compute up to three intial orbits using three observations in angular equatorial
     coordinates.

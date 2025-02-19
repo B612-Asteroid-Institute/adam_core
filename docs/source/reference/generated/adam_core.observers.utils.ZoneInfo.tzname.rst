@@ -1,0 +1,6 @@
+adam\_core.observers.utils.ZoneInfo.tzname
+==========================================
+
+.. currentmodule:: adam_core.observers.utils
+
+.. automethod:: ZoneInfo.tzname

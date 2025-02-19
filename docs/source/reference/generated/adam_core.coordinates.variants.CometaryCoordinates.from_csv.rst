@@ -1,0 +1,6 @@
+adam\_core.coordinates.variants.CometaryCoordinates.from\_csv
+=============================================================
+
+.. currentmodule:: adam_core.coordinates.variants
+
+.. automethod:: CometaryCoordinates.from_csv

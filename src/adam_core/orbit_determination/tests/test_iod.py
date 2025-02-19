@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -6,14 +8,15 @@ from adam_assist import ASSISTPropagator
 from ...coordinates import CoordinateCovariances, SphericalCoordinates
 from ...coordinates.origin import Origin
 from ...observers import Observers
+from ...orbits import Orbits
 from ...utils.helpers.observations import make_observations
 from ...utils.helpers.orbits import make_real_orbits
 from ..evaluate import OrbitDeterminationObservations
-from ..iod import iod
+from ..iod import FittedOrbitMembers, FittedOrbits, iod
 
 
 @pytest.fixture
-def real_data():
+def real_data() -> Tuple[Orbits, OrbitDeterminationObservations]:
     # Generate real observations and orbits
     exposures, detections, associations = make_observations()
     orbits = make_real_orbits(num_orbits=18)
@@ -57,7 +60,7 @@ def real_data():
     return orbit, observations
 
 
-def test_iod(real_data):
+def test_iod(real_data: Tuple[Orbits, OrbitDeterminationObservations]) -> None:
     orbit, observations = real_data
     # Call the iod function
     fitted_orbits, fitted_orbit_members = iod(

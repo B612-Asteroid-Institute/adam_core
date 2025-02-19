@@ -1,7 +1,7 @@
 import logging
 import multiprocessing as mp
 import time
-from typing import Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -38,9 +38,10 @@ def od_worker(
     delta: float = 1e-6,
     max_iter: int = 20,
     method: Literal["central", "finite"] = "central",
-    propagator_kwargs: dict = {},
+    propagator_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
-
+    if propagator_kwargs is None:
+        propagator_kwargs = {}
     od_orbits = FittedOrbits.empty()
     od_orbit_members = FittedOrbitMembers.empty()
     for orbit_id in orbit_ids:
@@ -104,8 +105,10 @@ def od_worker_remote(
     delta: float = 1e-6,
     max_iter: int = 20,
     method: Literal["central", "finite"] = "central",
-    propagator_kwargs: dict = {},
+    propagator_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    if propagator_kwargs is None:
+        propagator_kwargs = {}
     orbit_ids_chunk = orbit_ids[orbit_ids_indices[0] : orbit_ids_indices[1]]
     return od_worker(
         orbit_ids_chunk,
@@ -128,7 +131,7 @@ od_worker_remote.options(num_returns=1, num_cpus=1)
 
 
 def od(
-    orbit: FittedOrbits,
+    orbit: Union[Orbits, FittedOrbits],
     observations: OrbitDeterminationObservations,
     propagator: Type[Propagator],
     rchi2_threshold: float = 100,
@@ -138,10 +141,15 @@ def od(
     delta: float = 1e-6,
     max_iter: int = 20,
     method: Literal["central", "finite"] = "central",
-    propagator_kwargs: dict = {},
+    propagator_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    if propagator_kwargs is None:
+        propagator_kwargs = {}
     # Intialize the propagator
     prop = propagator(**propagator_kwargs)
+
+    if isinstance(orbit, FittedOrbits):
+        orbit = orbit.to_orbits()
 
     if method not in ["central", "finite"]:
         err = "method should be one of 'central' or 'finite'."
@@ -567,9 +575,9 @@ def od(
 
 
 def differential_correction(
-    orbits: Union[FittedOrbits, ray.ObjectRef],
-    orbit_members: Union[FittedOrbitMembers, ray.ObjectRef],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
+    orbits: Union[FittedOrbits, "ray.ObjectRef[Any]"],
+    orbit_members: Union[FittedOrbitMembers, "ray.ObjectRef[Any]"],
+    observations: Union[OrbitDeterminationObservations, "ray.ObjectRef[Any]"],
     propagator: Type[Propagator],
     min_obs: int = 5,
     min_arc_length: float = 1.0,
@@ -578,7 +586,7 @@ def differential_correction(
     delta: float = 1e-8,
     max_iter: int = 20,
     method: Literal["central", "finite"] = "central",
-    propagator_kwargs: dict = {},
+    propagator_kwargs: Optional[Dict[str, Any]] = None,
     chunk_size: int = 10,
     max_processes: Optional[int] = 1,
     orbit_ids: Optional[npt.NDArray[np.str_]] = None,
@@ -597,6 +605,8 @@ def differential_correction(
         Which parallelization backend to use {'ray', 'mp', 'cf'}. Defaults to using Python's concurrent.futures
         module ('cf').
     """
+    if propagator_kwargs is None:
+        propagator_kwargs = {}
     time_start = time.perf_counter()
     logger.info("Running differential correction...")
     if isinstance(orbits, ray.ObjectRef):

@@ -2,7 +2,7 @@ import logging
 import multiprocessing as mp
 import time
 from itertools import combinations
-from typing import Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -26,7 +26,12 @@ from .outliers import calculate_max_outliers
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["initial_orbit_determination"]
+__all__ = [
+    "initial_orbit_determination",
+    "sort_by_id_and_time",
+    "FittedOrbits",
+    "FittedOrbitMembers",
+]
 
 
 def sort_by_id_and_time(
@@ -186,8 +191,8 @@ def select_observations(
 
 def iod_worker(
     linkage_ids: npt.NDArray[np.str_],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
+    observations: Union[OrbitDeterminationObservations, "ray.ObjectRef[Any]"],
+    linkage_members: Union[FittedOrbitMembers, "ray.ObjectRef[Any]"],
     propagator: Type[Propagator],
     min_obs: int = 6,
     min_arc_length: float = 1.0,
@@ -199,8 +204,10 @@ def iod_worker(
     linkage_id_col: str = "cluster_id",
     iterate: bool = False,
     light_time: bool = True,
-    propagator_kwargs: dict = {},
+    propagator_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    if propagator_kwargs is None:
+        propagator_kwargs = {}
 
     iod_orbits = FittedOrbits.empty()
     iod_orbit_members = FittedOrbitMembers.empty()
@@ -260,10 +267,10 @@ def iod_worker(
 
 @ray.remote
 def iod_worker_remote(
-    linkage_ids: Union[npt.NDArray[np.str_], ray.ObjectRef],
+    linkage_ids: Union[npt.NDArray[np.str_], "ray.ObjectRef[Any]"],
     linkage_members_indices: Tuple[int, int],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
+    observations: Union[OrbitDeterminationObservations, "ray.ObjectRef[Any]"],
+    linkage_members: Union[FittedOrbitMembers, "ray.ObjectRef[Any]"],
     propagator: Type[Propagator],
     min_obs: int = 6,
     min_arc_length: float = 1.0,
@@ -275,8 +282,11 @@ def iod_worker_remote(
     linkage_id_col: str = "cluster_id",
     iterate: bool = False,
     light_time: bool = True,
-    propagator_kwargs: dict = {},
+    propagator_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    if propagator_kwargs is None:
+        propagator_kwargs = {}
+
     # Select linkage ids from linkage_members_indices
     linkage_id_chunk = linkage_ids[
         linkage_members_indices[0] : linkage_members_indices[1]
@@ -285,6 +295,7 @@ def iod_worker_remote(
         linkage_id_chunk,
         observations,
         linkage_members,
+        propagator,
         min_obs=min_obs,
         min_arc_length=min_arc_length,
         contamination_percentage=contamination_percentage,
@@ -293,7 +304,6 @@ def iod_worker_remote(
         linkage_id_col=linkage_id_col,
         iterate=iterate,
         light_time=light_time,
-        propagator=propagator,
         propagator_kwargs=propagator_kwargs,
     )
 

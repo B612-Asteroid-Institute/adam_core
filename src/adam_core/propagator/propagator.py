@@ -1,11 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
+from ray import ObjectRef
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
@@ -28,16 +29,15 @@ C = c.C
 RAY_INSTALLED = False
 try:
     import ray
-    from ray import ObjectRef
 
     RAY_INSTALLED = True
 except ImportError:
     pass
 
-TimestampType = Union[Timestamp, ObjectRef]
-OrbitType = Union[Orbits, VariantOrbits, ObjectRef]
-EphemerisType = Union[Ephemeris, VariantOrbits, ObjectRef]
-ObserverType = Union[Observers, ObjectRef]
+TimestampType = Union[Timestamp, "ObjectRef[Any]"]
+OrbitType = Union[Orbits, VariantOrbits, "ObjectRef[Any]"]
+EphemerisType = Union[Ephemeris, VariantOrbits, "ObjectRef[Any]"]
+ObserverType = Union[Observers, "ObjectRef[Any]"]
 
 
 def propagation_worker(
@@ -95,11 +95,11 @@ class EphemerisMixin:
 
     def _add_light_time(
         self,
-        orbits,
-        observers,
+        orbits: Orbits,
+        observers: Observers,
         lt_tol: float = 1e-12,
         max_iter: int = 10,
-    ) -> Tuple[Orbits, np.ndarray]:
+    ) -> Tuple[Orbits, npt.NDArray[np.float64]]:
         orbits_aberrated = Orbits.empty()
         lts = np.zeros(len(orbits))
         for i, (orbit, observer) in enumerate(zip(orbits, observers)):
@@ -460,7 +460,7 @@ class Propagator(ABC, EphemerisMixin):
         """
         pass
 
-    def __getstate__(self):
+    def __getstate__(self) -> Dict[str, Any]:
         """
         Get the state of the propagator.
 
@@ -482,7 +482,7 @@ class Propagator(ABC, EphemerisMixin):
             "    return state"
         )
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         """
         Set the state of the propagator.
 
@@ -504,8 +504,8 @@ class Propagator(ABC, EphemerisMixin):
 
     def propagate_orbits(
         self,
-        orbits: Union[OrbitType, ObjectRef],
-        times: Union[TimestampType, ObjectRef],
+        orbits: Union[OrbitType, "ObjectRef[Any]"],
+        times: Union[TimestampType, "ObjectRef[Any]"],
         covariance: bool = False,
         covariance_method: Literal[
             "auto", "sigma-point", "monte-carlo"
@@ -514,7 +514,7 @@ class Propagator(ABC, EphemerisMixin):
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
-    ) -> Orbits:
+    ) -> Union[Orbits, VariantOrbits]:
         """
         Propagate each orbit in orbits to each time in times.
 

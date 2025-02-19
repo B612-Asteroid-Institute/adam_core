@@ -1,11 +1,13 @@
 import healpy
+import numpy as np
+from numpy.typing import NDArray
 
 from ...time import Timestamp
 from ..detections import PointSourceDetections
 from ..exposures import Exposures
 
 
-def test_detections_link_to_exposures():
+def test_detections_link_to_exposures() -> None:
     start_times = Timestamp.from_iso8601(
         [
             "2000-01-01T00:00:00",
@@ -46,7 +48,7 @@ def test_detections_link_to_exposures():
     assert have_det.id.to_pylist() == ["d3", "d5"]
 
 
-def test_detection_healpixels():
+def test_detection_healpixels() -> None:
     ra, dec = healpy.pixelfunc.pix2ang(
         nside=16, ipix=[1, 2, 3, 4, 5], nest=True, lonlat=True
     )
@@ -65,7 +67,7 @@ def test_detection_healpixels():
     assert healpixels.tolist() == [1, 2, 3, 4, 5]
 
 
-def test_detection_group_by_healpixel():
+def test_detection_group_by_healpixel() -> None:
     healpixels = [3, 1, 1, 2, 1, 3, 1, 2]
     ids = ["d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"]
     ra, dec = healpy.pixelfunc.pix2ang(
@@ -95,7 +97,7 @@ def test_detection_group_by_healpixel():
     assert groups[3].id.to_pylist() == ["d1", "d6"]
 
 
-def test_detections_group_by_exposure():
+def test_detections_group_by_exposure() -> None:
     detections = PointSourceDetections.from_kwargs(
         id=["d1", "d2", "d3", "d4", "d5"],
         exposure_id=["e1", "e1", "e2", "e1", "e2"],

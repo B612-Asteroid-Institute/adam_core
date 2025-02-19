@@ -169,7 +169,7 @@ def _parse_oef(data: str) -> Dict[str, Any]:
 
 
 def query_neocc(
-    object_ids: Union[List, npt.ArrayLike],
+    object_ids: Union[List[str], npt.ArrayLike],
     orbit_type: Literal["ke", "eq"] = "ke",
     orbit_epoch: Literal["middle", "present-day"] = "present-day",
 ) -> Orbits:
@@ -205,9 +205,10 @@ def query_neocc(
     orbits = Orbits.empty()
 
     for object_id in object_ids:
-
         # Clean object ID so that there are no spaces
-        object_id = object_id.replace(" ", "")
+        if isinstance(object_id, (bytes, bytearray)):
+            object_id = object_id.decode("utf-8")
+        object_id = str(object_id).replace(" ", "")
 
         params = {"file": f"{object_id}.{orbit_type}{orbit_epoch}"}
 

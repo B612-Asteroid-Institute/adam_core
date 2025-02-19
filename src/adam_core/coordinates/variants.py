@@ -21,7 +21,7 @@ from .spherical import SphericalCoordinates
 T = TypeVar("T", bound=types.CoordinateType, covariant=True)
 
 
-class VariantCoordinatesTable(Generic[T], Protocol):
+class VariantCoordinatesTable(Protocol[T]):
     """
     A protocol for a generic table of variant coordinates.
     """

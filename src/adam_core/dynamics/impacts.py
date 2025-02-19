@@ -1,6 +1,6 @@
 import logging
 from abc import abstractmethod
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Sequence, Tuple, Type
 
 import numpy as np
 import numpy.typing as npt
@@ -34,7 +34,12 @@ except ImportError:
 if RAY_INSTALLED:
 
     @ray.remote
-    def impact_worker_ray(idx_chunk, orbits, propagator_class, num_days):
+    def impact_worker_ray(
+        idx_chunk: npt.NDArray[np.int64],
+        orbits: OrbitType,
+        propagator_class: Type[Propagator],
+        num_days: float,
+    ) -> Tuple[OrbitType, "EarthImpacts"]:
         prop = propagator_class()
         orbits_chunk = orbits.take(idx_chunk)
         variants, impacts = prop._detect_impacts(orbits_chunk, num_days)
@@ -132,7 +137,7 @@ class ImpactMixin:
 
             # Create futures
             futures = []
-            idx = np.arange(0, len(orbits))
+            idx = np.arange(0, len(orbits), dtype=np.int64)
             for idx_chunk in _iterate_chunks(idx, chunk_size):
                 futures.append(
                     impact_worker_ray.remote(
@@ -266,7 +271,9 @@ def calculate_impact_probabilities(
     return earth_impact_probabilities
 
 
-def link_impacting_variants(variants, impacts):
+def link_impacting_variants(
+    variants: VariantOrbits, impacts: EarthImpacts
+) -> Tuple[VariantOrbits, EarthImpacts]:
     """
     Link variants to the orbits from which they were generated.
     Parameters

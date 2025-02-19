@@ -1,0 +1,6 @@
+adam\_core.propagator.tests.test\_propagator.Ephemeris.orbit\_id
+================================================================
+
+.. currentmodule:: adam_core.propagator.tests.test_propagator
+
+.. autoattribute:: Ephemeris.orbit_id

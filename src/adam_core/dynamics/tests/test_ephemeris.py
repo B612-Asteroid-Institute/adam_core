@@ -1,4 +1,6 @@
 import cProfile
+from pathlib import Path
+from typing import Any, Dict, List
 
 import jax
 import numpy as np
@@ -12,7 +14,7 @@ from ...time import Timestamp
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
 
-OBJECT_IDS = [
+OBJECT_IDS: List[str] = [
     "594913 'Aylo'chaxnim (2020 AV2)",
     "163693 Atira (2003 CP20)",
     "(2010 TK7)",
@@ -43,7 +45,7 @@ OBJECT_IDS = [
     "1I/'Oumuamua (A/2017 U1)",
 ]
 
-TOLERANCES = {
+TOLERANCES: Dict[str, tuple[float, float, float]] = {
     # range (m), angular difference (mas), light_time difference (microseconds)
     # Default range is about consistent with our ability to get
     # observatory state vector positions compared to Horizons
@@ -75,7 +77,9 @@ TOLERANCES = {
 
 
 @pytest.mark.parametrize("object_id", OBJECT_IDS)
-def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
+def test_generate_ephemeris_2body(
+    object_id: str, propagated_orbits: Any, ephemeris: Any
+) -> None:
     # For our catalog of test orbits, generate ephemeris using Horizons generated state vectors
     # and compare the results to the Horizons generated ephemeris
     propagated_orbit = propagated_orbits.select("object_id", object_id)
@@ -141,7 +145,9 @@ def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
 
 
 @pytest.mark.profile
-def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
+def test_profile_generate_ephemeris_2body_matrix(
+    propagated_orbits: Any, tmp_path: Path
+) -> None:
     """Profile the generate_ephemeris_2body function with different combinations of orbits,
     observers and times. Results are saved to a stats file that can be visualized with snakeviz.
     """
@@ -167,7 +173,7 @@ def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
         times,
     )
 
-    def to_profile():
+    def to_profile() -> None:
         for n_entries_i in n_entries:
             generate_ephemeris_2body(
                 propagated_orbits[:n_entries_i],

@@ -1,11 +1,15 @@
 import cProfile
 import itertools
+from pathlib import Path
+from typing import Any, Dict, List
 
 import jax
 import numpy as np
 import pytest
 import spiceypy as sp
 from astropy import units as u
+from numpy.typing import NDArray
+from pandas import DataFrame
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
@@ -14,7 +18,7 @@ from ...time import Timestamp
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
 
-def test__propagate_2body_against_spice_elliptical(orbital_elements):
+def test__propagate_2body_against_spice_elliptical(orbital_elements: DataFrame) -> None:
     # Test propagation against SPICE for elliptical orbits.
 
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
@@ -26,8 +30,8 @@ def test__propagate_2body_against_spice_elliptical(orbital_elements):
     dts = np.arange(0, 10000, 10)
     for i, (t0_i, cartesian_i) in enumerate(zip(t0, cartesian_elements)):
 
-        spice_propagated = np.empty((len(dts), 6))
-        cartesian_propagated = np.empty((len(dts), 6))
+        spice_propagated: NDArray[np.float64] = np.empty((len(dts), 6))
+        cartesian_propagated: NDArray[np.float64] = np.empty((len(dts), 6))
 
         for j, dt_i in enumerate(dts):
 
@@ -52,7 +56,7 @@ def test__propagate_2body_against_spice_elliptical(orbital_elements):
         np.testing.assert_array_less(v_diff, 1)
 
 
-def test__propagate_2body_against_spice_hyperbolic(orbital_elements):
+def test__propagate_2body_against_spice_hyperbolic(orbital_elements: DataFrame) -> None:
     # Test propagation against SPICE for hyperbolic orbits.
 
     orbital_elements = orbital_elements[orbital_elements["e"] > 1.0]
@@ -90,7 +94,7 @@ def test__propagate_2body_against_spice_hyperbolic(orbital_elements):
         np.testing.assert_array_less(v_diff, 1)
 
 
-def test_propagate_2body_against_spice_elliptical(orbital_elements):
+def test_propagate_2body_against_spice_elliptical(orbital_elements: DataFrame) -> None:
     # Test propagation against SPICE for elliptical orbits.
 
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
@@ -126,14 +130,14 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
     )
 
     # Propagate orbits with SPICE and accumulate results
-    spice_propagated = []
+    spice_propagated: List[NDArray[np.float64]] = []
     times_mjd = times.mjd()
     for i, cartesian_i in enumerate(cartesian_elements):
 
         # Calculate dts from t0 for this orbit (each orbit's t0 is different)
         # but the final times we are propagating to are the same for all orbits
         dts = times_mjd - t0[i]
-        spice_propagated_i = np.empty((len(dts), 6))
+        spice_propagated_i: NDArray[np.float64] = np.empty((len(dts), 6))
         for j, dt_i in enumerate(dts):
             spice_propagated_i[j] = sp.prop2b(
                 mu[i], np.ascontiguousarray(cartesian_i), dt_i
@@ -141,13 +145,13 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
 
         spice_propagated.append(spice_propagated_i)
 
-    spice_propagated = np.vstack(spice_propagated)
+    spice_propagated_array: NDArray[np.float64] = np.vstack(spice_propagated)
 
     # Propagate orbits with adam_core
     orbits_propagated = propagate_2body(orbits, times)
 
     # Calculate difference between SPICE and adam_core
-    diff = orbits_propagated.coordinates.values - spice_propagated
+    diff = orbits_propagated.coordinates.values - spice_propagated_array
 
     # Calculate offset in position in cm
     r_diff = np.linalg.norm(diff[:, :3], axis=1) * u.au.to(u.cm)
@@ -160,7 +164,7 @@ def test_propagate_2body_against_spice_elliptical(orbital_elements):
     np.testing.assert_array_less(v_diff, 1)
 
 
-def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
+def test_propagate_2body_against_spice_hyperbolic(orbital_elements: DataFrame) -> None:
     # Test propagation against SPICE for hyperbolic orbits.
     orbital_elements = orbital_elements[orbital_elements["e"] > 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
@@ -230,8 +234,8 @@ def test_propagate_2body_against_spice_hyperbolic(orbital_elements):
 
 
 def test_propagate_2body_against_spice_elliptical_barycentric(
-    orbital_elements_barycentric,
-):
+    orbital_elements_barycentric: DataFrame,
+) -> None:
     # Test propagation against SPICE for elliptical orbits.
     orbital_elements = orbital_elements_barycentric[
         orbital_elements_barycentric["e"] < 1.0
@@ -305,8 +309,8 @@ def test_propagate_2body_against_spice_elliptical_barycentric(
 
 
 def test_propagate_2body_against_spice_hyperbolic_barycentric(
-    orbital_elements_barycentric,
-):
+    orbital_elements_barycentric: DataFrame,
+) -> None:
     # Test propagation against SPICE for hyperbolic orbits.
 
     orbital_elements = orbital_elements_barycentric[
@@ -380,7 +384,9 @@ def test_propagate_2body_against_spice_hyperbolic_barycentric(
     np.testing.assert_array_less(v_diff, 1)
 
 
-def test_benchmark__propagate_2body(benchmark, orbital_elements):
+def test_benchmark__propagate_2body(
+    benchmark: Any, orbital_elements: DataFrame
+) -> None:
     # Benchmark _propagate_2body with a single orbit propagated forward 1 day
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
     cartesian_elements = orbital_elements[["x", "y", "z", "vx", "vy", "vz"]].values
@@ -391,7 +397,9 @@ def test_benchmark__propagate_2body(benchmark, orbital_elements):
     benchmark(_propagate_2body, cartesian_elements[0], t0[0], t0[0] + 1, mu[0])
 
 
-def test_benchmark__propagate_2body_vmap(benchmark, orbital_elements):
+def test_benchmark__propagate_2body_vmap(
+    benchmark: Any, orbital_elements: DataFrame
+) -> None:
     # Benchmark the vectorized map version of _propagate_2body with a single
     # orbit propagated forward 1 day
     orbital_elements = orbital_elements[orbital_elements["e"] < 1.0]
@@ -411,7 +419,7 @@ def test_benchmark__propagate_2body_vmap(benchmark, orbital_elements):
     )
 
 
-def test_benchmark_propagate_2body(benchmark, orbital_elements):
+def test_benchmark_propagate_2body(benchmark: Any, orbital_elements: DataFrame) -> None:
     # Benchmark propagate_2body with a single orbit propagated forward 1 day
     # This function appears to add substantial overhead, so we benchmark it
     # separately from _propagate_2body
@@ -447,7 +455,9 @@ def test_benchmark_propagate_2body(benchmark, orbital_elements):
 
 
 @pytest.mark.benchmark(group="propagate_2body")
-def test_benchmark_propagate_2body_matrix(benchmark, propagated_orbits):
+def test_benchmark_propagate_2body_matrix(
+    benchmark: Any, propagated_orbits: Orbits
+) -> None:
     # Clear the jax cache
     jax.clear_caches()
 
@@ -466,7 +476,9 @@ def test_benchmark_propagate_2body_matrix(benchmark, propagated_orbits):
 
 
 @pytest.mark.profile
-def test_profile_propagate_2body_matrix(propagated_orbits, tmp_path):
+def test_profile_propagate_2body_matrix(
+    propagated_orbits: Orbits, tmp_path: Path
+) -> None:
     """Profile the propagate_2body function with different combinations of orbits and times.
     Results are saved to a stats file that can be visualized with snakeviz."""
     # Clear the jax cache

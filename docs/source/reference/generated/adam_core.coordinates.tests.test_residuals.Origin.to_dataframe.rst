@@ -1,0 +1,6 @@
+adam\_core.coordinates.tests.test\_residuals.Origin.to\_dataframe
+=================================================================
+
+.. currentmodule:: adam_core.coordinates.tests.test_residuals
+
+.. automethod:: Origin.to_dataframe

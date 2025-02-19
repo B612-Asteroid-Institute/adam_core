@@ -1,0 +1,6 @@
+adam\_core.coordinates.cometary.CoordinateCovariances.empty
+===========================================================
+
+.. currentmodule:: adam_core.coordinates.cometary
+
+.. automethod:: CoordinateCovariances.empty

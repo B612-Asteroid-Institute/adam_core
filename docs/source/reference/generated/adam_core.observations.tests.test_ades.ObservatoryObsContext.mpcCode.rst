@@ -1,0 +1,6 @@
+adam\_core.observations.tests.test\_ades.ObservatoryObsContext.mpcCode
+======================================================================
+
+.. currentmodule:: adam_core.observations.tests.test_ades
+
+.. autoattribute:: ObservatoryObsContext.mpcCode

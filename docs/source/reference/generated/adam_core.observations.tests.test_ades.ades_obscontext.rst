@@ -1,0 +1,6 @@
+adam\_core.observations.tests.test\_ades.ades\_obscontext
+=========================================================
+
+.. currentmodule:: adam_core.observations.tests.test_ades
+
+.. autofunction:: ades_obscontext

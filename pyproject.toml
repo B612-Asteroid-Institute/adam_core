@@ -73,6 +73,13 @@ test = [
     "adam-assist>=0.2.2",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
+    "sphinx>=7.0.0",
+    "myst-nb",
+    "sphinx-autobuild",
+    "sphinx-autodoc-typehints>=3.1.0",
+    "furo>=2024.8.6",
+    "sphinx-book-theme",
+    "types-requests>=2.32.0.20241016",
 ]
 
 [tool.black]
@@ -112,4 +119,9 @@ doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
 
+# Documentation commands
+docs-build = "sphinx-build -b html docs/source docs/build"
+docs-clean = { shell = "rm -rf docs/build" }
+docs-serve = { shell = "python -m http.server --directory docs/build" }
+docs-live = "sphinx-autobuild docs/source docs/build"
 

@@ -24,7 +24,7 @@ def _add_light_time(
 ) -> Tuple[jnp.ndarray, jnp.float64]:
     """
     When generating ephemeris, orbits need to be backwards propagated to the time
-    at which the light emitted or relflected from the object towards the observer.
+    at which the light emitted or reflected from the object towards the observer.
 
     Light time correction must be added to orbits in expressed in an inertial frame (ie, orbits
     must be barycentric).
@@ -35,7 +35,7 @@ def _add_light_time(
         Barycentric orbit in cartesian elements to correct for light time delay.
     t0 : float
         Epoch at which orbits are defined.
-    observer_positions : `~jax.numpy.ndarray` (3)
+    observer_position : `~jax.numpy.ndarray` (3)
         Location of the observer in barycentric cartesian elements at the time of observation.
     lt_tol : float, optional
         Calculate aberration to within this value in time (units of days.)
@@ -120,7 +120,7 @@ def add_light_time(
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     When generating ephemeris, orbits need to be backwards propagated to the time
-    at which the light emitted or relflected from the object towards the observer.
+    at which the light emitted or reflected from the object towards the observer.
 
     Light time correction must be added to orbits in expressed in an inertial frame (ie, orbits
     must be barycentric).

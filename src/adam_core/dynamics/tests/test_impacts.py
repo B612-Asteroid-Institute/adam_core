@@ -1,3 +1,5 @@
+from typing import Any, Dict, Tuple
+
 import numpy as np
 import pyarrow.compute as pc
 
@@ -23,17 +25,19 @@ from ..impacts import (
 
 
 class MockImpactPropagator(Propagator, ImpactMixin):
-    def __getstate__(self):
+    def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
 
     def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
         return orbits
 
-    def _detect_impacts(self, orbits: Orbits, num_days: float) -> Orbits:
+    def _detect_impacts(
+        self, orbits: Orbits, num_days: float
+    ) -> Tuple[Orbits, EarthImpacts]:
         # Artificially set the orbits.coordinates.times to the end time
         # except for the orbits who impacted
         new_times = orbits.coordinates.time.add_days(num_days)
@@ -66,7 +70,7 @@ class MockImpactPropagator(Propagator, ImpactMixin):
         return orbits, impact
 
 
-def test_calculate_impacts():
+def test_calculate_impacts() -> None:
     """
     Tests the i/o of calculate_impacts
     """
@@ -107,7 +111,7 @@ def test_calculate_impacts():
     )
 
 
-def test_calculate_impact_probabilities():
+def test_calculate_impact_probabilities() -> None:
     """
     Tests the i/o of calculate_impact_probabilities
     """
@@ -179,8 +183,10 @@ def test_calculate_impact_probabilities():
     assert ip == desired
 
 
-def test_calculate_mahalanobis_distance():
-    """ """
+def test_calculate_mahalanobis_distance() -> None:
+    """
+    Tests the calculation of Mahalanobis distance
+    """
     observed_orbit = Orbits.from_kwargs(
         orbit_id=["1", "1", "1"],
         object_id=["1", "1", "1"],
