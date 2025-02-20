@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Iterable, Tuple
+from typing import TYPE_CHECKING, Iterable, Tuple
 
 import numpy.typing as npt
 import pyarrow.compute as pc
@@ -8,6 +8,9 @@ import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from .classification import calc_orbit_class
+
+if TYPE_CHECKING:
+    from ..propagator import Propagator
 
 logger = logging.getLogger(__name__)
 
@@ -46,3 +49,12 @@ class Orbits(qv.Table):
         """
         keplerian = self.coordinates.to_keplerian()
         return calc_orbit_class(keplerian)
+
+    def preview(self, propagator: "Propagator") -> None:
+        """
+        For a single orbit, render a plotly plot of the orbit.
+        """
+        from .plots import plot_orbit
+
+        fig = plot_orbit(self, propagator)
+        fig.show()

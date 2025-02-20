@@ -51,6 +51,15 @@ class EarthImpacts(qv.Table):
     #: Earth-centered, Earth-fixed coordinates [ECEF - ITRF93] of the impact
     impact_coordinates = SphericalCoordinates.as_column()
 
+    def preview(self) -> None:
+        """
+        Plot the risk corridor for the given impacts.
+        """
+        from .plots import plot_risk_corridor
+
+        fig = plot_risk_corridor(self, title="Risk Corridor")
+        fig.show()
+
 
 class ImpactProbabilities(qv.Table):
     orbit_id = qv.LargeStringColumn()
