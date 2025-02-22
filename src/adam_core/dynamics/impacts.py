@@ -265,7 +265,7 @@ def calculate_impacts(
     results, collisions = propagator.detect_collisions(
         variants,
         num_days,
-        conditions,
+        conditions=conditions,
         max_processes=processes,
     )
 
