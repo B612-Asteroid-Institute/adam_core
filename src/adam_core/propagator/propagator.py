@@ -1,4 +1,5 @@
 import logging
+import multiprocessing as mp
 from abc import ABC, abstractmethod
 from typing import List, Literal, Optional, Tuple, Type, Union
 
@@ -345,7 +346,10 @@ class EphemerisMixin:
                 seed=seed,
             )
 
-        if max_processes is None or max_processes > 1:
+        if max_processes is None:
+            max_processes = mp.cpu_count()
+
+        if max_processes > 1:
 
             if RAY_INSTALLED is False:
                 raise ImportError(
@@ -574,8 +578,10 @@ class Propagator(ABC, EphemerisMixin):
         propagated : `~adam_core.orbits.orbits.Orbits`
             Propagated orbits.
         """
+        if max_processes is None:
+            max_processes = mp.cpu_count()
 
-        if max_processes is None or max_processes > 1:
+        if max_processes > 1:
             propagated_list: List[Orbits] = []
             variants_list: List[VariantOrbits] = []
 
@@ -603,12 +609,12 @@ class Propagator(ABC, EphemerisMixin):
                 # if we need to propagate variants
                 orbits = ray.get(orbits_ref)
 
-            # Create futures
-            futures = []
+            # Create futures inputs
+            futures_inputs = []
             idx = np.arange(0, len(orbits))
             for idx_chunk in _iterate_chunks(idx, chunk_size):
-                futures.append(
-                    propagation_worker_ray.remote(
+                futures_inputs.append(
+                    (
                         idx_chunk,
                         orbits_ref,
                         times_ref,
@@ -616,7 +622,7 @@ class Propagator(ABC, EphemerisMixin):
                     )
                 )
 
-            # Add variants to propagate to futures
+            # Add variants to propagate to futures inputs
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
                     orbits,
@@ -629,8 +635,8 @@ class Propagator(ABC, EphemerisMixin):
 
                 idx = np.arange(0, len(variants))
                 for variant_chunk_idx in _iterate_chunks(idx, chunk_size):
-                    futures.append(
-                        propagation_worker_ray.remote(
+                    futures_inputs.append(
+                        (
                             variant_chunk_idx,
                             variants_ref,
                             times_ref,
@@ -638,10 +644,26 @@ class Propagator(ABC, EphemerisMixin):
                         )
                     )
 
-            # Get results as they finish (we sort later)
-            unfinished = futures
-            while unfinished:
-                finished, unfinished = ray.wait(unfinished, num_returns=1)
+            # Submit and process jobs with queuing
+            futures = []
+            for future_input in futures_inputs:
+                futures.append(propagation_worker_ray.remote(*future_input))
+
+                if len(futures) >= max_processes * 1.5:
+                    finished, futures = ray.wait(futures, num_returns=1)
+                    result = ray.get(finished[0])
+                    if isinstance(result, Orbits):
+                        propagated_list.append(result)
+                    elif isinstance(result, VariantOrbits):
+                        variants_list.append(result)
+                    else:
+                        raise ValueError(
+                            f"Unexpected result type from propagation worker: {type(result)}"
+                        )
+
+            # Process remaining futures
+            while futures:
+                finished, futures = ray.wait(futures, num_returns=1)
                 result = ray.get(finished[0])
                 if isinstance(result, Orbits):
                     propagated_list.append(result)
