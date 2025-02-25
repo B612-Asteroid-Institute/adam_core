@@ -57,6 +57,14 @@ class Timestamp(qv.Table):
         """
         return self.rescale("tdb").mjd().to_numpy(False)
 
+    def to_iso8601(self) -> pa.lib.StringArray:
+        """
+        Returns the times as ISO 8601 strings in a pyarrow array.
+        """
+        if len(self) == 0:
+            return pa.array([], type=pa.string())
+        return pa.array(self.to_astropy().isot, type=pa.string())
+
     @classmethod
     def from_iso8601(
         cls, iso: pa.lib.StringArray | list[str], scale="utc"

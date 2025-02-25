@@ -11,6 +11,7 @@ from ...coordinates.transform import transform_coordinates
 from ...observers.observers import Observers
 from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
+from ...orbits.variants import VariantOrbits
 from ...time.time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..propagator import EphemerisMixin, Propagator
@@ -296,3 +297,61 @@ def test_generate_ephemeris_unordered_observers(max_processes):
     # Link back to observers to verify correct correspondence
     linkage = ephemeris.link_to_observers(observers)
     assert len(linkage.all_unique_values) == len(observers)
+
+
+def test_generate_ephemeris_variant_orbits():
+    """Test that ephemeris generation works correctly with variant orbits and respects covariance flag."""
+
+    # Create base orbits
+    base_orbits = Orbits.from_kwargs(
+        orbit_id=["test1", "test2"],
+        object_id=["test1", "test2"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 2.0],
+            y=[1.0, 2.0],
+            z=[1.0, 2.0],
+            vx=[0.1, 0.2],
+            vy=[0.1, 0.2],
+            vz=[0.1, 0.2],
+            time=Timestamp.from_mjd([60000, 60000]),
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    # Create variant orbits
+    variant_orbits = VariantOrbits.from_kwargs(
+        orbit_id=["test1", "test1", "test2", "test2"],
+        variant_id=["0", "1", "0", "1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.1, 2.0, 2.1],
+            y=[1.0, 1.1, 2.0, 2.1],
+            z=[1.0, 1.1, 2.0, 2.1],
+            vx=[0.1, 0.11, 0.2, 0.21],
+            vy=[0.1, 0.11, 0.2, 0.21],
+            vz=[0.1, 0.11, 0.2, 0.21],
+            time=Timestamp.from_mjd([60000, 60000, 60000, 60000]),
+            origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    # Create observers
+    times = Timestamp.from_mjd([60001, 60002], scale="utc")
+    observers = Observers.from_code("500", times)
+
+    prop = MockPropagator()
+
+    # Test with variant orbits - should work
+    ephemeris = prop.generate_ephemeris(variant_orbits, observers, covariance=False)
+    assert len(ephemeris) == len(variant_orbits) * len(times)
+
+    # Test with variant orbits and covariance=True - should raise assertion error
+    with pytest.raises(
+        AssertionError, match="Covariance is not supported for VariantOrbits"
+    ):
+        prop.generate_ephemeris(variant_orbits, observers, covariance=True)
+
+    # Test with regular orbits and covariance=True - should work
+    ephemeris = prop.generate_ephemeris(base_orbits, observers, covariance=True)
+    assert len(ephemeris) == len(base_orbits) * len(times)
