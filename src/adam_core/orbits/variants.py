@@ -186,6 +186,7 @@ class VariantOrbits(qv.Table):
 
             # All the variants must have the same epoch
             assert len(object_variants.coordinates.time.unique()) == 1
+            assert len(pc.unique(object_variants.coordinates.origin.code)) == 1
 
             # Calculate the mean
             mean = np.average(
@@ -213,6 +214,8 @@ class VariantOrbits(qv.Table):
                     vz=[mean[5]],
                     covariance=CoordinateCovariances.from_matrix(covariance),
                     time=object_variants.coordinates.time[0],
+                    origin=object_variants.coordinates.origin[0],
+                    frame=object_variants.coordinates.frame,
                 ),
             )
             orbits = qv.concatenate([orbits, orbit])

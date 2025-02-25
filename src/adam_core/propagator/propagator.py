@@ -326,12 +326,26 @@ class EphemerisMixin:
             Predicted ephemerides for each orbit observed by each
             observer.
         """
+        # If sending in VariantOrbits, we make sure not to run covariance
+        assert (covariance is False) or (
+            isinstance(orbits, Orbits)
+        ), "Covariance is not supported for VariantOrbits"
+
         # Check if we need to propagate orbit variants so we can propagate covariance
         # matrices
+        ephemeris: Ephemeris = Ephemeris.empty()
+        variant_ephemeris: VariantEphemeris = VariantEphemeris.empty()
+
+        variants = VariantOrbits.empty()
+        if covariance is True and not orbits.coordinates.covariance.is_all_nan():
+            variants = VariantOrbits.create(
+                orbits,
+                method=covariance_method,
+                num_samples=num_samples,
+                seed=seed,
+            )
 
         if max_processes is None or max_processes > 1:
-            ephemeris_list: List[Ephemeris] = []
-            variants_list: List[VariantEphemeris] = []
 
             if RAY_INSTALLED is False:
                 raise ImportError(
@@ -357,11 +371,11 @@ class EphemerisMixin:
                 orbits = ray.get(orbits_ref)
 
             # Create futures
-            futures = []
+            futures_inputs = []
             idx = np.arange(0, len(orbits))
             for idx_chunk in _iterate_chunks(idx, chunk_size):
-                futures.append(
-                    ephemeris_worker_ray.remote(
+                futures_inputs.append(
+                    (
                         idx_chunk,
                         orbits_ref,
                         observers_ref,
@@ -369,22 +383,13 @@ class EphemerisMixin:
                     )
                 )
 
-            # Add variants to futures (if we have any)
-            if covariance is True and not orbits.coordinates.covariance.is_all_nan():
-                variants = VariantOrbits.create(
-                    orbits,
-                    method=covariance_method,
-                    num_samples=num_samples,
-                    seed=seed,
-                )
-
                 # Add variants to object store
                 variants_ref = ray.put(variants)
 
                 idx = np.arange(0, len(variants))
                 for variant_chunk_idx in _iterate_chunks(idx, chunk_size):
-                    futures.append(
-                        ephemeris_worker_ray.remote(
+                    futures_inputs.append(
+                        (
                             variant_chunk_idx,
                             variants_ref,
                             observers_ref,
@@ -393,41 +398,61 @@ class EphemerisMixin:
                     )
 
             # Get results as they finish (we sort later)
-            unfinished = futures
-            while unfinished:
-                finished, unfinished = ray.wait(unfinished, num_returns=1)
+            futures = []
+            for future_input in futures_inputs:
+                futures.append(ephemeris_worker_ray.remote(*future_input))
+
+                if len(futures) >= max_processes * 1.5:
+                    finished, futures = ray.wait(futures, num_returns=1)
+                    result = ray.get(finished[0])
+                    if isinstance(result, Ephemeris):
+                        ephemeris = qv.concatenate([ephemeris, result])
+                    elif isinstance(result, VariantEphemeris):
+                        variant_ephemeris = qv.concatenate([variant_ephemeris, result])
+                    else:
+                        raise ValueError(
+                            f"Unexpected result type from ephemeris worker: {type(result)}"
+                        )
+
+            while futures:
+                finished, futures = ray.wait(futures, num_returns=1)
                 result = ray.get(finished[0])
                 if isinstance(result, Ephemeris):
-                    ephemeris_list.append(result)
+                    ephemeris = qv.concatenate([ephemeris, result])
                 elif isinstance(result, VariantEphemeris):
-                    variants_list.append(result)
+                    variant_ephemeris = qv.concatenate([variant_ephemeris, result])
                 else:
                     raise ValueError(
                         f"Unexpected result type from ephemeris worker: {type(result)}"
                     )
 
-            ephemeris = qv.concatenate(ephemeris_list)
-            if len(variants_list) > 0:
-                ephemeris_variants = qv.concatenate(variants_list)
-            else:
-                ephemeris_variants = None
-
         else:
-            ephemeris = self._generate_ephemeris(orbits, observers)
-
-            if covariance is True and not orbits.coordinates.covariance.is_all_nan():
-                variants = VariantOrbits.create(
-                    orbits,
-                    method=covariance_method,
-                    num_samples=num_samples,
-                    seed=seed,
-                )
-                ephemeris_variants = self._generate_ephemeris(variants, observers)
+            results = self._generate_ephemeris(orbits, observers)
+            if isinstance(results, Ephemeris):
+                ephemeris = results
+            elif isinstance(results, VariantEphemeris):
+                variant_ephemeris = results
             else:
-                ephemeris_variants = None
+                raise ValueError(
+                    f"Unexpected result type from generate_ephemeris: {type(results)}"
+                )
+            if covariance is True and len(variants) > 0:
+                variant_ephemeris = self._generate_ephemeris(variants, observers)
 
-        if ephemeris_variants is not None:
-            ephemeris = ephemeris_variants.collapse(ephemeris)
+        if covariance is False and len(variant_ephemeris) > 0:
+            # We were given VariantOrbits as an input, so return VariantEphemeris
+            return variant_ephemeris.sort_by(
+                [
+                    "orbit_id",
+                    "variant_id",
+                    "coordinates.time.days",
+                    "coordinates.time.nanos",
+                    "coordinates.origin.code",
+                ]
+            )
+
+        if covariance is True and len(variant_ephemeris) > 0:
+            ephemeris = variant_ephemeris.collapse(ephemeris)
 
         return ephemeris.sort_by(
             [

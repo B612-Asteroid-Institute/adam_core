@@ -159,13 +159,17 @@ def scout_orbits_to_variant_orbits(
         tp=pc.subtract(pc.cast(scout_orbits.tp, pa.float64()), 2400000.5),
         time=Timestamp.from_jd(pc.cast(scout_orbits.epoch, pa.float64())),
         origin=Origin.from_kwargs(code=pa.repeat("SUN", len(scout_orbits))),
+        frame="ecliptic",
     )
 
     cartesian_coords = cometary_coords.to_cartesian()
 
+    unique_orbit_ids = pc.cast(scout_orbits.idx, pa.large_string())
+
     variants = VariantOrbits.from_kwargs(
         coordinates=cartesian_coords,
-        orbit_id=pc.cast(scout_orbits.idx, pa.large_string()),
+        orbit_id=unique_orbit_ids,
+        variant_id=unique_orbit_ids,
         object_id=pa.repeat(object_id, len(scout_orbits)),
     )
 

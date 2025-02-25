@@ -201,6 +201,22 @@ class TestAstropyTime:
 
         assert have2.to_astropy() == t2
 
+    def test_to_iso8601(self):
+        """Test that the to_iso8601 method correctly converts times to ISO 8601 format"""
+        have = self.ts.to_iso8601()
+        want = pa.array(
+            [
+                "1858-11-17T00:00:00.000",
+                "1995-10-10T12:00:00.000",
+                "2023-02-26T00:00:00.000",  # We lose precision with astropy
+            ]
+        )
+        assert pc.all(pc.equal(have, want)).as_py()
+
+        # Test empty case
+        have = self.empty.to_iso8601()
+        assert len(have) == 0
+
 
 class TestTimeMath:
 
