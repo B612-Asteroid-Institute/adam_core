@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Tuple
 
 import jax.numpy as jnp
@@ -19,7 +20,7 @@ from ..utils.chunking import process_in_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
 
 
-@jit
+@partial(jit, static_argnames=("lt_tol", "max_iter", "tol", "stellar_aberration"))
 def _generate_ephemeris_2body(
     propagated_orbit: np.ndarray,
     observation_time: float,
