@@ -42,25 +42,36 @@ class MockImpactPropagator(Propagator, ImpactMixin):
         new_times = orbits.coordinates.time.add_days(num_days)
         orbits = orbits.set_column("coordinates.time", new_times)
 
+        # Do a transform away from the input origin and frame
+        orbits_transformed = orbits.set_column(
+            "coordinates",
+            transform_coordinates(
+                orbits.coordinates,
+                representation_out=CartesianCoordinates,
+                origin_out=OriginCodes.EARTH,
+                frame_out="equatorial",
+            ),
+        )
+
         # Pick random orbit to impact
-        impacted = orbits[0]
+        variant = orbits_transformed[0]
         impact = CollisionEvent.from_kwargs(
-            orbit_id=impacted.orbit_id,
-            variant_id=impacted.variant_id,
+            orbit_id=variant.orbit_id,
+            variant_id=variant.variant_id,
             coordinates=CartesianCoordinates.from_kwargs(
-                x=impacted.coordinates.x,
-                y=impacted.coordinates.y,
-                z=impacted.coordinates.z,
-                vx=impacted.coordinates.vx,
-                vy=impacted.coordinates.vy,
-                vz=impacted.coordinates.vz,
-                time=impacted.coordinates.time,
-                origin=impacted.coordinates.origin,
-                frame=impacted.coordinates.frame,
+                x=variant.coordinates.x,
+                y=variant.coordinates.y,
+                z=variant.coordinates.z,
+                vx=variant.coordinates.vx,
+                vy=variant.coordinates.vy,
+                vz=variant.coordinates.vz,
+                time=variant.coordinates.time,
+                origin=variant.coordinates.origin,
+                frame=variant.coordinates.frame,
             ),
             condition_id=["1"],
             collision_coordinates=transform_coordinates(
-                impacted.coordinates,
+                variant.coordinates,
                 representation_out=SphericalCoordinates,
                 origin_out=OriginCodes.EARTH,
                 frame_out="itrf93",
@@ -69,7 +80,7 @@ class MockImpactPropagator(Propagator, ImpactMixin):
             stopping_condition=[False],
         )
 
-        return orbits, impact
+        return variant, impact
 
 
 def test_calculate_impacts():
@@ -111,6 +122,13 @@ def test_calculate_impacts():
             orbits[0].coordinates.time.add_days(10).mjd().to_pylist()[0],
         )
     )
+    assert pc.all(
+        pc.equal(
+            variants.coordinates.origin.code.unique(),
+            orbits.coordinates.origin.code.unique(),
+        )
+    ).as_py()
+    assert variants.coordinates.frame == orbits.coordinates.frame
 
 
 def test_calculate_impact_probabilities():

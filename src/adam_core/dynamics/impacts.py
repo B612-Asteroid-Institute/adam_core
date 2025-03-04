@@ -18,6 +18,7 @@ from ..orbits import Orbits
 from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..propagator.propagator import OrbitType
+from ..propagator.utils import ensure_input_origin_and_frame
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
 
@@ -221,6 +222,8 @@ class ImpactMixin:
 
         else:
             propagated, impacts = self._detect_collisions(orbits, num_days, conditions)
+
+        propagated = ensure_input_origin_and_frame(orbits, propagated)
 
         return propagated, impacts
 

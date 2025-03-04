@@ -5,7 +5,6 @@ from typing import List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow.compute as pc
 import quivr as qv
 
 from ..constants import Constants as c
@@ -21,6 +20,8 @@ from ..orbits.variants import VariantEphemeris, VariantOrbits
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
+from .types import EphemerisType, ObserverType, OrbitType, TimestampType
+from .utils import ensure_input_origin_and_frame, ensure_input_time_scale
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,6 @@ try:
     RAY_INSTALLED = True
 except ImportError:
     pass
-
-TimestampType = Union[Timestamp, ObjectRef]
-OrbitType = Union[Orbits, VariantOrbits, ObjectRef]
-EphemerisType = Union[Ephemeris, VariantOrbits, ObjectRef]
-ObserverType = Union[Observers, ObjectRef]
 
 
 def propagation_worker(
@@ -708,34 +704,13 @@ class Propagator(ABC, EphemerisMixin):
             propagated = propagated_variants.collapse(propagated)
 
         # Preserve the time scale of the requested times
-        propagated = propagated.set_column(
-            "coordinates.time",
-            propagated.coordinates.time.rescale(times.scale),
-        )
+        propagated = ensure_input_time_scale(propagated, times)
 
         # Return the results with the original origin and frame
         # Preserve the original output origin for the input orbits
         # by orbit id
-        final_results = None
-        unique_origins = pc.unique(orbits.coordinates.origin.code)
-        for origin_code in unique_origins:
-            origin_orbits = orbits.select("coordinates.origin.code", origin_code)
-            result_origin_orbits = propagated.apply_mask(
-                pc.is_in(propagated.orbit_id, origin_orbits.orbit_id)
-            )
-            partial_results = result_origin_orbits.set_column(
-                "coordinates",
-                transform_coordinates(
-                    result_origin_orbits.coordinates,
-                    origin_out=OriginCodes[origin_code.as_py()],
-                    frame_out=orbits.coordinates.frame,
-                ),
-            )
-            if final_results is None:
-                final_results = partial_results
-            else:
-                final_results = qv.concatenate([final_results, partial_results])
+        propagated = ensure_input_origin_and_frame(orbits, propagated)
 
-        return final_results.sort_by(
+        return propagated.sort_by(
             ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
         )
