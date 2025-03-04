@@ -65,7 +65,7 @@ class MockImpactPropagator(Propagator, ImpactMixin):
                 origin_out=OriginCodes.EARTH,
                 frame_out="itrf93",
             ),
-            collision_object_name=["Earth"],
+            collision_object=Origin.from_kwargs(code=["EARTH"]),
             stopping_condition=[False],
         )
 
@@ -153,7 +153,7 @@ def test_calculate_impact_probabilities():
             frame="ecliptic",
         ),
         condition_id=["1", "1", "1"],
-        collision_object_name=["Earth", "Earth", "Earth"],
+        collision_object=Origin.from_kwargs(code=["EARTH", "EARTH", "EARTH"]),
         collision_coordinates=SphericalCoordinates.from_kwargs(
             rho=[1.0, 1.0, 1.0],
             lon=[1.0, 2.0, 3.0],
@@ -169,7 +169,7 @@ def test_calculate_impact_probabilities():
 
     impact_conditions = CollisionConditions.from_kwargs(
         condition_id=["1"],
-        collision_object_name=["Earth"],
+        collision_object=Origin.from_kwargs(code=["EARTH"]),
         collision_distance=[1.0],
         stopping_condition=[False],
     )

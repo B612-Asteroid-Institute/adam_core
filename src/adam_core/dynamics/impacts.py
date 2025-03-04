@@ -9,7 +9,7 @@ import quivr as qv
 
 from adam_core.constants import KM_P_AU
 from adam_core.constants import Constants as c
-from adam_core.coordinates import CartesianCoordinates
+from adam_core.coordinates import CartesianCoordinates, Origin
 from adam_core.ray_cluster import initialize_use_ray
 
 from ..coordinates.residuals import Residuals
@@ -65,11 +65,20 @@ class CollisionConditions(qv.Table):
     #: Unique identifier for the condition
     condition_id = qv.LargeStringColumn()
     #: Name of the object with which to detect collisions
-    collision_object_name = qv.LargeStringColumn()
+    collision_object = Origin.as_column()
     #: Distance from the object at which to detect collisions (in km)
     collision_distance = qv.Float64Column()
     #: Whether to stop propagation after a collision
     stopping_condition = qv.BooleanColumn()
+
+    @classmethod
+    def default(cls) -> "CollisionConditions":
+        return cls.from_kwargs(
+            condition_id=["Default"],
+            collision_object=Origin.from_kwargs(code=["EARTH"]),
+            collision_distance=[EARTH_RADIUS_KM],
+            stopping_condition=[True],
+        )
 
 
 class CollisionEvent(qv.Table):
@@ -82,7 +91,7 @@ class CollisionEvent(qv.Table):
     #: Unique identifier for the condition
     condition_id = qv.LargeStringColumn()
     #: Name of the object with which collisions were detected
-    collision_object_name = qv.LargeStringColumn()
+    collision_object = Origin.as_column()
     #: Spherical coordinates of the impact in the body-centered frame (does not
     #: have to be a body-fixed frame)
     collision_coordinates = SphericalCoordinates.as_column()
@@ -162,7 +171,7 @@ class ImpactMixin:
         if conditions is None:
             conditions = CollisionConditions.from_kwargs(
                 condition_id=["Earth"],
-                collision_object_name=["Earth"],
+                collision_object=Origin.from_kwargs(code=["EARTH"]),
                 collision_distance=[EARTH_RADIUS_KM],
                 stopping_condition=[True],
             )
@@ -257,7 +266,7 @@ def calculate_impacts(
     if conditions is None:
         conditions = CollisionConditions.from_kwargs(
             condition_id=["Default"],
-            collision_object_name=["Earth"],
+            collision_object=Origin.from_kwargs(code=["EARTH"]),
             collision_distance=[EARTH_RADIUS_KM],
             stopping_condition=[True],
         )
@@ -294,7 +303,7 @@ def calculate_impact_probabilities(
     if conditions is None:
         conditions = CollisionConditions.from_kwargs(
             condition_id=["Default"],
-            collision_object_name=["Earth"],
+            collision_object=Origin.from_kwargs(code=["EARTH"]),
             collision_distance=[EARTH_RADIUS_KM],
             stopping_condition=[True],
         )
