@@ -440,6 +440,21 @@ class EphemerisMixin:
                 variant_ephemeris = self._generate_ephemeris(variants, observers)
 
         if covariance is False and len(variant_ephemeris) > 0:
+            # If we decide that we do not need to guarantee that the time scale is in UTC
+            # then we may want to call:
+            # if isinstance(observers, ray.ObjectRef):
+            #     variant_ephemeris = ensure_input_time_scale(
+            #         variant_ephemeris, ray.get(observers).coordinates.time
+            #     )
+            # else:
+            #     variant_ephemeris = ensure_input_time_scale(
+            #         variant_ephemeris, observers.coordinates.time
+            #     )
+            variant_ephemeris = variant_ephemeris.set_column(
+                "coordinates.time",
+                variant_ephemeris.coordinates.time.rescale("utc"),
+            )
+
             # We were given VariantOrbits as an input, so return VariantEphemeris
             return variant_ephemeris.sort_by(
                 [
@@ -453,6 +468,20 @@ class EphemerisMixin:
 
         if covariance is True and len(variant_ephemeris) > 0:
             ephemeris = variant_ephemeris.collapse(ephemeris)
+
+        # Same note as above.
+        # if isinstance(observers, ray.ObjectRef):
+        #     ephemeris = ensure_input_time_scale(
+        #         ephemeris, ray.get(observers).coordinates.time
+        #     )
+        # else:
+        #     ephemeris = ensure_input_time_scale(
+        #         ephemeris, observers.coordinates.time
+        #     )
+        ephemeris = ephemeris.set_column(
+            "coordinates.time",
+            ephemeris.coordinates.time.rescale("utc"),
+        )
 
         return ephemeris.sort_by(
             [
