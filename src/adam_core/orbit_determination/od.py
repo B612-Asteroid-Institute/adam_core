@@ -14,9 +14,9 @@ from ..coordinates import CartesianCoordinates, CoordinateCovariances
 from ..coordinates.residuals import Residuals
 from ..orbit_determination import OrbitDeterminationObservations
 from ..orbits import Orbits
-from ..propagator import Propagator, _iterate_chunks
-from ..propagator.utils import _iterate_chunk_indices
+from ..propagator import Propagator
 from ..ray_cluster import initialize_use_ray
+from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .outliers import calculate_max_outliers
 

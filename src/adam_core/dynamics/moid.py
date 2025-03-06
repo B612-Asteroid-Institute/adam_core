@@ -38,9 +38,9 @@ from ..coordinates import (
 )
 from ..dynamics.propagation import _propagate_2body
 from ..orbits import Orbits
-from ..propagator.utils import _iterate_chunks
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
+from ..utils.iter import _iterate_chunks
 from ..utils.spice import get_perturber_state
 
 

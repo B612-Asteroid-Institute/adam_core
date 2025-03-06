@@ -1,8 +1,7 @@
 import numpy as np
-import pytest
 import quivr as qv
 
-from ..utils import _assert_times_almost_equal, _iterate_chunks
+from ..iter import _iterate_chunk_indices, _iterate_chunks
 
 
 class SampleTable(qv.Table):
@@ -37,16 +36,19 @@ def test__iterate_chunks_table():
             np.testing.assert_equal(chunk.a.to_numpy(), np.arange(i * 2, i * 2 + 1))
 
 
-def test__assert_times_almost_equal():
-    have = np.array([1.0, 2.0, 3.0])
-    want = np.array([1.0, 2.0, 3.0])
+def test__iterate_chunk_indices():
+    # Test that _iterate_chunk_indices works with numpy arrays and lists
+    a = np.arange(0, 10)
+    for i, chunk in enumerate(_iterate_chunk_indices(a, 2)):
+        assert chunk == (i * 2, i * 2 + 2)
 
-    _assert_times_almost_equal(have, want, tolerance=1.0)
+    a = [i for i in range(10)]
+    for i, chunk in enumerate(_iterate_chunk_indices(a, 2)):
+        assert chunk == (i * 2, i * 2 + 2)
 
-    with pytest.raises(ValueError):
-        have = np.array([1.0, 2.0, 3.0])
-        want = np.array([1.0, 2.0, 3.0])
-
-        # Offset have by 2 ms
-        have += 2 / 86800 / 1000
-        _assert_times_almost_equal(have, want, tolerance=1.0)
+    table = SampleTable.from_kwargs(a=np.arange(0, 11))
+    for i, chunk in enumerate(_iterate_chunk_indices(table, 2)):
+        if i != 5:
+            assert chunk == (i * 2, i * 2 + 2)
+        else:
+            assert chunk == (i * 2, i * 2 + 1)

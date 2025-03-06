@@ -20,7 +20,7 @@ from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
-from .utils import _iterate_chunks
+from ..utils.iter import _iterate_chunks
 
 logger = logging.getLogger(__name__)
 

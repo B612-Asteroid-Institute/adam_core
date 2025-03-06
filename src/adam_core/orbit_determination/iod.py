@@ -13,8 +13,8 @@ import ray
 
 from ..coordinates.residuals import Residuals
 from ..propagator import Propagator
-from ..propagator.utils import _iterate_chunk_indices, _iterate_chunks
 from ..ray_cluster import initialize_use_ray
+from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
 from . import (
     FittedOrbitMembers,
     FittedOrbits,
