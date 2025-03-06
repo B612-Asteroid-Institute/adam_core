@@ -16,8 +16,8 @@ from ..orbits import Orbits
 from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..propagator.propagator import OrbitType
-from ..propagator.utils import _iterate_chunks
 from ..time import Timestamp
+from ..utils.iter import _iterate_chunks
 
 logger = logging.getLogger(__name__)
 

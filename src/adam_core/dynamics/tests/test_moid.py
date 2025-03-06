@@ -1,10 +1,13 @@
 import numpy as np
+import pytest
+import quivr as qv
 
 from ...coordinates.keplerian import KeplerianCoordinates
-from ...coordinates.origin import Origin
+from ...coordinates.origin import Origin, OriginCodes
 from ...orbits import Orbits
 from ...time import Timestamp
-from ..moid import calculate_moid
+from ...utils.spice import get_perturber_state
+from ..moid import calculate_moid, calculate_perturber_moids
 
 
 def test_calculate_moid_circular_orbits():
@@ -182,3 +185,59 @@ def test_calculate_moid_noncircular_orbits():
 
     moid_31, moid_time_31 = calculate_moid(noncircular_2, noncircular_1)
     np.testing.assert_allclose(moid_31, 0.0, rtol=0, atol=1e-6)
+
+
+@pytest.mark.parametrize("max_processes", [1, 2])
+def test_calculate_perturber_moids(max_processes):
+    # Test that the MOID we can multiprocess the moid calculation
+    pertubers = [OriginCodes.EARTH, OriginCodes.MARS_BARYCENTER, OriginCodes.MERCURY]
+
+    time = Timestamp.from_mjd([59000.0], scale="tdb")
+
+    earth = Orbits.from_kwargs(
+        orbit_id=["input_EARTH"],
+        coordinates=get_perturber_state(OriginCodes.EARTH, time),
+    )
+    mars = Orbits.from_kwargs(
+        orbit_id=["input_MARS"],
+        coordinates=get_perturber_state(OriginCodes.MARS_BARYCENTER, time),
+    )
+    orbits = qv.concatenate([earth, mars])
+
+    moids = calculate_perturber_moids(
+        orbits, pertubers, max_processes=max_processes, chunk_size=1
+    )
+
+    assert len(moids) == 6
+    assert (
+        len(moids.select("orbit_id", "input_EARTH").select("perturber.code", "EARTH"))
+        == 1
+    )
+    assert (
+        len(
+            moids.select("orbit_id", "input_EARTH").select(
+                "perturber.code", "MARS_BARYCENTER"
+            )
+        )
+        == 1
+    )
+    assert (
+        len(moids.select("orbit_id", "input_MARS").select("perturber.code", "EARTH"))
+        == 1
+    )
+    assert (
+        len(
+            moids.select("orbit_id", "input_MARS").select(
+                "perturber.code", "MARS_BARYCENTER"
+            )
+        )
+        == 1
+    )
+    assert (
+        len(moids.select("orbit_id", "input_EARTH").select("perturber.code", "MERCURY"))
+        == 1
+    )
+    assert (
+        len(moids.select("orbit_id", "input_MARS").select("perturber.code", "MERCURY"))
+        == 1
+    )

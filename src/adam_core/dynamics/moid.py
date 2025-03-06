@@ -21,14 +21,34 @@ Algorithm 2:
 search for the overall minimum.
 """
 
+from typing import List, Optional, Union
+
 import numpy as np
 import numpy.typing as npt
+import quivr as qv
+import ray
+from ray import ObjectRef
 from scipy.optimize import minimize_scalar
 
-from ..coordinates import CartesianCoordinates, KeplerianCoordinates
+from ..coordinates import (
+    CartesianCoordinates,
+    KeplerianCoordinates,
+    Origin,
+    OriginCodes,
+)
 from ..dynamics.propagation import _propagate_2body
 from ..orbits import Orbits
+from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
+from ..utils.iter import _iterate_chunks
+from ..utils.spice import get_perturber_state
+
+
+class PerturberMOIDs(qv.Table):
+    orbit_id = qv.LargeStringColumn()
+    perturber = Origin.as_column()
+    moid = qv.Float64Column()
+    time = Timestamp.as_column()
 
 
 def project_point_on_plane(
@@ -145,13 +165,129 @@ def calculate_moid(
         lambda dt: calculate_moid_for_dt(primary_ellipse, secondary_ellipse, dt),
         bounds=bounds,
         method="bounded",
-        tol=1e-12,
+        tol=1e-14,
     )
     moid = result.fun
     moid_time = Timestamp.from_mjd(
-        [primary_ellipse.coordinates.time.mjd()[0].as_py() + result.x], scale="tdb"
+        [primary_ellipse.coordinates.time.mjd()[0].as_py() + result.x],
+        scale=primary_ellipse.coordinates.time.scale,
     )
     if result.status != 0:
         raise ValueError("MOID calculation did not converge.")
 
     return moid, moid_time
+
+
+def moid_worker(
+    idx_chunk: npt.NDArray[np.int64], orbits: Orbits, perturber: OriginCodes
+) -> PerturberMOIDs:
+    """
+    Calculate the MOID for a chunk of orbits with respect to a perturbing body.
+    """
+    orbits_chunk = orbits.take(idx_chunk)
+    states = get_perturber_state(
+        perturber,
+        orbits_chunk.coordinates.time,
+        frame=orbits_chunk.coordinates.frame,
+        origin=orbits_chunk.coordinates.origin[0].as_OriginCodes(),
+    )
+    moids = PerturberMOIDs.empty()
+    for orbit, state in zip(orbits_chunk, states):
+        moid, moid_time = calculate_moid(
+            orbit, Orbits.from_kwargs(orbit_id=[perturber.name], coordinates=state)
+        )
+
+        moids_i = PerturberMOIDs.from_kwargs(
+            orbit_id=orbit.orbit_id,
+            perturber=Origin.from_kwargs(code=[perturber.name]),
+            moid=[moid],
+            time=moid_time,
+        )
+
+        moids = qv.concatenate([moids, moids_i])
+
+    return moids
+
+
+moid_worker_ray = ray.remote(moid_worker)
+
+
+def calculate_perturber_moids(
+    orbits: Orbits,
+    perturber: Union[OriginCodes, List[OriginCodes]],
+    chunk_size: int = 100,
+    max_processes: Optional[int] = 1,
+) -> PerturberMOIDs:
+    """
+    Calculate the minimum orbit intersection distance (MOID) for all orbits with respect
+    to the perturbing body or bodies.
+
+    Parameters
+    ----------
+    orbits : Orbits
+        The orbits to calculate the MOID for.
+    perturber : OriginCodes or List[OriginCodes]
+        The perturbing body or bodies to calculate the MOID for.
+    chunk_size : int, optional
+        The number of orbits to process in each chunk, by default 100.
+    max_processes : int, optional
+        The maximum number of processes to use, by default 1.
+
+    Returns
+    -------
+    PerturberMOIDs
+        A table containing the MOID and time for each orbit with respect to the perturbing body or bodies.
+    """
+    assert len(orbits.orbit_id.unique()) == len(orbits)
+    assert len(orbits.coordinates.origin.code.unique()) == 1
+
+    if isinstance(perturber, OriginCodes):
+        perturbers = [perturber]
+    else:
+        perturbers = perturber
+
+    moids = PerturberMOIDs.empty()
+    use_ray = initialize_use_ray(num_cpus=max_processes)
+
+    if use_ray:
+
+        if not isinstance(orbits, ObjectRef):
+            orbits_ref = ray.put(orbits)
+        else:
+            orbits_ref = orbits
+            orbits = ray.get(orbits_ref)
+
+        futures_inputs = []
+        idx = np.arange(0, len(orbits))
+        for perturber in perturbers:
+            for idx_chunk in _iterate_chunks(idx, chunk_size):
+                futures_inputs.append(
+                    (
+                        idx_chunk,
+                        orbits_ref,
+                        perturber,
+                    )
+                )
+
+        futures = []
+        for future_input in futures_inputs:
+            futures.append(moid_worker_ray.remote(*future_input))
+
+            if len(futures) >= max_processes * 1.5:
+                finished, futures = ray.wait(futures, num_returns=1)
+                result = ray.get(finished[0])
+                moids = qv.concatenate([moids, result])
+
+        while futures:
+            finished, futures = ray.wait(futures, num_returns=1)
+            result = ray.get(finished[0])
+            moids = qv.concatenate([moids, result])
+
+    else:
+        idx = np.arange(0, len(orbits))
+        for perturber in perturbers:
+            for idx_chunk in _iterate_chunks(idx, chunk_size):
+                moids_i = moid_worker(idx_chunk, orbits, perturber)
+                moids = qv.concatenate([moids, moids_i])
+
+    return moids
