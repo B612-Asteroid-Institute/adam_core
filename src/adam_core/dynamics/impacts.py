@@ -339,14 +339,14 @@ def calculate_impact_probabilities(
                 max_mjd = impacts_per_condition.coordinates.time.max()
             else:
                 mean_mjd = Timestamp.nulls(
-                    1, scale=impacts_per_condition.coordinates.time.scale
+                    1, scale=variant_masked.coordinates.time.scale
                 )
                 stddev = None
                 min_mjd = Timestamp.nulls(
-                    1, scale=impacts_per_condition.coordinates.time.scale
+                    1, scale=variant_masked.coordinates.time.scale
                 )
                 max_mjd = Timestamp.nulls(
-                    1, scale=impacts_per_condition.coordinates.time.scale
+                    1, scale=variant_masked.coordinates.time.scale
                 )
 
             ip = ImpactProbabilities.from_kwargs(
