@@ -224,9 +224,16 @@ class Timestamp(qv.Table):
         np.add(days, 1, where=mask, out=days)
 
         nanos = np.round(remainder * 86400 * 1e9)
+
+        # Floating point arithmetic can cause nanos to be 86400e9
+        # instead of 0, so we need to handle this case
+        nanos_full_day = nanos == 86400 * 1e9
+        days = np.where(nanos_full_day, days + 1, days).astype(np.int64)
+        nanos = np.where(nanos_full_day, 0, nanos)
+
         return cls.from_kwargs(
             scale=astropy_time.scale,
-            days=days.astype(np.int64),
+            days=days,
             nanos=nanos,
         )
 
@@ -503,6 +510,7 @@ class Timestamp(qv.Table):
         return Timestamp.from_pyarrow(uniqued)
 
     def rescale(self, new_scale: str) -> Timestamp:
+
         if self.scale == new_scale:
             return self
         elif new_scale == "tai":
