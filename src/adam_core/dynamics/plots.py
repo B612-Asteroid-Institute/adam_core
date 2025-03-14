@@ -62,7 +62,7 @@ def prepare_propagated_variants(
     """
     assert propagated_variants.coordinates.frame == "ecliptic"
 
-    colliding_bodies = impacts.collision_object_name.unique().to_pylist()
+    colliding_bodies = impacts.collision_object.code.unique().to_pylist()
     prepared_variants = {}
 
     # Remove the non-impacting variants
@@ -76,9 +76,9 @@ def prepare_propagated_variants(
 
     for colliding_body in colliding_bodies:
 
-        if colliding_body == "Earth":
+        if colliding_body == "EARTH":
             radius = EARTH_RADIUS_KM
-        elif colliding_body == "Moon":
+        elif colliding_body == "MOON":
             radius = MOON_RADIUS_KM
         else:
             raise ValueError(
@@ -86,7 +86,7 @@ def prepare_propagated_variants(
             )
 
         impacts_on_colliding_body = impacts.apply_mask(
-            pc.equal(impacts.collision_object_name, colliding_body)
+            pc.equal(impacts.collision_object.code, colliding_body)
         )
         impacting_variants_body = impacting_variants.apply_mask(
             pc.is_in(impacting_variants.orbit_id, impacts_on_colliding_body.variant_id)
@@ -196,8 +196,8 @@ def generate_impact_visualization_data(
     if pc.any(
         pc.invert(
             pc.or_(
-                pc.equal(impacts.collision_object_name, "Earth"),
-                pc.equal(impacts.collision_object_name, "Moon"),
+                pc.equal(impacts.collision_object.code, "EARTH"),
+                pc.equal(impacts.collision_object.code, "MOON"),
             )
         )
     ).as_py():
@@ -452,8 +452,8 @@ def plot_impact_simulation(
     show_best_fit: bool = True,
     show_earth: bool = True,
     show_moon: bool = True,
-    downsample_non_impactors: bool = False,
-    downsample_size: float = 0.1,
+    sample_impactors: Optional[float] = None,
+    sample_non_impactors: Optional[float] = None,
     height: int = 720,
     width: int = 1200,
 ) -> go.Figure:
@@ -484,10 +484,10 @@ def plot_impact_simulation(
         Whether to show the Earth.
     show_moon: bool, optional
         Whether to show the Moon.
-    downsample_non_impactors: bool, optional
-        Whether to plot a fraction of the typically larger non-impacting population
-    downsample_size: float
-        The fraction (between 0 and 1) to sample the non-impactors.
+    sample_impactors: Optional[float], optional
+        Randomly sample the impactors for plotting. Should be between 0 and 1.
+    sample_non_impactors: Optional[float], optional
+        Randomly sample the non-impactors for plotting. Should be between 0 and 1.
     height: int, optional
         The height of the plot.
     width: int, optional
@@ -502,21 +502,49 @@ def plot_impact_simulation(
 
     num_variants = 0
     impact_count = {}
+    sampled_variants = {}
     for k, v in propagated_variants.items():
         num_variants += len(v.orbit_id.unique())
+
+        if k == "Non-Impacting":
+            if sample_non_impactors is not None:
+                orbit_ids = v.orbit_id.unique()
+                orbit_ids_sample = np.random.choice(
+                    orbit_ids,
+                    np.ceil(len(orbit_ids) * sample_non_impactors).astype(int),
+                    replace=False,
+                )
+                sampled_variants[k] = v.__class__.from_pyarrow(
+                    v.apply_mask(
+                        pc.is_in(v.orbit_id, pa.array(orbit_ids_sample))
+                    ).table.combine_chunks()
+                )
+                print(
+                    f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(orbit_ids)}"
+                )
+            else:
+                sampled_variants[k] = v
+
         if k != "Non-Impacting":
             impact_count[k] = 0
 
-        if downsample_non_impactors and k == "Non-Impacting":
-            orbit_ids = v.orbit_id.unique()
-            orbit_ids_sample = np.random.choice(
-                orbit_ids,
-                np.floor(len(orbit_ids) * downsample_size).astype(int),
-                replace=False,
-            )
-            propagated_variants[k] == v.apply_mask(
-                pc.is_in(v.orbit_id, pa.array(orbit_ids_sample))
-            )
+            if sample_impactors is not None:
+                orbit_ids = v.orbit_id.unique()
+                orbit_ids_sample = np.random.choice(
+                    orbit_ids,
+                    np.ceil(len(orbit_ids) * sample_impactors).astype(int),
+                    replace=False,
+                )
+                sampled_variants[k] = v.__class__.from_pyarrow(
+                    v.apply_mask(
+                        pc.is_in(v.orbit_id, pa.array(orbit_ids_sample))
+                    ).table.combine_chunks()
+                )
+                print(
+                    f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(orbit_ids)}"
+                )
+            else:
+                sampled_variants[k] = v
 
     if title is None:
         prefix = ""
@@ -529,7 +557,7 @@ def plot_impact_simulation(
 
         # Create the data for the frame
         data = []
-        for k, v in propagated_variants.items():
+        for k, v in sampled_variants.items():
 
             if k == "Non-Impacting" and not show_non_impacting:
                 continue
@@ -558,10 +586,10 @@ def plot_impact_simulation(
             else:
                 color = "red"
                 size = 2
-                name = f"{k} Impacting"
+                name = f"{k.lower().capitalize()} Impacting"
                 impacts_up_to_time = impacts.apply_mask(
                     pc.and_(
-                        pc.equal(impacts.collision_object_name, k),
+                        pc.equal(impacts.collision_object.code, k),
                         pc.and_(
                             pc.equal(impacts.coordinates.time.days, time.days[0]),
                             pc.less_equal(
@@ -573,11 +601,15 @@ def plot_impact_simulation(
                 )
                 impact_count[k] = len(impacts_up_to_time)
 
+            x = v_at_time.coordinates.x.to_numpy(zero_copy_only=False) * KM_P_AU
+            y = v_at_time.coordinates.y.to_numpy(zero_copy_only=False) * KM_P_AU
+            z = v_at_time.coordinates.z.to_numpy(zero_copy_only=False) * KM_P_AU
+
             data.append(
                 go.Scatter3d(
-                    x=v_at_time.coordinates.x.to_numpy(zero_copy_only=False) * KM_P_AU,
-                    y=v_at_time.coordinates.y.to_numpy(zero_copy_only=False) * KM_P_AU,
-                    z=v_at_time.coordinates.z.to_numpy(zero_copy_only=False) * KM_P_AU,
+                    x=x,
+                    y=y,
+                    z=z,
                     mode="markers",
                     marker=dict(
                         size=size,
@@ -619,7 +651,7 @@ def plot_impact_simulation(
 
         text = f"{prefix}Time: {propagation_times_isot[i]}"
         for k in impact_count:
-            text += f"<br>{k} Impacts: {impact_count[k]} of {num_variants} Variants<br>{k} Impact Probability: {impact_count[k]/num_variants * 100:.3f}%"
+            text += f"<br>{k.lower().capitalize()} Impacts: {impact_count[k]} of {num_variants} Variants<br>{k.lower().capitalize()} Impact Probability: {impact_count[k]/num_variants * 100:.3f}%"
 
         frame = go.Frame(
             data=data,
@@ -793,7 +825,7 @@ def plot_risk_corridor(
         The risk corridor plot.
     """
     # Filter to only include impacts on the Earth
-    impacts = impacts.apply_mask(pc.equal(impacts.collision_object_name, "Earth"))
+    impacts = impacts.apply_mask(pc.equal(impacts.collision_object.code, "EARTH"))
     if len(impacts) == 0:
         raise ValueError(
             "No Earth impacts found. Other collision objects are not supported yet."
