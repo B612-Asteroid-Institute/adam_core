@@ -9,4 +9,5 @@ __all__ = [
     "Ephemeris",
     "Orbits",
     "VariantOrbits",
+    "VariantEphemeris",
 ]
