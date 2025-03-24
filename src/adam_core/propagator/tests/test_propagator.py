@@ -221,7 +221,8 @@ def test_light_time_distance_threshold():
 
 
 @pytest.mark.parametrize("max_processes", [1, 4])
-def test_generate_ephemeris_unordered_observers(max_processes):
+@pytest.mark.parametrize("input_time_scale", ["utc", "tdb"])
+def test_generate_ephemeris_unordered_observers(max_processes, input_time_scale):
     """
     Test that ephemeris generation works correctly even when observers
     are not ordered by time, verifying that physical positions don't get mixed up
@@ -244,7 +245,9 @@ def test_generate_ephemeris_unordered_observers(max_processes):
         ),
     )
     # Create observers with deliberately unordered times
-    times = Timestamp.from_mjd([59005, 59004, 59005, 59004, 59006, 59006], scale="utc")
+    times = Timestamp.from_mjd(
+        [59005, 59004, 59005, 59004, 59006, 59006], scale=input_time_scale
+    )
     codes = ["500", "500", "X05", "X05", "X05", "500"]  # Mix of observatory codes
     observers = Observers.from_codes(codes, times)
 
@@ -298,8 +301,12 @@ def test_generate_ephemeris_unordered_observers(max_processes):
     linkage = ephemeris.link_to_observers(observers)
     assert len(linkage.all_unique_values) == len(observers)
 
+    # Verify that the returned ephemeris is in UTC
+    assert ephemeris.coordinates.time.scale == "utc"
 
-def test_generate_ephemeris_variant_orbits():
+
+@pytest.mark.parametrize("input_time_scale", ["utc", "tdb"])
+def test_generate_ephemeris_variant_orbits(input_time_scale):
     """Test that ephemeris generation works correctly with variant orbits and respects covariance flag."""
 
     # Create base orbits
@@ -337,7 +344,7 @@ def test_generate_ephemeris_variant_orbits():
     )
 
     # Create observers
-    times = Timestamp.from_mjd([60001, 60002], scale="utc")
+    times = Timestamp.from_mjd([60001, 60002], scale=input_time_scale)
     observers = Observers.from_code("500", times)
 
     prop = MockPropagator()
@@ -355,3 +362,6 @@ def test_generate_ephemeris_variant_orbits():
     # Test with regular orbits and covariance=True - should work
     ephemeris = prop.generate_ephemeris(base_orbits, observers, covariance=True)
     assert len(ephemeris) == len(base_orbits) * len(times)
+
+    # Verify that the returned ephemeris is in UTC
+    assert ephemeris.coordinates.time.scale == "utc"

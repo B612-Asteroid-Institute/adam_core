@@ -24,7 +24,7 @@ from ..utils.plots.logos import (
     get_logo_base64,
 )
 from ..utils.spice import get_perturber_state
-from .impacts import EarthImpacts
+from .impacts import CollisionEvent
 
 EARTH_RADIUS_KM = c.R_EARTH_EQUATORIAL * KM_P_AU * 0.999
 MOON_RADIUS_KM = 1738.1
@@ -36,17 +36,140 @@ except ImportError:
     raise ImportError("Please install adam_core[plots] to use this feature.")
 
 
+def prepare_propagated_variants(
+    propagated_variants: Orbits, impacts: CollisionEvent
+) -> dict[str, Orbits]:
+    """
+    Sets variants propagated after their impact time to their impact coordinates on the surface of the colliding body. If the colliding body is the Earth,
+    the variants are set to the impact coordinates on the surface of the Earth. If the colliding body is the Moon, the variants are set to the impact coordinates
+    in the lunarcentric frame (but not fixed to the surface of the Moon).
+
+    Note: Due to the nature of the impact detection code, some of the variants may already be inside the sphere of the Earth when the impact is detected.
+    In these cases, the variants' distance from the geocenter is set to the radius of the Earth. The results of this function should not be used
+    for high-fidelity impact predictions but instead for visualizations of the approximate impact corridor.
+
+    Parameters
+    ----------
+    propagated_variants: Orbits
+        The propagated variants to cleanse.
+    impacts: CollisionEvent
+        The impacts detected within the variants.
+
+    Returns
+    -------
+    Orbits
+        The propagated variants with the variants after their impact time set to their impact coordinates on the surface of the Earth.
+    """
+    assert propagated_variants.coordinates.frame == "ecliptic"
+
+    colliding_bodies = impacts.collision_object.code.unique().to_pylist()
+    prepared_variants = {}
+
+    # Remove the non-impacting variants
+    impacting_variants = propagated_variants.apply_mask(
+        pc.is_in(propagated_variants.orbit_id, impacts.variant_id)
+    )
+    non_impacting_variants = propagated_variants.apply_mask(
+        pc.invert(pc.is_in(propagated_variants.orbit_id, impacts.variant_id))
+    )
+    prepared_variants["Non-Impacting"] = non_impacting_variants
+
+    for colliding_body in colliding_bodies:
+
+        if colliding_body == "EARTH":
+            radius = EARTH_RADIUS_KM
+        elif colliding_body == "MOON":
+            radius = MOON_RADIUS_KM
+        else:
+            raise ValueError(
+                f"CollisionEvent visualizations are currently supported for the Earth and Moon. {colliding_body} is not supported."
+            )
+
+        impacts_on_colliding_body = impacts.apply_mask(
+            pc.equal(impacts.collision_object.code, colliding_body)
+        )
+        impacting_variants_body = impacting_variants.apply_mask(
+            pc.is_in(impacting_variants.orbit_id, impacts_on_colliding_body.variant_id)
+        )
+
+        for impact in impacts_on_colliding_body:
+
+            post_impact_mask = pc.and_(
+                pc.is_in(impacting_variants_body.orbit_id, impact.variant_id),
+                pc.greater_equal(
+                    impacting_variants_body.coordinates.time.mjd(),
+                    impact.coordinates.time.rescale(
+                        impacting_variants_body.coordinates.time.scale
+                    ).mjd()[0],
+                ),
+            )
+
+            impacting_variants_body_correct = impacting_variants_body.apply_mask(
+                pc.invert(post_impact_mask)
+            )
+            impacting_variants_body_incorrect = impacting_variants_body.apply_mask(
+                post_impact_mask
+            )
+
+            if len(impacting_variants_body_incorrect) > 0:
+                collision_coordinates = impact.collision_coordinates
+                collision_coordinates = qv.concatenate(
+                    [
+                        collision_coordinates
+                        for _ in range(len(impacting_variants_body_incorrect))
+                    ]
+                )
+
+                # Hack: In some cases, due to the time step of the propagation, the variants may already
+                # be inside the sphere of the colliding body when the impact is detected. In these cases, the variants'
+                # distance from the bodycenter is set its radius.
+                collision_coordinates = collision_coordinates.set_column(
+                    "rho", pa.repeat(radius / KM_P_AU, len(collision_coordinates))
+                )
+
+                # Override the time of the impact coordinates to the time of the propagated variants beyond the impact time, we do
+                # this so we can then calculate position of these locations on the surface of the Earth as the Earth rotates.
+                collision_coordinates = collision_coordinates.set_column(
+                    "time", impacting_variants_body_incorrect.coordinates.time
+                )
+
+                geocentric_coordinates = transform_coordinates(
+                    collision_coordinates,
+                    representation_out=CartesianCoordinates,
+                    frame_out="ecliptic",
+                    origin_out=OriginCodes.EARTH,
+                )
+                impacting_variants_body_incorrect = (
+                    impacting_variants_body_incorrect.set_column(
+                        "coordinates",
+                        geocentric_coordinates,
+                    )
+                )
+
+            impacting_variants_body = qv.concatenate(
+                [impacting_variants_body_correct, impacting_variants_body_incorrect]
+            )
+
+        prepared_variants[colliding_body] = impacting_variants_body
+
+    return prepared_variants
+
+
 def generate_impact_visualization_data(
     orbit: Orbits,
     variant_orbits: VariantOrbits,
-    impacts: EarthImpacts,
+    impacts: CollisionEvent,
     propagator: Propagator,
     time_step: float = 5,
     time_range: float = 60,
     max_processes: Optional[int] = None,
-):
+) -> Tuple[Timestamp, Orbits, dict[str, Orbits]]:
     """
-    Generates the data for the impact visualization animation.
+    Generates the data for the impact visualization animation. The user should be careful
+    to only send in collision events that correspond to an impact with a planetary body or moon.
+    Non-impacting collisions such as close approaches have not been tested for this function.
+
+    CollisionEvents visualizations are currently supported for the Earth and Moon.
 
     Parameters
     ----------
@@ -54,7 +177,7 @@ def generate_impact_visualization_data(
         The nominal best-fit orbit to propagate.
     variant_orbits: VariantOrbits
         The variants to propagate.
-    impacts: EarthImpacts
+    impacts: CollisionEvent
         The impacts detected within the variants.
     propagator: Propagator
         The propagator to use to propagate the orbit.
@@ -67,47 +190,34 @@ def generate_impact_visualization_data(
 
     Returns
     -------
-    Tuple[Orbits, Orbits]
-        The propagated nominal best-fit orbit and the propagated variants.
+    Tuple[Timestamp, Orbits, dict[str, Orbits]]
+        The propagation times, the propagated nominal best-fit orbit and the propagated variants.
     """
-    # Create propagation times around the mean impact time
-    mean_impact_time = np.mean(
-        impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
-    )
-    first_propagation_time = (
-        mean_impact_time - time_range / 60 / 24
-    )  # round to the nearest time step
-    first_propagation_time = first_propagation_time - np.mod(
-        first_propagation_time, time_step / 60 / 24
-    )
-    last_propagation_time = mean_impact_time + time_range / 60 / 24
-    last_propagation_time = last_propagation_time - np.mod(
-        last_propagation_time, time_step / 60 / 24
-    )
+    if pc.any(
+        pc.invert(
+            pc.or_(
+                pc.equal(impacts.collision_object.code, "EARTH"),
+                pc.equal(impacts.collision_object.code, "MOON"),
+            )
+        )
+    ).as_py():
+        raise ValueError(
+            "CollisionEvents visualizations are currently supported for the Earth and Moon."
+        )
 
-    propagation_times = Timestamp.from_mjd(
-        np.arange(
-            first_propagation_time,
-            last_propagation_time + time_step / 60 / 24,
-            time_step / 60 / 24,
-        ),
-        scale=impacts.coordinates.time.scale,
-    )
+    # Calculate the range of impact times
+    impact_times = impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    first_impact_time = np.min(impact_times)
+    last_impact_time = np.max(impact_times)
 
-    # Propagate the nominal best-fit orbit to the propagation times
-    propagated_orbit = propagator.propagate_orbits(
-        orbit, propagation_times, max_processes=max_processes
+    # Create propagation times around the range of impact times
+    mjds = np.arange(
+        first_impact_time - time_range / 60 / 24,
+        last_impact_time + time_range / 60 / 24 + time_step / 60 / 24,
+        time_step / 60 / 24,
     )
-    # Transform the best-fit orbit to geocentric frame
-    propagated_orbit = propagated_orbit.set_column(
-        "coordinates",
-        transform_coordinates(
-            propagated_orbit.coordinates,
-            representation_out=CartesianCoordinates,
-            frame_out="ecliptic",
-            origin_out=OriginCodes.EARTH,
-        ),
-    )
+    mjds = mjds - np.mod(mjds, time_step / 60 / 24)
+    propagation_times = Timestamp.from_mjd(mjds, scale=impacts.coordinates.time.scale)
 
     # Propagate the variants to the propagation times
     propagated_variants = propagator.propagate_orbits(
@@ -130,85 +240,29 @@ def generate_impact_visualization_data(
         ),
     )
 
-    propagated_variants = cleanse_propagated_variants(propagated_variants, impacts)
-
-    return propagated_orbit, propagated_variants
-
-
-def cleanse_propagated_variants(propagated_variants: Orbits, impacts: EarthImpacts):
-    """
-    Sets variants propagated after their impact time to their impact coordinates on the surface of the Earth.
-
-    Note: Due to the nature of the impact detection code, some of the variants may already be inside the sphere of the Earth when the impact is detected.
-    In these cases, the variants' distance from the geocenter is set to the radius of the Earth. The results of this function should not be used
-    for high-fidelity impact predictions but instead for visualizations of the approximate impact corridor.
-
-    Parameters
-    ----------
-    propagated_variants: Orbits
-        The propagated variants to cleanse.
-    impacts: EarthImpacts
-        The impacts detected within the variants.
-
-    Returns
-    -------
-    Orbits
-        The propagated variants with the variants after their impact time set to their impact coordinates on the surface of the Earth.
-    """
-    assert propagated_variants.coordinates.frame == "ecliptic"
-    assert pc.all(
-        pc.equal(propagated_variants.coordinates.origin.code, "EARTH")
-    ).as_py()
-
-    for impact in impacts:
-
-        post_impact_mask = pc.and_(
-            pc.is_in(propagated_variants.orbit_id, impact.variant_id),
-            pc.greater_equal(
-                propagated_variants.coordinates.time.mjd(),
-                impact.coordinates.time.mjd()[0],
-            ),
-        )
-
-        propagated_variants_correct = propagated_variants.apply_mask(
-            pc.invert(post_impact_mask)
-        )
-        propagated_variants_incorrect = propagated_variants.apply_mask(post_impact_mask)
-
-        impact_coordinates = impact.impact_coordinates
-        impact_coordinates = qv.concatenate(
-            [impact_coordinates for _ in range(len(propagated_variants_incorrect))]
-        )
-
-        # Hack: In some cases, due to the time step of the propagation, the variants may already
-        # be inside the sphere of the Earth when the impact is detected. In these cases, the variants'
-        # distance from the geocenter is set to the radius of the Earth.
-        impact_coordinates = impact_coordinates.set_column(
-            "rho", pa.repeat(c.R_EARTH_EQUATORIAL, len(impact_coordinates))
-        )
-
-        # Override the time of the impact coordinates to the time of the propagated variants beyond the impact time, we do
-        # this so we can then calculate position of these locations on the surface of the Earth as the Earth rotates.
-        impact_coordinates = impact_coordinates.set_column(
-            "time", propagated_variants_incorrect.coordinates.time
-        )
-
-        geocentric_impact_coordinates = transform_coordinates(
-            impact_coordinates,
+    # Propagate the nominal best-fit orbit to the propagation times
+    propagated_orbit = propagator.propagate_orbits(
+        orbit, propagation_times, max_processes=max_processes
+    )
+    # Transform the best-fit orbit to geocentric frame
+    propagated_orbit = propagated_orbit.set_column(
+        "coordinates",
+        transform_coordinates(
+            propagated_orbit.coordinates,
             representation_out=CartesianCoordinates,
             frame_out="ecliptic",
             origin_out=OriginCodes.EARTH,
-        )
-        propagated_variants_incorrect = propagated_variants_incorrect.set_column(
-            "coordinates",
-            geocentric_impact_coordinates,
+        ),
+    )
+
+    propagated_variants = prepare_propagated_variants(propagated_variants, impacts)
+
+    for k, v in propagated_variants.items():
+        propagated_variants[k] = v.sort_by(
+            ["coordinates.time.days", "coordinates.time.nanos"]
         )
 
-        propagated_variants = qv.concatenate(
-            [propagated_variants_correct, propagated_variants_incorrect]
-        )
-
-    return propagated_variants
+    return propagation_times, propagated_orbit, propagated_variants
 
 
 def create_sphere(radius, offset=None):
@@ -274,7 +328,7 @@ def add_earth(
         frame=frame,
         origin=origin,
     )
-    x, y, z = create_sphere(EARTH_RADIUS_KM, offset=earth_state.r[0] * KM_P_AU)
+    x, y, z = create_sphere(EARTH_RADIUS_KM * 0.999, offset=earth_state.r[0] * KM_P_AU)
 
     surface_traces = []
     if coastlines:
@@ -322,6 +376,7 @@ def add_earth(
                     line=dict(color="white", width=2),
                     showlegend=False,
                     visible=show,
+                    legendgroup="Earth",
                 )
             )
 
@@ -329,10 +384,11 @@ def add_earth(
         x=x,
         y=y,
         z=z,
-        opacity=0.5,
+        opacity=1,
         colorscale=[[0, "#015294"], [1, "#015294"]],
         showscale=False,
         name="Earth",
+        legendgroup="Earth",
         showlegend=True,
         visible=show,
     )
@@ -374,8 +430,8 @@ def add_moon(
         x=x,
         y=y,
         z=z,
-        opacity=0.5,
-        colorscale=[[0, "#555555"], [1, "#555555"]],
+        opacity=1.0,
+        colorscale=[[0, "#A9A9A9"], [1, "#A9A9A9"]],
         showscale=False,
         name="Moon",
         showlegend=True,
@@ -384,9 +440,10 @@ def add_moon(
 
 
 def plot_impact_simulation(
+    propagation_times: Timestamp,
     propagated_best_fit_orbit: Orbits,
-    propagated_variants: Orbits,
-    impacts: EarthImpacts,
+    propagated_variants: dict[str, Orbits],
+    impacts: CollisionEvent,
     grid: bool = True,
     title: str = None,
     logo: bool = True,
@@ -395,7 +452,10 @@ def plot_impact_simulation(
     show_best_fit: bool = True,
     show_earth: bool = True,
     show_moon: bool = True,
-    autoplay: bool = True,
+    sample_impactors: Optional[float] = None,
+    sample_non_impactors: Optional[float] = None,
+    height: int = 720,
+    width: int = 1200,
 ) -> go.Figure:
     """
     Plot the impact simulation.
@@ -406,7 +466,7 @@ def plot_impact_simulation(
         The propagated best-fit orbit.
     propagated_variants: Orbits
         The propagated variants.
-    impacts: EarthImpacts
+    impacts: CollisionEvent
         The impacts detected within the variants.
     grid: bool, optional
         Whether to add the grid to the plot.
@@ -414,24 +474,77 @@ def plot_impact_simulation(
         The title of the plot.
     logo: bool, optional
         Whether to add the Asteroid Institute logo to the plot.
+    show_impacting: bool, optional
+        Whether to show the impacting variants.
+    show_non_impacting: bool, optional
+        Whether to show the non-impacting variants.
+    show_best_fit: bool, optional
+        Whether to show the best-fit orbit.
+    show_earth: bool, optional
+        Whether to show the Earth.
+    show_moon: bool, optional
+        Whether to show the Moon.
+    sample_impactors: Optional[float], optional
+        Randomly sample the impactors for plotting. Should be between 0 and 1.
+    sample_non_impactors: Optional[float], optional
+        Randomly sample the non-impactors for plotting. Should be between 0 and 1.
+    height: int, optional
+        The height of the plot.
+    width: int, optional
+        The width of the plot.
 
     Returns
     -------
     go.Figure
         The impact simulation plot.
     """
-    # Ensure the propagated variants and best-fit orbit are sorted by time
-    propagated_variants = propagated_variants.sort_by(
-        ["coordinates.time.days", "coordinates.time.nanos"]
-    )
-    propagated_best_fit_orbit = propagated_best_fit_orbit.sort_by(
-        ["coordinates.time.days", "coordinates.time.nanos"]
-    )
-
-    propagation_times = propagated_variants.coordinates.time.unique()
     propagation_times_isot = propagation_times.to_astropy().isot
 
-    num_variants = len(propagated_variants.orbit_id.unique())
+    num_variants = 0
+    impact_count = {}
+    sampled_variants = {}
+    for k, v in propagated_variants.items():
+        num_variants += len(v.orbit_id.unique())
+
+        if k == "Non-Impacting":
+            if sample_non_impactors is not None:
+                orbit_ids = v.orbit_id.unique()
+                orbit_ids_sample = np.random.choice(
+                    orbit_ids,
+                    np.ceil(len(orbit_ids) * sample_non_impactors).astype(int),
+                    replace=False,
+                )
+                sampled_variants[k] = v.__class__.from_pyarrow(
+                    v.apply_mask(
+                        pc.is_in(v.orbit_id, pa.array(orbit_ids_sample))
+                    ).table.combine_chunks()
+                )
+                print(
+                    f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(orbit_ids)}"
+                )
+            else:
+                sampled_variants[k] = v
+
+        if k != "Non-Impacting":
+            impact_count[k] = 0
+
+            if sample_impactors is not None:
+                orbit_ids = v.orbit_id.unique()
+                orbit_ids_sample = np.random.choice(
+                    orbit_ids,
+                    np.ceil(len(orbit_ids) * sample_impactors).astype(int),
+                    replace=False,
+                )
+                sampled_variants[k] = v.__class__.from_pyarrow(
+                    v.apply_mask(
+                        pc.is_in(v.orbit_id, pa.array(orbit_ids_sample))
+                    ).table.combine_chunks()
+                )
+                print(
+                    f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(orbit_ids)}"
+                )
+            else:
+                sampled_variants[k] = v
 
     if title is None:
         prefix = ""
@@ -442,83 +555,114 @@ def plot_impact_simulation(
     frames = []
     for i, time in enumerate(propagation_times):
 
-        # Select the propagated variants at the current time
-        time_propagated_variants_mask = pc.and_(
-            pc.equal(propagated_variants.coordinates.time.days, time.days[0]),
-            pc.equal(propagated_variants.coordinates.time.nanos, time.nanos[0]),
-        )
-        time_propagated_variants = propagated_variants.apply_mask(
-            time_propagated_variants_mask
-        )
+        # Create the data for the frame
+        data = []
+        for k, v in sampled_variants.items():
 
-        # Create a mask for the impacting and non-impacting variants
-        impactor_mask_i = pc.is_in(
-            time_propagated_variants.orbit_id, impacts.variant_id
-        )
-        impacts_at_time = impacts.apply_mask(
-            pc.less_equal(impacts.coordinates.time.mjd(), time.mjd()[0])
-        )
-        impact_count = len(impacts_at_time)
+            if k == "Non-Impacting" and not show_non_impacting:
+                continue
 
-        non_impactor_coordinates = time_propagated_variants.apply_mask(
-            pc.invert(impactor_mask_i)
-        ).coordinates
-        impactor_coordinates = time_propagated_variants.apply_mask(
-            impactor_mask_i
-        ).coordinates
-        orbit_at_time = propagated_best_fit_orbit[i].coordinates
+            if k == "Impacting" and not show_impacting:
+                continue
 
-        earth_surface, surface_traces = add_earth(time, show=show_earth)
+            v_at_time = v.apply_mask(
+                pc.and_(
+                    pc.equal(v.coordinates.time.days, time.days[0]),
+                    pc.and_(
+                        pc.less_equal(
+                            v.coordinates.time.nanos, time.nanos[0].as_py() + 100000
+                        ),
+                        pc.greater_equal(
+                            v.coordinates.time.nanos, time.nanos[0].as_py() - 100000
+                        ),
+                    ),
+                )
+            )
 
-        frame = go.Frame(
-            data=[
+            if k == "Non-Impacting":
+                color = "#5685C3"
+                size = 1
+                name = k
+            else:
+                color = "red"
+                size = 2
+                name = f"{k.lower().capitalize()} Impacting"
+                impacts_up_to_time = impacts.apply_mask(
+                    pc.and_(
+                        pc.equal(impacts.collision_object.code, k),
+                        pc.and_(
+                            pc.equal(impacts.coordinates.time.days, time.days[0]),
+                            pc.less_equal(
+                                impacts.coordinates.time.nanos,
+                                time.nanos[0].as_py() + 100000,
+                            ),
+                        ),
+                    )
+                )
+                impact_count[k] = len(impacts_up_to_time)
+
+            x = v_at_time.coordinates.x.to_numpy(zero_copy_only=False) * KM_P_AU
+            y = v_at_time.coordinates.y.to_numpy(zero_copy_only=False) * KM_P_AU
+            z = v_at_time.coordinates.z.to_numpy(zero_copy_only=False) * KM_P_AU
+
+            data.append(
                 go.Scatter3d(
-                    x=impactor_coordinates.x.to_numpy(zero_copy_only=False) * KM_P_AU,
-                    y=impactor_coordinates.y.to_numpy(zero_copy_only=False) * KM_P_AU,
-                    z=impactor_coordinates.z.to_numpy(zero_copy_only=False) * KM_P_AU,
+                    x=x,
+                    y=y,
+                    z=z,
                     mode="markers",
                     marker=dict(
-                        size=1,
-                        color="red",
+                        size=size,
+                        color=color,
                         opacity=1,
                         showscale=False,
                     ),
-                    name="Impacting Variants",
-                    visible=show_impacting,
-                ),
-                go.Scatter3d(
-                    x=non_impactor_coordinates.x.to_numpy(zero_copy_only=False)
-                    * KM_P_AU,
-                    y=non_impactor_coordinates.y.to_numpy(zero_copy_only=False)
-                    * KM_P_AU,
-                    z=non_impactor_coordinates.z.to_numpy(zero_copy_only=False)
-                    * KM_P_AU,
-                    mode="markers",
-                    marker=dict(size=1, color="#5685C3", opacity=0.5, showscale=False),
-                    name="Non-Impacting Variants",
-                    visible=show_non_impacting,
-                ),
+                    name=name,
+                    visible=True,
+                    showlegend=True,
+                )
+            )
+
+        # Add best-fit orbit
+        if show_best_fit:
+            orbit_at_time = propagated_best_fit_orbit[i].coordinates
+            data.append(
                 go.Scatter3d(
                     x=orbit_at_time.x.to_numpy(zero_copy_only=False) * KM_P_AU,
                     y=orbit_at_time.y.to_numpy(zero_copy_only=False) * KM_P_AU,
                     z=orbit_at_time.z.to_numpy(zero_copy_only=False) * KM_P_AU,
                     mode="markers",
-                    marker=dict(size=4, color="#F07620", opacity=1, showscale=False),
+                    marker=dict(
+                        size=3,
+                        color="#F07620",
+                        opacity=1,
+                        showscale=False,
+                    ),
                     name="Best-Fit Orbit",
-                    visible=show_best_fit,
-                ),
-                earth_surface,
-                add_moon(time, show=show_moon),
-                *surface_traces,
-            ],
+                    visible=True,
+                    showlegend=True,
+                )
+            )
+
+        earth_surface, surface_traces = add_earth(time, show=show_earth)
+        data.append(earth_surface)
+        data.extend(surface_traces)
+        data.append(add_moon(time, show=show_moon))
+
+        text = f"{prefix}Time: {propagation_times_isot[i]}"
+        for k in impact_count:
+            text += f"<br>{k.lower().capitalize()} Impacts: {impact_count[k]} of {num_variants} Variants<br>{k.lower().capitalize()} Impact Probability: {impact_count[k]/num_variants * 100:.3f}%"
+
+        frame = go.Frame(
+            data=data,
             name=str(i),
             layout=dict(
                 title=dict(
-                    text=f"{prefix}Time: {propagation_times_isot[i]}<br>Impacts: {impact_count} of {num_variants} Variants<br>Impact Probability: {impact_count/num_variants * 100:.3f}%",
+                    text=text,
                     x=0.01,
                     y=0.97,
                     font=dict(size=14, color="white"),
-                )
+                ),
             ),
         )
 
@@ -556,7 +700,7 @@ def plot_impact_simulation(
                 source=get_logo_base64(AsteroidInstituteLogoDark),
                 xref="paper",
                 yref="paper",
-                x=1.02,
+                x=0.96,
                 y=-0.15,
                 sizex=0.20,
                 sizey=0.20,
@@ -582,6 +726,8 @@ def plot_impact_simulation(
             yaxis=dict(title=dict(text="y [km]", font=dict(color="white")), **config),
             zaxis=dict(title=dict(text="z [km]", font=dict(color="white")), **config),
         ),
+        height=height,
+        width=width,
         autosize=True,
         margin=dict(l=7, r=7, t=10, b=7, pad=0),
         paper_bgcolor="rgb(0,0,0)",
@@ -592,7 +738,7 @@ def plot_impact_simulation(
             dict(
                 type="buttons",
                 showactive=False,
-                x=0.04,
+                x=0.03,
                 y=-0.03,
                 buttons=[
                     dict(
@@ -625,9 +771,9 @@ def plot_impact_simulation(
             dict(
                 currentvalue=dict(prefix="Time: "),
                 pad=dict(t=50),
-                len=0.85,
-                x=0.12,
-                y=0.05,
+                len=0.90 if not logo else 0.80,
+                x=0.10,
+                y=0.07,
                 font=dict(color="white", size=10),
                 steps=[
                     dict(
@@ -651,7 +797,11 @@ def plot_impact_simulation(
 
 
 def plot_risk_corridor(
-    impacts: EarthImpacts, title: Optional[str] = None, logo: bool = True
+    impacts: CollisionEvent,
+    title: Optional[str] = None,
+    logo: bool = True,
+    height: int = 720,
+    width: int = 1200,
 ) -> go.Figure:
     """
     Plot the risk corridor with toggleable globe/map views.
@@ -664,18 +814,39 @@ def plot_risk_corridor(
         Plot title
     logo : bool, optional
         Whether to add the Asteroid Institute logo to the plot.
+    height : int, optional
+        The height of the plot.
+    width : int, optional
+        The width of the plot.
 
     Returns
     -------
     go.Figure
         The risk corridor plot.
     """
+    # Filter to only include impacts on the Earth
+    impacts = impacts.apply_mask(pc.equal(impacts.collision_object.code, "EARTH"))
+    if len(impacts) == 0:
+        raise ValueError(
+            "No Earth impacts found. Other collision objects are not supported yet."
+        )
+
+    # Transform impact coordinates to ITRF
+    impacts = impacts.set_column(
+        "collision_coordinates",
+        transform_coordinates(
+            impacts.collision_coordinates,
+            representation_out=SphericalCoordinates,
+            frame_out="itrf93",
+            origin_out=OriginCodes.EARTH,
+        ),
+    )
 
     # Sort all data by time
-    times = impacts.impact_coordinates.time.to_astropy()
+    times = impacts.collision_coordinates.time.to_astropy()
     time_order = np.argsort(times.mjd)
-    lon = impacts.impact_coordinates.lon.to_numpy(zero_copy_only=False)[time_order]
-    lat = impacts.impact_coordinates.lat.to_numpy(zero_copy_only=False)[time_order]
+    lon = impacts.collision_coordinates.lon.to_numpy(zero_copy_only=False)[time_order]
+    lat = impacts.collision_coordinates.lat.to_numpy(zero_copy_only=False)[time_order]
     times = times[time_order]
 
     # Convert times to minutes since first impact
@@ -683,27 +854,29 @@ def plot_risk_corridor(
     first_impact_time = times[0].iso
     time_step = 2
 
-    color_bar_config = dict(
-        tickmode="array",
-        tickangle=0,
-        orientation="h",
-        x=0.5,
-        y=-0.3,
-        xanchor="center",
-        yanchor="bottom",
-        thickness=25,
-    )
-
     # Calculate center
     center_lon = lon[0]
     center_lat = lat[0]
 
     plot_config = dict(
+        height=height,
+        width=width,
         map=dict(
             style="open-street-map",
             center=dict(lat=center_lat, lon=center_lon),
             zoom=1,
         ),
+    )
+    color_bar_config = dict(
+        tickmode="array",
+        tickangle=0,
+        orientation="h",
+        x=0.05,
+        y=-0.3,
+        xanchor="left",
+        yanchor="bottom",
+        thickness=25,
+        len=0.90 if not logo else 0.75,
     )
 
     # Create frames for animation
@@ -802,10 +975,10 @@ def plot_risk_corridor(
                 source=get_logo_base64(AsteroidInstituteLogoLight),
                 xref="paper",
                 yref="paper",
-                x=1.03,
-                y=-0.30,
-                sizex=0.19,
-                sizey=0.19,
+                x=0.81,
+                y=-0.26,
+                sizex=0.18,
+                sizey=0.18,
                 xanchor="left",
                 yanchor="bottom",
                 layer="above",
@@ -863,8 +1036,8 @@ def plot_risk_corridor(
             dict(
                 currentvalue=dict(prefix="Variant: "),
                 pad=dict(t=50),
-                len=0.85,
-                x=0.10,
+                len=0.90 if not logo else 0.75,
+                x=0.05,
                 y=0.07,
                 font=dict(color="black", size=10),
                 steps=[
@@ -883,232 +1056,6 @@ def plot_risk_corridor(
                     for i in range(len(frames))
                 ],
             )
-        ],
-    )
-
-    return fig
-
-
-def plot_risk_corridor_globe(
-    impacts: EarthImpacts, title: Optional[str] = None
-) -> go.Figure:
-    """
-    Plot the risk corridor with toggleable globe/map views.
-    Points colored by time with a linear scale and animated sequence.
-
-    Parameters
-    ----------
-    impacts : Impact data containing coordinates
-    title : str, optional
-        Plot title
-    """
-    # Sort all data by time
-    times = impacts.impact_coordinates.time.to_astropy()
-    time_order = np.argsort(times.mjd)
-    lon = impacts.impact_coordinates.lon.to_numpy(zero_copy_only=False)[time_order]
-    lat = impacts.impact_coordinates.lat.to_numpy(zero_copy_only=False)[time_order]
-    times = times[time_order]
-
-    # Convert times to minutes since first impact
-    time_nums = (times.mjd - times.mjd.min()) * 24 * 60
-    first_impact_time = times[0].iso
-    time_step = 2
-
-    color_bar_config = dict(
-        tickmode="array",
-        tickangle=0,
-        orientation="h",
-        x=0.5,
-        y=-0.1,
-        xanchor="center",
-        yanchor="bottom",
-        thickness=25,
-    )
-
-    layout_config = dict(
-        autosize=True,
-        showlegend=True,
-        paper_bgcolor="white",
-        margin=dict(l=7, r=7, t=10, b=7, pad=0),
-    )
-
-    geo_config = dict(
-        geo=dict(
-            projection_type="orthographic",
-            showland=True,
-            showcountries=True,
-            showocean=True,
-            countrywidth=0.5,
-            landcolor="rgb(243, 243, 243)",
-            oceancolor="rgb(204, 229, 255)",
-            showcoastlines=True,
-            coastlinewidth=1,
-            showframe=False,
-            bgcolor="rgba(0,0,0,0)",
-            resolution=110,
-            showsubunits=True,
-            subunitcolor="rgb(255, 255, 255)",
-            showrivers=True,
-            rivercolor="rgb(204, 229, 255)",
-            riverwidth=1,
-            projection=dict(scale=1.0),  # Adjust scale to show full globe
-        )
-    )
-
-    # Create frames for animation
-    frames = []
-    for i in range(len(lon)):
-
-        ticktext = [
-            f"T+{i:d} min"
-            for i in np.arange(0, time_nums[-1] + time_step, time_step)
-            .astype(int)
-            .tolist()
-        ]
-        frame = go.Frame(
-            data=[
-                go.Scattergeo(
-                    lon=lon[: i + 1],
-                    lat=lat[: i + 1],
-                    mode="markers",
-                    marker=dict(
-                        size=8,
-                        color=time_nums[: i + 1],
-                        colorscale="Viridis",
-                        opacity=0.8,
-                        showscale=True,
-                        colorbar=dict(
-                            title=dict(
-                                text=f"Minutes After First Detected Possible Impact {first_impact_time}",
-                                side="top",
-                                font=dict(size=12, color="black"),
-                            ),
-                            ticktext=ticktext,
-                            tickvals=np.arange(0, time_nums[-1] + time_step, time_step),
-                            **color_bar_config,
-                        ),
-                    ),
-                    name="Variant Impact Locations",
-                    hovertext=[
-                        f"Time: {t.iso}<br>Lon: {lo:.2f}°<br>Lat: {la:.2f}°<br>+{mins:.1f} min"
-                        for t, lo, la, mins in zip(
-                            times[: i + 1],
-                            lon[: i + 1],
-                            lat[: i + 1],
-                            time_nums[: i + 1],
-                        )
-                    ],
-                )
-            ],
-            name=str(i),
-            layout=layout_config,
-        )
-        frames.append(frame)
-
-    # Create the figure with initial state
-    fig = go.Figure(
-        data=[
-            go.Scattergeo(
-                lon=[lon[0]],
-                lat=[lat[0]],
-                mode="markers",
-                marker=dict(
-                    size=8,
-                    color=[time_nums[0]],
-                    colorscale="Viridis",
-                    opacity=0.8,
-                    showscale=True,
-                    colorbar=dict(
-                        title=dict(
-                            text=f"Minutes After First Detected Possible Impact {first_impact_time}",
-                            side="top",
-                            font=dict(size=12, color="black"),
-                        ),
-                        ticktext=[
-                            f"T+{i:d} min"
-                            for i in np.arange(0, time_nums[-1] + time_step, time_step)
-                            .astype(int)
-                            .tolist()
-                        ],
-                        tickvals=np.arange(0, time_nums[-1] + time_step, time_step),
-                        **color_bar_config,
-                    ),
-                ),
-                name="Variant Impact Locations",
-                hovertext=f"Time: {times[0].iso}<br>Lon: {lon[0]:.2f}°<br>Lat: {lat[0]:.2f}°<br>+{time_nums[0]:.1f} min",
-            )
-        ],
-        frames=frames,
-        layout=layout_config,
-    )
-
-    if title is None:
-        title = "Risk Corridor"
-
-    # Update layout
-    fig.update_layout(
-        title=dict(
-            text=title, xanchor="left", yanchor="top", font=dict(size=16, color="black")
-        ),
-        **geo_config,
-        **layout_config,
-        updatemenus=[
-            dict(
-                type="buttons",
-                showactive=False,
-                x=0.05,
-                y=-0.1,
-                buttons=[
-                    dict(
-                        label="▶",
-                        method="animate",
-                        args=[
-                            None,
-                            {
-                                "frame": {"duration": 50, "redraw": True},
-                                "fromcurrent": True,
-                            },
-                        ],
-                    ),
-                    dict(
-                        label="⏸",
-                        method="animate",
-                        args=[
-                            [None],
-                            {
-                                "frame": {"duration": 0, "redraw": False},
-                                "mode": "immediate",
-                                "transition": {"duration": 0},
-                            },
-                        ],
-                    ),
-                ],
-            )
-        ],
-        # Add slider for manual control
-        sliders=[
-            {
-                "currentvalue": {"prefix": "Variant: "},
-                "pad": {"t": 50},
-                "len": 0.9,
-                "x": 0.1,
-                "y": -0.05,
-                "steps": [
-                    dict(
-                        args=[
-                            [str(i)],
-                            {
-                                "frame": {"duration": 50, "redraw": True},
-                                "mode": "immediate",
-                                "transition": {"duration": 0},
-                            },
-                        ],
-                        label=str(i),
-                        method="animate",
-                    )
-                    for i in range(len(frames))
-                ],
-            }
         ],
     )
 

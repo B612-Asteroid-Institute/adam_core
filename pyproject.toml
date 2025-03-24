@@ -52,8 +52,9 @@ dependencies = [
 
 [project.optional-dependencies]
 plots = [
-    "plotly>=5.24.1",
     "geopandas>=1.0.1",
+    "plotly>=5.24.1",
+    "nbformat>=4.2.0",
 ]
 [build-system]
 requires = ["pdm-backend"]
@@ -75,7 +76,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.2.3",
+    "adam-assist>=0.3.0",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
 ]
