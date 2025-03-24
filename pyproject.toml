@@ -76,7 +76,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist@dc2e42bed6d1741598da5f6cec8b9950284aa9e5",
+    "adam-assist>=0.3.0",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
 ]
