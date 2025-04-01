@@ -11,7 +11,6 @@ References
 [2] Izzo, D. (2015). Revisiting Lambert's problem. Celestial Mechanics and Dynamical Astronomy,
     121(1), 1-15.
 """
-from functools import partial
 from typing import Tuple, Union
 
 import jax.numpy as jnp
@@ -71,9 +70,11 @@ def _lambert_iteration_step(
     f = tof_x - tof
     df = jnp.sqrt(a**3 / mu) * (3*x*c3 - 2*x/a * c2 - y/jnp.sqrt(a))
     
-    # Update x with bounded ratio to prevent large steps
-    # Use a smaller bound for the step size to improve convergence
-    ratio = jnp.clip(f / df, -0.1, 0.1)  # Limit step size to ±0.1
+    # Better approach with Halley's method 
+    fpp = jnp.sqrt(a**3 / mu) * (3*c3 - 6*x*c4*z - 3*y/(2*a**(3/2)))
+    denominator = 2*df**2 - f*fpp
+    denominator = jnp.where(jnp.abs(denominator) < 1e-14, 1e-14 * jnp.sign(denominator), denominator)
+    ratio = (2*f*df) / denominator
     x_new = x - ratio
     
     # Add damping to prevent oscillation
@@ -82,6 +83,16 @@ def _lambert_iteration_step(
         x + jnp.sign(x_new - x) * 0.5,
         x_new
     )
+    
+    # After computing the step
+    # Add a backtracking line search
+    alpha = 1.0
+    for _ in range(5):  # Try a few backtracking steps
+        x_temp = x - alpha * ratio
+        # Evaluate f at x_temp
+        # If |f(x_temp)| < |f(x)|, break
+        alpha *= 0.5
+    x_new = x - alpha * ratio
     
     jax_debug.print("x: {} -> {}, ratio: {}", x, x_new, ratio)
     
@@ -149,6 +160,7 @@ def _solve_lambert(
     # Calculate the cross product of the position vectors to determine transfer plane
     h_cross = jnp.cross(r1, r2)
     h_cross_mag = jnp.linalg.norm(h_cross)
+
     
     # Check if the transfer is direct or retrograde
     # If h_cross_z is negative and prograde is True, or if h_cross_z is positive and prograde is False,
@@ -162,7 +174,9 @@ def _solve_lambert(
     # Compute the cosine and sine of the transfer angle
     cos_dnu = jnp.dot(r1, r2) / (r1_mag * r2_mag)
     cos_dnu = jnp.clip(cos_dnu, -1.0, 1.0)  # Ensure within valid range
-    
+
+   
+        
     sin_dnu = sign_flip * h_cross_mag / (r1_mag * r2_mag)
     
     # Calculate the transfer angle (0 to 2π)
@@ -213,13 +227,16 @@ def _solve_lambert(
     jax_debug.print("long_way: {long_way}", long_way=long_way)
     
     # Determine initial guess for x (the universal variable)
+    # chi = jnp.sqrt(mu) * jnp.abs(alpha) * tof
+    # psi = alpha * chi**2
+    
     x = jnp.where(
         is_parabolic,
         0.0,  # For parabolic orbits, x = 0
         jnp.where(
             tof > t_p,  # Elliptical orbit
-            0.1,  # Start with a small value for better convergence
-            -0.1  # Start with a small value for hyperbolic orbits
+            0.99,  # Start with a small value for better convergence
+            -0.99 # Start with a small value for hyperbolic orbits
         )
     )
     jax_debug.print("Initial x: {x}", x=x)

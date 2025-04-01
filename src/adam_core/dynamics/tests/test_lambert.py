@@ -2,9 +2,29 @@ import numpy as np
 import numpy.testing as npt
 
 from adam_core.dynamics.lambert import solve_lambert
+from adam_core.coordinates.origin import OriginGravitationalParameters
 
 # Test cases from Vallado's "Fundamentals of Astrodynamics and Applications"
 # and other well-known problems
+
+def test_lambert_solver_lamberthub():
+
+    # Initial conditions
+    mu_sun = OriginGravitationalParameters.SUN
+    r1 = np.array([0.159321004, 0.579266185, 0.052359607])  # [AU]
+    r2 = np.array([0.057594337, 0.605750797, 0.068345246])  # [AU]
+    tof = 0.010794065 * 365.25
+
+    # Solving the problem
+    v1, v2 = solve_lambert(r1, r2, tof, mu=mu_sun, tol=1e-10, max_iter=100000)
+
+    # Expected final results
+    expected_v1 = np.array([-9.303603251, 3.018641330, 1.536362143])
+    expected_v1 = expected_v1 / 365.25
+
+    # Assert the results
+    np.testing.assert_allclose(v1, expected_v1, atol=1e-6, rtol=1e-6)
+
 
 def test_lambert_solver():
     """
