@@ -1,15 +1,10 @@
 """
-Implementation of Lambert's problem
+Implementation of Lambert's problem using Izzo's method.
 
-Lambert's problem determines the orbit between two points in space in a specified time of flight.
-This solver uses the universal variables method to efficiently compute the solution.
+This implementation follows the algorithm described in:
+Izzo, D. (2015). Revisiting Lambert's problem. Celestial Mechanics and Dynamical Astronomy, 121(1), 1-15.
 
-References
-----------
-[1] Vallado, D. A. (2013). Fundamentals of Astrodynamics and Applications. 4th ed.,
-    Microcosm Press. ISBN-13: 978-1881883180
-[2] Izzo, D. (2015). Revisiting Lambert's problem. Celestial Mechanics and Dynamical Astronomy,
-    121(1), 1-15.
+Credits: Based on poliastro implementation by Juan Luis Cano Rodríguez and lamberthub by Jorge Martinez
 """
 from typing import Tuple, Union
 
@@ -20,305 +15,330 @@ from jax import debug as jax_debug
 from jax import jit, lax, vmap
 
 from ..constants import Constants as C
-from .stumpff import calc_stumpff  # Import from your existing module
 
 config.update("jax_enable_x64", True)
 
 MU = C.MU
 
+@jit
+def _hyp2f1b(x):
+    """Hypergeometric function 2F1(3, 1, 5/2, x), implemented with JAX."""
+    # Using lax.while_loop for JAX compatibility
+    def cond_fun(state):
+        _, _, _, _, res, res_old = state
+        return res != res_old
+    
+    def body_fun(state):
+        x, ii, term, res, _, _ = state
+        
+        # Update term and result
+        term = term * (3 + ii) * (1 + ii) / (5 / 2 + ii) * x / (ii + 1)
+        res_old = res
+        res += term
+        
+        return x, ii + 1, term, res, res, res_old
+    
+    # Initialize state
+    init_state = (x, 0.0, 1.0, 1.0, 1.0, 0.0)
+    
+    # Run the loop
+    x, _, _, res, _, _ = lax.while_loop(cond_fun, body_fun, init_state)
+    
+    # Return infinity for x >= 1
+    return lax.cond(x >= 1.0, lambda _: jnp.inf, lambda _: res, None)
 
 @jit
-def _lambert_iteration_step(
-    x: float,
-    ratio: float,
-    iterations: int,
-    a_min: float,
-    beta: float,
-    r1_mag: float,
-    r2_mag: float,
-    s: float,
-    c: float,
-    tof: float,
-    mu: float,
-    long_way: bool,
-) -> Tuple[float, float, int]:
-    """Single iteration step of Lambert solver."""
-    # Compute the semi-major axis
-    a = a_min / (1 - x**2 / 2)
+def _compute_y(x, ll):
+    """Computes y."""
+    return jnp.sqrt(1 - ll**2 * (1 - x**2))
+
+@jit
+def _compute_psi(x, y, ll):
+    """Computes psi."""
+    # Use lax.cond instead of if-else for JAX compatibility
+    return lax.cond(
+        x < 1.0,
+        lambda _: jnp.arccos(x * y + ll * (1 - x**2)),  # Elliptic
+        lambda _: lax.cond(
+            x > 1.0,
+            lambda _: jnp.arcsinh((y - x * ll) * jnp.sqrt(x**2 - 1)),  # Hyperbolic
+            lambda _: 0.0,  # Parabolic (x == 1)
+            None
+        ),
+        None
+    )
+
+@jit
+def _tof_equation_y(x, y, T0, ll, M):
+    """Time of flight equation with externally computed y."""
+    # Special case for small number of revolutions and specific x range
+    def small_M_case():
+        eta = y - ll * x
+        S_1 = (1 - ll - x * eta) * 0.5
+        Q = 4 / 3 * _hyp2f1b(S_1)
+        return (eta**3 * Q + 4 * ll * eta) * 0.5
     
-    # Compute y based on x and a
-    y = jnp.sqrt(r1_mag * r2_mag) * jnp.sin(beta / 2) / jnp.sqrt(a * (1 - jnp.cos(beta)))
+    # General case
+    def general_case():
+        psi = _compute_psi(x, y, ll)
+        return jnp.divide(
+            jnp.divide(psi + M * jnp.pi, jnp.sqrt(jnp.abs(1 - x**2))) - x + ll * y,
+            (1 - x**2),
+        )
     
-    # Compute z = x^2/a
-    z = x**2 / a
-    
-    # Calculate Stumpff functions using the module
-    c0, c1, c2, c3, c4, c5 = calc_stumpff(z)
-    
-    # Compute time of flight for current x
-    tof_x = jnp.sqrt(a**3 / mu) * (
-        beta - x*y/jnp.sqrt(a) - 
-        2*jnp.arcsin(jnp.sqrt(s/(2*a))) + 
-        2*jnp.sqrt(a/s)*c2*z + 
-        (2*(s - c)/jnp.sqrt(a))*c3*z
+    # Use lax.cond for conditional execution
+    T_ = lax.cond(
+        (M == 0) & (jnp.sqrt(0.6) < x) & (x < jnp.sqrt(1.4)),
+        lambda _: small_M_case(),
+        lambda _: general_case(),
+        None
     )
     
-    # If long-way transfer, adjust TOF calculation
-    tof_x = jnp.where(long_way, -tof_x, tof_x)
+    return T_ - T0
+
+@jit
+def _tof_equation(x, T0, ll, M):
+    """Time of flight equation."""
+    y = _compute_y(x, ll)
+    return _tof_equation_y(x, y, T0, ll, M)
+
+@jit
+def _tof_equation_p(x, y, T, ll):
+    """First derivative of the time of flight equation."""
+    return (3 * T * x - 2 + 2 * ll**3 * x / y) / (1 - x**2)
+
+@jit
+def _tof_equation_p2(x, y, T, dT, ll):
+    """Second derivative of the time of flight equation."""
+    return (3 * T + 5 * x * dT + 2 * (1 - ll**2) * ll**3 / y**3) / (1 - x**2)
+
+@jit
+def _tof_equation_p3(x, y, _, dT, ddT, ll):
+    """Third derivative of the time of flight equation."""
+    return (7 * x * ddT + 8 * dT - 6 * (1 - ll**2) * ll**5 * x / y**5) / (1 - x**2)
+
+@jit
+def _initial_guess(T, ll, M, low_path):
+    """Initial guess for the iterative algorithm."""
     
-    # Newton-Raphson update
-    f = tof_x - tof
-    df = jnp.sqrt(a**3 / mu) * (3*x*c3 - 2*x/a * c2 - y/jnp.sqrt(a))
+    # Single revolution case
+    def single_rev():
+        T_0 = jnp.arccos(ll) + ll * jnp.sqrt(1 - ll**2) + M * jnp.pi  # Equation 19
+        T_1 = 2 * (1 - ll**3) / 3  # Equation 21
+        
+        # Determine initial guess based on T
+        x_T0 = (T_0 / T) ** (2 / 3) - 1
+        x_T1 = 5 / 2 * T_1 / T * (T_1 - T) / (1 - ll**5) + 1
+        x_middle = jnp.exp(jnp.log(2) * jnp.log(T / T_0) / jnp.log(T_1 / T_0)) - 1
+        
+        x_T0_case = T >= T_0
+        x_T1_case = T < T_1
+        
+        return lax.cond(
+            x_T0_case,
+            lambda _: x_T0,
+            lambda _: lax.cond(
+                x_T1_case,
+                lambda _: x_T1,
+                lambda _: x_middle,
+                None
+            ),
+            None
+        )
     
-    # Better approach with Halley's method 
-    fpp = jnp.sqrt(a**3 / mu) * (3*c3 - 6*x*c4*z - 3*y/(2*a**(3/2)))
-    denominator = 2*df**2 - f*fpp
-    denominator = jnp.where(jnp.abs(denominator) < 1e-14, 1e-14 * jnp.sign(denominator), denominator)
-    ratio = (2*f*df) / denominator
-    x_new = x - ratio
+    # Multiple revolution case
+    def multi_rev():
+        x_0l = (((M * jnp.pi + jnp.pi) / (8 * T)) ** (2 / 3) - 1) / (
+            ((M * jnp.pi + jnp.pi) / (8 * T)) ** (2 / 3) + 1
+        )
+        x_0r = (((8 * T) / (M * jnp.pi)) ** (2 / 3) - 1) / (
+            ((8 * T) / (M * jnp.pi)) ** (2 / 3) + 1
+        )
+        
+        # Choose high or low path
+        return lax.cond(
+            low_path,
+            lambda _: jnp.maximum(x_0l, x_0r),
+            lambda _: jnp.minimum(x_0l, x_0r),
+            None
+        )
     
-    # Add damping to prevent oscillation
-    x_new = jnp.where(
-        jnp.abs(x_new - x) > 0.5,
-        x + jnp.sign(x_new - x) * 0.5,
-        x_new
+    # Branch based on the number of revolutions
+    return lax.cond(
+        M == 0,
+        lambda _: single_rev(),
+        lambda _: multi_rev(),
+        None
     )
-    
-    # After computing the step
-    # Add a backtracking line search
-    alpha = 1.0
-    for _ in range(5):  # Try a few backtracking steps
-        x_temp = x - alpha * ratio
-        # Evaluate f at x_temp
-        # If |f(x_temp)| < |f(x)|, break
-        alpha *= 0.5
-    x_new = x - alpha * ratio
-    
-    jax_debug.print("x: {} -> {}, ratio: {}", x, x_new, ratio)
-    
-    return x_new, ratio, iterations + 1
-
 
 @jit
-def _lambert_iteration_condition(
-    x: float,
-    ratio: float,
-    iterations: int,
-    tol: float,
-    max_iter: int,
-    no_solution: bool,
-) -> bool:
-    """Condition for continuing Lambert iteration."""
-    # Add check for NaN values and improve convergence criteria
-    is_valid = ~(jnp.isnan(x) | jnp.isnan(ratio))
-    converged = jnp.abs(ratio) < tol
-    return ~converged & (iterations < max_iter) & (~no_solution) & is_valid
-
+def _householder(p0, T0, ll, M, atol, rtol, maxiter):
+    """Find a zero of time of flight equation using the Householder method."""
+    
+    def body_fun(state):
+        p0, iter_count = state
+        
+        # Compute values needed for the Householder step
+        y = _compute_y(p0, ll)
+        fval = _tof_equation_y(p0, y, T0, ll, M)
+        T = fval + T0
+        fder = _tof_equation_p(p0, y, T, ll)
+        fder2 = _tof_equation_p2(p0, y, T, fder, ll)
+        fder3 = _tof_equation_p3(p0, y, T, fder, fder2, ll)
+        
+        # Householder step (quartic)
+        numerator = (fder**2 - fval * fder2 / 2)
+        denominator = (fder * (fder**2 - fval * fder2) + fder3 * fval**2 / 6)
+        # Avoid division by zero
+        safe_denominator = jnp.where(jnp.abs(denominator) < 1e-15, 1e-15 * jnp.sign(denominator), denominator)
+        p = p0 - fval * (numerator / safe_denominator)
+        
+        # Debug output
+        jax_debug.print("Householder iteration {}: p0 = {}, p = {}, delta = {}", 
+                        iter_count, p0, p, jnp.abs(p - p0))
+        
+        return (p, iter_count + 1)
+    
+    def cond_fun(state):
+        p0, iter_count = state
+        y = _compute_y(p0, ll)
+        fval = _tof_equation_y(p0, y, T0, ll, M)
+        
+        # Continue if not converged and not exceeded max iterations
+        delta_p_small = jnp.abs(fval) < atol
+        iter_remaining = iter_count < maxiter
+        
+        return (~delta_p_small) & iter_remaining
+    
+    # Run the Householder iterations
+    (p, _) = lax.while_loop(cond_fun, body_fun, (p0, 0))
+    
+    return p
 
 @jit
-def _solve_lambert(
+def izzo_lambert(
     r1: jnp.ndarray,
     r2: jnp.ndarray,
     tof: float,
     mu: float = MU,
+    M: int = 0,
     prograde: bool = True,
-    max_iter: int = 100,
-    tol: float = 1e-12,
+    low_path: bool = True,
+    maxiter: int = 35,
+    atol: float = 1e-10,
+    rtol: float = 1e-10,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
-    Solve Lambert's problem for two position vectors and time of flight.
-
+    Solves Lambert problem using Izzo's devised algorithm.
+    
     Parameters
     ----------
-    r1 : `~jax.numpy.ndarray` (3)
-        Initial position vector in au.
-    r2 : `~jax.numpy.ndarray` (3)
-        Final position vector in au.
-    tof : float
-        Time of flight in days.
-    mu : float
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    prograde : bool, optional
-        If True, assume prograde motion. If False, assume retrograde motion.
-    max_iter : int, optional
-        Maximum number of iterations over which to converge.
-    tol : float, optional
-        Numerical tolerance for convergence.
-
+    r1: jnp.ndarray
+        Initial position vector.
+    r2: jnp.ndarray
+        Final position vector.
+    tof: float
+        Time of flight.
+    mu: float
+        Gravitational parameter, equivalent to GM of attractor body.
+    M: int
+        Number of revolutions. Must be equal or greater than 0.
+    prograde: bool
+        If True, specifies prograde motion. Otherwise, retrograde motion is imposed.
+    low_path: bool
+        If two solutions are available, it selects between high or low path.
+    maxiter: int
+        Maximum number of iterations.
+    atol: float
+        Absolute tolerance.
+    rtol: float
+        Relative tolerance.
+        
     Returns
     -------
-    v1 : `~jax.numpy.ndarray` (3)
-        Initial velocity vector in au/day.
-    v2 : `~jax.numpy.ndarray` (3)
-        Final velocity vector in au/day.
+    v1: jnp.ndarray
+        Initial velocity vector.
+    v2: jnp.ndarray
+        Final velocity vector.
     """
-    # Convert to non-dimensional form
-    r1_mag = jnp.linalg.norm(r1)
-    r2_mag = jnp.linalg.norm(r2)
+    # Compute basic geometric quantities
+    c = r2 - r1  # Chord
+    c_norm = jnp.linalg.norm(c)
+    r1_norm = jnp.linalg.norm(r1)
+    r2_norm = jnp.linalg.norm(r2)
     
-    # Calculate the cross product of the position vectors to determine transfer plane
-    h_cross = jnp.cross(r1, r2)
-    h_cross_mag = jnp.linalg.norm(h_cross)
-
+    # Semiperimeter
+    s = (r1_norm + r2_norm + c_norm) * 0.5
     
-    # Check if the transfer is direct or retrograde
-    # If h_cross_z is negative and prograde is True, or if h_cross_z is positive and prograde is False,
-    # we need to flip the sign of the transfer angle
-    sign_flip = jnp.where(
-        (h_cross[2] < 0) == prograde,
-        -1.0,
-        1.0
+    # Normalized vectors
+    i_r1 = r1 / r1_norm
+    i_r2 = r2 / r2_norm
+    
+    # Compute angular momentum unit vector
+    i_h = jnp.cross(i_r1, i_r2)
+    i_h_norm = jnp.linalg.norm(i_h)
+    i_h = i_h / jnp.where(i_h_norm > 0, i_h_norm, 1.0)  # Avoid division by zero
+    
+    # Geometry of the problem: lambda parameter
+    ll = jnp.sqrt(1 - jnp.minimum(1.0, c_norm / s))
+    
+    # Adjust lambda and compute transfer direction based on orbit inclination
+    ll_sign = jnp.where(i_h[2] < 0, -1.0, 1.0)
+    ll = ll * ll_sign
+    
+    # Compute tangential directions
+    i_t1 = jnp.where(
+        i_h[2] < 0,
+        jnp.cross(i_r1, i_h),
+        jnp.cross(i_h, i_r1)
     )
     
-    # Compute the cosine and sine of the transfer angle
-    cos_dnu = jnp.dot(r1, r2) / (r1_mag * r2_mag)
-    cos_dnu = jnp.clip(cos_dnu, -1.0, 1.0)  # Ensure within valid range
-
-   
-        
-    sin_dnu = sign_flip * h_cross_mag / (r1_mag * r2_mag)
-    
-    # Calculate the transfer angle (0 to 2π)
-    dnu = jnp.arctan2(sin_dnu, cos_dnu)
-    
-    # Ensure positive transfer angle
-    dnu = jnp.where(dnu < 0, dnu + 2 * jnp.pi, dnu)
-    
-    # Determine if the transfer is long-way (more than 180 degrees)
-    long_way = dnu > jnp.pi
-    
-    # Adjust for long-way transfers by flipping sign for retrograde orbits
-    dnu = jnp.where(
-        ~prograde & long_way,
-        2 * jnp.pi - dnu,
-        dnu
-    )
-    long_way = jnp.where(~prograde, ~long_way, long_way)
-    
-    # Parameter of the problem
-    c = jnp.sqrt(r1_mag**2 + r2_mag**2 - 2 * r1_mag * r2_mag * jnp.cos(dnu))  # chord
-    s = (r1_mag + r2_mag + c) / 2  # semi-perimeter
-    a_min = s / 2  # minimum energy semi-major axis
-    beta = 2 * jnp.arcsin(jnp.sqrt((s - c) / s))  # transfer angle
-    
-    # Adjust beta for long-way transfers
-    beta = jnp.where(long_way, 2 * jnp.pi - beta, beta)
-    
-    # Calculate the parabolic time of flight
-    t_p = jnp.sqrt(2 / mu) * (s**(3/2) - jnp.sign(jnp.sin(dnu)) * (s - c)**(3/2)) / 3
-    
-    # Handle special cases
-    # Parabolic orbit - TOF almost exactly matches parabolic TOF
-    is_parabolic = jnp.abs(tof - t_p) < tol
-    
-    # No good solution exists if TOF < t_p
-    no_solution = tof < t_p
-    
-    # Debug printing
-    print("Debug values:")
-    jax_debug.print("t_p: {t_p}", t_p=t_p)
-    jax_debug.print("is_parabolic: {is_parabolic}", is_parabolic=is_parabolic)
-    jax_debug.print("no_solution: {no_solution}", no_solution=no_solution)
-    jax_debug.print("s: {s}", s=s)
-    jax_debug.print("c: {c}", c=c)
-    jax_debug.print("beta: {beta}", beta=beta)
-    jax_debug.print("dnu: {dnu}", dnu=dnu)
-    jax_debug.print("long_way: {long_way}", long_way=long_way)
-    
-    # Determine initial guess for x (the universal variable)
-    # chi = jnp.sqrt(mu) * jnp.abs(alpha) * tof
-    # psi = alpha * chi**2
-    
-    x = jnp.where(
-        is_parabolic,
-        0.0,  # For parabolic orbits, x = 0
-        jnp.where(
-            tof > t_p,  # Elliptical orbit
-            0.99,  # Start with a small value for better convergence
-            -0.99 # Start with a small value for hyperbolic orbits
-        )
-    )
-    jax_debug.print("Initial x: {x}", x=x)
-    
-    # Initial values for iterative solution
-    ratio = 1.0
-    iterations = 0
-    
-    # Define carry structure for while loop
-    def body_fun(carry):
-        x, ratio, iterations = carry
-        return _lambert_iteration_step(
-            x, ratio, iterations,
-            a_min, beta, r1_mag, r2_mag,
-            s, c, tof, mu, long_way
-        )
-    
-    def cond_fun(carry):
-        x, ratio, iterations = carry
-        return _lambert_iteration_condition(
-            x, ratio, iterations,
-            tol, max_iter, no_solution
-        )
-    
-    # Solve iteratively
-    x, ratio, iterations = lax.while_loop(
-        cond_fun,
-        body_fun,
-        (x, ratio, iterations)
+    i_t2 = jnp.where(
+        i_h[2] < 0,
+        jnp.cross(i_r2, i_h),
+        jnp.cross(i_h, i_r2)
     )
     
-    # Post-process results to compute velocity vectors
-    # Compute semi-major axis
-    jax_debug.print("x: {}, x**2: {}, x**2/2: {}", x, x**2, x**2/2)
-    jax_debug.print("1 - x**2/2: {}", 1 - x**2/2)
-    jax_debug.print("a_min: {}", a_min)
-    a = a_min / (1 - x**2 / 2)
-    jax_debug.print("Final a: {}", a)
+    # Account for retrograde motion
+    ll = jnp.where(~prograde, -ll, ll)
+    i_t1 = jnp.where(~prograde, -i_t1, i_t1)
+    i_t2 = jnp.where(~prograde, -i_t2, i_t2)
     
-    # Compute y based on x and a
-    jax_debug.print("r1_mag: {}, r2_mag: {}", r1_mag, r2_mag)
-    jax_debug.print("beta: {}", beta)
-    jax_debug.print("a * (1 - cos(beta)): {}", a * (1 - jnp.cos(beta)))
-    y = jnp.sqrt(r1_mag * r2_mag) * jnp.sin(beta / 2) / jnp.sqrt(a * (1 - jnp.cos(beta)))
-    jax_debug.print("Final y: {}", y)
+    # Non-dimensional time of flight
+    T = jnp.sqrt(2 * mu / s**3) * tof
     
-    # Compute z = x^2/a
-    z = x**2 / a
-    jax_debug.print("Final z: {}", z)
+    # Find x using Householder iterations
+    x_0 = _initial_guess(T, ll, M, low_path)
+    jax_debug.print("Initial guess x_0 = {}", x_0)
     
-    # Get Stumpff functions
-    c0, c1, c2, c3, c4, c5 = calc_stumpff(z)
-    jax_debug.print("Final Stumpff c2, c3: {}, {}", c2, c3)
+    x = _householder(x_0, T, ll, M, atol, rtol, maxiter)
+    jax_debug.print("Final x = {}", x)
     
-    # Compute parameters needed for Lagrange coefficients
-    r12 = r1 - r2
-    r12_mag = jnp.linalg.norm(r12)
-    jax_debug.print("r12_mag: {}", r12_mag)
+    # Compute y from converged x
+    y = _compute_y(x, ll)
+    jax_debug.print("Final y = {}", y)
     
-    # Compute the Lagrange coefficients f, g, fdot, gdot
-    f = 1 - y**2 / r1_mag
-    g = r1_mag * r2_mag * jnp.sin(beta) / jnp.sqrt(mu * a)
-    g = jnp.where(long_way, -g, g)
-    jax_debug.print("f: {}, g: {}", f, g)
+    # Reconstruct the solution
+    gamma = jnp.sqrt(mu * s / 2)
+    rho = (r1_norm - r2_norm) / c_norm
+    sigma = jnp.sqrt(1 - rho**2)
     
-    fdot = jnp.sqrt(mu) / (r1_mag * r2_mag) * y * (z * c3 - 1)
-    gdot = 1 - y**2 / r2_mag
-    jax_debug.print("fdot: {}, gdot: {}", fdot, gdot)
+    # Compute velocity components
+    V_r1 = gamma * ((ll * y - x) - rho * (ll * y + x)) / r1_norm
+    V_r2 = -gamma * ((ll * y - x) + rho * (ll * y + x)) / r2_norm
+    V_t1 = gamma * sigma * (y + ll * x) / r1_norm
+    V_t2 = gamma * sigma * (y + ll * x) / r2_norm
     
-    # Compute velocities
-    v1 = (r2 - f * r1) / g
-    v2 = (gdot * r2 - r1) / g
-    jax_debug.print("v1: {}, v2: {}", v1, v2)
+    # Construct velocity vectors
+    v1 = V_r1 * i_r1 + V_t1 * i_t1
+    v2 = V_r2 * i_r2 + V_t2 * i_t2
     
     return v1, v2
 
-
 # Vectorize the Lambert solver
-_solve_lambert_vmap = jit(
-    vmap(_solve_lambert, in_axes=(0, 0, 0, None, None, None, None), out_axes=(0, 0))
+_izzo_lambert_vmap = jit(
+    vmap(izzo_lambert, in_axes=(0, 0, 0, None, None, None, None, None, None, None), out_axes=(0, 0))
 )
-
 
 def solve_lambert(
     r1: Union[np.ndarray, jnp.ndarray],
@@ -326,38 +346,39 @@ def solve_lambert(
     tof: Union[np.ndarray, float],
     mu: float = MU,
     prograde: bool = True,
-    max_iter: int = 100,
-    tol: float = 1e-12,
+    max_iter: int = 35,
+    tol: float = 1e-10,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Solve Lambert's problem for multiple initial and final positions and times of flight.
+    
+    This implementation uses Izzo's method which is robust and handles all orbit types.
 
     Parameters
     ----------
-    r1 : `~numpy.ndarray` or `~jax.numpy.ndarray` (N, 3)
+    r1 : array_like (N, 3)
         Initial position vectors in au.
-    r2 : `~numpy.ndarray` or `~jax.numpy.ndarray` (N, 3)
+    r2 : array_like (N, 3)
         Final position vectors in au.
-    tof : `~numpy.ndarray` or float (N) or scalar
+    tof : array_like (N) or float
         Times of flight in days.
     mu : float, optional
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
+        Gravitational parameter (GM) of the attracting body in units of au³/day².
     prograde : bool, optional
         If True, assume prograde motion. If False, assume retrograde motion.
     max_iter : int, optional
-        Maximum number of iterations over which to converge.
+        Maximum number of iterations for convergence.
     tol : float, optional
-        Numerical tolerance for convergence.
+        Convergence tolerance.
 
     Returns
     -------
-    v1 : `~numpy.ndarray` (N, 3)
+    v1 : ndarray (N, 3)
         Initial velocity vectors in au/day.
-    v2 : `~numpy.ndarray` (N, 3)
+    v2 : ndarray (N, 3)
         Final velocity vectors in au/day.
     """
-    # Convert inputs to jnp arrays if they are not already
+    # Convert inputs to jnp arrays
     r1 = jnp.asarray(r1)
     r2 = jnp.asarray(r2)
     
@@ -373,20 +394,19 @@ def solve_lambert(
     else:
         tof = jnp.asarray(tof)
     
-    # Call the vectorized solver
-    v1, v2 = _solve_lambert_vmap(r1, r2, tof, mu, prograde, max_iter, tol)
+    # Call vectorized solver (M=0 for single-revolution case)
+    v1, v2 = _izzo_lambert_vmap(r1, r2, tof, mu, 0, prograde, True, max_iter, tol, tol)
     
-    # Convert back to numpy arrays
+    # Convert to numpy arrays
     v1 = np.asarray(v1)
     v2 = np.asarray(v2)
     
-    # If inputs were scalars, return scalar outputs
+    # Return scalar outputs if inputs were scalar
     if len(v1) == 1:
         v1 = v1[0]
         v2 = v2[0]
     
     return v1, v2
-
 
 def generate_porkchop_data(
     r1_func,
@@ -395,8 +415,8 @@ def generate_porkchop_data(
     arrival_times,
     mu: float = MU,
     prograde: bool = True,
-    max_iter: int = 100,
-    tol: float = 1e-12,
+    max_iter: int = 35,
+    tol: float = 1e-10,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Generate data for a porkchop plot by solving Lambert's problem for a grid of
@@ -433,16 +453,16 @@ def generate_porkchop_data(
     """
     n_deps = len(departure_times)
     n_arrs = len(arrival_times)
-    
+
     # Initialize arrays to store results
     delta_v_departure = np.zeros((n_deps, n_arrs))
     delta_v_arrival = np.zeros((n_deps, n_arrs))
     total_delta_v = np.zeros((n_deps, n_arrs))
-    
+
     # Precompute positions at all times
     r1_positions = np.array([r1_func(t) for t in departure_times])
     r2_positions = np.array([r2_func(t) for t in arrival_times])
-    
+
     # For each departure and arrival time combination
     for i, t1 in enumerate(departure_times):
         for j, t2 in enumerate(arrival_times):
@@ -452,36 +472,38 @@ def generate_porkchop_data(
                 delta_v_arrival[i, j] = np.nan
                 total_delta_v[i, j] = np.nan
                 continue
-                
+
             # Get positions
             r1 = r1_positions[i]
             r2 = r2_positions[j]
-            
+
             # Time of flight
             tof = t2 - t1
-            
+
             # Solve Lambert's problem
             try:
-                v1_trans, v2_trans = solve_lambert(r1, r2, tof, mu, prograde, max_iter, tol)
-                
+                v1_trans, v2_trans = solve_lambert(
+                    r1, r2, tof, mu, prograde, max_iter, tol
+                )
+
                 # Get velocity of departure body at departure time
                 v1_body = r1_func(t1, return_velocity=True)[1]
-                
+
                 # Get velocity of arrival body at arrival time
                 v2_body = r2_func(t2, return_velocity=True)[1]
-                
+
                 # Calculate delta-v
                 dv1 = np.linalg.norm(v1_trans - v1_body)
                 dv2 = np.linalg.norm(v2_trans - v2_body)
-                
+
                 delta_v_departure[i, j] = dv1
                 delta_v_arrival[i, j] = dv2
                 total_delta_v[i, j] = dv1 + dv2
-                
+
             except:
                 # In case Lambert solver fails
                 delta_v_departure[i, j] = np.nan
                 delta_v_arrival[i, j] = np.nan
                 total_delta_v[i, j] = np.nan
-    
+
     return delta_v_departure, delta_v_arrival, total_delta_v

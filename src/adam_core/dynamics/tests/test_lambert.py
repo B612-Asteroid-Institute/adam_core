@@ -1,8 +1,11 @@
 import numpy as np
 import numpy.testing as npt
 
+from adam_core.constants import KM_P_AU, S_P_DAY
+from adam_core.coordinates.origin import OriginCodes, OriginGravitationalParameters
 from adam_core.dynamics.lambert import solve_lambert
-from adam_core.coordinates.origin import OriginGravitationalParameters
+from adam_core.time import Timestamp
+from adam_core.utils.spice import get_perturber_state
 
 # Test cases from Vallado's "Fundamentals of Astrodynamics and Applications"
 # and other well-known problems
@@ -13,13 +16,14 @@ def test_lambert_solver_lamberthub():
     mu_sun = OriginGravitationalParameters.SUN
     r1 = np.array([0.159321004, 0.579266185, 0.052359607])  # [AU]
     r2 = np.array([0.057594337, 0.605750797, 0.068345246])  # [AU]
-    tof = 0.010794065 * 365.25
+    tof = 0.010794065 * 365.25  # Convert years to days
 
     # Solving the problem
     v1, v2 = solve_lambert(r1, r2, tof, mu=mu_sun, tol=1e-10, max_iter=100000)
 
-    # Expected final results
+    # Expected final results (in AU/year)
     expected_v1 = np.array([-9.303603251, 3.018641330, 1.536362143])
+    # Convert expected velocities from AU/year to AU/day
     expected_v1 = expected_v1 / 365.25
 
     # Assert the results
@@ -185,3 +189,29 @@ def test_lambert_solver_long_way():
     transfer_angle = np.arccos(np.clip(np.dot(r1, r2) / (np.linalg.norm(r1) * np.linalg.norm(r2)), -1.0, 1.0))
     assert transfer_angle > np.pi
 
+def test_lambert_solver_earth_mars():
+    """
+    https://www.researchgate.net/publication/323256893_Survey_of_Earth-Mars_Trajectories_using_Lambert's_Problem_and_Applications#pfd
+    
+    Departure from Earth July 27, 2020 
+    Arrival at Mars February 19, 2021
+    Time of Flight: 207 days
+
+    """
+    departure_time = Timestamp.from_iso8601(["2020-07-27T00:00:00Z"], scale="utc")
+    arrival_time = Timestamp.from_iso8601(["2021-02-19T00:00:00Z"], scale="utc")
+
+    departure_state = get_perturber_state(OriginCodes.EARTH, departure_time)
+    arrival_state = get_perturber_state(OriginCodes.MARS_BARYCENTER, arrival_time)
+
+    v1, v2 = solve_lambert(departure_state.r, arrival_state.r, 207.0, mu=OriginGravitationalParameters.SUN)
+    # Calculate C3 (characteristic energy) in km^2/s^2
+    # C3 is the square of the hyperbolic excess velocity relative to Earth
+    earth_escape_velocity = np.sqrt(2 * OriginGravitationalParameters.EARTH)
+    earth_escape_velocity_km_s = earth_escape_velocity * KM_P_AU / S_P_DAY
+    v1_km_s = v1 * KM_P_AU / S_P_DAY
+    c3 = np.linalg.norm(v1_km_s)**2 - earth_escape_velocity_km_s**2
+    print(f"\nC3: {c3:.2f} km^2/s^2")
+
+    print(v1 * KM_P_AU / S_P_DAY)
+    print(v2 * KM_P_AU / S_P_DAY)
