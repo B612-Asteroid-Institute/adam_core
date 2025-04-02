@@ -1,22 +1,24 @@
 from typing import Optional, Tuple, Union
 
 import numpy as np
+import numpy.typing as npt
 import quivr as qv
 import ray
 
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
-from adam_core.dynamics.lambert import solve_lambert
+from adam_core.dynamics.lambert import calculate_c3, solve_lambert
 from adam_core.orbits import Orbit
 from adam_core.propagator import Propagator
 from adam_core.ray_cluster import initialize_use_ray
 from adam_core.time import Timestamp
 from adam_core.utils import get_perturber_state
+from adam_core.utils.iter import _iterate_chunk_indices
 
 
 class LambertOutput(qv.Table):
-    departure_time = Timestamp.as_column()
-    arrival_time = Timestamp.as_column()
+    departure_body = CartesianCoordinates.as_column()
+    arrival_body = CartesianCoordinates.as_column()
     vx_1 = qv.Float64Column()
     vy_1 = qv.Float64Column()
     vz_1 = qv.Float64Column()
@@ -25,8 +27,21 @@ class LambertOutput(qv.Table):
     vz_2 = qv.Float64Column()
     origin = Origin.as_column()
 
-    def c3(self) -> float:
-        pass
+    def c3(self) -> npt.NDArray[np.float64]:
+        """
+        Return the C3 in au^2/d^2.
+        """
+        return calculate_c3(
+            np.array([self.vx_1, self.vy_1, self.vz_1]),
+            self.departure_body.v.to_numpy(zero_copy_only=False)
+        )
+    
+    def time_of_flight(self) -> npt.NDArray[np.float64]:
+        """
+        Return the time of flight in days.
+        """
+        return self.arrival_body.timestamp.mjd().to_numpy(zero_copy_only=False) - self.departure_body.timestamp.mjd().to_numpy(zero_copy_only=False)
+
 
 
 def lambert_worker(
@@ -48,8 +63,8 @@ def lambert_worker(
     v1, v2 = solve_lambert(r1, r2, tof, mu, prograde, max_iter, tol)
 
     return LambertOutput.from_kwargs(
-        departure_time=departure_coordinates.timestamp,
-        arrival_time=arrival_coordinates.timestamp,
+        departure_body=departure_coordinates,
+        arrival_body=arrival_coordinates,
         vx_1=v1[:, 0],
         vy_1=v1[:, 1],
         vz_1=v1[:, 2],
@@ -192,7 +207,39 @@ def generate_porkchop_data(
 
     use_ray = initialize_use_ray(max_processes)
 
+    lambert_results = LambertOutput.empty()
     if use_ray:
         futures = []
-        for i in range(len(stacked_departure_coordinates)):
-            # TODO: actually queue up the work
+        for start, end in _iterate_chunk_indices(stacked_departure_coordinates, chunk_size=100):
+            futures.append(
+                lambert_worker_remote.remote(
+                    stacked_departure_coordinates[start:end],
+                    stacked_arrival_coordinates[start:end],
+                    propagation_origin,
+                    prograde,
+                    max_iter,
+                    tol,
+                )
+            )
+
+            if len(futures) > 1.5 * max_processes:
+                finished, futures = ray.wait(futures, num_returns=1)
+                result = ray.get(finished[0])
+                lambert_results = qv.concatenate([lambert_results, result])
+
+        while futures:
+            finished, futures = ray.wait(futures, num_returns=1)
+            result = ray.get(finished[0])
+            lambert_results = qv.concatenate([lambert_results, result])
+
+    else:
+        lambert_results = lambert_worker(
+            stacked_departure_coordinates,
+            stacked_arrival_coordinates,
+            propagation_origin,
+            prograde,
+            max_iter,
+            tol,
+        )
+
+    return lambert_results
