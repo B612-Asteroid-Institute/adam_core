@@ -601,9 +601,9 @@ def solve_lambert(
     Returns
     -------
     v1 : ndarray (N, 3)
-        Initial velocity vectors in au/day.
+        Initial velocity vectors in au/day with origin at the attractor
     v2 : ndarray (N, 3)
-        Final velocity vectors in au/day.
+        Final velocity vectors in au/day with origin at the attractor
     """
     # Convert inputs to jnp arrays
     r1 = jnp.asarray(r1)

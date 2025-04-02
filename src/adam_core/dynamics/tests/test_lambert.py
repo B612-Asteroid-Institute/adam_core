@@ -5,6 +5,7 @@ import pyarrow.compute as pc
 from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates.origin import OriginCodes, OriginGravitationalParameters
 from adam_core.dynamics.lambert import calculate_c3, solve_lambert
+from adam_core.orbits.query.horizons import query_horizons
 from adam_core.time import Timestamp
 from adam_core.utils.spice import get_perturber_state
 
@@ -31,9 +32,12 @@ def test_lambert_solver_lamberthub():
     np.testing.assert_allclose(v1, expected_v1, atol=1e-6, rtol=1e-6)
 
 
-
-def test_lambert_mars_perseverance():
+def test_lambert_mars_2020():
     """
+    Test the Lambert solver for the Mars 2020 mission.
+
+    Values from https://www.ulalaunch.com/docs/default-source/launch-booklets/mars2020_mobrochure_200717.pdf
+
     C3: 14.49 km2/s2
     Launch date July 30, 2020
     Mars arrival Feb. 18, 2021
@@ -45,13 +49,11 @@ def test_lambert_mars_perseverance():
     mars_arrival = get_perturber_state(OriginCodes.MARS_BARYCENTER, arrival_date, frame="ecliptic", origin=OriginCodes.SUN)
 
     tof = pc.subtract(mars_arrival.time.mjd(), earth_departure.time.mjd())[0].as_py()
-    print(f"TOF: {tof}")
     v1, v2 = solve_lambert(earth_departure.r, mars_arrival.r, tof, mu=mu_sun, prograde=True, tol=1e-10, max_iter=100000)
-
     c3 = calculate_c3(v1, earth_departure.v)
-    print(f"C3: {c3}")
-    # Convert from km²/s² to au²/day²
-    reported_c3 = 14.49 / ((KM_P_AU**2) * (S_P_DAY**2))
-    print(f"Reported C3: {reported_c3}")
-    assert np.isclose(c3, reported_c3, rtol=1e-6)
+    c3_km2_s2 = c3 * KM_P_AU**2 / S_P_DAY**2
     
+    reported_c3 = 14.49
+    assert np.isclose(c3_km2_s2, reported_c3, rtol=1e-6)
+    
+
