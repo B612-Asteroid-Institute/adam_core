@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 
@@ -85,6 +86,10 @@ class OriginGravitationalParameters(float, Enum):
 #       Investigate whether this class is even necessary
 class Origin(qv.Table):
     code = qv.LargeStringColumn()
+
+    @classmethod
+    def from_OriginCodes(cls, code: OriginCodes, size: int = 1) -> "Origin":
+        return cls.from_kwargs(code=pa.repeat(code.name, size))
 
     def as_OriginCodes(self) -> OriginCodes:
         """
