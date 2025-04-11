@@ -26,23 +26,29 @@ def _hyp2f1b(x):
     """Hypergeometric function 2F1(3, 1, 5/2, x), implemented with JAX."""
     # Set a finite number of iterations instead of convergence check
     MAX_ITER = 100
-    
+
     # Using lax.scan for JAX compatibility
     def body_fun(state, i):
         x, term, res = state
-        
+
         # Update term and result
         term = term * (3 + i) * (1 + i) / (5 / 2 + i) * x / (i + 1)
         res += term
-        
+
         return (x, term, res), None
-    
+
     # Initialize state
-    init_state = (x.astype(jnp.float64), jnp.ones_like(x, dtype=jnp.float64), jnp.ones_like(x, dtype=jnp.float64))
-    
+    init_state = (
+        x.astype(jnp.float64),
+        jnp.ones_like(x, dtype=jnp.float64),
+        jnp.ones_like(x, dtype=jnp.float64),
+    )
+
     # Run the loop with fixed iterations
-    (_, _, res), _ = lax.scan(body_fun, init_state, jnp.arange(MAX_ITER, dtype=jnp.float64))
-    
+    (_, _, res), _ = lax.scan(
+        body_fun, init_state, jnp.arange(MAX_ITER, dtype=jnp.float64)
+    )
+
     # Set to infinity for x >= 1
     return jnp.where(x >= 1.0, jnp.inf, res)
 
@@ -61,17 +67,16 @@ def _compute_psi(x, y, ll):
 
     # Elliptic case (x < 1.0)
     elliptic = jnp.arccos(jnp.clip(arccos_arg, -1.0, 1.0))
-    
+
     # Hyperbolic case (x > 1.0)
     hyperbolic = jnp.arcsinh((y - x * ll) * jnp.sqrt(x**2 - 1))
-    
+
     # Parabolic case (x == 1.0)
     parabolic = jnp.zeros_like(x)
-    
+
     # Use where statements instead of conditionals
-    result = jnp.where(x < 1.0, elliptic, 
-                jnp.where(x > 1.0, hyperbolic, parabolic))
-    
+    result = jnp.where(x < 1.0, elliptic, jnp.where(x > 1.0, hyperbolic, parabolic))
+
     return result
 
 
@@ -85,15 +90,13 @@ def _tof_equation_y(x, y, T0, ll, M):
     S_1 = (1 - ll - x * eta) * 0.5
     Q = 4 / 3 * _hyp2f1b(S_1)
     small_M_result = (eta**3 * Q + 4 * ll * eta) * 0.5
-    
 
     # Calculate values for general case
     psi = _compute_psi(x, y, ll)
     sqrt_term = jnp.sqrt(jnp.abs(1 - x**2))
     numerator = jnp.divide(psi + M * jnp.pi, sqrt_term) - x + ll * y
-    denominator = (1 - x**2)
+    denominator = 1 - x**2
     general_result = jnp.divide(numerator, denominator)
-    
 
     # Use where for conditional selection
     use_small_M = (M == 0) & (jnp.sqrt(0.6) < x) & (x < jnp.sqrt(1.4))
@@ -139,19 +142,17 @@ def _initial_guess(T, ll, M, low_path):
     # Determine initial guess based on T
     x_T0 = (T_0 / T) ** (2 / 3) - 1
     x_T1 = 5 / 2 * T_1 / T * (T_1 - T) / (1 - ll**5) + 1
-    
+
     # For the middle case, use logarithmic interpolation
     x_middle = jnp.exp(jnp.log(2) * jnp.log(T / T_0) / jnp.log(T_1 / T_0)) - 1
 
     # Create masks for the cases
     case_T_ge_T0 = T >= T_0
     case_T_lt_T1 = T < T_1
-    
+
     # Select appropriate single-revolution case
     x_single_rev = jnp.where(
-        case_T_ge_T0, 
-        x_T0, 
-        jnp.where(case_T_lt_T1, x_T1, x_middle)
+        case_T_ge_T0, x_T0, jnp.where(case_T_lt_T1, x_T1, x_middle)
     )
 
     # Multiple revolution case
@@ -163,15 +164,11 @@ def _initial_guess(T, ll, M, low_path):
     )
 
     # Choose high or low path for multi-rev
-    x_multi_rev = jnp.where(
-        low_path,
-        jnp.maximum(x_0l, x_0r),
-        jnp.minimum(x_0l, x_0r)
-    )
+    x_multi_rev = jnp.where(low_path, jnp.maximum(x_0l, x_0r), jnp.minimum(x_0l, x_0r))
 
     # Final selection based on M
     result = jnp.where(M == 0, x_single_rev, x_multi_rev)
-    
+
     return result
 
 
@@ -184,7 +181,7 @@ def _householder(p0, T0, ll, M, atol, rtol, maxiter):
 
         # Update p0 to be the current p
         p0 = p
-        
+
         # Compute values needed for the Householder step
         y = _compute_y(p0, ll)
         fval = _tof_equation_y(p0, y, T0, ll, M)
@@ -196,14 +193,12 @@ def _householder(p0, T0, ll, M, atol, rtol, maxiter):
         # Householder step (quartic)
         numerator = fder**2 - fval * fder2 / 2
         denominator = fder * (fder**2 - fval * fder2) + fder3 * fval**2 / 6
-        
+
         # Avoid division by zero with a safer approach
         safe_denominator = jnp.where(
-            jnp.abs(denominator) < 1e-15, 
-            jnp.sign(denominator) * 1e-15,
-            denominator
+            jnp.abs(denominator) < 1e-15, jnp.sign(denominator) * 1e-15, denominator
         )
-        
+
         # Compute the new value with safeguards against large steps
         delta = fval * (numerator / safe_denominator)
         # Limit step size to prevent divergence
@@ -215,7 +210,7 @@ def _householder(p0, T0, ll, M, atol, rtol, maxiter):
 
     def cond_fun(state):
         p0, p, iter_count = state
-        
+
         # Check both max iterations and convergence criteria
         delta_x = jnp.abs(p - p0)
         converged = delta_x < (rtol * jnp.abs(p0) + atol)
@@ -225,12 +220,14 @@ def _householder(p0, T0, ll, M, atol, rtol, maxiter):
 
     # Initialize state with different p value to ensure at least one iteration runs
     # Set p to be slightly different from p0 to trigger at least one iteration
-    init_p = p0 * 1.1 + 0.01  # Ensure it's different enough to avoid immediate convergence
+    init_p = (
+        p0 * 1.1 + 0.01
+    )  # Ensure it's different enough to avoid immediate convergence
     init_state = (p0, init_p, 0)
-    
+
     # Run the Householder iterations
     _, p, iteration_count = lax.while_loop(cond_fun, body_fun, init_state)
-    
+
     # Check if we reached max iterations without converging
     max_reached = iteration_count >= maxiter
     return p
@@ -239,40 +236,41 @@ def _householder(p0, T0, ll, M, atol, rtol, maxiter):
 @jit
 def _compute_T_min(ll, M, maxiter, atol, rtol):
     """Compute minimum T."""
-    
+
     # Case 1: ll == 1
     x_T_min_case1 = 0.0
     T_min_case1 = _tof_equation(x_T_min_case1, 0.0, ll, M)
-    
+
     # Case 2: ll != 1 and M == 0
     x_T_min_case2 = jnp.inf
     T_min_case2 = 0.0
-    
+
     # Case 3: ll != 1 and M != 0
     # Set x_i > 0 to avoid problems at ll = -1
     x_i = 0.1
     T_i = _tof_equation(x_i, 0.0, ll, M)
     x_T_min_case3 = _halley(x_i, T_i, ll, atol, rtol, maxiter)
     T_min_case3 = _tof_equation(x_T_min_case3, 0.0, ll, M)
-    
+
     # Select the appropriate case using masks
     is_ll_one = jnp.abs(ll - 1.0) < 1e-10
     is_m_zero = M == 0
-    
+
     # First choose between case 2 and case 3 based on M
     x_T_min_case23 = jnp.where(is_m_zero, x_T_min_case2, x_T_min_case3)
     T_min_case23 = jnp.where(is_m_zero, T_min_case2, T_min_case3)
-    
+
     # Then choose between case 1 and the result of case23 based on ll
     x_T_min = jnp.where(is_ll_one, x_T_min_case1, x_T_min_case23)
     T_min = jnp.where(is_ll_one, T_min_case1, T_min_case23)
-    
+
     return x_T_min, T_min
 
 
 @jit
 def _halley(p0, T0, ll, atol, rtol, maxiter):
     """Find a minimum of time of flight equation using the Halley method."""
+
     def body_fun(state):
         p0, iter_count = state
 
@@ -299,49 +297,42 @@ def _halley(p0, T0, ll, atol, rtol, maxiter):
 @jit
 def _find_xy(ll, T, M, maxiter, atol, rtol, low_path):
     """Computes all x, y for given number of revolutions."""
-    
+
     # Calculate M_max
     M_max = jnp.floor(T / jnp.pi)
     T_00 = jnp.arccos(jnp.abs(ll)) + jnp.abs(ll) * jnp.sqrt(1 - ll**2)
-    
-    
+
     # Possibly refine M_max using JAX-native operations
     need_refine = (T < T_00 + M_max * jnp.pi) & (M_max > 0)
-    
+
     # Define the refine function
     def refine_fn(need_refine):
         _, T_min = _compute_T_min(ll, M_max, maxiter, atol, rtol)
         return jnp.where(T < T_min, M_max - 1, M_max)
-    
+
     # Use lax.cond for this specific case as it's crucial
     M_max = lax.cond(
-        need_refine,
-        lambda _: refine_fn(need_refine),
-        lambda _: M_max,
-        None
+        need_refine, lambda _: refine_fn(need_refine), lambda _: M_max, None
     )
-    
-    
+
     # Check if solution exists - use explicit debug to verify condition
     valid_ll_value = jnp.abs(ll) < 1.0
-    
+
     valid_M = M <= M_max
     valid_solution = valid_ll_value & valid_M
-    
-    
+
     # Get initial guess
     x_0 = _initial_guess(T, ll, M, low_path)
-    
+
     # Run Householder iterations
     x = _householder(x_0, T, ll, M, atol, rtol, maxiter)
     y = _compute_y(x, ll)
-    
+
     # Return NaN for invalid cases using jnp.where which is more reliable
     # Check validation condition explicitly again
     x_result = jnp.where(valid_ll_value & valid_M, x, jnp.nan)
     y_result = jnp.where(valid_ll_value & valid_M, y, jnp.nan)
-    
-                   
+
     return x_result, y_result
 
 
@@ -434,14 +425,12 @@ def izzo_lambert(
     has_nan_x = jnp.isnan(x)
     has_nan_y = jnp.isnan(y)
     has_nans = has_nan_x | has_nan_y
-    
-    
+
     # Always compute all solution components
     # Reconstruct the solution - always compute these values
     gamma = jnp.sqrt(mu * s / 2)
     rho = (r1_norm - r2_norm) / c_norm
     sigma = jnp.sqrt(1 - rho**2)
-
 
     # Compute velocity components
     V_r1 = gamma * ((ll * y - x) - rho * (ll * y + x)) / r1_norm
@@ -452,15 +441,15 @@ def izzo_lambert(
     # Construct velocity vectors
     v1_valid = V_r1 * i_r1 + V_t1 * i_t1
     v2_valid = V_r2 * i_r2 + V_t2 * i_t2
-    
+
     # Create NaN vectors for invalid cases
     v1_nan = jnp.full_like(r1, jnp.nan)
     v2_nan = jnp.full_like(r2, jnp.nan)
-    
+
     # Select the appropriate results using where
     v1 = jnp.where(has_nans, v1_nan, v1_valid)
     v2 = jnp.where(has_nans, v2_nan, v2_valid)
-    
+
     return v1, v2
 
 
@@ -536,16 +525,21 @@ def solve_lambert(
     v2 = np.asarray(v2)
     return v1, v2
 
+
 @jit
-def _calculate_c3(v1: Union[np.ndarray, jnp.ndarray], body_v: Union[np.ndarray, jnp.ndarray]) -> jnp.ndarray:
+def _calculate_c3(
+    v1: Union[np.ndarray, jnp.ndarray], body_v: Union[np.ndarray, jnp.ndarray]
+) -> jnp.ndarray:
     v_infinity = v1 - body_v
-    
+
     # Use jnp.linalg.norm for JAX arrays to avoid TracerArrayConversionError
-    c3 = jnp.linalg.norm(v_infinity, axis=1)**2
+    c3 = jnp.linalg.norm(v_infinity, axis=1) ** 2
     return c3
 
 
-def calculate_c3(v1: Union[np.ndarray, jnp.ndarray], body_v: Union[np.ndarray, jnp.ndarray]) -> npt.NDArray[np.float64]:
+def calculate_c3(
+    v1: Union[np.ndarray, jnp.ndarray], body_v: Union[np.ndarray, jnp.ndarray]
+) -> npt.NDArray[np.float64]:
     """
     Calculate the C3 of a spacecraft given its velocity relative to a body.
 

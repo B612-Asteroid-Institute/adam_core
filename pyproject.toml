@@ -80,6 +80,7 @@ test = [
     "adam-assist>=0.3.0",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
+    "matplotlib>=3.10.1",
 ]
 
 [tool.black]
