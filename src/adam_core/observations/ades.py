@@ -39,22 +39,21 @@ class SubmitterObsContext:
 
 @dataclass
 class TelescopeObsContext:
-    name: str
     design: str
-    aperture: Optional[float] = None
-    detector: Optional[str] = None
+    aperture: float
+    detector: str
+    name: Optional[str] = None
     fRatio: Optional[float] = None
     filter: Optional[str] = None
     arraySize: Optional[str] = None
     pixelSize: Optional[float] = None
 
     def __post_init__(self):
-        assert len(self.name) <= STRING100
+        if self.name is not None:
+            assert len(self.name) <= STRING100
         assert len(self.design) <= STRING25
-        if self.aperture is not None:
-            assert self.aperture > 0
-        if self.detector is not None:
-            assert len(self.detector) <= STRING25
+        assert self.aperture > 0
+        assert len(self.detector) <= STRING25
         if self.fRatio is not None:
             assert self.fRatio > 0
         if self.filter is not None:
@@ -445,11 +444,9 @@ def _build_obs_context(context_dict: dict) -> ObsContext:
     # Extract telescope data
     telescope_data = context_dict.get("telescope", {})
     telescope = TelescopeObsContext(
-        name=telescope_data["name"],
+        name=telescope_data["name"] if "name" in telescope_data else None,
         design=telescope_data["design"],
-        aperture=(
-            float(telescope_data["aperture"]) if "aperture" in telescope_data else None
-        ),
+        aperture=float(telescope_data["aperture"]),
         detector=telescope_data.get("detector"),
         fRatio=float(telescope_data["fRatio"]) if "fRatio" in telescope_data else None,
         filter=telescope_data.get("filter"),
