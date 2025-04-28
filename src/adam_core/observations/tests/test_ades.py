@@ -534,7 +534,9 @@ def test_ADES_string_to_tables_minimal():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|stn|mode|astCat
 1234|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
 """
@@ -552,8 +554,9 @@ permID|obsTime|ra|dec|stn|mode|astCat
     assert context.submitter.institution is None
     assert context.observers == ["Observer1"]
     assert context.measurers == ["Measurer1"]
-    assert context.telescope.name == "Telescope1"
+    assert context.telescope.aperture == 1.0
     assert context.telescope.design == "Reflector"
+    assert context.telescope.detector == "CCD"
     assert context.software is None
     assert context.fundingSource is None
     assert context.comments == []
@@ -581,7 +584,9 @@ def test_ADES_string_to_tables_empty_observations():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|stn|mode|astCat
 """
 
@@ -606,7 +611,9 @@ def test_ADES_string_to_tables_multiple_observatories():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 # observatory
 ! mpcCode W84
 # submitter
@@ -617,7 +624,9 @@ def test_ADES_string_to_tables_multiple_observatories():
 ! name Measurer2
 # telescope
 ! name Telescope2
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|stn|mode|astCat
 1234|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
 5678|2024-01-01T00:00:00.000Z|190.0|10.0|W84|CCD|Gaia2
@@ -647,7 +656,9 @@ def test_ADES_string_to_tables_unknown_columns():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|raStar|decStar|stn|mode|astCat
 1234|2024-01-01T00:00:00.000Z|180.0|0.0|180.1|0.1|695|CCD|Gaia2
 5678|2024-01-01T00:00:00.000Z|190.0|10.0|190.1|10.1|695|CCD|Gaia2
@@ -683,7 +694,9 @@ def test_ADES_string_to_tables_null_handling():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
 1234|2024-01-01T00:00:00.000Z|180.0|0.0||r|695|CCD|Gaia2|First observation
 5678|2024-01-01T00:00:00.000Z|190.0|10.0| |g|695|CCD|Gaia2|Second observation
