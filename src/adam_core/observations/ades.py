@@ -152,6 +152,7 @@ class ADESObservations(qv.Table):
     trkSub = qv.LargeStringColumn(nullable=True)
     obsSubID = qv.LargeStringColumn(nullable=True)
     obsTime = Timestamp.as_column()
+    rmsTime = qv.Float64Column(nullable=True)
     ra = qv.Float64Column()
     dec = qv.Float64Column()
     # ADES uses arcseconds for rmsRA and rmsDec
@@ -164,12 +165,17 @@ class ADESObservations(qv.Table):
         nullable=True,
         validator=qv.validators.and_(qv.validators.ge(10e-8), qv.validators.lt(1e2)),
     )
+    rmsCorr = qv.Float64Column(nullable=True)
     mag = qv.Float64Column(nullable=True)
     rmsMag = qv.Float64Column(nullable=True)
     band = qv.LargeStringColumn(nullable=True)
     stn = qv.LargeStringColumn()
     mode = qv.LargeStringColumn()
     astCat = qv.LargeStringColumn()
+    photCat = qv.LargeStringColumn(nullable=True)
+    logSNR = qv.Float64Column(nullable=True)
+    seeing = qv.Float64Column(nullable=True)
+    exp = qv.Float64Column(nullable=True)
     remarks = qv.LargeStringColumn(nullable=True)
 
 
@@ -178,12 +184,16 @@ def ADES_to_string(
     obs_contexts: dict[str, ObsContext],
     seconds_precision: int = 3,
     columns_precision: dict[str, int] = {
-        "ra": 8,
-        "dec": 8,
-        "rmsRACosDec": 4,
-        "rmsDec": 4,
-        "mag": 2,
-        "rmsMag": 2,
+        "ra": 9,
+        "dec": 9,
+        "rmsRACosDec": 5,
+        "rmsDec": 5,
+        "rmsCorr": 8,
+        "mag": 4,
+        "rmsMag": 4,
+        "exp": 2,
+        "logSNR": 2,
+        "seeing": 2,
     },
 ) -> str:
     """
@@ -312,13 +322,45 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
     for col in data_dict:
         data_dict[col] = [None if x == "" or x.isspace() else x for x in data_dict[col]]
 
-    numeric_cols = ["ra", "dec", "rmsRA", "rmsDec", "mag", "rmsMag"]
+    numeric_cols = [
+        "ra",
+        "dec",
+        "rmsRA",
+        "rmsDec",
+        "mag",
+        "rmsMag",
+        "rmsCorr",
+        "rmsTime",
+        "logSNR",
+        "seeing",
+        "exp",
+    ]
     # Do all the data conversions and then initialize the new table and concatenate
     for col in numeric_cols:
         if col in data_dict:
             data_dict[col] = [
                 float(x) if x is not None else None for x in data_dict[col]
             ]
+
+    # Some users are accustomed to having fixed-width columns, so we strip whitespace
+    # from all the string columns with the exception of the 'remarks' column
+    string_cols = [
+        "provID",
+        "permID",
+        "trkSub",
+        "obsSubID",
+        "stn",
+        "mode",
+        "astCat",
+        "photCat",
+        "band",
+    ]
+    for col in string_cols:
+        if col in data_dict:
+            data_dict[col] = [
+                x.strip() if x is not None else None for x in data_dict[col]
+            ]
+
     if "obsTime" in data_dict:
         # Remove 'Z' from timestamps and convert to MJD
         times = [t[:-1] if t is not None else None for t in data_dict["obsTime"]]
