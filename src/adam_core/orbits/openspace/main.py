@@ -6,8 +6,8 @@ import os
 
 import numpy as np
 
-from ..coordinates.keplerian import KeplerianCoordinates
-from ..orbits import Orbits
+from ...coordinates.keplerian import KeplerianCoordinates
+from ...orbits import Orbits
 
 
 def _safe_orbital_period(keplerian: KeplerianCoordinates) -> float:
