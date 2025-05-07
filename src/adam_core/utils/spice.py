@@ -1,5 +1,5 @@
 import os
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Set
 
 import numpy as np
 import pyarrow.compute as pc
@@ -25,6 +25,8 @@ DEFAULT_KERNELS = [
     earth_itrf93,
 ]
 
+# Global state for tracking custom kernels
+_REGISTERED_KERNELS: Set[str] = set()
 
 J2000_TDB_JD = 2451545.0
 
@@ -88,7 +90,7 @@ def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
         return
 
     for kernel in kernels:
-        sp.furnsh(kernel)
+        register_spice_kernel(kernel)
     os.environ[env_var] = "True"
     return
 
@@ -144,6 +146,124 @@ def get_perturber_state(
             perturber.value, epoch.as_py(), frame_spice, "NONE", origin.value
         )
         states[mask, :] = state
+
+    # Convert units (vectorized operations)
+    states = states / KM_P_AU
+    states[:, 3:] *= S_P_DAY
+
+    return CartesianCoordinates.from_kwargs(
+        time=times,
+        x=states[:, 0],
+        y=states[:, 1],
+        z=states[:, 2],
+        vx=states[:, 3],
+        vy=states[:, 4],
+        vz=states[:, 5],
+        frame=frame,
+        origin=Origin.from_kwargs(code=[origin.name] * N),
+    )
+
+
+def list_registered_kernels() -> Set[str]:
+    """
+    Get the set of currently registered custom SPICE kernels.
+
+    Returns
+    -------
+    kernels : set[str]
+        Set of kernel file paths that are currently registered
+    """
+    return _REGISTERED_KERNELS.copy()
+
+
+def register_spice_kernel(kernel_path: str) -> None:
+    """
+    Register and load a custom SPICE kernel.
+
+    Parameters
+    ----------
+    kernel_path : str
+        Path to the SPICE kernel file
+    """
+    if kernel_path not in _REGISTERED_KERNELS:
+        sp.furnsh(kernel_path)
+        _REGISTERED_KERNELS.add(kernel_path)
+
+
+def unregister_spice_kernel(kernel_path: str) -> None:
+    """
+    Unregister and unload a custom SPICE kernel.
+
+    Parameters
+    ----------
+    kernel_path : str
+        Path to the SPICE kernel file
+    """
+    if kernel_path in _REGISTERED_KERNELS:
+        sp.unload(kernel_path)
+        _REGISTERED_KERNELS.remove(kernel_path)
+
+
+def get_spice_body_state(
+    body_id: int,
+    times: Timestamp,
+    frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
+    origin: OriginCodes = OriginCodes.SUN,
+) -> CartesianCoordinates:
+    """
+    Get state vectors for a body using its SPICE ID.
+
+    Parameters
+    ----------
+    body_id : int
+        The SPICE ID of the body
+    times : Timestamp
+        Times at which to get state vectors
+    frame : {'equatorial', 'ecliptic', 'itrf93'}
+        Reference frame for returned state vectors
+    origin : OriginCodes
+        The origin for the state vectors
+
+    Returns
+    -------
+    states : CartesianCoordinates
+        The state vectors in the desired frame
+
+    Raises
+    ------
+    ValueError
+        If the body ID is not found in any loaded kernel or if state data
+        cannot be retrieved for the requested times
+    """
+    if frame == "ecliptic":
+        frame_spice = "ECLIPJ2000"
+    elif frame == "equatorial":
+        frame_spice = "J2000"
+    elif frame == "itrf93":
+        frame_spice = "ITRF93"
+    else:
+        raise ValueError("frame should be one of {'equatorial', 'ecliptic', 'itrf93'}")
+
+    # Make sure SPICE is ready
+    setup_SPICE()
+
+    # Convert epochs to ET in TDB
+    epochs_et = times.et()
+    unique_epochs_et = epochs_et.unique()
+    N = len(times)
+    states = np.empty((N, 6), dtype=np.float64)
+
+    for i, epoch in enumerate(unique_epochs_et):
+        mask = pc.equal(epochs_et, epoch).to_numpy(False)
+        try:
+            state, lt = sp.spkez(
+                body_id, epoch.as_py(), frame_spice, "NONE", origin.value
+            )
+            states[mask, :] = state
+        except sp.SpiceyError as e:
+            raise ValueError(
+                f"Could not get state data for body ID {body_id} at time {epoch}: {str(e)}"
+            )
 
     # Convert units (vectorized operations)
     states = states / KM_P_AU
