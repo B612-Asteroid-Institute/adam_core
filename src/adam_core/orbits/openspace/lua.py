@@ -22,7 +22,7 @@ class LuaDict:
             elif isinstance(v, tuple):
                 v = f"{{{', '.join([str(x) for x in v])}}}"
             elif isinstance(v, list):
-                v = f"{{{', '.join([str(x) for x in v])}}}"
+                v = f'{{"{", ".join([str(x) for x in v])}"}}'
             elif isinstance(v, str):
                 v = f'"{v}"'
             elif isinstance(v, LuaDict):
