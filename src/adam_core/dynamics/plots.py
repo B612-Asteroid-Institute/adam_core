@@ -1,3 +1,4 @@
+import logging
 from typing import List, Literal, Optional, Tuple
 
 import numpy as np
@@ -29,6 +30,8 @@ from .impacts import CollisionEvent
 EARTH_RADIUS_KM = c.R_EARTH_EQUATORIAL * KM_P_AU * 0.999
 MOON_RADIUS_KM = 1738.1
 
+logger = logging.getLogger(__name__)
+
 try:
     import geopandas as gpd
     import plotly.graph_objects as go
@@ -38,7 +41,7 @@ except ImportError:
 
 def prepare_propagated_variants(
     propagated_variants: Orbits, impacts: CollisionEvent
-) -> dict[str, Orbits]:
+) -> dict[Literal["Non-Impacting", "EARTH", "MOON"], Orbits]:
     """
     Sets variants propagated after their impact time to their impact coordinates on the surface of the colliding body. If the colliding body is the Earth,
     the variants are set to the impact coordinates on the surface of the Earth. If the colliding body is the Moon, the variants are set to the impact coordinates
@@ -57,8 +60,12 @@ def prepare_propagated_variants(
 
     Returns
     -------
-    Orbits
-        The propagated variants with the variants after their impact time set to their impact coordinates on the surface of the Earth.
+    dict[Literal["Non-Impacting", "EARTH", "MOON"], Orbits]
+        A dictionary containing the prepared variants, with keys:
+          - "Non-Impacting": Variants that don't impact any body
+          - "EARTH": Variants that impact Earth (if any)
+          - "MOON": Variants that impact the Moon (if any)
+        Only bodies that appear in the impacts will be included as keys.
     """
     assert propagated_variants.coordinates.frame == "ecliptic"
 
@@ -454,8 +461,8 @@ def plot_impact_simulation(
     show_moon: bool = True,
     sample_impactors: Optional[float] = None,
     sample_non_impactors: Optional[float] = None,
-    height: int = 720,
-    width: int = 1200,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
 ) -> go.Figure:
     """
     Plot the impact simulation.
@@ -515,7 +522,7 @@ def plot_impact_simulation(
 
                 if len(numpy_orbit_ids) == 0:
                     orbit_ids_sample = numpy_orbit_ids  # Already an empty numpy array with correct dtype
-                    print("No non-impacting variants available to sample.")
+                    logger.info("No non-impacting variants available to sample.")
                 else:
                     sample_size = np.ceil(
                         len(numpy_orbit_ids) * sample_non_impactors
@@ -528,7 +535,7 @@ def plot_impact_simulation(
                         sample_size,
                         replace=False,
                     )
-                    print(
+                    logger.info(
                         f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(numpy_orbit_ids)}"
                     )
 
@@ -864,8 +871,8 @@ def plot_risk_corridor(
     impacts: CollisionEvent,
     title: Optional[str] = None,
     logo: bool = True,
-    height: int = 720,
-    width: int = 1200,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
 ) -> go.Figure:
     """
     Plot the risk corridor with toggleable globe/map views.
