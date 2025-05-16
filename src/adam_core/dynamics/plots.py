@@ -1,3 +1,4 @@
+import logging
 from typing import List, Literal, Optional, Tuple
 
 import numpy as np
@@ -29,6 +30,8 @@ from .impacts import CollisionEvent
 EARTH_RADIUS_KM = c.R_EARTH_EQUATORIAL * KM_P_AU * 0.999
 MOON_RADIUS_KM = 1738.1
 
+logger = logging.getLogger(__name__)
+
 try:
     import geopandas as gpd
     import plotly.graph_objects as go
@@ -38,7 +41,7 @@ except ImportError:
 
 def prepare_propagated_variants(
     propagated_variants: Orbits, impacts: CollisionEvent
-) -> dict[str, Orbits]:
+) -> dict[Literal["Non-Impacting", "EARTH", "MOON"], Orbits]:
     """
     Sets variants propagated after their impact time to their impact coordinates on the surface of the colliding body. If the colliding body is the Earth,
     the variants are set to the impact coordinates on the surface of the Earth. If the colliding body is the Moon, the variants are set to the impact coordinates
@@ -57,8 +60,12 @@ def prepare_propagated_variants(
 
     Returns
     -------
-    Orbits
-        The propagated variants with the variants after their impact time set to their impact coordinates on the surface of the Earth.
+    dict[Literal["Non-Impacting", "EARTH", "MOON"], Orbits]
+        A dictionary containing the prepared variants, with keys:
+          - "Non-Impacting": Variants that don't impact any body
+          - "EARTH": Variants that impact Earth (if any)
+          - "MOON": Variants that impact the Moon (if any)
+        Only bodies that appear in the impacts will be included as keys.
     """
     assert propagated_variants.coordinates.frame == "ecliptic"
 
@@ -454,8 +461,8 @@ def plot_impact_simulation(
     show_moon: bool = True,
     sample_impactors: Optional[float] = None,
     sample_non_impactors: Optional[float] = None,
-    height: int = 720,
-    width: int = 1200,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
 ) -> go.Figure:
     """
     Plot the impact simulation.
@@ -509,18 +516,37 @@ def plot_impact_simulation(
         if k == "Non-Impacting":
             if sample_non_impactors is not None:
                 orbit_ids = v.orbit_id.unique()
-                orbit_ids_sample = np.random.choice(
-                    orbit_ids,
-                    np.ceil(len(orbit_ids) * sample_non_impactors).astype(int),
-                    replace=False,
+                numpy_orbit_ids = orbit_ids.to_numpy(
+                    zero_copy_only=False
+                )  # Convert to NumPy
+
+                if len(numpy_orbit_ids) == 0:
+                    orbit_ids_sample = numpy_orbit_ids  # Already an empty numpy array with correct dtype
+                    logger.info("No non-impacting variants available to sample.")
+                else:
+                    sample_size = np.ceil(
+                        len(numpy_orbit_ids) * sample_non_impactors
+                    ).astype(int)
+                    sample_size = min(
+                        sample_size, len(numpy_orbit_ids)
+                    )  # Ensure sample_size <= population
+                    orbit_ids_sample = np.random.choice(
+                        numpy_orbit_ids,
+                        sample_size,
+                        replace=False,
+                    )
+                    logger.info(
+                        f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(numpy_orbit_ids)}"
+                    )
+
+                # Create Arrow array with explicit type
+                arrow_orbit_ids_sample = pa.array(
+                    orbit_ids_sample, type=v.orbit_id.type
                 )
                 sampled_variants[k] = v.__class__.from_pyarrow(
                     v.apply_mask(
-                        pc.is_in(v.orbit_id, pa.array(orbit_ids_sample))
+                        pc.is_in(v.orbit_id, arrow_orbit_ids_sample)
                     ).table.combine_chunks()
-                )
-                print(
-                    f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(orbit_ids)}"
                 )
             else:
                 sampled_variants[k] = v
@@ -530,21 +556,44 @@ def plot_impact_simulation(
 
             if sample_impactors is not None:
                 orbit_ids = v.orbit_id.unique()
-                orbit_ids_sample = np.random.choice(
-                    orbit_ids,
-                    np.ceil(len(orbit_ids) * sample_impactors).astype(int),
-                    replace=False,
+                numpy_orbit_ids = orbit_ids.to_numpy(
+                    zero_copy_only=False
+                )  # Convert to NumPy
+
+                if len(numpy_orbit_ids) == 0:
+                    orbit_ids_sample = numpy_orbit_ids  # Empty array with correct dtype
+                    logger.info(f"No impacting variants for '{k}' available to sample.")
+                else:
+                    sample_size = np.ceil(
+                        len(numpy_orbit_ids) * sample_impactors
+                    ).astype(int)
+                    sample_size = min(
+                        sample_size, len(numpy_orbit_ids)
+                    )  # Ensure sample_size <= population
+                    orbit_ids_sample = np.random.choice(
+                        numpy_orbit_ids,
+                        sample_size,
+                        replace=False,
+                    )
+                    logger.info(
+                        f"Sampled {len(orbit_ids_sample)} impacting variants for '{k}' out of {len(numpy_orbit_ids)}"
+                    )
+
+                # Create Arrow array with explicit type
+                arrow_orbit_ids_sample = pa.array(
+                    orbit_ids_sample, type=v.orbit_id.type
                 )
                 sampled_variants[k] = v.__class__.from_pyarrow(
                     v.apply_mask(
-                        pc.is_in(v.orbit_id, pa.array(orbit_ids_sample))
+                        pc.is_in(v.orbit_id, arrow_orbit_ids_sample)
                     ).table.combine_chunks()
-                )
-                print(
-                    f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(orbit_ids)}"
                 )
             else:
                 sampled_variants[k] = v
+
+    all_potential_impactor_ids_from_impacts_table = set(
+        impacts.variant_id.unique().to_pylist()
+    )
 
     if title is None:
         prefix = ""
@@ -554,6 +603,33 @@ def plot_impact_simulation(
     # Build the individual frames for the animation
     frames = []
     for i, time in enumerate(propagation_times):
+
+        # 1. Get all impacts up to the current time
+        all_impacts_up_to_current_time = impacts.apply_mask(
+            pc.less_equal(impacts.coordinates.time.mjd(), time.mjd()[0])
+        )
+
+        # 2. Get the set of unique variant IDs that have impacted *anything* up to current time
+        current_frame_total_unique_impacted_ids_set = set(
+            all_impacts_up_to_current_time.variant_id.unique().to_pylist()
+        )
+
+        # 3. Update impact_count for each body (for title text)
+        for (
+            body_key
+        ) in (
+            impact_count.keys()
+        ):  # These are "EARTH", "MOON", etc. as initialized earlier
+            impacts_on_this_body_up_to_current_time = (
+                all_impacts_up_to_current_time.apply_mask(
+                    pc.equal(
+                        all_impacts_up_to_current_time.collision_object.code, body_key
+                    )
+                )
+            )
+            impact_count[body_key] = len(
+                impacts_on_this_body_up_to_current_time.variant_id.unique()
+            )
 
         # Create the data for the frame
         data = []
@@ -587,19 +663,6 @@ def plot_impact_simulation(
                 color = "red"
                 size = 2
                 name = f"{k.lower().capitalize()} Impacting"
-                impacts_up_to_time = impacts.apply_mask(
-                    pc.and_(
-                        pc.equal(impacts.collision_object.code, k),
-                        pc.and_(
-                            pc.equal(impacts.coordinates.time.days, time.days[0]),
-                            pc.less_equal(
-                                impacts.coordinates.time.nanos,
-                                time.nanos[0].as_py() + 100000,
-                            ),
-                        ),
-                    )
-                )
-                impact_count[k] = len(impacts_up_to_time)
 
             x = v_at_time.coordinates.x.to_numpy(zero_copy_only=False) * KM_P_AU
             y = v_at_time.coordinates.y.to_numpy(zero_copy_only=False) * KM_P_AU
@@ -667,6 +730,13 @@ def plot_impact_simulation(
         )
 
         frames.append(frame)
+
+        # If all impacting variants (from the original impacts table) have impacted by this frame, stop.
+        if all_potential_impactor_ids_from_impacts_table:
+            if all_potential_impactor_ids_from_impacts_table.issubset(
+                current_frame_total_unique_impacted_ids_set
+            ):
+                break
 
     # Plot the figure
     fig = go.Figure(data=frames[0].data, frames=frames, layout=frames[0].layout)
@@ -791,6 +861,7 @@ def plot_impact_simulation(
                 ],
             )
         ],
+        uirevision="constant",
     )
 
     return fig
@@ -800,8 +871,8 @@ def plot_risk_corridor(
     impacts: CollisionEvent,
     title: Optional[str] = None,
     logo: bool = True,
-    height: int = 720,
-    width: int = 1200,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
 ) -> go.Figure:
     """
     Plot the risk corridor with toggleable globe/map views.
@@ -852,7 +923,6 @@ def plot_risk_corridor(
     # Convert times to minutes since first impact
     time_nums = (times.mjd - times.mjd.min()) * 24 * 60
     first_impact_time = times[0].iso
-    time_step = 2
 
     # Calculate center
     center_lon = lon[0]
@@ -882,10 +952,24 @@ def plot_risk_corridor(
     # Create frames for animation
     frames = []
     for i in range(len(lon)):
+        # Calculate time_step to have approximately 10 ticks
+        time_step = int(np.ceil(time_nums[-1] / 10))
+        # Round to nearest 5 or 10 for cleaner intervals
+        if time_step > 10:
+            time_step = int(np.ceil(time_step / 10) * 10)
+        elif time_step > 5:
+            time_step = int(np.ceil(time_step / 5) * 5)
+
+        # Determine effective step for np.arange to avoid step=0.
+        # If time_step is 0 (which implies time_nums[-1] == 0), use 1.
+        # This ensures np.arange(0, 0 + 1, 1) yields [0] for the T+0 min case.
+        effective_arange_step = time_step if time_step > 0 else 1
 
         ticktext = [
             f"T+{i:d} min"
-            for i in np.arange(0, time_nums[-1] + time_step, time_step)
+            for i in np.arange(
+                0, time_nums[-1] + effective_arange_step, effective_arange_step
+            )
             .astype(int)
             .tolist()
         ]
@@ -908,7 +992,11 @@ def plot_risk_corridor(
                                 font=dict(size=12, color="black"),
                             ),
                             ticktext=ticktext,
-                            tickvals=np.arange(0, time_nums[-1] + time_step, time_step),
+                            tickvals=np.arange(
+                                0,
+                                time_nums[-1] + effective_arange_step,
+                                effective_arange_step,
+                            ).tolist(),
                             **color_bar_config,
                         ),
                     ),
@@ -949,7 +1037,11 @@ def plot_risk_corridor(
                         ),
                         ticktext=[
                             f"T+{i:d} min"
-                            for i in np.arange(0, time_nums[-1] + time_step, time_step)
+                            for i in np.arange(
+                                0,
+                                time_nums[-1] + effective_arange_step,
+                                effective_arange_step,
+                            )
                             .astype(int)
                             .tolist()
                         ],
