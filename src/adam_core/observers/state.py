@@ -82,17 +82,19 @@ def get_mpc_observer_state(
         # For ITRF93, which is Earth-fixed, position is constant but velocity comes from Earth's rotation
         N = len(times)
         r_obs = np.tile(o_vec_ITRF93, (N, 1))
-        
+
         # Calculate velocity due to Earth's rotation
         rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
         v_obs = np.tile(-OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction, (N, 1))
-        
+
         # For ITRF93, we still need Earth's state relative to the requested origin
         if origin != OriginCodes.EARTH:
-            earth_state = get_perturber_state(OriginCodes.EARTH, times, frame="itrf93", origin=origin)
+            earth_state = get_perturber_state(
+                OriginCodes.EARTH, times, frame="itrf93", origin=origin
+            )
             r_obs += earth_state.r
             v_obs += earth_state.v
-            
+
         observer_states = CartesianCoordinates.from_kwargs(
             time=times,
             x=r_obs[:, 0],
@@ -106,7 +108,7 @@ def get_mpc_observer_state(
                 code=pa.repeat(origin.name, len(times), type=pa.large_string())
             ),
         )
-        
+
         return observer_states
 
     # For other frames, continue with existing implementation
