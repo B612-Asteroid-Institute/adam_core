@@ -1,6 +1,7 @@
 from typing import Literal, Union
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
 import spiceypy as sp
 
@@ -40,8 +41,10 @@ def get_mpc_observer_state(
         frame_spice = "ECLIPJ2000"
     elif frame == "equatorial":
         frame_spice = "J2000"
+    elif frame == "itrf93":
+        frame_spice = "ITRF93"
     else:
-        err = "frame should be one of {'equatorial', 'ecliptic'}"
+        err = "frame should be one of {'equatorial', 'ecliptic', 'itrf93'}"
         raise ValueError(err)
 
     # Observatory codes use the geodedics from the MPC observatory code table
@@ -66,6 +69,47 @@ def get_mpc_observer_state(
         )
         raise ValueError(err)
 
+    # Calculate pointing vector from geocenter to observatory
+    sin_longitude = np.sin(np.radians(longitude))
+    cos_longitude = np.cos(np.radians(longitude))
+    o_hat_ITRF93 = np.array([cos_longitude * cos_phi, sin_longitude * cos_phi, sin_phi])
+
+    # Multiply pointing vector with Earth radius to get actual vector
+    o_vec_ITRF93 = np.dot(R_EARTH_EQUATORIAL, o_hat_ITRF93)
+
+    # If ITRF93 frame is requested, we can directly use the ITRF93 values
+    if frame == "itrf93":
+        # For ITRF93, which is Earth-fixed, position is constant but velocity comes from Earth's rotation
+        N = len(times)
+        r_obs = np.tile(o_vec_ITRF93, (N, 1))
+        
+        # Calculate velocity due to Earth's rotation
+        rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
+        v_obs = np.tile(-OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction, (N, 1))
+        
+        # For ITRF93, we still need Earth's state relative to the requested origin
+        if origin != OriginCodes.EARTH:
+            earth_state = get_perturber_state(OriginCodes.EARTH, times, frame="itrf93", origin=origin)
+            r_obs += earth_state.r
+            v_obs += earth_state.v
+            
+        observer_states = CartesianCoordinates.from_kwargs(
+            time=times,
+            x=r_obs[:, 0],
+            y=r_obs[:, 1],
+            z=r_obs[:, 2],
+            vx=v_obs[:, 0],
+            vy=v_obs[:, 1],
+            vz=v_obs[:, 2],
+            frame=frame,
+            origin=Origin.from_kwargs(
+                code=pa.repeat(origin.name, len(times), type=pa.large_string())
+            ),
+        )
+        
+        return observer_states
+
+    # For other frames, continue with existing implementation
     # Grab Earth state vector (this function handles duplicate times)
     state = get_perturber_state(OriginCodes.EARTH, times, frame=frame, origin=origin)
 
@@ -74,16 +118,6 @@ def get_mpc_observer_state(
         return state
 
     # If not then we need to add a topocentric correction
-    # Get observer location on Earth
-    sin_longitude = np.sin(np.radians(longitude))
-    cos_longitude = np.cos(np.radians(longitude))
-
-    # Calculate pointing vector from geocenter to observatory
-    o_hat_ITRF93 = np.array([cos_longitude * cos_phi, sin_longitude * cos_phi, sin_phi])
-
-    # Multiply pointing vector with Earth radius to get actual vector
-    o_vec_ITRF93 = np.dot(R_EARTH_EQUATORIAL, o_hat_ITRF93)
-
     # Warning! Converting times to ET will incur a loss of precision.
     epochs_et = times.et()
     unique_epochs_et_tdb = epochs_et.unique()
@@ -123,7 +157,9 @@ def get_mpc_observer_state(
         vy=v_obs[:, 1],
         vz=v_obs[:, 2],
         frame=frame,
-        origin=Origin.from_kwargs(code=[origin.name for i in range(len(times))]),
+        origin=Origin.from_kwargs(
+            code=pa.repeat(origin.name, len(times), type=pa.large_string())
+        ),
     )
 
     return observer_states
