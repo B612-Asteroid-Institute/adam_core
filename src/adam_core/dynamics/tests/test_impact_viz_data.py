@@ -12,7 +12,7 @@ except ImportError:
     HAS_ASSIST = False
 
 try:
-    import geopandas as gpd
+    import geopandas as gpd  # noqa: F401
     import plotly.graph_objects as go
 
     HAS_PLOTLY = True
