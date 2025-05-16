@@ -390,7 +390,7 @@ def plot_porkchop(
 
     # Define default contour levels for C3 if not provided
     if c3_levels is None:
-        c3_levels = [8, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100]
+        c3_levels = np.linspace(8.0, 100.0, 11)  # 11 levels from 8 to 100
 
     # Create contour plot
     contour = ax.contour(
@@ -923,7 +923,7 @@ def plot_porkchop_plotly(
         width=width, height=height, autosize=False, hovermode="closest",
         legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1),
         updatemenus=[
-            dict(type="buttons",direction="right",x=0.5,xanchor="center",y=1.15,yanchor="top",showactive=True,
+            dict(type="buttons",direction="right",x=1,xanchor="right",y=1.15,yanchor="top",showactive=True,
                  buttons=[
                     dict(label="Display C3",method="restyle", # Use "restyle" for visibility changes
                          args=[{"visible": c3_view_visibility[:len(fig.data)]}, list(range(len(fig.data)))]),
