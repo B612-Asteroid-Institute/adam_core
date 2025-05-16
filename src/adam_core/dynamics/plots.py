@@ -562,7 +562,7 @@ def plot_impact_simulation(
 
                 if len(numpy_orbit_ids) == 0:
                     orbit_ids_sample = numpy_orbit_ids  # Empty array with correct dtype
-                    print(f"No impacting variants for '{k}' available to sample.")
+                    logger.info(f"No impacting variants for '{k}' available to sample.")
                 else:
                     sample_size = np.ceil(
                         len(numpy_orbit_ids) * sample_impactors
@@ -575,7 +575,7 @@ def plot_impact_simulation(
                         sample_size,
                         replace=False,
                     )
-                    print(
+                    logger.info(
                         f"Sampled {len(orbit_ids_sample)} impacting variants for '{k}' out of {len(numpy_orbit_ids)}"
                     )
 
