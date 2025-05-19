@@ -635,65 +635,7 @@ def _generate_custom_log_colorscale(base_colorscale_name: str, levels: List[floa
     return custom_scale
 
 
-def _generate_hovertext_grid(
-    grid_departure_mjd: npt.NDArray[np.float64],
-    grid_arrival_mjd: npt.NDArray[np.float64],
-    original_tof_grid_days: npt.NDArray[np.float64],
-    grid_c3_km2_s2: npt.NDArray[np.float64],
-    grid_vinf_km_s: npt.NDArray[np.float64],
-) -> Tuple[npt.NDArray[np.str_], npt.NDArray[np.str_]]:
-    # --- Hovertext Preparation ---
-    dep_time_obj = Time(grid_departure_mjd.ravel(), format="mjd")
-    dep_date_str_flat = dep_time_obj.to_value("iso", subfmt="date")
-    dep_date_str_grid = dep_date_str_flat.reshape(grid_departure_mjd.shape)
 
-    arr_time_obj = Time(grid_arrival_mjd.ravel(), format="mjd")
-    arr_date_str_flat = arr_time_obj.to_value("iso", subfmt="date")
-    arr_date_str_grid = arr_date_str_flat.reshape(grid_arrival_mjd.shape)
-
-    tof_flat_grid = original_tof_grid_days.ravel()
-    tof_str_flat_grid = np.full(tof_flat_grid.shape, "N/A", dtype=object)
-    valid_tof_mask_flat_grid = ~np.isnan(tof_flat_grid)
-    tof_str_flat_grid[valid_tof_mask_flat_grid] = [
-        f"{val:.1f} days" for val in tof_flat_grid[valid_tof_mask_flat_grid]
-    ]
-    tof_str_grid_final = tof_str_flat_grid.reshape(original_tof_grid_days.shape)
-
-    base_hover_text_np = np.char.add(
-        np.char.add("<b>Departure:</b> ", dep_date_str_grid), "<br>"
-    ) + np.char.add(np.char.add("<b>Arrival:</b> ", arr_date_str_grid), "<br>")
-
-    c3_metric_flat_grid = grid_c3_km2_s2.ravel()
-    c3_metric_str_flat_grid = np.full(c3_metric_flat_grid.shape, "N/A", dtype=object)
-    valid_c3_metric_mask_flat_grid = ~np.isnan(c3_metric_flat_grid)
-    c3_metric_str_flat_grid[valid_c3_metric_mask_flat_grid] = [
-        f"{val:.1f} km²/s²"
-        for val in c3_metric_flat_grid[valid_c3_metric_mask_flat_grid]
-    ]
-    c3_metric_str_grid_final = c3_metric_str_flat_grid.reshape(grid_c3_km2_s2.shape)
-    c3_hovertext_grid = (
-        base_hover_text_np
-        + np.char.add(np.char.add("<b>C3:</b> ", c3_metric_str_grid_final), "<br>")
-        + np.char.add(np.char.add("<b>ToF:</b> ", tof_str_grid_final), "")
-    ).tolist()
-
-    vinf_metric_flat_grid = grid_vinf_km_s.ravel()
-    vinf_metric_str_flat_grid = np.full(
-        vinf_metric_flat_grid.shape, "N/A", dtype=object
-    )
-    valid_vinf_metric_mask_flat_grid = ~np.isnan(vinf_metric_flat_grid)
-    vinf_metric_str_flat_grid[valid_vinf_metric_mask_flat_grid] = [
-        f"{val:.1f} km/s"
-        for val in vinf_metric_flat_grid[valid_vinf_metric_mask_flat_grid]
-    ]
-    vinf_metric_str_grid_final = vinf_metric_str_flat_grid.reshape(grid_vinf_km_s.shape)
-    vinf_hovertext_grid = (
-        base_hover_text_np
-        + np.char.add(np.char.add("<b>Vinf:</b> ", vinf_metric_str_grid_final), "<br>")
-        + np.char.add(np.char.add("<b>ToF:</b> ", tof_str_grid_final), "")
-    ).tolist()
-
-    return vinf_hovertext_grid, c3_hovertext_grid
 
 def plot_porkchop_plotly(
     porkchop_data: LambertOutput,
@@ -714,10 +656,12 @@ def plot_porkchop_plotly(
     ylim_mjd: Optional[Tuple[float, float]] = None,
     title: str = "Porkchop Plot",
     show_optimal: bool = True,
+    optimal_hover: bool = True,
+    trim_to_valid: bool = True,
+    date_buffer_days: float = 3.0,
 ):
     """
-    Plot the porkchop plot from Lambert trajectory data using Plotly,
-    with a button to toggle between C3 and Vinf (departure) views.
+    Plot the porkchop plot from Lambert trajectory data using Plotly.
 
     Parameters
     ----------
@@ -734,11 +678,11 @@ def plot_porkchop_plotly(
     c3_step : float, optional
         Step size for C3 contour levels.
     vinf_min : float, optional
-        Minimum Vinf value (km/s) for contour levels.
+        Minimum Vinf value (km/s) for hover display.
     vinf_max : float, optional
-        Maximum Vinf value (km/s) for contour levels.
+        Maximum Vinf value (km/s) for hover display.
     vinf_step : float, optional
-        Step size for Vinf contour levels.
+        Step size for Vinf hover display.
     tof_min : float, optional
         Minimum ToF value (days) for contour levels.
     tof_max : float, optional
@@ -746,7 +690,7 @@ def plot_porkchop_plotly(
     tof_step : float, optional
         Step size for ToF contour levels.
     metric_colorscale : str, optional
-        Plotly colorscale name for the C3/Vinf filled contours.
+        Plotly colorscale name for the C3 filled contours.
     tof_line_color : str, optional
         Color for the ToF contour lines.
     xlim_mjd : Tuple[float, float], optional
@@ -757,13 +701,19 @@ def plot_porkchop_plotly(
         Plot title.
     show_optimal : bool, optional
         If True, marks the optimal point on the plot.
+    optimal_hover : bool, optional
+        If True, enables hover information for the optimal point.
+    trim_to_valid : bool, optional
+        If True, trims the plot to only include valid data.
+    date_buffer_days : float, optional
+        Number of days to add as buffer around the min and max dates (default: 3).
 
     Returns
     -------
     fig : plotly.graph_objects.Figure
         The Plotly figure object.
     """
-    # --- Data Extraction and Basic Setup ---
+    # --- Extract basic raw data ---
     c3_values_au_d2 = porkchop_data.c3()  # C3 in (AU/day)^2
     vinf_values_au_day = np.sqrt(
         np.maximum(0, c3_values_au_d2)
@@ -771,23 +721,78 @@ def plot_porkchop_plotly(
 
     time_of_flight_days = porkchop_data.time_of_flight()
     departure_times = porkchop_data.departure_state.time
-    departure_times_mjd = departure_times.mjd().to_numpy(
-        zero_copy_only=False
-    )
     arrival_times = porkchop_data.arrival_state.time
-    arrival_times_mjd = arrival_times.mjd().to_numpy(
-        zero_copy_only=False
-    )
 
-    unique_departure_times = departure_times.unique()
-    unique_arrival_times = arrival_times.unique()
-    unique_departure_times_mjd = np.sort(np.unique(departure_times_mjd))
-    unique_arrival_times_mjd = np.sort(np.unique(arrival_times_mjd))
-    unique_departure_dates_dt = [dt.datetime for dt in unique_departure_times.to_astropy()]
-    unique_arrival_dates_dt = [dt.datetime for dt in unique_arrival_times.to_astropy()]
-
-
-    if len(unique_departure_times) < 2 or len(unique_arrival_times) < 2:
+    # Convert to metric units
+    km_s_per_au_day = KM_P_AU / S_P_DAY
+    c3_values_km2_s2 = c3_values_au_d2 * (km_s_per_au_day**2)
+    vinf_values_km_s = vinf_values_au_day * km_s_per_au_day
+    
+    # Define default C3 range if not provided
+    if c3_min is None:
+        c3_min = max(8.0, np.nanpercentile(c3_values_km2_s2, 5))
+    if c3_max is None:
+        c3_max = min(100.0, np.nanpercentile(c3_values_km2_s2, 95))
+    
+    # Extract raw MJD values for all points
+    departure_times_mjd = departure_times.mjd().to_numpy(zero_copy_only=False)
+    arrival_times_mjd = arrival_times.mjd().to_numpy(zero_copy_only=False)
+    
+    # --- Identify valid data and filter time ranges ---
+    # Create a mask for valid C3 values (not NaN and not over max)
+    valid_c3_mask = ~np.isnan(c3_values_km2_s2) & (c3_values_km2_s2 <= c3_max)
+    
+    # Extract all unique times from the raw data
+    all_departure_mjd = np.sort(np.unique(departure_times_mjd))
+    all_arrival_mjd = np.sort(np.unique(arrival_times_mjd))
+    
+    if trim_to_valid and np.any(valid_c3_mask):
+        print(f"Found {np.sum(valid_c3_mask)} valid C3 values out of {len(valid_c3_mask)}")
+        
+        # Extract departure and arrival times only for valid data points
+        valid_departure_times_mjd = departure_times_mjd[valid_c3_mask]
+        valid_arrival_times_mjd = arrival_times_mjd[valid_c3_mask]
+        
+        # Get unique departure and arrival times directly from valid data
+        unique_departure_mjd = np.sort(np.unique(valid_departure_times_mjd))
+        unique_arrival_mjd = np.sort(np.unique(valid_arrival_times_mjd))
+        
+        # Add buffer around min/max dates if requested
+        if date_buffer_days > 0:
+            # Get min/max of valid times
+            min_dep_mjd, max_dep_mjd = np.min(unique_departure_mjd), np.max(unique_departure_mjd)
+            min_arr_mjd, max_arr_mjd = np.min(unique_arrival_mjd), np.max(unique_arrival_mjd)
+            
+            # Apply buffer, but don't go beyond bounds of all available dates
+            min_dep_with_buffer = max(min_dep_mjd - date_buffer_days, np.min(all_departure_mjd))
+            max_dep_with_buffer = min(max_dep_mjd + date_buffer_days, np.max(all_departure_mjd))
+            min_arr_with_buffer = max(min_arr_mjd - date_buffer_days, np.min(all_arrival_mjd))
+            max_arr_with_buffer = min(max_arr_mjd + date_buffer_days, np.max(all_arrival_mjd))
+            
+            # Include additional dates within buffer
+            unique_departure_mjd = all_departure_mjd[
+                (all_departure_mjd >= min_dep_with_buffer) & 
+                (all_departure_mjd <= max_dep_with_buffer)
+            ]
+            unique_arrival_mjd = all_arrival_mjd[
+                (all_arrival_mjd >= min_arr_with_buffer) & 
+                (all_arrival_mjd <= max_arr_with_buffer)
+            ]
+            
+            print(f"Added buffer: departure range {min_dep_mjd:.1f}-{max_dep_mjd:.1f} → {min_dep_with_buffer:.1f}-{max_dep_with_buffer:.1f}")
+            print(f"Added buffer: arrival range {min_arr_mjd:.1f}-{max_arr_mjd:.1f} → {min_arr_with_buffer:.1f}-{max_arr_with_buffer:.1f}")
+        
+        print(f"Using valid data range: departure {min(unique_departure_mjd):.1f} to {max(unique_departure_mjd):.1f}")
+        print(f"Using valid data range: arrival {min(unique_arrival_mjd):.1f} to {max(unique_arrival_mjd):.1f}")
+    else:
+        # If not trimming or no valid data, use all unique times
+        unique_departure_mjd = all_departure_mjd
+        unique_arrival_mjd = all_arrival_mjd
+    
+    print(f"Using {len(unique_departure_mjd)} unique departure times and {len(unique_arrival_mjd)} unique arrival times")
+    
+    # Check if we have enough unique times to create a grid
+    if len(unique_departure_mjd) < 2 or len(unique_arrival_mjd) < 2:
         warnings.warn(
             "Porkchop plotting: Not enough unique times for grid. Returning empty figure."
         )
@@ -803,15 +808,15 @@ def plot_porkchop_plotly(
             yaxis=dict(type="date"),
         )
         return fig_empty
-
+    
+    # Convert to datetime objects for plotting axes
+    unique_departure_dates_dt = [Time(mjd, format="mjd").datetime for mjd in unique_departure_mjd]
+    unique_arrival_dates_dt = [Time(mjd, format="mjd").datetime for mjd in unique_arrival_mjd]
 
     # --- Unit Conversions and Grid Setup ---
-    km_s_per_au_day = KM_P_AU / S_P_DAY
-    c3_values_km2_s2 = c3_values_au_d2 * (km_s_per_au_day**2)
-    vinf_values_km_s = vinf_values_au_day * km_s_per_au_day
-
+    # Create the grid for interpolation with unique times derived from valid data
     grid_departure_mjd, grid_arrival_mjd = np.meshgrid(
-        unique_departure_times_mjd, unique_arrival_times_mjd
+        unique_departure_mjd, unique_arrival_mjd
     )
     points = np.vstack((departure_times_mjd, arrival_times_mjd)).T
 
@@ -832,20 +837,9 @@ def plot_porkchop_plotly(
 
     original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
 
-    vinf_hovertext_grid, c3_hovertext_grid = _generate_hovertext_grid(
-        grid_departure_mjd,
-        grid_arrival_mjd,
-        original_tof_grid_days,
-        grid_c3_km2_s2,
-        grid_vinf_km_s,
-    )
-
     # Determine contour level parameters
     # For C3
-    if c3_min is None:
-        c3_min = max(8.0, np.nanpercentile(grid_c3_km2_s2, 5))  # 5th percentile with minimum floor
-    if c3_max is None:
-        c3_max = min(100.0, np.nanpercentile(grid_c3_km2_s2, 95))  # 95th percentile with maximum ceiling
+
     if c3_step is None:
         c3_step = (c3_max - c3_min) / 10  # 10 levels by default
     
@@ -868,7 +862,7 @@ def plot_porkchop_plotly(
 
     # --- Replace NaN values and over-max values with sentinel ---
     # Use a sentinel value that's 2x the maximum
-    sentinel_value = c3_max * 2
+    sentinel_value = c3_max * 1.1
 
     # Replace NaN and over-max values with the sentinel value
     grid_c3_for_plot = np.copy(grid_c3_km2_s2)
@@ -877,51 +871,28 @@ def plot_porkchop_plotly(
     
     # Apply sentinel value to all invalid areas
     grid_c3_for_plot[mask_nan | mask_over] = sentinel_value
-
-    # Apply the same approach for Vinf
-    sentinel_value_vinf = vinf_max * 2
-    grid_vinf_for_plot = np.copy(grid_vinf_km_s)
-    mask_nan_vinf = np.isnan(grid_vinf_for_plot)
-    mask_over_vinf = grid_vinf_for_plot > vinf_max
     
-    # Apply sentinel value to all invalid areas
-    grid_vinf_for_plot[mask_nan_vinf | mask_over_vinf] = sentinel_value_vinf
+    # Create a mask for valid data (not NaN and not over max)
+    valid_mask = ~(mask_nan | mask_over)
+    
+    # --- Trim plot to valid data region if requested ---
+    # Note: We've already trimmed before creating the grid,
+    # so this section is no longer needed
+    
+    # Set up the date limits for the plot
+    # Convert the min/max MJD values to datetime objects for Plotly
+    xlim_dt = [Time(np.min(grid_departure_mjd), format="mjd").datetime, 
+               Time(np.max(grid_departure_mjd), format="mjd").datetime]
+    ylim_dt = [Time(np.min(grid_arrival_mjd), format="mjd").datetime, 
+               Time(np.max(grid_arrival_mjd), format="mjd").datetime]
+    
+    # If explicit limits were provided, use those instead
+    if xlim_mjd:
+        xlim_dt = [Time(xlim_mjd[0], format="mjd").datetime, Time(xlim_mjd[1], format="mjd").datetime]
+    if ylim_mjd:
+        ylim_dt = [Time(ylim_mjd[0], format="mjd").datetime, Time(ylim_mjd[1], format="mjd").datetime]
 
-    # --- Update the hover text for sentinel values ---
-    # Create masks for sentinel values
-    c3_sentinel_mask = (grid_c3_for_plot == sentinel_value)
-    vinf_sentinel_mask = (grid_vinf_for_plot == sentinel_value_vinf)
-
-    # Convert hovertext to numpy arrays for easier manipulation
-    c3_hovertext_grid_np = np.array(c3_hovertext_grid)
-    vinf_hovertext_grid_np = np.array(vinf_hovertext_grid)
-
-    # Update hover text for sentinel values
-    for i in range(c3_sentinel_mask.shape[0]):
-        for j in range(c3_sentinel_mask.shape[1]):
-            if c3_sentinel_mask[i, j]:
-                parts = c3_hovertext_grid_np[i, j].split("<br>")
-                parts[2] = "<b>C3:</b> N/A"
-                parts[3] = "<b>ToF:</b> N/A"
-                c3_hovertext_grid_np[i, j] = "<br>".join(parts)
-
-    for i in range(vinf_sentinel_mask.shape[0]):
-        for j in range(vinf_sentinel_mask.shape[1]):
-            if vinf_sentinel_mask[i, j]:
-                parts = vinf_hovertext_grid_np[i, j].split("<br>")
-                parts[2] = "<b>Vinf:</b> N/A" 
-                parts[3] = "<b>ToF:</b> N/A"
-                vinf_hovertext_grid_np[i, j] = "<br>".join(parts)
-
-    # Create hoverinfo arrays (all set to "text")
-    c3_hoverinfo = np.full(c3_sentinel_mask.shape, "text", dtype=object)
-    vinf_hoverinfo = np.full(vinf_sentinel_mask.shape, "text", dtype=object)
-
-    # Convert numpy arrays back to lists for Plotly
-    c3_hovertext_grid_updated = c3_hovertext_grid_np.tolist()
-    vinf_hovertext_grid_updated = vinf_hovertext_grid_np.tolist()
-
-    # --- Create custom colorscales ---
+    # --- Create custom colorscale ---
     # Define function to create custom colorscale with white for sentinel
     def create_colorscale_with_sentinel(base_colorscale, vmin, vmax, sentinel):
         # Get standard colorscale
@@ -938,15 +909,45 @@ def plot_porkchop_plotly(
         
         return colorscale
 
-    # Create custom colorscales
+    # Create custom colorscale for C3
     c3_colorscale = create_colorscale_with_sentinel(
         metric_colorscale, c3_min, c3_max, sentinel_value
     )
-    vinf_colorscale = create_colorscale_with_sentinel(
-        metric_colorscale, vinf_min, vinf_max, sentinel_value_vinf
-    )
 
-    # --- Update C3 Contour Trace ---
+    # --- Prepare customdata for hover template ---
+    # For date strings, we need to convert the grid MJD values to timestamps and then to ISO strings
+    # First, create Timestamp objects from the grid MJD values (after trimming)
+    flat_dep_mjd = grid_departure_mjd.flatten()
+    flat_arr_mjd = grid_arrival_mjd.flatten()
+    
+    # Create Timestamp objects from the flattened MJD values
+    flat_dep_times = Timestamp.from_mjd(flat_dep_mjd, scale="tdb")
+    flat_arr_times = Timestamp.from_mjd(flat_arr_mjd, scale="tdb")
+    
+    # Get ISO 8601 strings
+    flat_dep_iso = flat_dep_times.to_iso8601().to_numpy(zero_copy_only=False)
+    flat_arr_iso = flat_arr_times.to_iso8601().to_numpy(zero_copy_only=False)
+    
+    # Reshape back to grid shape
+    grid_dep_iso = flat_dep_iso.reshape(grid_departure_mjd.shape)
+    grid_arr_iso = flat_arr_iso.reshape(grid_arrival_mjd.shape)
+    
+    # Create a 3D array to hold the numeric data for hover: [c3, vinf, tof]
+    # We'll handle dates separately as strings
+    customdata = np.zeros((grid_c3_km2_s2.shape[0], grid_c3_km2_s2.shape[1], 3), dtype=np.float64)
+    
+    # Initialize with NaN values
+    customdata[:,:,0] = np.nan  # C3
+    customdata[:,:,1] = np.nan  # Vinf
+    customdata[:,:,2] = np.nan  # ToF
+    
+    # Fill in valid values 
+    valid_mask_trimmed = ~np.isnan(grid_c3_km2_s2)
+    customdata[:,:,0][valid_mask_trimmed] = grid_c3_km2_s2[valid_mask_trimmed]
+    customdata[:,:,1][valid_mask_trimmed] = grid_vinf_km_s[valid_mask_trimmed]
+    customdata[:,:,2][valid_mask_trimmed] = original_tof_grid_days[valid_mask_trimmed]
+
+    # --- Create C3 Contour Trace with hover template ---
     plotly_traces = []
     plotly_traces.append(
         go.Contour(
@@ -957,58 +958,35 @@ def plot_porkchop_plotly(
             zmin=c3_min,  # Min value for colorscale
             zmax=c3_max * 1.1,  # Max value for data display (not including sentinel)
             colorscale=c3_colorscale,
-            hovertext=c3_hovertext_grid_updated,
-            hoverinfo=c3_hoverinfo.tolist(),
+            customdata=customdata,
+            text=np.stack([grid_dep_iso, grid_arr_iso], axis=-1),  # Store date strings as text
+            hovertemplate=(
+                "<b>Departure:</b> %{text[0]}<br>" +  # Use text array for dates
+                "<b>Arrival:</b> %{text[1]}<br>" +    # Use text array for dates
+                "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>" +
+                "<b>Vinf:</b> %{customdata[1]:.1f} km/s<br>" +
+                "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
+            ),
             contours=dict(
                 coloring="fill", 
                 showlabels=True, 
                 labelfont=dict(size=10, color="black"),
                 start=c3_min,
                 end=c3_max,
-                size=c3_step
+                size=c3_step,
+                # Format C3 values to 1 decimal place
+                labelformat=".1f",
             ),
             line=dict(width=0.5, smoothing=1.3),
-            name="C3",
+            name="C3 (km²/s²) / Vinf (km/s)",
             colorbar=dict(
-                title="C3 (km²/s²)",
-                # Cap the colorbar range to exclude sentinel
-                tickvals=np.linspace(c3_min, c3_max, 6),
-                ticktext=[f"{val:.1f}" for val in np.linspace(c3_min, c3_max, 6)]
+                title="<b>C3</b> (km²/s²) / <b>Vinf</b> (km/s)",
+                # Generate ticks based on the actual step size
+                tickvals=[level for level in np.arange(c3_min, c3_max + 0.5*c3_step, c3_step)],
+                ticktext=[f"{c3:.1f} / {np.sqrt(c3):.1f}" for c3 in np.arange(c3_min, c3_max + 0.5*c3_step, c3_step)]
             ),
             connectgaps=True,
             visible=True,
-        )
-    )
-
-    # --- Update Vinf Contour Trace ---
-    plotly_traces.append(
-        go.Contour(
-            x=unique_departure_dates_dt,
-            y=unique_arrival_dates_dt,
-            z=grid_vinf_for_plot,
-            zauto=False,
-            zmin=vinf_min,
-            zmax=vinf_max * 1.1,
-            colorscale=vinf_colorscale,
-            hovertext=vinf_hovertext_grid_updated,
-            hoverinfo=vinf_hoverinfo.tolist(),
-            contours=dict(
-                coloring="fill", 
-                showlabels=True, 
-                labelfont=dict(size=10, color="black"),
-                start=vinf_min,
-                end=vinf_max,
-                size=vinf_step
-            ),
-            line=dict(width=0.5, smoothing=1.3),
-            name="Vinf",
-            colorbar=dict(
-                title="Vinf (km/s)",
-                tickvals=np.linspace(vinf_min, vinf_max, 6),
-                ticktext=[f"{val:.1f}" for val in np.linspace(vinf_min, vinf_max, 6)]
-            ),
-            connectgaps=True,
-            visible=False,
         )
     )
 
@@ -1036,161 +1014,95 @@ def plot_porkchop_plotly(
         )
     )
 
-    # --- Optimal C3 point (visible with C3 plot) ---
+    # --- Optimal point (showing both C3 and Vinf info) ---
     if show_optimal and np.any(~np.isnan(c3_values_km2_s2)):
         min_c3_idx = np.nanargmin(c3_values_km2_s2)
-        best_dep_mjd_c3 = departure_times_mjd[min_c3_idx]
-        best_arr_mjd_c3 = arrival_times_mjd[min_c3_idx]
-        best_tof_c3 = time_of_flight_days[min_c3_idx]
         best_c3_val = c3_values_km2_s2[min_c3_idx]
+        best_vinf_val = vinf_values_km_s[min_c3_idx]
+        best_tof = time_of_flight_days[min_c3_idx]
         
-        ht_c3 = f"<b>Optimal C3</b><br>Dep: {Time(best_dep_mjd_c3, format='mjd').iso[:10]}<br>Arr: {Time(best_arr_mjd_c3, format='mjd').iso[:10]}<br>C3: {best_c3_val:.1f} km²/s²<br>ToF: {best_tof_c3:.1f} d"
+        # Get the timestamp objects directly from original data
+        # Convert numpy index to Python integer for proper indexing into quivr/pyarrow tables
+        best_dep_time = departure_times[int(min_c3_idx)]
+        best_arr_time = arrival_times[int(min_c3_idx)]
         
-        plotly_traces.append(
-            go.Scatter(
-                x=[Time(best_dep_mjd_c3, format="mjd").datetime],
-                y=[Time(best_arr_mjd_c3, format="mjd").datetime],
-                mode="markers",
-                marker=dict(
-                    symbol="star",
-                    color="red",
-                    size=12,
-                    line=dict(color="black", width=1),
-                ),
-                showlegend=False,
-                name=f"Opt C3: {best_c3_val:.1f}",
-                hoverinfo="text",
-                text=[ht_c3],
-                visible=True,
-                hoverlabel=dict(bgcolor="red"),
-                hovertemplate=ht_c3,
+        # Get ISO strings for hover text
+        best_dep_iso = best_dep_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
+        best_arr_iso = best_arr_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
+        
+        # For scatter point positioning, get datetime objects
+        best_dep_dt = best_dep_time.to_astropy()[0].datetime
+        best_arr_dt = best_arr_time.to_astropy()[0].datetime
+        
+        # Check if the optimal point falls within our current plot range
+        optimal_in_range = (
+            xlim_dt[0] <= best_dep_dt <= xlim_dt[1] and
+            ylim_dt[0] <= best_arr_dt <= ylim_dt[1]
+        )
+        
+        if optimal_in_range:
+            # Create customdata for optimal point with numeric values
+            optimal_customdata = np.array([
+                [best_c3_val, best_vinf_val, best_tof]
+            ])
+            
+            # Create text array for date strings
+            optimal_text = np.array([[best_dep_iso, best_arr_iso]])
+            
+            # Configure hover behavior
+            if optimal_hover:
+                hover_info = dict(
+                    customdata=optimal_customdata,
+                    text=optimal_text,
+                    hovertemplate=(
+                        "<b>Optimal C3</b><br>" +
+                        "<b>Departure:</b> %{text[0]}<br>" +
+                        "<b>Arrival:</b> %{text[1]}<br>" +
+                        "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>" +
+                        "<b>Vinf:</b> %{customdata[1]:.1f} km/s<br>" +
+                        "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
+                    ),
+                    hoverlabel=dict(bgcolor="red"),
+                )
+            else:
+                hover_info = dict(
+                    hoverinfo="skip",  # Completely disable hover
+                )
+            
+            plotly_traces.append(
+                go.Scatter(
+                    x=[best_dep_dt],
+                    y=[best_arr_dt],
+                    mode="markers",
+                    marker=dict(
+                        symbol="star",
+                        color="red",
+                        size=12,
+                        line=dict(color="black", width=1),
+                    ),
+                    showlegend=False,
+                    name="Optimal C3",
+                    visible=True,
+                    **hover_info,
+                )
             )
-        )
-    else:
-        # Add placeholder to maintain trace index positions
-        plotly_traces.append(go.Scatter(visible=False))
-
-    # --- Optimal Vinf point (visible with Vinf plot) ---
-    if show_optimal and np.any(~np.isnan(vinf_values_km_s)):
-        min_vinf_idx = np.nanargmin(vinf_values_km_s)
-        best_dep_mjd_vinf = departure_times_mjd[min_vinf_idx]
-        best_arr_mjd_vinf = arrival_times_mjd[min_vinf_idx]
-        best_tof_vinf = time_of_flight_days[min_vinf_idx]
-        best_vinf_val = vinf_values_km_s[min_vinf_idx]
-        
-        ht_vinf = f"<b>Optimal Vinf</b><br>Dep: {Time(best_dep_mjd_vinf, format='mjd').iso[:10]}<br>Arr: {Time(best_arr_mjd_vinf, format='mjd').iso[:10]}<br>Vinf: {best_vinf_val:.1f} km/s<br>ToF: {best_tof_vinf:.1f} d"
-        
-        plotly_traces.append(
-            go.Scatter(
-                x=[Time(best_dep_mjd_vinf, format="mjd").datetime],
-                y=[Time(best_arr_mjd_vinf, format="mjd").datetime],
-                mode="markers",
-                marker=dict(
-                    symbol="diamond",
-                    color="blue",
-                    size=12,
-                    line=dict(color="black", width=1),
-                ),
-                showlegend=False,
-                name=f"Opt Vinf: {best_vinf_val:.1f}",
-                hoverinfo="text",
-                text=[ht_vinf],
-                visible=False,
-                hoverlabel=dict(bgcolor="blue"),
-                hovertemplate=ht_vinf,
-            )
-        )
-    else:
-        # Add placeholder to maintain trace index positions
-        plotly_traces.append(go.Scatter(visible=False))
-
-    # --- Axis Range Determination ---
-    final_xlim_dt = (
-        [
-            Time(xlim_mjd[0], format="mjd").datetime,
-            Time(xlim_mjd[1], format="mjd").datetime,
-        ]
-        if xlim_mjd
-        else (
-            [min(unique_departure_dates_dt), max(unique_departure_dates_dt)]
-            if unique_departure_dates_dt
-            else None
-        )
-    )
-    final_ylim_dt = (
-        [
-            Time(ylim_mjd[0], format="mjd").datetime,
-            Time(ylim_mjd[1], format="mjd").datetime,
-        ]
-        if ylim_mjd
-        else (
-            [min(unique_arrival_dates_dt), max(unique_arrival_dates_dt)]
-            if unique_arrival_dates_dt
-            else None
-        )
-    )
+        else:
+            print(f"Optimal point ({best_dep_iso}, {best_arr_iso}) falls outside the current plot range and will not be displayed")
 
     # --- Figure Creation and Layout Update ---
     fig = go.Figure(data=plotly_traces)
 
-    # Correct trace ordering for visibility arrays:
-    # 0: C3 contour
-    # 1: Vinf contour
-    # 2: ToF contours
-    # 3: Optimal C3 point
-    # 4: Optimal Vinf point
-
-    # Visibility for C3 view - Showing C3 contour, ToF contours, and C3 optimal point
-    c3_view_visibility = [True, False, True, True, False]  # Default visibility pattern
-
-    # Visibility for Vinf view - Showing Vinf contour, ToF contours, and Vinf optimal point
-    vinf_view_visibility = [False, True, True, False, True]  # Default visibility pattern
-
     fig.update_layout(
+        title_text=title,
         xaxis_title="Departure Date",
         yaxis_title="Arrival Date",
-        xaxis=dict(tickformat="%Y-%m-%d", tickangle=-45, range=final_xlim_dt),
-        yaxis=dict(tickformat="%Y-%m-%d", range=final_ylim_dt),
+        xaxis=dict(tickformat="%Y-%m-%d", tickangle=-45, range=xlim_dt),
+        yaxis=dict(tickformat="%Y-%m-%d", range=ylim_dt),
         width=width,
         height=height,
         autosize=False,
         hovermode="closest",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        updatemenus=[
-            dict(
-                type="buttons",
-                direction="right",
-                x=1,
-                xanchor="right",
-                y=1.15,
-                yanchor="top",
-                showactive=True,
-                buttons=[
-                    dict(
-                        label="Display C3",
-                        method="restyle",  # Use "restyle" for visibility changes
-                        args=[
-                            {"visible": c3_view_visibility[: len(fig.data)]},
-                            list(range(len(fig.data))),
-                        ],
-                    ),
-                    # args2 for title update is not directly supported with "restyle" for multiple traces easily.
-                    # Title update will be handled by a separate call or by initial setting.
-                    dict(
-                        label="Display Vinf",
-                        method="restyle",
-                        args=[
-                            {"visible": vinf_view_visibility[: len(fig.data)]},
-                            list(range(len(fig.data))),
-                        ],
-                    ),
-                ],
-            )
-        ],
     )
-    # Set initial title - this will be static unless we add more complex callbacks or change approach
-    # For simplicity, the title will remain the base title, or users can set it when calling.
-    # If dynamic title update with buttons is critical, it requires a different approach (e.g. custom JS or Dash)
-    fig.update_layout(title_text=title)  # Set base title
 
     return fig
