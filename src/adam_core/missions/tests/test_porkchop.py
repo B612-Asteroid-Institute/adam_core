@@ -75,7 +75,9 @@ def test_generate_real_porkchop_plot(tmp_path):
     fig = plot_porkchop_plotly(
         results,
         title="Earth to Mars Transfer (2022-2024)",
-        show_optimal=True,
+        optimal_hover=False,
+        trim_to_valid=True,
+        date_buffer_days=3.0,  # Add 3 days of buffer around valid data
     )
     
     # Save to pytest's temporary directory
