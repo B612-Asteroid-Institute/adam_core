@@ -168,7 +168,6 @@ def generate_porkchop_data(
                 origin_out=propagation_origin,
             ),
         )
-
     # create empty CartesianCoordinates
     departure_coordinates = CartesianCoordinates.empty(
         frame="ecliptic",
@@ -207,7 +206,6 @@ def generate_porkchop_data(
         arrival_coordinates = get_perturber_state(
             arrival_body, times, frame="ecliptic", origin=propagation_origin
         )
-
     x, y = np.meshgrid(
         np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
     )
@@ -738,7 +736,6 @@ def plot_porkchop_plotly(
         vinf_max = np.sqrt(c3_max)
     if vinf_step is None:
         vinf_step = (vinf_max - vinf_min) / 10  # 10 levels by default
-
     # For ToF
     if tof_min is None:
         tof_min = np.nanmin(original_tof_grid_days[original_tof_grid_days > 0])

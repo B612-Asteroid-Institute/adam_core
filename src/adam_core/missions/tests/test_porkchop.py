@@ -10,7 +10,6 @@ def test_generate_porkchop_data_origins():
     # Test with different origins
     earliest_launch = Timestamp.from_mjd([60000], scale="tdb")
     maximum_arrival = Timestamp.from_mjd([60100], scale="tdb")
-
     # Test with Sun as origin
     results_sun = generate_porkchop_data(
         departure_body=OriginCodes.EARTH,
@@ -29,7 +28,6 @@ def test_generate_porkchop_data_origins():
 
     # Check that time of flight is valid (positive)
     assert np.all(results_sun.time_of_flight() > 0)
-
     # Check that C3 values are computed
     assert np.all(~np.isnan(results_sun.c3()))
 
@@ -51,7 +49,6 @@ def test_generate_real_porkchop_plot(tmp_path):
     # These are approximate optimal transfer dates for illustration
     earliest_launch = Timestamp.from_iso8601(["2022-01-01T00:00:00"], scale="tdb")
     maximum_arrival = Timestamp.from_iso8601(["2024-01-01T00:00:00"], scale="tdb")
-
     # Generate porkchop data with reasonable resolution
     results = generate_porkchop_data(
         departure_body=OriginCodes.EARTH,
