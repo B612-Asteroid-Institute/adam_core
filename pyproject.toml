@@ -57,6 +57,9 @@ plots = [
     "nbformat>=4.2.0",
     "matplotlib>=3.10.1",
 ]
+oem = [
+    "oem>=0.4.5",
+]
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"

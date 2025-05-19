@@ -1,22 +1,34 @@
 try:
-    from oem import OrbitEphemerisMessage, Ephemeris, OrbitEphemerisHeader, State, EphemerisSegment, HeaderSection
+    from oem import OrbitEphemerisMessage
+    from oem.components import EphemerisSegment, HeaderSection
 except ImportError:
-    raise ImportError("oem is not installed. This package requires oem to run. Please install it using 'pip install oem'.")
+    raise ImportError(
+        "oem is not installed. This package requires oem to run. Please install it using 'pip install oem'."
+    )
 
-from typing import Optional, Type
-from ..coordinates import Timestamp, CartesianCoordinates
-from ..dynamics import Propagator
-from ..orbits import Orbits
-from ..orbits.ephemeris import Ephemeris
-import quivr as qv
 import datetime
+from typing import Optional, Type
+
+import quivr as qv
+
+from ..coordinates import CartesianCoordinates
+from ..coordinates.origin import Origin, OriginCodes
+from ..propagator import Propagator
+from ..time import Timestamp
+from . import Orbits
+
+frame_ref_table = {
+    "ECLIPJ2000": "ecliptic",
+    "J2000": "equatorial",
+    "EME2000": "equatorial",
+}
+
 
 def orbit_to_oem(
     orbits: Orbits,
     output_file: str,
     times: Timestamp,
     propagator_klass: Type[Propagator],
-    comment: str = "OEM file generated from adam_core Orbit",
     originator: str = "adam_core",
 ) -> str:
     """
@@ -25,15 +37,13 @@ def orbit_to_oem(
     This function converts the state vectors and epoch from an Orbit object into the OEM format.
     The OEM file will contain the spherical coordinates (right ascension, declination, range) and
     their rates, along with any available covariance information.
-    
-    Parameters  
+
+    Parameters
     ----------
     orbit : Orbit
         The Orbit object to convert
     output_file : str
         Path to the output OEM file
-    comment : str, optional
-        Comment to include in the OEM file header
 
     Returns
     -------
@@ -48,9 +58,8 @@ def orbit_to_oem(
 
     oem_header = {
         "CCSDS_OEM_VERS": "2.0",
-        "CREATION_DATE": datetime.now().isoformat(),
+        "CREATION_DATE": datetime.datetime.now().isoformat(),
         "ORIGINATOR": originator,
-        "COMMENT": comment,
     }
 
     segments = []
@@ -71,18 +80,18 @@ def orbit_to_oem(
         states = []
 
         for orbit_state in orbit_states:
-            state = [orbit_state.coordinates.time.to_astropy(),*orbit_state.coordinates.values]
+            state = [
+                orbit_state.coordinates.time.to_astropy(),
+                *orbit_state.coordinates.values,
+            ]
             states.append(state)
-        
-        segment = EphemerisSegment(
-            states=states,
-            header=metadata,
-        )
+
+        segment = EphemerisSegment(metadata, states)
 
         segments.append(segment)
 
     header = HeaderSection(oem_header)
-    
+
     oem_file = OrbitEphemerisMessage(
         header=header,
         segments=segments,
@@ -102,7 +111,7 @@ def orbit_from_oem(
     This function reads an OEM file and converts the state vectors and epoch into an Orbit object.
     The Orbit object will contain the spherical coordinates (right ascension, declination, range) and
     their rates, along with any available covariance information.
-    
+
     Parameters
     ----------
     input_file : str
@@ -114,42 +123,39 @@ def orbit_from_oem(
         The Orbit object
     """
 
-    oem_file = OrbitEphemerisMessage()
-    oem_file.open(input_file)
+    oem_file = OrbitEphemerisMessage.open(input_file)
 
     orbits = Orbits.empty()
 
-    for segment in oem_file.segments:
+    for i, segment in enumerate(oem_file.segments):
+        object_id = segment.metadata["OBJECT_ID"]
         for state in segment:
-            object_id = state.object_id
             frame = state.frame
-            origin = state.origin
+            origin = state.center
             time = Timestamp.from_astropy(state.epoch)
             position = state.position
             velocity = state.velocity
 
-
             coordinates = CartesianCoordinates.from_kwargs(
                 time=time,
-                x = position[0],
-                y = position[1],
-                z = position[2],
-                vx = velocity[0],
-                vy = velocity[1],
-                vz = velocity[2],
-                frame=frame,
-                origin=origin,
+                x=[position[0]],
+                y=[position[1]],
+                z=[position[2]],
+                vx=[velocity[0]],
+                vy=[velocity[1]],
+                vz=[velocity[2]],
+                frame=frame_ref_table[frame],
+                origin=Origin.from_kwargs(code=[origin.upper()]),
             )
 
-            orbit_id = object_id + "_" + time.to_iso()
+            orbit_id = f"{object_id}_seg_{i}_{time.to_iso8601()[0].as_py()}"
 
             orbit = Orbits.from_kwargs(
-                object_id=object_id,
-                orbit_id=orbit_id,
+                object_id=[object_id],
+                orbit_id=[orbit_id],
                 coordinates=coordinates,
             )
 
             orbits = qv.concatenate([orbits, orbit])
 
     return orbits
-
