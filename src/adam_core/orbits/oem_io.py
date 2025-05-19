@@ -1,6 +1,6 @@
 try:
     from oem import OrbitEphemerisMessage
-    from oem.components import EphemerisSegment, HeaderSection
+    from oem.components import EphemerisSegment, HeaderSection, MetaDataSection
 except ImportError:
     raise ImportError(
         "oem is not installed. This package requires oem to run. Please install it using 'pip install oem'."
@@ -77,6 +77,8 @@ def orbit_to_oem(
             "STOP_TIME": orbit_states.coordinates.time.max().to_iso8601()[0].as_py(),
         }
 
+        metadata_section = MetaDataSection(metadata)
+
         states = []
 
         for orbit_state in orbit_states:
@@ -86,7 +88,7 @@ def orbit_to_oem(
             ]
             states.append(state)
 
-        segment = EphemerisSegment(metadata, states)
+        segment = EphemerisSegment(metadata_section, states)
 
         segments.append(segment)
 
