@@ -21,6 +21,8 @@ frame_ref_table = {
     "ECLIPJ2000": "ecliptic",
     "J2000": "equatorial",
     "EME2000": "equatorial",
+    "equatorial": "equatorial",
+    "ecliptic": "ecliptic",
 }
 
 
@@ -57,7 +59,7 @@ def orbit_to_oem(
     unique_orbit_ids = results.orbit_id.unique()
 
     oem_header = {
-        "CCSDS_OEM_VERS": "2.0",
+        "CCSDS_OEM_VERS": "1.0",
         "CREATION_DATE": datetime.datetime.now().isoformat(),
         "ORIGINATOR": originator,
     }
@@ -70,9 +72,10 @@ def orbit_to_oem(
         metadata = {
             "OBJECT_NAME": orbit_id,
             "OBJECT_ID": orbit_id,
-            "CENTER_NAME": orbit_states.coordinates.origin.code,
+            "CENTER_NAME": orbit_states.coordinates.origin.code[0].as_py(),
+            # This should be more specific - likely expecting ex J2000
             "REF_FRAME": orbit_states.coordinates.frame,
-            "TIME_SYSTEM": orbit_states.coordinates.time.scale,
+            "TIME_SYSTEM": orbit_states.coordinates.time.scale.upper(),
             "START_TIME": orbit_states.coordinates.time.min().to_iso8601()[0].as_py(),
             "STOP_TIME": orbit_states.coordinates.time.max().to_iso8601()[0].as_py(),
         }
@@ -83,11 +86,12 @@ def orbit_to_oem(
 
         for orbit_state in orbit_states:
             state = [
-                orbit_state.coordinates.time.to_astropy(),
-                *orbit_state.coordinates.values,
+                orbit_state.coordinates.time.to_astropy()[0],
+                *orbit_state.coordinates.values[0],
             ]
             states.append(state)
 
+        states = list(zip(*states))
         segment = EphemerisSegment(metadata_section, states)
 
         segments.append(segment)

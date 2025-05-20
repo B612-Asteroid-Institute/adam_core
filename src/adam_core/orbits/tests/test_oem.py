@@ -59,4 +59,12 @@ def test_orbit_to_oem(tmp_path):
     oem_path = f"{tmp_path}/test.oem"
     oem_data = orbit_to_oem(test_orbit, oem_path, times, ASSISTPropagator)
 
-    # convert to oem
+    # test load
+    orbits_rt = orbit_from_oem(oem_path)
+
+    orbits_rt_df = orbits_rt.to_dataframe()
+
+    assert orbits_rt.coordinates.frame == "equatorial"
+    assert orbits_rt.coordinates.origin.code[0].as_py() == "EARTH"
+    assert len(orbits_rt_df) == 5
+    assert orbits_rt.coordinates.time.scale == "tdb"
