@@ -1,7 +1,7 @@
+import logging
 import multiprocessing as mp
-import time
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +12,6 @@ import quivr as qv
 import ray
 from astropy.time import Time
 from matplotlib.colors import LogNorm, Normalize
-from scipy import ndimage
 from scipy.interpolate import griddata
 
 from adam_core.constants import KM_P_AU, S_P_DAY
@@ -25,6 +24,8 @@ from adam_core.ray_cluster import initialize_use_ray
 from adam_core.time import Timestamp
 from adam_core.utils import get_perturber_state
 from adam_core.utils.iter import _iterate_chunk_indices
+
+logger = logging.getLogger(__name__)
 
 
 class LambertOutput(qv.Table):
@@ -144,11 +145,7 @@ def generate_porkchop_data(
         The porkchop data.
     """
 
-    start_total = time.time()
-    print(f"Starting porkchop data generation...")
-
     # if departure_body is an Orbit, ensure its origin is the propagation_origin
-    start_prep = time.time()
     if isinstance(departure_body, Orbits):
         departure_body = departure_body.set_column(
             "coordinates",
@@ -171,11 +168,7 @@ def generate_porkchop_data(
                 origin_out=propagation_origin,
             ),
         )
-    prep_time = time.time() - start_prep
-    print(f"Initial coordinate transformation took {prep_time:.3f} seconds")
 
-    # pre-generate the state vectors for the departure and arrival bodies and the specified time grid
-    start_time_gen = time.time()
     # create empty CartesianCoordinates
     departure_coordinates = CartesianCoordinates.empty(
         frame="ecliptic",
@@ -192,11 +185,8 @@ def generate_porkchop_data(
         ),
         scale="tdb",
     )
-    time_gen_time = time.time() - start_time_gen
-    print(f"Time grid generation took {time_gen_time:.3f} seconds")
 
     # get r1 (departure body) for times
-    start_dep_prop = time.time()
     if isinstance(departure_body, Orbits):
         propagator = propagator_class()
         departure_coordinates = propagator.propagate_orbits(
@@ -206,11 +196,8 @@ def generate_porkchop_data(
         departure_coordinates = get_perturber_state(
             departure_body, times, frame="ecliptic", origin=propagation_origin
         )
-    dep_prop_time = time.time() - start_dep_prop
-    print(f"Departure body propagation took {dep_prop_time:.3f} seconds")
 
     # get r2 (arrival body) for times
-    start_arr_prop = time.time()
     if isinstance(arrival_body, Orbits):
         propagator = propagator_class()
         arrival_coordinates = propagator.propagate_orbits(
@@ -220,10 +207,7 @@ def generate_porkchop_data(
         arrival_coordinates = get_perturber_state(
             arrival_body, times, frame="ecliptic", origin=propagation_origin
         )
-    arr_prop_time = time.time() - start_arr_prop
-    print(f"Arrival body propagation took {arr_prop_time:.3f} seconds")
 
-    start_mesh = time.time()
     x, y = np.meshgrid(
         np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
     )
@@ -238,18 +222,12 @@ def generate_porkchop_data(
 
     stacked_departure_coordinates = departure_coordinates.take(x)
     stacked_arrival_coordinates = arrival_coordinates.take(y)
-    mesh_time = time.time() - start_mesh
-    print(f"Mesh creation and coordinate stacking took {mesh_time:.3f} seconds")
 
     if max_processes is None:
         max_processes = mp.cpu_count()
 
-    start_ray = time.time()
     use_ray = initialize_use_ray(max_processes)
-    ray_init_time = time.time() - start_ray
-    print(f"Ray initialization took {ray_init_time:.3f} seconds")
 
-    start_lambert = time.time()
     lambert_results = LambertOutput.empty()
     if use_ray:
         futures = []
@@ -286,30 +264,6 @@ def generate_porkchop_data(
             max_iter,
             tol,
         )
-    lambert_time = time.time() - start_lambert
-    print(f"Lambert problem solution took {lambert_time:.3f} seconds")
-
-    total_time = time.time() - start_total
-    print(f"\nTotal porkchop data generation took {total_time:.3f} seconds")
-    print(
-        f"  - Coordinate preparation: {prep_time:.3f}s ({prep_time/total_time*100:.1f}%)"
-    )
-    print(
-        f"  - Time grid generation: {time_gen_time:.3f}s ({time_gen_time/total_time*100:.1f}%)"
-    )
-    print(
-        f"  - Departure propagation: {dep_prop_time:.3f}s ({dep_prop_time/total_time*100:.1f}%)"
-    )
-    print(
-        f"  - Arrival propagation: {arr_prop_time:.3f}s ({arr_prop_time/total_time*100:.1f}%)"
-    )
-    print(f"  - Mesh and stacking: {mesh_time:.3f}s ({mesh_time/total_time*100:.1f}%)")
-    print(
-        f"  - Ray initialization: {ray_init_time:.3f}s ({ray_init_time/total_time*100:.1f}%)"
-    )
-    print(
-        f"  - Lambert solution: {lambert_time:.3f}s ({lambert_time/total_time*100:.1f}%)"
-    )
 
     return lambert_results
 
@@ -390,9 +344,6 @@ def plot_porkchop(
         method="cubic",
         fill_value=np.nan,
     )
-
-    print(f"len(c3_values_km2_s2): {len(c3_values_km2_s2)}")
-    print(f"len(grid_c3): {len(grid_c3)}")
 
     # Define default contour levels for C3 if not provided
     if c3_levels is None:
@@ -567,74 +518,6 @@ def plot_porkchop(
     return fig, ax
 
 
-def _generate_custom_log_colorscale(base_colorscale_name: str, levels: List[float]):
-    """Generates a custom Plotly colorscale for logarithmic perception.
-    Maps original data levels to colors sampled logarithmically from a base colorscale.
-    """
-    if not levels:
-        return base_colorscale_name
-
-    # 1. Use unique, sorted, finite levels
-    original_levels_np = np.array(
-        sorted(list(set(l for l in levels if l is not None and np.isfinite(l))))
-    )
-    if len(original_levels_np) < 2:
-        # Not enough points to define a meaningful scale, fallback or use a single color if one level exists
-        if len(original_levels_np) == 1:
-            color = pcolors.sample_colorscale(base_colorscale_name, [0.5])[0]
-            return [[0.0, color], [1.0, color]]
-        return base_colorscale_name
-
-    min_orig, max_orig = original_levels_np[0], original_levels_np[-1]
-
-    # 2. Normalize original levels to [0, 1] for output colorscale positions
-    if np.isclose(min_orig, max_orig):
-        color = pcolors.sample_colorscale(base_colorscale_name, [0.5])[0]
-        return [[0.0, color], [1.0, color]]
-    norm_orig_positions = (original_levels_np - min_orig) / (max_orig - min_orig)
-
-    # 3. Determine colorscale sampling points (logarithmically mapped from original_levels_np)
-    # These points (0-1) are where we pick colors from the base_colorscale_name.
-    positive_mask = original_levels_np > 1e-9  # Epsilon for "positive"
-    positive_levels_for_log_range = original_levels_np[positive_mask]
-
-    sampling_points = norm_orig_positions.copy()  # Default to linear sampling
-
-    if len(positive_levels_for_log_range) >= 2:
-        log_vals = np.log10(positive_levels_for_log_range)
-        min_log, max_log = (
-            log_vals[0],
-            log_vals[-1],
-        )  # positive_levels_for_log_range is sorted
-
-        if not np.isclose(min_log, max_log):  # Meaningful log scale range exists
-            clamped_for_log = np.clip(
-                original_levels_np,
-                positive_levels_for_log_range[0],
-                positive_levels_for_log_range[-1],
-            )
-            log_of_clamped = np.log10(clamped_for_log)  # All values are now positive
-
-            current_sampling_points = (log_of_clamped - min_log) / (max_log - min_log)
-            current_sampling_points = np.clip(current_sampling_points, 0, 1)
-            sampling_points = (
-                current_sampling_points  # Apply if log scaling was successful
-            )
-
-    # 4. Sample the colors from the base colorscale using the determined sampling_points
-    colors = pcolors.sample_colorscale(base_colorscale_name, sampling_points)
-
-    # 5. Construct the Plotly colorscale [[norm_pos, color_str], ...]
-    custom_scale = []
-    for i in range(len(original_levels_np)):
-        custom_scale.append([norm_orig_positions[i], colors[i]])
-
-    if len(custom_scale) == 1:
-        return [[0.0, custom_scale[0][1]], [1.0, custom_scale[0][1]]]
-
-    return custom_scale
-
-
 def plot_porkchop_plotly(
     porkchop_data: LambertOutput,
     width: int = 900,
@@ -745,9 +628,6 @@ def plot_porkchop_plotly(
     all_arrival_mjd = np.sort(np.unique(arrival_times_mjd))
 
     if trim_to_valid and np.any(valid_c3_mask):
-        print(
-            f"Found {np.sum(valid_c3_mask)} valid C3 values out of {len(valid_c3_mask)}"
-        )
 
         # Extract departure and arrival times only for valid data points
         valid_departure_times_mjd = departure_times_mjd[valid_c3_mask]
@@ -790,28 +670,10 @@ def plot_porkchop_plotly(
                 (all_arrival_mjd >= min_arr_with_buffer)
                 & (all_arrival_mjd <= max_arr_with_buffer)
             ]
-
-            print(
-                f"Added buffer: departure range {min_dep_mjd:.1f}-{max_dep_mjd:.1f} → {min_dep_with_buffer:.1f}-{max_dep_with_buffer:.1f}"
-            )
-            print(
-                f"Added buffer: arrival range {min_arr_mjd:.1f}-{max_arr_mjd:.1f} → {min_arr_with_buffer:.1f}-{max_arr_with_buffer:.1f}"
-            )
-
-        print(
-            f"Using valid data range: departure {min(unique_departure_mjd):.1f} to {max(unique_departure_mjd):.1f}"
-        )
-        print(
-            f"Using valid data range: arrival {min(unique_arrival_mjd):.1f} to {max(unique_arrival_mjd):.1f}"
-        )
     else:
         # If not trimming or no valid data, use all unique times
         unique_departure_mjd = all_departure_mjd
         unique_arrival_mjd = all_arrival_mjd
-
-    print(
-        f"Using {len(unique_departure_mjd)} unique departure times and {len(unique_arrival_mjd)} unique arrival times"
-    )
 
     # Check if we have enough unique times to create a grid
     if len(unique_departure_mjd) < 2 or len(unique_arrival_mjd) < 2:
@@ -893,13 +755,9 @@ def plot_porkchop_plotly(
     # Replace NaN and over-max values with the sentinel value
     grid_c3_for_plot = np.copy(grid_c3_km2_s2)
     mask_nan = np.isnan(grid_c3_for_plot)
-    mask_over = grid_c3_for_plot > c3_max
 
     # Apply sentinel value to all invalid areas
     grid_c3_for_plot[mask_nan] = sentinel_value
-
-    # Create a mask for valid data (not NaN and not over max)
-    valid_mask = ~(mask_nan | mask_over)
 
     # --- Trim plot to valid data region if requested ---
     # Note: We've already trimmed before creating the grid,
@@ -1135,7 +993,7 @@ def plot_porkchop_plotly(
                 )
             )
         else:
-            print(
+            logger.warning(
                 f"Optimal point ({best_dep_iso}, {best_arr_iso}) falls outside the current plot range and will not be displayed"
             )
 

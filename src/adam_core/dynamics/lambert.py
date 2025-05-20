@@ -228,8 +228,6 @@ def _householder(p0, T0, ll, M, atol, rtol, maxiter):
     # Run the Householder iterations
     _, p, iteration_count = lax.while_loop(cond_fun, body_fun, init_state)
 
-    # Check if we reached max iterations without converging
-    max_reached = iteration_count >= maxiter
     return p
 
 
@@ -319,7 +317,6 @@ def _find_xy(ll, T, M, maxiter, atol, rtol, low_path):
     valid_ll_value = jnp.abs(ll) < 1.0
 
     valid_M = M <= M_max
-    valid_solution = valid_ll_value & valid_M
 
     # Get initial guess
     x_0 = _initial_guess(T, ll, M, low_path)
