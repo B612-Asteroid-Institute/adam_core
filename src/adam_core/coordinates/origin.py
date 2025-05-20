@@ -89,7 +89,9 @@ class Origin(qv.Table):
 
     @classmethod
     def from_OriginCodes(cls, code: OriginCodes, size: int = 1) -> "Origin":
-        return cls.from_kwargs(code=pa.array(pa.repeat(code.name, size), type=pa.large_string()))
+        return cls.from_kwargs(
+            code=pa.array(pa.repeat(code.name, size), type=pa.large_string())
+        )
 
     def as_OriginCodes(self) -> OriginCodes:
         """
