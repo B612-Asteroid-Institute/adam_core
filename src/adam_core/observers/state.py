@@ -162,7 +162,7 @@ def get_mpc_observer_state(
         vz=v_obs[:, 2],
         frame=frame,
         origin=Origin.from_kwargs(
-            code=pa.repeat(origin.name, len(times), type=pa.large_string())
+            code=pa.array(pa.repeat(origin.name, len(times)), type=pa.large_string())
         ),
     )
 
