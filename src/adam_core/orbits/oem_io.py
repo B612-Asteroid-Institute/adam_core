@@ -1,4 +1,5 @@
 try:
+    from oem import CURRENT_VERSION as OEM_VERSION
     from oem import OrbitEphemerisMessage
     from oem.components import EphemerisSegment, HeaderSection, MetaDataSection
 except ImportError:
@@ -7,23 +8,301 @@ except ImportError:
     )
 
 import datetime
-from typing import Optional, Type
+from typing import Literal, Optional, Type
 
+import numpy as np
+import numpy.typing as npt
+import pyarrow.compute as pc
 import quivr as qv
 
+from adam_core.coordinates.transform import transform_coordinates
+
 from ..coordinates import CartesianCoordinates
+from ..coordinates.covariances import _upper_triangular_to_full
 from ..coordinates.origin import Origin, OriginCodes
 from ..propagator import Propagator
 from ..time import Timestamp
 from . import Orbits
 
-frame_ref_table = {
-    "ECLIPJ2000": "ecliptic",
-    "J2000": "equatorial",
-    "EME2000": "equatorial",
-    "equatorial": "equatorial",
-    "ecliptic": "ecliptic",
-}
+REF_FRAME_VALUES = (
+    "EME2000", # Earth Mean Equator and Equinox of J2000
+    "GCRF", # Geocentric Celestial Reference Frame
+    "GRC", # Geocentric Reference Frame
+    "ICRF", # International Celestial Reference Frame
+    "ITRF2000", # International Terrestrial Reference Frame
+    "ITRF-93", # International Terrestrial Reference Frame
+    "ITRF-97", # International Terrestrial Reference Frame
+    "MCI", # Mean Celestial Intermediate
+    "TDR", # True of Date
+    "TEME", # True Equator Mean Equinox
+    "TOD" # True of Date
+)
+
+CCSDS_CENTER_NAME_VALUES = (
+    "101955 BENNU",
+    "103P/HARTLEY 2",
+    "11351 LEUCUS",
+    "132524 APL",
+    "15094 POLYMELE",
+    "162173 RYUGU",
+    "16 PSYCHE",
+    "19P/BORRELLY",
+    "1 CERES",
+    "1P/HALLEY",
+    "21900 ORUS",
+    "21 LUTETIA",
+    "21P/GIACOBINI-ZINNER",
+    "243 IDA",
+    "25143 ITOKAWA",
+    "253 MATHILDE",
+    "26P/GRIGG-SKJELLRUP",
+    "2867 STEINS",
+    "3200 PHAETHON",
+    "3548 EURYBATES",
+    "4179 TOUTATIS",
+    "433 EROS",
+    "4 VESTA",
+    "52246 DONALDJOHANSON",
+    "5525 ANNEFRANK",
+    "617 PATROCLUS",
+    "65803 DIDYMOS/DIMORPHOS",
+    "67P/CHURYUMOV-GERASIMENKO",
+    "81P/WILD 2",
+    "951 GASPRA",
+    "9969 BRAILLE",
+    "9P/TEMPEL 1",
+    "AMALTHEA",
+    "ARIEL",
+    "ARROKOTH",
+    "ATLAS",
+    "CALLISTO",
+    "CALYPSO",
+    "CHARON",
+    "DEIMOS",
+    "DIONE",
+    "EARTH",
+    "EARTH BARYCENTER",
+    "EARTH-MOON L1",
+    "EARTH-MOON L2",
+    "ENCELADUS",
+    "EPIMETHEUS",
+    "EUROPA",
+    "GANYMEDE",
+    "HELENE",
+    "HYPERION",
+    "IAPETUS",
+    "IO",
+    "JANUS",
+    "JUPITER",
+    "JUPITER BARYCENTER",
+    "LARISSA",
+    "MARS",
+    "MARS BARYCENTER",
+    "MERCURY",
+    "MERCURY BARYCENTER",
+    "MIMAS",
+    "MIRANDA",
+    "MOON",
+    "NEPTUNE",
+    "NEPTUNE BARYCENTER",
+    "OBERON",
+    "PANDORA",
+    "PHOBOS",
+    "PHOEBE",
+    "PLUTO",
+    "PLUTO BARYCENTER",
+    "PROTEUS",
+    "RHEA",
+    "SATURN",
+    "SATURN BARYCENTER",
+    "SOLAR SYSTEM BARYCENTER",
+    "SUN",
+    "SUN-EARTH L1",
+    "SUN-EARTH L2",
+    "TELESTO",
+    "TETHYS",
+    "TITAN",
+    "TITANIA",
+    "TRITON",
+    "UMBRIEL",
+    "URANUS",
+    "URANUS BARYCENTER",
+    "VENUS",
+    "VENUS BARYCENTER",
+)
+
+def _adam_to_oem_frame(frame: str) -> str:
+    """
+    Convert ADAM Core frame to OEM frame.
+    
+    Parameters
+    ----------
+    frame : str
+        The ADAM Core frame ('equatorial', 'ecliptic', 'itrf93')
+        
+    Returns
+    -------
+    str
+        The corresponding OEM frame
+        
+    Raises
+    ------
+    ValueError
+        If the frame is not supported
+    """
+    frame_map = {
+        "equatorial": "EME2000",  # Earth Mean Equator and Equinox of J2000
+        "itrf93": "ITRF-93",      # International Terrestrial Reference Frame
+    }
+    
+    if frame in frame_map:
+        return frame_map[frame]
+    else:
+        raise ValueError(f"Unsupported frame for OEM conversion: {frame}. Only 'equatorial' and 'itrf93' are supported.")
+
+def _oem_to_adam_frame(frame: str) -> str:
+    """
+    Convert OEM frame to ADAM Core frame.
+    
+    Parameters
+    ----------
+    frame : str
+        The OEM frame
+        
+    Returns
+    -------
+    str
+        The corresponding ADAM Core frame
+        
+    Raises
+    ------
+    ValueError
+        If the frame is not supported
+    """
+    frame_map = {
+        "EME2000": "equatorial",  # Earth Mean Equator and Equinox of J2000
+        "ITRF-93": "itrf93",      # International Terrestrial Reference Frame
+    }
+    
+    if frame in frame_map:
+        return frame_map[frame]
+    else:
+        raise ValueError(f"Unsupported OEM frame: {frame}. Supported frames are {list(frame_map.keys())}.")
+
+def _adam_to_oem_center(code: str) -> str:
+    """
+    Convert ADAM Core origin code to OEM center name.
+    
+    Parameters
+    ----------
+    code : str
+        The ADAM Core origin code
+        
+    Returns
+    -------
+    str
+        The corresponding OEM center name
+        
+    Raises
+    ------
+    ValueError
+        If the origin code is not supported
+    """
+    center_map = {
+        "SOLAR_SYSTEM_BARYCENTER": "SOLAR SYSTEM BARYCENTER",
+        "MERCURY_BARYCENTER": "MERCURY BARYCENTER",
+        "VENUS_BARYCENTER": "VENUS BARYCENTER",
+        "EARTH_MOON_BARYCENTER": "EARTH BARYCENTER",
+        "MARS_BARYCENTER": "MARS BARYCENTER",
+        "JUPITER_BARYCENTER": "JUPITER BARYCENTER",
+        "SATURN_BARYCENTER": "SATURN BARYCENTER",
+        "URANUS_BARYCENTER": "URANUS BARYCENTER",
+        "NEPTUNE_BARYCENTER": "NEPTUNE BARYCENTER",
+        "SUN": "SUN",
+        "MERCURY": "MERCURY",
+        "VENUS": "VENUS",
+        "EARTH": "EARTH",
+        "MOON": "MOON",
+        "MARS": "MARS",
+        "JUPITER": "JUPITER",
+        "SATURN": "SATURN",
+        "URANUS": "URANUS",
+        "NEPTUNE": "NEPTUNE",
+    }
+    
+    if code in center_map:
+        return center_map[code]
+    else:
+        raise ValueError(f"Unsupported origin code for OEM conversion: {code}")
+
+def _oem_to_adam_center(center: str) -> str:
+    """
+    Convert OEM center name to ADAM Core origin code.
+    
+    Parameters
+    ----------
+    center : str
+        The OEM center name
+        
+    Returns
+    -------
+    str
+        The corresponding ADAM Core origin code
+        
+    Raises
+    ------
+    ValueError
+        If the center name is not supported
+    """
+    center_map = {
+        "SOLAR SYSTEM BARYCENTER": "SOLAR_SYSTEM_BARYCENTER",
+        "MERCURY BARYCENTER": "MERCURY_BARYCENTER",
+        "VENUS BARYCENTER": "VENUS_BARYCENTER",
+        "EARTH BARYCENTER": "EARTH_MOON_BARYCENTER",  # Note: OEM uses EARTH BARYCENTER for what SPICE calls EMB
+        "MARS BARYCENTER": "MARS_BARYCENTER",
+        "JUPITER BARYCENTER": "JUPITER_BARYCENTER",
+        "SATURN BARYCENTER": "SATURN_BARYCENTER",
+        "URANUS BARYCENTER": "URANUS_BARYCENTER",
+        "NEPTUNE BARYCENTER": "NEPTUNE_BARYCENTER",
+        "SUN": "SUN",
+        "MERCURY": "MERCURY",
+        "VENUS": "VENUS",
+        "EARTH": "EARTH",
+        "MOON": "MOON",
+        "MARS": "MARS",
+        "JUPITER": "JUPITER",
+        "SATURN": "SATURN",
+        "URANUS": "URANUS",
+        "NEPTUNE": "NEPTUNE",
+    }
+    center_upper = center.upper()
+    
+    if center_upper in center_map:
+        return center_map[center_upper]
+    else:
+        raise ValueError(f"Unsupported OEM center name: {center}. Supported centers are {list(center_map.keys())}.")
+
+
+def _oem_to_adam_covariances(cov_ordering: Literal["LTM", "UTM", "FULL", "LTMWCC", "UTMWCC"], covariances: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """
+    Convert OEM covariances to ADAM Core covariances.
+    
+    Parameters
+    ----------
+    cov_ordering : Literal["LTM", "UTM", "FULL", "LTMWCC", "UTMWCC"]
+        The ordering of the covariances
+    covariances : npt.NDArray[np.float64]
+        The covariances
+        
+    Returns
+    -------
+    npt.NDArray[np.float64]
+        The ADAM Core covariances as (N, 6, 6) array
+    """
+    if cov_ordering == "LTM":
+        return covariances
+    elif cov_ordering == "UTM":
+        return covariances
 
 
 def orbit_to_oem(
@@ -31,14 +310,12 @@ def orbit_to_oem(
     output_file: str,
     times: Timestamp,
     propagator_klass: Type[Propagator],
-    originator: str = "adam_core",
+    originator: str = "ADAM CORE USER",
 ) -> str:
     """
     Convert Orbit object to an OEM file.
 
     This function converts the state vectors and epoch from an Orbit object into the OEM format.
-    The OEM file will contain the spherical coordinates (right ascension, declination, range) and
-    their rates, along with any available covariance information.
 
     Parameters
     ----------
@@ -52,55 +329,71 @@ def orbit_to_oem(
     str
         Path to the output OEM file
     """
+    # Check that we have a single object_id
+    assert len(orbits.object_id.unique()) == 1, "Only one object_id is supported for OEM conversion."
+
+    assert pc.all(
+        pc.invert(pc.is_null(orbits.object_id))
+    ).as_py(), "Orbits must specify object_id for oem metadata."
+
+    object_id = orbits.object_id[0].as_py()
+
+    # Assert that output times are unique
+    assert len(times) == len(times.unique()), "Times must be unique for each state"
+
     propagator = propagator_klass()
 
-    results = propagator.propagate_orbits(orbits, times)
+    object_states = propagator.propagate_orbits(orbits, times)
 
-    unique_orbit_ids = results.orbit_id.unique()
+    # Of the default OEM frames, we only support EME2000 (equatorial).
+    # So let's transform to that frame.
+    object_states = object_states.set_column(
+        "coordinates",
+        transform_coordinates(
+            object_states.coordinates,
+            frame_out="equatorial"
+        )
+    )
+    object_states = object_states.sort_by("coordinates.time")
 
     oem_header = {
-        "CCSDS_OEM_VERS": "1.0",
+        "CCSDS_OEM_VERS": OEM_VERSION,
         "CREATION_DATE": datetime.datetime.now().isoformat(),
         "ORIGINATOR": originator,
     }
 
-    segments = []
+    oem_frame = _adam_to_oem_frame(object_states.coordinates.frame)
 
-    for orbit_id in unique_orbit_ids:
-        orbit_states = results.select("orbit_id", orbit_id)
+    # Convert origin from ADAM Core format to OEM format
+    oem_center = _adam_to_oem_center(object_states.coordinates.origin.code[0].as_py())
+    
+    segment_metadata = {
+        "OBJECT_NAME": object_id,
+        "OBJECT_ID": object_id,
+        "CENTER_NAME": oem_center,
+        "REF_FRAME": oem_frame,
+        "TIME_SYSTEM": object_states.coordinates.time.scale.upper(),
+        "START_TIME": object_states.coordinates.time.min().to_iso8601()[0].as_py(),
+        "STOP_TIME": object_states.coordinates.time.max().to_iso8601()[0].as_py(),
+    }
+    metadata_section = MetaDataSection(segment_metadata)
 
-        metadata = {
-            "OBJECT_NAME": orbit_id,
-            "OBJECT_ID": orbit_id,
-            "CENTER_NAME": orbit_states.coordinates.origin.code[0].as_py(),
-            # This should be more specific - likely expecting ex J2000
-            "REF_FRAME": orbit_states.coordinates.frame,
-            "TIME_SYSTEM": orbit_states.coordinates.time.scale.upper(),
-            "START_TIME": orbit_states.coordinates.time.min().to_iso8601()[0].as_py(),
-            "STOP_TIME": orbit_states.coordinates.time.max().to_iso8601()[0].as_py(),
-        }
+    states = []
+    for orbit_state in object_states:
+        state = [
+            orbit_state.coordinates.time.to_astropy()[0],
+            *orbit_state.coordinates.values[0],
+        ]
+        states.append(state)
 
-        metadata_section = MetaDataSection(metadata)
-
-        states = []
-
-        for orbit_state in orbit_states:
-            state = [
-                orbit_state.coordinates.time.to_astropy()[0],
-                *orbit_state.coordinates.values[0],
-            ]
-            states.append(state)
-
-        states = list(zip(*states))
-        segment = EphemerisSegment(metadata_section, states)
-
-        segments.append(segment)
+    states = list(zip(*states))
+    segment = EphemerisSegment(metadata_section, states)
 
     header = HeaderSection(oem_header)
 
     oem_file = OrbitEphemerisMessage(
         header=header,
-        segments=segments,
+        segments=[segment],
     )
 
     oem_file.save_as(output_file)
@@ -128,16 +421,17 @@ def orbit_from_oem(
     Orbit
         The Orbit object
     """
-
     oem_file = OrbitEphemerisMessage.open(input_file)
+
 
     orbits = Orbits.empty()
 
     for i, segment in enumerate(oem_file.segments):
         object_id = segment.metadata["OBJECT_ID"]
         for state in segment:
-            frame = state.frame
-            origin = state.center
+            # Convert OEM frame and center to ADAM Core format
+            frame = _oem_to_adam_frame(state.frame)
+            origin = _oem_to_adam_center(state.center)
             time = Timestamp.from_astropy(state.epoch)
             position = state.position
             velocity = state.velocity
@@ -150,8 +444,8 @@ def orbit_from_oem(
                 vx=[velocity[0]],
                 vy=[velocity[1]],
                 vz=[velocity[2]],
-                frame=frame_ref_table[frame],
-                origin=Origin.from_kwargs(code=[origin.upper()]),
+                frame=frame,
+                origin=Origin.from_kwargs(code=[origin]),
             )
 
             orbit_id = f"{object_id}_seg_{i}_{time.to_iso8601()[0].as_py()}"

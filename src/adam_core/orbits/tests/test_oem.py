@@ -1,6 +1,7 @@
 import os
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 import quivr as qv
 from adam_assist import ASSISTPropagator
@@ -19,40 +20,33 @@ astroforge_optical_path = (
 def test_orbit_from_oem():
     optical_orbits = orbit_from_oem(astroforge_optical_path)
 
-    optical_orbits_df = optical_orbits.to_dataframe()
+    first_segment = optical_orbits.apply_mask(pc.match_substring(optical_orbits.orbit_id, "seg_0"))
+    second_segment = optical_orbits.apply_mask(pc.match_substring(optical_orbits.orbit_id, "seg_1"))
 
-    # print(optical_orbits_df)
+    assert len(first_segment) == 10
+    assert len(second_segment) == 5
+    assert len(optical_orbits) == 15
 
-    orbit_ids = optical_orbits_df["orbit_id"]
-    first_segment_ids = [orbit_id for orbit_id in orbit_ids if "seg_0" in orbit_id]
-    second_segment_ids = [orbit_id for orbit_id in orbit_ids if "seg_1" in orbit_id]
-
-    assert len(orbit_ids) == 15
-    assert len(first_segment_ids) == 10
-    assert len(second_segment_ids) == 5
-
-    assert optical_orbits.coordinates.frame == "equatorial"
+    assert optical_orbits.coordinates.frame == "equatorial" # J2000
     assert optical_orbits.coordinates.origin.code[0].as_py() == "EARTH"
 
 
 def test_orbit_to_oem(tmp_path):
-    # generate an orbit
-
     mjds = [60000.0, 60001.0, 60002.0, 60003.0, 60004.0]
     times = Timestamp.from_mjd(mjds, scale="tdb")
     test_orbit = Orbits.from_kwargs(
-        object_id=["test"],
+        object_id=["object_id1"],
         orbit_id=["test_orbit"],
         coordinates=CartesianCoordinates.from_kwargs(
             time=times[0],
             x=[1.0],
             y=[1.1],
             z=[1.2],
-            vx=[1.0],
-            vy=[0.1],
+            vx=[0.01],
+            vy=[0.01],
             vz=[0.01],
             frame="equatorial",
-            origin=Origin.from_kwargs(code=["EARTH"]),
+            origin=Origin.from_kwargs(code=["SUN"]),
         ),
     )
 
@@ -65,6 +59,6 @@ def test_orbit_to_oem(tmp_path):
     orbits_rt_df = orbits_rt.to_dataframe()
 
     assert orbits_rt.coordinates.frame == "equatorial"
-    assert orbits_rt.coordinates.origin.code[0].as_py() == "EARTH"
+    assert orbits_rt.coordinates.origin.code[0].as_py() == "SUN"
     assert len(orbits_rt_df) == 5
     assert orbits_rt.coordinates.time.scale == "tdb"

@@ -2,6 +2,7 @@ import logging
 from typing import Callable, Optional, Tuple
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
 from scipy.linalg import sqrtm
@@ -475,3 +476,17 @@ def transform_covariances_jacobian(
     jacobian = calc_jacobian(coords, _func, **kwargs)
     covariances = jacobian @ covariances @ np.transpose(jacobian, axes=(0, 2, 1))
     return covariances
+
+
+def _upper_triangular_to_full(
+    upper_triangular: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """
+    Convert an upper triangular matrix containing 21 elements to a full 6x6 matrix.
+    """
+    assert len(upper_triangular) == 21
+
+    full = np.zeros((6, 6))
+    full[np.triu_indices(6)] = upper_triangular
+    full[np.tril_indices(6, -1)] = full.T[np.tril_indices(6, -1)]
+    return full
