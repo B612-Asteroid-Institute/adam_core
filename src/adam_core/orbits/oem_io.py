@@ -321,7 +321,7 @@ def orbit_to_oem(
 
     propagator = propagator_klass()
 
-    object_states = propagator.propagate_orbits(orbits, times)
+    object_states = propagator.propagate_orbits(orbits, times, covariance=True)
 
     # Of the default OEM frames, we only support EME2000 (equatorial).
     # So let's transform to that frame.
@@ -357,15 +357,26 @@ def orbit_to_oem(
     metadata_section = MetaDataSection(segment_metadata)
 
     states = []
+    covariances = []
     for orbit_state in object_states:
         state = [
             orbit_state.coordinates.time.to_astropy()[0],
             *orbit_state.coordinates.values[0],
         ]
         states.append(state)
+        if not orbit_state.coordinates.covariance[0].is_all_nan():
+            matrix = orbit_state.coordinates.covariance[0].to_matrix()[0]
+            matrix_lt = matrix[np.tril_indices(6)].tolist()
+            covariance = [
+                orbit_state.coordinates.time.to_astropy()[0],
+                oem_frame, 
+                *matrix_lt,
+            ]
+            covariances.append(covariance)
 
     states = list(zip(*states))
-    segment = EphemerisSegment(metadata_section, states)
+    covariances = list(zip(*covariances))
+    segment = EphemerisSegment(metadata_section, states, covariance_data=covariances)
 
     header = HeaderSection(oem_header)
 

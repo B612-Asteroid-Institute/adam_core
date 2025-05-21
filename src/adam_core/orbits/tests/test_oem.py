@@ -4,10 +4,12 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
+import numpy as np
 from adam_assist import ASSISTPropagator
 
 from ...coordinates import CartesianCoordinates
 from ...coordinates.origin import Origin
+from ...coordinates.covariances import CoordinateCovariances
 from ...time import Timestamp
 from ..oem_io import orbit_from_oem, orbit_to_oem
 from ..orbits import Orbits
@@ -61,6 +63,7 @@ def test_orbit_to_oem(tmp_path):
             vz=[0.01],
             frame="equatorial",
             origin=Origin.from_kwargs(code=["SUN"]),
+            covariance=CoordinateCovariances.from_sigmas(np.array([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]])),
         ),
     )
 
@@ -76,3 +79,4 @@ def test_orbit_to_oem(tmp_path):
     assert orbits_rt.coordinates.origin.code[0].as_py() == "SUN"
     assert len(orbits_rt_df) == 5
     assert orbits_rt.coordinates.time.scale == "tdb"
+    assert not np.any([cov.is_all_nan() for cov in orbits_rt.coordinates.covariance])
