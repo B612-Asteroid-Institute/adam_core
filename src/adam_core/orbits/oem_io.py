@@ -18,7 +18,7 @@ import quivr as qv
 from adam_core.coordinates.transform import transform_coordinates
 
 from ..coordinates import CartesianCoordinates
-from ..coordinates.covariances import _upper_triangular_to_full
+from ..coordinates.covariances import _upper_triangular_to_full, _lower_triangular_to_full, CoordinateCovariances
 from ..coordinates.origin import Origin, OriginCodes
 from ..propagator import Propagator
 from ..time import Timestamp
@@ -283,28 +283,6 @@ def _oem_to_adam_center(center: str) -> str:
         raise ValueError(f"Unsupported OEM center name: {center}. Supported centers are {list(center_map.keys())}.")
 
 
-def _oem_to_adam_covariances(cov_ordering: Literal["LTM", "UTM", "FULL", "LTMWCC", "UTMWCC"], covariances: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    """
-    Convert OEM covariances to ADAM Core covariances.
-    
-    Parameters
-    ----------
-    cov_ordering : Literal["LTM", "UTM", "FULL", "LTMWCC", "UTMWCC"]
-        The ordering of the covariances
-    covariances : npt.NDArray[np.float64]
-        The covariances
-        
-    Returns
-    -------
-    npt.NDArray[np.float64]
-        The ADAM Core covariances as (N, 6, 6) array
-    """
-    if cov_ordering == "LTM":
-        return covariances
-    elif cov_ordering == "UTM":
-        return covariances
-
-
 def orbit_to_oem(
     orbits: Orbits,
     output_file: str,
@@ -423,11 +401,11 @@ def orbit_from_oem(
     """
     oem_file = OrbitEphemerisMessage.open(input_file)
 
-
     orbits = Orbits.empty()
 
     for i, segment in enumerate(oem_file.segments):
         object_id = segment.metadata["OBJECT_ID"]
+
         for state in segment:
             # Convert OEM frame and center to ADAM Core format
             frame = _oem_to_adam_frame(state.frame)
@@ -435,6 +413,14 @@ def orbit_from_oem(
             time = Timestamp.from_astropy(state.epoch)
             position = state.position
             velocity = state.velocity
+
+            adam_cov = CoordinateCovariances.nulls(1)
+            for covariance in segment.covariances:
+                if covariance.epoch == state.epoch:
+                    if covariance.frame == state.frame:
+                        # Reshape the covariance matrix to include batch dimension (N, 6, 6)
+                        cov_matrix = covariance.matrix.reshape(1, 6, 6)
+                        adam_cov = CoordinateCovariances.from_matrix(cov_matrix)
 
             coordinates = CartesianCoordinates.from_kwargs(
                 time=time,
@@ -446,6 +432,7 @@ def orbit_from_oem(
                 vz=[velocity[2]],
                 frame=frame,
                 origin=Origin.from_kwargs(code=[origin]),
+                covariance=adam_cov,
             )
 
             orbit_id = f"{object_id}_seg_{i}_{time.to_iso8601()[0].as_py()}"
@@ -457,5 +444,7 @@ def orbit_from_oem(
             )
 
             orbits = qv.concatenate([orbits, orbit])
+
+
 
     return orbits

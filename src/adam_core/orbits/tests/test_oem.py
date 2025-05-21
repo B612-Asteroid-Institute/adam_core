@@ -16,6 +16,10 @@ astroforge_optical_path = (
     f"{os.path.dirname(__file__)}/testdata/AstroForgeSC_Optical.oem"
 )
 
+covariance_example_path = (
+    f"{os.path.dirname(__file__)}/testdata/CovarianceExample.oem"
+)
+
 
 def test_orbit_from_oem():
     optical_orbits = orbit_from_oem(astroforge_optical_path)
@@ -29,6 +33,16 @@ def test_orbit_from_oem():
 
     assert optical_orbits.coordinates.frame == "equatorial" # J2000
     assert optical_orbits.coordinates.origin.code[0].as_py() == "EARTH"
+
+
+def test_orbit_from_oem_covariance():
+    orbits = orbit_from_oem(covariance_example_path)
+
+    assert len(orbits) == 4
+
+    assert not orbits.coordinates.covariance[0].is_all_nan()
+    assert orbits.coordinates.covariance[1:].is_all_nan()
+
 
 
 def test_orbit_to_oem(tmp_path):
