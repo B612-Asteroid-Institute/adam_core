@@ -8,34 +8,35 @@ except ImportError:
     )
 
 import datetime
-from typing import Literal, Optional, Type
+from typing import Type
 
 import numpy as np
-import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
 
 from adam_core.coordinates.transform import transform_coordinates
 
 from ..coordinates import CartesianCoordinates
-from ..coordinates.covariances import _upper_triangular_to_full, _lower_triangular_to_full, CoordinateCovariances
-from ..coordinates.origin import Origin, OriginCodes
+from ..coordinates.covariances import (
+    CoordinateCovariances,
+)
+from ..coordinates.origin import Origin
 from ..propagator import Propagator
 from ..time import Timestamp
 from . import Orbits
 
 REF_FRAME_VALUES = (
-    "EME2000", # Earth Mean Equator and Equinox of J2000
-    "GCRF", # Geocentric Celestial Reference Frame
-    "GRC", # Geocentric Reference Frame
-    "ICRF", # International Celestial Reference Frame
-    "ITRF2000", # International Terrestrial Reference Frame
-    "ITRF-93", # International Terrestrial Reference Frame
-    "ITRF-97", # International Terrestrial Reference Frame
-    "MCI", # Mean Celestial Intermediate
-    "TDR", # True of Date
-    "TEME", # True Equator Mean Equinox
-    "TOD" # True of Date
+    "EME2000",  # Earth Mean Equator and Equinox of J2000
+    "GCRF",  # Geocentric Celestial Reference Frame
+    "GRC",  # Geocentric Reference Frame
+    "ICRF",  # International Celestial Reference Frame
+    "ITRF2000",  # International Terrestrial Reference Frame
+    "ITRF-93",  # International Terrestrial Reference Frame
+    "ITRF-97",  # International Terrestrial Reference Frame
+    "MCI",  # Mean Celestial Intermediate
+    "TDR",  # True of Date
+    "TEME",  # True Equator Mean Equinox
+    "TOD",  # True of Date
 )
 
 CCSDS_CENTER_NAME_VALUES = (
@@ -131,20 +132,21 @@ CCSDS_CENTER_NAME_VALUES = (
     "VENUS BARYCENTER",
 )
 
+
 def _adam_to_oem_frame(frame: str) -> str:
     """
     Convert ADAM Core frame to OEM frame.
-    
+
     Parameters
     ----------
     frame : str
         The ADAM Core frame ('equatorial', 'ecliptic', 'itrf93')
-        
+
     Returns
     -------
     str
         The corresponding OEM frame
-        
+
     Raises
     ------
     ValueError
@@ -152,28 +154,31 @@ def _adam_to_oem_frame(frame: str) -> str:
     """
     frame_map = {
         "equatorial": "EME2000",  # Earth Mean Equator and Equinox of J2000
-        "itrf93": "ITRF-93",      # International Terrestrial Reference Frame
+        "itrf93": "ITRF-93",  # International Terrestrial Reference Frame
     }
-    
+
     if frame in frame_map:
         return frame_map[frame]
     else:
-        raise ValueError(f"Unsupported frame for OEM conversion: {frame}. Only 'equatorial' and 'itrf93' are supported.")
+        raise ValueError(
+            f"Unsupported frame for OEM conversion: {frame}. Only 'equatorial' and 'itrf93' are supported."
+        )
+
 
 def _oem_to_adam_frame(frame: str) -> str:
     """
     Convert OEM frame to ADAM Core frame.
-    
+
     Parameters
     ----------
     frame : str
         The OEM frame
-        
+
     Returns
     -------
     str
         The corresponding ADAM Core frame
-        
+
     Raises
     ------
     ValueError
@@ -181,28 +186,31 @@ def _oem_to_adam_frame(frame: str) -> str:
     """
     frame_map = {
         "EME2000": "equatorial",  # Earth Mean Equator and Equinox of J2000
-        "ITRF-93": "itrf93",      # International Terrestrial Reference Frame
+        "ITRF-93": "itrf93",  # International Terrestrial Reference Frame
     }
-    
+
     if frame in frame_map:
         return frame_map[frame]
     else:
-        raise ValueError(f"Unsupported OEM frame: {frame}. Supported frames are {list(frame_map.keys())}.")
+        raise ValueError(
+            f"Unsupported OEM frame: {frame}. Supported frames are {list(frame_map.keys())}."
+        )
+
 
 def _adam_to_oem_center(code: str) -> str:
     """
     Convert ADAM Core origin code to OEM center name.
-    
+
     Parameters
     ----------
     code : str
         The ADAM Core origin code
-        
+
     Returns
     -------
     str
         The corresponding OEM center name
-        
+
     Raises
     ------
     ValueError
@@ -229,26 +237,27 @@ def _adam_to_oem_center(code: str) -> str:
         "URANUS": "URANUS",
         "NEPTUNE": "NEPTUNE",
     }
-    
+
     if code in center_map:
         return center_map[code]
     else:
         raise ValueError(f"Unsupported origin code for OEM conversion: {code}")
 
+
 def _oem_to_adam_center(center: str) -> str:
     """
     Convert OEM center name to ADAM Core origin code.
-    
+
     Parameters
     ----------
     center : str
         The OEM center name
-        
+
     Returns
     -------
     str
         The corresponding ADAM Core origin code
-        
+
     Raises
     ------
     ValueError
@@ -276,11 +285,13 @@ def _oem_to_adam_center(center: str) -> str:
         "NEPTUNE": "NEPTUNE",
     }
     center_upper = center.upper()
-    
+
     if center_upper in center_map:
         return center_map[center_upper]
     else:
-        raise ValueError(f"Unsupported OEM center name: {center}. Supported centers are {list(center_map.keys())}.")
+        raise ValueError(
+            f"Unsupported OEM center name: {center}. Supported centers are {list(center_map.keys())}."
+        )
 
 
 def orbit_to_oem(
@@ -308,7 +319,9 @@ def orbit_to_oem(
         Path to the output OEM file
     """
     # Check that we have a single object_id
-    assert len(orbits.object_id.unique()) == 1, "Only one object_id is supported for OEM conversion."
+    assert (
+        len(orbits.object_id.unique()) == 1
+    ), "Only one object_id is supported for OEM conversion."
 
     assert pc.all(
         pc.invert(pc.is_null(orbits.object_id))
@@ -327,10 +340,7 @@ def orbit_to_oem(
     # So let's transform to that frame.
     object_states = object_states.set_column(
         "coordinates",
-        transform_coordinates(
-            object_states.coordinates,
-            frame_out="equatorial"
-        )
+        transform_coordinates(object_states.coordinates, frame_out="equatorial"),
     )
     object_states = object_states.sort_by("coordinates.time")
 
@@ -344,7 +354,7 @@ def orbit_to_oem(
 
     # Convert origin from ADAM Core format to OEM format
     oem_center = _adam_to_oem_center(object_states.coordinates.origin.code[0].as_py())
-    
+
     segment_metadata = {
         "OBJECT_NAME": object_id,
         "OBJECT_ID": object_id,
@@ -369,7 +379,7 @@ def orbit_to_oem(
             matrix_lt = matrix[np.tril_indices(6)].tolist()
             covariance = [
                 orbit_state.coordinates.time.to_astropy()[0],
-                oem_frame, 
+                oem_frame,
                 *matrix_lt,
             ]
             covariances.append(covariance)
@@ -425,6 +435,9 @@ def orbit_from_oem(
             position = state.position
             velocity = state.velocity
 
+            # We only join covariances that match the epoch and the frame of states
+            # TODO: In the future, we should consider alternative modes where we read in entire segments
+            # as orbits and solve for the covariance given epochs available.
             adam_cov = CoordinateCovariances.nulls(1)
             for covariance in segment.covariances:
                 if covariance.epoch == state.epoch:
@@ -455,7 +468,5 @@ def orbit_from_oem(
             )
 
             orbits = qv.concatenate([orbits, orbit])
-
-
 
     return orbits

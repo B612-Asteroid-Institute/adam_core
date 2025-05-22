@@ -484,7 +484,9 @@ def _upper_triangular_to_full(
     """
     Convert an upper triangular matrix containing 21 elements to a full 6x6 matrix.
     """
-    assert len(upper_triangular) == 21, "Upper triangular matrix must be a 21 element vector"
+    assert (
+        len(upper_triangular) == 21
+    ), "Upper triangular matrix must be a 21 element vector"
 
     full = np.zeros((6, 6))
     full[np.triu_indices(6)] = upper_triangular
@@ -498,7 +500,9 @@ def _lower_triangular_to_full(
     """
     Convert a lower triangular matrix containing 21 elements to a full 6x6 matrix.
     """
-    assert len(lower_triangular) == 21, "Lower triangular matrix must be a 21 element vector"
+    assert (
+        len(lower_triangular) == 21
+    ), "Lower triangular matrix must be a 21 element vector"
 
     full = np.zeros((6, 6))
     full[np.tril_indices(6)] = lower_triangular
