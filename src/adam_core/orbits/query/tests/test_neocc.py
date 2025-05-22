@@ -2,29 +2,9 @@ from pathlib import Path
 
 import numpy as np
 
-from ..neocc import _parse_oef, _upper_triangular_to_full, query_neocc
+from ..neocc import _parse_oef, query_neocc
 
 TESTDATA_DIR = Path(__file__).parent / "testdata" / "neocc"
-
-
-def test__upper_triangular_to_full():
-    # Test that we can reconstruct a full covariance matrix from an upper triangular matrix.
-    expected_array = np.array(
-        [
-            [1, 2, 3, 4, 5, 6],
-            [2, 2, 3, 4, 5, 6],
-            [3, 3, 3, 4, 5, 6],
-            [4, 4, 4, 4, 5, 6],
-            [5, 5, 5, 5, 5, 6],
-            [6, 6, 6, 6, 6, 6],
-        ],
-        dtype=np.float64,
-    )
-
-    triangular_array = np.triu(expected_array)[np.triu_indices(6)].flatten()
-
-    actual_array = _upper_triangular_to_full(triangular_array)
-    np.testing.assert_array_equal(actual_array, expected_array)
 
 
 def test__parse_oef_2024YR4_ke0():

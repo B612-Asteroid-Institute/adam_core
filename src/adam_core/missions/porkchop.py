@@ -168,7 +168,6 @@ def generate_porkchop_data(
                 origin_out=propagation_origin,
             ),
         )
-
     # create empty CartesianCoordinates
     departure_coordinates = CartesianCoordinates.empty(
         frame="ecliptic",
@@ -207,7 +206,6 @@ def generate_porkchop_data(
         arrival_coordinates = get_perturber_state(
             arrival_body, times, frame="ecliptic", origin=propagation_origin
         )
-
     x, y = np.meshgrid(
         np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
     )
@@ -608,7 +606,6 @@ def plot_porkchop_plotly(
     km_s_per_au_day = KM_P_AU / S_P_DAY
     c3_values_km2_s2 = c3_values_au_d2 * (km_s_per_au_day**2)
     vinf_values_km_s = vinf_values_au_day * km_s_per_au_day
-
     # Define default C3 range if not provided
     if c3_min is None:
         c3_min = max(8.0, np.nanpercentile(c3_values_km2_s2, 5))
@@ -674,7 +671,6 @@ def plot_porkchop_plotly(
         # If not trimming or no valid data, use all unique times
         unique_departure_mjd = all_departure_mjd
         unique_arrival_mjd = all_arrival_mjd
-
     # Check if we have enough unique times to create a grid
     if len(unique_departure_mjd) < 2 or len(unique_arrival_mjd) < 2:
         warnings.warn(
@@ -738,7 +734,6 @@ def plot_porkchop_plotly(
         vinf_max = np.sqrt(c3_max)
     if vinf_step is None:
         vinf_step = (vinf_max - vinf_min) / 10  # 10 levels by default
-
     # For ToF
     if tof_min is None:
         tof_min = np.nanmin(original_tof_grid_days[original_tof_grid_days > 0])
@@ -928,7 +923,6 @@ def plot_porkchop_plotly(
         best_c3_val = c3_values_km2_s2[min_c3_idx]
         best_vinf_val = vinf_values_km_s[min_c3_idx]
         best_tof = time_of_flight_days[min_c3_idx]
-
         # Get the timestamp objects directly from original data
         # Convert numpy index to Python integer for proper indexing into quivr/pyarrow tables
         best_dep_time = departure_times[int(min_c3_idx)]
@@ -974,7 +968,6 @@ def plot_porkchop_plotly(
                 hover_info = dict(
                     hoverinfo="skip",  # Completely disable hover
                 )
-
             plotly_traces.append(
                 go.Scatter(
                     x=[best_dep_dt],
