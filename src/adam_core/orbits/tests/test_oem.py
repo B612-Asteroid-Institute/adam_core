@@ -2,13 +2,21 @@ import os
 
 import numpy as np
 import pyarrow.compute as pc
-from adam_assist import ASSISTPropagator
+import pytest
+
+# Check if required modules are available
+try:
+    from adam_assist import ASSISTPropagator
+
+    from ...orbits.oem_io import orbit_from_oem, orbit_to_oem
+    _OEM_AVAILABLE = True
+except ImportError:
+    _OEM_AVAILABLE = False
 
 from ...coordinates import CartesianCoordinates
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...time import Timestamp
-from ..oem_io import orbit_from_oem, orbit_to_oem
 from ..orbits import Orbits
 
 astroforge_optical_path = (
@@ -18,6 +26,7 @@ astroforge_optical_path = (
 covariance_example_path = f"{os.path.dirname(__file__)}/testdata/CovarianceExample.oem"
 
 
+@pytest.mark.skipif(not _OEM_AVAILABLE, reason="OEM dependencies not installed")
 def test_orbit_from_oem():
     optical_orbits = orbit_from_oem(astroforge_optical_path)
 
@@ -36,6 +45,7 @@ def test_orbit_from_oem():
     assert optical_orbits.coordinates.origin.code[0].as_py() == "EARTH"
 
 
+@pytest.mark.skipif(not _OEM_AVAILABLE, reason="OEM dependencies not installed")
 def test_orbit_from_oem_covariance():
     orbits = orbit_from_oem(covariance_example_path)
 
@@ -45,6 +55,7 @@ def test_orbit_from_oem_covariance():
     assert orbits.coordinates.covariance[1:].is_all_nan()
 
 
+@pytest.mark.skipif(not _OEM_AVAILABLE, reason="OEM dependencies not installed")
 def test_orbit_to_oem(tmp_path):
     mjds = [60000.0, 60001.0, 60002.0, 60003.0, 60004.0]
     times = Timestamp.from_mjd(mjds, scale="tdb")
