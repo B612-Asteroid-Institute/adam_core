@@ -97,52 +97,21 @@ def lambert_worker(
 lambert_worker_remote = ray.remote(lambert_worker)
 
 
-def generate_porkchop_data(
-    departure_body: Union[Orbits, OriginCodes],
-    arrival_body: Union[Orbits, OriginCodes],
-    earliest_launch_time: Timestamp,
-    maximum_arrival_time: Timestamp,
-    propagation_origin: OriginCodes = OriginCodes.SUN,
-    step_size: float = 1.0,
-    prograde: bool = True,
-    max_iter: int = 35,
-    tol: float = 1e-10,
-    propagator_class: Optional[type[Propagator]] = None,
-    max_processes: Optional[int] = 1,
-) -> LambertOutput:
+def prepare_and_propagate_orbits(
+        departure_body: Union[Orbits, OriginCodes],
+        arrival_body: Union[Orbits, OriginCodes],
+        earliest_launch_time: Timestamp,
+        maximum_arrival_time: Timestamp,
+        propagation_origin: OriginCodes = OriginCodes.SUN,
+        step_size: float = 1.0,
+        prograde: bool = True,
+        max_iter: int = 35,
+        tol: float = 1e-10,
+        propagator_class: Optional[type[Propagator]] = None,
+        max_processes: Optional[int] = 1,
+) -> Tuple[Orbits, Orbits]:
     """
-    Generate data for a porkchop plot by solving Lambert's problem for a grid of
-    departure and arrival times.
-
-    Parameters
-    ----------
-    departure_body : Union[Orbits, OriginCodes]
-        The departure body.
-    arrival_body : Union[Orbits, OriginCodes]
-        The arrival body.
-    earliest_launch_time : Timestamp
-        The earliest launch time.
-    maximum_arrival_time : Timestamp
-        The maximum arrival time.
-    propagation_origin : OriginCodes, optional
-        The origin of the propagation.
-    step_size : float, optional
-        The step size for the porkchop plot.
-    prograde : bool, optional
-        If True, assume prograde motion. If False, assume retrograde motion.
-    max_iter : int, optional
-        The maximum number of iterations for Lambert's solver.
-    tol : float, optional
-        The numerical tolerance for Lambert's solver.
-    propagator_class : Optional[type[Propagator]], optional
-        The propagator class to use.
-    max_processes : Optional[int], optional
-        The maximum number of processes to use.
-
-    Returns
-    -------
-    porkchop_data : LambertOutput
-        The porkchop data.
+    Prepare and propagate orbits for a porkchop plot.
     """
 
     # if departure_body is an Orbit, ensure its origin is the propagation_origin
@@ -206,6 +175,54 @@ def generate_porkchop_data(
         arrival_coordinates = get_perturber_state(
             arrival_body, times, frame="ecliptic", origin=propagation_origin
         )
+
+    return departure_coordinates, arrival_coordinates
+
+
+def generate_porkchop_data(
+    departure_coordinates: CartesianCoordinates,
+    arrival_coordinates: CartesianCoordinates,
+    propagation_origin: OriginCodes = OriginCodes.SUN,
+    prograde: bool = True,
+    max_iter: int = 35,
+    tol: float = 1e-10,    
+    max_processes: Optional[int] = 1,
+) -> LambertOutput:
+    """
+    Generate data for a porkchop plot by solving Lambert's problem for a grid of
+    departure and arrival times.
+
+    Parameters
+    ----------
+    departure_body : Union[Orbits, OriginCodes]
+        The departure body.
+    arrival_body : Union[Orbits, OriginCodes]
+        The arrival body.
+    earliest_launch_time : Timestamp
+        The earliest launch time.
+    maximum_arrival_time : Timestamp
+        The maximum arrival time.
+    propagation_origin : OriginCodes, optional
+        The origin of the propagation.
+    step_size : float, optional
+        The step size for the porkchop plot.
+    prograde : bool, optional
+        If True, assume prograde motion. If False, assume retrograde motion.
+    max_iter : int, optional
+        The maximum number of iterations for Lambert's solver.
+    tol : float, optional
+        The numerical tolerance for Lambert's solver.
+    propagator_class : Optional[type[Propagator]], optional
+        The propagator class to use.
+    max_processes : Optional[int], optional
+        The maximum number of processes to use.
+
+    Returns
+    -------
+    porkchop_data : LambertOutput
+        The porkchop data.
+    """
+
     x, y = np.meshgrid(
         np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
     )
