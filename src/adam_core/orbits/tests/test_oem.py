@@ -9,6 +9,7 @@ try:
     from adam_assist import ASSISTPropagator
 
     from ...orbits.oem_io import orbit_from_oem, orbit_to_oem
+
     _OEM_AVAILABLE = True
 except ImportError:
     _OEM_AVAILABLE = False
