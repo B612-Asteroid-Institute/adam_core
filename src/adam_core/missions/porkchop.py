@@ -104,9 +104,6 @@ def prepare_and_propagate_orbits(
         maximum_arrival_time: Timestamp,
         propagation_origin: OriginCodes = OriginCodes.SUN,
         step_size: float = 1.0,
-        prograde: bool = True,
-        max_iter: int = 35,
-        tol: float = 1e-10,
         propagator_class: Optional[type[Propagator]] = None,
         max_processes: Optional[int] = 1,
 ) -> Tuple[Orbits, Orbits]:
