@@ -3,7 +3,7 @@ import numpy as np
 from adam_core.coordinates.origin import OriginCodes
 from adam_core.time import Timestamp
 
-from ..porkchop import generate_porkchop_data, plot_porkchop_plotly
+from ..porkchop import generate_porkchop_data, plot_porkchop_plotly, prepare_and_propagate_orbits
 
 
 def test_generate_porkchop_data_origins():
@@ -11,13 +11,17 @@ def test_generate_porkchop_data_origins():
     earliest_launch = Timestamp.from_mjd([60000], scale="tdb")
     maximum_arrival = Timestamp.from_mjd([60100], scale="tdb")
     # Test with Sun as origin
-    results_sun = generate_porkchop_data(
+    departure_coordinates, arrival_coordinates = prepare_and_propagate_orbits(
         departure_body=OriginCodes.EARTH,
         arrival_body=OriginCodes.MARS_BARYCENTER,
         earliest_launch_time=earliest_launch,
         maximum_arrival_time=maximum_arrival,
         propagation_origin=OriginCodes.SUN,
         step_size=5.0,  # Larger step size for faster test
+    )
+    results_sun = generate_porkchop_data(
+        departure_coordinates=departure_coordinates,
+        arrival_coordinates=arrival_coordinates,
     )
 
     # Verify that results are generated
@@ -49,14 +53,19 @@ def test_generate_real_porkchop_plot(tmp_path):
     # These are approximate optimal transfer dates for illustration
     earliest_launch = Timestamp.from_iso8601(["2022-01-01T00:00:00"], scale="tdb")
     maximum_arrival = Timestamp.from_iso8601(["2024-01-01T00:00:00"], scale="tdb")
-    # Generate porkchop data with reasonable resolution
-    results = generate_porkchop_data(
+    # Propagate orbits
+    departure_coordinates, arrival_coordinates = prepare_and_propagate_orbits(
         departure_body=OriginCodes.EARTH,
         arrival_body=OriginCodes.MARS_BARYCENTER,
         earliest_launch_time=earliest_launch,
         maximum_arrival_time=maximum_arrival,
         propagation_origin=OriginCodes.SUN,
         step_size=1.0,  # 1-day intervals for good resolution
+    )
+    # Generate porkchop data with reasonable resolution
+    results = generate_porkchop_data(
+        departure_coordinates=departure_coordinates,
+        arrival_coordinates=arrival_coordinates,
     )
 
     # Verify data was generated successfully
