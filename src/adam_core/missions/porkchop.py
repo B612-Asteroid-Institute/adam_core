@@ -98,47 +98,31 @@ lambert_worker_remote = ray.remote(lambert_worker)
 
 
 def prepare_and_propagate_orbits(
-        departure_body: Union[Orbits, OriginCodes],
-        arrival_body: Union[Orbits, OriginCodes],
+        body: Union[Orbits, OriginCodes],
         earliest_launch_time: Timestamp,
         maximum_arrival_time: Timestamp,
         propagation_origin: OriginCodes = OriginCodes.SUN,
         step_size: float = 1.0,
         propagator_class: Optional[type[Propagator]] = None,
         max_processes: Optional[int] = 1,
-) -> Tuple[Orbits, Orbits]:
+) -> CartesianCoordinates:
     """
-    Prepare and propagate orbits for a porkchop plot.
+    Prepare and propagate orbits for a single body.
     """
-
-    # if departure_body is an Orbit, ensure its origin is the propagation_origin
-    if isinstance(departure_body, Orbits):
-        departure_body = departure_body.set_column(
+    # if body is an Orbit, ensure its origin is the propagation_origin
+    if isinstance(body, Orbits):
+        body = body.set_column(
             "coordinates",
             transform_coordinates(
-                departure_body.coordinates,
+                body.coordinates,
                 representation_out=CartesianCoordinates,
                 frame_out="ecliptic",
                 origin_out=propagation_origin,
             ),
         )
 
-    # if arrival_body is an Orbit, ensure its origin is the propagation_origin
-    if isinstance(arrival_body, Orbits):
-        arrival_body = arrival_body.set_column(
-            "coordinates",
-            transform_coordinates(
-                arrival_body.coordinates,
-                representation_out=CartesianCoordinates,
-                frame_out="ecliptic",
-                origin_out=propagation_origin,
-            ),
-        )
     # create empty CartesianCoordinates
-    departure_coordinates = CartesianCoordinates.empty(
-        frame="ecliptic",
-    )
-    arrival_coordinates = CartesianCoordinates.empty(
+    coordinates = CartesianCoordinates.empty(
         frame="ecliptic",
     )
 
@@ -151,29 +135,18 @@ def prepare_and_propagate_orbits(
         scale="tdb",
     )
 
-    # get r1 (departure body) for times
-    if isinstance(departure_body, Orbits):
+    # get coordinates for the body at specified times
+    if isinstance(body, Orbits):
         propagator = propagator_class()
-        departure_coordinates = propagator.propagate_orbits(
-            departure_body, times, max_processes=max_processes
+        coordinates = propagator.propagate_orbits(
+            body, times, max_processes=max_processes
         ).coordinates
     else:
-        departure_coordinates = get_perturber_state(
-            departure_body, times, frame="ecliptic", origin=propagation_origin
+        coordinates = get_perturber_state(
+            body, times, frame="ecliptic", origin=propagation_origin
         )
 
-    # get r2 (arrival body) for times
-    if isinstance(arrival_body, Orbits):
-        propagator = propagator_class()
-        arrival_coordinates = propagator.propagate_orbits(
-            arrival_body, times, max_processes=max_processes
-        ).coordinates
-    else:
-        arrival_coordinates = get_perturber_state(
-            arrival_body, times, frame="ecliptic", origin=propagation_origin
-        )
-
-    return departure_coordinates, arrival_coordinates
+    return coordinates
 
 
 def generate_porkchop_data(
