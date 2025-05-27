@@ -383,7 +383,8 @@ class EphemerisMixin:
                     )
                 )
 
-                # Add variants to object store
+            # Add variants to propagate to futures inputs
+            if covariance is True and len(variants) > 0:
                 variants_ref = ray.put(variants)
 
                 idx = np.arange(0, len(variants))
