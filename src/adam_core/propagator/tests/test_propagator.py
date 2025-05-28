@@ -383,7 +383,7 @@ def test_generate_ephemeris_performance_benchmark():
     """
     # Create a moderately sized test case
     orbits = make_real_orbits(10)
-    times = Timestamp.from_mjd(np.arange(60001, 60010), scale="tdb")
+    times = Timestamp.from_mjd(np.arange(60001, 60005), scale="tdb")
     observers = Observers.from_code("500", times)
     
     prop = ASSISTPropagator()
@@ -392,20 +392,16 @@ def test_generate_ephemeris_performance_benchmark():
     # Benchmark single process
     start_time = time.time()
     ephemeris_single = prop.generate_ephemeris(
-        orbits, observers, covariance=True, num_samples=10, max_processes=1, chunk_size=5, seed=42
+        orbits, observers, covariance=True, num_samples=10, max_processes=1, chunk_size=1, seed=42
     )
     single_process_time = time.time() - start_time
-
-    print(f"Single process time: {single_process_time:.3f}s")
     
     # Benchmark multiple processes
     start_time = time.time()
     ephemeris_multi = prop.generate_ephemeris(
-        orbits, observers, covariance=True, num_samples=10, max_processes=4, chunk_size=5, seed=42
+        orbits, observers, covariance=True, num_samples=10, max_processes=4, chunk_size=1, seed=42
     )
     multi_process_time = time.time() - start_time
-
-    print(f"Multi process time: {multi_process_time:.3f}s")
     
     # Verify results are identical
     assert len(ephemeris_single) == len(ephemeris_multi)
@@ -415,5 +411,8 @@ def test_generate_ephemeris_performance_benchmark():
     # (allowing for overhead, but catching catastrophic performance regressions)
     max_acceptable_ratio = 0.9
     actual_ratio = multi_process_time / single_process_time if single_process_time > 0 else float('inf')
-
-    print(f"Ratio: {multi_process_time / single_process_time:.2f}x")
+    assert actual_ratio < max_acceptable_ratio, (
+        f"Multiprocessing performance is {actual_ratio:.2f}x slower than single process "
+        f"({multi_process_time:.3f}s vs {single_process_time:.3f}s). "
+        f"This suggests a performance regression in the multiprocessing code."
+    )
