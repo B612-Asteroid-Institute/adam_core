@@ -11,7 +11,7 @@ class LuaDict:
         return "".join(word.capitalize() for word in s.split("_"))
 
     def to_string(self, indent: int = 0):
-        lua = f"{{\n"
+        lua = "{\n"
         for k, v in self.__dict__.items():
             if v is None:
                 continue
