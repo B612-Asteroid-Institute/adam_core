@@ -1,5 +1,4 @@
 import time
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pyarrow as pa
@@ -377,7 +376,7 @@ def test_generate_ephemeris_performance_benchmark():
     """
     Benchmark test to ensure generate_ephemeris performance with multiprocessing
     is reasonable and doesn't degrade significantly.
-    
+
     This test compares single-process vs multi-process performance to ensure
     multiprocessing provides a benefit rather than a penalty.
     """
@@ -385,32 +384,48 @@ def test_generate_ephemeris_performance_benchmark():
     orbits = make_real_orbits(10)
     times = Timestamp.from_mjd(np.arange(60001, 60005), scale="tdb")
     observers = Observers.from_code("500", times)
-    
+
     prop = ASSISTPropagator()
     initialize_use_ray(num_cpus=4)
-    
+
     # Benchmark single process
     start_time = time.time()
     ephemeris_single = prop.generate_ephemeris(
-        orbits, observers, covariance=True, num_samples=10, max_processes=1, chunk_size=1, seed=42
+        orbits,
+        observers,
+        covariance=True,
+        num_samples=10,
+        max_processes=1,
+        chunk_size=1,
+        seed=42,
     )
     single_process_time = time.time() - start_time
-    
+
     # Benchmark multiple processes
     start_time = time.time()
     ephemeris_multi = prop.generate_ephemeris(
-        orbits, observers, covariance=True, num_samples=10, max_processes=4, chunk_size=1, seed=42
+        orbits,
+        observers,
+        covariance=True,
+        num_samples=10,
+        max_processes=4,
+        chunk_size=1,
+        seed=42,
     )
     multi_process_time = time.time() - start_time
-    
+
     # Verify results are identical
     assert len(ephemeris_single) == len(ephemeris_multi)
     assert len(ephemeris_single) == len(orbits) * len(times)
-    
+
     # Performance check: multiprocessing shouldn't be more than 1x slower
     # (allowing for overhead, but catching catastrophic performance regressions)
     max_acceptable_ratio = 0.9
-    actual_ratio = multi_process_time / single_process_time if single_process_time > 0 else float('inf')
+    actual_ratio = (
+        multi_process_time / single_process_time
+        if single_process_time > 0
+        else float("inf")
+    )
     assert actual_ratio < max_acceptable_ratio, (
         f"Multiprocessing performance is {actual_ratio:.2f}x slower than single process "
         f"({multi_process_time:.3f}s vs {single_process_time:.3f}s). "
