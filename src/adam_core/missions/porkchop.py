@@ -603,9 +603,15 @@ def plot_porkchop_plotly(
     vinf_values_km_s = vinf_values_au_day * km_s_per_au_day
     # Define default C3 range if not provided
     if c3_min is None:
-        c3_min = max(8.0, np.nanpercentile(c3_values_km2_s2, 5))
+        c3_min = np.nanpercentile(c3_values_km2_s2, 5)
     if c3_max is None:
-        c3_max = min(100.0, np.nanpercentile(c3_values_km2_s2, 95))
+        c3_max = np.nanpercentile(c3_values_km2_s2, 95)
+    
+    assert c3_max > c3_min, "C3 max must be greater than C3 min"
+
+    if c3_step is None:
+        c3_step = (c3_max - c3_min) / 10  # 10 levels by default
+    assert c3_step < (c3_max - c3_min), "C3 step must be less than the C3 range"
 
     # Extract raw MJD values for all points
     departure_times_mjd = departure_times.mjd().to_numpy(zero_copy_only=False)
@@ -716,11 +722,6 @@ def plot_porkchop_plotly(
 
     original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
 
-    # Determine contour level parameters
-    # For C3
-
-    if c3_step is None:
-        c3_step = (c3_max - c3_min) / 10  # 10 levels by default
 
     # For Vinf (derive from C3 if not specified)
     if vinf_min is None:
@@ -737,6 +738,20 @@ def plot_porkchop_plotly(
     if tof_step is None:
         tof_step = max(5, (tof_max - tof_min) / 10)  # 10 levels, minimum step of 5 days
         tof_step = round(tof_step / 5) * 5  # Round to multiple of 5
+
+    # Validate ToF range - handle cases where ToF values are invalid
+    if not (np.isfinite(tof_min) and np.isfinite(tof_max)) or tof_max <= tof_min:
+        logger.warning(
+            f"Invalid ToF range: tof_min={tof_min}, tof_max={tof_max}. "
+            "Using default range."
+        )
+        tof_min = 30.0  # Default minimum ToF
+        tof_max = 365.0  # Default maximum ToF
+
+    # Validate all step sizes are positive
+    assert c3_step > 0, f"c3_step must be positive, got {c3_step}"
+    assert vinf_step > 0, f"vinf_step must be positive, got {vinf_step}"
+    assert tof_step > 0, f"tof_step must be positive, got {tof_step}"
 
     # --- Replace NaN values and over-max values with sentinel ---
     # Use a sentinel value that's 2x the maximum
