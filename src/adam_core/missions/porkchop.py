@@ -636,7 +636,7 @@ def plot_porkchop_plotly(
         unique_arrival_mjd = np.sort(np.unique(valid_arrival_times_mjd))
 
         # Add buffer around min/max dates if requested
-        if date_buffer_days > 0:
+        if date_buffer_days is not None and date_buffer_days > 0:
             # Get min/max of valid times
             min_dep_mjd, max_dep_mjd = np.min(unique_departure_mjd), np.max(
                 unique_departure_mjd
