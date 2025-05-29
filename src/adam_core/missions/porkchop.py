@@ -193,6 +193,10 @@ def generate_porkchop_data(
         The porkchop data.
     """
 
+    # First let's make sure departure and arrival coordinates are time-ordered
+    departure_coordinates = departure_coordinates.sort_by(["time.days", "time.nanos"])
+    arrival_coordinates = arrival_coordinates.sort_by(["time.days", "time.nanos"])
+
     x, y = np.meshgrid(
         np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
     )
