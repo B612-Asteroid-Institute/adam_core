@@ -52,7 +52,11 @@ class LambertOutput(qv.Table):
         """
         Return the v infinity in au/d.
         """
-        return np.linalg.norm(self.vx_2 - self.departure_state.v, axis=1)
+        return np.linalg.norm(
+            np.array(self.table.select(["vx_2", "vy_2", "vz_2"]))
+            - self.departure_state.v,
+            axis=1,
+        )
 
     def time_of_flight(self) -> npt.NDArray[np.float64]:
         """
@@ -98,13 +102,13 @@ lambert_worker_remote = ray.remote(lambert_worker)
 
 
 def prepare_and_propagate_orbits(
-        body: Union[Orbits, OriginCodes],
-        earliest_launch_time: Timestamp,
-        maximum_arrival_time: Timestamp,
-        propagation_origin: OriginCodes = OriginCodes.SUN,
-        step_size: float = 1.0,
-        propagator_class: Optional[type[Propagator]] = None,
-        max_processes: Optional[int] = 1,
+    body: Union[Orbits, OriginCodes],
+    earliest_launch_time: Timestamp,
+    maximum_arrival_time: Timestamp,
+    propagation_origin: OriginCodes = OriginCodes.SUN,
+    step_size: float = 1.0,
+    propagator_class: Optional[type[Propagator]] = None,
+    max_processes: Optional[int] = 1,
 ) -> CartesianCoordinates:
     """
     Prepare and propagate orbits for a single body.
@@ -155,7 +159,7 @@ def generate_porkchop_data(
     propagation_origin: OriginCodes = OriginCodes.SUN,
     prograde: bool = True,
     max_iter: int = 35,
-    tol: float = 1e-10,    
+    tol: float = 1e-10,
     max_processes: Optional[int] = 1,
 ) -> LambertOutput:
     """
