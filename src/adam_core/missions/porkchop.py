@@ -533,6 +533,7 @@ def plot_porkchop_plotly(
     optimal_hover: bool = True,
     trim_to_valid: bool = True,
     date_buffer_days: float = 3.0,
+    bundle_raw_data: bool = True,
 ):
     """
     Plot the porkchop plot from Lambert trajectory data using Plotly.
@@ -606,7 +607,7 @@ def plot_porkchop_plotly(
         c3_min = np.nanpercentile(c3_values_km2_s2, 5)
     if c3_max is None:
         c3_max = np.nanpercentile(c3_values_km2_s2, 95)
-    
+
     assert c3_max > c3_min, "C3 max must be greater than C3 min"
 
     if c3_step is None:
@@ -721,7 +722,6 @@ def plot_porkchop_plotly(
     )
 
     original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
-
 
     # For Vinf (derive from C3 if not specified)
     if vinf_min is None:
@@ -838,22 +838,54 @@ def plot_porkchop_plotly(
     grid_dep_iso = flat_dep_iso.reshape(grid_departure_mjd.shape)
     grid_arr_iso = flat_arr_iso.reshape(grid_arrival_mjd.shape)
 
-    # Create a 3D array to hold the numeric data for hover: [c3, vinf, tof]
-    # We'll handle dates separately as strings
-    customdata = np.zeros(
-        (grid_c3_km2_s2.shape[0], grid_c3_km2_s2.shape[1], 3), dtype=np.float64
-    )
+    customdata = None
 
-    # Initialize with NaN values
-    customdata[:, :, 0] = np.nan  # C3
-    customdata[:, :, 1] = np.nan  # Vinf
-    customdata[:, :, 2] = np.nan  # ToF
+    if bundle_raw_data:
+        # Create a 3D array to hold the numeric data for hover:
+        # [C3, Vinf, ToF, Arrival X, Arrival Y, Arrival Z]
+        customdata = np.full(
+            (grid_c3_km2_s2.shape[0], grid_c3_km2_s2.shape[1], 6),
+            np.nan,
+            dtype=np.float64,
+        )
 
-    # Fill in valid values
-    valid_mask_trimmed = ~np.isnan(grid_c3_km2_s2)
-    customdata[:, :, 0][valid_mask_trimmed] = grid_c3_km2_s2[valid_mask_trimmed]
-    customdata[:, :, 1][valid_mask_trimmed] = grid_vinf_km_s[valid_mask_trimmed]
-    customdata[:, :, 2][valid_mask_trimmed] = original_tof_grid_days[valid_mask_trimmed]
+        # Populate with gridded C3, Vinf, ToF
+        customdata[:, :, 0] = grid_c3_km2_s2
+        customdata[:, :, 1] = grid_vinf_km_s
+        customdata[:, :, 2] = original_tof_grid_days
+
+        # Get raw arrival Cartesian coordinates
+        raw_arrival_x = porkchop_data.arrival_state.x.to_numpy(zero_copy_only=False)
+        raw_arrival_y = porkchop_data.arrival_state.y.to_numpy(zero_copy_only=False)
+        raw_arrival_z = porkchop_data.arrival_state.z.to_numpy(zero_copy_only=False)
+
+        # Interpolate arrival Cartesian coordinates onto the grid
+        grid_arrival_x = griddata(
+            points,
+            raw_arrival_x,
+            (grid_departure_mjd, grid_arrival_mjd),
+            method="cubic",
+            fill_value=np.nan,
+        )
+        grid_arrival_y = griddata(
+            points,
+            raw_arrival_y,
+            (grid_departure_mjd, grid_arrival_mjd),
+            method="cubic",
+            fill_value=np.nan,
+        )
+        grid_arrival_z = griddata(
+            points,
+            raw_arrival_z,
+            (grid_departure_mjd, grid_arrival_mjd),
+            method="cubic",
+            fill_value=np.nan,
+        )
+
+        # Populate customdata with gridded arrival Cartesian coordinates
+        customdata[:, :, 3] = grid_arrival_x
+        customdata[:, :, 4] = grid_arrival_y
+        customdata[:, :, 5] = grid_arrival_z
 
     # --- Create C3 Contour Trace with hover template ---
     plotly_traces = []
@@ -875,7 +907,10 @@ def plot_porkchop_plotly(
                 + "<b>Arrival:</b> %{text[1]}<br>"  # Use text array for dates
                 + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
                 + "<b>Vinf:</b> %{customdata[1]:.1f} km/s<br>"
-                + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
+                + "<b>ToF:</b> %{customdata[2]:.1f} days<br>"
+                + "<b>Arrival X:</b> %{customdata[3]:.3f} AU<br>"
+                + "<b>Arrival Y:</b> %{customdata[4]:.3f} AU<br>"
+                + "<b>Arrival Z:</b> %{customdata[5]:.3f} AU<extra></extra>"
             ),
             contours=dict(
                 coloring="fill",
