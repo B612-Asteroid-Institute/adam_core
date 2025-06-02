@@ -1,8 +1,9 @@
-from typing import List, Union
+from typing import List, Optional, Union
 
 import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
+import quivr as qv
 from astroquery.jplhorizons import Horizons
 
 from ...coordinates.cartesian import CartesianCoordinates
@@ -14,6 +15,7 @@ from ...observers import Observers
 from ...time import Timestamp
 from ..ephemeris import Ephemeris
 from ..orbits import Orbits
+from ...utils.iter import _iterate_chunks
 
 
 def _get_horizons_vectors(
@@ -249,8 +251,8 @@ def query_horizons(
     times: Timestamp,
     coordinate_type: str = "cartesian",
     location: str = "@sun",
-    id_type: str = "smallbody",
     aberrations: str = "geometric",
+    id_type: Optional[str] = None,
 ) -> Orbits:
     """
     Query JPL Horizons (through astroquery) for an object's state vectors or elements at the given times.
@@ -278,102 +280,122 @@ def query_horizons(
     orbits : `~adam_core.orbits.orbits.Orbits`
         Orbits object containing the state vectors or elements of the object at each time.
     """
-    if coordinate_type == "cartesian":
-        vectors = _get_horizons_vectors(
-            object_ids,
-            times,
-            location=location,
-            id_type=id_type,
-            aberrations=aberrations,
-        )
+    chunk_size = 50 #This is based on the Horizon's limit of 50-75 times before it fails
+    total_orbits = Orbits.empty()
+    assert len(times) > 0, "Must have at least one time"
 
-        times = Timestamp.from_jd(vectors["datetime_jd"].values, scale="tdb")
-        origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
-        frame = "ecliptic"
-        coordinates = CartesianCoordinates.from_kwargs(
-            time=times,
-            x=vectors["x"].values,
-            y=vectors["y"].values,
-            z=vectors["z"].values,
-            vx=vectors["vx"].values,
-            vy=vectors["vy"].values,
-            vz=vectors["vz"].values,
-            origin=origin,
-            frame=frame,
-        )
-        orbit_id = vectors["orbit_id"].values
-        object_id = vectors["targetname"].values
+    # Sort times to make sure they are in order
+    times = times.sort_by(["days", "nanos"])
 
-        return Orbits.from_kwargs(
-            orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
-        )
+    for times_i in _iterate_chunks(times, chunk_size):
 
-    elif coordinate_type == "keplerian":
-        elements = _get_horizons_elements(
-            object_ids,
-            times,
-            location=location,
-            id_type=id_type,
-        )
+        if coordinate_type == "cartesian":
+            vectors = _get_horizons_vectors(
+                object_ids,
+                times_i,
+                location=location,
+                id_type=id_type,
+                aberrations=aberrations,
+            )
 
-        times = Timestamp.from_jd(
-            elements["datetime_jd"].values,
-            scale="tdb",
-        )
-        origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
-        frame = "ecliptic"
-        coordinates = KeplerianCoordinates(
-            time=times,
-            a=elements["a"].values,
-            e=elements["e"].values,
-            i=elements["incl"].values,
-            raan=elements["Omega"].values,
-            ap=elements["w"].values,
-            M=elements["M"].values,
-            origin=origin,
-            frame=frame,
-        )
-        orbit_id = elements["orbit_id"].values
-        object_id = elements["targetname"].values
+            times = Timestamp.from_jd(vectors["datetime_jd"].values, scale="tdb")
+            origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
+            frame = "ecliptic"
+            coordinates = CartesianCoordinates.from_kwargs(
+                time=times,
+                x=vectors["x"].values,
+                y=vectors["y"].values,
+                z=vectors["z"].values,
+                vx=vectors["vx"].values,
+                vy=vectors["vy"].values,
+                vz=vectors["vz"].values,
+                origin=origin,
+                frame=frame,
+            )
+            orbit_id = vectors["orbit_id"].values
+            object_id = vectors["targetname"].values
 
-        return Orbits.from_kwargs(
-            orbit_id=orbit_id,
-            object_id=object_id,
-            coordinates=coordinates.to_cartesian(),
-        )
+            orbits = Orbits.from_kwargs(
+                orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
+            )
 
-    elif coordinate_type == "cometary":
-        elements = _get_horizons_elements(
-            object_ids,
-            times,
-            location=location,
-            id_type=id_type,
-        )
+            total_orbits = qv.concatenate([orbits, total_orbits])
 
-        tp = Timestamp.from_jd(elements["Tp_jd"].values, scale="tdb")
-        times = Timestamp.from_jd(elements["datetime_jd"].values, scale="tdb")
-        origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
-        frame = "ecliptic"
-        coordinates = CometaryCoordinates.from_kwargs(
-            time=times,
-            q=elements["q"].values,
-            e=elements["e"].values,
-            i=elements["incl"].values,
-            raan=elements["Omega"].values,
-            ap=elements["w"].values,
-            tp=tp.mjd(),
-            origin=origin,
-            frame=frame,
-        )
-        orbit_id = elements["orbit_id"].values
-        object_id = elements["targetname"].values
+        elif coordinate_type == "keplerian":
+            elements = _get_horizons_elements(
+                object_ids,
+                times_i,
+                location=location,
+                id_type=id_type,
+            )
 
-        return Orbits.from_kwargs(
-            orbit_id=orbit_id,
-            object_id=object_id,
-            coordinates=coordinates.to_cartesian(),
-        )
+            times = Timestamp.from_jd(
+                elements["datetime_jd"].values,
+                scale="tdb",
+            )
+            origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
+            frame = "ecliptic"
+            coordinates = KeplerianCoordinates.from_kwargs(
+                time=times,
+                a=elements["a"].values,
+                e=elements["e"].values,
+                i=elements["incl"].values,
+                raan=elements["Omega"].values,
+                ap=elements["w"].values,
+                M=elements["M"].values,
+                origin=origin,
+                frame=frame,
+            )
+            orbit_id = elements["orbit_id"].values
+            object_id = elements["targetname"].values
 
-    else:
-        err = "coordinate_type should be one of {'cartesian', 'keplerian', 'cometary'}"
-        raise ValueError(err)
+            orbits = Orbits.from_kwargs(
+                orbit_id=orbit_id,
+                object_id=object_id,
+                coordinates=coordinates.to_cartesian(),
+            )
+
+            total_orbits = qv.concatenate([orbits, total_orbits])
+
+        elif coordinate_type == "cometary":
+            elements = _get_horizons_elements(
+                object_ids,
+                times_i,
+                location=location,
+                id_type=id_type,
+            )
+
+            tp = Timestamp.from_jd(elements["Tp_jd"].values, scale="tdb")
+            times = Timestamp.from_jd(elements["datetime_jd"].values, scale="tdb")
+            origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
+            frame = "ecliptic"
+            coordinates = CometaryCoordinates.from_kwargs(
+                time=times,
+                q=elements["q"].values,
+                e=elements["e"].values,
+                i=elements["incl"].values,
+                raan=elements["Omega"].values,
+                ap=elements["w"].values,
+                tp=tp.mjd(),
+                origin=origin,
+                frame=frame,
+            )
+            orbit_id = elements["orbit_id"].values
+            object_id = elements["targetname"].values
+
+            orbits = Orbits.from_kwargs(
+                orbit_id=orbit_id,
+                object_id=object_id,
+                coordinates=coordinates.to_cartesian(),
+            )
+
+            total_orbits = qv.concatenate([orbits, total_orbits])
+
+        else:
+            err = "coordinate_type should be one of {'cartesian', 'keplerian', 'cometary'}"
+            raise ValueError(err)
+        
+    # Sort orbits by time
+    total_orbits = total_orbits.sort_by(["coordinates.time.days", "coordinates.time.nanos"])
+
+    return total_orbits
