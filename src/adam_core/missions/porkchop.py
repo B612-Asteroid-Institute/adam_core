@@ -525,7 +525,7 @@ def plot_porkchop_plotly(
     tof_max: Optional[float] = None,
     tof_step: Optional[float] = None,
     metric_colorscale: str = "Viridis",
-    tof_line_color: str = "black",
+    tof_line_color: str = "red",
     xlim_mjd: Optional[Tuple[float, float]] = None,
     ylim_mjd: Optional[Tuple[float, float]] = None,
     title: str = "Porkchop Plot",
@@ -798,6 +798,9 @@ def plot_porkchop_plotly(
         standard_colors = pcolors.sample_colorscale(
             base_colorscale, np.linspace(0, 1, 11)
         )
+
+        # Reverse the colors
+        standard_colors = standard_colors[::-1]
 
         # Convert to normalized range (0-1)
         norm_max = 0.9  # Reserve top 10% for sentinel
