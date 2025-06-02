@@ -28,14 +28,14 @@ from .renderable import (
 from .translation import KeplerTranslation, SpiceTranslation, Transform
 
 
-def _safe_orbital_period(keplerian: KeplerianCoordinates) -> float:
+def _safe_orbital_period(period: float) -> float:
     """
-    Compute the orbital period of an orbit.
+    For an orbit with no period or infinite period, use a default value in days.
     """
-    orbital_period = float(keplerian.P[0])
+    orbital_period = float(period)
     # Use a default value if orbital period is infinite or NaN
     if np.isnan(orbital_period) or np.isinf(orbital_period):
-        return 1000.0
+        return 10000.0
     return orbital_period
 
 
@@ -381,7 +381,8 @@ def create_renderable_trail_orbit(
                     argument_of_periapsis=keplerian_i.ap[0].as_py(),
                     ascending_node=keplerian_i.raan[0].as_py(),
                     mean_anomaly=keplerian_i.M[0].as_py(),
-                    period=keplerian_i.P[0] * S_P_DAY,  # in seconds here
+                    period=_safe_orbital_period(keplerian_i.P[0])
+                    * S_P_DAY,  # in seconds here
                 )
             elif translation_type == "Spice":
                 translation = SpiceTranslation(
@@ -394,7 +395,7 @@ def create_renderable_trail_orbit(
             renderable = RenderableTrailOrbit(
                 color=color,
                 period=(
-                    keplerian_i.P[0] if period is None else period
+                    _safe_orbital_period(keplerian_i.P[0]) if period is None else period
                 ),  # in days here (confusingly)
                 resolution=resolution,
                 translation=translation,
