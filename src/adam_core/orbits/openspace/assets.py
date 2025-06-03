@@ -135,6 +135,13 @@ def create_renderable_orbital_kepler(
 
     This is the best renderable to use for large numbers of orbits (e.g. > 1000).
 
+    Example
+    -------
+    >>> from adam_core.orbits.query import query_sbdb
+    >>> from adam_core.orbits.openspace import create_renderable_orbital_kepler
+    >>> orbits = query_sbdb(["2013 RR165", "2018 BP1"])
+    >>> create_renderable_orbital_kepler(orbits, "out_dir", "openspace_example")
+
     Parameters
     ----------
     orbits : Orbits
@@ -286,6 +293,13 @@ def create_renderable_trail_orbit(
     The Keplerian translation is the default and is the best for small numbers of orbits (e.g. < 1000).
     The Spice translation is the best to use for a few dozen orbits.
 
+    Example
+    -------
+    >>> from adam_core.orbits.query import query_sbdb
+    >>> from adam_core.orbits.openspace import create_renderable_trail_orbit
+    >>> orbits = query_sbdb(["2013 RR165", "2018 BP1"])
+    >>> create_renderable_trail_orbit(orbits, "out_dir", "openspace_example", translation_type="Kepler")
+
     Parameters
     ----------
     orbits : Orbits
@@ -360,9 +374,12 @@ def create_renderable_trail_orbit(
         if spice_id_mappings is None:
             raise ValueError("Spice ID mappings are required for Spice translation")
 
+    os.makedirs(out_dir, exist_ok=True)
+
     with open(os.path.join(out_dir, f"{identifier}.asset"), "w") as f:
 
         assets = []
+        asset_number = 0
         for i, (orbit, keplerian_i) in enumerate(zip(orbits, keplerian)):
 
             orbit_id = orbit.orbit_id[0].as_py()
@@ -370,7 +387,15 @@ def create_renderable_trail_orbit(
             if object_id is None:
                 object_id = orbit_id
 
-            gui = Gui(name=f"{object_id}", path=gui_path)
+            if trail_head:
+                gui_trail = Gui(
+                    name=f"{object_id} Trail", path=gui_path + f"/{object_id}"
+                )
+                gui_head = Gui(
+                    name=f"{object_id} Head", path=gui_path + f"/{object_id}"
+                )
+            else:
+                gui_trail = Gui(name=f"{object_id}", path=gui_path)
 
             if translation_type == "Kepler":
                 translation = KeplerTranslation(
@@ -407,27 +432,37 @@ def create_renderable_trail_orbit(
                 rendering=rendering,
             )
 
-            if trail_head:
-                transform = Transform(
-                    translation=translation,
-                )
-            else:
-                transform = None
-
             asset = Asset(
                 identifier=object_id.replace(" ", "_"),
                 parent="SunEclipJ2000",
                 renderable=renderable,
-                transform=transform,
-                gui=gui,
+                gui=gui_trail,
             )
 
-            asset_id = f"Object{i:08d}"
+            asset_id = f"Object{asset_number:08d}"
+            asset_number += 1
             assets.append(asset_id)
 
             f.write(f"local {asset_id} = ")
             f.write(asset.to_string(indent=4))
             f.write("\n\n")
+
+            if trail_head:
+                head_asset = Asset(
+                    identifier=object_id.replace(" ", "_") + "_Head",
+                    parent="SunEclipJ2000",
+                    transform=Transform(
+                        translation=translation,
+                    ),
+                    gui=gui_head,
+                )
+                head_asset_id = f"Object{asset_number:08d}"
+                asset_number += 1
+                assets.append(head_asset_id)
+
+                f.write(f"local {head_asset_id} = ")
+                f.write(head_asset.to_string(indent=4))
+                f.write("\n\n")
 
     initialization = create_initialization(assets)
     with open(os.path.join(out_dir, f"{identifier}.asset"), "a") as f:
