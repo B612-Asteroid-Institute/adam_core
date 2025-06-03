@@ -282,7 +282,6 @@ def plot_porkchop_plotly(
     optimal_hover: bool = True,
     trim_to_valid: bool = True,
     date_buffer_days: float = 3.0,
-    bundle_raw_data: bool = True,
 ):
     """
     Plot the porkchop plot from Lambert trajectory data using Plotly.
@@ -587,97 +586,18 @@ def plot_porkchop_plotly(
     grid_dep_iso = flat_dep_iso.reshape(grid_departure_mjd.shape)
     grid_arr_iso = flat_arr_iso.reshape(grid_arrival_mjd.shape)
 
-    customdata = None
+    # Create a 3D array to hold the numeric data for hover:
+    # [C3, Vinf, ToF, Departure X, Departure Y, Departure Z, Arrival X, Arrival Y, Arrival Z]
+    customdata = np.full(
+        (grid_c3_km2_s2.shape[0], grid_c3_km2_s2.shape[1], 9),
+        np.nan,
+        dtype=np.float64,
+    )
 
-    if bundle_raw_data:
-        # Create a 3D array to hold the numeric data for hover:
-        # [C3, Vinf, ToF, Departure X, Departure Y, Departure Z, Arrival X, Arrival Y, Arrival Z]
-        customdata = np.full(
-            (grid_c3_km2_s2.shape[0], grid_c3_km2_s2.shape[1], 9),
-            np.nan,
-            dtype=np.float64,
-        )
-
-        # Populate with gridded C3, Vinf, ToF
-        customdata[:, :, 0] = grid_c3_km2_s2
-        customdata[:, :, 1] = grid_vinf_km_s
-        customdata[:, :, 2] = original_tof_grid_days
-
-        # Get raw departure Cartesian coordinates converted to KM
-        raw_departure_x = (
-            porkchop_data.departure_state.x.to_numpy(zero_copy_only=False) * KM_P_AU
-        )
-        raw_departure_y = (
-            porkchop_data.departure_state.y.to_numpy(zero_copy_only=False) * KM_P_AU
-        )
-        raw_departure_z = (
-            porkchop_data.departure_state.z.to_numpy(zero_copy_only=False) * KM_P_AU
-        )
-
-        # Get raw arrival Cartesian coordinates converted to KM
-        raw_arrival_x = (
-            porkchop_data.arrival_state.x.to_numpy(zero_copy_only=False) * KM_P_AU
-        )
-        raw_arrival_y = (
-            porkchop_data.arrival_state.y.to_numpy(zero_copy_only=False) * KM_P_AU
-        )
-        raw_arrival_z = (
-            porkchop_data.arrival_state.z.to_numpy(zero_copy_only=False) * KM_P_AU
-        )
-
-        # Interpolate Cartesian coordinates onto the grid
-        grid_departure_x = griddata(
-            points,
-            raw_departure_x,
-            (grid_departure_mjd, grid_arrival_mjd),
-            method="cubic",
-            fill_value=np.nan,
-        )
-        grid_departure_y = griddata(
-            points,
-            raw_departure_y,
-            (grid_departure_mjd, grid_arrival_mjd),
-            method="cubic",
-            fill_value=np.nan,
-        )
-
-        grid_departure_z = griddata(
-            points,
-            raw_departure_z,
-            (grid_departure_mjd, grid_arrival_mjd),
-            method="cubic",
-            fill_value=np.nan,
-        )
-
-        grid_arrival_x = griddata(
-            points,
-            raw_arrival_x,
-            (grid_departure_mjd, grid_arrival_mjd),
-            method="cubic",
-            fill_value=np.nan,
-        )
-        grid_arrival_y = griddata(
-            points,
-            raw_arrival_y,
-            (grid_departure_mjd, grid_arrival_mjd),
-            method="cubic",
-            fill_value=np.nan,
-        )
-        grid_arrival_z = griddata(
-            points,
-            raw_arrival_z,
-            (grid_departure_mjd, grid_arrival_mjd),
-            method="cubic",
-            fill_value=np.nan,
-        )
-
-        # Populate customdata with gridded arrival Cartesian coordinates
-        customdata[:, :, 3] = grid_departure_x
-        customdata[:, :, 4] = grid_departure_y
-        customdata[:, :, 5] = grid_departure_z
-        customdata[:, :, 6] = grid_arrival_x
-        customdata[:, :, 7] = grid_arrival_y
-        customdata[:, :, 8] = grid_arrival_z
+    # Populate with gridded C3, Vinf, ToF
+    customdata[:, :, 0] = grid_c3_km2_s2
+    customdata[:, :, 1] = grid_vinf_km_s
+    customdata[:, :, 2] = original_tof_grid_days
 
     # --- Create C3 Contour Trace with hover template ---
     plotly_traces = []
