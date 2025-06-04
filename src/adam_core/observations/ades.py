@@ -486,7 +486,7 @@ def _build_obs_context(context_dict: dict) -> ObsContext:
     # Extract telescope data
     telescope_data = context_dict.get("telescope", {})
     telescope = TelescopeObsContext(
-        name=telescope_data["name"] if "name" in telescope_data else None,
+        name=telescope_data.get("name", None),
         design=telescope_data["design"],
         aperture=float(telescope_data["aperture"]),
         detector=telescope_data.get("detector"),

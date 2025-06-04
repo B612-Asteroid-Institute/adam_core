@@ -193,8 +193,7 @@ def create_renderable_orbital_kepler(
     tag : str, optional
         The tag for the Keplerian orbital.
     """
-    if " " in identifier:
-        identifier = identifier.replace(" ", "_")
+    safe_identifier = identifier.replace(" ", "_")
 
     if rendering is not None:
         rendering = RenderableOrbitalKeplerRendering(rendering)
@@ -203,7 +202,7 @@ def create_renderable_orbital_kepler(
         render_bin_mode = RenderBinMode(render_bin_mode)
 
     if gui_name is None:
-        gui_name = identifier
+        gui_name = safe_identifier
 
     if gui_path is None:
         gui_path = "/ADAM"
@@ -212,7 +211,7 @@ def create_renderable_orbital_kepler(
 
     # Create SBDB formatted file
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"{identifier.replace(" ", "_")}.csv")
+    path = os.path.join(out_dir, f"{safe_identifier}.csv")
     orbits_to_sbdb_file(orbits, path)
 
     # Initialize the renderable
@@ -242,13 +241,13 @@ def create_renderable_orbital_kepler(
 
     # Declare the asset
     asset = Asset(
-        identifier=identifier.replace(" ", "_"),
+        identifier=safe_identifier,
         parent="SunEclipJ2000",
         renderable=renderable,
         gui=gui,
     )
 
-    with open(os.path.join(out_dir, f"{identifier.replace(' ', '_')}.asset"), "w") as f:
+    with open(os.path.join(out_dir, f"{safe_identifier}.asset"), "w") as f:
         f.write("local Object = ")
         f.write(asset.to_string(indent=4))
         f.write("\n\n")
@@ -349,8 +348,7 @@ def create_renderable_trail_orbit(
     spice_id_mappings : dict, optional
         A dictionary mapping object IDs to SPICE IDs.
     """
-    if " " in identifier:
-        identifier = identifier.replace(" ", "_")
+    safe_identifier = identifier.replace(" ", "_")
 
     if rendering is not None:
         rendering = RenderableTrailRendering(rendering)
@@ -376,7 +374,7 @@ def create_renderable_trail_orbit(
 
     os.makedirs(out_dir, exist_ok=True)
 
-    with open(os.path.join(out_dir, f"{identifier}.asset"), "w") as f:
+    with open(os.path.join(out_dir, f"{safe_identifier}.asset"), "w") as f:
 
         assets = []
         asset_number = 0
@@ -465,7 +463,7 @@ def create_renderable_trail_orbit(
                 f.write("\n\n")
 
     initialization = create_initialization(assets)
-    with open(os.path.join(out_dir, f"{identifier}.asset"), "a") as f:
+    with open(os.path.join(out_dir, f"{safe_identifier}.asset"), "a") as f:
         f.write(initialization)
 
         if translation_type == "Spice":
