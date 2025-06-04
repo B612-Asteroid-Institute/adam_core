@@ -158,10 +158,10 @@ def test_ObsContext_to_string(ades_obscontext):
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Blanco 4m
 ! design Reflector
 ! aperture 4.0
 ! detector CCD
+! name Blanco 4m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -198,10 +198,10 @@ def test_ObsContext_to_string(ades_obscontext):
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Bok 2.3m
 ! design Reflector
 ! aperture 2.3
 ! detector CCD
+! name Bok 2.3m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -237,10 +237,10 @@ def test_ADES_to_string(ades_observations, ades_obscontext):
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Mayall 4m
 ! design Reflector
 ! aperture 4.0
 ! detector CCD
+! name Mayall 4m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -249,7 +249,7 @@ def test_ADES_to_string(ades_observations, ades_obscontext):
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
 permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
-3001|a2345b|obs04|2024-05-05T04:48:00.000Z|15.05000000|10.05000000|21.40|r|695|CCD|Gaia2|This is the fourth dummy observation
+3001|a2345b|obs04|2024-05-05T04:48:00.000Z|15.050000000|10.050000000|21.4000|r|695|CCD|Gaia2|This is the fourth dummy observation
 # observatory
 ! mpcCode V00
 ! name Kitt Peak National Observatory - Bok + 90Prime
@@ -271,10 +271,10 @@ permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Bok 2.3m
 ! design Reflector
 ! aperture 2.3
 ! detector CCD
+! name Bok 2.3m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -283,7 +283,7 @@ permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
 permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
-3001|a2345b|obs03|2024-05-05T00:00:00.000Z|15.00000000|10.00000000|V00|CCD|Gaia2
+3001|a2345b|obs03|2024-05-05T00:00:00.000Z|15.000000000|10.000000000|V00|CCD|Gaia2
 # observatory
 ! mpcCode W84
 ! name Cerro Tololo - Blanco + DECam
@@ -305,10 +305,10 @@ permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Blanco 4m
 ! design Reflector
 ! aperture 4.0
 ! detector CCD
+! name Blanco 4m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -317,8 +317,8 @@ permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
 permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|remarks
-3000|a1234b|obs01|2024-05-04T00:00:00.000Z|240.00000000|-15.00000000|0.9659|1.0000|20.00|r|W84|CCD|Gaia2|This is a dummy observation
-3000|a1234b|obs02|2024-05-04T02:24:00.000Z|240.05000000|-15.05000000|0.9657|1.0000|20.30|g|W84|CCD|Gaia2|This is another dummy observation
+3000|a1234b|obs01|2024-05-04T00:00:00.000Z|240.000000000|-15.000000000|0.96590|1.00000|20.0000|r|W84|CCD|Gaia2|This is a dummy observation
+3000|a1234b|obs02|2024-05-04T02:24:00.000Z|240.050000000|-15.050000000|0.96570|1.00000|20.3000|g|W84|CCD|Gaia2|This is another dummy observation
 """  # noqa: E501
 
     actual = ADES_to_string(ades_observations, ades_obscontext)
@@ -346,10 +346,10 @@ permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|rema
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Mayall 4m
 ! design Reflector
 ! aperture 4.0
 ! detector CCD
+! name Mayall 4m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -380,10 +380,10 @@ permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Bok 2.3m
 ! design Reflector
 ! aperture 2.3
 ! detector CCD
+! name Bok 2.3m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -414,10 +414,10 @@ permID|trkSub|obsSubID|obsTime|ra|dec|stn|mode|astCat
 ! name C. Fiaschetti
 ! name D. Remy
 # telescope
-! name Blanco 4m
 ! design Reflector
 ! aperture 4.0
 ! detector CCD
+! name Blanco 4m
 # software
 ! objectDetection Asteroid Discovery Analysis and Mapping + Tracklet-less Heliocentric Orbit Recovery (ADAM::THOR)
 # fundingSource WilliamBowes, McGregorGirand, Tito's Vodka, PRawls, SKraus, Yishan/KWong, SGalitsky, Google
@@ -534,7 +534,9 @@ def test_ADES_string_to_tables_minimal():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|stn|mode|astCat
 1234|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
 """
@@ -552,8 +554,9 @@ permID|obsTime|ra|dec|stn|mode|astCat
     assert context.submitter.institution is None
     assert context.observers == ["Observer1"]
     assert context.measurers == ["Measurer1"]
-    assert context.telescope.name == "Telescope1"
+    assert context.telescope.aperture == 1.0
     assert context.telescope.design == "Reflector"
+    assert context.telescope.detector == "CCD"
     assert context.software is None
     assert context.fundingSource is None
     assert context.comments == []
@@ -581,7 +584,9 @@ def test_ADES_string_to_tables_empty_observations():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|stn|mode|astCat
 """
 
@@ -606,7 +611,9 @@ def test_ADES_string_to_tables_multiple_observatories():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 # observatory
 ! mpcCode W84
 # submitter
@@ -617,7 +624,9 @@ def test_ADES_string_to_tables_multiple_observatories():
 ! name Measurer2
 # telescope
 ! name Telescope2
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|stn|mode|astCat
 1234|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
 5678|2024-01-01T00:00:00.000Z|190.0|10.0|W84|CCD|Gaia2
@@ -647,7 +656,9 @@ def test_ADES_string_to_tables_unknown_columns():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|raStar|decStar|stn|mode|astCat
 1234|2024-01-01T00:00:00.000Z|180.0|0.0|180.1|0.1|695|CCD|Gaia2
 5678|2024-01-01T00:00:00.000Z|190.0|10.0|190.1|10.1|695|CCD|Gaia2
@@ -683,7 +694,9 @@ def test_ADES_string_to_tables_null_handling():
 ! name Measurer1
 # telescope
 ! name Telescope1
+! aperture 1.0
 ! design Reflector
+! detector CCD
 permID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
 1234|2024-01-01T00:00:00.000Z|180.0|0.0||r|695|CCD|Gaia2|First observation
 5678|2024-01-01T00:00:00.000Z|190.0|10.0| |g|695|CCD|Gaia2|Second observation
