@@ -103,15 +103,37 @@ lambert_worker_remote = ray.remote(lambert_worker)
 
 def prepare_and_propagate_orbits(
     body: Union[Orbits, OriginCodes],
-    earliest_launch_time: Timestamp,
-    maximum_arrival_time: Timestamp,
+    start_time: Timestamp,
+    end_time: Timestamp,
     propagation_origin: OriginCodes = OriginCodes.SUN,
     step_size: float = 1.0,
     propagator_class: Optional[type[Propagator]] = None,
     max_processes: Optional[int] = 1,
 ) -> CartesianCoordinates:
     """
-    Prepare and propagate orbits for a single body.
+    Prepare and propagate orbits for a single body over a specified time range.
+    
+    Parameters
+    ----------
+    body : Union[Orbits, OriginCodes]
+        The body to propagate (either an Orbits object or an OriginCode for a major body).
+    start_time : Timestamp
+        The start time for propagation.
+    end_time : Timestamp
+        The end time for propagation.
+    propagation_origin : OriginCodes, optional
+        The origin of the propagation (default: SUN).
+    step_size : float, optional
+        The step size in days (default: 1.0).
+    propagator_class : Optional[type[Propagator]], optional
+        The propagator class to use for orbit propagation.
+    max_processes : Optional[int], optional
+        The maximum number of processes to use.
+        
+    Returns
+    -------
+    CartesianCoordinates
+        The propagated coordinates over the specified time range.
     """
     # if body is an Orbit, ensure its origin is the propagation_origin
     if isinstance(body, Orbits):
@@ -125,15 +147,10 @@ def prepare_and_propagate_orbits(
             ),
         )
 
-    # create empty CartesianCoordinates
-    coordinates = CartesianCoordinates.empty(
-        frame="ecliptic",
-    )
-
     times = Timestamp.from_mjd(
         np.arange(
-            earliest_launch_time.rescale("tdb").mjd()[0].as_py(),
-            maximum_arrival_time.rescale("tdb").mjd()[0].as_py(),
+            start_time.rescale("tdb").mjd()[0].as_py(),
+            end_time.rescale("tdb").mjd()[0].as_py(),
             step_size,
         ),
         scale="tdb",
@@ -168,28 +185,23 @@ def generate_porkchop_data(
 
     Parameters
     ----------
-    departure_body : Union[Orbits, OriginCodes]
-        The departure body.
-    arrival_body : Union[Orbits, OriginCodes]
-        The arrival body.
-    earliest_launch_time : Timestamp
-        The earliest launch time.
-    maximum_arrival_time : Timestamp
-        The maximum arrival time.
-    propagation_origin : OriginCodes, optional
+    departure_coordinates : CartesianCoordinates
+        The departure coordinates.
+    arrival_coordinates : CartesianCoordinates
+        The arrival coordinates.
+    propagation_origin : OriginCodes
         The origin of the propagation.
-    step_size : float, optional
-        The step size for the porkchop plot.
     prograde : bool, optional
         If True, assume prograde motion. If False, assume retrograde motion.
     max_iter : int, optional
         The maximum number of iterations for Lambert's solver.
     tol : float, optional
         The numerical tolerance for Lambert's solver.
-    propagator_class : Optional[type[Propagator]], optional
-        The propagator class to use.
     max_processes : Optional[int], optional
         The maximum number of processes to use.
+    max_processes : Optional[int], optional
+        The maximum number of processes to use.
+
 
     Returns
     -------
@@ -201,20 +213,30 @@ def generate_porkchop_data(
     departure_coordinates = departure_coordinates.sort_by(["time.days", "time.nanos"])
     arrival_coordinates = arrival_coordinates.sort_by(["time.days", "time.nanos"])
 
-    x, y = np.meshgrid(
+    # Get the actual times for comparison
+    dep_times_mjd = departure_coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    arr_times_mjd = arrival_coordinates.time.mjd().to_numpy(zero_copy_only=False)
+
+    # Create meshgrids of indices and times
+    dep_indices, arr_indices = np.meshgrid(
         np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
     )
+    dep_time_grid, arr_time_grid = np.meshgrid(dep_times_mjd, arr_times_mjd)
 
     # Filter to ensure departure time is before arrival time
-    # and create a mask for valid time combinations
-    valid_indices = y > x  # arrival index must be greater than departure index
+    # Use actual time comparison instead of index comparison
+    valid_indices = arr_time_grid > dep_time_grid
 
     # Apply the mask to flatten only valid combinations
-    x = x[valid_indices].flatten()
-    y = y[valid_indices].flatten()
+    dep_indices_flat = dep_indices[valid_indices].flatten()
+    arr_indices_flat = arr_indices[valid_indices].flatten()
 
-    stacked_departure_coordinates = departure_coordinates.take(x)
-    stacked_arrival_coordinates = arrival_coordinates.take(y)
+    stacked_departure_coordinates = departure_coordinates.take(dep_indices_flat)
+    stacked_arrival_coordinates = arrival_coordinates.take(arr_indices_flat)
+
+    # If no valid combinations exist, return empty results
+    if len(stacked_departure_coordinates) == 0:
+        return LambertOutput.empty()
 
     if max_processes is None:
         max_processes = mp.cpu_count()
