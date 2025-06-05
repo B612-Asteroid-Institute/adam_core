@@ -1,13 +1,12 @@
 import logging
 import uuid
-from typing import TYPE_CHECKING, Iterable, Tuple
+from typing import TYPE_CHECKING, Iterable, Literal, Tuple
 
 import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
-from .classification import calc_orbit_class
 
 if TYPE_CHECKING:
     from ..propagator import Propagator
@@ -37,18 +36,25 @@ class Orbits(qv.Table):
             mask = pc.equal(self.orbit_id, orbit_id)
             yield orbit_id, self.apply_mask(mask)
 
-    def dynamical_class(self) -> npt.NDArray[str]:
+    def dynamical_class(self, style: Literal["PDS", "MPC"] = "PDS") -> npt.NDArray[str]:
         """
         Compute dynamical classes of orbits. Currently
         limited to asteroid dynamical classes.
+
+        Parameters
+        ----------
+        style : {"PDS", "MPC"}, optional
+            Classification scheme to use. Default is "PDS".
 
         Returns
         -------
         dynamical_classes : `~numpy.ndarray`
             Dynamical classes of orbits.
         """
+        from .classification import calc_orbit_class
+
         keplerian = self.coordinates.to_keplerian()
-        return calc_orbit_class(keplerian)
+        return calc_orbit_class(keplerian, style=style)
 
     def preview(self, propagator: "Propagator") -> None:
         """
