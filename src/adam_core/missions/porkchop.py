@@ -1,7 +1,7 @@
 import logging
 import multiprocessing as mp
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,6 +17,7 @@ from scipy.interpolate import griddata
 from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
+from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.dynamics.lambert import calculate_c3, solve_lambert
 from adam_core.orbits import Orbits
 from adam_core.propagator import Propagator
@@ -85,6 +86,75 @@ class LambertOutput(qv.Table):
         return self.arrival_state.time.mjd().to_numpy(
             zero_copy_only=False
         ) - self.departure_state.time.mjd().to_numpy(zero_copy_only=False)
+
+
+def departure_spherical_coordinates(
+    departure_origin: OriginCodes,
+    times: Timestamp,
+    frame: str,
+    vx: npt.NDArray[np.float64],
+    vy: npt.NDArray[np.float64],
+    vz: npt.NDArray[np.float64],
+) -> SphericalCoordinates:
+    """
+    Return the spherical coordinates of the departure vector.
+
+    Parameters
+    ----------
+    departure_origin : OriginCodes
+        The origin of the departure and also the frame of the departure vectors.
+    times : Timestamp
+        The times of the departure vectors.
+    frame : str
+        The frame of the departure vectors.
+    vx : npt.NDArray[np.float64]
+        The x-component of the departure vectors.
+    vy : npt.NDArray[np.float64]
+        The y-component of the departure vectors.
+    vz : npt.NDArray[np.float64]
+        The z-component of the departure vectors.
+
+    Returns
+    -------
+    SphericalCoordinates
+        The spherical coordinates of the departure unit vectors.
+        Can be used to express ra / dec of the departure direction.
+    """
+    assert len(vx) == len(vy) == len(vz) == len(times), "All arrays must have the same length"
+    assert len(vx) > 0, "At least one departure vector is required"
+    
+    # Create unit direction vectors from the velocity vectors
+    # Normalize the velocity vectors to get direction only
+    velocity_magnitude = np.sqrt(vx**2 + vy**2 + vz**2)
+    direction_x = vx / velocity_magnitude
+    direction_y = vy / velocity_magnitude  
+    direction_z = vz / velocity_magnitude
+    
+    # Create CartesianCoordinates with the direction as position (on unit sphere)
+    # and zero velocity since we only care about the direction
+    direction_coords = CartesianCoordinates.from_kwargs(
+        time=times,
+        x=direction_x,  # Unit vector pointing in velocity direction
+        y=direction_y,  
+        z=direction_z,
+        vx=np.zeros_like(vx),  # No velocity needed for direction
+        vy=np.zeros_like(vy), 
+        vz=np.zeros_like(vz),
+        # From our departing origin.
+        origin=Origin.from_OriginCodes(departure_origin, size=len(vx)),
+        frame=frame,
+    )
+    
+    # Transform direction to equatorial frame for proper RA/Dec coordinates
+    # These are inertial celestial coordinates, suitable for any departure origin
+    spherical = transform_coordinates(
+        direction_coords,
+        SphericalCoordinates,
+        frame_out="equatorial",
+        origin_out=departure_origin
+    )
+    return spherical
+
 
 
 def lambert_worker(
