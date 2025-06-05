@@ -49,7 +49,7 @@ def test_generate_porkchop_data_origins():
     # Check that time of flight is valid (positive)
     assert np.all(results_sun.time_of_flight() > 0)
     # Check that C3 values are computed
-    assert np.all(~np.isnan(results_sun.c3()))
+    assert np.all(~np.isnan(results_sun.c3_departure()))
 
 
 def test_generate_real_porkchop_plot(tmp_path):
@@ -97,7 +97,7 @@ def test_generate_real_porkchop_plot(tmp_path):
 
     # Verify data was generated successfully
     assert len(results) > 0
-    assert np.all(~np.isnan(results.c3()))
+    assert np.all(~np.isnan(results.c3_departure()))
 
     # Generate the plot using plotly for interactive visualization
     fig = plot_porkchop_plotly(
@@ -127,7 +127,7 @@ def test_generate_real_porkchop_plot(tmp_path):
         )
 
     # Print the path to the HTML file
-    print(f"\nPorkchop plot HTML saved to: {html_path}")
+    print(f"\nOpen plot with: open {html_path}")
 
     # return fig  # Return the figure for further analysis if needed
 
@@ -181,7 +181,7 @@ def test_porkchop_different_time_grids():
     assert np.all(tof > 0), f"All time of flight should be positive, got: {tof}"
     
     # Verify C3 values are finite
-    c3_values = results.c3()
+    c3_values = results.c3_departure()
     assert np.all(np.isfinite(c3_values)), "All C3 values should be finite"
     
     # Verify that departure times are before arrival times

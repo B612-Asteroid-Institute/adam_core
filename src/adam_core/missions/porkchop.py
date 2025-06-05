@@ -38,8 +38,8 @@ class LambertOutput(qv.Table):
     vy_2 = qv.Float64Column()
     vz_2 = qv.Float64Column()
     origin = Origin.as_column()
-
-    def c3(self) -> npt.NDArray[np.float64]:
+    
+    def c3_departure(self) -> npt.NDArray[np.float64]:
         """
         Return the C3 in au^2/d^2.
         """
@@ -48,13 +48,33 @@ class LambertOutput(qv.Table):
             self.departure_state.v,
         )
 
-    def vinf(self) -> npt.NDArray[np.float64]:
+    def c3_arrival(self) -> npt.NDArray[np.float64]:
+        """
+        Return the C3 in au^2/d^2.
+        """
+        return calculate_c3(
+            np.array(self.table.select(["vx_2", "vy_2", "vz_2"])),
+            self.arrival_state.v,
+        )
+    
+    def vinf_departure(self) -> npt.NDArray[np.float64]:
+        """
+        Return the v infinity in au/d.
+        """
+        return np.linalg.norm(
+            np.array(self.table.select(["vx_1", "vy_1", "vz_1"]))
+            - self.departure_state.v,
+            axis=1,
+        )
+
+
+    def vinf_arrival(self) -> npt.NDArray[np.float64]:
         """
         Return the v infinity in au/d.
         """
         return np.linalg.norm(
             np.array(self.table.select(["vx_2", "vy_2", "vz_2"]))
-            - self.departure_state.v,
+            - self.arrival_state.v,
             axis=1,
         )
 
@@ -295,8 +315,9 @@ def plot_porkchop_plotly(
     tof_min: Optional[float] = None,
     tof_max: Optional[float] = None,
     tof_step: Optional[float] = None,
-    metric_colorscale: str = "Viridis",
-    tof_line_color: str = "red",
+    c3_base_colorscale: str = "Reds",
+    vinf_base_colorscale: str = "Blues",
+    tof_line_color: str = "black",
     xlim_mjd: Optional[Tuple[float, float]] = None,
     ylim_mjd: Optional[Tuple[float, float]] = None,
     title: str = "Porkchop Plot",
@@ -359,10 +380,8 @@ def plot_porkchop_plotly(
         The Plotly figure object.
     """
     # --- Extract basic raw data ---
-    c3_values_au_d2 = porkchop_data.c3()  # C3 in (AU/day)^2
-    vinf_values_au_day = np.sqrt(
-        np.maximum(0, c3_values_au_d2)
-    )  # Departure Vinf in AU/day
+    c3_departure_au_d2 = porkchop_data.c3_departure()  # C3 departure in (AU/day)^2
+    vinf_arrival_au_day = porkchop_data.vinf_arrival()  # V∞ arrival in AU/day
 
     time_of_flight_days = porkchop_data.time_of_flight()
     departure_times = porkchop_data.departure_state.time
@@ -370,13 +389,13 @@ def plot_porkchop_plotly(
 
     # Convert to metric units
     km_s_per_au_day = KM_P_AU / S_P_DAY
-    c3_values_km2_s2 = c3_values_au_d2 * (km_s_per_au_day**2)
-    vinf_values_km_s = vinf_values_au_day * km_s_per_au_day
+    c3_departure_km2_s2 = c3_departure_au_d2 * (km_s_per_au_day**2)
+    vinf_arrival_km_s = vinf_arrival_au_day * km_s_per_au_day
     # Define default C3 range if not provided
     if c3_min is None:
-        c3_min = np.nanpercentile(c3_values_km2_s2, 5)
+        c3_min = np.nanpercentile(c3_departure_km2_s2, 5)
     if c3_max is None:
-        c3_max = np.nanpercentile(c3_values_km2_s2, 95)
+        c3_max = np.nanpercentile(c3_departure_km2_s2, 95)
 
     assert c3_max > c3_min, "C3 max must be greater than C3 min"
 
@@ -384,13 +403,21 @@ def plot_porkchop_plotly(
         c3_step = (c3_max - c3_min) / 10  # 10 levels by default
     assert c3_step < (c3_max - c3_min), "C3 step must be less than the C3 range"
 
+    # Define default V∞ range if not provided
+    if vinf_min is None:
+        vinf_min = np.nanpercentile(vinf_arrival_km_s, 5)
+    if vinf_max is None:
+        vinf_max = np.nanpercentile(vinf_arrival_km_s, 95)
+    if vinf_step is None:
+        vinf_step = (vinf_max - vinf_min) / 10  # 10 levels by default
+
     # Extract raw MJD values for all points
     departure_times_mjd = departure_times.mjd().to_numpy(zero_copy_only=False)
     arrival_times_mjd = arrival_times.mjd().to_numpy(zero_copy_only=False)
 
     # --- Identify valid data and filter time ranges ---
     # Create a mask for valid C3 values (not NaN and not over max)
-    valid_c3_mask = ~np.isnan(c3_values_km2_s2) & (c3_values_km2_s2 <= c3_max)
+    valid_c3_mask = ~np.isnan(c3_departure_km2_s2) & (c3_departure_km2_s2 <= c3_max)
 
     # Extract all unique times from the raw data
     all_departure_mjd = np.sort(np.unique(departure_times_mjd))
@@ -476,30 +503,23 @@ def plot_porkchop_plotly(
     )
     points = np.vstack((departure_times_mjd, arrival_times_mjd)).T
 
-    grid_c3_km2_s2 = griddata(
+    # Interpolate both C3 departure and V∞ arrival onto the grid
+    grid_c3_departure_km2_s2 = griddata(
         points,
-        c3_values_km2_s2,
+        c3_departure_km2_s2,
         (grid_departure_mjd, grid_arrival_mjd),
         method="cubic",
         fill_value=np.nan,
     )
-    grid_vinf_km_s = griddata(
+    grid_vinf_arrival_km_s = griddata(
         points,
-        vinf_values_km_s,
+        vinf_arrival_km_s,
         (grid_departure_mjd, grid_arrival_mjd),
         method="cubic",
         fill_value=np.nan,
     )
 
     original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
-
-    # For Vinf (derive from C3 if not specified)
-    if vinf_min is None:
-        vinf_min = np.sqrt(c3_min)
-    if vinf_max is None:
-        vinf_max = np.sqrt(c3_max)
-    if vinf_step is None:
-        vinf_step = (vinf_max - vinf_min) / 10  # 10 levels by default
     # For ToF
     if tof_min is None:
         tof_min = np.nanmin(original_tof_grid_days[original_tof_grid_days > 0])
@@ -524,15 +544,19 @@ def plot_porkchop_plotly(
     assert tof_step > 0, f"tof_step must be positive, got {tof_step}"
 
     # --- Replace NaN values and over-max values with sentinel ---
-    # Use a sentinel value that's 2x the maximum
-    sentinel_value = c3_max * 1.01
+    # Use a sentinel value that's 2x the maximum for C3
+    c3_sentinel_value = c3_max * 1.01
+    vinf_sentinel_value = vinf_max * 1.01
 
-    # Replace NaN and over-max values with the sentinel value
-    grid_c3_for_plot = np.copy(grid_c3_km2_s2)
-    mask_nan = np.isnan(grid_c3_for_plot)
+    # Replace NaN and over-max values with the sentinel value for C3
+    grid_c3_for_plot = np.copy(grid_c3_departure_km2_s2)
+    mask_c3_nan = np.isnan(grid_c3_for_plot)
+    grid_c3_for_plot[mask_c3_nan] = c3_sentinel_value
 
-    # Apply sentinel value to all invalid areas
-    grid_c3_for_plot[mask_nan] = sentinel_value
+    # Replace NaN and over-max values with the sentinel value for V∞
+    grid_vinf_for_plot = np.copy(grid_vinf_arrival_km_s)
+    mask_vinf_nan = np.isnan(grid_vinf_for_plot)
+    grid_vinf_for_plot[mask_vinf_nan] = vinf_sentinel_value
 
     # --- Trim plot to valid data region if requested ---
     # Note: We've already trimmed before creating the grid,
@@ -564,12 +588,13 @@ def plot_porkchop_plotly(
     # --- Create custom colorscale ---
     # Define function to create custom colorscale with white for sentinel
     def create_colorscale_with_sentinel(base_colorscale, vmin, vmax, sentinel):
-        # Get standard colorscale
+        # Get standard colorscale using brighter range to avoid muddy overlaps
+        # Use range 0.2 to 0.8 instead of 0 to 1 to skip very dark and very light colors
         standard_colors = pcolors.sample_colorscale(
-            base_colorscale, np.linspace(0, 1, 11)
+            base_colorscale, np.linspace(0.2, 0.8, 11)
         )
 
-        # Reverse the colors
+        # Reverse the colors (brightest for lowest values)
         standard_colors = standard_colors[::-1]
 
         # Convert to normalized range (0-1)
@@ -585,9 +610,12 @@ def plot_porkchop_plotly(
 
         return colorscale
 
-    # Create custom colorscale for C3
+    # Create custom colorscales for both C3 and V∞
     c3_colorscale = create_colorscale_with_sentinel(
-        metric_colorscale, c3_min, c3_max, sentinel_value
+        c3_base_colorscale, c3_min, c3_max, c3_sentinel_value
+    )
+    vinf_colorscale = create_colorscale_with_sentinel(
+        vinf_base_colorscale, vinf_min, vinf_max, vinf_sentinel_value
     )
 
     # --- Prepare customdata for hover template ---
@@ -609,66 +637,159 @@ def plot_porkchop_plotly(
     grid_arr_iso = flat_arr_iso.reshape(grid_arrival_mjd.shape)
 
     # Create a 3D array to hold the numeric data for hover:
-    # [C3, Vinf, ToF, Departure X, Departure Y, Departure Z, Arrival X, Arrival Y, Arrival Z]
+    # [C3_departure, Vinf_arrival, ToF]
     customdata = np.full(
-        (grid_c3_km2_s2.shape[0], grid_c3_km2_s2.shape[1], 9),
+        (grid_c3_departure_km2_s2.shape[0], grid_c3_departure_km2_s2.shape[1], 3),
         np.nan,
         dtype=np.float64,
     )
 
-    # Populate with gridded C3, Vinf, ToF
-    customdata[:, :, 0] = grid_c3_km2_s2
-    customdata[:, :, 1] = grid_vinf_km_s
+    # Populate with gridded C3 departure, V∞ arrival, ToF
+    customdata[:, :, 0] = grid_c3_departure_km2_s2
+    customdata[:, :, 1] = grid_vinf_arrival_km_s
     customdata[:, :, 2] = original_tof_grid_days
 
-    # --- Create C3 Contour Trace with hover template ---
+    # --- Create Dual Contour Traces ---
     plotly_traces = []
+    
+    # C3 Departure Contour Trace (warm colorscale)
     plotly_traces.append(
         go.Contour(
             x=unique_departure_dates_dt,
             y=unique_arrival_dates_dt,
             z=grid_c3_for_plot,
-            zauto=False,  # Don't auto-scale z values
-            zmin=c3_min,  # Min value for colorscale
-            zmax=c3_max * 1.1,  # Max value for data display (not including sentinel)
+            zauto=False,
+            zmin=c3_min,
+            zmax=c3_max * 1.1,
             colorscale=c3_colorscale,
+            opacity=0.3,  # More transparency for better layering
             customdata=customdata,
-            text=np.stack(
-                [grid_dep_iso, grid_arr_iso], axis=-1
-            ),  # Store date strings as text
+            text=np.stack([grid_dep_iso, grid_arr_iso], axis=-1),
             hovertemplate=(
-                "<b>Departure:</b> %{text[0]}<br>"  # Use text array for dates
-                + "<b>Arrival:</b> %{text[1]}<br>"  # Use text array for dates
+                "<b>C3 Departure</b><br>"
+                + "<b>Departure:</b> %{text[0]}<br>"
+                + "<b>Arrival:</b> %{text[1]}<br>"
                 + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                + "<b>Vinf:</b> %{customdata[1]:.1f} km/s<br>"
-                + "<b>ToF:</b> %{customdata[2]:.1f} days<br>"
+                + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
+                + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
             ),
             contours=dict(
                 coloring="fill",
                 showlabels=True,
-                labelfont=dict(size=10, color="black"),
+                labelfont=dict(size=10, color="darkred"),
                 start=c3_min,
                 end=c3_max,
                 size=c3_step,
-                # Format C3 values to 1 decimal place
                 labelformat=".1f",
             ),
             line=dict(width=0.5, smoothing=1.3),
-            name="C3 (km²/s²) / Vinf (km/s)",
-            colorbar=dict(
-                title="<b>C3</b> (km²/s²) / <b>Vinf</b> (km/s)",
-                # Generate ticks based on the actual step size
-                tickvals=[
-                    level
-                    for level in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
-                ],
-                ticktext=[
-                    f"{c3:.1f} / {np.sqrt(c3):.1f}"
-                    for c3 in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
-                ],
-            ),
+            name="C3 Departure",
+            showscale=False,  # Remove colorbar from main trace
             connectgaps=True,
             visible=True,
+            showlegend=True,
+        )
+    )
+    
+    # V∞ Arrival Contour Trace (cool colorscale)
+    plotly_traces.append(
+        go.Contour(
+            x=unique_departure_dates_dt,
+            y=unique_arrival_dates_dt,
+            z=grid_vinf_for_plot,
+            zauto=False,
+            zmin=vinf_min,
+            zmax=vinf_max * 1.1,
+            colorscale=vinf_colorscale,
+            opacity=0.3,  # More transparency for better layering
+            customdata=customdata,
+            text=np.stack([grid_dep_iso, grid_arr_iso], axis=-1),
+            hovertemplate=(
+                "<b>V∞ Arrival</b><br>"
+                + "<b>Departure:</b> %{text[0]}<br>"
+                + "<b>Arrival:</b> %{text[1]}<br>"
+                + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
+                + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
+                + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
+            ),
+            contours=dict(
+                coloring="fill",
+                showlabels=True,
+                labelfont=dict(size=10, color="darkblue"),
+                start=vinf_min,
+                end=vinf_max,
+                size=vinf_step,
+                labelformat=".1f",
+            ),
+            line=dict(width=0.5, smoothing=1.3),
+            name="V∞ Arrival",
+            showscale=False,  # Remove colorbar from main trace
+            connectgaps=False,  # Faster rendering by not connecting across gaps
+            visible=True,
+            showlegend=True,
+        )
+    )
+    
+    # --- Persistent Colorbars (invisible traces that hold colorbars) ---
+    # C3 Departure Colorbar (always visible)
+    plotly_traces.append(
+        go.Scatter(
+            x=[None],  # No actual data points
+            y=[None],
+            mode="markers",
+            marker=dict(
+                colorscale=c3_colorscale,
+                cmin=c3_min,
+                cmax=c3_max,
+                color=[c3_min],  # Dummy value for colorscale
+                colorbar=dict(
+                    title="<b>C3 Departure</b><br>(km²/s²)",
+                    x=1.05,  # Position to the right with more space
+                    len=0.75,  # Shorter to fit both colorbars
+                    tickvals=[
+                        level
+                        for level in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
+                    ],
+                    ticktext=[
+                        f"{c3:.1f}"
+                        for c3 in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
+                    ],
+                ),
+            ),
+            showlegend=False,
+            hoverinfo="skip",
+            visible=True,  # Always visible
+        )
+    )
+    
+    # V∞ Arrival Colorbar (always visible)
+    plotly_traces.append(
+        go.Scatter(
+            x=[None],  # No actual data points
+            y=[None],
+            mode="markers",
+            marker=dict(
+                colorscale=vinf_colorscale,
+                cmin=vinf_min,
+                cmax=vinf_max,
+                color=[vinf_min],  # Dummy value for colorscale
+                colorbar=dict(
+                    title="<b>V∞ Arrival</b><br>(km/s)",
+                    x=1.15,  # Position further to the right with more space
+                    len=0.75,  # Shorter to fit both colorbars
+                    tickvals=[
+                        level
+                        for level in np.arange(vinf_min, vinf_max + 0.5 * vinf_step, vinf_step)
+                    ],
+                    ticktext=[
+                        f"{vinf:.1f}"
+                        for vinf in np.arange(vinf_min, vinf_max + 0.5 * vinf_step, vinf_step)
+                    ],
+                ),
+            ),
+            showlegend=False,
+            hoverinfo="skip",
+            visible=True,  # Always visible
         )
     )
 
@@ -687,7 +808,7 @@ def plot_porkchop_plotly(
                 end=tof_max,
                 size=tof_step,
             ),
-            line=dict(color=tof_line_color, width=1, dash="dash"),
+            line=dict(color=tof_line_color, width=1, dash="longdash"),
             name="ToF (days)",
             showscale=False,
             hoverinfo="skip",
@@ -696,78 +817,147 @@ def plot_porkchop_plotly(
         )
     )
 
-    # --- Optimal point (showing both C3 and Vinf info) ---
-    if show_optimal and np.any(~np.isnan(c3_values_km2_s2)):
-        min_c3_idx = np.nanargmin(c3_values_km2_s2)
-        best_c3_val = c3_values_km2_s2[min_c3_idx]
-        best_vinf_val = vinf_values_km_s[min_c3_idx]
-        best_tof = time_of_flight_days[min_c3_idx]
-        # Get the timestamp objects directly from original data
-        # Convert numpy index to Python integer for proper indexing into quivr/pyarrow tables
-        best_dep_time = departure_times[int(min_c3_idx)]
-        best_arr_time = arrival_times[int(min_c3_idx)]
+    # --- Optimal Points (separate for C3 and V∞) ---
+    if show_optimal:
+        # Optimal C3 Departure Point
+        if np.any(~np.isnan(c3_departure_km2_s2)):
+            min_c3_idx = np.nanargmin(c3_departure_km2_s2)
+            best_c3_val = c3_departure_km2_s2[min_c3_idx]
+            best_c3_vinf_val = vinf_arrival_km_s[min_c3_idx]
+            best_c3_tof = time_of_flight_days[min_c3_idx]
+            
+            # Get the timestamp objects directly from original data
+            best_c3_dep_time = departure_times[int(min_c3_idx)]
+            best_c3_arr_time = arrival_times[int(min_c3_idx)]
 
-        # Get ISO strings for hover text
-        best_dep_iso = best_dep_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
-        best_arr_iso = best_arr_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
+            # Get ISO strings for hover text
+            best_c3_dep_iso = best_c3_dep_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
+            best_c3_arr_iso = best_c3_arr_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
 
-        # For scatter point positioning, get datetime objects
-        best_dep_dt = best_dep_time.to_astropy()[0].datetime
-        best_arr_dt = best_arr_time.to_astropy()[0].datetime
+            # For scatter point positioning, get datetime objects
+            best_c3_dep_dt = best_c3_dep_time.to_astropy()[0].datetime
+            best_c3_arr_dt = best_c3_arr_time.to_astropy()[0].datetime
 
-        # Check if the optimal point falls within our current plot range
-        optimal_in_range = (
-            xlim_dt[0] <= best_dep_dt <= xlim_dt[1]
-            and ylim_dt[0] <= best_arr_dt <= ylim_dt[1]
-        )
+            # Check if the optimal C3 point falls within our current plot range
+            c3_optimal_in_range = (
+                xlim_dt[0] <= best_c3_dep_dt <= xlim_dt[1]
+                and ylim_dt[0] <= best_c3_arr_dt <= ylim_dt[1]
+            )
 
-        if optimal_in_range:
-            # Create customdata for optimal point with numeric values
-            optimal_customdata = np.array([[best_c3_val, best_vinf_val, best_tof]])
+            if c3_optimal_in_range:
+                # Create customdata for optimal C3 point
+                c3_optimal_customdata = np.array([[best_c3_val, best_c3_vinf_val, best_c3_tof]])
+                c3_optimal_text = np.array([[best_c3_dep_iso, best_c3_arr_iso]])
 
-            # Create text array for date strings
-            optimal_text = np.array([[best_dep_iso, best_arr_iso]])
-
-            # Configure hover behavior
-            if optimal_hover:
-                hover_info = dict(
-                    customdata=optimal_customdata,
-                    text=optimal_text,
-                    hovertemplate=(
-                        "<b>Optimal C3</b><br>"
-                        + "<b>Departure:</b> %{text[0]}<br>"
-                        + "<b>Arrival:</b> %{text[1]}<br>"
-                        + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                        + "<b>Vinf:</b> %{customdata[1]:.1f} km/s<br>"
-                        + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
-                    ),
-                    hoverlabel=dict(bgcolor="red"),
+                # Configure hover behavior for C3 optimal
+                if optimal_hover:
+                    c3_hover_info = dict(
+                        customdata=c3_optimal_customdata,
+                        text=c3_optimal_text,
+                        hovertemplate=(
+                            "<b>Optimal C3 Departure</b><br>"
+                            + "<b>Departure:</b> %{text[0]}<br>"
+                            + "<b>Arrival:</b> %{text[1]}<br>"
+                            + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
+                            + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
+                            + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
+                        ),
+                        hoverlabel=dict(bgcolor="darkred"),
+                    )
+                else:
+                    c3_hover_info = dict(hoverinfo="skip")
+                    
+                plotly_traces.append(
+                    go.Scatter(
+                        x=[best_c3_dep_dt],
+                        y=[best_c3_arr_dt],
+                        mode="markers",
+                        marker=dict(
+                            symbol="circle",
+                            color="darkred",
+                            size=10,
+                            line=dict(color="white", width=2),
+                        ),
+                        showlegend=True,
+                        name="Optimal C3",
+                        visible=True,
+                        **c3_hover_info,
+                    )
                 )
             else:
-                hover_info = dict(
-                    hoverinfo="skip",  # Completely disable hover
+                logger.warning(
+                    f"Optimal C3 point ({best_c3_dep_iso}, {best_c3_arr_iso}) falls outside the current plot range"
                 )
-            plotly_traces.append(
-                go.Scatter(
-                    x=[best_dep_dt],
-                    y=[best_arr_dt],
-                    mode="markers",
-                    marker=dict(
-                        symbol="star",
-                        color="red",
-                        size=12,
-                        line=dict(color="black", width=1),
-                    ),
-                    showlegend=False,
-                    name="Optimal C3",
-                    visible=True,
-                    **hover_info,
+        
+        # Optimal V∞ Arrival Point
+        if np.any(~np.isnan(vinf_arrival_km_s)):
+            min_vinf_idx = np.nanargmin(vinf_arrival_km_s)
+            best_vinf_c3_val = c3_departure_km2_s2[min_vinf_idx]
+            best_vinf_val = vinf_arrival_km_s[min_vinf_idx]
+            best_vinf_tof = time_of_flight_days[min_vinf_idx]
+            
+            # Get the timestamp objects directly from original data
+            best_vinf_dep_time = departure_times[int(min_vinf_idx)]
+            best_vinf_arr_time = arrival_times[int(min_vinf_idx)]
+
+            # Get ISO strings for hover text
+            best_vinf_dep_iso = best_vinf_dep_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
+            best_vinf_arr_iso = best_vinf_arr_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
+
+            # For scatter point positioning, get datetime objects
+            best_vinf_dep_dt = best_vinf_dep_time.to_astropy()[0].datetime
+            best_vinf_arr_dt = best_vinf_arr_time.to_astropy()[0].datetime
+
+            # Check if the optimal V∞ point falls within our current plot range
+            vinf_optimal_in_range = (
+                xlim_dt[0] <= best_vinf_dep_dt <= xlim_dt[1]
+                and ylim_dt[0] <= best_vinf_arr_dt <= ylim_dt[1]
+            )
+
+            if vinf_optimal_in_range:
+                # Create customdata for optimal V∞ point
+                vinf_optimal_customdata = np.array([[best_vinf_c3_val, best_vinf_val, best_vinf_tof]])
+                vinf_optimal_text = np.array([[best_vinf_dep_iso, best_vinf_arr_iso]])
+
+                # Configure hover behavior for V∞ optimal
+                if optimal_hover:
+                    vinf_hover_info = dict(
+                        customdata=vinf_optimal_customdata,
+                        text=vinf_optimal_text,
+                        hovertemplate=(
+                            "<b>Optimal V∞ Arrival</b><br>"
+                            + "<b>Departure:</b> %{text[0]}<br>"
+                            + "<b>Arrival:</b> %{text[1]}<br>"
+                            + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
+                            + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
+                            + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
+                        ),
+                        hoverlabel=dict(bgcolor="darkblue"),
+                    )
+                else:
+                    vinf_hover_info = dict(hoverinfo="skip")
+                    
+                plotly_traces.append(
+                    go.Scatter(
+                        x=[best_vinf_dep_dt],
+                        y=[best_vinf_arr_dt],
+                        mode="markers",
+                        marker=dict(
+                            symbol="circle",
+                            color="darkblue",
+                            size=10,
+                            line=dict(color="white", width=2),
+                        ),
+                        showlegend=True,
+                        name="Optimal V∞",
+                        visible=True,
+                        **vinf_hover_info,
+                    )
                 )
-            )
-        else:
-            logger.warning(
-                f"Optimal point ({best_dep_iso}, {best_arr_iso}) falls outside the current plot range and will not be displayed"
-            )
+            else:
+                logger.warning(
+                    f"Optimal V∞ point ({best_vinf_dep_iso}, {best_vinf_arr_iso}) falls outside the current plot range"
+                )
 
     # --- Figure Creation and Layout Update ---
     fig = go.Figure(data=plotly_traces)
@@ -778,11 +968,23 @@ def plot_porkchop_plotly(
         yaxis_title="Arrival Date",
         xaxis=dict(tickformat="%Y-%m-%d", tickangle=-45, range=xlim_dt),
         yaxis=dict(tickformat="%Y-%m-%d", range=ylim_dt),
-        width=width,
+        width=width + 200,  # Extra width for colorbars
         height=height,
         autosize=False,
         hovermode="closest",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(r=200),  # Right margin for colorbars
+        legend=dict(
+            orientation="h", 
+            yanchor="bottom", 
+            y=1.02, 
+            xanchor="left", 
+            x=0,
+            itemsizing="constant",  # Keep legend items same size when hidden
+            font=dict(size=12),  # Larger legend text
+            bgcolor="rgba(255,255,255,0.8)",  # Semi-transparent background
+            bordercolor="Black",
+            borderwidth=1
+        ),
     )
 
     return fig
