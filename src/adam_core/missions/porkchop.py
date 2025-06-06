@@ -25,6 +25,7 @@ from adam_core.ray_cluster import initialize_use_ray
 from adam_core.time import Timestamp
 from adam_core.utils import get_perturber_state
 from adam_core.utils.iter import _iterate_chunk_indices
+from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_base64
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +396,7 @@ def plot_porkchop_plotly(
     optimal_hover: bool = True,
     trim_to_valid: bool = True,
     date_buffer_days: float = 3.0,
+    logo: bool = True,
 ):
     """
     Plot the porkchop plot from Lambert trajectory data using Plotly.
@@ -443,6 +445,8 @@ def plot_porkchop_plotly(
         If True, trims the plot to only include valid data.
     date_buffer_days : float, optional
         Number of days to add as buffer around the min and max dates (default: 3).
+    logo : bool, optional
+        If True, adds the Asteroid Institute logo to the plot.
 
     Returns
     -------
@@ -1032,6 +1036,23 @@ def plot_porkchop_plotly(
     # --- Figure Creation and Layout Update ---
     fig = go.Figure(data=plotly_traces)
 
+    if logo:
+        images = [
+            dict(
+                source=get_logo_base64(AsteroidInstituteLogoLight),
+                xref="paper",
+                yref="paper",
+                x=1.02,
+                y=-0.25,
+                sizex=0.15,
+                sizey=0.15,
+                xanchor="left",
+                yanchor="bottom",
+            )
+        ]
+    else:
+        images = []
+
     fig.update_layout(
         title_text=title,
         xaxis_title="Departure Date",
@@ -1043,6 +1064,7 @@ def plot_porkchop_plotly(
         autosize=False,
         hovermode="closest",
         margin=dict(r=200),  # Right margin for colorbars
+        images=images,
         legend=dict(
             orientation="h", 
             yanchor="bottom", 
