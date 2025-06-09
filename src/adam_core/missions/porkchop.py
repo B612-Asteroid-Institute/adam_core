@@ -709,7 +709,7 @@ def plot_porkchop_plotly(
             zmax=c3_max * 1.1,
             colorscale=c3_colorscale,
             opacity=0.3,  # More transparency for better layering
-            hoverinfo="skip",  # Remove hover info for size optimization
+            hoverinfo="none",  # No hover info but allows click events
             contours=dict(
                 coloring="fill",
                 showlabels=True,
@@ -739,7 +739,7 @@ def plot_porkchop_plotly(
             zmax=vinf_max * 1.1,
             colorscale=vinf_colorscale,
             opacity=0.3,  # More transparency for better layering
-            hoverinfo="skip",  # Remove hover info for size optimization
+            hoverinfo="none",  # No hover info but allows click events
             contours=dict(
                 coloring="fill",
                 showlabels=True,
@@ -785,7 +785,7 @@ def plot_porkchop_plotly(
                 ),
             ),
             showlegend=False,
-            hoverinfo="skip",
+            hoverinfo="skip",  # Skip hover for colorbar traces
             visible=True,  # Always visible
         )
     )
@@ -820,7 +820,7 @@ def plot_porkchop_plotly(
                 ),
             ),
             showlegend=False,
-            hoverinfo="skip",
+            hoverinfo="skip",  # Skip hover for colorbar traces
             visible=True,  # Always visible
         )
     )
@@ -843,7 +843,7 @@ def plot_porkchop_plotly(
             line=dict(color=tof_line_color, width=1, dash="longdash"),
             name="ToF (days)",
             showscale=False,
-            hoverinfo="skip",
+            hoverinfo="skip",  # Skip hover for ToF contours
             connectgaps=False,  # Don't connect across NaN gaps
             visible=True,
         )
@@ -884,7 +884,7 @@ def plot_porkchop_plotly(
                         showlegend=True,
                         name="Optimal C3",
                         visible=True,
-                        hoverinfo="skip",  # Remove hover info for size optimization
+                        hoverinfo="skip",  # Skip hover for optimal points
                     )
                 )
 
@@ -921,7 +921,7 @@ def plot_porkchop_plotly(
                         showlegend=True,
                         name="Optimal V∞",
                         visible=True,
-                        hoverinfo="skip",  # Remove hover info for size optimization
+                        hoverinfo="skip",  # Skip hover for optimal points
                     )
                 )
 
