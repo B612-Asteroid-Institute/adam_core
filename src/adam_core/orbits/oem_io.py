@@ -374,7 +374,7 @@ def orbit_to_oem(
     for orbit_state in object_states:
         # Get values in km and km/s for OEM export
         values_km = orbit_state.coordinates.values_km[0]  # Get first (and only) row
-        
+
         state = [
             orbit_state.coordinates.time.to_astropy()[0],
             *values_km,  # Already in km and km/s
@@ -484,7 +484,7 @@ def orbit_to_oem_propagated(
     for orbit_state in object_states:
         # Get values in km and km/s for OEM export
         values_km = orbit_state.coordinates.values_km[0]  # Get first (and only) row
-        
+
         state = [
             orbit_state.coordinates.time.to_astropy()[0],
             *values_km,  # Already in km and km/s
@@ -549,7 +549,7 @@ def orbit_from_oem(
             frame = _oem_to_adam_frame(state.frame)
             origin = _oem_to_adam_center(state.center)
             time = Timestamp.from_astropy(state.epoch)
-            
+
             # Convert position and velocity from km/km-s (OEM units) to AU/AU-day (ADAM Core units)
             position_au = km_to_au(np.array(state.position))
             velocity_au_day = km_per_s_to_au_per_day(np.array(state.velocity))
@@ -564,7 +564,9 @@ def orbit_from_oem(
                         # Reshape the covariance matrix to include batch dimension (N, 6, 6)
                         cov_matrix_km = covariance.matrix.reshape(1, 6, 6)
                         # Convert covariance from km units to AU units
-                        cov_matrix_au = convert_cartesian_covariance_km_to_au(cov_matrix_km)
+                        cov_matrix_au = convert_cartesian_covariance_km_to_au(
+                            cov_matrix_km
+                        )
                         adam_cov = CoordinateCovariances.from_matrix(cov_matrix_au)
 
             coordinates = CartesianCoordinates.from_kwargs(

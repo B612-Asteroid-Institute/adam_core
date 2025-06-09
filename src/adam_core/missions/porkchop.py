@@ -40,7 +40,7 @@ class LambertOutput(qv.Table):
     vy_2 = qv.Float64Column()
     vz_2 = qv.Float64Column()
     origin = Origin.as_column()
-    
+
     def c3_departure(self) -> npt.NDArray[np.float64]:
         """
         Return the C3 in au^2/d^2.
@@ -58,7 +58,7 @@ class LambertOutput(qv.Table):
             np.array(self.table.select(["vx_2", "vy_2", "vz_2"])),
             self.arrival_state.v,
         )
-    
+
     def vinf_departure(self) -> npt.NDArray[np.float64]:
         """
         Return the v infinity in au/d.
@@ -68,7 +68,6 @@ class LambertOutput(qv.Table):
             - self.departure_state.v,
             axis=1,
         )
-
 
     def vinf_arrival(self) -> npt.NDArray[np.float64]:
         """
@@ -121,41 +120,42 @@ def departure_spherical_coordinates(
         The spherical coordinates of the departure unit vectors.
         Can be used to express ra / dec of the departure direction.
     """
-    assert len(vx) == len(vy) == len(vz) == len(times), "All arrays must have the same length"
+    assert (
+        len(vx) == len(vy) == len(vz) == len(times)
+    ), "All arrays must have the same length"
     assert len(vx) > 0, "At least one departure vector is required"
-    
+
     # Create unit direction vectors from the velocity vectors
     # Normalize the velocity vectors to get direction only
     velocity_magnitude = np.sqrt(vx**2 + vy**2 + vz**2)
     direction_x = vx / velocity_magnitude
-    direction_y = vy / velocity_magnitude  
+    direction_y = vy / velocity_magnitude
     direction_z = vz / velocity_magnitude
-    
+
     # Create CartesianCoordinates with the direction as position (on unit sphere)
     # and zero velocity since we only care about the direction
     direction_coords = CartesianCoordinates.from_kwargs(
         time=times,
         x=direction_x,  # Unit vector pointing in velocity direction
-        y=direction_y,  
+        y=direction_y,
         z=direction_z,
         vx=np.zeros_like(vx),  # No velocity needed for direction
-        vy=np.zeros_like(vy), 
+        vy=np.zeros_like(vy),
         vz=np.zeros_like(vz),
         # From our departing origin.
         origin=Origin.from_OriginCodes(departure_origin, size=len(vx)),
         frame=frame,
     )
-    
+
     # Transform direction to equatorial frame for proper RA/Dec coordinates
     # These are inertial celestial coordinates, suitable for any departure origin
     spherical = transform_coordinates(
         direction_coords,
         SphericalCoordinates,
         frame_out="equatorial",
-        origin_out=departure_origin
+        origin_out=departure_origin,
     )
     return spherical
-
 
 
 def lambert_worker(
@@ -203,7 +203,7 @@ def prepare_and_propagate_orbits(
 ) -> CartesianCoordinates:
     """
     Prepare and propagate orbits for a single body over a specified time range.
-    
+
     Parameters
     ----------
     body : Union[Orbits, OriginCodes]
@@ -220,7 +220,7 @@ def prepare_and_propagate_orbits(
         The propagator class to use for orbit propagation.
     max_processes : Optional[int], optional
         The maximum number of processes to use.
-        
+
     Returns
     -------
     CartesianCoordinates
@@ -372,6 +372,7 @@ def generate_porkchop_data(
         )
 
     return lambert_results
+
 
 def plot_porkchop_plotly(
     porkchop_data: LambertOutput,
@@ -692,40 +693,11 @@ def plot_porkchop_plotly(
         vinf_base_colorscale, vinf_min, vinf_max, vinf_sentinel_value
     )
 
-    # --- Prepare customdata for hover template ---
-    # For date strings, we need to convert the grid MJD values to timestamps and then to ISO strings
-    # First, create Timestamp objects from the grid MJD values (after trimming)
-    flat_dep_mjd = grid_departure_mjd.flatten()
-    flat_arr_mjd = grid_arrival_mjd.flatten()
-
-    # Create Timestamp objects from the flattened MJD values
-    flat_dep_times = Timestamp.from_mjd(flat_dep_mjd, scale="tdb")
-    flat_arr_times = Timestamp.from_mjd(flat_arr_mjd, scale="tdb")
-
-    # Get ISO 8601 strings
-    flat_dep_iso = flat_dep_times.to_iso8601().to_numpy(zero_copy_only=False)
-    flat_arr_iso = flat_arr_times.to_iso8601().to_numpy(zero_copy_only=False)
-
-    # Reshape back to grid shape
-    grid_dep_iso = flat_dep_iso.reshape(grid_departure_mjd.shape)
-    grid_arr_iso = flat_arr_iso.reshape(grid_arrival_mjd.shape)
-
-    # Create a 3D array to hold the numeric data for hover:
-    # [C3_departure, Vinf_arrival, ToF]
-    customdata = np.full(
-        (grid_c3_departure_km2_s2.shape[0], grid_c3_departure_km2_s2.shape[1], 3),
-        np.nan,
-        dtype=np.float64,
-    )
-
-    # Populate with gridded C3 departure, V∞ arrival, ToF
-    customdata[:, :, 0] = grid_c3_departure_km2_s2
-    customdata[:, :, 1] = grid_vinf_arrival_km_s
-    customdata[:, :, 2] = original_tof_grid_days
+    # --- Custom data and hover info removed for size optimization ---
 
     # --- Create Dual Contour Traces ---
     plotly_traces = []
-    
+
     # C3 Departure Contour Trace (warm colorscale)
     plotly_traces.append(
         go.Contour(
@@ -737,16 +709,7 @@ def plot_porkchop_plotly(
             zmax=c3_max * 1.1,
             colorscale=c3_colorscale,
             opacity=0.3,  # More transparency for better layering
-            customdata=customdata,
-            text=np.stack([grid_dep_iso, grid_arr_iso], axis=-1),
-            hovertemplate=(
-                "<b>C3 Departure</b><br>"
-                + "<b>Departure:</b> %{text[0]}<br>"
-                + "<b>Arrival:</b> %{text[1]}<br>"
-                + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
-                + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
-            ),
+            hoverinfo="skip",  # Remove hover info for size optimization
             contours=dict(
                 coloring="fill",
                 showlabels=True,
@@ -764,7 +727,7 @@ def plot_porkchop_plotly(
             showlegend=True,
         )
     )
-    
+
     # V∞ Arrival Contour Trace (cool colorscale)
     plotly_traces.append(
         go.Contour(
@@ -776,16 +739,7 @@ def plot_porkchop_plotly(
             zmax=vinf_max * 1.1,
             colorscale=vinf_colorscale,
             opacity=0.3,  # More transparency for better layering
-            customdata=customdata,
-            text=np.stack([grid_dep_iso, grid_arr_iso], axis=-1),
-            hovertemplate=(
-                "<b>V∞ Arrival</b><br>"
-                + "<b>Departure:</b> %{text[0]}<br>"
-                + "<b>Arrival:</b> %{text[1]}<br>"
-                + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
-                + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
-            ),
+            hoverinfo="skip",  # Remove hover info for size optimization
             contours=dict(
                 coloring="fill",
                 showlabels=True,
@@ -803,7 +757,7 @@ def plot_porkchop_plotly(
             showlegend=True,
         )
     )
-    
+
     # --- Persistent Colorbars (invisible traces that hold colorbars) ---
     # C3 Departure Colorbar (always visible)
     plotly_traces.append(
@@ -835,7 +789,7 @@ def plot_porkchop_plotly(
             visible=True,  # Always visible
         )
     )
-    
+
     # V∞ Arrival Colorbar (always visible)
     plotly_traces.append(
         go.Scatter(
@@ -853,11 +807,15 @@ def plot_porkchop_plotly(
                     len=0.75,  # Shorter to fit both colorbars
                     tickvals=[
                         level
-                        for level in np.arange(vinf_min, vinf_max + 0.5 * vinf_step, vinf_step)
+                        for level in np.arange(
+                            vinf_min, vinf_max + 0.5 * vinf_step, vinf_step
+                        )
                     ],
                     ticktext=[
                         f"{vinf:.1f}"
-                        for vinf in np.arange(vinf_min, vinf_max + 0.5 * vinf_step, vinf_step)
+                        for vinf in np.arange(
+                            vinf_min, vinf_max + 0.5 * vinf_step, vinf_step
+                        )
                     ],
                 ),
             ),
@@ -896,17 +854,10 @@ def plot_porkchop_plotly(
         # Optimal C3 Departure Point
         if np.any(~np.isnan(c3_departure_km2_s2)):
             min_c3_idx = np.nanargmin(c3_departure_km2_s2)
-            best_c3_val = c3_departure_km2_s2[min_c3_idx]
-            best_c3_vinf_val = vinf_arrival_km_s[min_c3_idx]
-            best_c3_tof = time_of_flight_days[min_c3_idx]
-            
+
             # Get the timestamp objects directly from original data
             best_c3_dep_time = departure_times[int(min_c3_idx)]
             best_c3_arr_time = arrival_times[int(min_c3_idx)]
-
-            # Get ISO strings for hover text
-            best_c3_dep_iso = best_c3_dep_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
-            best_c3_arr_iso = best_c3_arr_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
 
             # For scatter point positioning, get datetime objects
             best_c3_dep_dt = best_c3_dep_time.to_astropy()[0].datetime
@@ -919,28 +870,6 @@ def plot_porkchop_plotly(
             )
 
             if c3_optimal_in_range:
-                # Create customdata for optimal C3 point
-                c3_optimal_customdata = np.array([[best_c3_val, best_c3_vinf_val, best_c3_tof]])
-                c3_optimal_text = np.array([[best_c3_dep_iso, best_c3_arr_iso]])
-
-                # Configure hover behavior for C3 optimal
-                if optimal_hover:
-                    c3_hover_info = dict(
-                        customdata=c3_optimal_customdata,
-                        text=c3_optimal_text,
-                        hovertemplate=(
-                            "<b>Optimal C3 Departure</b><br>"
-                            + "<b>Departure:</b> %{text[0]}<br>"
-                            + "<b>Arrival:</b> %{text[1]}<br>"
-                            + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                            + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
-                            + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
-                        ),
-                        hoverlabel=dict(bgcolor="darkred"),
-                    )
-                else:
-                    c3_hover_info = dict(hoverinfo="skip")
-                    
                 plotly_traces.append(
                     go.Scatter(
                         x=[best_c3_dep_dt],
@@ -955,28 +884,17 @@ def plot_porkchop_plotly(
                         showlegend=True,
                         name="Optimal C3",
                         visible=True,
-                        **c3_hover_info,
+                        hoverinfo="skip",  # Remove hover info for size optimization
                     )
                 )
-            else:
-                logger.warning(
-                    f"Optimal C3 point ({best_c3_dep_iso}, {best_c3_arr_iso}) falls outside the current plot range"
-                )
-        
+
         # Optimal V∞ Arrival Point
         if np.any(~np.isnan(vinf_arrival_km_s)):
             min_vinf_idx = np.nanargmin(vinf_arrival_km_s)
-            best_vinf_c3_val = c3_departure_km2_s2[min_vinf_idx]
-            best_vinf_val = vinf_arrival_km_s[min_vinf_idx]
-            best_vinf_tof = time_of_flight_days[min_vinf_idx]
-            
+
             # Get the timestamp objects directly from original data
             best_vinf_dep_time = departure_times[int(min_vinf_idx)]
             best_vinf_arr_time = arrival_times[int(min_vinf_idx)]
-
-            # Get ISO strings for hover text
-            best_vinf_dep_iso = best_vinf_dep_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
-            best_vinf_arr_iso = best_vinf_arr_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
 
             # For scatter point positioning, get datetime objects
             best_vinf_dep_dt = best_vinf_dep_time.to_astropy()[0].datetime
@@ -989,28 +907,6 @@ def plot_porkchop_plotly(
             )
 
             if vinf_optimal_in_range:
-                # Create customdata for optimal V∞ point
-                vinf_optimal_customdata = np.array([[best_vinf_c3_val, best_vinf_val, best_vinf_tof]])
-                vinf_optimal_text = np.array([[best_vinf_dep_iso, best_vinf_arr_iso]])
-
-                # Configure hover behavior for V∞ optimal
-                if optimal_hover:
-                    vinf_hover_info = dict(
-                        customdata=vinf_optimal_customdata,
-                        text=vinf_optimal_text,
-                        hovertemplate=(
-                            "<b>Optimal V∞ Arrival</b><br>"
-                            + "<b>Departure:</b> %{text[0]}<br>"
-                            + "<b>Arrival:</b> %{text[1]}<br>"
-                            + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                            + "<b>V∞ Arrival:</b> %{customdata[1]:.1f} km/s<br>"
-                            + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
-                        ),
-                        hoverlabel=dict(bgcolor="darkblue"),
-                    )
-                else:
-                    vinf_hover_info = dict(hoverinfo="skip")
-                    
                 plotly_traces.append(
                     go.Scatter(
                         x=[best_vinf_dep_dt],
@@ -1025,12 +921,8 @@ def plot_porkchop_plotly(
                         showlegend=True,
                         name="Optimal V∞",
                         visible=True,
-                        **vinf_hover_info,
+                        hoverinfo="skip",  # Remove hover info for size optimization
                     )
-                )
-            else:
-                logger.warning(
-                    f"Optimal V∞ point ({best_vinf_dep_iso}, {best_vinf_arr_iso}) falls outside the current plot range"
                 )
 
     # --- Figure Creation and Layout Update ---
@@ -1066,16 +958,16 @@ def plot_porkchop_plotly(
         margin=dict(r=200),  # Right margin for colorbars
         images=images,
         legend=dict(
-            orientation="h", 
-            yanchor="bottom", 
-            y=1.02, 
-            xanchor="left", 
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
             x=0,
             itemsizing="constant",  # Keep legend items same size when hidden
             font=dict(size=12),  # Larger legend text
             bgcolor="rgba(255,255,255,0.8)",  # Semi-transparent background
             bordercolor="Black",
-            borderwidth=1
+            borderwidth=1,
         ),
     )
 

@@ -194,7 +194,7 @@ class CartesianCoordinates(qv.Table):
     def values_km(self) -> npt.NDArray[np.float64]:
         """
         Get coordinate values in km and km/s units.
-        
+
         Returns
         -------
         np.ndarray (N, 6)
@@ -221,16 +221,16 @@ class CartesianCoordinates(qv.Table):
     def covariance_km(self) -> npt.NDArray[np.float64]:
         """
         Get covariance matrix in km and km/s units.
-        
+
         Returns
         -------
         np.ndarray (N, 6, 6)
-            Covariance matrices with position elements in km² and 
+            Covariance matrices with position elements in km² and
             velocity elements in (km/s)²
         """
         if self.covariance.is_all_nan():
             return self.covariance.to_matrix()
-        
+
         return convert_cartesian_covariance_au_to_km(self.covariance.to_matrix())
 
     def rotate(

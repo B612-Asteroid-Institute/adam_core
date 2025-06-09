@@ -13,9 +13,9 @@ from ...coordinates.origin import Origin
 from ...coordinates.spherical import SphericalCoordinates
 from ...observers import Observers
 from ...time import Timestamp
+from ...utils.iter import _iterate_chunks
 from ..ephemeris import Ephemeris
 from ..orbits import Orbits
-from ...utils.iter import _iterate_chunks
 
 
 def _get_horizons_vectors(
@@ -280,7 +280,9 @@ def query_horizons(
     orbits : `~adam_core.orbits.orbits.Orbits`
         Orbits object containing the state vectors or elements of the object at each time.
     """
-    chunk_size = 50 #This is based on the Horizon's limit of 50-75 times before it fails
+    chunk_size = (
+        50  # This is based on the Horizon's limit of 50-75 times before it fails
+    )
     total_orbits = Orbits.empty()
     assert len(times) > 0, "Must have at least one time"
 
@@ -394,8 +396,10 @@ def query_horizons(
         else:
             err = "coordinate_type should be one of {'cartesian', 'keplerian', 'cometary'}"
             raise ValueError(err)
-        
+
     # Sort orbits by time
-    total_orbits = total_orbits.sort_by(["coordinates.time.days", "coordinates.time.nanos"])
+    total_orbits = total_orbits.sort_by(
+        ["coordinates.time.days", "coordinates.time.nanos"]
+    )
 
     return total_orbits
