@@ -379,6 +379,7 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
 
 def ADES_string_to_tables(
     ades_string: str,
+    ignore_invalid_obs_context: bool = False,
 ) -> Tuple[dict[str, ObsContext], ADESObservations]:
     """
     Parse an ADES format string into ObsContext and ADESObservations objects.
@@ -387,6 +388,8 @@ def ADES_string_to_tables(
     ----------
     ades_string : str
         The ADES format string to parse.
+    ignore_invalid_obs_context : bool, optional
+        If True, ignore missing observatory context blocks.
 
     Returns
     -------
@@ -464,7 +467,17 @@ def ADES_string_to_tables(
                 current_section[key] = value
 
     if current_obs_context:
-        obs_contexts[current_context_code] = _build_obs_context(current_obs_context)
+        try:
+            obs_contexts[current_context_code] = _build_obs_context(current_obs_context)
+        except KeyError as e:
+            if ignore_invalid_obs_context:
+                logger.warning(
+                    f"Error building obs context for {current_context_code}: {e}"
+                )
+            else:
+                raise KeyError(
+                    f"Error building obs context for observatory {current_context_code}: {e} (set ignore_invalid_obs_context=True to ignore)"
+                )
 
     return obs_contexts, observations
 
