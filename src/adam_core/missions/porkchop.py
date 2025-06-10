@@ -12,12 +12,12 @@ import quivr as qv
 import ray
 from astropy.time import Time
 from matplotlib.colors import LogNorm, Normalize
-from scipy.interpolate import griddata
 
 from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
+from adam_core.coordinates.units import au_per_day_to_km_per_s
 from adam_core.dynamics.lambert import calculate_c3, solve_lambert
 from adam_core.orbits import Orbits
 from adam_core.propagator import Propagator
@@ -462,10 +462,9 @@ def plot_porkchop_plotly(
     departure_times = porkchop_data.departure_state.time
     arrival_times = porkchop_data.arrival_state.time
 
-    # Convert to metric units
-    km_s_per_au_day = KM_P_AU / S_P_DAY
-    c3_departure_km2_s2 = c3_departure_au_d2 * (km_s_per_au_day**2)
-    vinf_arrival_km_s = vinf_arrival_au_day * km_s_per_au_day
+    # Convert to metric units using unit conversion functions
+    c3_departure_km2_s2 = c3_departure_au_d2 * (au_per_day_to_km_per_s(1.0)**2)
+    vinf_arrival_km_s = au_per_day_to_km_per_s(vinf_arrival_au_day)
     # Define default C3 range if not provided
     if c3_min is None:
         c3_min = np.nanpercentile(c3_departure_km2_s2, 5)
@@ -572,27 +571,22 @@ def plot_porkchop_plotly(
     ]
 
     # --- Unit Conversions and Grid Setup ---
-    # Create the grid for interpolation with unique times derived from valid data
+    # Create the grid including date combinations that do not have valid Lambert solutions
     grid_departure_mjd, grid_arrival_mjd = np.meshgrid(
         unique_departure_mjd, unique_arrival_mjd
     )
-    points = np.vstack((departure_times_mjd, arrival_times_mjd)).T
 
-    # Interpolate both C3 departure and V∞ arrival onto the grid
-    grid_c3_departure_km2_s2 = griddata(
-        points,
-        c3_departure_km2_s2,
-        (grid_departure_mjd, grid_arrival_mjd),
-        method="cubic",
-        fill_value=np.nan,
-    )
-    grid_vinf_arrival_km_s = griddata(
-        points,
-        vinf_arrival_km_s,
-        (grid_departure_mjd, grid_arrival_mjd),
-        method="cubic",
-        fill_value=np.nan,
-    )
+    # Use numpy's built-in unique with return_inverse to map data points to grid indices
+    # This finds where each data point belongs in the unique arrays
+    dep_indices = np.searchsorted(unique_departure_mjd, departure_times_mjd)
+    arr_indices = np.searchsorted(unique_arrival_mjd, arrival_times_mjd)
+
+    # Initialize grid arrays with NaN and fill using advanced indexing
+    grid_c3_departure_km2_s2 = np.full((len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64)
+    grid_vinf_arrival_km_s = np.full((len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64)
+    
+    grid_c3_departure_km2_s2[arr_indices, dep_indices] = c3_departure_km2_s2
+    grid_vinf_arrival_km_s[arr_indices, dep_indices] = vinf_arrival_km_s
 
     original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
     # For ToF
