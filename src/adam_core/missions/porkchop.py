@@ -729,78 +729,10 @@ def plot_porkchop_plotly(
             name="V∞ Arrival",
             showscale=False,  # Remove colorbar from main trace
             connectgaps=False,  # Faster rendering by not connecting across gaps
-            visible=True,
+            visible='legendonly',
             showlegend=True,
         )
     )
-
-    # --- Persistent Colorbars (invisible traces that hold colorbars) ---
-    # C3 Departure Colorbar (always visible)
-    plotly_traces.append(
-        go.Scatter(
-            x=[None],  # No actual data points
-            y=[None],
-            mode="markers",
-            marker=dict(
-                colorscale=c3_colorscale,
-                cmin=c3_min,
-                cmax=c3_max,
-                color=[c3_min],  # Dummy value for colorscale
-                colorbar=dict(
-                    title="<b>C3 Departure</b><br>(km²/s²)",
-                    x=1.05,  # Position to the right with more space
-                    len=0.75,  # Shorter to fit both colorbars
-                    tickvals=[
-                        level
-                        for level in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
-                    ],
-                    ticktext=[
-                        f"{c3:.1f}"
-                        for c3 in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
-                    ],
-                ),
-            ),
-            showlegend=False,
-            hoverinfo="skip",  # Skip hover for colorbar traces
-            visible=True,  # Always visible
-        )
-    )
-
-    # V∞ Arrival Colorbar (always visible)
-    plotly_traces.append(
-        go.Scatter(
-            x=[None],  # No actual data points
-            y=[None],
-            mode="markers",
-            marker=dict(
-                colorscale=vinf_colorscale,
-                cmin=vinf_min,
-                cmax=vinf_max,
-                color=[vinf_min],  # Dummy value for colorscale
-                colorbar=dict(
-                    title="<b>V∞ Arrival</b><br>(km/s)",
-                    x=1.15,  # Position further to the right with more space
-                    len=0.75,  # Shorter to fit both colorbars
-                    tickvals=[
-                        level
-                        for level in np.arange(
-                            vinf_min, vinf_max + 0.5 * vinf_step, vinf_step
-                        )
-                    ],
-                    ticktext=[
-                        f"{vinf:.1f}"
-                        for vinf in np.arange(
-                            vinf_min, vinf_max + 0.5 * vinf_step, vinf_step
-                        )
-                    ],
-                ),
-            ),
-            showlegend=False,
-            hoverinfo="skip",  # Skip hover for colorbar traces
-            visible=True,  # Always visible
-        )
-    )
-
     # --- ToF Contours ---
     plotly_traces.append(
         go.Contour(
