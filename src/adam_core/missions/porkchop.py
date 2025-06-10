@@ -489,61 +489,46 @@ def plot_porkchop_plotly(
     departure_times_mjd = departure_times.mjd().to_numpy(zero_copy_only=False)
     arrival_times_mjd = arrival_times.mjd().to_numpy(zero_copy_only=False)
 
-    # --- Identify valid data and filter time ranges ---
-    # Create a mask for valid C3 values (not NaN and not over max)
-    valid_c3_mask = ~np.isnan(c3_departure_km2_s2) & (c3_departure_km2_s2 <= c3_max)
+    # --- Apply all filtering to the actual data in one place ---
+    # Start with a mask for valid C3 values (not NaN and not over max)
+    data_mask = ~np.isnan(c3_departure_km2_s2) & (c3_departure_km2_s2 <= c3_max)
 
-    # Extract all unique times from the raw data
-    all_departure_mjd = np.sort(np.unique(departure_times_mjd))
-    all_arrival_mjd = np.sort(np.unique(arrival_times_mjd))
-
-    if trim_to_valid and np.any(valid_c3_mask):
-
-        # Extract departure and arrival times only for valid data points
-        valid_departure_times_mjd = departure_times_mjd[valid_c3_mask]
-        valid_arrival_times_mjd = arrival_times_mjd[valid_c3_mask]
-
-        # Get unique departure and arrival times directly from valid data
-        unique_departure_mjd = np.sort(np.unique(valid_departure_times_mjd))
-        unique_arrival_mjd = np.sort(np.unique(valid_arrival_times_mjd))
-
-        # Add buffer around min/max dates if requested
-        if date_buffer_days is not None and date_buffer_days > 0:
-            # Get min/max of valid times
-            min_dep_mjd, max_dep_mjd = np.min(unique_departure_mjd), np.max(
-                unique_departure_mjd
-            )
-            min_arr_mjd, max_arr_mjd = np.min(unique_arrival_mjd), np.max(
-                unique_arrival_mjd
-            )
-
-            # Apply buffer, but don't go beyond bounds of all available dates
-            min_dep_with_buffer = max(
-                min_dep_mjd - date_buffer_days, np.min(all_departure_mjd)
-            )
-            max_dep_with_buffer = min(
-                max_dep_mjd + date_buffer_days, np.max(all_departure_mjd)
-            )
-            min_arr_with_buffer = max(
-                min_arr_mjd - date_buffer_days, np.min(all_arrival_mjd)
-            )
-            max_arr_with_buffer = min(
-                max_arr_mjd + date_buffer_days, np.max(all_arrival_mjd)
-            )
-
-            # Include additional dates within buffer
-            unique_departure_mjd = all_departure_mjd[
-                (all_departure_mjd >= min_dep_with_buffer)
-                & (all_departure_mjd <= max_dep_with_buffer)
-            ]
-            unique_arrival_mjd = all_arrival_mjd[
-                (all_arrival_mjd >= min_arr_with_buffer)
-                & (all_arrival_mjd <= max_arr_with_buffer)
-            ]
+    if trim_to_valid and np.any(data_mask):
+        # Apply trimming: only keep data with valid C3 values
+        pass  # Keep the data_mask as is
     else:
-        # If not trimming or no valid data, use all unique times
-        unique_departure_mjd = all_departure_mjd
-        unique_arrival_mjd = all_arrival_mjd
+        # If not trimming or no valid data, keep all data
+        data_mask = np.ones(len(c3_departure_km2_s2), dtype=bool)
+
+    # Apply date buffer filtering if requested
+    if trim_to_valid and date_buffer_days is not None and date_buffer_days > 0 and np.any(data_mask):
+        # Get the range of valid times
+        valid_dep_times = departure_times_mjd[data_mask]
+        valid_arr_times = arrival_times_mjd[data_mask]
+        
+        if len(valid_dep_times) > 0 and len(valid_arr_times) > 0:
+            # Calculate buffer range
+            min_dep_mjd, max_dep_mjd = np.min(valid_dep_times), np.max(valid_dep_times)
+            min_arr_mjd, max_arr_mjd = np.min(valid_arr_times), np.max(valid_arr_times)
+            
+            # Apply buffer to all data points (not just valid ones)
+            dep_in_buffer = (departure_times_mjd >= (min_dep_mjd - date_buffer_days)) & \
+                           (departure_times_mjd <= (max_dep_mjd + date_buffer_days))
+            arr_in_buffer = (arrival_times_mjd >= (min_arr_mjd - date_buffer_days)) & \
+                           (arrival_times_mjd <= (max_arr_mjd + date_buffer_days))
+            
+            # Keep data that's either valid OR within the buffer range
+            data_mask = data_mask | (dep_in_buffer & arr_in_buffer)
+
+    # Filter all our data arrays using the combined mask
+    filtered_departure_mjd = departure_times_mjd[data_mask]
+    filtered_arrival_mjd = arrival_times_mjd[data_mask]
+    filtered_c3_km2_s2 = c3_departure_km2_s2[data_mask]
+    filtered_vinf_km_s = vinf_arrival_km_s[data_mask]
+
+    # Get unique times from the filtered data - this guarantees all data points have corresponding unique times
+    unique_departure_mjd, dep_indices = np.unique(filtered_departure_mjd, return_inverse=True)
+    unique_arrival_mjd, arr_indices = np.unique(filtered_arrival_mjd, return_inverse=True)
     # Check if we have enough unique times to create a grid
     if len(unique_departure_mjd) < 2 or len(unique_arrival_mjd) < 2:
         warnings.warn(
@@ -576,17 +561,14 @@ def plot_porkchop_plotly(
         unique_departure_mjd, unique_arrival_mjd
     )
 
-    # Use numpy's built-in unique with return_inverse to map data points to grid indices
-    # This finds where each data point belongs in the unique arrays
-    dep_indices = np.searchsorted(unique_departure_mjd, departure_times_mjd)
-    arr_indices = np.searchsorted(unique_arrival_mjd, arrival_times_mjd)
-
-    # Initialize grid arrays with NaN and fill using advanced indexing
+    # Initialize grid arrays with NaN and fill using the filtered data
+    # Since we used return_inverse=True, dep_indices and arr_indices are guaranteed to be valid
     grid_c3_departure_km2_s2 = np.full((len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64)
     grid_vinf_arrival_km_s = np.full((len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64)
     
-    grid_c3_departure_km2_s2[arr_indices, dep_indices] = c3_departure_km2_s2
-    grid_vinf_arrival_km_s[arr_indices, dep_indices] = vinf_arrival_km_s
+    # Fill the grid directly - no validity masking needed since we pre-filtered the data
+    grid_c3_departure_km2_s2[arr_indices, dep_indices] = filtered_c3_km2_s2
+    grid_vinf_arrival_km_s[arr_indices, dep_indices] = filtered_vinf_km_s
 
     original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
     # For ToF
