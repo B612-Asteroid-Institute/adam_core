@@ -462,7 +462,7 @@ def plot_porkchop_plotly(
     vinf_arrival_km_s = au_per_day_to_km_per_s(vinf_arrival_au_day)
     # Define default C3 range if not provided
     if c3_departure_min is None:
-        c3_departure_min = np.min(c3_departure_km2_s2)
+        c3_departure_min = 0
     if c3_departure_max is None:
         c3_departure_max = np.max(c3_departure_km2_s2)
 
@@ -475,13 +475,13 @@ def plot_porkchop_plotly(
 
     # Define default V∞ range if not provided
     if vinf_arrival_min is None:
-        vinf_arrival_min = np.min(vinf_arrival_km_s)
+        vinf_arrival_min = 0
     if vinf_arrival_max is None:
         vinf_arrival_max = np.max(vinf_arrival_km_s)
     vinf_step = (vinf_arrival_max - vinf_arrival_min) / 10  # 10 levels by default
 
     if tof_min is None:
-        tof_min = np.min(time_of_flight_days[time_of_flight_days > 0])
+        tof_min = 0
     if tof_max is None:
         tof_max = np.max(time_of_flight_days)
 
@@ -501,6 +501,7 @@ def plot_porkchop_plotly(
     # We want to keep all solutions that are not NaN and are within the specified ranges of c3, vinf and tof
     data_mask = (
         ~np.isnan(c3_departure_km2_s2)
+        & ~np.isnan(vinf_arrival_km_s)  # Also filter out V∞ NaN values
         & (c3_departure_km2_s2 <= c3_departure_max)
         & (c3_departure_km2_s2 >= c3_departure_min)
         & (vinf_arrival_km_s >= vinf_arrival_min)
@@ -564,27 +565,14 @@ def plot_porkchop_plotly(
         (len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64
     )
 
-
     # Fill the grid directly - no validity masking needed since we pre-filtered the data
     grid_c3_departure_km2_s2[arr_indices, dep_indices] = filtered_c3_km2_s2
     grid_vinf_arrival_km_s[arr_indices, dep_indices] = filtered_vinf_km_s
     grid_tof_days = grid_arrival_mjd - grid_departure_mjd
 
-
-    # --- Replace NaN values and over-max values with sentinel ---
-    # Use a sentinel value that's 2x the maximum for C3
-    c3_sentinel_value = c3_departure_max * 1.01
-    vinf_sentinel_value = vinf_arrival_max * 1.01
-
-    # Replace NaN and over-max values with the sentinel value for C3
-    grid_c3_for_plot = np.copy(grid_c3_departure_km2_s2)
-    mask_c3_nan = np.isnan(grid_c3_for_plot)
-    grid_c3_for_plot[mask_c3_nan] = c3_sentinel_value
-
-    # Replace NaN and over-max values with the sentinel value for V∞
-    grid_vinf_for_plot = np.copy(grid_vinf_arrival_km_s)
-    mask_vinf_nan = np.isnan(grid_vinf_for_plot)
-    grid_vinf_for_plot[mask_vinf_nan] = vinf_sentinel_value
+    # --- Use original grids with NaN values for native Plotly handling ---
+    grid_c3_for_plot = grid_c3_departure_km2_s2
+    grid_vinf_for_plot = grid_vinf_arrival_km_s
 
     # Set up the date limits for the plot
     # Convert the min/max MJD values to datetime objects for Plotly
@@ -609,38 +597,9 @@ def plot_porkchop_plotly(
             Time(ylim_mjd[1], format="mjd").datetime,
         ]
 
-    # --- Create custom colorscale ---
-    # Define function to create custom colorscale with white for sentinel
-    def create_colorscale_with_sentinel(base_colorscale, vmin, vmax, sentinel):
-        # Get standard colorscale using brighter range to avoid muddy overlaps
-        # Use range 0.2 to 0.8 instead of 0 to 1 to skip very dark and very light colors
-        standard_colors = pcolors.sample_colorscale(
-            base_colorscale, np.linspace(0.2, 0.8, 11)
-        )
-
-        # Reverse the colors (brightest for lowest values)
-        standard_colors = standard_colors[::-1]
-
-        # Convert to normalized range (0-1)
-        norm_max = 0.9  # Reserve top 10% for sentinel
-
-        # Create standard part of colorscale
-        colorscale = [
-            (i * norm_max / 10, color) for i, color in enumerate(standard_colors)
-        ]
-
-        # Add sentinel value as white
-        colorscale.append((1.0, "rgba(255,255,255,1)"))  # White with transparency
-
-        return colorscale
-
-    # Create custom colorscales for both C3 and V∞
-    c3_colorscale = create_colorscale_with_sentinel(
-        c3_base_colorscale, c3_departure_min, c3_departure_max, c3_sentinel_value
-    )
-    vinf_colorscale = create_colorscale_with_sentinel(
-        vinf_base_colorscale, vinf_arrival_min, vinf_arrival_max, vinf_sentinel_value
-    )
+    # --- Use standard Plotly colorscales ---
+    c3_colorscale = c3_base_colorscale
+    vinf_colorscale = vinf_base_colorscale
 
     # --- Create hover information grids if requested ---
     hover_info = "none"
@@ -702,7 +661,7 @@ def plot_porkchop_plotly(
             z=grid_c3_for_plot,
             zauto=False,
             zmin=c3_departure_min,
-            zmax=c3_departure_max * 1.1,
+            zmax=c3_departure_max,
             colorscale=c3_colorscale,
             opacity=0.3,  # More transparency for better layering
             hoverinfo=hover_info,
@@ -720,7 +679,7 @@ def plot_porkchop_plotly(
             line=dict(width=0.5, smoothing=1.3),
             name="C3 Departure",
             showscale=False,  # Remove colorbar from main trace
-            connectgaps=True,
+            connectgaps=False,  # Don't connect across gaps to match V∞ behavior
             visible=True,
             showlegend=True,
         )
@@ -734,7 +693,7 @@ def plot_porkchop_plotly(
             z=grid_vinf_for_plot,
             zauto=False,
             zmin=vinf_arrival_min,
-            zmax=vinf_arrival_max * 1.1,
+            zmax=vinf_arrival_max,
             colorscale=vinf_colorscale,
             opacity=0.3,  # More transparency for better layering
             hoverinfo=hover_info,
