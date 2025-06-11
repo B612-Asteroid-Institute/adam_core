@@ -30,6 +30,69 @@ from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_bas
 logger = logging.getLogger(__name__)
 
 
+def generate_saturated_colorscale(base_color: str, n_levels: int = 6) -> List[List]:
+    """
+    Generate a colorscale from light to dark based on a base color.
+    
+    Parameters
+    ----------
+    base_color : str
+        Base color name (e.g., 'red', 'blue') or hex code (e.g., '#FF0000')
+    n_levels : int, optional
+        Number of levels in the colorscale (default: 6)
+    
+    Returns
+    -------
+    List[List]
+        Plotly colorscale format: [[position, color], ...]
+    """
+    # Color mapping for common base colors to RGB
+    color_map = {
+        'red': (255, 0, 0),
+        'blue': (0, 0, 255),
+        'green': (0, 255, 0),
+        'orange': (255, 165, 0),
+        'purple': (128, 0, 128),
+        'yellow': (255, 255, 0),
+        'cyan': (0, 255, 255),
+        'magenta': (255, 0, 255),
+    }
+    
+    # Parse base color
+    if base_color.startswith('#'):
+        # Hex color
+        hex_color = base_color.lstrip('#')
+        base_rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    elif base_color.lower() in color_map:
+        base_rgb = color_map[base_color.lower()]
+    else:
+        # Default to red if unknown
+        base_rgb = (255, 0, 0)
+    
+    colorscale = []
+    for i in range(n_levels):
+        position = i / (n_levels - 1)
+        
+        # Create gradient from light (but saturated) to dark
+        # Light end: mix base color with white, but keep saturation
+        # Dark end: darken the base color
+        if position == 0:
+            # Lightest: 80% base color + 20% white
+            r = int(base_rgb[0] * 0.8 + 255 * 0.2)
+            g = int(base_rgb[1] * 0.8 + 255 * 0.2)
+            b = int(base_rgb[2] * 0.8 + 255 * 0.2)
+        else:
+            # Gradually darken the base color
+            factor = 1 - (position * 0.7)  # Don't go completely black
+            r = int(base_rgb[0] * factor)
+            g = int(base_rgb[1] * factor)
+            b = int(base_rgb[2] * factor)
+        
+        colorscale.append([position, f"rgb({r}, {g}, {b})"])
+    
+    return colorscale
+
+
 class LambertOutput(qv.Table):
     departure_state = CartesianCoordinates.as_column()
     arrival_state = CartesianCoordinates.as_column()
@@ -510,7 +573,6 @@ def plot_porkchop_plotly(
         & (time_of_flight_days <= tof_max)
     )
 
-
     # Filter all our data arrays using the combined mask
     filtered_departure_mjd = departure_times_mjd[data_mask]
     filtered_arrival_mjd = arrival_times_mjd[data_mask]
@@ -597,9 +659,31 @@ def plot_porkchop_plotly(
             Time(ylim_mjd[1], format="mjd").datetime,
         ]
 
-    # --- Use standard Plotly colorscales ---
-    c3_colorscale = c3_base_colorscale
-    vinf_colorscale = vinf_base_colorscale
+    # --- Generate custom colorscales with better saturation at minimum values ---
+    # Map common Plotly colorscale names to base colors
+    colorscale_to_color = {
+        "Reds": "red",
+        "Blues": "blue", 
+        "Greens": "green",
+        "Oranges": "orange",
+        "Purples": "purple",
+    }
+    
+    # Generate C3 colorscale
+    if c3_base_colorscale in colorscale_to_color:
+        c3_colorscale = generate_saturated_colorscale(
+            colorscale_to_color[c3_base_colorscale]
+        )
+    else:
+        c3_colorscale = c3_base_colorscale
+    
+    # Generate V∞ colorscale  
+    if vinf_base_colorscale in colorscale_to_color:
+        vinf_colorscale = generate_saturated_colorscale(
+            colorscale_to_color[vinf_base_colorscale]
+        )
+    else:
+        vinf_colorscale = vinf_base_colorscale
 
     # --- Create hover information grids if requested ---
     hover_info = "none"
@@ -840,8 +924,22 @@ def plot_porkchop_plotly(
         title_text=title,
         xaxis_title="Departure Date",
         yaxis_title="Arrival Date",
-        xaxis=dict(tickformat="%Y-%m-%d", tickangle=-45, range=xlim_dt),
-        yaxis=dict(tickformat="%Y-%m-%d", range=ylim_dt),
+        xaxis=dict(
+            tickformat="%Y-%m-%d", 
+            tickangle=-45, 
+            range=xlim_dt,
+            showgrid=True,
+            gridcolor="lightgray",
+            gridwidth=1
+        ),
+        yaxis=dict(
+            tickformat="%Y-%m-%d", 
+            range=ylim_dt,
+            showgrid=True,
+            gridcolor="lightgray",
+            gridwidth=1
+        ),
+        plot_bgcolor="white",
         width=width,
         height=height,
         autosize=False,
