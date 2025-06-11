@@ -395,6 +395,7 @@ def plot_porkchop_plotly(
     title: str = "Porkchop Plot",
     show_optimal: bool = True,
     optimal_hover: bool = True,
+    show_hover: bool = False,
     trim_to_valid: bool = True,
     date_buffer_days: float = 3.0,
     logo: bool = True,
@@ -442,6 +443,8 @@ def plot_porkchop_plotly(
         If True, marks the optimal point on the plot.
     optimal_hover : bool, optional
         If True, enables hover information for the optimal point.
+    show_hover : bool, optional
+        If True, enables hover information showing C3, V∞, ToF, and dates.
     trim_to_valid : bool, optional
         If True, trims the plot to only include valid data.
     date_buffer_days : float, optional
@@ -669,7 +672,40 @@ def plot_porkchop_plotly(
         vinf_base_colorscale, vinf_min, vinf_max, vinf_sentinel_value
     )
 
-    # --- Custom data and hover info removed for size optimization ---
+    # --- Create hover information grids if requested ---
+    hover_info = "none"
+    custom_data = None
+    hover_template = None
+    
+    if show_hover:
+        # Create date strings for hover display 
+        grid_departure_date_strings = np.array([[Time(mjd, format="mjd").strftime('%Y-%m-%d') 
+                                               for mjd in unique_departure_mjd] 
+                                              for _ in unique_arrival_mjd])
+        grid_arrival_date_strings = np.array([[Time(mjd, format="mjd").strftime('%Y-%m-%d') 
+                                             for _ in unique_departure_mjd] 
+                                            for mjd in unique_arrival_mjd])
+        
+        # Stack all the data we want in hover info
+        # Shape: (n_arrival, n_departure, 5) for [c3, vinf, tof, dep_date, arr_date]
+        custom_data = np.stack([
+            grid_c3_departure_km2_s2,    # C3 in km²/s²
+            grid_vinf_arrival_km_s,      # V∞ in km/s  
+            original_tof_grid_days,      # ToF in days
+            grid_departure_date_strings, # Departure date strings
+            grid_arrival_date_strings    # Arrival date strings
+        ], axis=-1)
+        
+        hover_info = "text"
+        hover_template = (
+            "<b>Mission Parameters</b><br>"
+            "Departure: %{customdata[3]}<br>"
+            "Arrival: %{customdata[4]}<br>"
+            "Time of Flight: %{customdata[2]:.1f} days<br>"
+            "C3 Departure: %{customdata[0]:.2f} km²/s²<br>"
+            "V∞ Arrival: %{customdata[1]:.2f} km/s<br>"
+            "<extra></extra>"
+        )
 
     # --- Create Dual Contour Traces ---
     plotly_traces = []
@@ -685,7 +721,9 @@ def plot_porkchop_plotly(
             zmax=c3_max * 1.1,
             colorscale=c3_colorscale,
             opacity=0.3,  # More transparency for better layering
-            hoverinfo="none",  # No hover info but allows click events
+            hoverinfo=hover_info,
+            hovertemplate=hover_template,
+            customdata=custom_data,
             contours=dict(
                 coloring="fill",
                 showlabels=True,
@@ -715,7 +753,9 @@ def plot_porkchop_plotly(
             zmax=vinf_max * 1.1,
             colorscale=vinf_colorscale,
             opacity=0.3,  # More transparency for better layering
-            hoverinfo="none",  # No hover info but allows click events
+            hoverinfo=hover_info,
+            hovertemplate=hover_template,
+            customdata=custom_data,
             contours=dict(
                 coloring="fill",
                 showlabels=True,
@@ -842,11 +882,11 @@ def plot_porkchop_plotly(
                 source=get_logo_base64(AsteroidInstituteLogoLight),
                 xref="paper",
                 yref="paper",
-                x=1.02,
-                y=-0.25,
-                sizex=0.15,
-                sizey=0.15,
-                xanchor="left",
+                x=0.98,
+                y=0.02,
+                sizex=0.12,
+                sizey=0.12,
+                xanchor="right",
                 yanchor="bottom",
             )
         ]
@@ -859,11 +899,10 @@ def plot_porkchop_plotly(
         yaxis_title="Arrival Date",
         xaxis=dict(tickformat="%Y-%m-%d", tickangle=-45, range=xlim_dt),
         yaxis=dict(tickformat="%Y-%m-%d", range=ylim_dt),
-        width=width + 200,  # Extra width for colorbars
+        width=width,
         height=height,
         autosize=False,
         hovermode="closest",
-        margin=dict(r=200),  # Right margin for colorbars
         images=images,
         legend=dict(
             orientation="h",

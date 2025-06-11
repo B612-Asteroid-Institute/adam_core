@@ -106,6 +106,7 @@ def test_generate_real_porkchop_plot(tmp_path):
         optimal_hover=False,
         trim_to_valid=True,
         date_buffer_days=3.0,  # Add 3 days of buffer around valid data
+        show_hover=True,
     )
 
     # Save to pytest's temporary directory
