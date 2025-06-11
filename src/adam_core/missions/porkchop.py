@@ -378,15 +378,12 @@ def plot_porkchop_plotly(
     porkchop_data: LambertOutput,
     width: int = 900,
     height: int = 700,
-    c3_min: Optional[float] = None,
-    c3_max: Optional[float] = None,
-    c3_step: Optional[float] = None,
-    vinf_min: Optional[float] = None,
-    vinf_max: Optional[float] = None,
-    vinf_step: Optional[float] = None,
+    c3_departure_min: Optional[float] = None,
+    c3_departure_max: Optional[float] = None,
+    vinf_arrival_min: Optional[float] = None,
+    vinf_arrival_max: Optional[float] = None,
     tof_min: Optional[float] = None,
     tof_max: Optional[float] = None,
-    tof_step: Optional[float] = None,
     c3_base_colorscale: str = "Reds",
     vinf_base_colorscale: str = "Blues",
     tof_line_color: str = "black",
@@ -396,8 +393,6 @@ def plot_porkchop_plotly(
     show_optimal: bool = True,
     optimal_hover: bool = True,
     show_hover: bool = False,
-    trim_to_valid: bool = True,
-    date_buffer_days: float = 3.0,
     logo: bool = True,
 ):
     """
@@ -415,8 +410,6 @@ def plot_porkchop_plotly(
         Minimum C3 value (km^2/s^2) for contour levels.
     c3_max : float, optional
         Maximum C3 value (km^2/s^2) for contour levels.
-    c3_step : float, optional
-        Step size for C3 contour levels.
     vinf_min : float, optional
         Minimum Vinf value (km/s) for hover display.
     vinf_max : float, optional
@@ -460,68 +453,62 @@ def plot_porkchop_plotly(
     # --- Extract basic raw data ---
     c3_departure_au_d2 = porkchop_data.c3_departure()  # C3 departure in (AU/day)^2
     vinf_arrival_au_day = porkchop_data.vinf_arrival()  # V∞ arrival in AU/day
-
     time_of_flight_days = porkchop_data.time_of_flight()
     departure_times = porkchop_data.departure_state.time
     arrival_times = porkchop_data.arrival_state.time
 
     # Convert to metric units using unit conversion functions
-    c3_departure_km2_s2 = c3_departure_au_d2 * (au_per_day_to_km_per_s(1.0)**2)
+    c3_departure_km2_s2 = c3_departure_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
     vinf_arrival_km_s = au_per_day_to_km_per_s(vinf_arrival_au_day)
     # Define default C3 range if not provided
-    if c3_min is None:
-        c3_min = np.nanpercentile(c3_departure_km2_s2, 5)
-    if c3_max is None:
-        c3_max = np.nanpercentile(c3_departure_km2_s2, 95)
+    if c3_departure_min is None:
+        c3_departure_min = np.min(c3_departure_km2_s2)
+    if c3_departure_max is None:
+        c3_departure_max = np.max(c3_departure_km2_s2)
 
-    assert c3_max > c3_min, "C3 max must be greater than C3 min"
+    assert c3_departure_max > c3_departure_min, "C3 max must be greater than C3 min"
 
-    if c3_step is None:
-        c3_step = (c3_max - c3_min) / 10  # 10 levels by default
-    assert c3_step < (c3_max - c3_min), "C3 step must be less than the C3 range"
+    c3_step = (c3_departure_max - c3_departure_min) / 10  # 10 levels by default
+    assert c3_step < (
+        c3_departure_max - c3_departure_min
+    ), "C3 step must be less than the C3 range"
 
     # Define default V∞ range if not provided
-    if vinf_min is None:
-        vinf_min = np.nanpercentile(vinf_arrival_km_s, 5)
-    if vinf_max is None:
-        vinf_max = np.nanpercentile(vinf_arrival_km_s, 95)
-    if vinf_step is None:
-        vinf_step = (vinf_max - vinf_min) / 10  # 10 levels by default
+    if vinf_arrival_min is None:
+        vinf_arrival_min = np.min(vinf_arrival_km_s)
+    if vinf_arrival_max is None:
+        vinf_arrival_max = np.max(vinf_arrival_km_s)
+    vinf_step = (vinf_arrival_max - vinf_arrival_min) / 10  # 10 levels by default
+
+    if tof_min is None:
+        tof_min = np.min(time_of_flight_days[time_of_flight_days > 0])
+    if tof_max is None:
+        tof_max = np.max(time_of_flight_days)
+
+    tof_step = max(5, (tof_max - tof_min) / 10)  # 10 levels, minimum step of 5 days
+    tof_step = round(tof_step / 5) * 5  # Round to multiple of 5
+
+    # Validate all step sizes are positive
+    assert c3_step > 0, f"c3_step must be positive, got {c3_step}"
+    assert vinf_step > 0, f"vinf_step must be positive, got {vinf_step}"
+    assert tof_step > 0, f"tof_step must be positive, got {tof_step}"
 
     # Extract raw MJD values for all points
     departure_times_mjd = departure_times.mjd().to_numpy(zero_copy_only=False)
     arrival_times_mjd = arrival_times.mjd().to_numpy(zero_copy_only=False)
 
     # --- Apply all filtering to the actual data in one place ---
-    # Start with a mask for valid C3 values (not NaN and not over max)
-    data_mask = ~np.isnan(c3_departure_km2_s2) & (c3_departure_km2_s2 <= c3_max)
+    # We want to keep all solutions that are not NaN and are within the specified ranges of c3, vinf and tof
+    data_mask = (
+        ~np.isnan(c3_departure_km2_s2)
+        & (c3_departure_km2_s2 <= c3_departure_max)
+        & (c3_departure_km2_s2 >= c3_departure_min)
+        & (vinf_arrival_km_s >= vinf_arrival_min)
+        & (vinf_arrival_km_s <= vinf_arrival_max)
+        & (time_of_flight_days >= tof_min)
+        & (time_of_flight_days <= tof_max)
+    )
 
-    if trim_to_valid and np.any(data_mask):
-        # Apply trimming: only keep data with valid C3 values
-        pass  # Keep the data_mask as is
-    else:
-        # If not trimming or no valid data, keep all data
-        data_mask = np.ones(len(c3_departure_km2_s2), dtype=bool)
-
-    # Apply date buffer filtering if requested
-    if trim_to_valid and date_buffer_days is not None and date_buffer_days > 0 and np.any(data_mask):
-        # Get the range of valid times
-        valid_dep_times = departure_times_mjd[data_mask]
-        valid_arr_times = arrival_times_mjd[data_mask]
-        
-        if len(valid_dep_times) > 0 and len(valid_arr_times) > 0:
-            # Calculate buffer range
-            min_dep_mjd, max_dep_mjd = np.min(valid_dep_times), np.max(valid_dep_times)
-            min_arr_mjd, max_arr_mjd = np.min(valid_arr_times), np.max(valid_arr_times)
-            
-            # Apply buffer to all data points (not just valid ones)
-            dep_in_buffer = (departure_times_mjd >= (min_dep_mjd - date_buffer_days)) & \
-                           (departure_times_mjd <= (max_dep_mjd + date_buffer_days))
-            arr_in_buffer = (arrival_times_mjd >= (min_arr_mjd - date_buffer_days)) & \
-                           (arrival_times_mjd <= (max_arr_mjd + date_buffer_days))
-            
-            # Keep data that's either valid OR within the buffer range
-            data_mask = data_mask | (dep_in_buffer & arr_in_buffer)
 
     # Filter all our data arrays using the combined mask
     filtered_departure_mjd = departure_times_mjd[data_mask]
@@ -530,8 +517,12 @@ def plot_porkchop_plotly(
     filtered_vinf_km_s = vinf_arrival_km_s[data_mask]
 
     # Get unique times from the filtered data - this guarantees all data points have corresponding unique times
-    unique_departure_mjd, dep_indices = np.unique(filtered_departure_mjd, return_inverse=True)
-    unique_arrival_mjd, arr_indices = np.unique(filtered_arrival_mjd, return_inverse=True)
+    unique_departure_mjd, dep_indices = np.unique(
+        filtered_departure_mjd, return_inverse=True
+    )
+    unique_arrival_mjd, arr_indices = np.unique(
+        filtered_arrival_mjd, return_inverse=True
+    )
     # Check if we have enough unique times to create a grid
     if len(unique_departure_mjd) < 2 or len(unique_arrival_mjd) < 2:
         warnings.warn(
@@ -566,41 +557,24 @@ def plot_porkchop_plotly(
 
     # Initialize grid arrays with NaN and fill using the filtered data
     # Since we used return_inverse=True, dep_indices and arr_indices are guaranteed to be valid
-    grid_c3_departure_km2_s2 = np.full((len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64)
-    grid_vinf_arrival_km_s = np.full((len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64)
-    
+    grid_c3_departure_km2_s2 = np.full(
+        (len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64
+    )
+    grid_vinf_arrival_km_s = np.full(
+        (len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64
+    )
+
+
     # Fill the grid directly - no validity masking needed since we pre-filtered the data
     grid_c3_departure_km2_s2[arr_indices, dep_indices] = filtered_c3_km2_s2
     grid_vinf_arrival_km_s[arr_indices, dep_indices] = filtered_vinf_km_s
+    grid_tof_days = grid_arrival_mjd - grid_departure_mjd
 
-    original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
-    # For ToF
-    if tof_min is None:
-        tof_min = np.nanmin(original_tof_grid_days[original_tof_grid_days > 0])
-    if tof_max is None:
-        tof_max = np.nanmax(original_tof_grid_days)
-    if tof_step is None:
-        tof_step = max(5, (tof_max - tof_min) / 10)  # 10 levels, minimum step of 5 days
-        tof_step = round(tof_step / 5) * 5  # Round to multiple of 5
-
-    # Validate ToF range - handle cases where ToF values are invalid
-    if not (np.isfinite(tof_min) and np.isfinite(tof_max)) or tof_max <= tof_min:
-        logger.warning(
-            f"Invalid ToF range: tof_min={tof_min}, tof_max={tof_max}. "
-            "Using default range."
-        )
-        tof_min = 30.0  # Default minimum ToF
-        tof_max = 365.0  # Default maximum ToF
-
-    # Validate all step sizes are positive
-    assert c3_step > 0, f"c3_step must be positive, got {c3_step}"
-    assert vinf_step > 0, f"vinf_step must be positive, got {vinf_step}"
-    assert tof_step > 0, f"tof_step must be positive, got {tof_step}"
 
     # --- Replace NaN values and over-max values with sentinel ---
     # Use a sentinel value that's 2x the maximum for C3
-    c3_sentinel_value = c3_max * 1.01
-    vinf_sentinel_value = vinf_max * 1.01
+    c3_sentinel_value = c3_departure_max * 1.01
+    vinf_sentinel_value = vinf_arrival_max * 1.01
 
     # Replace NaN and over-max values with the sentinel value for C3
     grid_c3_for_plot = np.copy(grid_c3_departure_km2_s2)
@@ -611,10 +585,6 @@ def plot_porkchop_plotly(
     grid_vinf_for_plot = np.copy(grid_vinf_arrival_km_s)
     mask_vinf_nan = np.isnan(grid_vinf_for_plot)
     grid_vinf_for_plot[mask_vinf_nan] = vinf_sentinel_value
-
-    # --- Trim plot to valid data region if requested ---
-    # Note: We've already trimmed before creating the grid,
-    # so this section is no longer needed
 
     # Set up the date limits for the plot
     # Convert the min/max MJD values to datetime objects for Plotly
@@ -666,39 +636,53 @@ def plot_porkchop_plotly(
 
     # Create custom colorscales for both C3 and V∞
     c3_colorscale = create_colorscale_with_sentinel(
-        c3_base_colorscale, c3_min, c3_max, c3_sentinel_value
+        c3_base_colorscale, c3_departure_min, c3_departure_max, c3_sentinel_value
     )
     vinf_colorscale = create_colorscale_with_sentinel(
-        vinf_base_colorscale, vinf_min, vinf_max, vinf_sentinel_value
+        vinf_base_colorscale, vinf_arrival_min, vinf_arrival_max, vinf_sentinel_value
     )
 
     # --- Create hover information grids if requested ---
     hover_info = "none"
     custom_data = None
     hover_template = None
-    
+
     if show_hover:
-        # Create date strings for hover display 
-        grid_departure_date_strings = np.array([[Time(mjd, format="mjd").strftime('%Y-%m-%d') 
-                                               for mjd in unique_departure_mjd] 
-                                              for _ in unique_arrival_mjd])
-        grid_arrival_date_strings = np.array([[Time(mjd, format="mjd").strftime('%Y-%m-%d') 
-                                             for _ in unique_departure_mjd] 
-                                            for mjd in unique_arrival_mjd])
-        
+        # Create date strings for hover display
+        grid_departure_date_strings = np.array(
+            [
+                [
+                    Time(mjd, format="mjd").strftime("%Y-%m-%d")
+                    for mjd in unique_departure_mjd
+                ]
+                for _ in unique_arrival_mjd
+            ]
+        )
+        grid_arrival_date_strings = np.array(
+            [
+                [
+                    Time(mjd, format="mjd").strftime("%Y-%m-%d")
+                    for _ in unique_departure_mjd
+                ]
+                for mjd in unique_arrival_mjd
+            ]
+        )
+
         # Stack all the data we want in hover info
         # Shape: (n_arrival, n_departure, 5) for [c3, vinf, tof, dep_date, arr_date]
-        custom_data = np.stack([
-            grid_c3_departure_km2_s2,    # C3 in km²/s²
-            grid_vinf_arrival_km_s,      # V∞ in km/s  
-            original_tof_grid_days,      # ToF in days
-            grid_departure_date_strings, # Departure date strings
-            grid_arrival_date_strings    # Arrival date strings
-        ], axis=-1)
-        
+        custom_data = np.stack(
+            [
+                grid_c3_departure_km2_s2,  # C3 in km²/s²
+                grid_vinf_arrival_km_s,  # V∞ in km/s
+                grid_tof_days,  # ToF in days
+                grid_departure_date_strings,  # Departure date strings
+                grid_arrival_date_strings,  # Arrival date strings
+            ],
+            axis=-1,
+        )
+
         hover_info = "text"
         hover_template = (
-            "<b>Mission Parameters</b><br>"
             "Departure: %{customdata[3]}<br>"
             "Arrival: %{customdata[4]}<br>"
             "Time of Flight: %{customdata[2]:.1f} days<br>"
@@ -717,8 +701,8 @@ def plot_porkchop_plotly(
             y=unique_arrival_dates_dt,
             z=grid_c3_for_plot,
             zauto=False,
-            zmin=c3_min,
-            zmax=c3_max * 1.1,
+            zmin=c3_departure_min,
+            zmax=c3_departure_max * 1.1,
             colorscale=c3_colorscale,
             opacity=0.3,  # More transparency for better layering
             hoverinfo=hover_info,
@@ -728,8 +712,8 @@ def plot_porkchop_plotly(
                 coloring="fill",
                 showlabels=True,
                 labelfont=dict(size=10, color="darkred"),
-                start=c3_min,
-                end=c3_max,
+                start=c3_departure_min,
+                end=c3_departure_max,
                 size=c3_step,
                 labelformat=".1f",
             ),
@@ -749,8 +733,8 @@ def plot_porkchop_plotly(
             y=unique_arrival_dates_dt,
             z=grid_vinf_for_plot,
             zauto=False,
-            zmin=vinf_min,
-            zmax=vinf_max * 1.1,
+            zmin=vinf_arrival_min,
+            zmax=vinf_arrival_max * 1.1,
             colorscale=vinf_colorscale,
             opacity=0.3,  # More transparency for better layering
             hoverinfo=hover_info,
@@ -760,8 +744,8 @@ def plot_porkchop_plotly(
                 coloring="fill",
                 showlabels=True,
                 labelfont=dict(size=10, color="darkblue"),
-                start=vinf_min,
-                end=vinf_max,
+                start=vinf_arrival_min,
+                end=vinf_arrival_max,
                 size=vinf_step,
                 labelformat=".1f",
             ),
@@ -769,7 +753,7 @@ def plot_porkchop_plotly(
             name="V∞ Arrival",
             showscale=False,  # Remove colorbar from main trace
             connectgaps=False,  # Faster rendering by not connecting across gaps
-            visible='legendonly',
+            visible="legendonly",
             showlegend=True,
         )
     )
@@ -778,7 +762,7 @@ def plot_porkchop_plotly(
         go.Contour(
             x=unique_departure_dates_dt,
             y=unique_arrival_dates_dt,
-            z=original_tof_grid_days,  # Original ToF grid with NaNs
+            z=grid_tof_days,  # Original ToF grid with NaNs
             colorscale=[[0, tof_line_color], [1, tof_line_color]],
             contours=dict(
                 coloring="lines",

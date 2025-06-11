@@ -103,9 +103,13 @@ def test_generate_real_porkchop_plot(tmp_path):
     fig = plot_porkchop_plotly(
         results,
         title="Earth to Mars Transfer (2022-2024)",
+        c3_departure_min=0.0,
+        c3_departure_max=100.0,
+        vinf_arrival_min=0.0,
+        vinf_arrival_max=100.0,
+        tof_min=0.0,
+        tof_max=1000.0,
         optimal_hover=False,
-        trim_to_valid=True,
-        date_buffer_days=3.0,  # Add 3 days of buffer around valid data
         show_hover=True,
     )
 
@@ -216,7 +220,6 @@ def test_porkchop_different_time_grids():
         results,
         title="Test: Different Time Grids",
         show_optimal=True,
-        trim_to_valid=False,  # Don't trim so we can see the full grid
     )
 
     # Verify figure was created successfully
@@ -364,9 +367,8 @@ def test_index_out_of_bounds_regression():
     
     This test creates a scenario where:
     1. Some data points have invalid C3 values (filtered out)
-    2. trim_to_valid=True creates unique arrays based only on valid data
-    3. The invalid data points have times outside the valid time range
-    4. Old implementation would try to use np.searchsorted with out-of-bounds results
+    2. The invalid data points have times outside the valid time range
+    3. Old implementation would try to use np.searchsorted with out-of-bounds results
     """
     from adam_core.coordinates import CartesianCoordinates
     from adam_core.time import Timestamp
@@ -433,8 +435,8 @@ def test_index_out_of_bounds_regression():
     fig = plot_porkchop_plotly(
         results,
         title="Regression Test - Index Out of Bounds",
-        c3_min=c3_min_auto,
-        c3_max=c3_max_for_test,  # This will filter out high C3 data
+        c3_departure_min=c3_min_auto,
+        c3_departure_max=c3_max_for_test,  # This will filter out high C3 data
         trim_to_valid=True,      # This triggers the filtering logic
         date_buffer_days=1.0,    # Small buffer to test buffer logic
         show_optimal=True,
@@ -499,8 +501,8 @@ def test_extreme_filtering_edge_case():
     fig = plot_porkchop_plotly(
         results,
         title="Extreme Filtering Test",
-        c3_min=c3_min_auto,
-        c3_max=very_low_c3_max,    # Very restrictive filtering
+        c3_departure_min=c3_min_auto,
+        c3_departure_max=very_low_c3_max,    # Very restrictive filtering
         trim_to_valid=True,        # Enable trimming
         date_buffer_days=0.5,      # Small buffer
         show_optimal=False,        # Disable optimal points to avoid issues with very few points
