@@ -30,32 +30,37 @@ from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_bas
 logger = logging.getLogger(__name__)
 
 
-def generate_saturated_colorscale(base_color: str, n_levels: int = 6) -> List[List]:
+def generate_saturated_colorscale(base_color: str, n_levels: int = 8, max_alpha: float = 0.8, min_alpha: float = 0.1) -> List[List]:
     """
-    Generate a colorscale from light to dark based on a base color.
+    Generate a colorscale from light to dark based on a base color with full saturation
+    and variable transparency that increases with color intensity.
     
     Parameters
     ----------
     base_color : str
         Base color name (e.g., 'red', 'blue') or hex code (e.g., '#FF0000')
     n_levels : int, optional
-        Number of levels in the colorscale (default: 6)
+        Number of levels in the colorscale (default: 8)
+    max_alpha : float, optional
+        Maximum alpha (opacity) for darkest colors (default: 0.8)
+    min_alpha : float, optional
+        Minimum alpha (opacity) for lightest colors (default: 0.1)
     
     Returns
     -------
     List[List]
-        Plotly colorscale format: [[position, color], ...]
+        Plotly colorscale format with RGBA: [[position, color], ...]
     """
-    # Color mapping for common base colors to RGB
+    # Color mapping for common base colors to RGB with full saturation
     color_map = {
-        'red': (255, 0, 0),
-        'blue': (0, 0, 255),
-        'green': (0, 255, 0),
-        'orange': (255, 165, 0),
-        'purple': (128, 0, 128),
-        'yellow': (255, 255, 0),
-        'cyan': (0, 255, 255),
-        'magenta': (255, 0, 255),
+        'red': (255, 0, 0),        # Pure red, full saturation
+        'blue': (0, 0, 255),       # Pure blue, full saturation
+        'green': (0, 255, 0),      # Pure green, full saturation
+        'orange': (255, 165, 0),   # Pure orange, full saturation
+        'purple': (128, 0, 128),   # Pure purple, full saturation
+        'yellow': (255, 255, 0),   # Pure yellow, full saturation
+        'cyan': (0, 255, 255),     # Pure cyan, full saturation
+        'magenta': (255, 0, 255),  # Pure magenta, full saturation
     }
     
     # Parse base color
@@ -66,29 +71,132 @@ def generate_saturated_colorscale(base_color: str, n_levels: int = 6) -> List[Li
     elif base_color.lower() in color_map:
         base_rgb = color_map[base_color.lower()]
     else:
-        # Default to red if unknown
+        # Default to pure red if unknown
         base_rgb = (255, 0, 0)
     
     colorscale = []
     for i in range(n_levels):
         position = i / (n_levels - 1)
         
-        # Create gradient from light (but saturated) to dark
-        # Light end: mix base color with white, but keep saturation
-        # Dark end: darken the base color
+        # Create lightness variation while maintaining full saturation
+        # Lighter colors: mix with white but preserve hue
+        # Darker colors: reduce brightness but keep saturation
         if position == 0:
-            # Lightest: 80% base color + 20% white
-            r = int(base_rgb[0] * 0.8 + 255 * 0.2)
-            g = int(base_rgb[1] * 0.8 + 255 * 0.2)
-            b = int(base_rgb[2] * 0.8 + 255 * 0.2)
+            # Lightest: mix with white for pastel effect
+            lightness_factor = 0.9  # Very light
+            r = int(base_rgb[0] * lightness_factor + 255 * (1 - lightness_factor))
+            g = int(base_rgb[1] * lightness_factor + 255 * (1 - lightness_factor))
+            b = int(base_rgb[2] * lightness_factor + 255 * (1 - lightness_factor))
         else:
-            # Gradually darken the base color
-            factor = 1 - (position * 0.7)  # Don't go completely black
-            r = int(base_rgb[0] * factor)
-            g = int(base_rgb[1] * factor)
-            b = int(base_rgb[2] * factor)
+            # Use power curve for smooth transition
+            intensity = np.power(position, 0.8)
+            
+            # Maintain saturation by scaling from full saturation down
+            r = int(base_rgb[0] * (0.3 + 0.7 * intensity))
+            g = int(base_rgb[1] * (0.3 + 0.7 * intensity))
+            b = int(base_rgb[2] * (0.3 + 0.7 * intensity))
         
-        colorscale.append([position, f"rgb({r}, {g}, {b})"])
+        # Ensure values are within valid RGB range
+        r = max(0, min(255, r))
+        g = max(0, min(255, g))
+        b = max(0, min(255, b))
+        
+        # Calculate alpha based on position (lighter = more transparent)
+        alpha = min_alpha + (max_alpha - min_alpha) * position
+        
+        colorscale.append([position, f"rgba({r}, {g}, {b}, {alpha:.2f})"])
+    
+    return colorscale
+
+
+def generate_perceptual_colorscale(base_color: str, n_levels: int = 8, min_lightness: float = 0.3, max_lightness: float = 0.9, max_alpha: float = 0.8, min_alpha: float = 0.1) -> List[List]:
+    """
+    Generate a perceptually uniform colorscale with full saturation and variable transparency
+    that works better for overlaying contours.
+    
+    Parameters
+    ----------
+    base_color : str
+        Base color name (e.g., 'red', 'blue') or hex code (e.g., '#FF0000')
+    n_levels : int, optional
+        Number of levels in the colorscale (default: 8)
+    min_lightness : float, optional
+        Minimum lightness value (0-1, default: 0.3 for good contrast)
+    max_lightness : float, optional  
+        Maximum lightness value (0-1, default: 0.9 for visibility with transparency)
+    max_alpha : float, optional
+        Maximum alpha (opacity) for darkest colors (default: 0.8)
+    min_alpha : float, optional
+        Minimum alpha (opacity) for lightest colors (default: 0.1)
+    
+    Returns
+    -------
+    List[List]
+        Plotly colorscale format with RGBA: [[position, color], ...]
+    """
+    # Full saturation color mapping for maximum color purity
+    color_map = {
+        'red': (255, 0, 0),        # Pure red
+        'blue': (0, 0, 255),       # Pure blue
+        'green': (0, 255, 0),      # Pure green
+        'orange': (255, 165, 0),   # Pure orange
+        'purple': (128, 0, 128),   # Pure purple
+        'yellow': (255, 255, 0),   # Pure yellow
+        'cyan': (0, 255, 255),     # Pure cyan
+        'magenta': (255, 0, 255),  # Pure magenta
+    }
+    
+    # Parse base color
+    if base_color.startswith('#'):
+        hex_color = base_color.lstrip('#')
+        base_rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    elif base_color.lower() in color_map:
+        base_rgb = color_map[base_color.lower()]
+    else:
+        base_rgb = (255, 0, 0)  # Default pure red
+        
+    # Convert base color to normalized RGB for calculations
+    base_r, base_g, base_b = [x / 255.0 for x in base_rgb]
+    
+    colorscale = []
+    for i in range(n_levels):
+        position = i / (n_levels - 1)
+        
+        # Create perceptually uniform lightness steps
+        lightness = max_lightness - (position * (max_lightness - min_lightness))
+        
+        # Use full saturation throughout, varying only lightness
+        saturation = 1.0  # Always full saturation
+        
+        if position == 0:
+            # Lightest: mix with white while maintaining hue
+            white_mix = 1 - lightness
+            r = base_r * lightness + white_mix
+            g = base_g * lightness + white_mix
+            b = base_b * lightness + white_mix
+        else:
+            # Scale the base color by lightness while maintaining saturation
+            # Use HSV-like scaling to preserve hue and saturation
+            max_component = max(base_r, base_g, base_b)
+            
+            if max_component > 0:
+                # Scale all components proportionally to achieve desired lightness
+                scale_factor = lightness / max_component
+                r = base_r * scale_factor
+                g = base_g * scale_factor  
+                b = base_b * scale_factor
+            else:
+                r = g = b = lightness
+        
+        # Convert back to 0-255 range and ensure validity
+        r_int = max(0, min(255, int(r * 255)))
+        g_int = max(0, min(255, int(g * 255)))
+        b_int = max(0, min(255, int(b * 255)))
+        
+        # Calculate alpha based on position (lighter = more transparent)
+        alpha = min_alpha + (max_alpha - min_alpha) * position
+        
+        colorscale.append([position, f"rgba({r_int}, {g_int}, {b_int}, {alpha:.2f})"])
     
     return colorscale
 
@@ -454,7 +562,6 @@ def plot_porkchop_plotly(
     ylim_mjd: Optional[Tuple[float, float]] = None,
     title: str = "Porkchop Plot",
     show_optimal: bool = True,
-    optimal_hover: bool = True,
     show_hover: bool = False,
     logo: bool = True,
 ):
@@ -464,49 +571,41 @@ def plot_porkchop_plotly(
     Parameters
     ----------
     porkchop_data : LambertOutput
-        The output from generate_porkchop_data.
+        The porkchop data.
     width : int, optional
-        Figure width in pixels.
+        The width of the plot.
     height : int, optional
-        Figure height in pixels.
-    c3_min : float, optional
-        Minimum C3 value (km^2/s^2) for contour levels.
-    c3_max : float, optional
-        Maximum C3 value (km^2/s^2) for contour levels.
-    vinf_min : float, optional
-        Minimum Vinf value (km/s) for hover display.
-    vinf_max : float, optional
-        Maximum Vinf value (km/s) for hover display.
-    vinf_step : float, optional
-        Step size for Vinf hover display.
+        The height of the plot.
+    c3_departure_min : float, optional
+        The minimum C3 departure value.
+    c3_departure_max : float, optional
+        The maximum C3 departure value.
+    vinf_arrival_min : float, optional
+        The minimum V∞ arrival value.
+    vinf_arrival_max : float, optional
+        The maximum V∞ arrival value.
     tof_min : float, optional
-        Minimum ToF value (days) for contour levels.
+        The minimum time of flight value.
     tof_max : float, optional
-        Maximum ToF value (days) for contour levels.
-    tof_step : float, optional
-        Step size for ToF contour levels.
-    metric_colorscale : str, optional
-        Plotly colorscale name for the C3 filled contours.
+        The maximum time of flight value.
+    c3_base_colorscale : str, optional
+        The base colorscale for C3.
+    vinf_base_colorscale : str, optional
+        The base colorscale for V∞.
     tof_line_color : str, optional
-        Color for the ToF contour lines.
-    xlim_mjd : Tuple[float, float], optional
-        x-axis limits (min_mjd, max_mjd).
-    ylim_mjd : Tuple[float, float], optional
-        y-axis limits (min_mjd, max_mjd).
+        The color of the time of flight line.
+    xlim_mjd : tuple, optional
+        The x-axis limits in MJD.
+    ylim_mjd : tuple, optional
+        The y-axis limits in MJD.
     title : str, optional
-        Plot title.
+        The title of the plot.
     show_optimal : bool, optional
-        If True, marks the optimal point on the plot.
-    optimal_hover : bool, optional
-        If True, enables hover information for the optimal point.
+        Whether to show the optimal V∞ point.
     show_hover : bool, optional
-        If True, enables hover information showing C3, V∞, ToF, and dates.
-    trim_to_valid : bool, optional
-        If True, trims the plot to only include valid data.
-    date_buffer_days : float, optional
-        Number of days to add as buffer around the min and max dates (default: 3).
+        Whether to show the hover information.
     logo : bool, optional
-        If True, adds the Asteroid Institute logo to the plot.
+        Whether to show the logo.
 
     Returns
     -------
@@ -578,6 +677,42 @@ def plot_porkchop_plotly(
     filtered_arrival_mjd = arrival_times_mjd[data_mask]
     filtered_c3_km2_s2 = c3_departure_km2_s2[data_mask]
     filtered_vinf_km_s = vinf_arrival_km_s[data_mask]
+    filtered_tof_days = time_of_flight_days[data_mask]
+
+    # Recalculate min/max and step sizes based on filtered data
+    if len(filtered_c3_km2_s2) > 0:
+        c3_departure_min_filtered = np.min(filtered_c3_km2_s2)
+        c3_departure_max_filtered = np.max(filtered_c3_km2_s2)
+        c3_step_filtered = (c3_departure_max_filtered - c3_departure_min_filtered) / 10
+        if c3_step_filtered <= 0:
+            c3_step_filtered = 1.0  # Fallback for constant data
+    else:
+        c3_departure_min_filtered = c3_departure_min
+        c3_departure_max_filtered = c3_departure_max
+        c3_step_filtered = c3_step
+
+    if len(filtered_vinf_km_s) > 0:
+        vinf_arrival_min_filtered = np.min(filtered_vinf_km_s)
+        vinf_arrival_max_filtered = np.max(filtered_vinf_km_s)
+        vinf_step_filtered = (vinf_arrival_max_filtered - vinf_arrival_min_filtered) / 10
+        if vinf_step_filtered <= 0:
+            vinf_step_filtered = 1.0  # Fallback for constant data
+    else:
+        vinf_arrival_min_filtered = vinf_arrival_min
+        vinf_arrival_max_filtered = vinf_arrival_max
+        vinf_step_filtered = vinf_step
+
+    if len(filtered_tof_days) > 0:
+        tof_min_filtered = np.min(filtered_tof_days)
+        tof_max_filtered = np.max(filtered_tof_days)
+        tof_step_filtered = max(5, (tof_max_filtered - tof_min_filtered) / 10)
+        tof_step_filtered = round(tof_step_filtered / 5) * 5  # Round to multiple of 5
+        if tof_step_filtered <= 0:
+            tof_step_filtered = 5  # Fallback minimum step
+    else:
+        tof_min_filtered = tof_min
+        tof_max_filtered = tof_max
+        tof_step_filtered = tof_step
 
     # Get unique times from the filtered data - this guarantees all data points have corresponding unique times
     unique_departure_mjd, dep_indices = np.unique(
@@ -669,18 +804,26 @@ def plot_porkchop_plotly(
         "Purples": "purple",
     }
     
-    # Generate C3 colorscale
+    # Generate C3 colorscale with full saturation and built-in transparency
     if c3_base_colorscale in colorscale_to_color:
+        # Using saturated colorscale with transparency built into the colorscale
         c3_colorscale = generate_saturated_colorscale(
-            colorscale_to_color[c3_base_colorscale]
+            colorscale_to_color[c3_base_colorscale], 
+            n_levels=8,
+            max_alpha=0.7,  # Maximum opacity for darkest colors
+            min_alpha=0.15  # Minimum opacity for lightest colors
         )
     else:
         c3_colorscale = c3_base_colorscale
     
-    # Generate V∞ colorscale  
+    # Generate V∞ colorscale with full saturation and built-in transparency
     if vinf_base_colorscale in colorscale_to_color:
+        # Using saturated colorscale with transparency built into the colorscale
         vinf_colorscale = generate_saturated_colorscale(
-            colorscale_to_color[vinf_base_colorscale]
+            colorscale_to_color[vinf_base_colorscale], 
+            n_levels=8,
+            max_alpha=0.7,  # Maximum opacity for darkest colors
+            min_alpha=0.15  # Minimum opacity for lightest colors
         )
     else:
         vinf_colorscale = vinf_base_colorscale
@@ -737,17 +880,17 @@ def plot_porkchop_plotly(
     # --- Create Dual Contour Traces ---
     plotly_traces = []
 
-    # C3 Departure Contour Trace (warm colorscale)
+    # C3 Departure Contour Trace (warm colorscale with built-in transparency)
     plotly_traces.append(
         go.Contour(
             x=unique_departure_dates_dt,
             y=unique_arrival_dates_dt,
             z=grid_c3_for_plot,
             zauto=False,
-            zmin=c3_departure_min,
-            zmax=c3_departure_max,
+            zmin=c3_departure_min_filtered,
+            zmax=c3_departure_max_filtered,
             colorscale=c3_colorscale,
-            opacity=0.3,  # More transparency for better layering
+            opacity=1.0,  # Use full opacity since transparency is built into colorscale
             hoverinfo=hover_info,
             hovertemplate=hover_template,
             customdata=custom_data,
@@ -755,12 +898,12 @@ def plot_porkchop_plotly(
                 coloring="fill",
                 showlabels=True,
                 labelfont=dict(size=10, color="darkred"),
-                start=c3_departure_min,
-                end=c3_departure_max,
-                size=c3_step,
+                start=c3_departure_min_filtered,
+                end=c3_departure_max_filtered,
+                size=c3_step_filtered,
                 labelformat=".1f",
             ),
-            line=dict(width=0.5, smoothing=1.3),
+            line=dict(width=1.0, smoothing=1.3),
             name="C3 Departure",
             showscale=False,  # Remove colorbar from main trace
             connectgaps=False,  # Don't connect across gaps to match V∞ behavior
@@ -769,17 +912,17 @@ def plot_porkchop_plotly(
         )
     )
 
-    # V∞ Arrival Contour Trace (cool colorscale)
+    # V∞ Arrival Contour Trace (cool colorscale with built-in transparency)
     plotly_traces.append(
         go.Contour(
             x=unique_departure_dates_dt,
             y=unique_arrival_dates_dt,
             z=grid_vinf_for_plot,
             zauto=False,
-            zmin=vinf_arrival_min,
-            zmax=vinf_arrival_max,
+            zmin=vinf_arrival_min_filtered,
+            zmax=vinf_arrival_max_filtered,
             colorscale=vinf_colorscale,
-            opacity=0.3,  # More transparency for better layering
+            opacity=1.0,  # Use full opacity since transparency is built into colorscale
             hoverinfo=hover_info,
             hovertemplate=hover_template,
             customdata=custom_data,
@@ -787,12 +930,12 @@ def plot_porkchop_plotly(
                 coloring="fill",
                 showlabels=True,
                 labelfont=dict(size=10, color="darkblue"),
-                start=vinf_arrival_min,
-                end=vinf_arrival_max,
-                size=vinf_step,
+                start=vinf_arrival_min_filtered,
+                end=vinf_arrival_max_filtered,
+                size=vinf_step_filtered,
                 labelformat=".1f",
             ),
-            line=dict(width=0.5, smoothing=1.3),
+            line=dict(width=1.0, smoothing=1.3),
             name="V∞ Arrival",
             showscale=False,  # Remove colorbar from main trace
             connectgaps=False,  # Faster rendering by not connecting across gaps
@@ -811,9 +954,9 @@ def plot_porkchop_plotly(
                 coloring="lines",
                 showlabels=True,
                 labelfont=dict(size=10, color=tof_line_color),
-                start=tof_min,
-                end=tof_max,
-                size=tof_step,
+                start=tof_min_filtered,
+                end=tof_max_filtered,
+                size=tof_step_filtered,
             ),
             line=dict(color=tof_line_color, width=1, dash="longdash"),
             name="ToF (days)",
@@ -826,17 +969,17 @@ def plot_porkchop_plotly(
 
     # --- Optimal Points (separate for C3 and V∞) ---
     if show_optimal:
-        # Optimal C3 Departure Point
-        if np.any(~np.isnan(c3_departure_km2_s2)):
-            min_c3_idx = np.nanargmin(c3_departure_km2_s2)
+        # Optimal C3 Departure Point from filtered data
+        if len(filtered_c3_km2_s2) > 0:
+            min_c3_filtered_idx = np.nanargmin(filtered_c3_km2_s2)
 
-            # Get the timestamp objects directly from original data
-            best_c3_dep_time = departure_times[int(min_c3_idx)]
-            best_c3_arr_time = arrival_times[int(min_c3_idx)]
+            # Get the corresponding departure and arrival times from filtered data
+            best_c3_dep_mjd = filtered_departure_mjd[min_c3_filtered_idx]
+            best_c3_arr_mjd = filtered_arrival_mjd[min_c3_filtered_idx]
 
-            # For scatter point positioning, get datetime objects
-            best_c3_dep_dt = best_c3_dep_time.to_astropy()[0].datetime
-            best_c3_arr_dt = best_c3_arr_time.to_astropy()[0].datetime
+            # Convert to datetime objects for plotting
+            best_c3_dep_dt = Time(best_c3_dep_mjd, format="mjd").datetime
+            best_c3_arr_dt = Time(best_c3_arr_mjd, format="mjd").datetime
 
             # Check if the optimal C3 point falls within our current plot range
             c3_optimal_in_range = (
@@ -863,17 +1006,17 @@ def plot_porkchop_plotly(
                     )
                 )
 
-        # Optimal V∞ Arrival Point
-        if np.any(~np.isnan(vinf_arrival_km_s)):
-            min_vinf_idx = np.nanargmin(vinf_arrival_km_s)
+        # Optimal V∞ Arrival Point from filtered data
+        if len(filtered_vinf_km_s) > 0:
+            min_vinf_filtered_idx = np.nanargmin(filtered_vinf_km_s)
 
-            # Get the timestamp objects directly from original data
-            best_vinf_dep_time = departure_times[int(min_vinf_idx)]
-            best_vinf_arr_time = arrival_times[int(min_vinf_idx)]
+            # Get the corresponding departure and arrival times from filtered data
+            best_vinf_dep_mjd = filtered_departure_mjd[min_vinf_filtered_idx]
+            best_vinf_arr_mjd = filtered_arrival_mjd[min_vinf_filtered_idx]
 
-            # For scatter point positioning, get datetime objects
-            best_vinf_dep_dt = best_vinf_dep_time.to_astropy()[0].datetime
-            best_vinf_arr_dt = best_vinf_arr_time.to_astropy()[0].datetime
+            # Convert to datetime objects for plotting
+            best_vinf_dep_dt = Time(best_vinf_dep_mjd, format="mjd").datetime
+            best_vinf_arr_dt = Time(best_vinf_arr_mjd, format="mjd").datetime
 
             # Check if the optimal V∞ point falls within our current plot range
             vinf_optimal_in_range = (

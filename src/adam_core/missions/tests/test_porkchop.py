@@ -109,7 +109,6 @@ def test_generate_real_porkchop_plot(tmp_path):
         vinf_arrival_max=100.0,
         tof_min=0.0,
         tof_max=1000.0,
-        optimal_hover=False,
         show_hover=True,
     )
 
