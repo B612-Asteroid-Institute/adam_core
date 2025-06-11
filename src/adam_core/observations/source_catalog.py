@@ -42,6 +42,8 @@ class SourceCatalog(qv.Table):
     mag = qv.Float64Column(nullable=True)
     #: 1-sigma uncertainty in the magnitude of the source in AB magnitudes
     mag_sigma = qv.Float64Column(nullable=True)
+    #: Signal-to-noise ratio of the source
+    snr = qv.Float64Column(nullable=True)
 
     # PSF parameters
     #: Full width at half maximum of the PSF in arcseconds
@@ -78,6 +80,13 @@ class SourceCatalog(qv.Table):
     # Association Details
     #: The ID of the solar system object associated with the source
     object_id = qv.LargeStringColumn(nullable=True)
+
+    #: Astrometric Catalog used for astrometric measurements
+    astrometric_catalog = qv.LargeStringColumn(nullable=True)
+    #: Photometric Catalog used for photometric measurements
+    photometric_catalog = qv.LargeStringColumn(nullable=True)
+    #: Mode of the observation
+    mode = qv.LargeStringColumn(nullable=True)
 
     #: ID of the source catalog
     catalog_id = qv.LargeStringColumn()
