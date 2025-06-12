@@ -903,6 +903,7 @@ def plot_porkchop_plotly(
                 size=c3_step_filtered,
                 labelformat=".1f",
             ),
+            ncontours=10,  # Ensure exactly 10 contour levels
             line=dict(width=1.0, smoothing=1.3),
             name="C3 Departure",
             showscale=False,  # Remove colorbar from main trace
@@ -935,6 +936,7 @@ def plot_porkchop_plotly(
                 size=vinf_step_filtered,
                 labelformat=".1f",
             ),
+            ncontours=10,  # Ensure exactly 10 contour levels
             line=dict(width=1.0, smoothing=1.3),
             name="V∞ Arrival",
             showscale=False,  # Remove colorbar from main trace
