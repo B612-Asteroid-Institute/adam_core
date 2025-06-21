@@ -843,7 +843,7 @@ def plot_impact_simulation(
                 pad=dict(t=50),
                 len=0.90 if not logo else 0.80,
                 x=0.10,
-                y=0.07,
+                y=0.0,
                 font=dict(color="white", size=10),
                 steps=[
                     dict(
@@ -1095,7 +1095,7 @@ def plot_risk_corridor(
                 type="buttons",
                 showactive=False,
                 x=0.03,
-                y=-0.03,
+                y=-0.07,
                 buttons=[
                     dict(
                         label="▶",
@@ -1130,7 +1130,7 @@ def plot_risk_corridor(
                 pad=dict(t=50),
                 len=0.90 if not logo else 0.75,
                 x=0.05,
-                y=0.07,
+                y=0.0,
                 font=dict(color="black", size=10),
                 steps=[
                     dict(
