@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 
 from adam_core.coordinates.origin import OriginCodes
+from adam_core.coordinates.units import au_per_day_to_km_per_s
 from adam_core.time import Timestamp
 
 from ..porkchop import (
@@ -416,19 +418,19 @@ def test_index_out_of_bounds_regression():
 
     # Manually modify the results to simulate some very high C3 values
     # This simulates what would happen with difficult Lambert solutions
-    c3_values = results.c3_departure()
-    
+    c3_values_au_d2 = results.c3_departure()
+    c3_values_km2_s2 = c3_values_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
+
     # Make the last few solutions have extremely high C3 values that would be filtered out
     modified_results = results.set_column('vx_1', results.vx_1)  # Dummy modification to create copy
-    
+
     # Create a plotting scenario that would trigger the old bug:
     # 1. Set c3_max to filter out some data but ensure it's valid
-    # 2. Use trim_to_valid=True 
-    # 3. The filtered unique arrays won't cover all data points
-    c3_min_auto = np.nanpercentile(c3_values, 5)
-    c3_max_auto = np.nanpercentile(c3_values, 95)
+    # 2. The filtered unique arrays won't cover all data points
+    c3_min_auto = np.nanpercentile(c3_values_km2_s2, 5)
+    c3_max_auto = np.nanpercentile(c3_values_km2_s2, 95)
     c3_max_for_test = c3_min_auto + (c3_max_auto - c3_min_auto) * 0.6  # 60% of the range
-    
+
     # This should work without errors in the new implementation
     # but would have failed with "index X is out of bounds" in the old implementation
     fig = plot_porkchop_plotly(
@@ -436,11 +438,9 @@ def test_index_out_of_bounds_regression():
         title="Regression Test - Index Out of Bounds",
         c3_departure_min=c3_min_auto,
         c3_departure_max=c3_max_for_test,  # This will filter out high C3 data
-        trim_to_valid=True,      # This triggers the filtering logic
-        date_buffer_days=1.0,    # Small buffer to test buffer logic
         show_optimal=True,
     )
-    
+
     # Verify the plot was created successfully
     assert fig is not None, "Plot should be created without index errors"
     
@@ -491,21 +491,111 @@ def test_extreme_filtering_edge_case():
     )
 
     # Set very restrictive C3 limits to filter out most data
-    c3_values = results.c3_departure()
-    c3_min_auto = np.nanpercentile(c3_values, 5)
-    c3_max_auto = np.nanpercentile(c3_values, 95)
+    c3_values_au_d2 = results.c3_departure()
+    c3_values_km2_s2 = c3_values_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
+    c3_min_auto = np.nanpercentile(c3_values_km2_s2, 5)
+    c3_max_auto = np.nanpercentile(c3_values_km2_s2, 95)
     very_low_c3_max = c3_min_auto + (c3_max_auto - c3_min_auto) * 0.2  # Keep only bottom 20%
-    
+
     # This extreme filtering should still work without errors
     fig = plot_porkchop_plotly(
         results,
         title="Extreme Filtering Test",
         c3_departure_min=c3_min_auto,
         c3_departure_max=very_low_c3_max,    # Very restrictive filtering
-        trim_to_valid=True,        # Enable trimming
-        date_buffer_days=0.5,      # Small buffer
         show_optimal=False,        # Disable optimal points to avoid issues with very few points
     )
-    
+
     # Should create a plot even with extreme filtering
     assert fig is not None, "Plot should be created even with extreme filtering"
+
+
+def test_generate_porkchop_data_mismatched_inputs():
+    """
+    Test that generate_porkchop_data fails with assertion errors when
+    given coordinates with mismatched frames or mixed/mismatched origins.
+    """
+    from adam_core.coordinates import CartesianCoordinates, Origin
+
+    # Create base coordinates for testing
+    departure_times = Timestamp.from_mjd([60000, 60001], scale="tdb")
+    arrival_times = Timestamp.from_mjd([60050, 60051], scale="tdb")
+
+    # Consistent departure coordinates (ecliptic, SUN origin)
+    departure_coords = CartesianCoordinates.from_kwargs(
+        time=departure_times,
+        x=[1.0, 1.1],
+        y=[0.0, 0.1],
+        z=[0.0, 0.01],
+        vx=[0.0, 0.01],
+        vy=[0.017, 0.016],
+        vz=[0.0, 0.001],
+        frame="ecliptic",
+        origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+    )
+
+    # --- Test mismatched frames ---
+    arrival_coords_diff_frame = CartesianCoordinates.from_kwargs(
+        time=arrival_times,
+        x=[1.5, 1.6],
+        y=[0.5, 0.6],
+        z=[0.05, 0.06],
+        vx=[0.05, 0.06],
+        vy=[0.010, 0.009],
+        vz=[0.005, 0.006],
+        frame="equatorial",  # Different frame
+        origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+    )
+
+    with pytest.raises(
+        AssertionError, match="Departure and arrival frames must be the same"
+    ):
+        generate_porkchop_data(
+            departure_coordinates=departure_coords,
+            arrival_coordinates=arrival_coords_diff_frame,
+        )
+
+    # Consistent arrival coordinates for further tests
+    arrival_coords = CartesianCoordinates.from_kwargs(
+        time=arrival_times,
+        x=[1.5, 1.6],
+        y=[0.5, 0.6],
+        z=[0.05, 0.06],
+        vx=[0.05, 0.06],
+        vy=[0.010, 0.009],
+        vz=[0.005, 0.006],
+        frame="ecliptic",
+        origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+    )
+
+    # --- Test mixed departure origins ---
+    departure_coords_mixed_origin = departure_coords.set_column(
+        "origin", Origin.from_kwargs(code=["SUN", "EARTH"])
+    )
+    with pytest.raises(AssertionError):
+        generate_porkchop_data(
+            departure_coordinates=departure_coords_mixed_origin,
+            arrival_coordinates=arrival_coords,
+        )
+
+    # --- Test mixed arrival origins ---
+    arrival_coords_mixed_origin = arrival_coords.set_column(
+        "origin", Origin.from_kwargs(code=["SUN", "MARS_BARYCENTER"])
+    )
+    with pytest.raises(AssertionError):
+        generate_porkchop_data(
+            departure_coordinates=departure_coords,
+            arrival_coordinates=arrival_coords_mixed_origin,
+        )
+
+    # --- Test mismatched (but consistent) origins ---
+    arrival_coords_different_origin = arrival_coords.set_column(
+        "origin", Origin.from_kwargs(code=["MARS_BARYCENTER", "MARS_BARYCENTER"])
+    )
+    with pytest.raises(
+        AssertionError, match="Departure and arrival origins must be the same"
+    ):
+        generate_porkchop_data(
+            departure_coordinates=departure_coords,
+            arrival_coordinates=arrival_coords_different_origin,
+        )

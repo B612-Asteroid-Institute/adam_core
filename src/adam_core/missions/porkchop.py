@@ -471,6 +471,19 @@ def generate_porkchop_data(
         The porkchop data.
     """
 
+    # assert that the departure and arrival coordinates have the same frame, Origin
+    departure_frame = departure_coordinates.frame
+    arrival_frame = arrival_coordinates.frame
+
+    assert departure_frame == arrival_frame, "Departure and arrival frames must be the same"
+    assert len(departure_coordinates.origin.code.unique()) == 1
+    assert len(arrival_coordinates.origin.code.unique()) == 1
+
+    departure_origin = departure_coordinates.origin[0]
+    arrival_origin = arrival_coordinates.origin[0]
+
+    assert departure_origin == arrival_origin, "Departure and arrival origins must be the same"
+
     # First let's make sure departure and arrival coordinates are time-ordered
     departure_coordinates = departure_coordinates.sort_by(["time.days", "time.nanos"])
     arrival_coordinates = arrival_coordinates.sort_by(["time.days", "time.nanos"])
