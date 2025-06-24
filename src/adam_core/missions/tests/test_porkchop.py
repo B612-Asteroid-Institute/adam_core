@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from adam_core.coordinates.origin import OriginCodes
+from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.units import au_per_day_to_km_per_s
 from adam_core.time import Timestamp
 
@@ -599,3 +599,330 @@ def test_generate_porkchop_data_mismatched_inputs():
             departure_coordinates=departure_coords,
             arrival_coordinates=arrival_coords_different_origin,
         )
+def test_lambert_output_as_orbit():
+    """
+    Test the LambertOutput.as_orbit method for both departure and arrival modes.
+    This test verifies that the method correctly constructs Orbits objects
+    from Lambert solution data.
+    """
+    from adam_core.coordinates import CartesianCoordinates
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    # Create simple test coordinates for Lambert solution
+    departure_times = Timestamp.from_mjd([60000, 60005, 60010], scale="tdb")
+    departure_coords = CartesianCoordinates.from_kwargs(
+        time=departure_times,
+        x=[1.0, 1.1, 1.2],  # Earth-like orbit
+        y=[0.0, 0.1, 0.2],
+        z=[0.0, 0.01, 0.02],
+        vx=[0.0, 0.01, 0.02],
+        vy=[0.017, 0.016, 0.015],  # Earth orbital velocity
+        vz=[0.0, 0.001, 0.002],
+        frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
+    )
+
+    arrival_times = Timestamp.from_mjd([60050, 60055, 60060], scale="tdb")
+    arrival_coords = CartesianCoordinates.from_kwargs(
+        time=arrival_times,
+        x=[1.5, 1.6, 1.7],  # Mars-like orbit
+        y=[0.5, 0.6, 0.7],
+        z=[0.05, 0.06, 0.07],
+        vx=[0.05, 0.06, 0.07],
+        vy=[0.010, 0.009, 0.008],  # Mars orbital velocity
+        vz=[0.005, 0.006, 0.007],
+        frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Generate Lambert solutions
+    lambert_results = generate_porkchop_data(
+        departure_coordinates=departure_coords,
+        arrival_coordinates=arrival_coords,
+        propagation_origin=OriginCodes.SUN,
+    )
+
+    # Verify we have some results to test with
+    assert len(lambert_results) > 0, "Should have Lambert solutions for testing"
+
+    # Test departure orbit construction
+    departure_orbits = lambert_results.as_orbit(from_state="departure")
+    
+    # Verify the basic structure of the returned Orbits object
+    assert isinstance(departure_orbits, Orbits), "Should return an Orbits object"
+    assert len(departure_orbits) == len(lambert_results), "Should have same number of orbits as Lambert results"
+    
+    # Verify orbit IDs follow the expected pattern
+    expected_departure_ids = [f"lambert_departure_{i}" for i in range(len(lambert_results))]
+    actual_departure_ids = departure_orbits.orbit_id.to_pylist()
+    assert actual_departure_ids == expected_departure_ids, f"Expected orbit IDs {expected_departure_ids}, got {actual_departure_ids}"
+    
+    # Verify the coordinates match the departure state positions and Lambert velocities
+    departure_coords_from_orbit = departure_orbits.coordinates
+    
+    # Check positions match departure state
+    np.testing.assert_array_almost_equal(
+        departure_coords_from_orbit.x.to_numpy(zero_copy_only=False),
+        lambert_results.departure_state.x.to_numpy(zero_copy_only=False),
+        decimal=10,
+        err_msg="Departure orbit positions should match departure state positions"
+    )
+    
+    # Check velocities match Lambert solution departure velocities (vx_1, vy_1, vz_1)
+    np.testing.assert_array_almost_equal(
+        departure_coords_from_orbit.vx.to_numpy(zero_copy_only=False),
+        lambert_results.vx_1.to_numpy(zero_copy_only=False),
+        decimal=10,
+        err_msg="Departure orbit velocities should match Lambert solution v1"
+    )
+    
+    # Check time and frame match
+    assert departure_coords_from_orbit.time.equals(lambert_results.departure_state.time), "Times should match"
+    assert departure_coords_from_orbit.frame == lambert_results.departure_state.frame, "Frames should match"
+    assert departure_coords_from_orbit.origin.code.equals(lambert_results.departure_state.origin.code), "Origins should match"
+
+    # Test arrival orbit construction
+    arrival_orbits = lambert_results.as_orbit(from_state="arrival")
+    
+    # Verify the basic structure
+    assert isinstance(arrival_orbits, Orbits), "Should return an Orbits object"
+    assert len(arrival_orbits) == len(lambert_results), "Should have same number of orbits as Lambert results"
+    
+    # Verify orbit IDs follow the expected pattern
+    expected_arrival_ids = [f"lambert_arrival_{i}" for i in range(len(lambert_results))]
+    actual_arrival_ids = arrival_orbits.orbit_id.to_pylist()
+    assert actual_arrival_ids == expected_arrival_ids, f"Expected orbit IDs {expected_arrival_ids}, got {actual_arrival_ids}"
+    
+    # Verify the coordinates match the arrival state positions and Lambert velocities
+    arrival_coords_from_orbit = arrival_orbits.coordinates
+    
+    # Check positions match arrival state
+    np.testing.assert_array_almost_equal(
+        arrival_coords_from_orbit.x.to_numpy(zero_copy_only=False),
+        lambert_results.arrival_state.x.to_numpy(zero_copy_only=False),
+        decimal=10,
+        err_msg="Arrival orbit positions should match arrival state positions"
+    )
+    
+    # Check velocities match Lambert solution arrival velocities (vx_2, vy_2, vz_2)
+    np.testing.assert_array_almost_equal(
+        arrival_coords_from_orbit.vx.to_numpy(zero_copy_only=False),
+        lambert_results.vx_2.to_numpy(zero_copy_only=False),
+        decimal=10,
+        err_msg="Arrival orbit velocities should match Lambert solution v2"
+    )
+    
+    # Check time and frame match
+    assert arrival_coords_from_orbit.time.equals(lambert_results.arrival_state.time), "Times should match"
+    assert arrival_coords_from_orbit.frame == lambert_results.arrival_state.frame, "Frames should match"
+    assert arrival_coords_from_orbit.origin.code.equals(lambert_results.arrival_state.origin.code), "Origins should match"
+
+    # Test default parameter (should be "departure")
+    default_orbits = lambert_results.as_orbit()
+    assert default_orbits.orbit_id.to_pylist() == expected_departure_ids, "Default should be departure mode"
+    
+    # Test with empty Lambert results
+    empty_lambert = generate_porkchop_data(
+        departure_coordinates=departure_coords[:0],  # Empty coordinates
+        arrival_coordinates=arrival_coords[:0],
+        propagation_origin=OriginCodes.SUN,
+    )
+    
+    empty_departure_orbits = empty_lambert.as_orbit(from_state="departure")
+    assert len(empty_departure_orbits) == 0, "Empty Lambert results should produce empty orbits"
+    
+    empty_arrival_orbits = empty_lambert.as_orbit(from_state="arrival")
+    assert len(empty_arrival_orbits) == 0, "Empty Lambert results should produce empty orbits"
+
+
+def test_lambert_output_as_orbit_keplerian_consistency():
+    """
+    Test that orbits generated from departure and arrival states represent
+    the same transfer trajectory by comparing their Keplerian elements.
+    
+    This test verifies that the Lambert solution creates a consistent transfer
+    orbit regardless of whether we construct it from the departure or arrival state.
+    """
+    from adam_core.coordinates import (
+        CartesianCoordinates,
+        KeplerianCoordinates,
+        transform_coordinates,
+    )
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    # Create test coordinates with larger separations for more realistic Lambert solutions
+    departure_times = Timestamp.from_mjd([60000, 60010], scale="tdb")
+    departure_coords = CartesianCoordinates.from_kwargs(
+        time=departure_times,
+        x=[1.0, 1.05],  # Earth-like orbit variations
+        y=[0.0, 0.1], 
+        z=[0.0, 0.01],
+        vx=[0.0, 0.01],
+        vy=[0.017, 0.016],  # Earth orbital velocity ~17 km/s
+        vz=[0.0, 0.001],
+        frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
+    )
+
+    # Arrival coordinates with sufficient time separation for realistic transfers
+    arrival_times = Timestamp.from_mjd([60200, 60250], scale="tdb")  # ~200-250 days later
+    arrival_coords = CartesianCoordinates.from_kwargs(
+        time=arrival_times,
+        x=[1.52, 1.55],  # Mars-like orbit variations  
+        y=[0.5, 0.6],
+        z=[0.02, 0.03],
+        vx=[0.02, 0.03],
+        vy=[0.012, 0.011],  # Mars orbital velocity ~12 km/s
+        vz=[0.001, 0.002],
+        frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Generate Lambert solutions
+    lambert_results = generate_porkchop_data(
+        departure_coordinates=departure_coords,
+        arrival_coordinates=arrival_coords,
+        propagation_origin=OriginCodes.SUN,
+    )
+
+    # Verify we have solutions to test
+    assert len(lambert_results) > 0, "Should have Lambert solutions for Keplerian comparison"
+    
+    # Generate orbits from both departure and arrival states
+    departure_orbits = lambert_results.as_orbit(from_state="departure")
+    arrival_orbits = lambert_results.as_orbit(from_state="arrival")
+    
+    # Convert both to Keplerian coordinates
+    departure_keplerian = transform_coordinates(
+        departure_orbits.coordinates,
+        KeplerianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+    
+    arrival_keplerian = transform_coordinates(
+        arrival_orbits.coordinates, 
+        KeplerianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+    
+    # Compare orbital elements that should be identical to machine precision for the same transfer orbit
+    # Semi-major axis should be identical (tolerance: ~1.5 mm for 1 AU orbit)
+    departure_a = departure_keplerian.a.to_numpy(zero_copy_only=False)
+    arrival_a = arrival_keplerian.a.to_numpy(zero_copy_only=False)
+    
+    np.testing.assert_allclose(
+        departure_a, arrival_a, 
+        rtol=1e-14, atol=1e-16,
+        err_msg="Semi-major axis should be identical for departure and arrival orbits"
+    )
+    
+    # Eccentricity should be identical (dimensionless, expect machine precision)
+    departure_e = departure_keplerian.e.to_numpy(zero_copy_only=False)
+    arrival_e = arrival_keplerian.e.to_numpy(zero_copy_only=False)
+    
+    np.testing.assert_allclose(
+        departure_e, arrival_e,
+        rtol=1e-14, atol=1e-16,
+        err_msg="Eccentricity should be identical for departure and arrival orbits"
+    )
+    
+    # Inclination should be identical (tolerance: ~1e-12 degrees ≈ 3 microarcseconds)
+    departure_i = departure_keplerian.i.to_numpy(zero_copy_only=False)
+    arrival_i = arrival_keplerian.i.to_numpy(zero_copy_only=False)
+    
+    np.testing.assert_allclose(
+        departure_i, arrival_i,
+        rtol=1e-14, atol=1e-16,
+        err_msg="Inclination should be identical for departure and arrival orbits"
+    )
+    
+    # Longitude of ascending node should be nearly identical (normalize for 0-360 wraparound)
+    departure_raan = departure_keplerian.raan.to_numpy(zero_copy_only=False)
+    arrival_raan = arrival_keplerian.raan.to_numpy(zero_copy_only=False)
+    
+    # Convert to radians, normalize to [0, 2π], then back to degrees for comparison
+    departure_raan_rad = np.deg2rad(departure_raan)
+    arrival_raan_rad = np.deg2rad(arrival_raan)
+    departure_raan_norm = np.mod(departure_raan_rad, 2*np.pi)
+    arrival_raan_norm = np.mod(arrival_raan_rad, 2*np.pi)
+    
+    np.testing.assert_allclose(
+        departure_raan_norm, arrival_raan_norm,
+        rtol=1e-14, atol=1e-16,
+        err_msg="RAAN should be identical for departure and arrival orbits"
+    )
+    
+    # Argument of periapsis should be identical (normalize for 0-360 wraparound) 
+    departure_ap = departure_keplerian.ap.to_numpy(zero_copy_only=False)
+    arrival_ap = arrival_keplerian.ap.to_numpy(zero_copy_only=False)
+    
+    # Convert to radians, normalize to [0, 2π] for machine precision comparison
+    departure_ap_rad = np.deg2rad(departure_ap)
+    arrival_ap_rad = np.deg2rad(arrival_ap)
+    departure_ap_norm = np.mod(departure_ap_rad, 2*np.pi)
+    arrival_ap_norm = np.mod(arrival_ap_rad, 2*np.pi)
+    
+    np.testing.assert_allclose(
+        departure_ap_norm, arrival_ap_norm,
+        rtol=1e-14, atol=1e-16, 
+        err_msg="Argument of periapsis should be identical for departure and arrival orbits"
+    )
+    
+    # Mean anomaly will be different due to different times, but let's just verify
+    # that both states represent the same orbital trajectory
+    departure_M = departure_keplerian.M.to_numpy(zero_copy_only=False)
+    arrival_M = arrival_keplerian.M.to_numpy(zero_copy_only=False)
+    
+    # We don't need to check mean anomaly equality since they're at different times
+    # along the same orbit. The fact that a, e, i, raan, and ap are consistent
+    # is sufficient to verify the orbital trajectory is the same.
+    
+    print(f"Successfully verified Keplerian consistency for {len(lambert_results)} Lambert solutions")
+    print(f"  Semi-major axis range: {np.min(departure_a):.6f} - {np.max(departure_a):.6f} AU")
+    print(f"  Eccentricity range: {np.min(departure_e):.6f} - {np.max(departure_e):.6f}")
+    print(f"  Inclination range: {np.min(departure_i)*180/np.pi:.3f} - {np.max(departure_i)*180/np.pi:.3f} degrees")
+
+
+def test_lambert_output_as_orbit_invalid_state():
+    """
+    Test that as_orbit method raises appropriate error for invalid from_state parameter.
+    """
+    from adam_core.coordinates import CartesianCoordinates
+    from adam_core.time import Timestamp
+
+    # Create minimal test data
+    departure_times = Timestamp.from_mjd([60000], scale="tdb")
+    departure_coords = CartesianCoordinates.from_kwargs(
+        time=departure_times,
+        x=[1.0], y=[0.0], z=[0.0],
+        vx=[0.0], vy=[0.017], vz=[0.0],
+        frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
+    )
+
+    arrival_times = Timestamp.from_mjd([60050], scale="tdb")
+    arrival_coords = CartesianCoordinates.from_kwargs(
+        time=arrival_times,
+        x=[1.5], y=[0.5], z=[0.05],
+        vx=[0.05], vy=[0.010], vz=[0.005],
+        frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Generate Lambert solutions
+    lambert_results = generate_porkchop_data(
+        departure_coordinates=departure_coords,
+        arrival_coordinates=arrival_coords,
+        propagation_origin=OriginCodes.SUN,
+    )
+
+    # Test with invalid from_state - should raise AssertionError due to the assert statement
+    try:
+        result = lambert_results.as_orbit(from_state="invalid")
+        assert False, "Should have raised AssertionError for invalid from_state"
+    except AssertionError as e:
+        assert "from_state must be either 'departure' or 'arrival'" in str(e)

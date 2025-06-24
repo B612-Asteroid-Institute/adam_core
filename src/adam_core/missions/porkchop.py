@@ -1,7 +1,7 @@
 import logging
 import multiprocessing as mp
 import warnings
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Literal, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -257,6 +257,57 @@ class LambertOutput(qv.Table):
         return self.arrival_state.time.mjd().to_numpy(
             zero_copy_only=False
         ) - self.departure_state.time.mjd().to_numpy(zero_copy_only=False)
+    
+    def as_orbit(self, from_state: Literal["departure", "arrival"]="departure") -> Orbits:
+        """
+        Construct solution orbit from departure 
+
+        Parameters
+        ----------
+        from_state : Literal["departure", "arrival"]
+            The state to construct the orbit from.
+
+        Returns
+        -------
+        Orbits
+            The constructed orbits.
+        """
+        assert from_state in ["departure", "arrival"], "from_state must be either 'departure' or 'arrival'"
+        if from_state == "departure":
+            # Generate orbit id as "lambert_departure_X" where X is the index of the departure state
+            orbit_ids = [f"lambert_departure_{i}" for i in range(len(self.departure_state))]
+            return Orbits.from_kwargs(
+                orbit_id=orbit_ids,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    time=self.departure_state.time,
+                    x=self.departure_state.x,
+                    y=self.departure_state.y,
+                    z=self.departure_state.z,
+                    vx=self.vx_1,
+                    vy=self.vy_1,
+                    vz=self.vz_1,
+                    origin=self.departure_state.origin,
+                    frame=self.departure_state.frame,
+                ),
+            )
+        elif from_state == "arrival":
+            # Generate orbit id as "lambert_arrival_X" where X is the index of the arrival state
+            orbit_ids = [f"lambert_arrival_{i}" for i in range(len(self.arrival_state))]    
+            return Orbits.from_kwargs(
+                orbit_id=orbit_ids,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    time=self.arrival_state.time,
+                    x=self.arrival_state.x,
+                    y=self.arrival_state.y,
+                    z=self.arrival_state.z,
+                    vx=self.vx_2,
+                    vy=self.vy_2,
+                    vz=self.vz_2,
+                    origin=self.arrival_state.origin,
+                    frame=self.arrival_state.frame,
+                ),
+            )
+        
 
 
 def departure_spherical_coordinates(
