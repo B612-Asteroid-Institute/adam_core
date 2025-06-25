@@ -769,7 +769,6 @@ def test_lambert_output_as_orbit():
     ), "Default should be departure mode"
 
 
-
 def test_lambert_output_as_orbit_keplerian_consistency():
     """
     Test that orbits generated from departure and arrival states represent
