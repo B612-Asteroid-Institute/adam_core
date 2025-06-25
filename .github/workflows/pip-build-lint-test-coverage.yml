@@ -39,6 +39,7 @@ jobs:
       - name: Fix library paths on Linux
         if: runner.os == 'Linux'
         run: |
+          ls -la .venv/lib/python${{ matrix.python-version }}/site-packages
           patchelf --add-rpath "$PWD/.venv/lib/python${{ matrix.python-version }}/site-packages" .venv/lib/python${{ matrix.python-version }}/site-packages/libassist.cpython-${{ matrix.python-version }}-linux.so
       - name: Lint
         run: pdm run lint
