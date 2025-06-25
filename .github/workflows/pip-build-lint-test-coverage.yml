@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.11", "3.12"]
     defaults:
       run:
         shell: bash -l {0}
@@ -35,11 +35,11 @@ jobs:
       - name: Fix library paths on macOS
         if: runner.os == 'macOS'
         run: |
-          install_name_tool -add_rpath "$PWD/.venv/lib/python3.12/site-packages" .venv/lib/python3.12/site-packages/libassist.cpython-312-darwin.so
+          install_name_tool -add_rpath "$PWD/.venv/lib/python${{ matrix.python-version }}/site-packages" .venv/lib/python${{ matrix.python-version }}/site-packages/libassist.cpython-${{ matrix.python-version }}-darwin.so
       - name: Fix library paths on Linux
         if: runner.os == 'Linux'
         run: |
-          patchelf --add-rpath "$PWD/.venv/lib/python3.12/site-packages" .venv/lib/python3.12/site-packages/libassist.cpython-312-linux.so
+          patchelf --add-rpath "$PWD/.venv/lib/python${{ matrix.python-version }}/site-packages" .venv/lib/python${{ matrix.python-version }}/site-packages/libassist.cpython-${{ matrix.python-version }}-linux.so
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
