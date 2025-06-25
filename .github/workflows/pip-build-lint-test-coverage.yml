@@ -35,12 +35,20 @@ jobs:
       - name: Fix library paths on macOS
         if: runner.os == 'macOS'
         run: |
-          install_name_tool -add_rpath "$PWD/.venv/lib/python${{ matrix.python-version }}/site-packages" .venv/lib/python${{ matrix.python-version }}/site-packages/libassist.cpython-${{ matrix.python-version }}-darwin.so
+          # Convert python version (e.g. "3.12" -> "312")
+          PYTHON_VERSION_NO_DOT=$(echo "${{ matrix.python-version }}" | sed 's/\.//')
+          # GitHub macOS runners typically use x86_64 or arm64, but for GitHub Actions it's x86_64
+          ARCH="x86_64"
+          install_name_tool -add_rpath "$PWD/.venv/lib/python${{ matrix.python-version }}/site-packages" .venv/lib/python${{ matrix.python-version }}/site-packages/libassist.cpython-${PYTHON_VERSION_NO_DOT}-${ARCH}-darwin.so
       - name: Fix library paths on Linux
         if: runner.os == 'Linux'
         run: |
           ls -la .venv/lib/python${{ matrix.python-version }}/site-packages
-          patchelf --add-rpath "$PWD/.venv/lib/python${{ matrix.python-version }}/site-packages" .venv/lib/python${{ matrix.python-version }}/site-packages/libassist.cpython-${{ matrix.python-version }}-linux.so
+          # Convert python version (e.g. "3.12" -> "312")
+          PYTHON_VERSION_NO_DOT=$(echo "${{ matrix.python-version }}" | sed 's/\.//')
+          # GitHub runners use x86_64 architecture
+          ARCH="x86_64"
+          patchelf --add-rpath "$PWD/.venv/lib/python${{ matrix.python-version }}/site-packages" .venv/lib/python${{ matrix.python-version }}/site-packages/libassist.cpython-${PYTHON_VERSION_NO_DOT}-${ARCH}-linux-gnu.so
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
