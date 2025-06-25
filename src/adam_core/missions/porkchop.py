@@ -1,19 +1,15 @@
 import logging
 import multiprocessing as mp
 import warnings
-from typing import Any, List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import plotly.express.colors as pcolors
 import plotly.graph_objects as go
 import quivr as qv
 import ray
 from astropy.time import Time
-from matplotlib.colors import LogNorm, Normalize
 
-from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
@@ -175,7 +171,6 @@ def generate_perceptual_colorscale(
         lightness = max_lightness - (position * (max_lightness - min_lightness))
 
         # Use full saturation throughout, varying only lightness
-        saturation = 1.0  # Always full saturation
 
         if position == 0:
             # Lightest: mix with white while maintaining hue

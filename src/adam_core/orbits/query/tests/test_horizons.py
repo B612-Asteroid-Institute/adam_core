@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from adam_core.orbits.query import query_horizons
 from adam_core.time import Timestamp

@@ -3,7 +3,6 @@ Tests for unit conversion utilities.
 """
 
 import numpy as np
-import pytest
 
 from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates.units import (

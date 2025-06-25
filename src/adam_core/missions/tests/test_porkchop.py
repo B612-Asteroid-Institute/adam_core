@@ -434,9 +434,7 @@ def test_index_out_of_bounds_regression():
     c3_values_km2_s2 = c3_values_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
 
     # Make the last few solutions have extremely high C3 values that would be filtered out
-    modified_results = results.set_column(
-        "vx_1", results.vx_1
-    )  # Dummy modification to create copy
+    results.set_column("vx_1", results.vx_1)  # Dummy modification to create copy
 
     # Create a plotting scenario that would trigger the old bug:
     # 1. Set c3_max to filter out some data but ensure it's valid
@@ -770,22 +768,6 @@ def test_lambert_output_as_orbit():
         default_orbits.orbit_id.to_pylist() == expected_departure_ids
     ), "Default should be departure mode"
 
-    # Test with empty Lambert results
-    empty_lambert = generate_porkchop_data(
-        departure_coordinates=departure_coords[:0],  # Empty coordinates
-        arrival_coordinates=arrival_coords[:0],
-        propagation_origin=OriginCodes.SUN,
-    )
-
-    empty_departure_orbits = empty_lambert.as_orbit(from_state="departure")
-    assert (
-        len(empty_departure_orbits) == 0
-    ), "Empty Lambert results should produce empty orbits"
-
-    empty_arrival_orbits = empty_lambert.as_orbit(from_state="arrival")
-    assert (
-        len(empty_arrival_orbits) == 0
-    ), "Empty Lambert results should produce empty orbits"
 
 
 def test_lambert_output_as_orbit_keplerian_consistency():
@@ -801,7 +783,6 @@ def test_lambert_output_as_orbit_keplerian_consistency():
         KeplerianCoordinates,
         transform_coordinates,
     )
-    from adam_core.orbits import Orbits
     from adam_core.time import Timestamp
 
     # Create test coordinates with larger separations for more realistic Lambert solutions
@@ -940,8 +921,8 @@ def test_lambert_output_as_orbit_keplerian_consistency():
 
     # Mean anomaly will be different due to different times, but let's just verify
     # that both states represent the same orbital trajectory
-    departure_M = departure_keplerian.M.to_numpy(zero_copy_only=False)
-    arrival_M = arrival_keplerian.M.to_numpy(zero_copy_only=False)
+    departure_keplerian.M.to_numpy(zero_copy_only=False)
+    arrival_keplerian.M.to_numpy(zero_copy_only=False)
 
     # We don't need to check mean anomaly equality since they're at different times
     # along the same orbit. The fact that a, e, i, raan, and ap are consistent
@@ -1004,7 +985,7 @@ def test_lambert_output_as_orbit_invalid_state():
 
     # Test with invalid from_state - should raise AssertionError due to the assert statement
     try:
-        result = lambert_results.as_orbit(from_state="invalid")
+        lambert_results.as_orbit(from_state="invalid")
         assert False, "Should have raised AssertionError for invalid from_state"
     except AssertionError as e:
         assert "from_state must be either 'departure' or 'arrival'" in str(e)

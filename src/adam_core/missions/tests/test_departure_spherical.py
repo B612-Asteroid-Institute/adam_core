@@ -285,7 +285,7 @@ class TestDepartureSphericalCoordinates:
 
         # Should handle zero velocity gracefully (though result may be undefined)
         with pytest.warns(RuntimeWarning):  # Division by zero warning expected
-            result = departure_spherical_coordinates(
+            departure_spherical_coordinates(
                 OriginCodes.EARTH, times, "ecliptic", vx, vy, vz
             )
 
