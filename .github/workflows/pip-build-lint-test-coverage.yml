@@ -29,7 +29,17 @@ jobs:
           cache-dependency-path: ./pyproject.toml
       - name: Install Testing Dependencies
         run: |
+          pip install uv
+          pdm config use_uv true
           pdm install -G test
+      - name: Fix library paths on macOS
+        if: runner.os == 'macOS'
+        run: |
+          install_name_tool -add_rpath "$PWD/.venv/lib/python3.12/site-packages" .venv/lib/python3.12/site-packages/libassist.cpython-312-darwin.so
+      - name: Fix library paths on Linux
+        if: runner.os == 'Linux'
+        run: |
+          patchelf --add-rpath "$PWD/.venv/lib/python3.12/site-packages" .venv/lib/python3.12/site-packages/libassist.cpython-312-linux.so
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
