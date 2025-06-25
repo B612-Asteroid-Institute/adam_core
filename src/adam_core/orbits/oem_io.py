@@ -8,6 +8,7 @@ except ImportError:
     )
 
 import datetime
+import logging
 from typing import Type
 
 import numpy as np
@@ -17,13 +18,18 @@ import quivr as qv
 from adam_core.coordinates.transform import transform_coordinates
 
 from ..coordinates import CartesianCoordinates
-from ..coordinates.covariances import (
-    CoordinateCovariances,
-)
+from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin
+from ..coordinates.units import (
+    convert_cartesian_covariance_km_to_au,
+    km_per_s_to_au_per_day,
+    km_to_au,
+)
 from ..propagator import Propagator
 from ..time import Timestamp
 from . import Orbits
+
+logger = logging.getLogger(__name__)
 
 REF_FRAME_VALUES = (
     "EME2000",  # Earth Mean Equator and Equinox of J2000
@@ -297,6 +303,113 @@ def _oem_to_adam_center(center: str) -> str:
 def orbit_to_oem(
     orbits: Orbits,
     output_file: str,
+    originator: str = "ADAM CORE USER",
+) -> str:
+    """
+    Convert Orbit object to an OEM file.
+
+    This function converts the state vectors and epoch from an Orbit object into the OEM format.
+
+    Parameters
+    ----------
+    orbit : Orbit
+        The Orbit object to convert, must be pre-propagated to the desired times.
+    output_file : str
+        Path to the output OEM file
+
+    Returns
+    -------
+    str
+        Path to the output OEM file
+    """
+    # Check that we have a single object_id
+    assert (
+        len(orbits.object_id.unique()) == 1
+    ), "Only one object_id is supported for OEM conversion."
+
+    assert pc.all(
+        pc.invert(pc.is_null(orbits.object_id))
+    ).as_py(), "Orbits must specify object_id for oem metadata."
+
+    # If there is only one time, throw a warning
+    if len(orbits.coordinates.time.unique()) == 1:
+        logger.warning(
+            "WARNING: Orbit has only one time, you probably wanted to use orbit_to_oem_propagated instead."
+        )
+
+    object_id = orbits.object_id[0].as_py()
+
+    # Of the default OEM frames, we only support EME2000 (equatorial).
+    # So let's transform to that frame.
+    object_states = orbits.set_column(
+        "coordinates",
+        transform_coordinates(orbits.coordinates, frame_out="equatorial"),
+    )
+    object_states = object_states.sort_by("coordinates.time")
+
+    oem_header = {
+        "CCSDS_OEM_VERS": OEM_VERSION,
+        "CREATION_DATE": datetime.datetime.now().isoformat(),
+        "ORIGINATOR": originator,
+    }
+
+    oem_frame = _adam_to_oem_frame(object_states.coordinates.frame)
+
+    # Convert origin from ADAM Core format to OEM format
+    oem_center = _adam_to_oem_center(object_states.coordinates.origin.code[0].as_py())
+
+    segment_metadata = {
+        "OBJECT_NAME": object_id,
+        "OBJECT_ID": object_id,
+        "CENTER_NAME": oem_center,
+        "REF_FRAME": oem_frame,
+        "TIME_SYSTEM": object_states.coordinates.time.scale.upper(),
+        "START_TIME": object_states.coordinates.time.min().to_iso8601()[0].as_py(),
+        "STOP_TIME": object_states.coordinates.time.max().to_iso8601()[0].as_py(),
+    }
+    metadata_section = MetaDataSection(segment_metadata)
+
+    states = []
+    covariances = []
+    for orbit_state in object_states:
+        # Get values in km and km/s for OEM export
+        values_km = orbit_state.coordinates.values_km[0]  # Get first (and only) row
+
+        state = [
+            orbit_state.coordinates.time.to_astropy()[0],
+            *values_km,  # Already in km and km/s
+        ]
+        states.append(state)
+        if not orbit_state.coordinates.covariance[0].is_all_nan():
+            # Get covariance matrix in km units
+            matrix_km = orbit_state.coordinates.covariance_km()[0]
+            matrix_lt = matrix_km[np.tril_indices(6)].tolist()
+            covariance = [
+                orbit_state.coordinates.time.to_astropy()[0],
+                oem_frame,
+                *matrix_lt,
+            ]
+            covariances.append(covariance)
+
+    states = list(zip(*states))
+    covariances = list(zip(*covariances))
+    segment = EphemerisSegment(metadata_section, states, covariance_data=covariances)
+
+    header = HeaderSection(oem_header)
+
+    oem_file = OrbitEphemerisMessage(
+        header=header,
+        segments=[segment],
+    )
+
+    oem_file.save_as(output_file)
+
+    return output_file
+
+
+def orbit_to_oem_propagated(
+    orbits: Orbits,
+    output_file: str,
     times: Timestamp,
     propagator_klass: Type[Propagator],
     originator: str = "ADAM CORE USER",
@@ -369,14 +482,18 @@ def orbit_to_oem(
     states = []
     covariances = []
     for orbit_state in object_states:
+        # Get values in km and km/s for OEM export
+        values_km = orbit_state.coordinates.values_km[0]  # Get first (and only) row
+
         state = [
             orbit_state.coordinates.time.to_astropy()[0],
-            *orbit_state.coordinates.values[0],
+            *values_km,  # Already in km and km/s
         ]
         states.append(state)
         if not orbit_state.coordinates.covariance[0].is_all_nan():
-            matrix = orbit_state.coordinates.covariance[0].to_matrix()[0]
-            matrix_lt = matrix[np.tril_indices(6)].tolist()
+            # Get covariance matrix in km units
+            matrix_km = orbit_state.coordinates.covariance_km()[0]
+            matrix_lt = matrix_km[np.tril_indices(6)].tolist()
             covariance = [
                 orbit_state.coordinates.time.to_astropy()[0],
                 oem_frame,
@@ -407,8 +524,8 @@ def orbit_from_oem(
     Convert an OEM file to an Orbit object.
 
     This function reads an OEM file and converts the state vectors and epoch into an Orbit object.
-    The Orbit object will contain the spherical coordinates (right ascension, declination, range) and
-    their rates, along with any available covariance information.
+    Each state in the oem file is converted to an Orbit row. Covariances are only supported
+    if the covariance epoch matches the state epoch.
 
     Parameters
     ----------
@@ -432,8 +549,10 @@ def orbit_from_oem(
             frame = _oem_to_adam_frame(state.frame)
             origin = _oem_to_adam_center(state.center)
             time = Timestamp.from_astropy(state.epoch)
-            position = state.position
-            velocity = state.velocity
+
+            # Convert position and velocity from km/km-s (OEM units) to AU/AU-day (ADAM Core units)
+            position_au = km_to_au(np.array(state.position))
+            velocity_au_day = km_per_s_to_au_per_day(np.array(state.velocity))
 
             # We only join covariances that match the epoch and the frame of states
             # TODO: In the future, we should consider alternative modes where we read in entire segments
@@ -443,17 +562,21 @@ def orbit_from_oem(
                 if covariance.epoch == state.epoch:
                     if covariance.frame == state.frame:
                         # Reshape the covariance matrix to include batch dimension (N, 6, 6)
-                        cov_matrix = covariance.matrix.reshape(1, 6, 6)
-                        adam_cov = CoordinateCovariances.from_matrix(cov_matrix)
+                        cov_matrix_km = covariance.matrix.reshape(1, 6, 6)
+                        # Convert covariance from km units to AU units
+                        cov_matrix_au = convert_cartesian_covariance_km_to_au(
+                            cov_matrix_km
+                        )
+                        adam_cov = CoordinateCovariances.from_matrix(cov_matrix_au)
 
             coordinates = CartesianCoordinates.from_kwargs(
                 time=time,
-                x=[position[0]],
-                y=[position[1]],
-                z=[position[2]],
-                vx=[velocity[0]],
-                vy=[velocity[1]],
-                vz=[velocity[2]],
+                x=[position_au[0]],
+                y=[position_au[1]],
+                z=[position_au[2]],
+                vx=[velocity_au_day[0]],
+                vy=[velocity_au_day[1]],
+                vz=[velocity_au_day[2]],
                 frame=frame,
                 origin=Origin.from_kwargs(code=[origin]),
                 covariance=adam_cov,

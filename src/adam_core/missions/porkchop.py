@@ -1,22 +1,19 @@
 import logging
 import multiprocessing as mp
 import warnings
-from typing import Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import plotly.express.colors as pcolors
 import plotly.graph_objects as go
 import quivr as qv
 import ray
 from astropy.time import Time
-from matplotlib.colors import LogNorm, Normalize
-from scipy.interpolate import griddata
 
-from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
+from adam_core.coordinates.spherical import SphericalCoordinates
+from adam_core.coordinates.units import au_per_day_to_km_per_s
 from adam_core.dynamics.lambert import calculate_c3, solve_lambert
 from adam_core.orbits import Orbits
 from adam_core.propagator import Propagator
@@ -24,8 +21,188 @@ from adam_core.ray_cluster import initialize_use_ray
 from adam_core.time import Timestamp
 from adam_core.utils import get_perturber_state
 from adam_core.utils.iter import _iterate_chunk_indices
+from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_base64
 
 logger = logging.getLogger(__name__)
+
+
+def generate_saturated_colorscale(
+    base_color: str, n_levels: int = 8, max_alpha: float = 0.8, min_alpha: float = 0.1
+) -> List[List]:
+    """
+    Generate a colorscale from light to dark based on a base color with full saturation
+    and variable transparency that increases with color intensity.
+
+    Parameters
+    ----------
+    base_color : str
+        Base color name (e.g., 'red', 'blue') or hex code (e.g., '#FF0000')
+    n_levels : int, optional
+        Number of levels in the colorscale (default: 8)
+    max_alpha : float, optional
+        Maximum alpha (opacity) for darkest colors (default: 0.8)
+    min_alpha : float, optional
+        Minimum alpha (opacity) for lightest colors (default: 0.1)
+
+    Returns
+    -------
+    List[List]
+        Plotly colorscale format with RGBA: [[position, color], ...]
+    """
+    # Color mapping for common base colors to RGB with full saturation
+    color_map = {
+        "red": (255, 0, 0),  # Pure red, full saturation
+        "blue": (0, 0, 255),  # Pure blue, full saturation
+        "green": (0, 255, 0),  # Pure green, full saturation
+        "orange": (255, 165, 0),  # Pure orange, full saturation
+        "purple": (128, 0, 128),  # Pure purple, full saturation
+        "yellow": (255, 255, 0),  # Pure yellow, full saturation
+        "cyan": (0, 255, 255),  # Pure cyan, full saturation
+        "magenta": (255, 0, 255),  # Pure magenta, full saturation
+    }
+
+    # Parse base color
+    if base_color.startswith("#"):
+        # Hex color
+        hex_color = base_color.lstrip("#")
+        base_rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    elif base_color.lower() in color_map:
+        base_rgb = color_map[base_color.lower()]
+    else:
+        # Default to pure red if unknown
+        base_rgb = (255, 0, 0)
+
+    colorscale = []
+    for i in range(n_levels):
+        position = i / (n_levels - 1)
+
+        # Create lightness variation while maintaining full saturation
+        # Lighter colors: mix with white but preserve hue
+        # Darker colors: reduce brightness but keep saturation
+        if position == 0:
+            # Lightest: mix with white for pastel effect
+            lightness_factor = 0.9  # Very light
+            r = int(base_rgb[0] * lightness_factor + 255 * (1 - lightness_factor))
+            g = int(base_rgb[1] * lightness_factor + 255 * (1 - lightness_factor))
+            b = int(base_rgb[2] * lightness_factor + 255 * (1 - lightness_factor))
+        else:
+            # Use power curve for smooth transition
+            intensity = np.power(position, 0.8)
+
+            # Maintain saturation by scaling from full saturation down
+            r = int(base_rgb[0] * (0.3 + 0.7 * intensity))
+            g = int(base_rgb[1] * (0.3 + 0.7 * intensity))
+            b = int(base_rgb[2] * (0.3 + 0.7 * intensity))
+
+        # Ensure values are within valid RGB range
+        r = max(0, min(255, r))
+        g = max(0, min(255, g))
+        b = max(0, min(255, b))
+
+        # Calculate alpha based on position (lighter = more transparent)
+        alpha = min_alpha + (max_alpha - min_alpha) * position
+
+        colorscale.append([position, f"rgba({r}, {g}, {b}, {alpha:.2f})"])
+
+    return colorscale
+
+
+def generate_perceptual_colorscale(
+    base_color: str,
+    n_levels: int = 8,
+    min_lightness: float = 0.3,
+    max_lightness: float = 0.9,
+    max_alpha: float = 0.8,
+    min_alpha: float = 0.1,
+) -> List[List]:
+    """
+    Generate a perceptually uniform colorscale with full saturation and variable transparency
+    that works better for overlaying contours.
+
+    Parameters
+    ----------
+    base_color : str
+        Base color name (e.g., 'red', 'blue') or hex code (e.g., '#FF0000')
+    n_levels : int, optional
+        Number of levels in the colorscale (default: 8)
+    min_lightness : float, optional
+        Minimum lightness value (0-1, default: 0.3 for good contrast)
+    max_lightness : float, optional
+        Maximum lightness value (0-1, default: 0.9 for visibility with transparency)
+    max_alpha : float, optional
+        Maximum alpha (opacity) for darkest colors (default: 0.8)
+    min_alpha : float, optional
+        Minimum alpha (opacity) for lightest colors (default: 0.1)
+
+    Returns
+    -------
+    List[List]
+        Plotly colorscale format with RGBA: [[position, color], ...]
+    """
+    # Full saturation color mapping for maximum color purity
+    color_map = {
+        "red": (255, 0, 0),  # Pure red
+        "blue": (0, 0, 255),  # Pure blue
+        "green": (0, 255, 0),  # Pure green
+        "orange": (255, 165, 0),  # Pure orange
+        "purple": (128, 0, 128),  # Pure purple
+        "yellow": (255, 255, 0),  # Pure yellow
+        "cyan": (0, 255, 255),  # Pure cyan
+        "magenta": (255, 0, 255),  # Pure magenta
+    }
+
+    # Parse base color
+    if base_color.startswith("#"):
+        hex_color = base_color.lstrip("#")
+        base_rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    elif base_color.lower() in color_map:
+        base_rgb = color_map[base_color.lower()]
+    else:
+        base_rgb = (255, 0, 0)  # Default pure red
+
+    # Convert base color to normalized RGB for calculations
+    base_r, base_g, base_b = [x / 255.0 for x in base_rgb]
+
+    colorscale = []
+    for i in range(n_levels):
+        position = i / (n_levels - 1)
+
+        # Create perceptually uniform lightness steps
+        lightness = max_lightness - (position * (max_lightness - min_lightness))
+
+        # Use full saturation throughout, varying only lightness
+
+        if position == 0:
+            # Lightest: mix with white while maintaining hue
+            white_mix = 1 - lightness
+            r = base_r * lightness + white_mix
+            g = base_g * lightness + white_mix
+            b = base_b * lightness + white_mix
+        else:
+            # Scale the base color by lightness while maintaining saturation
+            # Use HSV-like scaling to preserve hue and saturation
+            max_component = max(base_r, base_g, base_b)
+
+            if max_component > 0:
+                # Scale all components proportionally to achieve desired lightness
+                scale_factor = lightness / max_component
+                r = base_r * scale_factor
+                g = base_g * scale_factor
+                b = base_b * scale_factor
+            else:
+                r = g = b = lightness
+
+        # Convert back to 0-255 range and ensure validity
+        r_int = max(0, min(255, int(r * 255)))
+        g_int = max(0, min(255, int(g * 255)))
+        b_int = max(0, min(255, int(b * 255)))
+
+        # Calculate alpha based on position (lighter = more transparent)
+        alpha = min_alpha + (max_alpha - min_alpha) * position
+
+        colorscale.append([position, f"rgba({r_int}, {g_int}, {b_int}, {alpha:.2f})"])
+
+    return colorscale
 
 
 class LambertOutput(qv.Table):
@@ -39,7 +216,7 @@ class LambertOutput(qv.Table):
     vz_2 = qv.Float64Column()
     origin = Origin.as_column()
 
-    def c3(self) -> npt.NDArray[np.float64]:
+    def c3_departure(self) -> npt.NDArray[np.float64]:
         """
         Return the C3 in au^2/d^2.
         """
@@ -48,11 +225,34 @@ class LambertOutput(qv.Table):
             self.departure_state.v,
         )
 
-    def vinf(self) -> npt.NDArray[np.float64]:
+    def c3_arrival(self) -> npt.NDArray[np.float64]:
+        """
+        Return the C3 in au^2/d^2.
+        """
+        return calculate_c3(
+            np.array(self.table.select(["vx_2", "vy_2", "vz_2"])),
+            self.arrival_state.v,
+        )
+
+    def vinf_departure(self) -> npt.NDArray[np.float64]:
         """
         Return the v infinity in au/d.
         """
-        return np.linalg.norm(self.vx_2 - self.departure_state.v, axis=1)
+        return np.linalg.norm(
+            np.array(self.table.select(["vx_1", "vy_1", "vz_1"]))
+            - self.departure_state.v,
+            axis=1,
+        )
+
+    def vinf_arrival(self) -> npt.NDArray[np.float64]:
+        """
+        Return the v infinity in au/d.
+        """
+        return np.linalg.norm(
+            np.array(self.table.select(["vx_2", "vy_2", "vz_2"]))
+            - self.arrival_state.v,
+            axis=1,
+        )
 
     def time_of_flight(self) -> npt.NDArray[np.float64]:
         """
@@ -61,6 +261,133 @@ class LambertOutput(qv.Table):
         return self.arrival_state.time.mjd().to_numpy(
             zero_copy_only=False
         ) - self.departure_state.time.mjd().to_numpy(zero_copy_only=False)
+
+    def as_orbit(
+        self, from_state: Literal["departure", "arrival"] = "departure"
+    ) -> Orbits:
+        """
+        Construct solution orbit from departure
+
+        Parameters
+        ----------
+        from_state : Literal["departure", "arrival"]
+            The state to construct the orbit from.
+
+        Returns
+        -------
+        Orbits
+            The constructed orbits.
+        """
+        assert from_state in [
+            "departure",
+            "arrival",
+        ], "from_state must be either 'departure' or 'arrival'"
+        if from_state == "departure":
+            # Generate orbit id as "lambert_departure_X" where X is the index of the departure state
+            orbit_ids = [
+                f"lambert_departure_{i}" for i in range(len(self.departure_state))
+            ]
+            return Orbits.from_kwargs(
+                orbit_id=orbit_ids,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    time=self.departure_state.time,
+                    x=self.departure_state.x,
+                    y=self.departure_state.y,
+                    z=self.departure_state.z,
+                    vx=self.vx_1,
+                    vy=self.vy_1,
+                    vz=self.vz_1,
+                    origin=self.departure_state.origin,
+                    frame=self.departure_state.frame,
+                ),
+            )
+        elif from_state == "arrival":
+            # Generate orbit id as "lambert_arrival_X" where X is the index of the arrival state
+            orbit_ids = [f"lambert_arrival_{i}" for i in range(len(self.arrival_state))]
+            return Orbits.from_kwargs(
+                orbit_id=orbit_ids,
+                coordinates=CartesianCoordinates.from_kwargs(
+                    time=self.arrival_state.time,
+                    x=self.arrival_state.x,
+                    y=self.arrival_state.y,
+                    z=self.arrival_state.z,
+                    vx=self.vx_2,
+                    vy=self.vy_2,
+                    vz=self.vz_2,
+                    origin=self.arrival_state.origin,
+                    frame=self.arrival_state.frame,
+                ),
+            )
+
+
+def departure_spherical_coordinates(
+    departure_origin: OriginCodes,
+    times: Timestamp,
+    frame: str,
+    vx: npt.NDArray[np.float64],
+    vy: npt.NDArray[np.float64],
+    vz: npt.NDArray[np.float64],
+) -> SphericalCoordinates:
+    """
+    Return the spherical coordinates of the departure vector.
+
+    Parameters
+    ----------
+    departure_origin : OriginCodes
+        The origin of the departure and also the frame of the departure vectors.
+    times : Timestamp
+        The times of the departure vectors.
+    frame : str
+        The frame of the departure vectors.
+    vx : npt.NDArray[np.float64]
+        The x-component of the departure vectors.
+    vy : npt.NDArray[np.float64]
+        The y-component of the departure vectors.
+    vz : npt.NDArray[np.float64]
+        The z-component of the departure vectors.
+
+    Returns
+    -------
+    SphericalCoordinates
+        The spherical coordinates of the departure unit vectors.
+        Can be used to express ra / dec of the departure direction.
+    """
+    assert (
+        len(vx) == len(vy) == len(vz) == len(times)
+    ), "All arrays must have the same length"
+    assert len(vx) > 0, "At least one departure vector is required"
+
+    # Create unit direction vectors from the velocity vectors
+    # Normalize the velocity vectors to get direction only
+    velocity_magnitude = np.sqrt(vx**2 + vy**2 + vz**2)
+    direction_x = vx / velocity_magnitude
+    direction_y = vy / velocity_magnitude
+    direction_z = vz / velocity_magnitude
+
+    # Create CartesianCoordinates with the direction as position (on unit sphere)
+    # and zero velocity since we only care about the direction
+    direction_coords = CartesianCoordinates.from_kwargs(
+        time=times,
+        x=direction_x,  # Unit vector pointing in velocity direction
+        y=direction_y,
+        z=direction_z,
+        vx=np.zeros_like(vx),  # No velocity needed for direction
+        vy=np.zeros_like(vy),
+        vz=np.zeros_like(vz),
+        # From our departing origin.
+        origin=Origin.from_OriginCodes(departure_origin, size=len(vx)),
+        frame=frame,
+    )
+
+    # Transform direction to equatorial frame for proper RA/Dec coordinates
+    # These are inertial celestial coordinates, suitable for any departure origin
+    spherical = transform_coordinates(
+        direction_coords,
+        SphericalCoordinates,
+        frame_out="equatorial",
+        origin_out=departure_origin,
+    )
+    return spherical
 
 
 def lambert_worker(
@@ -97,17 +424,82 @@ def lambert_worker(
 lambert_worker_remote = ray.remote(lambert_worker)
 
 
-def generate_porkchop_data(
-    departure_body: Union[Orbits, OriginCodes],
-    arrival_body: Union[Orbits, OriginCodes],
-    earliest_launch_time: Timestamp,
-    maximum_arrival_time: Timestamp,
+def prepare_and_propagate_orbits(
+    body: Union[Orbits, OriginCodes],
+    start_time: Timestamp,
+    end_time: Timestamp,
     propagation_origin: OriginCodes = OriginCodes.SUN,
     step_size: float = 1.0,
+    propagator_class: Optional[type[Propagator]] = None,
+    max_processes: Optional[int] = 1,
+) -> CartesianCoordinates:
+    """
+    Prepare and propagate orbits for a single body over a specified time range.
+
+    Parameters
+    ----------
+    body : Union[Orbits, OriginCodes]
+        The body to propagate (either an Orbits object or an OriginCode for a major body).
+    start_time : Timestamp
+        The start time for propagation.
+    end_time : Timestamp
+        The end time for propagation.
+    propagation_origin : OriginCodes, optional
+        The origin of the propagation (default: SUN).
+    step_size : float, optional
+        The step size in days (default: 1.0).
+    propagator_class : Optional[type[Propagator]], optional
+        The propagator class to use for orbit propagation.
+    max_processes : Optional[int], optional
+        The maximum number of processes to use.
+
+    Returns
+    -------
+    CartesianCoordinates
+        The propagated coordinates over the specified time range.
+    """
+    # if body is an Orbit, ensure its origin is the propagation_origin
+    if isinstance(body, Orbits):
+        body = body.set_column(
+            "coordinates",
+            transform_coordinates(
+                body.coordinates,
+                representation_out=CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=propagation_origin,
+            ),
+        )
+
+    times = Timestamp.from_mjd(
+        np.arange(
+            start_time.rescale("tdb").mjd()[0].as_py(),
+            end_time.rescale("tdb").mjd()[0].as_py(),
+            step_size,
+        ),
+        scale="tdb",
+    )
+
+    # get coordinates for the body at specified times
+    if isinstance(body, Orbits):
+        propagator = propagator_class()
+        coordinates = propagator.propagate_orbits(
+            body, times, max_processes=max_processes
+        ).coordinates
+    else:
+        coordinates = get_perturber_state(
+            body, times, frame="ecliptic", origin=propagation_origin
+        )
+
+    return coordinates
+
+
+def generate_porkchop_data(
+    departure_coordinates: CartesianCoordinates,
+    arrival_coordinates: CartesianCoordinates,
+    propagation_origin: OriginCodes = OriginCodes.SUN,
     prograde: bool = True,
     max_iter: int = 35,
     tol: float = 1e-10,
-    propagator_class: Optional[type[Propagator]] = None,
     max_processes: Optional[int] = 1,
 ) -> LambertOutput:
     """
@@ -116,28 +508,23 @@ def generate_porkchop_data(
 
     Parameters
     ----------
-    departure_body : Union[Orbits, OriginCodes]
-        The departure body.
-    arrival_body : Union[Orbits, OriginCodes]
-        The arrival body.
-    earliest_launch_time : Timestamp
-        The earliest launch time.
-    maximum_arrival_time : Timestamp
-        The maximum arrival time.
-    propagation_origin : OriginCodes, optional
+    departure_coordinates : CartesianCoordinates
+        The departure coordinates.
+    arrival_coordinates : CartesianCoordinates
+        The arrival coordinates.
+    propagation_origin : OriginCodes
         The origin of the propagation.
-    step_size : float, optional
-        The step size for the porkchop plot.
     prograde : bool, optional
         If True, assume prograde motion. If False, assume retrograde motion.
     max_iter : int, optional
         The maximum number of iterations for Lambert's solver.
     tol : float, optional
         The numerical tolerance for Lambert's solver.
-    propagator_class : Optional[type[Propagator]], optional
-        The propagator class to use.
     max_processes : Optional[int], optional
         The maximum number of processes to use.
+    max_processes : Optional[int], optional
+        The maximum number of processes to use.
+
 
     Returns
     -------
@@ -145,81 +532,51 @@ def generate_porkchop_data(
         The porkchop data.
     """
 
-    # if departure_body is an Orbit, ensure its origin is the propagation_origin
-    if isinstance(departure_body, Orbits):
-        departure_body = departure_body.set_column(
-            "coordinates",
-            transform_coordinates(
-                departure_body.coordinates,
-                representation_out=CartesianCoordinates,
-                frame_out="ecliptic",
-                origin_out=propagation_origin,
-            ),
-        )
+    # assert that the departure and arrival coordinates have the same frame, Origin
+    departure_frame = departure_coordinates.frame
+    arrival_frame = arrival_coordinates.frame
 
-    # if arrival_body is an Orbit, ensure its origin is the propagation_origin
-    if isinstance(arrival_body, Orbits):
-        arrival_body = arrival_body.set_column(
-            "coordinates",
-            transform_coordinates(
-                arrival_body.coordinates,
-                representation_out=CartesianCoordinates,
-                frame_out="ecliptic",
-                origin_out=propagation_origin,
-            ),
-        )
-    # create empty CartesianCoordinates
-    departure_coordinates = CartesianCoordinates.empty(
-        frame="ecliptic",
-    )
-    arrival_coordinates = CartesianCoordinates.empty(
-        frame="ecliptic",
-    )
+    assert (
+        departure_frame == arrival_frame
+    ), "Departure and arrival frames must be the same"
+    assert len(departure_coordinates.origin.code.unique()) == 1
+    assert len(arrival_coordinates.origin.code.unique()) == 1
 
-    times = Timestamp.from_mjd(
-        np.arange(
-            earliest_launch_time.rescale("tdb").mjd()[0].as_py(),
-            maximum_arrival_time.rescale("tdb").mjd()[0].as_py(),
-            step_size,
-        ),
-        scale="tdb",
-    )
+    departure_origin = departure_coordinates.origin[0]
+    arrival_origin = arrival_coordinates.origin[0]
 
-    # get r1 (departure body) for times
-    if isinstance(departure_body, Orbits):
-        propagator = propagator_class()
-        departure_coordinates = propagator.propagate_orbits(
-            departure_body, times, max_processes=max_processes
-        ).coordinates
-    else:
-        departure_coordinates = get_perturber_state(
-            departure_body, times, frame="ecliptic", origin=propagation_origin
-        )
+    assert (
+        departure_origin == arrival_origin
+    ), "Departure and arrival origins must be the same"
 
-    # get r2 (arrival body) for times
-    if isinstance(arrival_body, Orbits):
-        propagator = propagator_class()
-        arrival_coordinates = propagator.propagate_orbits(
-            arrival_body, times, max_processes=max_processes
-        ).coordinates
-    else:
-        arrival_coordinates = get_perturber_state(
-            arrival_body, times, frame="ecliptic", origin=propagation_origin
-        )
-    x, y = np.meshgrid(
+    # First let's make sure departure and arrival coordinates are time-ordered
+    departure_coordinates = departure_coordinates.sort_by(["time.days", "time.nanos"])
+    arrival_coordinates = arrival_coordinates.sort_by(["time.days", "time.nanos"])
+
+    # Get the actual times for comparison
+    dep_times_mjd = departure_coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    arr_times_mjd = arrival_coordinates.time.mjd().to_numpy(zero_copy_only=False)
+
+    # Create meshgrids of indices and times
+    dep_indices, arr_indices = np.meshgrid(
         np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
     )
+    dep_time_grid, arr_time_grid = np.meshgrid(dep_times_mjd, arr_times_mjd)
 
     # Filter to ensure departure time is before arrival time
-    # and create a mask for valid time combinations
-    valid_indices = y > x  # arrival index must be greater than departure index
+    # Use actual time comparison instead of index comparison
+    valid_indices = arr_time_grid > dep_time_grid
 
     # Apply the mask to flatten only valid combinations
-    x = x[valid_indices].flatten()
-    y = y[valid_indices].flatten()
+    dep_indices_flat = dep_indices[valid_indices].flatten()
+    arr_indices_flat = arr_indices[valid_indices].flatten()
 
-    stacked_departure_coordinates = departure_coordinates.take(x)
-    stacked_arrival_coordinates = arrival_coordinates.take(y)
+    stacked_departure_coordinates = departure_coordinates.take(dep_indices_flat)
+    stacked_arrival_coordinates = arrival_coordinates.take(arr_indices_flat)
+
+    # If no valid combinations exist, return empty results
+    if len(stacked_departure_coordinates) == 0:
+        return LambertOutput.empty()
 
     if max_processes is None:
         max_processes = mp.cpu_count()
@@ -266,278 +623,25 @@ def generate_porkchop_data(
     return lambert_results
 
 
-def plot_porkchop(
-    porkchop_data: LambertOutput,
-    figsize: Tuple[int, int] = (12, 10),
-    c3_levels: Optional[list] = None,
-    cmap: str = "Wistia",
-    tof_levels: Optional[list] = None,
-    xlim: Optional[Tuple[float, float]] = None,
-    ylim: Optional[Tuple[float, float]] = None,
-    title: str = "Porkchop Plot",
-    show_optimal: bool = True,
-    log_scale: bool = True,
-):
-    """
-    Plot the porkchop plot from Lambert trajectory data.
-
-    Parameters
-    ----------
-    porkchop_data : LambertOutput
-        The output from generate_porkchop_data containing Lambert trajectory solutions.
-    figsize : Tuple[int, int], optional
-        Figure size (width, height) in inches. Default is (12, 10).
-    c3_levels : list, optional
-        List of C3 values for contour levels. If None, default levels will be used.
-    cmap : str, optional
-        Matplotlib colormap name for the filled contours. Default is 'Wistia'.
-    tof_levels : list, optional
-        List of time of flight values for contour levels. If None, dynamic levels will be used.
-    xlim : Tuple[float, float], optional
-        x-axis limits (min, max) in MJD. If None, will use data range.
-    ylim : Tuple[float, float], optional
-        y-axis limits (min, max) in MJD. If None, will use data range.
-    title : str, optional
-        Plot title. Default is 'Porkchop Plot'.
-    show_optimal : bool, optional
-        If True, marks the optimal (minimum C3) point on the plot. Default is True.
-    log_scale : bool, optional
-        If True, uses logarithmic scale for C3 contours. Default is True.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        The matplotlib figure object.
-    ax : matplotlib.axes.Axes
-        The matplotlib axes object.
-    """
-    from astropy.time import Time
-
-    # Extract data from LambertOutput
-    c3_values = porkchop_data.c3()
-    time_of_flight = porkchop_data.time_of_flight()
-    departure_times = porkchop_data.departure_state.time.mjd().to_numpy(
-        zero_copy_only=False
-    )
-    arrival_times = porkchop_data.arrival_state.time.mjd().to_numpy(
-        zero_copy_only=False
-    )
-
-    # Convert C3 from (AU/day)^2 to km^2/s^2
-    c3_values_km2_s2 = c3_values * (0.02004**2 * 86400**2)
-
-    # Create figure and prepare grid
-    fig, ax = plt.subplots(figsize=figsize)
-    unique_departure_times = np.sort(np.unique(departure_times))
-    unique_arrival_times = np.sort(np.unique(arrival_times))
-    grid_departure, grid_arrival = np.meshgrid(
-        unique_departure_times, unique_arrival_times
-    )
-
-    # Interpolate C3 values onto the regular grid
-    grid_c3 = griddata(
-        (departure_times, arrival_times),
-        c3_values_km2_s2,
-        (grid_departure, grid_arrival),
-        method="cubic",
-        fill_value=np.nan,
-    )
-
-    # Define default contour levels for C3 if not provided
-    if c3_levels is None:
-        c3_levels = np.linspace(8.0, 100.0, 11)  # 11 levels from 8 to 100
-
-    # Create contour plot
-    contour = ax.contour(
-        grid_departure,
-        grid_arrival,
-        grid_c3,
-        levels=c3_levels,
-        colors="black",
-        linewidths=1,
-    )
-    ax.clabel(contour, inline=True, fontsize=10, fmt="%d")
-
-    # Create filled contour plot with appropriate color scale
-    norm = (
-        LogNorm(vmin=min(c3_levels), vmax=max(c3_levels))
-        if log_scale
-        else Normalize(vmin=min(c3_levels), vmax=max(c3_levels))
-    )
-    contourf = ax.contourf(
-        grid_departure, grid_arrival, grid_c3, levels=c3_levels, cmap=cmap, norm=norm
-    )
-
-    # Add colorbar
-    cbar = plt.colorbar(contourf, ax=ax)
-    cbar.set_label("C3 (km²/s²)", fontsize=12)
-
-    # Mark the optimal point if requested
-    if show_optimal:
-        min_idx = np.nanargmin(c3_values_km2_s2)
-        best_departure = departure_times[min_idx]
-        best_arrival = arrival_times[min_idx]
-        best_tof = time_of_flight[min_idx]
-        ax.scatter(
-            best_departure,
-            best_arrival,
-            color="red",
-            s=100,
-            marker="*",
-            label=f"Optimal: C3={c3_values_km2_s2[min_idx]:.1f} km²/s², ToF={best_tof:.1f} days",
-        )
-
-    # Add time of flight contours
-    tof_grid = grid_arrival - grid_departure
-
-    if tof_levels is None:
-        # Get optimal TOF and round to a nice number
-        min_idx = np.nanargmin(c3_values_km2_s2)
-        optimal_tof = time_of_flight[min_idx]
-        optimal_tof_rounded = (
-            round(optimal_tof / 5) * 5
-            if optimal_tof < 100
-            else round(optimal_tof / 10) * 10
-        )
-
-        # Set TOF range and create levels centered around optimal
-        min_tof = max(0, np.nanmin(tof_grid))
-        max_tof = np.nanmax(tof_grid)
-        num_levels = 9  # Odd number to have optimal in the middle
-        step_size = max(5, round((max_tof - min_tof) / num_levels / 5) * 5)
-
-        # Create levels below and above optimal
-        half_levels = (num_levels - 1) // 2
-        lower_bound = max(min_tof, optimal_tof_rounded - half_levels * step_size)
-        upper_bound = min(max_tof, optimal_tof_rounded + (half_levels + 1) * step_size)
-
-        lower_levels = np.arange(lower_bound, optimal_tof_rounded, step_size)
-        upper_levels = np.arange(optimal_tof_rounded, upper_bound, step_size)
-        tof_levels = np.concatenate([lower_levels, upper_levels])
-        tof_levels = tof_levels[tof_levels > 0]
-
-    # Draw TOF contours
-    tof_contour = ax.contour(
-        grid_departure,
-        grid_arrival,
-        tof_grid,
-        levels=tof_levels,
-        colors="red",
-        linestyles="dashed",
-        linewidths=1,
-    )
-
-    # Improve TOF contour labels visibility
-    ax.clabel(
-        tof_contour,
-        inline=True,
-        fontsize=10,
-        fmt="%d days",
-        inline_spacing=10,  # More space around labels
-        use_clabeltext=True,  # Enable manual positioning if needed
-        colors="red",  # Match contour color
-    )
-
-    # Set axis limits based on valid C3 values if not explicitly provided
-    if xlim is None or ylim is None:
-        max_c3 = max(c3_levels)
-        valid_mask = (~np.isnan(grid_c3)) & (grid_c3 <= max_c3)
-
-        if np.any(valid_mask):
-            valid_cols_mask = np.any(valid_mask, axis=0)
-            valid_rows_mask = np.any(valid_mask, axis=1)
-
-            if np.any(valid_cols_mask) and np.any(valid_rows_mask):
-                valid_col_indices = np.where(valid_cols_mask)[0]
-                valid_row_indices = np.where(valid_rows_mask)[0]
-
-                col_padding = max(2, int(0.05 * len(valid_col_indices)))
-                row_padding = max(2, int(0.05 * len(valid_row_indices)))
-
-                max_col = min(
-                    len(unique_departure_times) - 1, valid_col_indices[-1] + col_padding
-                )
-                min_row = max(0, valid_row_indices[0] - row_padding)
-
-                if xlim is None:
-                    xlim = (min(departure_times), unique_departure_times[max_col])
-                if ylim is None:
-                    ylim = (unique_arrival_times[min_row], max(arrival_times))
-
-    # Apply the limits
-    if xlim is None:
-        xlim = (min(departure_times), max(departure_times))
-    if ylim is None:
-        ylim = (min(arrival_times), max(arrival_times))
-
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-
-    # Add labels and title
-    ax.set_xlabel("Departure Date", fontsize=12)
-    ax.set_ylabel("Arrival Date", fontsize=12)
-    ax.set_title(title, fontsize=14)
-
-    # Get current ticks
-    xticks = ax.get_xticks()
-    yticks = ax.get_yticks()
-
-    # Filter out any dates that might cause ERFA warnings (typically far future/past dates)
-    # Only keep ticks within our data range plus a small margin
-    x_min, x_max = ax.get_xlim()
-    y_min, y_max = ax.get_ylim()
-    margin = 10  # 10 day margin
-
-    xticks = xticks[(xticks >= x_min - margin) & (xticks <= x_max + margin)]
-    yticks = yticks[(yticks >= y_min - margin) & (yticks <= y_max + margin)]
-
-    # Explicitly set the ticks before setting labels
-    ax.set_xticks(xticks)
-    ax.set_yticks(yticks)
-
-    # Suppress ERFA warnings when converting dates
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=Warning)
-        xtick_labels = Time(xticks, format="mjd").iso
-        ytick_labels = Time(yticks, format="mjd").iso
-
-    # Simplify date format to just show YYYY-MM-DD
-    xtick_labels = [label.split(" ")[0] for label in xtick_labels]
-    ytick_labels = [label.split(" ")[0] for label in ytick_labels]
-
-    # Set the tick labels
-    ax.set_xticklabels(xtick_labels, rotation=45, ha="right")
-    ax.set_yticklabels(ytick_labels)
-
-    if show_optimal:
-        ax.legend(loc="upper left")
-
-    plt.tight_layout()
-    return fig, ax
-
-
 def plot_porkchop_plotly(
     porkchop_data: LambertOutput,
     width: int = 900,
     height: int = 700,
-    c3_min: Optional[float] = None,
-    c3_max: Optional[float] = None,
-    c3_step: Optional[float] = None,
-    vinf_min: Optional[float] = None,
-    vinf_max: Optional[float] = None,
-    vinf_step: Optional[float] = None,
+    c3_departure_min: Optional[float] = None,
+    c3_departure_max: Optional[float] = None,
+    vinf_arrival_min: Optional[float] = None,
+    vinf_arrival_max: Optional[float] = None,
     tof_min: Optional[float] = None,
     tof_max: Optional[float] = None,
-    tof_step: Optional[float] = None,
-    metric_colorscale: str = "Viridis",
+    c3_base_colorscale: str = "Reds",
+    vinf_base_colorscale: str = "Blues",
     tof_line_color: str = "black",
     xlim_mjd: Optional[Tuple[float, float]] = None,
     ylim_mjd: Optional[Tuple[float, float]] = None,
     title: str = "Porkchop Plot",
     show_optimal: bool = True,
-    optimal_hover: bool = True,
-    trim_to_valid: bool = True,
-    date_buffer_days: float = 3.0,
+    show_hover: bool = False,
+    logo: bool = True,
 ):
     """
     Plot the porkchop plot from Lambert trajectory data using Plotly.
@@ -545,47 +649,41 @@ def plot_porkchop_plotly(
     Parameters
     ----------
     porkchop_data : LambertOutput
-        The output from generate_porkchop_data.
+        The porkchop data.
     width : int, optional
-        Figure width in pixels.
+        The width of the plot.
     height : int, optional
-        Figure height in pixels.
-    c3_min : float, optional
-        Minimum C3 value (km^2/s^2) for contour levels.
-    c3_max : float, optional
-        Maximum C3 value (km^2/s^2) for contour levels.
-    c3_step : float, optional
-        Step size for C3 contour levels.
-    vinf_min : float, optional
-        Minimum Vinf value (km/s) for hover display.
-    vinf_max : float, optional
-        Maximum Vinf value (km/s) for hover display.
-    vinf_step : float, optional
-        Step size for Vinf hover display.
+        The height of the plot.
+    c3_departure_min : float, optional
+        The minimum C3 departure value.
+    c3_departure_max : float, optional
+        The maximum C3 departure value.
+    vinf_arrival_min : float, optional
+        The minimum V∞ arrival value.
+    vinf_arrival_max : float, optional
+        The maximum V∞ arrival value.
     tof_min : float, optional
-        Minimum ToF value (days) for contour levels.
+        The minimum time of flight value.
     tof_max : float, optional
-        Maximum ToF value (days) for contour levels.
-    tof_step : float, optional
-        Step size for ToF contour levels.
-    metric_colorscale : str, optional
-        Plotly colorscale name for the C3 filled contours.
+        The maximum time of flight value.
+    c3_base_colorscale : str, optional
+        The base colorscale for C3.
+    vinf_base_colorscale : str, optional
+        The base colorscale for V∞.
     tof_line_color : str, optional
-        Color for the ToF contour lines.
-    xlim_mjd : Tuple[float, float], optional
-        x-axis limits (min_mjd, max_mjd).
-    ylim_mjd : Tuple[float, float], optional
-        y-axis limits (min_mjd, max_mjd).
+        The color of the time of flight line.
+    xlim_mjd : tuple, optional
+        The x-axis limits in MJD.
+    ylim_mjd : tuple, optional
+        The y-axis limits in MJD.
     title : str, optional
-        Plot title.
+        The title of the plot.
     show_optimal : bool, optional
-        If True, marks the optimal point on the plot.
-    optimal_hover : bool, optional
-        If True, enables hover information for the optimal point.
-    trim_to_valid : bool, optional
-        If True, trims the plot to only include valid data.
-    date_buffer_days : float, optional
-        Number of days to add as buffer around the min and max dates (default: 3).
+        Whether to show the optimal V∞ point.
+    show_hover : bool, optional
+        Whether to show the hover information.
+    logo : bool, optional
+        Whether to show the logo.
 
     Returns
     -------
@@ -593,84 +691,116 @@ def plot_porkchop_plotly(
         The Plotly figure object.
     """
     # --- Extract basic raw data ---
-    c3_values_au_d2 = porkchop_data.c3()  # C3 in (AU/day)^2
-    vinf_values_au_day = np.sqrt(
-        np.maximum(0, c3_values_au_d2)
-    )  # Departure Vinf in AU/day
-
+    c3_departure_au_d2 = porkchop_data.c3_departure()  # C3 departure in (AU/day)^2
+    vinf_arrival_au_day = porkchop_data.vinf_arrival()  # V∞ arrival in AU/day
     time_of_flight_days = porkchop_data.time_of_flight()
     departure_times = porkchop_data.departure_state.time
     arrival_times = porkchop_data.arrival_state.time
 
-    # Convert to metric units
-    km_s_per_au_day = KM_P_AU / S_P_DAY
-    c3_values_km2_s2 = c3_values_au_d2 * (km_s_per_au_day**2)
-    vinf_values_km_s = vinf_values_au_day * km_s_per_au_day
+    # Convert to metric units using unit conversion functions
+    c3_departure_km2_s2 = c3_departure_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
+    vinf_arrival_km_s = au_per_day_to_km_per_s(vinf_arrival_au_day)
     # Define default C3 range if not provided
-    if c3_min is None:
-        c3_min = max(8.0, np.nanpercentile(c3_values_km2_s2, 5))
-    if c3_max is None:
-        c3_max = min(100.0, np.nanpercentile(c3_values_km2_s2, 95))
+    if c3_departure_min is None:
+        c3_departure_min = 0
+    if c3_departure_max is None:
+        c3_departure_max = np.max(c3_departure_km2_s2)
+
+    assert c3_departure_max > c3_departure_min, "C3 max must be greater than C3 min"
+
+    c3_step = (c3_departure_max - c3_departure_min) / 10  # 10 levels by default
+    assert c3_step < (
+        c3_departure_max - c3_departure_min
+    ), "C3 step must be less than the C3 range"
+
+    # Define default V∞ range if not provided
+    if vinf_arrival_min is None:
+        vinf_arrival_min = 0
+    if vinf_arrival_max is None:
+        vinf_arrival_max = np.max(vinf_arrival_km_s)
+    vinf_step = (vinf_arrival_max - vinf_arrival_min) / 10  # 10 levels by default
+
+    if tof_min is None:
+        tof_min = 0
+    if tof_max is None:
+        tof_max = np.max(time_of_flight_days)
+
+    tof_step = max(5, (tof_max - tof_min) / 10)  # 10 levels, minimum step of 5 days
+    tof_step = round(tof_step / 5) * 5  # Round to multiple of 5
+
+    # Validate all step sizes are positive
+    assert c3_step > 0, f"c3_step must be positive, got {c3_step}"
+    assert vinf_step > 0, f"vinf_step must be positive, got {vinf_step}"
+    assert tof_step > 0, f"tof_step must be positive, got {tof_step}"
 
     # Extract raw MJD values for all points
     departure_times_mjd = departure_times.mjd().to_numpy(zero_copy_only=False)
     arrival_times_mjd = arrival_times.mjd().to_numpy(zero_copy_only=False)
 
-    # --- Identify valid data and filter time ranges ---
-    # Create a mask for valid C3 values (not NaN and not over max)
-    valid_c3_mask = ~np.isnan(c3_values_km2_s2) & (c3_values_km2_s2 <= c3_max)
+    # --- Apply all filtering to the actual data in one place ---
+    # We want to keep all solutions that are not NaN and are within the specified ranges of c3, vinf and tof
+    data_mask = (
+        ~np.isnan(c3_departure_km2_s2)
+        & ~np.isnan(vinf_arrival_km_s)  # Also filter out V∞ NaN values
+        & (c3_departure_km2_s2 <= c3_departure_max)
+        & (c3_departure_km2_s2 >= c3_departure_min)
+        & (vinf_arrival_km_s >= vinf_arrival_min)
+        & (vinf_arrival_km_s <= vinf_arrival_max)
+        & (time_of_flight_days >= tof_min)
+        & (time_of_flight_days <= tof_max)
+    )
 
-    # Extract all unique times from the raw data
-    all_departure_mjd = np.sort(np.unique(departure_times_mjd))
-    all_arrival_mjd = np.sort(np.unique(arrival_times_mjd))
+    # Filter all our data arrays using the combined mask
+    filtered_departure_mjd = departure_times_mjd[data_mask]
+    filtered_arrival_mjd = arrival_times_mjd[data_mask]
+    filtered_c3_km2_s2 = c3_departure_km2_s2[data_mask]
+    filtered_vinf_km_s = vinf_arrival_km_s[data_mask]
+    filtered_tof_days = time_of_flight_days[data_mask]
 
-    if trim_to_valid and np.any(valid_c3_mask):
-
-        # Extract departure and arrival times only for valid data points
-        valid_departure_times_mjd = departure_times_mjd[valid_c3_mask]
-        valid_arrival_times_mjd = arrival_times_mjd[valid_c3_mask]
-
-        # Get unique departure and arrival times directly from valid data
-        unique_departure_mjd = np.sort(np.unique(valid_departure_times_mjd))
-        unique_arrival_mjd = np.sort(np.unique(valid_arrival_times_mjd))
-
-        # Add buffer around min/max dates if requested
-        if date_buffer_days > 0:
-            # Get min/max of valid times
-            min_dep_mjd, max_dep_mjd = np.min(unique_departure_mjd), np.max(
-                unique_departure_mjd
-            )
-            min_arr_mjd, max_arr_mjd = np.min(unique_arrival_mjd), np.max(
-                unique_arrival_mjd
-            )
-
-            # Apply buffer, but don't go beyond bounds of all available dates
-            min_dep_with_buffer = max(
-                min_dep_mjd - date_buffer_days, np.min(all_departure_mjd)
-            )
-            max_dep_with_buffer = min(
-                max_dep_mjd + date_buffer_days, np.max(all_departure_mjd)
-            )
-            min_arr_with_buffer = max(
-                min_arr_mjd - date_buffer_days, np.min(all_arrival_mjd)
-            )
-            max_arr_with_buffer = min(
-                max_arr_mjd + date_buffer_days, np.max(all_arrival_mjd)
-            )
-
-            # Include additional dates within buffer
-            unique_departure_mjd = all_departure_mjd[
-                (all_departure_mjd >= min_dep_with_buffer)
-                & (all_departure_mjd <= max_dep_with_buffer)
-            ]
-            unique_arrival_mjd = all_arrival_mjd[
-                (all_arrival_mjd >= min_arr_with_buffer)
-                & (all_arrival_mjd <= max_arr_with_buffer)
-            ]
+    # Recalculate min/max and step sizes based on filtered data
+    if len(filtered_c3_km2_s2) > 0:
+        c3_departure_min_filtered = np.min(filtered_c3_km2_s2)
+        c3_departure_max_filtered = np.max(filtered_c3_km2_s2)
+        c3_step_filtered = (c3_departure_max_filtered - c3_departure_min_filtered) / 10
+        if c3_step_filtered <= 0:
+            c3_step_filtered = 1.0  # Fallback for constant data
     else:
-        # If not trimming or no valid data, use all unique times
-        unique_departure_mjd = all_departure_mjd
-        unique_arrival_mjd = all_arrival_mjd
+        c3_departure_min_filtered = c3_departure_min
+        c3_departure_max_filtered = c3_departure_max
+        c3_step_filtered = c3_step
+
+    if len(filtered_vinf_km_s) > 0:
+        vinf_arrival_min_filtered = np.min(filtered_vinf_km_s)
+        vinf_arrival_max_filtered = np.max(filtered_vinf_km_s)
+        vinf_step_filtered = (
+            vinf_arrival_max_filtered - vinf_arrival_min_filtered
+        ) / 10
+        if vinf_step_filtered <= 0:
+            vinf_step_filtered = 1.0  # Fallback for constant data
+    else:
+        vinf_arrival_min_filtered = vinf_arrival_min
+        vinf_arrival_max_filtered = vinf_arrival_max
+        vinf_step_filtered = vinf_step
+
+    if len(filtered_tof_days) > 0:
+        tof_min_filtered = np.min(filtered_tof_days)
+        tof_max_filtered = np.max(filtered_tof_days)
+        tof_step_filtered = max(5, (tof_max_filtered - tof_min_filtered) / 10)
+        tof_step_filtered = round(tof_step_filtered / 5) * 5  # Round to multiple of 5
+        if tof_step_filtered <= 0:
+            tof_step_filtered = 5  # Fallback minimum step
+    else:
+        tof_min_filtered = tof_min
+        tof_max_filtered = tof_max
+        tof_step_filtered = tof_step
+
+    # Get unique times from the filtered data - this guarantees all data points have corresponding unique times
+    unique_departure_mjd, dep_indices = np.unique(
+        filtered_departure_mjd, return_inverse=True
+    )
+    unique_arrival_mjd, arr_indices = np.unique(
+        filtered_arrival_mjd, return_inverse=True
+    )
     # Check if we have enough unique times to create a grid
     if len(unique_departure_mjd) < 2 or len(unique_arrival_mjd) < 2:
         warnings.warn(
@@ -698,65 +828,28 @@ def plot_porkchop_plotly(
     ]
 
     # --- Unit Conversions and Grid Setup ---
-    # Create the grid for interpolation with unique times derived from valid data
+    # Create the grid including date combinations that do not have valid Lambert solutions
     grid_departure_mjd, grid_arrival_mjd = np.meshgrid(
         unique_departure_mjd, unique_arrival_mjd
     )
-    points = np.vstack((departure_times_mjd, arrival_times_mjd)).T
 
-    grid_c3_km2_s2 = griddata(
-        points,
-        c3_values_km2_s2,
-        (grid_departure_mjd, grid_arrival_mjd),
-        method="cubic",
-        fill_value=np.nan,
+    # Initialize grid arrays with NaN and fill using the filtered data
+    # Since we used return_inverse=True, dep_indices and arr_indices are guaranteed to be valid
+    grid_c3_departure_km2_s2 = np.full(
+        (len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64
     )
-    grid_vinf_km_s = griddata(
-        points,
-        vinf_values_km_s,
-        (grid_departure_mjd, grid_arrival_mjd),
-        method="cubic",
-        fill_value=np.nan,
+    grid_vinf_arrival_km_s = np.full(
+        (len(unique_arrival_mjd), len(unique_departure_mjd)), np.nan, dtype=np.float64
     )
 
-    original_tof_grid_days = grid_arrival_mjd - grid_departure_mjd
+    # Fill the grid directly - no validity masking needed since we pre-filtered the data
+    grid_c3_departure_km2_s2[arr_indices, dep_indices] = filtered_c3_km2_s2
+    grid_vinf_arrival_km_s[arr_indices, dep_indices] = filtered_vinf_km_s
+    grid_tof_days = grid_arrival_mjd - grid_departure_mjd
 
-    # Determine contour level parameters
-    # For C3
-
-    if c3_step is None:
-        c3_step = (c3_max - c3_min) / 10  # 10 levels by default
-
-    # For Vinf (derive from C3 if not specified)
-    if vinf_min is None:
-        vinf_min = np.sqrt(c3_min)
-    if vinf_max is None:
-        vinf_max = np.sqrt(c3_max)
-    if vinf_step is None:
-        vinf_step = (vinf_max - vinf_min) / 10  # 10 levels by default
-    # For ToF
-    if tof_min is None:
-        tof_min = np.nanmin(original_tof_grid_days[original_tof_grid_days > 0])
-    if tof_max is None:
-        tof_max = np.nanmax(original_tof_grid_days)
-    if tof_step is None:
-        tof_step = max(5, (tof_max - tof_min) / 10)  # 10 levels, minimum step of 5 days
-        tof_step = round(tof_step / 5) * 5  # Round to multiple of 5
-
-    # --- Replace NaN values and over-max values with sentinel ---
-    # Use a sentinel value that's 2x the maximum
-    sentinel_value = c3_max * 1.01
-
-    # Replace NaN and over-max values with the sentinel value
-    grid_c3_for_plot = np.copy(grid_c3_km2_s2)
-    mask_nan = np.isnan(grid_c3_for_plot)
-
-    # Apply sentinel value to all invalid areas
-    grid_c3_for_plot[mask_nan] = sentinel_value
-
-    # --- Trim plot to valid data region if requested ---
-    # Note: We've already trimmed before creating the grid,
-    # so this section is no longer needed
+    # --- Use original grids with NaN values for native Plotly handling ---
+    grid_c3_for_plot = grid_c3_departure_km2_s2
+    grid_vinf_for_plot = grid_vinf_arrival_km_s
 
     # Set up the date limits for the plot
     # Convert the min/max MJD values to datetime objects for Plotly
@@ -781,229 +874,314 @@ def plot_porkchop_plotly(
             Time(ylim_mjd[1], format="mjd").datetime,
         ]
 
-    # --- Create custom colorscale ---
-    # Define function to create custom colorscale with white for sentinel
-    def create_colorscale_with_sentinel(base_colorscale, vmin, vmax, sentinel):
-        # Get standard colorscale
-        standard_colors = pcolors.sample_colorscale(
-            base_colorscale, np.linspace(0, 1, 11)
+    # --- Generate custom colorscales with better saturation at minimum values ---
+    # Map common Plotly colorscale names to base colors
+    colorscale_to_color = {
+        "Reds": "red",
+        "Blues": "blue",
+        "Greens": "green",
+        "Oranges": "orange",
+        "Purples": "purple",
+    }
+
+    # Generate C3 colorscale with full saturation and built-in transparency
+    if c3_base_colorscale in colorscale_to_color:
+        # Using saturated colorscale with transparency built into the colorscale
+        c3_colorscale = generate_saturated_colorscale(
+            colorscale_to_color[c3_base_colorscale],
+            n_levels=8,
+            max_alpha=0.7,  # Maximum opacity for darkest colors
+            min_alpha=0.15,  # Minimum opacity for lightest colors
+        )
+    else:
+        c3_colorscale = c3_base_colorscale
+
+    # Generate V∞ colorscale with full saturation and built-in transparency
+    if vinf_base_colorscale in colorscale_to_color:
+        # Using saturated colorscale with transparency built into the colorscale
+        vinf_colorscale = generate_saturated_colorscale(
+            colorscale_to_color[vinf_base_colorscale],
+            n_levels=8,
+            max_alpha=0.7,  # Maximum opacity for darkest colors
+            min_alpha=0.15,  # Minimum opacity for lightest colors
+        )
+    else:
+        vinf_colorscale = vinf_base_colorscale
+
+    # --- Create hover information grids if requested ---
+    hover_info = "none"
+    custom_data = None
+    hover_template = None
+
+    if show_hover:
+        # Create date strings for hover display
+        grid_departure_date_strings = np.array(
+            [
+                [
+                    Time(mjd, format="mjd").strftime("%Y-%m-%d")
+                    for mjd in unique_departure_mjd
+                ]
+                for _ in unique_arrival_mjd
+            ]
+        )
+        grid_arrival_date_strings = np.array(
+            [
+                [
+                    Time(mjd, format="mjd").strftime("%Y-%m-%d")
+                    for _ in unique_departure_mjd
+                ]
+                for mjd in unique_arrival_mjd
+            ]
         )
 
-        # Convert to normalized range (0-1)
-        norm_max = 0.9  # Reserve top 10% for sentinel
+        # Stack all the data we want in hover info
+        # Shape: (n_arrival, n_departure, 5) for [c3, vinf, tof, dep_date, arr_date]
+        custom_data = np.stack(
+            [
+                grid_c3_departure_km2_s2,  # C3 in km²/s²
+                grid_vinf_arrival_km_s,  # V∞ in km/s
+                grid_tof_days,  # ToF in days
+                grid_departure_date_strings,  # Departure date strings
+                grid_arrival_date_strings,  # Arrival date strings
+            ],
+            axis=-1,
+        )
 
-        # Create standard part of colorscale
-        colorscale = [
-            (i * norm_max / 10, color) for i, color in enumerate(standard_colors)
-        ]
+        hover_info = "text"
+        hover_template = (
+            "Departure: %{customdata[3]}<br>"
+            "Arrival: %{customdata[4]}<br>"
+            "Time of Flight: %{customdata[2]:.1f} days<br>"
+            "C3 Departure: %{customdata[0]:.2f} km²/s²<br>"
+            "V∞ Arrival: %{customdata[1]:.2f} km/s<br>"
+            "<extra></extra>"
+        )
 
-        # Add sentinel value as white
-        colorscale.append((1.0, "rgba(255,255,255,1)"))  # White with transparency
-
-        return colorscale
-
-    # Create custom colorscale for C3
-    c3_colorscale = create_colorscale_with_sentinel(
-        metric_colorscale, c3_min, c3_max, sentinel_value
-    )
-
-    # --- Prepare customdata for hover template ---
-    # For date strings, we need to convert the grid MJD values to timestamps and then to ISO strings
-    # First, create Timestamp objects from the grid MJD values (after trimming)
-    flat_dep_mjd = grid_departure_mjd.flatten()
-    flat_arr_mjd = grid_arrival_mjd.flatten()
-
-    # Create Timestamp objects from the flattened MJD values
-    flat_dep_times = Timestamp.from_mjd(flat_dep_mjd, scale="tdb")
-    flat_arr_times = Timestamp.from_mjd(flat_arr_mjd, scale="tdb")
-
-    # Get ISO 8601 strings
-    flat_dep_iso = flat_dep_times.to_iso8601().to_numpy(zero_copy_only=False)
-    flat_arr_iso = flat_arr_times.to_iso8601().to_numpy(zero_copy_only=False)
-
-    # Reshape back to grid shape
-    grid_dep_iso = flat_dep_iso.reshape(grid_departure_mjd.shape)
-    grid_arr_iso = flat_arr_iso.reshape(grid_arrival_mjd.shape)
-
-    # Create a 3D array to hold the numeric data for hover: [c3, vinf, tof]
-    # We'll handle dates separately as strings
-    customdata = np.zeros(
-        (grid_c3_km2_s2.shape[0], grid_c3_km2_s2.shape[1], 3), dtype=np.float64
-    )
-
-    # Initialize with NaN values
-    customdata[:, :, 0] = np.nan  # C3
-    customdata[:, :, 1] = np.nan  # Vinf
-    customdata[:, :, 2] = np.nan  # ToF
-
-    # Fill in valid values
-    valid_mask_trimmed = ~np.isnan(grid_c3_km2_s2)
-    customdata[:, :, 0][valid_mask_trimmed] = grid_c3_km2_s2[valid_mask_trimmed]
-    customdata[:, :, 1][valid_mask_trimmed] = grid_vinf_km_s[valid_mask_trimmed]
-    customdata[:, :, 2][valid_mask_trimmed] = original_tof_grid_days[valid_mask_trimmed]
-
-    # --- Create C3 Contour Trace with hover template ---
+    # --- Create Dual Contour Traces ---
     plotly_traces = []
+
+    # C3 Departure Contour Trace (warm colorscale with built-in transparency)
     plotly_traces.append(
         go.Contour(
             x=unique_departure_dates_dt,
             y=unique_arrival_dates_dt,
             z=grid_c3_for_plot,
-            zauto=False,  # Don't auto-scale z values
-            zmin=c3_min,  # Min value for colorscale
-            zmax=c3_max * 1.1,  # Max value for data display (not including sentinel)
+            zauto=False,
+            zmin=c3_departure_min_filtered,
+            zmax=c3_departure_max_filtered,
             colorscale=c3_colorscale,
-            customdata=customdata,
-            text=np.stack(
-                [grid_dep_iso, grid_arr_iso], axis=-1
-            ),  # Store date strings as text
-            hovertemplate=(
-                "<b>Departure:</b> %{text[0]}<br>"  # Use text array for dates
-                + "<b>Arrival:</b> %{text[1]}<br>"  # Use text array for dates
-                + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                + "<b>Vinf:</b> %{customdata[1]:.1f} km/s<br>"
-                + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
-            ),
+            opacity=1.0,  # Use full opacity since transparency is built into colorscale
+            hoverinfo=hover_info,
+            hovertemplate=hover_template,
+            customdata=custom_data,
             contours=dict(
                 coloring="fill",
                 showlabels=True,
-                labelfont=dict(size=10, color="black"),
-                start=c3_min,
-                end=c3_max,
-                size=c3_step,
-                # Format C3 values to 1 decimal place
+                labelfont=dict(size=10, color="darkred"),
+                start=c3_departure_min_filtered,
+                end=c3_departure_max_filtered,
+                size=c3_step_filtered,
                 labelformat=".1f",
             ),
-            line=dict(width=0.5, smoothing=1.3),
-            name="C3 (km²/s²) / Vinf (km/s)",
-            colorbar=dict(
-                title="<b>C3</b> (km²/s²) / <b>Vinf</b> (km/s)",
-                # Generate ticks based on the actual step size
-                tickvals=[
-                    level
-                    for level in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
-                ],
-                ticktext=[
-                    f"{c3:.1f} / {np.sqrt(c3):.1f}"
-                    for c3 in np.arange(c3_min, c3_max + 0.5 * c3_step, c3_step)
-                ],
-            ),
-            connectgaps=True,
+            ncontours=10,  # Ensure exactly 10 contour levels
+            line=dict(width=1.0, smoothing=1.3),
+            name="C3 Departure",
+            showscale=False,  # Remove colorbar from main trace
+            connectgaps=False,  # Don't connect across gaps to match V∞ behavior
             visible=True,
+            showlegend=True,
         )
     )
 
+    # V∞ Arrival Contour Trace (cool colorscale with built-in transparency)
+    plotly_traces.append(
+        go.Contour(
+            x=unique_departure_dates_dt,
+            y=unique_arrival_dates_dt,
+            z=grid_vinf_for_plot,
+            zauto=False,
+            zmin=vinf_arrival_min_filtered,
+            zmax=vinf_arrival_max_filtered,
+            colorscale=vinf_colorscale,
+            opacity=1.0,  # Use full opacity since transparency is built into colorscale
+            hoverinfo=hover_info,
+            hovertemplate=hover_template,
+            customdata=custom_data,
+            contours=dict(
+                coloring="fill",
+                showlabels=True,
+                labelfont=dict(size=10, color="darkblue"),
+                start=vinf_arrival_min_filtered,
+                end=vinf_arrival_max_filtered,
+                size=vinf_step_filtered,
+                labelformat=".1f",
+            ),
+            ncontours=10,  # Ensure exactly 10 contour levels
+            line=dict(width=1.0, smoothing=1.3),
+            name="V∞ Arrival",
+            showscale=False,  # Remove colorbar from main trace
+            connectgaps=False,  # Faster rendering by not connecting across gaps
+            visible="legendonly",
+            showlegend=True,
+        )
+    )
     # --- ToF Contours ---
     plotly_traces.append(
         go.Contour(
             x=unique_departure_dates_dt,
             y=unique_arrival_dates_dt,
-            z=original_tof_grid_days,  # Original ToF grid with NaNs
+            z=grid_tof_days,  # Original ToF grid with NaNs
             colorscale=[[0, tof_line_color], [1, tof_line_color]],
             contours=dict(
                 coloring="lines",
                 showlabels=True,
                 labelfont=dict(size=10, color=tof_line_color),
-                start=tof_min,
-                end=tof_max,
-                size=tof_step,
+                start=tof_min_filtered,
+                end=tof_max_filtered,
+                size=tof_step_filtered,
             ),
-            line=dict(color=tof_line_color, width=1, dash="dash"),
+            line=dict(color=tof_line_color, width=1, dash="longdash"),
             name="ToF (days)",
             showscale=False,
-            hoverinfo="skip",
+            hoverinfo="skip",  # Skip hover for ToF contours
             connectgaps=False,  # Don't connect across NaN gaps
             visible=True,
         )
     )
 
-    # --- Optimal point (showing both C3 and Vinf info) ---
-    if show_optimal and np.any(~np.isnan(c3_values_km2_s2)):
-        min_c3_idx = np.nanargmin(c3_values_km2_s2)
-        best_c3_val = c3_values_km2_s2[min_c3_idx]
-        best_vinf_val = vinf_values_km_s[min_c3_idx]
-        best_tof = time_of_flight_days[min_c3_idx]
-        # Get the timestamp objects directly from original data
-        # Convert numpy index to Python integer for proper indexing into quivr/pyarrow tables
-        best_dep_time = departure_times[int(min_c3_idx)]
-        best_arr_time = arrival_times[int(min_c3_idx)]
+    # --- Optimal Points (separate for C3 and V∞) ---
+    if show_optimal:
+        # Optimal C3 Departure Point from filtered data
+        if len(filtered_c3_km2_s2) > 0:
+            min_c3_filtered_idx = np.nanargmin(filtered_c3_km2_s2)
 
-        # Get ISO strings for hover text
-        best_dep_iso = best_dep_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
-        best_arr_iso = best_arr_time.to_iso8601().to_numpy(zero_copy_only=False)[0]
+            # Get the corresponding departure and arrival times from filtered data
+            best_c3_dep_mjd = filtered_departure_mjd[min_c3_filtered_idx]
+            best_c3_arr_mjd = filtered_arrival_mjd[min_c3_filtered_idx]
 
-        # For scatter point positioning, get datetime objects
-        best_dep_dt = best_dep_time.to_astropy()[0].datetime
-        best_arr_dt = best_arr_time.to_astropy()[0].datetime
+            # Convert to datetime objects for plotting
+            best_c3_dep_dt = Time(best_c3_dep_mjd, format="mjd").datetime
+            best_c3_arr_dt = Time(best_c3_arr_mjd, format="mjd").datetime
 
-        # Check if the optimal point falls within our current plot range
-        optimal_in_range = (
-            xlim_dt[0] <= best_dep_dt <= xlim_dt[1]
-            and ylim_dt[0] <= best_arr_dt <= ylim_dt[1]
-        )
-
-        if optimal_in_range:
-            # Create customdata for optimal point with numeric values
-            optimal_customdata = np.array([[best_c3_val, best_vinf_val, best_tof]])
-
-            # Create text array for date strings
-            optimal_text = np.array([[best_dep_iso, best_arr_iso]])
-
-            # Configure hover behavior
-            if optimal_hover:
-                hover_info = dict(
-                    customdata=optimal_customdata,
-                    text=optimal_text,
-                    hovertemplate=(
-                        "<b>Optimal C3</b><br>"
-                        + "<b>Departure:</b> %{text[0]}<br>"
-                        + "<b>Arrival:</b> %{text[1]}<br>"
-                        + "<b>C3:</b> %{customdata[0]:.1f} km²/s²<br>"
-                        + "<b>Vinf:</b> %{customdata[1]:.1f} km/s<br>"
-                        + "<b>ToF:</b> %{customdata[2]:.1f} days<extra></extra>"
-                    ),
-                    hoverlabel=dict(bgcolor="red"),
-                )
-            else:
-                hover_info = dict(
-                    hoverinfo="skip",  # Completely disable hover
-                )
-            plotly_traces.append(
-                go.Scatter(
-                    x=[best_dep_dt],
-                    y=[best_arr_dt],
-                    mode="markers",
-                    marker=dict(
-                        symbol="star",
-                        color="red",
-                        size=12,
-                        line=dict(color="black", width=1),
-                    ),
-                    showlegend=False,
-                    name="Optimal C3",
-                    visible=True,
-                    **hover_info,
-                )
+            # Check if the optimal C3 point falls within our current plot range
+            c3_optimal_in_range = (
+                xlim_dt[0] <= best_c3_dep_dt <= xlim_dt[1]
+                and ylim_dt[0] <= best_c3_arr_dt <= ylim_dt[1]
             )
-        else:
-            logger.warning(
-                f"Optimal point ({best_dep_iso}, {best_arr_iso}) falls outside the current plot range and will not be displayed"
+
+            if c3_optimal_in_range:
+                plotly_traces.append(
+                    go.Scatter(
+                        x=[best_c3_dep_dt],
+                        y=[best_c3_arr_dt],
+                        mode="markers",
+                        marker=dict(
+                            symbol="circle",
+                            color="darkred",
+                            size=10,
+                            line=dict(color="white", width=2),
+                        ),
+                        showlegend=True,
+                        name="Optimal C3",
+                        visible=True,
+                        hoverinfo="skip",  # Skip hover for optimal points
+                    )
+                )
+
+        # Optimal V∞ Arrival Point from filtered data
+        if len(filtered_vinf_km_s) > 0:
+            min_vinf_filtered_idx = np.nanargmin(filtered_vinf_km_s)
+
+            # Get the corresponding departure and arrival times from filtered data
+            best_vinf_dep_mjd = filtered_departure_mjd[min_vinf_filtered_idx]
+            best_vinf_arr_mjd = filtered_arrival_mjd[min_vinf_filtered_idx]
+
+            # Convert to datetime objects for plotting
+            best_vinf_dep_dt = Time(best_vinf_dep_mjd, format="mjd").datetime
+            best_vinf_arr_dt = Time(best_vinf_arr_mjd, format="mjd").datetime
+
+            # Check if the optimal V∞ point falls within our current plot range
+            vinf_optimal_in_range = (
+                xlim_dt[0] <= best_vinf_dep_dt <= xlim_dt[1]
+                and ylim_dt[0] <= best_vinf_arr_dt <= ylim_dt[1]
             )
+
+            if vinf_optimal_in_range:
+                plotly_traces.append(
+                    go.Scatter(
+                        x=[best_vinf_dep_dt],
+                        y=[best_vinf_arr_dt],
+                        mode="markers",
+                        marker=dict(
+                            symbol="circle",
+                            color="darkblue",
+                            size=10,
+                            line=dict(color="white", width=2),
+                        ),
+                        showlegend=True,
+                        name="Optimal V∞",
+                        visible=True,
+                        hoverinfo="skip",  # Skip hover for optimal points
+                    )
+                )
 
     # --- Figure Creation and Layout Update ---
     fig = go.Figure(data=plotly_traces)
+
+    if logo:
+        images = [
+            dict(
+                source=get_logo_base64(AsteroidInstituteLogoLight),
+                xref="paper",
+                yref="paper",
+                x=0.98,
+                y=0.02,
+                sizex=0.12,
+                sizey=0.12,
+                xanchor="right",
+                yanchor="bottom",
+            )
+        ]
+    else:
+        images = []
 
     fig.update_layout(
         title_text=title,
         xaxis_title="Departure Date",
         yaxis_title="Arrival Date",
-        xaxis=dict(tickformat="%Y-%m-%d", tickangle=-45, range=xlim_dt),
-        yaxis=dict(tickformat="%Y-%m-%d", range=ylim_dt),
+        xaxis=dict(
+            tickformat="%Y-%m-%d",
+            tickangle=-45,
+            range=xlim_dt,
+            showgrid=True,
+            gridcolor="lightgray",
+            gridwidth=1,
+        ),
+        yaxis=dict(
+            tickformat="%Y-%m-%d",
+            range=ylim_dt,
+            showgrid=True,
+            gridcolor="lightgray",
+            gridwidth=1,
+        ),
+        plot_bgcolor="white",
         width=width,
         height=height,
         autosize=False,
         hovermode="closest",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        images=images,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            itemsizing="constant",  # Keep legend items same size when hidden
+            font=dict(size=12),  # Larger legend text
+            bgcolor="rgba(255,255,255,0.8)",  # Semi-transparent background
+            bordercolor="Black",
+            borderwidth=1,
+        ),
     )
 
     return fig
