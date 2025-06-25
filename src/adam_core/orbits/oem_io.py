@@ -524,8 +524,8 @@ def orbit_from_oem(
     Convert an OEM file to an Orbit object.
 
     This function reads an OEM file and converts the state vectors and epoch into an Orbit object.
-    The Orbit object will contain the spherical coordinates (right ascension, declination, range) and
-    their rates, along with any available covariance information.
+    Each state in the oem file is converted to an Orbit row. Covariances are only supported
+    if the covariance epoch matches the state epoch.
 
     Parameters
     ----------
