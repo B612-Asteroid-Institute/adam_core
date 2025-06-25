@@ -30,11 +30,13 @@ from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_bas
 logger = logging.getLogger(__name__)
 
 
-def generate_saturated_colorscale(base_color: str, n_levels: int = 8, max_alpha: float = 0.8, min_alpha: float = 0.1) -> List[List]:
+def generate_saturated_colorscale(
+    base_color: str, n_levels: int = 8, max_alpha: float = 0.8, min_alpha: float = 0.1
+) -> List[List]:
     """
     Generate a colorscale from light to dark based on a base color with full saturation
     and variable transparency that increases with color intensity.
-    
+
     Parameters
     ----------
     base_color : str
@@ -45,7 +47,7 @@ def generate_saturated_colorscale(base_color: str, n_levels: int = 8, max_alpha:
         Maximum alpha (opacity) for darkest colors (default: 0.8)
     min_alpha : float, optional
         Minimum alpha (opacity) for lightest colors (default: 0.1)
-    
+
     Returns
     -------
     List[List]
@@ -53,31 +55,31 @@ def generate_saturated_colorscale(base_color: str, n_levels: int = 8, max_alpha:
     """
     # Color mapping for common base colors to RGB with full saturation
     color_map = {
-        'red': (255, 0, 0),        # Pure red, full saturation
-        'blue': (0, 0, 255),       # Pure blue, full saturation
-        'green': (0, 255, 0),      # Pure green, full saturation
-        'orange': (255, 165, 0),   # Pure orange, full saturation
-        'purple': (128, 0, 128),   # Pure purple, full saturation
-        'yellow': (255, 255, 0),   # Pure yellow, full saturation
-        'cyan': (0, 255, 255),     # Pure cyan, full saturation
-        'magenta': (255, 0, 255),  # Pure magenta, full saturation
+        "red": (255, 0, 0),  # Pure red, full saturation
+        "blue": (0, 0, 255),  # Pure blue, full saturation
+        "green": (0, 255, 0),  # Pure green, full saturation
+        "orange": (255, 165, 0),  # Pure orange, full saturation
+        "purple": (128, 0, 128),  # Pure purple, full saturation
+        "yellow": (255, 255, 0),  # Pure yellow, full saturation
+        "cyan": (0, 255, 255),  # Pure cyan, full saturation
+        "magenta": (255, 0, 255),  # Pure magenta, full saturation
     }
-    
+
     # Parse base color
-    if base_color.startswith('#'):
+    if base_color.startswith("#"):
         # Hex color
-        hex_color = base_color.lstrip('#')
-        base_rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        hex_color = base_color.lstrip("#")
+        base_rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
     elif base_color.lower() in color_map:
         base_rgb = color_map[base_color.lower()]
     else:
         # Default to pure red if unknown
         base_rgb = (255, 0, 0)
-    
+
     colorscale = []
     for i in range(n_levels):
         position = i / (n_levels - 1)
-        
+
         # Create lightness variation while maintaining full saturation
         # Lighter colors: mix with white but preserve hue
         # Darker colors: reduce brightness but keep saturation
@@ -90,30 +92,37 @@ def generate_saturated_colorscale(base_color: str, n_levels: int = 8, max_alpha:
         else:
             # Use power curve for smooth transition
             intensity = np.power(position, 0.8)
-            
+
             # Maintain saturation by scaling from full saturation down
             r = int(base_rgb[0] * (0.3 + 0.7 * intensity))
             g = int(base_rgb[1] * (0.3 + 0.7 * intensity))
             b = int(base_rgb[2] * (0.3 + 0.7 * intensity))
-        
+
         # Ensure values are within valid RGB range
         r = max(0, min(255, r))
         g = max(0, min(255, g))
         b = max(0, min(255, b))
-        
+
         # Calculate alpha based on position (lighter = more transparent)
         alpha = min_alpha + (max_alpha - min_alpha) * position
-        
+
         colorscale.append([position, f"rgba({r}, {g}, {b}, {alpha:.2f})"])
-    
+
     return colorscale
 
 
-def generate_perceptual_colorscale(base_color: str, n_levels: int = 8, min_lightness: float = 0.3, max_lightness: float = 0.9, max_alpha: float = 0.8, min_alpha: float = 0.1) -> List[List]:
+def generate_perceptual_colorscale(
+    base_color: str,
+    n_levels: int = 8,
+    min_lightness: float = 0.3,
+    max_lightness: float = 0.9,
+    max_alpha: float = 0.8,
+    min_alpha: float = 0.1,
+) -> List[List]:
     """
     Generate a perceptually uniform colorscale with full saturation and variable transparency
     that works better for overlaying contours.
-    
+
     Parameters
     ----------
     base_color : str
@@ -122,13 +131,13 @@ def generate_perceptual_colorscale(base_color: str, n_levels: int = 8, min_light
         Number of levels in the colorscale (default: 8)
     min_lightness : float, optional
         Minimum lightness value (0-1, default: 0.3 for good contrast)
-    max_lightness : float, optional  
+    max_lightness : float, optional
         Maximum lightness value (0-1, default: 0.9 for visibility with transparency)
     max_alpha : float, optional
         Maximum alpha (opacity) for darkest colors (default: 0.8)
     min_alpha : float, optional
         Minimum alpha (opacity) for lightest colors (default: 0.1)
-    
+
     Returns
     -------
     List[List]
@@ -136,38 +145,38 @@ def generate_perceptual_colorscale(base_color: str, n_levels: int = 8, min_light
     """
     # Full saturation color mapping for maximum color purity
     color_map = {
-        'red': (255, 0, 0),        # Pure red
-        'blue': (0, 0, 255),       # Pure blue
-        'green': (0, 255, 0),      # Pure green
-        'orange': (255, 165, 0),   # Pure orange
-        'purple': (128, 0, 128),   # Pure purple
-        'yellow': (255, 255, 0),   # Pure yellow
-        'cyan': (0, 255, 255),     # Pure cyan
-        'magenta': (255, 0, 255),  # Pure magenta
+        "red": (255, 0, 0),  # Pure red
+        "blue": (0, 0, 255),  # Pure blue
+        "green": (0, 255, 0),  # Pure green
+        "orange": (255, 165, 0),  # Pure orange
+        "purple": (128, 0, 128),  # Pure purple
+        "yellow": (255, 255, 0),  # Pure yellow
+        "cyan": (0, 255, 255),  # Pure cyan
+        "magenta": (255, 0, 255),  # Pure magenta
     }
-    
+
     # Parse base color
-    if base_color.startswith('#'):
-        hex_color = base_color.lstrip('#')
-        base_rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    if base_color.startswith("#"):
+        hex_color = base_color.lstrip("#")
+        base_rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
     elif base_color.lower() in color_map:
         base_rgb = color_map[base_color.lower()]
     else:
         base_rgb = (255, 0, 0)  # Default pure red
-        
+
     # Convert base color to normalized RGB for calculations
     base_r, base_g, base_b = [x / 255.0 for x in base_rgb]
-    
+
     colorscale = []
     for i in range(n_levels):
         position = i / (n_levels - 1)
-        
+
         # Create perceptually uniform lightness steps
         lightness = max_lightness - (position * (max_lightness - min_lightness))
-        
+
         # Use full saturation throughout, varying only lightness
         saturation = 1.0  # Always full saturation
-        
+
         if position == 0:
             # Lightest: mix with white while maintaining hue
             white_mix = 1 - lightness
@@ -178,26 +187,26 @@ def generate_perceptual_colorscale(base_color: str, n_levels: int = 8, min_light
             # Scale the base color by lightness while maintaining saturation
             # Use HSV-like scaling to preserve hue and saturation
             max_component = max(base_r, base_g, base_b)
-            
+
             if max_component > 0:
                 # Scale all components proportionally to achieve desired lightness
                 scale_factor = lightness / max_component
                 r = base_r * scale_factor
-                g = base_g * scale_factor  
+                g = base_g * scale_factor
                 b = base_b * scale_factor
             else:
                 r = g = b = lightness
-        
+
         # Convert back to 0-255 range and ensure validity
         r_int = max(0, min(255, int(r * 255)))
         g_int = max(0, min(255, int(g * 255)))
         b_int = max(0, min(255, int(b * 255)))
-        
+
         # Calculate alpha based on position (lighter = more transparent)
         alpha = min_alpha + (max_alpha - min_alpha) * position
-        
+
         colorscale.append([position, f"rgba({r_int}, {g_int}, {b_int}, {alpha:.2f})"])
-    
+
     return colorscale
 
 
@@ -257,10 +266,12 @@ class LambertOutput(qv.Table):
         return self.arrival_state.time.mjd().to_numpy(
             zero_copy_only=False
         ) - self.departure_state.time.mjd().to_numpy(zero_copy_only=False)
-    
-    def as_orbit(self, from_state: Literal["departure", "arrival"]="departure") -> Orbits:
+
+    def as_orbit(
+        self, from_state: Literal["departure", "arrival"] = "departure"
+    ) -> Orbits:
         """
-        Construct solution orbit from departure 
+        Construct solution orbit from departure
 
         Parameters
         ----------
@@ -272,10 +283,15 @@ class LambertOutput(qv.Table):
         Orbits
             The constructed orbits.
         """
-        assert from_state in ["departure", "arrival"], "from_state must be either 'departure' or 'arrival'"
+        assert from_state in [
+            "departure",
+            "arrival",
+        ], "from_state must be either 'departure' or 'arrival'"
         if from_state == "departure":
             # Generate orbit id as "lambert_departure_X" where X is the index of the departure state
-            orbit_ids = [f"lambert_departure_{i}" for i in range(len(self.departure_state))]
+            orbit_ids = [
+                f"lambert_departure_{i}" for i in range(len(self.departure_state))
+            ]
             return Orbits.from_kwargs(
                 orbit_id=orbit_ids,
                 coordinates=CartesianCoordinates.from_kwargs(
@@ -292,7 +308,7 @@ class LambertOutput(qv.Table):
             )
         elif from_state == "arrival":
             # Generate orbit id as "lambert_arrival_X" where X is the index of the arrival state
-            orbit_ids = [f"lambert_arrival_{i}" for i in range(len(self.arrival_state))]    
+            orbit_ids = [f"lambert_arrival_{i}" for i in range(len(self.arrival_state))]
             return Orbits.from_kwargs(
                 orbit_id=orbit_ids,
                 coordinates=CartesianCoordinates.from_kwargs(
@@ -307,7 +323,6 @@ class LambertOutput(qv.Table):
                     frame=self.arrival_state.frame,
                 ),
             )
-        
 
 
 def departure_spherical_coordinates(
@@ -526,14 +541,18 @@ def generate_porkchop_data(
     departure_frame = departure_coordinates.frame
     arrival_frame = arrival_coordinates.frame
 
-    assert departure_frame == arrival_frame, "Departure and arrival frames must be the same"
+    assert (
+        departure_frame == arrival_frame
+    ), "Departure and arrival frames must be the same"
     assert len(departure_coordinates.origin.code.unique()) == 1
     assert len(arrival_coordinates.origin.code.unique()) == 1
 
     departure_origin = departure_coordinates.origin[0]
     arrival_origin = arrival_coordinates.origin[0]
 
-    assert departure_origin == arrival_origin, "Departure and arrival origins must be the same"
+    assert (
+        departure_origin == arrival_origin
+    ), "Departure and arrival origins must be the same"
 
     # First let's make sure departure and arrival coordinates are time-ordered
     departure_coordinates = departure_coordinates.sort_by(["time.days", "time.nanos"])
@@ -758,7 +777,9 @@ def plot_porkchop_plotly(
     if len(filtered_vinf_km_s) > 0:
         vinf_arrival_min_filtered = np.min(filtered_vinf_km_s)
         vinf_arrival_max_filtered = np.max(filtered_vinf_km_s)
-        vinf_step_filtered = (vinf_arrival_max_filtered - vinf_arrival_min_filtered) / 10
+        vinf_step_filtered = (
+            vinf_arrival_max_filtered - vinf_arrival_min_filtered
+        ) / 10
         if vinf_step_filtered <= 0:
             vinf_step_filtered = 1.0  # Fallback for constant data
     else:
@@ -862,32 +883,32 @@ def plot_porkchop_plotly(
     # Map common Plotly colorscale names to base colors
     colorscale_to_color = {
         "Reds": "red",
-        "Blues": "blue", 
+        "Blues": "blue",
         "Greens": "green",
         "Oranges": "orange",
         "Purples": "purple",
     }
-    
+
     # Generate C3 colorscale with full saturation and built-in transparency
     if c3_base_colorscale in colorscale_to_color:
         # Using saturated colorscale with transparency built into the colorscale
         c3_colorscale = generate_saturated_colorscale(
-            colorscale_to_color[c3_base_colorscale], 
+            colorscale_to_color[c3_base_colorscale],
             n_levels=8,
             max_alpha=0.7,  # Maximum opacity for darkest colors
-            min_alpha=0.15  # Minimum opacity for lightest colors
+            min_alpha=0.15,  # Minimum opacity for lightest colors
         )
     else:
         c3_colorscale = c3_base_colorscale
-    
+
     # Generate V∞ colorscale with full saturation and built-in transparency
     if vinf_base_colorscale in colorscale_to_color:
         # Using saturated colorscale with transparency built into the colorscale
         vinf_colorscale = generate_saturated_colorscale(
-            colorscale_to_color[vinf_base_colorscale], 
+            colorscale_to_color[vinf_base_colorscale],
             n_levels=8,
             max_alpha=0.7,  # Maximum opacity for darkest colors
-            min_alpha=0.15  # Minimum opacity for lightest colors
+            min_alpha=0.15,  # Minimum opacity for lightest colors
         )
     else:
         vinf_colorscale = vinf_base_colorscale
@@ -1134,19 +1155,19 @@ def plot_porkchop_plotly(
         xaxis_title="Departure Date",
         yaxis_title="Arrival Date",
         xaxis=dict(
-            tickformat="%Y-%m-%d", 
-            tickangle=-45, 
+            tickformat="%Y-%m-%d",
+            tickangle=-45,
             range=xlim_dt,
             showgrid=True,
             gridcolor="lightgray",
-            gridwidth=1
+            gridwidth=1,
         ),
         yaxis=dict(
-            tickformat="%Y-%m-%d", 
+            tickformat="%Y-%m-%d",
             range=ylim_dt,
             showgrid=True,
             gridcolor="lightgray",
-            gridwidth=1
+            gridwidth=1,
         ),
         plot_bgcolor="white",
         width=width,
