@@ -940,9 +940,9 @@ def plot_risk_corridor(
     color_bar_config = dict(
         tickmode="array",
         tickangle=0,
-        orientation="h",
+        orientation="h",  # Back to horizontal
         x=0.05,
-        y=-0.3,
+        y=-0.25,  # Positioned well below slider and buttons
         xanchor="left",
         yanchor="bottom",
         thickness=25,
@@ -1068,7 +1068,7 @@ def plot_risk_corridor(
                 xref="paper",
                 yref="paper",
                 x=0.81,
-                y=-0.26,
+                y=-0.30,  # Moved logo up slightly
                 sizex=0.18,
                 sizey=0.18,
                 xanchor="left",
@@ -1088,14 +1088,14 @@ def plot_risk_corridor(
             font=dict(size=14, color="black"),
         ),
         autosize=True,
-        margin=dict(l=7, r=7, t=30, b=7, pad=0),
+        margin=dict(l=7, r=7, t=30, b=100, pad=0),  # Increased bottom margin for horizontal layout
         **plot_config,
         updatemenus=[
             dict(
                 type="buttons",
                 showactive=False,
                 x=0.03,
-                y=-0.07,
+                y=-0.12,  # Positioned between slider and colorbar
                 buttons=[
                     dict(
                         label="▶",
@@ -1130,7 +1130,7 @@ def plot_risk_corridor(
                 pad=dict(t=50),
                 len=0.90 if not logo else 0.75,
                 x=0.05,
-                y=0.0,
+                y=-0.06,  # Moved slider down slightly
                 font=dict(color="black", size=10),
                 steps=[
                     dict(
