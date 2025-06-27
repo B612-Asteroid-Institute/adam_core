@@ -19,8 +19,8 @@ def test_generate_porkchop_data_origins():
     arrival_start = Timestamp.from_mjd([60050], scale="tdb")
     arrival_end = Timestamp.from_mjd([60100], scale="tdb")
 
-    # Get departure coordinates for Earth
-    departure_coordinates = prepare_and_propagate_orbits(
+    # Get departure orbits for Earth
+    departure_orbits = prepare_and_propagate_orbits(
         body=OriginCodes.EARTH,
         start_time=departure_start,
         end_time=departure_end,
@@ -28,8 +28,8 @@ def test_generate_porkchop_data_origins():
         step_size=5.0,  # Larger step size for faster test
     )
 
-    # Get arrival coordinates for Mars
-    arrival_coordinates = prepare_and_propagate_orbits(
+    # Get arrival orbits for Mars
+    arrival_orbits = prepare_and_propagate_orbits(
         body=OriginCodes.MARS_BARYCENTER,
         start_time=arrival_start,
         end_time=arrival_end,
@@ -38,8 +38,8 @@ def test_generate_porkchop_data_origins():
     )
 
     results_sun = generate_porkchop_data(
-        departure_coordinates=departure_coordinates,
-        arrival_coordinates=arrival_coordinates,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
     )
 
     # Verify that results are generated
@@ -74,8 +74,8 @@ def test_generate_real_porkchop_plot(tmp_path):
     arrival_start = Timestamp.from_iso8601(["2022-06-01T00:00:00"], scale="tdb")
     arrival_end = Timestamp.from_iso8601(["2024-01-01T00:00:00"], scale="tdb")
 
-    # Get departure coordinates for Earth
-    departure_coordinates = prepare_and_propagate_orbits(
+    # Get departure orbits for Earth
+    departure_orbits = prepare_and_propagate_orbits(
         body=OriginCodes.EARTH,
         start_time=departure_start,
         end_time=departure_end,
@@ -83,8 +83,8 @@ def test_generate_real_porkchop_plot(tmp_path):
         step_size=1.0,  # 1-day intervals for good resolution
     )
 
-    # Get arrival coordinates for Mars
-    arrival_coordinates = prepare_and_propagate_orbits(
+    # Get arrival orbits for Mars
+    arrival_orbits = prepare_and_propagate_orbits(
         body=OriginCodes.MARS_BARYCENTER,
         start_time=arrival_start,
         end_time=arrival_end,
@@ -93,8 +93,8 @@ def test_generate_real_porkchop_plot(tmp_path):
     )
     # Generate porkchop data with reasonable resolution
     results = generate_porkchop_data(
-        departure_coordinates=departure_coordinates,
-        arrival_coordinates=arrival_coordinates,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
     )
 
     # Verify data was generated successfully
@@ -141,9 +141,11 @@ def test_generate_real_porkchop_plot(tmp_path):
 def test_porkchop_different_time_grids():
     """
     Test that porkchop functions work correctly when departure and arrival
-    coordinates have different time grids.
+    orbits have different time grids.
     """
     from adam_core.coordinates import CartesianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.orbits import Orbits
     from adam_core.time import Timestamp
 
     # Create departure coordinates with one time grid
@@ -165,6 +167,7 @@ def test_porkchop_different_time_grids():
         ],  # Earth orbital velocity ~17 km/s -> 0.017 AU/day
         vz=[0.0, 0.001, 0.002, 0.003, 0.004],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
     )
 
     # Create arrival coordinates with a DIFFERENT time grid (shifted and different spacing)
@@ -180,12 +183,24 @@ def test_porkchop_different_time_grids():
         vy=[0.010, 0.009, 0.008, 0.007],  # Mars orbital velocity
         vz=[0.005, 0.006, 0.007, 0.008],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Convert coordinates to orbits
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=[f"departure_{i}" for i in range(len(departure_times))],
+        coordinates=departure_coords,
+    )
+
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=[f"arrival_{i}" for i in range(len(arrival_times))],
+        coordinates=arrival_coords,
     )
 
     # Generate porkchop data - this should work with different time grids
     results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
         propagation_origin=OriginCodes.SUN,
     )
 
@@ -201,8 +216,8 @@ def test_porkchop_different_time_grids():
     assert np.all(np.isfinite(c3_values)), "All C3 values should be finite"
 
     # Verify that departure times are before arrival times
-    dep_mjd = results.departure_state.time.mjd().to_numpy(zero_copy_only=False)
-    arr_mjd = results.arrival_state.time.mjd().to_numpy(zero_copy_only=False)
+    dep_mjd = results.departure_time.mjd().to_numpy(zero_copy_only=False)
+    arr_mjd = results.arrival_time.mjd().to_numpy(zero_copy_only=False)
     assert np.all(
         dep_mjd < arr_mjd
     ), "All departure times should be before arrival times"
@@ -233,6 +248,8 @@ def test_porkchop_overlapping_time_grids():
     ranges and step sizes.
     """
     from adam_core.coordinates import CartesianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.orbits import Orbits
     from adam_core.time import Timestamp
 
     # Departure times: every 5 days from day 60000 to 60020
@@ -248,6 +265,7 @@ def test_porkchop_overlapping_time_grids():
         vy=[0.017, 0.016, 0.015, 0.014, 0.013],
         vz=[0.0, 0.001, 0.002, 0.003, 0.004],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
     )
 
     # Arrival times: every 3 days from day 60010 to 60025 (overlapping!)
@@ -263,12 +281,24 @@ def test_porkchop_overlapping_time_grids():
         vy=[0.010, 0.0095, 0.009, 0.0085, 0.008, 0.0075],
         vz=[0.005, 0.0055, 0.006, 0.0065, 0.007, 0.0075],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Convert coordinates to orbits
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=[f"departure_{i}" for i in range(len(departure_times))],
+        coordinates=departure_coords,
+    )
+
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=[f"arrival_{i}" for i in range(len(arrival_times))],
+        coordinates=arrival_coords,
     )
 
     # Generate porkchop data
     results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
         propagation_origin=OriginCodes.SUN,
     )
 
@@ -283,8 +313,8 @@ def test_porkchop_overlapping_time_grids():
     assert np.all(tof > 0), "All time of flight should be positive"
 
     # Verify that departure times are before arrival times
-    dep_mjd = results.departure_state.time.mjd().to_numpy(zero_copy_only=False)
-    arr_mjd = results.arrival_state.time.mjd().to_numpy(zero_copy_only=False)
+    dep_mjd = results.departure_time.mjd().to_numpy(zero_copy_only=False)
+    arr_mjd = results.arrival_time.mjd().to_numpy(zero_copy_only=False)
     assert np.all(
         dep_mjd < arr_mjd
     ), "All departure times should be before arrival times"
@@ -310,6 +340,8 @@ def test_porkchop_problematic_case_that_old_version_would_fail():
     but works correctly with the new time-based filtering.
     """
     from adam_core.coordinates import CartesianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.orbits import Orbits
     from adam_core.time import Timestamp
 
     # Create a case where index-based filtering would give wrong results:
@@ -326,6 +358,7 @@ def test_porkchop_problematic_case_that_old_version_would_fail():
         vy=[0.017, 0.016, 0.015],
         vz=[0.0, 0.001, 0.002],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
     )
 
     # Arrival times are EARLIER than departure times
@@ -341,6 +374,18 @@ def test_porkchop_problematic_case_that_old_version_would_fail():
         vy=[0.010, 0.009, 0.008],
         vz=[0.005, 0.006, 0.007],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Convert coordinates to orbits
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=[f"departure_{i}" for i in range(len(departure_times))],
+        coordinates=departure_coords,
+    )
+
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=[f"arrival_{i}" for i in range(len(arrival_times))],
+        coordinates=arrival_coords,
     )
 
     # With the old index-based filtering, this would have incorrectly included
@@ -350,8 +395,8 @@ def test_porkchop_problematic_case_that_old_version_would_fail():
     # With our new time-based filtering, this should return NO valid combinations
     # because all departure times are after all arrival times
     results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
         propagation_origin=OriginCodes.SUN,
     )
 
@@ -372,6 +417,8 @@ def test_index_out_of_bounds_regression():
     3. Old implementation would try to use np.searchsorted with out-of-bounds results
     """
     from adam_core.coordinates import CartesianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.orbits import Orbits
     from adam_core.time import Timestamp
 
     # Create data where the first few points have very early times with valid data
@@ -396,6 +443,7 @@ def test_index_out_of_bounds_regression():
         vy=[0.017, 0.0169, 0.0168, 0.010, 0.0099, 0.0098],
         vz=[0.0, 0.0001, 0.0002, 0.005, 0.0051, 0.0052],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
     )
 
     # Create arrival times that span a different range
@@ -419,12 +467,24 @@ def test_index_out_of_bounds_regression():
         vy=[0.015, 0.0149, 0.0148, 0.008, 0.0079, 0.0078],
         vz=[0.002, 0.0021, 0.0022, 0.007, 0.0071, 0.0072],
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Convert coordinates to orbits
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=[f"departure_{i}" for i in range(len(departure_times))],
+        coordinates=departure_coords,
+    )
+
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=[f"arrival_{i}" for i in range(len(arrival_times))],
+        coordinates=arrival_coords,
     )
 
     # Generate porkchop data - this will create Lambert solutions for all valid combinations
     results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
         propagation_origin=OriginCodes.SUN,
     )
 
@@ -434,7 +494,9 @@ def test_index_out_of_bounds_regression():
     c3_values_km2_s2 = c3_values_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
 
     # Make the last few solutions have extremely high C3 values that would be filtered out
-    results.set_column("vx_1", results.vx_1)  # Dummy modification to create copy
+    # For test modification, we need a different approach since the new structure doesn't have vx_1
+    # Instead, let's just verify the results are valid
+    results_modified = results  # No need to modify for this test with new structure
 
     # Create a plotting scenario that would trigger the old bug:
     # 1. Set c3_max to filter out some data but ensure it's valid
@@ -470,6 +532,8 @@ def test_extreme_filtering_edge_case():
     This tests the edge case handling when very few data points remain after filtering.
     """
     from adam_core.coordinates import CartesianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.orbits import Orbits
     from adam_core.time import Timestamp
 
     # Create a large time span with data
@@ -485,6 +549,7 @@ def test_extreme_filtering_edge_case():
         vy=np.linspace(0.015, 0.019, len(departure_times)),
         vz=np.linspace(-0.001, 0.001, len(departure_times)),
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
     )
 
     arrival_times = Timestamp.from_mjd(
@@ -499,12 +564,24 @@ def test_extreme_filtering_edge_case():
         vy=np.linspace(0.008, 0.012, len(arrival_times)),
         vz=np.linspace(0.004, 0.008, len(arrival_times)),
         frame="ecliptic",
+        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
+    )
+
+    # Convert coordinates to orbits
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=[f"departure_{i}" for i in range(len(departure_times))],
+        coordinates=departure_coords,
+    )
+
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=[f"arrival_{i}" for i in range(len(arrival_times))],
+        coordinates=arrival_coords,
     )
 
     # Generate porkchop data
     results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
         propagation_origin=OriginCodes.SUN,
     )
 
@@ -533,9 +610,10 @@ def test_extreme_filtering_edge_case():
 def test_generate_porkchop_data_mismatched_inputs():
     """
     Test that generate_porkchop_data fails with assertion errors when
-    given coordinates with mismatched frames or mixed/mismatched origins.
+    given orbits with mismatched frames or mixed/mismatched origins.
     """
     from adam_core.coordinates import CartesianCoordinates, Origin
+    from adam_core.orbits import Orbits
 
     # Create base coordinates for testing
     departure_times = Timestamp.from_mjd([60000, 60001], scale="tdb")
@@ -554,6 +632,11 @@ def test_generate_porkchop_data_mismatched_inputs():
         origin=Origin.from_kwargs(code=["SUN", "SUN"]),
     )
 
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=["dep_0", "dep_1"],
+        coordinates=departure_coords,
+    )
+
     # --- Test mismatched frames ---
     arrival_coords_diff_frame = CartesianCoordinates.from_kwargs(
         time=arrival_times,
@@ -567,12 +650,17 @@ def test_generate_porkchop_data_mismatched_inputs():
         origin=Origin.from_kwargs(code=["SUN", "SUN"]),
     )
 
+    arrival_orbits_diff_frame = Orbits.from_kwargs(
+        orbit_id=["arr_0", "arr_1"],
+        coordinates=arrival_coords_diff_frame,
+    )
+
     with pytest.raises(
         AssertionError, match="Departure and arrival frames must be the same"
     ):
         generate_porkchop_data(
-            departure_coordinates=departure_coords,
-            arrival_coordinates=arrival_coords_diff_frame,
+            departure_orbits=departure_orbits,
+            arrival_orbits=arrival_orbits_diff_frame,
         )
 
     # Consistent arrival coordinates for further tests
@@ -588,43 +676,60 @@ def test_generate_porkchop_data_mismatched_inputs():
         origin=Origin.from_kwargs(code=["SUN", "SUN"]),
     )
 
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=["arr_0", "arr_1"],
+        coordinates=arrival_coords,
+    )
+
     # --- Test mixed departure origins ---
     departure_coords_mixed_origin = departure_coords.set_column(
         "origin", Origin.from_kwargs(code=["SUN", "EARTH"])
     )
+    departure_orbits_mixed_origin = Orbits.from_kwargs(
+        orbit_id=["dep_0", "dep_1"],
+        coordinates=departure_coords_mixed_origin,
+    )
     with pytest.raises(AssertionError):
         generate_porkchop_data(
-            departure_coordinates=departure_coords_mixed_origin,
-            arrival_coordinates=arrival_coords,
+            departure_orbits=departure_orbits_mixed_origin,
+            arrival_orbits=arrival_orbits,
         )
 
     # --- Test mixed arrival origins ---
     arrival_coords_mixed_origin = arrival_coords.set_column(
         "origin", Origin.from_kwargs(code=["SUN", "MARS_BARYCENTER"])
     )
+    arrival_orbits_mixed_origin = Orbits.from_kwargs(
+        orbit_id=["arr_0", "arr_1"],
+        coordinates=arrival_coords_mixed_origin,
+    )
     with pytest.raises(AssertionError):
         generate_porkchop_data(
-            departure_coordinates=departure_coords,
-            arrival_coordinates=arrival_coords_mixed_origin,
+            departure_orbits=departure_orbits,
+            arrival_orbits=arrival_orbits_mixed_origin,
         )
 
     # --- Test mismatched (but consistent) origins ---
     arrival_coords_different_origin = arrival_coords.set_column(
         "origin", Origin.from_kwargs(code=["MARS_BARYCENTER", "MARS_BARYCENTER"])
     )
+    arrival_orbits_different_origin = Orbits.from_kwargs(
+        orbit_id=["arr_0", "arr_1"],
+        coordinates=arrival_coords_different_origin,
+    )
     with pytest.raises(
         AssertionError, match="Departure and arrival origins must be the same"
     ):
         generate_porkchop_data(
-            departure_coordinates=departure_coords,
-            arrival_coordinates=arrival_coords_different_origin,
+            departure_orbits=departure_orbits,
+            arrival_orbits=arrival_orbits_different_origin,
         )
 
 
-def test_lambert_output_as_orbit():
+def test_lambert_solution_orbits():
     """
-    Test the LambertOutput.as_orbit method for both departure and arrival modes.
-    This test verifies that the method correctly constructs Orbits objects
+    Test the LambertSolutions.solution_departure_orbit and .solution_arrival_orbit methods.
+    This test verifies that the methods correctly construct Orbits objects
     from Lambert solution data.
     """
     from adam_core.coordinates import CartesianCoordinates
@@ -658,10 +763,21 @@ def test_lambert_output_as_orbit():
         origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
     )
 
+    # Convert coordinates to orbits
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=[f"departure_{i}" for i in range(len(departure_times))],
+        coordinates=departure_coords,
+    )
+
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=[f"arrival_{i}" for i in range(len(arrival_times))],
+        coordinates=arrival_coords,
+    )
+
     # Generate Lambert solutions
     lambert_results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
         propagation_origin=OriginCodes.SUN,
     )
 
@@ -669,7 +785,7 @@ def test_lambert_output_as_orbit():
     assert len(lambert_results) > 0, "Should have Lambert solutions for testing"
 
     # Test departure orbit construction
-    departure_orbits = lambert_results.as_orbit(from_state="departure")
+    departure_orbits = lambert_results.solution_departure_orbit()
 
     # Verify the basic structure of the returned Orbits object
     assert isinstance(departure_orbits, Orbits), "Should return an Orbits object"
@@ -679,7 +795,7 @@ def test_lambert_output_as_orbit():
 
     # Verify orbit IDs follow the expected pattern
     expected_departure_ids = [
-        f"lambert_departure_{i}" for i in range(len(lambert_results))
+        f"solution_departure_orbit_{i}" for i in range(len(lambert_results))
     ]
     actual_departure_ids = departure_orbits.orbit_id.to_pylist()
     assert (
@@ -692,32 +808,32 @@ def test_lambert_output_as_orbit():
     # Check positions match departure state
     np.testing.assert_array_almost_equal(
         departure_coords_from_orbit.x.to_numpy(zero_copy_only=False),
-        lambert_results.departure_state.x.to_numpy(zero_copy_only=False),
+        lambert_results.departure_body_x.to_numpy(zero_copy_only=False),
         decimal=10,
         err_msg="Departure orbit positions should match departure state positions",
     )
 
-    # Check velocities match Lambert solution departure velocities (vx_1, vy_1, vz_1)
+    # Check velocities match Lambert solution departure velocities (solution_departure_vx, vy, vz)
     np.testing.assert_array_almost_equal(
         departure_coords_from_orbit.vx.to_numpy(zero_copy_only=False),
-        lambert_results.vx_1.to_numpy(zero_copy_only=False),
+        lambert_results.solution_departure_vx.to_numpy(zero_copy_only=False),
         decimal=10,
         err_msg="Departure orbit velocities should match Lambert solution v1",
     )
 
     # Check time and frame match
     assert departure_coords_from_orbit.time.equals(
-        lambert_results.departure_state.time
+        lambert_results.departure_time
     ), "Times should match"
     assert (
-        departure_coords_from_orbit.frame == lambert_results.departure_state.frame
+        departure_coords_from_orbit.frame == lambert_results.frame
     ), "Frames should match"
     assert departure_coords_from_orbit.origin.code.equals(
-        lambert_results.departure_state.origin.code
+        lambert_results.origin.code
     ), "Origins should match"
 
     # Test arrival orbit construction
-    arrival_orbits = lambert_results.as_orbit(from_state="arrival")
+    arrival_orbits = lambert_results.solution_arrival_orbit()
 
     # Verify the basic structure
     assert isinstance(arrival_orbits, Orbits), "Should return an Orbits object"
@@ -726,7 +842,9 @@ def test_lambert_output_as_orbit():
     ), "Should have same number of orbits as Lambert results"
 
     # Verify orbit IDs follow the expected pattern
-    expected_arrival_ids = [f"lambert_arrival_{i}" for i in range(len(lambert_results))]
+    expected_arrival_ids = [
+        f"solution_arrival_orbit_{i}" for i in range(len(lambert_results))
+    ]
     actual_arrival_ids = arrival_orbits.orbit_id.to_pylist()
     assert (
         actual_arrival_ids == expected_arrival_ids
@@ -738,38 +856,32 @@ def test_lambert_output_as_orbit():
     # Check positions match arrival state
     np.testing.assert_array_almost_equal(
         arrival_coords_from_orbit.x.to_numpy(zero_copy_only=False),
-        lambert_results.arrival_state.x.to_numpy(zero_copy_only=False),
+        lambert_results.arrival_body_x.to_numpy(zero_copy_only=False),
         decimal=10,
         err_msg="Arrival orbit positions should match arrival state positions",
     )
 
-    # Check velocities match Lambert solution arrival velocities (vx_2, vy_2, vz_2)
+    # Check velocities match Lambert solution arrival velocities (solution_arrival_vx, vy, vz)
     np.testing.assert_array_almost_equal(
         arrival_coords_from_orbit.vx.to_numpy(zero_copy_only=False),
-        lambert_results.vx_2.to_numpy(zero_copy_only=False),
+        lambert_results.solution_arrival_vx.to_numpy(zero_copy_only=False),
         decimal=10,
         err_msg="Arrival orbit velocities should match Lambert solution v2",
     )
 
     # Check time and frame match
     assert arrival_coords_from_orbit.time.equals(
-        lambert_results.arrival_state.time
+        lambert_results.arrival_time
     ), "Times should match"
     assert (
-        arrival_coords_from_orbit.frame == lambert_results.arrival_state.frame
+        arrival_coords_from_orbit.frame == lambert_results.frame
     ), "Frames should match"
     assert arrival_coords_from_orbit.origin.code.equals(
-        lambert_results.arrival_state.origin.code
+        lambert_results.origin.code
     ), "Origins should match"
 
-    # Test default parameter (should be "departure")
-    default_orbits = lambert_results.as_orbit()
-    assert (
-        default_orbits.orbit_id.to_pylist() == expected_departure_ids
-    ), "Default should be departure mode"
 
-
-def test_lambert_output_as_orbit_keplerian_consistency():
+def test_lambert_solution_orbits_keplerian_consistency():
     """
     Test that orbits generated from departure and arrival states represent
     the same transfer trajectory by comparing their Keplerian elements.
@@ -782,6 +894,7 @@ def test_lambert_output_as_orbit_keplerian_consistency():
         KeplerianCoordinates,
         transform_coordinates,
     )
+    from adam_core.orbits import Orbits
     from adam_core.time import Timestamp
 
     # Create test coordinates with larger separations for more realistic Lambert solutions
@@ -814,10 +927,21 @@ def test_lambert_output_as_orbit_keplerian_consistency():
         origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
     )
 
+    # Convert coordinates to orbits
+    departure_orbits = Orbits.from_kwargs(
+        orbit_id=[f"departure_{i}" for i in range(len(departure_times))],
+        coordinates=departure_coords,
+    )
+
+    arrival_orbits = Orbits.from_kwargs(
+        orbit_id=[f"arrival_{i}" for i in range(len(arrival_times))],
+        coordinates=arrival_coords,
+    )
+
     # Generate Lambert solutions
     lambert_results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
+        departure_orbits=departure_orbits,
+        arrival_orbits=arrival_orbits,
         propagation_origin=OriginCodes.SUN,
     )
 
@@ -827,8 +951,8 @@ def test_lambert_output_as_orbit_keplerian_consistency():
     ), "Should have Lambert solutions for Keplerian comparison"
 
     # Generate orbits from both departure and arrival states
-    departure_orbits = lambert_results.as_orbit(from_state="departure")
-    arrival_orbits = lambert_results.as_orbit(from_state="arrival")
+    departure_orbits = lambert_results.solution_departure_orbit()
+    arrival_orbits = lambert_results.solution_arrival_orbit()
 
     # Convert both to Keplerian coordinates
     departure_keplerian = transform_coordinates(
@@ -939,52 +1063,3 @@ def test_lambert_output_as_orbit_keplerian_consistency():
     print(
         f"  Inclination range: {np.min(departure_i)*180/np.pi:.3f} - {np.max(departure_i)*180/np.pi:.3f} degrees"
     )
-
-
-def test_lambert_output_as_orbit_invalid_state():
-    """
-    Test that as_orbit method raises appropriate error for invalid from_state parameter.
-    """
-    from adam_core.coordinates import CartesianCoordinates
-    from adam_core.time import Timestamp
-
-    # Create minimal test data
-    departure_times = Timestamp.from_mjd([60000], scale="tdb")
-    departure_coords = CartesianCoordinates.from_kwargs(
-        time=departure_times,
-        x=[1.0],
-        y=[0.0],
-        z=[0.0],
-        vx=[0.0],
-        vy=[0.017],
-        vz=[0.0],
-        frame="ecliptic",
-        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(departure_times)),
-    )
-
-    arrival_times = Timestamp.from_mjd([60050], scale="tdb")
-    arrival_coords = CartesianCoordinates.from_kwargs(
-        time=arrival_times,
-        x=[1.5],
-        y=[0.5],
-        z=[0.05],
-        vx=[0.05],
-        vy=[0.010],
-        vz=[0.005],
-        frame="ecliptic",
-        origin=Origin.from_OriginCodes(OriginCodes.SUN, len(arrival_times)),
-    )
-
-    # Generate Lambert solutions
-    lambert_results = generate_porkchop_data(
-        departure_coordinates=departure_coords,
-        arrival_coordinates=arrival_coords,
-        propagation_origin=OriginCodes.SUN,
-    )
-
-    # Test with invalid from_state - should raise AssertionError due to the assert statement
-    try:
-        lambert_results.as_orbit(from_state="invalid")
-        assert False, "Should have raised AssertionError for invalid from_state"
-    except AssertionError as e:
-        assert "from_state must be either 'departure' or 'arrival'" in str(e)
