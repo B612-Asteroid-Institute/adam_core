@@ -493,11 +493,6 @@ def test_index_out_of_bounds_regression():
     c3_values_au_d2 = results.c3_departure()
     c3_values_km2_s2 = c3_values_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
 
-    # Make the last few solutions have extremely high C3 values that would be filtered out
-    # For test modification, we need a different approach since the new structure doesn't have vx_1
-    # Instead, let's just verify the results are valid
-    results_modified = results  # No need to modify for this test with new structure
-
     # Create a plotting scenario that would trigger the old bug:
     # 1. Set c3_max to filter out some data but ensure it's valid
     # 2. The filtered unique arrays won't cover all data points
