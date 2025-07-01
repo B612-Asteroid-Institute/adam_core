@@ -922,7 +922,6 @@ def plot_risk_corridor(
 
     # Convert times to minutes since first impact
     time_nums = (times.mjd - times.mjd.min()) * 24 * 60
-    first_impact_time = times[0].iso
 
     # Calculate center
     center_lon = lon[0]
@@ -954,7 +953,7 @@ def plot_risk_corridor(
     for i in range(len(lon)):
         # Create ticks for min, middle (when applicable), and max
         current_max_time = time_nums[i]
-        
+
         if i == 0:
             # First frame: only show T+0 min
             tick_values = [0]
@@ -967,7 +966,11 @@ def plot_risk_corridor(
             # Third frame and beyond: show T+0 min, middle, and max
             middle_time = current_max_time / 2
             tick_values = [0, middle_time, current_max_time]
-            tick_labels = ["T+0 min", f"T+{middle_time:.0f} min", f"T+{current_max_time:.0f} min"]
+            tick_labels = [
+                "T+0 min",
+                f"T+{middle_time:.0f} min",
+                f"T+{current_max_time:.0f} min",
+            ]
         frame = go.Frame(
             data=[
                 go.Scattermap(
@@ -1068,7 +1071,9 @@ def plot_risk_corridor(
             font=dict(size=14, color="black"),
         ),
         autosize=True,
-        margin=dict(l=7, r=120, t=30, b=30, pad=0),  # Increased right margin for vertical colorbar
+        margin=dict(
+            l=7, r=120, t=30, b=30, pad=0
+        ),  # Increased right margin for vertical colorbar
         **plot_config,
         updatemenus=[
             dict(
