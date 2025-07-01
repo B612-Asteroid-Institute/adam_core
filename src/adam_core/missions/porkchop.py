@@ -231,12 +231,6 @@ class LambertSolutions(qv.Table):
     solution_arrival_vx = qv.Float64Column()
     solution_arrival_vy = qv.Float64Column()
     solution_arrival_vz = qv.Float64Column()
-    # vx_1 = qv.Float64Column()
-    # vy_1 = qv.Float64Column()
-    # vz_1 = qv.Float64Column()
-    # vx_2 = qv.Float64Column()
-    # vy_2 = qv.Float64Column()
-    # vz_2 = qv.Float64Column()
     frame = qv.StringAttribute(default="unspecified")
     origin = Origin.as_column()
 
