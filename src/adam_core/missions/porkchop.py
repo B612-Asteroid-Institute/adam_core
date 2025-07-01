@@ -1,7 +1,7 @@
 import logging
 import multiprocessing as mp
 import warnings
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -205,24 +205,137 @@ def generate_perceptual_colorscale(
     return colorscale
 
 
-class LambertOutput(qv.Table):
-    departure_state = CartesianCoordinates.as_column()
-    arrival_state = CartesianCoordinates.as_column()
-    vx_1 = qv.Float64Column()
-    vy_1 = qv.Float64Column()
-    vz_1 = qv.Float64Column()
-    vx_2 = qv.Float64Column()
-    vy_2 = qv.Float64Column()
-    vz_2 = qv.Float64Column()
+# class LambertOutput(qv.Table):
+class LambertSolutions(qv.Table):
+    # departure_state = CartesianCoordinates.as_column()
+    # arrival_state = CartesianCoordinates.as_column()
+    departure_body_id = qv.LargeStringColumn()
+    departure_time = Timestamp.as_column()
+    departure_body_x = qv.Float64Column()
+    departure_body_y = qv.Float64Column()
+    departure_body_z = qv.Float64Column()
+    departure_body_vx = qv.Float64Column()
+    departure_body_vy = qv.Float64Column()
+    departure_body_vz = qv.Float64Column()
+    arrival_body_id = qv.LargeStringColumn()
+    arrival_time = Timestamp.as_column()
+    arrival_body_x = qv.Float64Column()
+    arrival_body_y = qv.Float64Column()
+    arrival_body_z = qv.Float64Column()
+    arrival_body_vx = qv.Float64Column()
+    arrival_body_vy = qv.Float64Column()
+    arrival_body_vz = qv.Float64Column()
+    solution_departure_vx = qv.Float64Column()
+    solution_departure_vy = qv.Float64Column()
+    solution_departure_vz = qv.Float64Column()
+    solution_arrival_vx = qv.Float64Column()
+    solution_arrival_vy = qv.Float64Column()
+    solution_arrival_vz = qv.Float64Column()
+    frame = qv.StringAttribute(default="unspecified")
     origin = Origin.as_column()
+
+    def departure_body_orbit(self) -> Orbits:
+        """
+        Return the departure body orbit.
+        """
+        return Orbits.from_kwargs(
+            orbit_id=self.departure_body_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                time=self.departure_time,
+                x=self.departure_body_x,
+                y=self.departure_body_y,
+                z=self.departure_body_z,
+                vx=self.departure_body_vx,
+                vy=self.departure_body_vy,
+                vz=self.departure_body_vz,
+                origin=self.origin,
+                frame=self.frame,
+            ),
+        )
+
+    def arrival_body_orbit(self) -> Orbits:
+        """
+        Return the arrival body orbit.
+        """
+        return Orbits.from_kwargs(
+            orbit_id=self.arrival_body_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                time=self.arrival_time,
+                x=self.arrival_body_x,
+                y=self.arrival_body_y,
+                z=self.arrival_body_z,
+                vx=self.arrival_body_vx,
+                vy=self.arrival_body_vy,
+                vz=self.arrival_body_vz,
+                origin=self.origin,
+                frame=self.frame,
+            ),
+        )
+
+    def solution_departure_orbit(self) -> Orbits:
+        """
+        Return the solution departure orbit.
+        """
+        solution_departure_orbit_id = [
+            f"solution_departure_orbit_{i}"
+            for i in range(len(self.solution_departure_vx))
+        ]
+        return Orbits.from_kwargs(
+            orbit_id=solution_departure_orbit_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                time=self.departure_time,
+                x=self.departure_body_x,
+                y=self.departure_body_y,
+                z=self.departure_body_z,
+                vx=self.solution_departure_vx,
+                vy=self.solution_departure_vy,
+                vz=self.solution_departure_vz,
+                origin=self.origin,
+                frame=self.frame,
+            ),
+        )
+
+    def solution_arrival_orbit(self) -> Orbits:
+        """
+        Return the solution arrival orbit.
+        """
+        solution_arrival_orbit_id = [
+            f"solution_arrival_orbit_{i}" for i in range(len(self.solution_arrival_vx))
+        ]
+        return Orbits.from_kwargs(
+            orbit_id=solution_arrival_orbit_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                time=self.arrival_time,
+                x=self.arrival_body_x,
+                y=self.arrival_body_y,
+                z=self.arrival_body_z,
+                vx=self.solution_arrival_vx,
+                vy=self.solution_arrival_vy,
+                vz=self.solution_arrival_vz,
+                origin=self.origin,
+                frame=self.frame,
+            ),
+        )
 
     def c3_departure(self) -> npt.NDArray[np.float64]:
         """
         Return the C3 in au^2/d^2.
         """
         return calculate_c3(
-            np.array(self.table.select(["vx_1", "vy_1", "vz_1"])),
-            self.departure_state.v,
+            np.array(
+                self.table.select(
+                    [
+                        "solution_departure_vx",
+                        "solution_departure_vy",
+                        "solution_departure_vz",
+                    ]
+                )
+            ),
+            np.array(
+                self.table.select(
+                    ["departure_body_vx", "departure_body_vy", "departure_body_vz"]
+                )
+            ),
         )
 
     def c3_arrival(self) -> npt.NDArray[np.float64]:
@@ -230,8 +343,20 @@ class LambertOutput(qv.Table):
         Return the C3 in au^2/d^2.
         """
         return calculate_c3(
-            np.array(self.table.select(["vx_2", "vy_2", "vz_2"])),
-            self.arrival_state.v,
+            np.array(
+                self.table.select(
+                    [
+                        "solution_arrival_vx",
+                        "solution_arrival_vy",
+                        "solution_arrival_vz",
+                    ]
+                )
+            ),
+            np.array(
+                self.table.select(
+                    ["arrival_body_vx", "arrival_body_vy", "arrival_body_vz"]
+                )
+            ),
         )
 
     def vinf_departure(self) -> npt.NDArray[np.float64]:
@@ -239,8 +364,20 @@ class LambertOutput(qv.Table):
         Return the v infinity in au/d.
         """
         return np.linalg.norm(
-            np.array(self.table.select(["vx_1", "vy_1", "vz_1"]))
-            - self.departure_state.v,
+            np.array(
+                self.table.select(
+                    [
+                        "solution_departure_vx",
+                        "solution_departure_vy",
+                        "solution_departure_vz",
+                    ]
+                )
+            )
+            - np.array(
+                self.table.select(
+                    ["departure_body_vx", "departure_body_vy", "departure_body_vz"]
+                )
+            ),
             axis=1,
         )
 
@@ -249,8 +386,20 @@ class LambertOutput(qv.Table):
         Return the v infinity in au/d.
         """
         return np.linalg.norm(
-            np.array(self.table.select(["vx_2", "vy_2", "vz_2"]))
-            - self.arrival_state.v,
+            np.array(
+                self.table.select(
+                    [
+                        "solution_arrival_vx",
+                        "solution_arrival_vy",
+                        "solution_arrival_vz",
+                    ]
+                )
+            )
+            - np.array(
+                self.table.select(
+                    ["arrival_body_vx", "arrival_body_vy", "arrival_body_vz"]
+                )
+            ),
             axis=1,
         )
 
@@ -258,66 +407,9 @@ class LambertOutput(qv.Table):
         """
         Return the time of flight in days.
         """
-        return self.arrival_state.time.mjd().to_numpy(
+        return self.arrival_time.mjd().to_numpy(
             zero_copy_only=False
-        ) - self.departure_state.time.mjd().to_numpy(zero_copy_only=False)
-
-    def as_orbit(
-        self, from_state: Literal["departure", "arrival"] = "departure"
-    ) -> Orbits:
-        """
-        Construct solution orbit from departure
-
-        Parameters
-        ----------
-        from_state : Literal["departure", "arrival"]
-            The state to construct the orbit from.
-
-        Returns
-        -------
-        Orbits
-            The constructed orbits.
-        """
-        assert from_state in [
-            "departure",
-            "arrival",
-        ], "from_state must be either 'departure' or 'arrival'"
-        if from_state == "departure":
-            # Generate orbit id as "lambert_departure_X" where X is the index of the departure state
-            orbit_ids = [
-                f"lambert_departure_{i}" for i in range(len(self.departure_state))
-            ]
-            return Orbits.from_kwargs(
-                orbit_id=orbit_ids,
-                coordinates=CartesianCoordinates.from_kwargs(
-                    time=self.departure_state.time,
-                    x=self.departure_state.x,
-                    y=self.departure_state.y,
-                    z=self.departure_state.z,
-                    vx=self.vx_1,
-                    vy=self.vy_1,
-                    vz=self.vz_1,
-                    origin=self.departure_state.origin,
-                    frame=self.departure_state.frame,
-                ),
-            )
-        elif from_state == "arrival":
-            # Generate orbit id as "lambert_arrival_X" where X is the index of the arrival state
-            orbit_ids = [f"lambert_arrival_{i}" for i in range(len(self.arrival_state))]
-            return Orbits.from_kwargs(
-                orbit_id=orbit_ids,
-                coordinates=CartesianCoordinates.from_kwargs(
-                    time=self.arrival_state.time,
-                    x=self.arrival_state.x,
-                    y=self.arrival_state.y,
-                    z=self.arrival_state.z,
-                    vx=self.vx_2,
-                    vy=self.vy_2,
-                    vz=self.vz_2,
-                    origin=self.arrival_state.origin,
-                    frame=self.arrival_state.frame,
-                ),
-            )
+        ) - self.departure_time.mjd().to_numpy(zero_copy_only=False)
 
 
 def departure_spherical_coordinates(
@@ -391,13 +483,17 @@ def departure_spherical_coordinates(
 
 
 def lambert_worker(
-    departure_coordinates: CartesianCoordinates,
-    arrival_coordinates: CartesianCoordinates,
+    departure_orbits: Orbits,
+    arrival_orbits: Orbits,
     propagation_origin: OriginCodes,
     prograde: bool = True,
     max_iter: int = 35,
     tol: float = 1e-10,
-) -> LambertOutput:
+) -> LambertSolutions:
+    # Extract coordinates from orbits
+    departure_coordinates = departure_orbits.coordinates
+    arrival_coordinates = arrival_orbits.coordinates
+
     r1 = departure_coordinates.r
     r2 = arrival_coordinates.r
     tof = arrival_coordinates.time.mjd().to_numpy(
@@ -408,15 +504,34 @@ def lambert_worker(
     mu = origins.mu()[0]
     v1, v2 = solve_lambert(r1, r2, tof, mu, prograde, max_iter, tol)
 
-    return LambertOutput.from_kwargs(
-        departure_state=departure_coordinates,
-        arrival_state=arrival_coordinates,
-        vx_1=v1[:, 0],
-        vy_1=v1[:, 1],
-        vz_1=v1[:, 2],
-        vx_2=v2[:, 0],
-        vy_2=v2[:, 1],
-        vz_2=v2[:, 2],
+    # Use actual orbit IDs from the Orbits objects
+    departure_body_ids = departure_orbits.orbit_id.to_pylist()
+    arrival_body_ids = arrival_orbits.orbit_id.to_pylist()
+
+    return LambertSolutions.from_kwargs(
+        departure_body_id=departure_body_ids,
+        departure_time=departure_coordinates.time,
+        departure_body_x=departure_coordinates.x,
+        departure_body_y=departure_coordinates.y,
+        departure_body_z=departure_coordinates.z,
+        departure_body_vx=departure_coordinates.vx,
+        departure_body_vy=departure_coordinates.vy,
+        departure_body_vz=departure_coordinates.vz,
+        arrival_body_id=arrival_body_ids,
+        arrival_time=arrival_coordinates.time,
+        arrival_body_x=arrival_coordinates.x,
+        arrival_body_y=arrival_coordinates.y,
+        arrival_body_z=arrival_coordinates.z,
+        arrival_body_vx=arrival_coordinates.vx,
+        arrival_body_vy=arrival_coordinates.vy,
+        arrival_body_vz=arrival_coordinates.vz,
+        solution_departure_vx=v1[:, 0],
+        solution_departure_vy=v1[:, 1],
+        solution_departure_vz=v1[:, 2],
+        solution_arrival_vx=v2[:, 0],
+        solution_arrival_vy=v2[:, 1],
+        solution_arrival_vz=v2[:, 2],
+        frame=departure_coordinates.frame,
         origin=origins,
     )
 
@@ -432,7 +547,7 @@ def prepare_and_propagate_orbits(
     step_size: float = 1.0,
     propagator_class: Optional[type[Propagator]] = None,
     max_processes: Optional[int] = 1,
-) -> CartesianCoordinates:
+) -> Orbits:
     """
     Prepare and propagate orbits for a single body over a specified time range.
 
@@ -455,8 +570,8 @@ def prepare_and_propagate_orbits(
 
     Returns
     -------
-    CartesianCoordinates
-        The propagated coordinates over the specified time range.
+    Orbits
+        The propagated orbits over the specified time range.
     """
     # if body is an Orbit, ensure its origin is the propagation_origin
     if isinstance(body, Orbits):
@@ -479,39 +594,44 @@ def prepare_and_propagate_orbits(
         scale="tdb",
     )
 
-    # get coordinates for the body at specified times
+    # get orbits for the body at specified times
     if isinstance(body, Orbits):
         propagator = propagator_class()
-        coordinates = propagator.propagate_orbits(
-            body, times, max_processes=max_processes
-        ).coordinates
+        orbits = propagator.propagate_orbits(body, times, max_processes=max_processes)
     else:
+        # For major bodies, create an Orbits object with the body's origin code as the orbit_id
         coordinates = get_perturber_state(
             body, times, frame="ecliptic", origin=propagation_origin
         )
+        # Create orbit IDs based on the body name and time index
+        orbit_ids = np.repeat(body.name, len(coordinates))
+        orbits = Orbits.from_kwargs(
+            orbit_id=orbit_ids,
+            coordinates=coordinates,
+        )
 
-    return coordinates
+    return orbits
 
 
 def generate_porkchop_data(
-    departure_coordinates: CartesianCoordinates,
-    arrival_coordinates: CartesianCoordinates,
+    departure_orbits: Orbits,
+    arrival_orbits: Orbits,
     propagation_origin: OriginCodes = OriginCodes.SUN,
     prograde: bool = True,
     max_iter: int = 35,
     tol: float = 1e-10,
     max_processes: Optional[int] = 1,
-) -> LambertOutput:
+) -> LambertSolutions:
     """
     Generate data for a porkchop plot by solving Lambert's problem for a grid of
     departure and arrival times.
 
     Parameters
     ----------
-    departure_coordinates : CartesianCoordinates
-        The departure coordinates.
-    arrival_coordinates : CartesianCoordinates
-        The arrival coordinates.
+    departure_orbits : Orbits
+        The departure orbits.
+    arrival_orbits : Orbits
+        The arrival orbits.
     propagation_origin : OriginCodes
         The origin of the propagation.
     prograde : bool, optional
@@ -532,34 +652,34 @@ def generate_porkchop_data(
         The porkchop data.
     """
 
-    # assert that the departure and arrival coordinates have the same frame, Origin
-    departure_frame = departure_coordinates.frame
-    arrival_frame = arrival_coordinates.frame
-
     assert (
-        departure_frame == arrival_frame
+        departure_orbits.coordinates.frame == arrival_orbits.coordinates.frame
     ), "Departure and arrival frames must be the same"
-    assert len(departure_coordinates.origin.code.unique()) == 1
-    assert len(arrival_coordinates.origin.code.unique()) == 1
-
-    departure_origin = departure_coordinates.origin[0]
-    arrival_origin = arrival_coordinates.origin[0]
+    assert len(departure_orbits.coordinates.origin.code.unique()) == 1
+    assert len(arrival_orbits.coordinates.origin.code.unique()) == 1
 
     assert (
-        departure_origin == arrival_origin
+        departure_orbits.coordinates.origin.code[0]
+        == arrival_orbits.coordinates.origin.code[0]
     ), "Departure and arrival origins must be the same"
 
-    # First let's make sure departure and arrival coordinates are time-ordered
-    departure_coordinates = departure_coordinates.sort_by(["time.days", "time.nanos"])
-    arrival_coordinates = arrival_coordinates.sort_by(["time.days", "time.nanos"])
+    # First let's make sure departure and arrival orbits are time-ordered
+    departure_orbits = departure_orbits.sort_by(
+        ["coordinates.time.days", "coordinates.time.nanos"]
+    )
+    arrival_orbits = arrival_orbits.sort_by(
+        ["coordinates.time.days", "coordinates.time.nanos"]
+    )
 
     # Get the actual times for comparison
-    dep_times_mjd = departure_coordinates.time.mjd().to_numpy(zero_copy_only=False)
-    arr_times_mjd = arrival_coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    dep_times_mjd = departure_orbits.coordinates.time.mjd().to_numpy(
+        zero_copy_only=False
+    )
+    arr_times_mjd = arrival_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
     # Create meshgrids of indices and times
     dep_indices, arr_indices = np.meshgrid(
-        np.arange(len(departure_coordinates)), np.arange(len(arrival_coordinates))
+        np.arange(len(departure_orbits)), np.arange(len(arrival_orbits))
     )
     dep_time_grid, arr_time_grid = np.meshgrid(dep_times_mjd, arr_times_mjd)
 
@@ -571,28 +691,28 @@ def generate_porkchop_data(
     dep_indices_flat = dep_indices[valid_indices].flatten()
     arr_indices_flat = arr_indices[valid_indices].flatten()
 
-    stacked_departure_coordinates = departure_coordinates.take(dep_indices_flat)
-    stacked_arrival_coordinates = arrival_coordinates.take(arr_indices_flat)
+    stacked_departure_orbits = departure_orbits.take(dep_indices_flat)
+    stacked_arrival_orbits = arrival_orbits.take(arr_indices_flat)
 
     # If no valid combinations exist, return empty results
-    if len(stacked_departure_coordinates) == 0:
-        return LambertOutput.empty()
+    if len(stacked_departure_orbits) == 0:
+        return LambertSolutions.empty()
 
     if max_processes is None:
         max_processes = mp.cpu_count()
 
     use_ray = initialize_use_ray(max_processes)
 
-    lambert_results = LambertOutput.empty()
+    lambert_results = LambertSolutions.empty()
     if use_ray:
         futures = []
         for start, end in _iterate_chunk_indices(
-            stacked_departure_coordinates, chunk_size=100
+            stacked_departure_orbits, chunk_size=100
         ):
             futures.append(
                 lambert_worker_remote.remote(
-                    stacked_departure_coordinates[start:end],
-                    stacked_arrival_coordinates[start:end],
+                    stacked_departure_orbits[start:end],
+                    stacked_arrival_orbits[start:end],
                     propagation_origin,
                     prograde,
                     max_iter,
@@ -612,8 +732,8 @@ def generate_porkchop_data(
 
     else:
         lambert_results = lambert_worker(
-            stacked_departure_coordinates,
-            stacked_arrival_coordinates,
+            stacked_departure_orbits,
+            stacked_arrival_orbits,
             propagation_origin,
             prograde,
             max_iter,
@@ -624,7 +744,7 @@ def generate_porkchop_data(
 
 
 def plot_porkchop_plotly(
-    porkchop_data: LambertOutput,
+    porkchop_data: LambertSolutions,
     width: int = 900,
     height: int = 700,
     c3_departure_min: Optional[float] = None,
@@ -694,8 +814,8 @@ def plot_porkchop_plotly(
     c3_departure_au_d2 = porkchop_data.c3_departure()  # C3 departure in (AU/day)^2
     vinf_arrival_au_day = porkchop_data.vinf_arrival()  # V∞ arrival in AU/day
     time_of_flight_days = porkchop_data.time_of_flight()
-    departure_times = porkchop_data.departure_state.time
-    arrival_times = porkchop_data.arrival_state.time
+    departure_times = porkchop_data.departure_time
+    arrival_times = porkchop_data.arrival_time
 
     # Convert to metric units using unit conversion functions
     c3_departure_km2_s2 = c3_departure_au_d2 * (au_per_day_to_km_per_s(1.0) ** 2)
