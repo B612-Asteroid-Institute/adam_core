@@ -51,7 +51,6 @@ dependencies = [
   "naif-eop-historical",
   "naif-earth-itrf93",
   "timezonefinder",
-  "rebound<=4.4.8",
 ]
 
 [project.optional-dependencies]
