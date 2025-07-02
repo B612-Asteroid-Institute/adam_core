@@ -51,7 +51,7 @@ dependencies = [
   "naif-eop-historical",
   "naif-earth-itrf93",
   "timezonefinder",
-  "rebound @ git+https://github.com/hannorein/rebound.git@4.4.8",
+  "rebound<=4.4.8",
 ]
 
 [project.optional-dependencies]
