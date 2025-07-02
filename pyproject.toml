@@ -64,9 +64,7 @@ plots = [
 oem = [
     "oem>=0.4.5",
 ]
-assist = [
-    "adam-assist>=0.3.0",
-]
+
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
