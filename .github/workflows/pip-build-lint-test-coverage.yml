@@ -32,7 +32,7 @@ jobs:
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
-        run: pdm run coverage
+        run: pdm run coverage -vv
       - name: Coverage report to coveralls
         uses: coverallsapp/github-action@v2.0.0
         with:
