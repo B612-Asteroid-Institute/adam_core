@@ -922,7 +922,6 @@ def plot_risk_corridor(
 
     # Convert times to minutes since first impact
     time_nums = (times.mjd - times.mjd.min()) * 24 * 60
-    first_impact_time = times[0].iso
 
     # Calculate center
     center_lon = lon[0]
@@ -940,39 +939,38 @@ def plot_risk_corridor(
     color_bar_config = dict(
         tickmode="array",
         tickangle=0,
-        orientation="h",
-        x=0.05,
-        y=-0.3,
+        orientation="v",  # Vertical orientation for right side
+        x=1.02,
+        y=0.5,  # Centered vertically
         xanchor="left",
-        yanchor="bottom",
+        yanchor="middle",
         thickness=25,
-        len=0.90 if not logo else 0.75,
+        len=0.8,
     )
 
     # Create frames for animation
     frames = []
     for i in range(len(lon)):
-        # Calculate time_step to have approximately 10 ticks
-        time_step = int(np.ceil(time_nums[-1] / 10))
-        # Round to nearest 5 or 10 for cleaner intervals
-        if time_step > 10:
-            time_step = int(np.ceil(time_step / 10) * 10)
-        elif time_step > 5:
-            time_step = int(np.ceil(time_step / 5) * 5)
+        # Create ticks for min, middle (when applicable), and max
+        current_max_time = time_nums[i]
 
-        # Determine effective step for np.arange to avoid step=0.
-        # If time_step is 0 (which implies time_nums[-1] == 0), use 1.
-        # This ensures np.arange(0, 0 + 1, 1) yields [0] for the T+0 min case.
-        effective_arange_step = time_step if time_step > 0 else 1
-
-        ticktext = [
-            f"T+{i:d} min"
-            for i in np.arange(
-                0, time_nums[-1] + effective_arange_step, effective_arange_step
-            )
-            .astype(int)
-            .tolist()
-        ]
+        if i == 0:
+            # First frame: only show T+0 min
+            tick_values = [0]
+            tick_labels = ["T+0 min"]
+        elif i == 1:
+            # Second frame: show T+0 min and max
+            tick_values = [0, current_max_time]
+            tick_labels = ["T+0 min", f"T+{current_max_time:.0f} min"]
+        else:
+            # Third frame and beyond: show T+0 min, middle, and max
+            middle_time = current_max_time / 2
+            tick_values = [0, middle_time, current_max_time]
+            tick_labels = [
+                "T+0 min",
+                f"T+{middle_time:.0f} min",
+                f"T+{current_max_time:.0f} min",
+            ]
         frame = go.Frame(
             data=[
                 go.Scattermap(
@@ -987,16 +985,11 @@ def plot_risk_corridor(
                         showscale=True,
                         colorbar=dict(
                             title=dict(
-                                text=f"Minutes After First Detected Possible Impact {first_impact_time}",
-                                side="top",
+                                side="right",
                                 font=dict(size=12, color="black"),
                             ),
-                            ticktext=ticktext,
-                            tickvals=np.arange(
-                                0,
-                                time_nums[-1] + effective_arange_step,
-                                effective_arange_step,
-                            ).tolist(),
+                            ticktext=tick_labels,
+                            tickvals=tick_values,
                             **color_bar_config,
                         ),
                     ),
@@ -1031,20 +1024,10 @@ def plot_risk_corridor(
                     showscale=True,
                     colorbar=dict(
                         title=dict(
-                            text=f"Minutes After First Detected Possible Impact {first_impact_time}",
-                            side="top",
+                            side="right",
                             font=dict(size=12, color="black"),
                         ),
-                        ticktext=[
-                            f"T+{i:d} min"
-                            for i in np.arange(
-                                0,
-                                time_nums[-1] + effective_arange_step,
-                                effective_arange_step,
-                            )
-                            .astype(int)
-                            .tolist()
-                        ],
+                        ticktext=["T+0 min", f"T+{time_nums[-1]:.0f} min"],
                         tickvals=[0, time_nums[-1]],
                         **color_bar_config,
                     ),
@@ -1068,7 +1051,7 @@ def plot_risk_corridor(
                 xref="paper",
                 yref="paper",
                 x=0.81,
-                y=-0.26,
+                y=-0.20,  # Moved logo up slightly
                 sizex=0.18,
                 sizey=0.18,
                 xanchor="left",
@@ -1088,14 +1071,16 @@ def plot_risk_corridor(
             font=dict(size=14, color="black"),
         ),
         autosize=True,
-        margin=dict(l=7, r=7, t=30, b=7, pad=0),
+        margin=dict(
+            l=7, r=120, t=30, b=30, pad=0
+        ),  # Increased right margin for vertical colorbar
         **plot_config,
         updatemenus=[
             dict(
                 type="buttons",
                 showactive=False,
                 x=0.03,
-                y=-0.07,
+                y=-0.12,  # Positioned between slider and colorbar
                 buttons=[
                     dict(
                         label="▶",
@@ -1130,7 +1115,6 @@ def plot_risk_corridor(
                 pad=dict(t=50),
                 len=0.90 if not logo else 0.75,
                 x=0.05,
-                y=0.0,
                 font=dict(color="black", size=10),
                 steps=[
                     dict(
