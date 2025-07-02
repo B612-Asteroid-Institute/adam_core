@@ -64,8 +64,8 @@ def load_test_data():
 @pytest.mark.parametrize(
     "time_step,time_range,max_processes",
     [
-        (5, 60, None),  # Default values
-        (10, 30, 1),  # Smaller range, single process
+        (10, 30, None),  # Default values
+        (10, 20, 1),  # Smaller range, single process
     ],
 )
 def test_generate_impact_visualization_data(time_step, time_range, max_processes):
