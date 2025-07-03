@@ -51,6 +51,7 @@ dependencies = [
   "naif-eop-historical",
   "naif-earth-itrf93",
   "timezonefinder",
+  "rebound==4.4.10",
 ]
 
 [project.optional-dependencies]
@@ -84,7 +85,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.3.0",
+    "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@e92b074b02a10e13d7352ba0e4d542d8f27a5757",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.1",

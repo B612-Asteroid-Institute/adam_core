@@ -28,12 +28,11 @@ jobs:
           cache: true
           cache-dependency-path: ./pyproject.toml
       - name: Install Testing Dependencies
-        run: |
-          pdm install -G test
+        run: pdm install -G test
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
-        run: pdm run coverage
+        run: pdm run coverage -vv
       - name: Coverage report to coveralls
         uses: coverallsapp/github-action@v2.0.0
         with:
