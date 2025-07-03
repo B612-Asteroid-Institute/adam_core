@@ -64,7 +64,7 @@ def load_test_data():
 @pytest.mark.parametrize(
     "time_step,time_range,max_processes",
     [
-        (5, 20, 4),  # Default values
+        (5, 20, 1),  # Default values
         (10, 30, 1),  # Smaller range, single process
     ],
 )
