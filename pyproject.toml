@@ -85,7 +85,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@779efd811c22d2c886ae7c817b73fcd5f45a8cf1",
+    "adam-assist @ git+https://github.com/B612-Asteroid-Institute/adam-assist.git@bfc143bb530dbb39cdcb70f50ba980e6fddbcd13",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.1",
