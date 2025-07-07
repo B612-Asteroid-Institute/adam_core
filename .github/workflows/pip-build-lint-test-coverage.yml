@@ -28,8 +28,7 @@ jobs:
           cache: true
           cache-dependency-path: ./pyproject.toml
       - name: Install Testing Dependencies
-        run: |
-          pdm install -G test
+        run: pdm install -G test
       - name: Lint
         run: pdm run lint
       - name: Test with coverage
