@@ -51,7 +51,6 @@ dependencies = [
   "naif-eop-historical",
   "naif-earth-itrf93",
   "timezonefinder",
-  "rebound<=4.4.8",
 ]
 
 [project.optional-dependencies]
@@ -85,7 +84,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.3.0",
+    "adam-assist>=0.3.2",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.1",
