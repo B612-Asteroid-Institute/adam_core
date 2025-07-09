@@ -1,9 +1,13 @@
+import time
+
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
 from adam_assist import ASSISTPropagator
+
+from adam_core.ray_cluster import initialize_use_ray
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin, OriginCodes
@@ -221,7 +225,8 @@ def test_light_time_distance_threshold():
 
 
 @pytest.mark.parametrize("max_processes", [1, 4])
-def test_generate_ephemeris_unordered_observers(max_processes):
+@pytest.mark.parametrize("input_time_scale", ["utc", "tdb"])
+def test_generate_ephemeris_unordered_observers(max_processes, input_time_scale):
     """
     Test that ephemeris generation works correctly even when observers
     are not ordered by time, verifying that physical positions don't get mixed up
@@ -244,7 +249,9 @@ def test_generate_ephemeris_unordered_observers(max_processes):
         ),
     )
     # Create observers with deliberately unordered times
-    times = Timestamp.from_mjd([59005, 59004, 59005, 59004, 59006, 59006], scale="utc")
+    times = Timestamp.from_mjd(
+        [59005, 59004, 59005, 59004, 59006, 59006], scale=input_time_scale
+    )
     codes = ["500", "500", "X05", "X05", "X05", "500"]  # Mix of observatory codes
     observers = Observers.from_codes(codes, times)
 
@@ -298,8 +305,12 @@ def test_generate_ephemeris_unordered_observers(max_processes):
     linkage = ephemeris.link_to_observers(observers)
     assert len(linkage.all_unique_values) == len(observers)
 
+    # Verify that the returned ephemeris is in UTC
+    assert ephemeris.coordinates.time.scale == "utc"
 
-def test_generate_ephemeris_variant_orbits():
+
+@pytest.mark.parametrize("input_time_scale", ["utc", "tdb"])
+def test_generate_ephemeris_variant_orbits(input_time_scale):
     """Test that ephemeris generation works correctly with variant orbits and respects covariance flag."""
 
     # Create base orbits
@@ -337,7 +348,7 @@ def test_generate_ephemeris_variant_orbits():
     )
 
     # Create observers
-    times = Timestamp.from_mjd([60001, 60002], scale="utc")
+    times = Timestamp.from_mjd([60001, 60002], scale=input_time_scale)
     observers = Observers.from_code("500", times)
 
     prop = MockPropagator()
@@ -355,3 +366,68 @@ def test_generate_ephemeris_variant_orbits():
     # Test with regular orbits and covariance=True - should work
     ephemeris = prop.generate_ephemeris(base_orbits, observers, covariance=True)
     assert len(ephemeris) == len(base_orbits) * len(times)
+
+    # Verify that the returned ephemeris is in UTC
+    assert ephemeris.coordinates.time.scale == "utc"
+
+
+@pytest.mark.skipif(not RAY_INSTALLED, reason="Ray not installed")
+def test_generate_ephemeris_performance_benchmark():
+    """
+    Benchmark test to ensure generate_ephemeris performance with multiprocessing
+    is reasonable and doesn't degrade significantly.
+
+    This test compares single-process vs multi-process performance to ensure
+    multiprocessing provides a benefit rather than a penalty.
+    """
+    # Create a moderately sized test case
+    orbits = make_real_orbits(10)
+    times = Timestamp.from_mjd(np.arange(60001, 60005), scale="tdb")
+    observers = Observers.from_code("500", times)
+
+    prop = ASSISTPropagator()
+    initialize_use_ray(num_cpus=4)
+
+    # Benchmark single process
+    start_time = time.time()
+    ephemeris_single = prop.generate_ephemeris(
+        orbits,
+        observers,
+        covariance=True,
+        num_samples=10,
+        max_processes=1,
+        chunk_size=1,
+        seed=42,
+    )
+    single_process_time = time.time() - start_time
+
+    # Benchmark multiple processes
+    start_time = time.time()
+    ephemeris_multi = prop.generate_ephemeris(
+        orbits,
+        observers,
+        covariance=True,
+        num_samples=10,
+        max_processes=4,
+        chunk_size=1,
+        seed=42,
+    )
+    multi_process_time = time.time() - start_time
+
+    # Verify results are identical
+    assert len(ephemeris_single) == len(ephemeris_multi)
+    assert len(ephemeris_single) == len(orbits) * len(times)
+
+    # Performance check: multiprocessing shouldn't be more than 1x slower
+    # (allowing for overhead, but catching catastrophic performance regressions)
+    max_acceptable_ratio = 0.9
+    actual_ratio = (
+        multi_process_time / single_process_time
+        if single_process_time > 0
+        else float("inf")
+    )
+    assert actual_ratio < max_acceptable_ratio, (
+        f"Multiprocessing performance is {actual_ratio:.2f}x slower than single process "
+        f"({multi_process_time:.3f}s vs {single_process_time:.3f}s). "
+        f"This suggests a performance regression in the multiprocessing code."
+    )

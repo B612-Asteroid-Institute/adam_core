@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 
+from adam_core.coordinates.covariances import _upper_triangular_to_full
+
 from ...utils.helpers.orbits import make_real_orbits
 from ..covariances import (
     CoordinateCovariances,
@@ -200,3 +202,23 @@ def test_CoordinateCovariances_from_matrix_invalid_shape():
     covariances = np.zeros((6, 5))
     with pytest.raises(ValueError):
         CoordinateCovariances.from_matrix(covariances)
+
+
+def test__upper_triangular_to_full():
+    # Test that we can reconstruct a full covariance matrix from an upper triangular matrix.
+    expected_array = np.array(
+        [
+            [1, 2, 3, 4, 5, 6],
+            [2, 2, 3, 4, 5, 6],
+            [3, 3, 3, 4, 5, 6],
+            [4, 4, 4, 4, 5, 6],
+            [5, 5, 5, 5, 5, 6],
+            [6, 6, 6, 6, 6, 6],
+        ],
+        dtype=np.float64,
+    )
+
+    triangular_array = np.triu(expected_array)[np.triu_indices(6)].flatten()
+
+    actual_array = _upper_triangular_to_full(triangular_array)
+    np.testing.assert_array_equal(actual_array, expected_array)

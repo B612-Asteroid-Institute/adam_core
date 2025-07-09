@@ -10,6 +10,12 @@ from ..time import Timestamp
 from . import cometary, keplerian, spherical
 from .covariances import CoordinateCovariances
 from .origin import Origin
+from .units import (
+    au_per_day_to_km_per_s,
+    au_to_km,
+    convert_cartesian_covariance_au_to_km,
+    convert_cartesian_values_au_to_km,
+)
 
 __all__ = ["CartesianCoordinates"]
 
@@ -183,6 +189,49 @@ class CartesianCoordinates(qv.Table):
         Magnitude of the specific angular momentum vector.
         """
         return np.linalg.norm(self.h, axis=1)
+
+    @property
+    def values_km(self) -> npt.NDArray[np.float64]:
+        """
+        Get coordinate values in km and km/s units.
+
+        Returns
+        -------
+        np.ndarray (N, 6)
+            Coordinate values with:
+            - x, y, z in km
+            - vx, vy, vz in km/s
+        """
+        return convert_cartesian_values_au_to_km(self.values)
+
+    @property
+    def r_km(self) -> npt.NDArray[np.float64]:
+        """
+        Position vector in km.
+        """
+        return au_to_km(self.r)
+
+    @property
+    def v_km_s(self) -> npt.NDArray[np.float64]:
+        """
+        Velocity vector in km/s.
+        """
+        return au_per_day_to_km_per_s(self.v)
+
+    def covariance_km(self) -> npt.NDArray[np.float64]:
+        """
+        Get covariance matrix in km and km/s units.
+
+        Returns
+        -------
+        np.ndarray (N, 6, 6)
+            Covariance matrices with position elements in km² and
+            velocity elements in (km/s)²
+        """
+        if self.covariance.is_all_nan():
+            return self.covariance.to_matrix()
+
+        return convert_cartesian_covariance_au_to_km(self.covariance.to_matrix())
 
     def rotate(
         self, rotation_matrix: npt.NDArray[np.float64], frame_out: str

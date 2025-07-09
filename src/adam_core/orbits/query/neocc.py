@@ -5,23 +5,11 @@ import numpy.typing as npt
 import quivr as qv
 import requests
 
+from adam_core.coordinates.covariances import _upper_triangular_to_full
+
 from ...coordinates import CoordinateCovariances, KeplerianCoordinates, Origin
 from ...orbits import Orbits
 from ...time import Timestamp
-
-
-def _upper_triangular_to_full(
-    upper_triangular: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
-    """
-    Convert an upper triangular matrix containing 21 elements to a full 6x6 matrix.
-    """
-    assert len(upper_triangular) == 21
-
-    full = np.zeros((6, 6))
-    full[np.triu_indices(6)] = upper_triangular
-    full[np.tril_indices(6, -1)] = full.T[np.tril_indices(6, -1)]
-    return full
 
 
 def _parse_oef(data: str) -> Dict[str, Any]:

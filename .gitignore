@@ -107,3 +107,6 @@ dmypy.json
 pdm.lock
 .pdm-build/*
 .pdm-python
+
+# macOS files
+*.DS_Store

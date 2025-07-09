@@ -706,3 +706,17 @@ def test_Timestamp_min():
     assert min_time.scale == times.scale
     assert min_time.days.to_pylist() == [1]
     assert min_time.nanos.to_pylist() == [1]
+
+
+def test_Timestamp_rescale_roundtrip():
+    # Bug fix test for cases where floating point arithmetic
+    # causes nanos to be 86400e9 instead of 0
+    t = Timestamp.from_kwargs(days=[59005, 40005, 40000], nanos=[0, 0, 0], scale="tdb")
+    t2 = t.rescale("utc").rescale("tdb")
+    assert t2.scale == "tdb"
+    assert t2.days.to_pylist() == [59005, 40005, 40000]
+    assert t2.nanos.to_pylist() == [0, 0, 0]
+
+    # Previous bugged output values
+    assert t2.days.to_pylist() != [59004, 40004, 39999]
+    assert t2.nanos.to_pylist() != [86400 * 1e9, 86400 * 1e9, 86400 * 1e9]

@@ -28,8 +28,11 @@ dependencies = [
   "astropy",
   "astroquery",
   "healpy",
-  "jax",
-  "jaxlib",
+  # jaxlib cpu is only available for macos x86_64 <=0.4.38
+  "jax>=0.4.23,<=0.4.38; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+  "jax; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+  "jaxlib>=0.4.23,<=0.4.38; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+  "jaxlib; platform_system != 'Darwin' or platform_machine != 'x86_64'",
   "numba",
   "numpy>=2.0.0",
   "pdm",
@@ -52,9 +55,15 @@ dependencies = [
 
 [project.optional-dependencies]
 plots = [
-    "plotly>=5.24.1",
     "geopandas>=1.0.1",
+    "plotly>=5.24.1",
+    "nbformat>=4.2.0",
+    "matplotlib>=3.10.1",
 ]
+oem = [
+    "oem>=0.4.5",
+]
+
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
@@ -75,9 +84,14 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.2.3",
+    "adam-assist>=0.3.2",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
+    "matplotlib>=3.10.1",
+    "geopandas>=1.0.1",
+    "plotly>=5.24.1",
+    "nbformat>=4.2.0",
+    "oem>=0.4.5",
 ]
 
 [tool.black]
