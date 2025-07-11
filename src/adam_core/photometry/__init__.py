@@ -1,4 +1,19 @@
-try:
-    from ._version import __version__
-except ImportError:
-    __version__ = "0.0.0dev0"
+# flake8: noqa: F401
+from .simple_magnitude import (
+    InstrumentFilters,
+    StandardFilters,
+    calculate_apparent_magnitude,
+    convert_magnitude,
+    find_conversion_path,
+    predict_magnitudes,
+)
+
+__all__ = [
+    # Simple magnitude system
+    "StandardFilters",
+    "InstrumentFilters", 
+    "calculate_apparent_magnitude",
+    "convert_magnitude",
+    "find_conversion_path",
+    "predict_magnitudes",
+]
