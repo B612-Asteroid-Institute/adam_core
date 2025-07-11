@@ -2,15 +2,20 @@ import uuid
 from typing import Literal, Optional
 
 import numpy as np
+import jax.numpy as jnp
 import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
-from ..coordinates.spherical import SphericalCoordinates
+from ..coordinates.covariances import CoordinateCovariances, weighted_covariance, transform_covariances_jacobian
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
+from ..coordinates.transform import _keplerian_to_cartesian_a, _keplerian_to_cartesian_a_vmap
+from ..coordinates.spherical import SphericalCoordinates
+from ..coordinates.keplerian import KeplerianCoordinates
 from .ephemeris import Ephemeris
 from .orbits import Orbits
+
+FLOAT_TOLERANCE = 1e-15  # Define tolerance for near-circular/equatorial cases
 
 
 class VariantOrbits(qv.Table):
@@ -126,7 +131,7 @@ class VariantOrbits(qv.Table):
     def collapse(self, orbits: Orbits) -> Orbits:
         """
         Collapse the variants and recalculate the covariance matrix for each
-        each orbit at each epoch. The mean state is taken from the orbits class and
+        orbit at each epoch. The mean state is taken from the orbits class and
         is not calculated from the variants.
 
         Parameters
@@ -154,14 +159,117 @@ class VariantOrbits(qv.Table):
             )
             variants = link.select_right(key)
 
+            # Calculate covariance directly in Cartesian space
             samples = variants.coordinates.values
             mean = orbit.coordinates.values[0]
             covariance = weighted_covariance(
-                mean, samples, variants.weights_cov.to_numpy(zero_copy_only=False)
+                mean,
+                samples,
+                variants.weights_cov.to_numpy(zero_copy_only=False)
             ).reshape(1, 6, 6)
 
             orbit_collapsed = orbit.set_column(
-                "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)
+                "coordinates.covariance",
+                CoordinateCovariances.from_matrix(covariance)
+            )
+
+            orbits_list.append(orbit_collapsed)
+
+        return qv.concatenate(orbits_list)
+
+    def collapse_keplerian(self, orbits: Orbits) -> Orbits:
+        """
+        Alternative collapse method that computes covariance in Keplerian space
+        to better capture non-linear uncertainty structures.
+        This implementation first converts variants to Keplerian elements to better
+        capture the non-linear uncertainty structure before computing the covariance.
+        It handles special cases for near-circular and near-equatorial orbits by
+        combining appropriate angles.
+        Parameters
+        ----------
+        orbits : `~adam_core.orbits.orbits.Orbits`
+            Orbits from which the variants were generated.
+        Returns
+        -------
+        collapsed_orbits : `~adam_core.orbits.orbits.Orbits`
+            The collapsed orbits.
+        """
+        link = self.link_to_orbits(orbits)
+
+        # Iterate over the variants and calculate the mean state and covariance matrix
+        # for each orbit at each epoch then create a new orbit with the calculated covariance matrix
+        orbits_list = []
+        for orbit in orbits:
+            assert len(orbit) == 1
+
+            key = link.key(
+                orbit_id=orbit.orbit_id[0].as_py(),
+                day=orbit.coordinates.time.days[0].as_py(),
+                millis=orbit.coordinates.time.millis()[0].as_py(),
+            )
+            variants = link.select_right(key)
+
+            # Convert variants and mean state to Keplerian elements
+            keplerian_variants = variants.coordinates.to_keplerian()
+            keplerian_mean = orbit.coordinates.to_keplerian()
+            
+            # Get samples and mean state in Keplerian space
+            keplerian_samples = jnp.array(keplerian_variants.values)
+            keplerian_mean_state = jnp.array(keplerian_mean.values[0])
+            
+            # Handle special cases for near-circular and near-equatorial orbits
+            mean_e = keplerian_mean_state[1]  # eccentricity
+            mean_i = keplerian_mean_state[2]  # inclination
+            
+            def circular_mean(angles):
+                return jnp.arctan2(jnp.mean(jnp.sin(angles)), jnp.mean(jnp.cos(angles)))
+
+            if mean_e < FLOAT_TOLERANCE and mean_i < FLOAT_TOLERANCE: # Near-circular and near-equatorial
+                true_longitude = keplerian_samples[:, 3] + keplerian_samples[:, 4] + keplerian_samples[:, 5]
+                keplerian_samples = keplerian_samples.at[:, 3].set(0.0) # raan
+                keplerian_samples = keplerian_samples.at[:, 4].set(0.0) # ap
+                keplerian_samples = keplerian_samples.at[:, 5].set(true_longitude) # M
+
+                keplerian_mean_state = keplerian_mean_state.at[3].set(0.0)
+                keplerian_mean_state = keplerian_mean_state.at[4].set(0.0)
+                keplerian_mean_state = keplerian_mean_state.at[5].set(circular_mean(true_longitude))
+
+            elif mean_e < FLOAT_TOLERANCE:  # Near-circular
+                long_peri = keplerian_samples[:, 3] + keplerian_samples[:, 4]
+                keplerian_samples = keplerian_samples.at[:, 3].set(long_peri) # raan
+                keplerian_samples = keplerian_samples.at[:, 4].set(0.0) # ap
+                
+                keplerian_mean_state = keplerian_mean_state.at[3].set(circular_mean(long_peri))
+                keplerian_mean_state = keplerian_mean_state.at[4].set(0.0)
+
+            elif mean_i < FLOAT_TOLERANCE: # Near-equatorial
+                long_peri = keplerian_samples[:, 3] + keplerian_samples[:, 4]
+                keplerian_samples = keplerian_samples.at[:, 3].set(0.0) # raan
+                keplerian_samples = keplerian_samples.at[:, 4].set(long_peri) # ap
+
+                keplerian_mean_state = keplerian_mean_state.at[3].set(0.0)
+                keplerian_mean_state = keplerian_mean_state.at[4].set(circular_mean(long_peri))
+
+            # Calculate covariance in Keplerian space, which is more linear for orbital uncertainties
+            keplerian_covariance = weighted_covariance(
+                keplerian_mean_state,
+                keplerian_samples,
+                variants.weights_cov.to_numpy(zero_copy_only=False)
+            ).reshape(1, 6, 6)  # Reshape to (N=1, D=6, D=6)
+
+            # Extract mu from the orbit's origin
+            mu = orbit.coordinates.origin.mu()[0]
+
+            # Transform covariance back to Cartesian using the Jacobian
+            cartesian_covariance = transform_covariances_jacobian(
+                keplerian_mean_state.reshape(1, 6),
+                keplerian_covariance,
+                lambda x: _keplerian_to_cartesian_a(x, mu=mu, max_iter=1000, tol=1e-15),
+            )
+
+            orbit_collapsed = orbit.set_column(
+                "coordinates.covariance",
+                CoordinateCovariances.from_matrix(np.array(cartesian_covariance))
             )
 
             orbits_list.append(orbit_collapsed)
