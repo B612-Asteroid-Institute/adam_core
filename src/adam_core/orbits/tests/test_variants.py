@@ -33,7 +33,7 @@ def test_VariantOrbits():
         collapsed_orbits.coordinates.covariance.to_matrix(),
         orbits.coordinates.covariance.to_matrix(),
         rtol=0,
-        atol=1e-14,
+        atol=1e-12,
     )
 
     # Check that the orbit ids are the same
@@ -163,32 +163,6 @@ def test_VariantOrbits_collapse_by_object_id():
     with pytest.raises(AssertionError):
         variant_orbits_diff_origins.collapse_by_object_id()
 
-def test_collapse_keplerian_method():
-    """Test only the collapse_keplerian method."""
-    
-    # Get a sample of real orbits from SBDB
-    orbits = query_sbdb(["324 Bamberga"])
-
-    # Create variant orbits
-    variant_orbits = VariantOrbits.create(orbits)
-
-    # Collapse using the Keplerian method
-    collapsed_keplerian = variant_orbits.collapse_keplerian(orbits)
-
-    # Check that the covariance matrices are valid
-    np.testing.assert_allclose(
-        collapsed_keplerian.coordinates.covariance.to_matrix(),
-        orbits.coordinates.covariance.to_matrix(),
-        rtol=0,
-        atol=1e-12, # Looser tolerance for Keplerian method
-    )
-
-    # Check that the orbit ids are the same
-    np.testing.assert_equal(
-        collapsed_keplerian.orbit_id.to_numpy(zero_copy_only=False),
-        orbits.orbit_id.to_numpy(zero_copy_only=False),
-    )
-
 
 def test_collapse_methods_comparison():
     """Test and compare both collapse methods (original and Keplerian)."""
@@ -200,7 +174,7 @@ def test_collapse_methods_comparison():
     variant_orbits = VariantOrbits.create(orbits)
 
     # Collapse using both methods
-    collapsed_cartesian = variant_orbits.collapse(orbits)
+    collapsed_cartesian = variant_orbits.collapse_cartesian(orbits)
     collapsed_keplerian = variant_orbits.collapse_keplerian(orbits)
 
     # Check that both methods preserve orbit IDs
@@ -242,7 +216,7 @@ def test_collapse_methods_comparison():
     variant_special = VariantOrbits.create(special_case_orbits)
     
     # Collapse using both methods
-    collapsed_cart_special = variant_special.collapse(special_case_orbits)
+    collapsed_cart_special = variant_special.collapse_cartesian(special_case_orbits)
     collapsed_kep_special = variant_special.collapse_keplerian(special_case_orbits)
 
     # Check that results are reasonable for the special case

@@ -565,6 +565,7 @@ class Propagator(ABC, EphemerisMixin):
         covariance_method: Literal[
             "auto", "sigma-point", "monte-carlo"
         ] = "monte-carlo",
+        collapse_method: Literal["cartesian", "keplerian"] = "cartesian",
         num_samples: int = 1000,
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
@@ -731,7 +732,9 @@ class Propagator(ABC, EphemerisMixin):
                 propagated_variants = None
 
         if propagated_variants is not None:
-            propagated = propagated_variants.collapse(propagated)
+            propagated = propagated_variants.collapse(
+                propagated, method=collapse_method
+            )
 
         # Preserve the time scale of the requested times
         propagated = ensure_input_time_scale(propagated, times)

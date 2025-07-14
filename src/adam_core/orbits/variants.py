@@ -128,11 +128,48 @@ class VariantOrbits(qv.Table):
             },
         )
 
-    def collapse(self, orbits: Orbits) -> Orbits:
+    def collapse(
+        self,
+        orbits: Orbits,
+        method: Literal["keplerian", "cartesian"] = "keplerian",
+    ) -> Orbits:
         """
         Collapse the variants and recalculate the covariance matrix for each
         orbit at each epoch. The mean state is taken from the orbits class and
         is not calculated from the variants.
+
+        This implementation can compute the covariance in either Cartesian or Keplerian space.
+        By default it will compute the covariance in Keplerian space to better handle the
+        non-linear nature of orbital dynamics. For some orbits, however, the Keplerian
+        transformation may be unstable (near-circular, near-equatorial, etc.). In these
+        cases, the Cartesian method may be more appropriate.
+
+        Parameters
+        ----------
+        orbits : `~adam_core.orbits.orbits.Orbits`
+            Orbits from which the variants were generated.
+        method : {'keplerian', 'cartesian'}, optional
+            The coordinate system in which to compute the covariance matrix.
+
+        Returns
+        -------
+        collapsed_orbits : `~adam_core.orbits.orbits.Orbits`
+            The collapsed orbits.
+        """
+        if method == "cartesian":
+            return self.collapse_cartesian(orbits)
+        elif method == "keplerian":
+            return self.collapse_keplerian(orbits)
+        else:
+            raise ValueError(f"Unknown collapse method: {method}")
+
+    def collapse_cartesian(self, orbits: Orbits) -> Orbits:
+        """
+        Collapse the variants and recalculate the covariance matrix for each
+        orbit at each epoch. The mean state is taken from the orbits class and
+        is not calculated from the variants.
+
+        This implementation computes the covariance in Cartesian space.
 
         Parameters
         ----------
