@@ -83,7 +83,6 @@ def ades_obscontext():
                 mpcCode="V00", name="Kitt Peak National Observatory - Bok + 90Prime"
             ),
             submitter=submitter_context,
-            observers=["B. A. S. Survey"],
             measurers=measurers,
             telescope=TelescopeObsContext(
                 name="Bok 2.3m",
@@ -143,8 +142,6 @@ def test_ObsContext_to_string(ades_obscontext):
 # submitter
 ! name J. Moeyens
 ! institution B612 Asteroid Institute
-# observers
-! name D. E. Survey
 # measurers
 ! name J. Moeyens
 ! name M. Juric
@@ -157,6 +154,8 @@ def test_ObsContext_to_string(ades_obscontext):
 ! name E. Lu
 ! name C. Fiaschetti
 ! name D. Remy
+# observers
+! name D. E. Survey
 # telescope
 ! design Reflector
 ! aperture 4.0
@@ -183,8 +182,6 @@ def test_ObsContext_to_string(ades_obscontext):
 # submitter
 ! name J. Moeyens
 ! institution B612 Asteroid Institute
-# observers
-! name B. A. S. Survey
 # measurers
 ! name J. Moeyens
 ! name M. Juric
@@ -365,8 +362,6 @@ permID|trkSub|obsSubID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
 # submitter
 ! name J. Moeyens
 ! institution B612 Asteroid Institute
-# observers
-! name B. A. S. Survey
 # measurers
 ! name J. Moeyens
 ! name M. Juric

@@ -46,7 +46,7 @@ class TelescopeObsContext:
     fRatio: Optional[float] = None
     filter: Optional[str] = None
     arraySize: Optional[str] = None
-    pixelSize: Optional[float] = None
+    pixelScale: Optional[float] = None
 
     def __post_init__(self):
         if self.name is not None:
@@ -60,8 +60,8 @@ class TelescopeObsContext:
             assert len(self.filter) <= STRING25
         if self.arraySize is not None:
             assert len(self.arraySize) <= STRING25
-        if self.pixelSize is not None:
-            assert self.pixelSize > 0
+        if self.pixelScale is not None:
+            assert self.pixelScale > 0
 
 
 @dataclass
@@ -86,9 +86,9 @@ class SoftwareObsContext:
 class ObsContext:
     observatory: ObservatoryObsContext
     submitter: SubmitterObsContext
-    observers: list[str]
     measurers: list[str]
     telescope: TelescopeObsContext
+    observers: Optional[list[str]] = None
     software: Optional[SoftwareObsContext] = None
     coinvestigators: Optional[list[str]] = None
     collaborators: Optional[list[str]] = None
@@ -96,18 +96,19 @@ class ObsContext:
     comments: Optional[list[str]] = None
 
     def __post_init__(self):
-        assert len(self.observers) > 0
-        for observer in self.observers:
-            assert len(observer) <= STRING100
         assert len(self.measurers) > 0
         for measurer in self.measurers:
             assert len(measurer) <= STRING100
+        if self.observers is not None:
+            assert isinstance(self.observers, list)
+            for observer in self.observers:
+                assert len(observer) <= STRING100
         if self.coinvestigators is not None:
-            assert len(self.coinvestigators) > 0
+            assert isinstance(self.coinvestigators, list)
             for coinvestigator in self.coinvestigators:
                 assert len(coinvestigator) <= STRING100
         if self.collaborators is not None:
-            assert len(self.collaborators) > 0
+            assert isinstance(self.collaborators, list)
             for collaborator in self.collaborators:
                 assert len(collaborator) <= STRING100
         if self.fundingSource is not None:
@@ -132,9 +133,10 @@ class ObsContext:
                         "coinvestigators",
                         "collaborators",
                     ]:
-                        lines.append(f"# {k}")
-                        for name in v:
-                            lines.append(f"! name {name}")
+                        if len(v) > 0:
+                            lines.append(f"# {k}")
+                            for name in v:
+                                lines.append(f"! name {name}")
                     elif k == "fundingSource":
                         lines.append(f"# fundingSource {v}")
                     elif k == "comments":
@@ -291,7 +293,7 @@ def ADES_to_string(
         for col, prec_col in columns_precision.items():
             if col in ades.columns:
                 ades[col] = [
-                    f"{i:.{prec_col}f}" if i is not None or not np.isnan(i) else ""
+                    f"{i:.{prec_col}f}" if i is not None and not np.isnan(i) else ""
                     for i in ades[col]
                 ]
 
@@ -313,6 +315,8 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
     known_columns = set(ADESObservations.empty().table.column_names)
     # Check for unknown columns
     unknown_columns = set(data_dict.keys()) - known_columns
+    unknown_columns.discard("rmsRA")  # rmsRA is a synonym for rmsRACosDec
+
     if unknown_columns:
         logger.warning(
             f"Found unknown ADES columns that will be ignored: {unknown_columns}"
@@ -506,9 +510,9 @@ def _build_obs_context(context_dict: dict) -> ObsContext:
         fRatio=float(telescope_data["fRatio"]) if "fRatio" in telescope_data else None,
         filter=telescope_data.get("filter"),
         arraySize=telescope_data.get("arraySize"),
-        pixelSize=(
-            float(telescope_data["pixelSize"])
-            if "pixelSize" in telescope_data
+        pixelScale=(
+            float(telescope_data["pixelScale"])
+            if "pixelScale" in telescope_data
             else None
         ),
     )
@@ -528,9 +532,11 @@ def _build_obs_context(context_dict: dict) -> ObsContext:
     return ObsContext(
         observatory=observatory,
         submitter=submitter,
-        observers=context_dict["observers"]["name"],
         measurers=context_dict["measurers"]["name"],
         telescope=telescope,
+        observers=context_dict.get("observers", {}).get("name", None),
+        coinvestigators=context_dict.get("coinvestigators", {}).get("name", None),
+        collaborators=context_dict.get("collaborators", {}).get("name", None),
         software=software,
         fundingSource=context_dict.get("fundingSource"),
         comments=context_dict.get("comment", {}).get("line", []),
