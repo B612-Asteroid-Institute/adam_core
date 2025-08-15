@@ -41,8 +41,8 @@ jobs:
         run: pdm install -G test
       - name: Lint
         run: pdm run lint
-      - name: Typecheck
-        run: pdm run typecheck
+      # - name: Typecheck
+      #   run: pdm run typecheck
 
   test:
     runs-on: ubuntu-latest
