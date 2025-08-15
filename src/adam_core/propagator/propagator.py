@@ -97,7 +97,8 @@ class EphemerisMixin:
         lt_tol: float = 1e-12,
         max_iter: int = 10,
     ) -> Tuple[Orbits, np.ndarray]:
-        orbits_aberrated = Orbits.empty()
+        # Accumulate then concatenate once to reduce per-iteration overhead
+        aberrated_list: List[Orbits] = []
         lts = np.zeros(len(orbits))
         for i, (orbit, observer) in enumerate(zip(orbits, observers)):
             # Set the running variables
@@ -147,9 +148,10 @@ class EphemerisMixin:
                 # Update the previous light travel time to this iteration's light travel time
                 lt_prev = lt
 
-            orbits_aberrated = qv.concatenate([orbits_aberrated, orbit_i])
+            aberrated_list.append(orbit_i)
             lts[i] = lt
 
+        orbits_aberrated = qv.concatenate(aberrated_list) if len(aberrated_list) > 0 else Orbits.empty()
         return orbits_aberrated, lts
 
     def _generate_ephemeris(
@@ -160,9 +162,9 @@ class EphemerisMixin:
         """
 
         if isinstance(orbits, Orbits):
-            ephemeris_total = Ephemeris.empty()
+            ephemeris_chunks: List[Ephemeris] = []
         elif isinstance(orbits, VariantOrbits):
-            ephemeris_total = VariantEphemeris.empty()
+            ephemeris_chunks: List[VariantEphemeris] = []
 
         # Sort observers by time and code to ensure consistent ordering
         # As further propagation will order by time as well
@@ -250,6 +252,7 @@ class EphemerisMixin:
                     light_time=light_time,
                     aberrated_coordinates=propagated_orbits_aberrated.coordinates,
                 )
+                ephemeris_chunks.append(ephemeris)
             elif isinstance(orbit, VariantOrbits):
                 ephemeris = VariantEphemeris.from_kwargs(
                     orbit_id=propagated_orbits_barycentric.orbit_id,
@@ -258,8 +261,12 @@ class EphemerisMixin:
                     weights=np.repeat(orbit.weights[0], len(observers)),
                     weights_cov=np.repeat(orbit.weights_cov[0], len(observers)),
                 )
-
-            ephemeris_total = qv.concatenate([ephemeris_total, ephemeris])
+                ephemeris_chunks.append(ephemeris)
+        # Build once at the end
+        if isinstance(orbits, Orbits):
+            ephemeris_total = qv.concatenate(ephemeris_chunks) if len(ephemeris_chunks) > 0 else Ephemeris.empty()
+        else:
+            ephemeris_total = qv.concatenate(ephemeris_chunks) if len(ephemeris_chunks) > 0 else VariantEphemeris.empty()
 
         ephemeris_total = ephemeris_total.sort_by(
             [
