@@ -151,7 +151,11 @@ class EphemerisMixin:
             aberrated_list.append(orbit_i)
             lts[i] = lt
 
-        orbits_aberrated = qv.concatenate(aberrated_list) if len(aberrated_list) > 0 else Orbits.empty()
+        orbits_aberrated = (
+            qv.concatenate(aberrated_list)
+            if len(aberrated_list) > 0
+            else Orbits.empty()
+        )
         return orbits_aberrated, lts
 
     def _generate_ephemeris(
@@ -264,9 +268,17 @@ class EphemerisMixin:
                 ephemeris_chunks.append(ephemeris)
         # Build once at the end
         if isinstance(orbits, Orbits):
-            ephemeris_total = qv.concatenate(ephemeris_chunks) if len(ephemeris_chunks) > 0 else Ephemeris.empty()
+            ephemeris_total = (
+                qv.concatenate(ephemeris_chunks)
+                if len(ephemeris_chunks) > 0
+                else Ephemeris.empty()
+            )
         else:
-            ephemeris_total = qv.concatenate(ephemeris_chunks) if len(ephemeris_chunks) > 0 else VariantEphemeris.empty()
+            ephemeris_total = (
+                qv.concatenate(ephemeris_chunks)
+                if len(ephemeris_chunks) > 0
+                else VariantEphemeris.empty()
+            )
 
         ephemeris_total = ephemeris_total.sort_by(
             [
