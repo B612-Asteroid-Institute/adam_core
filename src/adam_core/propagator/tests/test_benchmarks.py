@@ -1,12 +1,10 @@
 import numpy as np
 import pytest
-
 from adam_assist import ASSISTPropagator
 
 from ...observers.observers import Observers
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
-
 
 # Optional Ray-based multi-processing benchmark
 RAY_INSTALLED = False
@@ -80,5 +78,3 @@ def test_assist_generate_ephemeris_multi_process_benchmark(benchmark):
 
     ephemeris = benchmark(run)
     assert len(ephemeris) == len(orbits) * len(observers)
-
-
