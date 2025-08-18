@@ -94,6 +94,7 @@ jobs:
     needs: [ test ]
     permissions:
       contents: write
+      pull-requests: write
     defaults:
       run:
         shell: bash -l {0}
@@ -135,7 +136,7 @@ jobs:
           auto-push: true
           gh-pages-branch: gh-pages
       - name: Compare benchmarks
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Python Benchmark
