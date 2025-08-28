@@ -4,6 +4,7 @@ import typing
 
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
+from .geodetics import GeodeticCoordinates
 from .keplerian import KeplerianCoordinates
 from .spherical import SphericalCoordinates
 
@@ -13,6 +14,7 @@ Coordinates = typing.Union[
     KeplerianCoordinates,
     SphericalCoordinates,
     CometaryCoordinates,
+    GeodeticCoordinates,
 ]
 
 #: Type variable which represents any of the coordinate classes.
@@ -23,5 +25,6 @@ CoordinateType = typing.TypeVar(
         KeplerianCoordinates,
         CometaryCoordinates,
         SphericalCoordinates,
+        GeodeticCoordinates,
     ],
 )

@@ -15,6 +15,7 @@ from ..utils.chunking import process_in_chunks
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
+from .geodetics import GeodeticCoordinates
 from .keplerian import KeplerianCoordinates
 from .origin import OriginCodes
 from .spherical import SphericalCoordinates
@@ -35,11 +36,212 @@ CoordinatesClasses = (
     KeplerianCoordinates,
     CometaryCoordinates,
     SphericalCoordinates,
+    GeodeticCoordinates,
 )
 
 
 Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 FLOAT_TOLERANCE = 1e-15
+
+
+@jit
+def _cartesian_to_geodetic(
+    coords_cartesian: Union[np.ndarray, jnp.ndarray],
+    a: float,
+    f: float,
+    max_iter: int = 100,
+    tol: float = 1e-15,
+) -> jnp.ndarray:
+    """
+    Convert a single Cartesian coordinate to a geodetic coordinate. This only makes sense to
+    do if the Cartesian coordinates are in a Earth-centered frame (such as ECEF or ITRF).
+
+    Uses Bowring's method [1] to compute the geodetic coordinates.
+
+    Parameters
+    ----------
+    coords_cartesian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
+        3D Cartesian coordinate including time derivatives.
+        x : x-position in units of distance.
+        y : y-position in units of distance.
+        z : z-position in units of distance.
+        vx : x-velocity in the same units of x per arbitrary unit of time.
+        vy : y-velocity in the same units of y per arbitrary unit of time.
+        vz : z-velocity in the same units of z per arbitrary unit of time.
+    a : float (1)
+        Semi-major axis of the Earth in units of distance.
+    f : float (1)
+        Flattening of the Earth.
+    max_iter : int (1)
+        Maximum number of iterations to perform.
+    tol : float (1)
+        Tolerance for the iteration.
+
+    Returns
+    -------
+    coords_geodetic : `~jax.numpy.ndarray` (6)
+        3D geodetic coordinate including time derivatives.
+        alt : Altitude in units of distance.
+        lon : Longitude in degrees.
+        lat : Latitude in degrees.
+        vup : Up velocity in the same units of x per arbitrary unit of time.
+        veast : East velocity in degrees per arbitrary unit of time.
+        vnorth : North velocity in degrees per arbitrary unit of time.
+
+    References
+    ----------
+    [1] Bowring, B. R. (1976). The accuracy of geodetic latitude and height
+        equations. Survey Review, 28(218), 202-206.
+    """
+    coords_geodetic = jnp.zeros(6, dtype=jnp.float64)
+    x = coords_cartesian[0]
+    y = coords_cartesian[1]
+    z = coords_cartesian[2]
+    vx = coords_cartesian[3]
+    vy = coords_cartesian[4]
+    vz = coords_cartesian[5]
+
+    # Semi-minor axis
+    b = a * (1 - f)
+
+    # Eccentricity squared
+    e2 = (a**2 - b**2) / a**2
+
+    # Distance from z-axis
+    xy = jnp.sqrt(x**2 + y**2)
+
+    # Initial guess for latitude
+    lat = jnp.arctan2(z, xy * (1 - e2))
+
+    diff = 1e15
+    iterations = 0
+    lat_i = lat
+    p_init = [lat_i, diff, iterations]
+
+    @jit
+    def _iterate(p):
+        lat_i = p[0]
+        iterations = p[2]
+
+        sin_lat = jnp.sin(lat)
+        cos_lat = jnp.cos(lat)
+
+        # Radius of curvature in prime vertical
+        N = a / jnp.sqrt(1.0 - e2 * sin_lat**2)
+
+        # Altitude
+        alt = xy / cos_lat - N
+
+        # Updated latitude
+        lat_i = jnp.arctan2(z, xy * (1.0 - e2 * N / (N + alt)))
+
+        diff = lat_i - lat
+        iterations += 1
+
+        p[0] = lat_i
+        p[1] = diff
+        p[2] = iterations
+
+        return p
+
+    def _while_condition(p):
+        diff = p[1]
+        iterations = p[2]
+        return (jnp.abs(diff) > tol) & (iterations <= max_iter)
+
+    lat = lax.while_loop(_while_condition, _iterate, p_init)[0]
+    lon = jnp.arctan2(y, x)
+    lon = jnp.where(lon < 0.0, 2 * jnp.pi + lon, lon)
+
+    sin_lat = jnp.sin(lat)
+    cos_lat = jnp.cos(lat)
+    sin_lon = jnp.sin(lon)
+    cos_lon = jnp.cos(lon)
+
+    N = a / jnp.sqrt(1.0 - e2 * sin_lat**2)
+    alt = xy / cos_lat - N
+
+    # Compute East-North-Up velocities
+    v_east = -sin_lon * vx + cos_lon * vy
+    v_north = -sin_lat * cos_lon * vx - sin_lat * sin_lon * vy + cos_lat * vz
+    v_up = cos_lat * cos_lon * vx + cos_lat * sin_lon * vy + sin_lat * vz
+
+    coords_geodetic = coords_geodetic.at[0].set(alt)
+    coords_geodetic = coords_geodetic.at[1].set(jnp.degrees(lon))
+    coords_geodetic = coords_geodetic.at[2].set(jnp.degrees(lat))
+    coords_geodetic = coords_geodetic.at[3].set(jnp.degrees(v_east))
+    coords_geodetic = coords_geodetic.at[4].set(jnp.degrees(v_north))
+    coords_geodetic = coords_geodetic.at[5].set(v_up)
+
+    return coords_geodetic
+
+
+# Vectorization Map: _cartesian_to_geodetic
+_cartesian_to_geodetic_vmap = jit(
+    vmap(
+        _cartesian_to_geodetic,
+        in_axes=(0, None, None, None, None),
+    )
+)
+
+
+def cartesian_to_geodetic(
+    coords_cartesian: Union[np.ndarray, jnp.ndarray],
+    a: float,
+    f: float,
+    max_iter: int = 100,
+    tol: float = 1e-15,
+) -> jnp.ndarray:
+    """
+    Convert Cartesian coordinates to a geodetic coordinate.
+
+    Parameters
+    ----------
+    coords_cartesian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (N, 6)
+        3D Cartesian coordinate including time derivatives.
+        x : x-position in units of distance.
+        y : y-position in units of distance.
+        z : z-position in units of distance.
+        vx : x-velocity in the same units of x per arbitrary unit of time.
+        vy : y-velocity in the same units of y per arbitrary unit of time.
+        vz : z-velocity in the same units of z per arbitrary unit of time.
+    a : float (1)
+        Semi-major axis of the Earth in units of distance.
+    f : float (1)
+        Flattening of the Earth.
+    max_iter : int (1)
+        Maximum number of iterations to perform.
+    tol : float (1)
+        Tolerance for the iteration.
+
+    Returns
+    -------
+    coords_geodetic : `~jax.numpy.ndarray` (N, 6)
+        3D geodetic coordinate including time derivatives.
+        alt : Altitude in units of distance.
+        lon : Longitude in degrees.
+        lat : Latitude in degrees.
+        vup : Up velocity in the same units of x per arbitrary unit of time.
+        veast : East velocity in degrees per arbitrary unit of time.
+        vnorth : North velocity in degrees per arbitrary unit of time.
+    """
+    # Define chunk size
+    chunk_size = 200
+
+    # Process in chunks
+    coords_geodetic: np.ndarray = np.empty((0, 6))
+    for cartesian_chunk in process_in_chunks(coords_cartesian, chunk_size):
+        coords_geodetic_chunk = _cartesian_to_geodetic_vmap(
+            cartesian_chunk, a, f, max_iter, tol
+        )
+        coords_geodetic = np.concatenate(
+            (coords_geodetic, np.asarray(coords_geodetic_chunk))
+        )
+
+    # Concatenate chunks and remove padding
+    coords_geodetic = coords_geodetic[: len(coords_cartesian)]
+
+    return coords_geodetic
 
 
 @jit
@@ -71,7 +273,7 @@ def _cartesian_to_spherical(
             (same unit of time as the x, y, and z velocities).
         vlon : Longitudinal velocity in degrees per arbitrary unit of time
             (same unit of time as the x, y, and z velocities).
-        vlat :Latitudinal velocity in degrees per arbitrary unit of time.
+        vlat : Latitudinal velocity in degrees per arbitrary unit of time.
             (same unit of time as the x, y, and z velocities).
     """
     coords_spherical = jnp.zeros(6, dtype=jnp.float64)
@@ -1510,7 +1712,7 @@ def transform_coordinates(
     ValueError
         If frame_in, frame_out are not one of 'equatorial', 'ecliptic'.
         If representation_in, representation_out are not one of 'cartesian',
-            'spherical', 'keplerian', 'cometary'.
+            'spherical', 'keplerian', 'cometary', 'geodetic'.
     TypeError
         If coords is not a `~adam_core.coordinates.Coordinates` object.
         If origin_out is not a `~adam_core.coordinates.OriginCodes` object.

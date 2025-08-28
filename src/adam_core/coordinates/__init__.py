@@ -4,6 +4,7 @@ from __future__ import annotations
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .covariances import CoordinateCovariances
+from .geodetics import GeodeticCoordinates
 from .keplerian import KeplerianCoordinates
 from .origin import Origin, OriginCodes
 from .residuals import Residuals
