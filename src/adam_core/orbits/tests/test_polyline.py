@@ -90,7 +90,7 @@ class TestOrbitsPlaneParams:
             q_x=[0.0], q_y=[1.0], q_z=[0.0],
             n_x=[0.0], n_y=[0.0], n_z=[1.0],
             r0_x=[0.0], r0_y=[0.0], r0_z=[0.0],
-            a=[1.0], e=[0.0],
+            a=[1.0], e=[0.0], M0=[0.0],
             frame="ecliptic",
             origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
         )

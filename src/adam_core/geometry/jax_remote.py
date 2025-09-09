@@ -19,9 +19,11 @@ import ray
 from quivr import concatenate
 
 from ..observations.rays import ObservationRays
-from ..orbits.polyline import OrbitPolylineSegments
+from ..orbits.polyline import OrbitPolylineSegments, OrbitsPlaneParams
 from .adapters import bvh_shard_to_arrays, hits_soa_to_overlap_hits, rays_to_arrays, segments_to_soa
 from .aggregator import aggregate_candidates
+from .anomaly import AnomalyLabels
+from .anomaly_labeling import compute_orbital_elements_batch, label_anomalies_batch
 from .bvh import BVHShard
 from .jax_kernels import OverlapBackend, compute_overlap_hits_jax
 from .jax_types import BVHArrays, OrbitIdMapping, SegmentsSOA
@@ -32,6 +34,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "process_ray_batch_remote",
     "query_bvh_parallel_jax",
+    "query_bvh_parallel_with_labeling",
 ]
 
 
@@ -188,6 +191,7 @@ def query_bvh_parallel_jax(
 
     # Launch batches
     futures = []
+    batch_bounds = []
     for start_idx in range(0, len(rays), batch_size):
         end_idx = min(start_idx + batch_size, len(rays))
         
@@ -209,6 +213,7 @@ def query_bvh_parallel_jax(
             max_candidates_per_ray=max_candidates_per_ray,
         )
         futures.append(future)
+        batch_bounds.append((start_idx, end_idx))
     
     # Collect results
     batch_results = ray.get(futures)
@@ -216,7 +221,13 @@ def query_bvh_parallel_jax(
     if not batch_results:
         return OverlapHits.empty()
     
-    # Combine all hits
+    # Offset local det_indices to global indices
+    for i, res in enumerate(batch_results):
+        start_idx, _ = batch_bounds[i]
+        if len(res["det_indices"]) > 0:
+            res["det_indices"] = res["det_indices"] + start_idx
+
+    # Combine results
     all_det_indices = []
     all_orbit_indices = []
     all_seg_ids = []
@@ -258,3 +269,88 @@ def query_bvh_parallel_jax(
     logger.info(f"Found {len(hits)} overlap hits from {len(rays)} rays")
     
     return hits
+
+
+def query_bvh_parallel_with_labeling(
+    bvh: BVHShard,
+    segments: "OrbitPolylineSegments",
+    rays: ObservationRays,
+    plane_params: OrbitsPlaneParams,
+    guard_arcmin: float = 1.0,
+    batch_size: int = 2000,
+    max_candidates_per_ray: int = 64,
+    max_hits_per_ray: Optional[int] = None,
+    max_variants_per_hit: int = 2,
+    max_newton_iterations: int = 10,
+) -> Tuple[OverlapHits, AnomalyLabels]:
+    """
+    Query BVH in parallel and compute anomaly labels using Ray remote functions.
+    
+    This function combines parallel overlap detection with parallel anomaly labeling
+    for maximum efficiency when both are needed.
+    
+    Parameters
+    ----------
+    bvh : BVHShard
+        Built BVH for the segments
+    segments : OrbitPolylineSegments
+        Orbit polyline segments with AABBs
+    rays : ObservationRays
+        Observation rays to query
+    plane_params : OrbitsPlaneParams
+        Orbital plane parameters for anomaly labeling
+    guard_arcmin : float, default=1.0
+        Guard band tolerance in arcminutes
+    batch_size : int, default=2000
+        Number of rays per batch
+    max_candidates_per_ray : int, default=64
+        Maximum candidates per ray for aggregation
+    max_hits_per_ray : int, optional
+        Maximum number of hits to return per ray
+    max_variants_per_hit : int, default=2
+        Maximum variants to compute per hit for anomaly labeling
+    max_newton_iterations : int, default=10
+        Maximum Newton iterations for anomaly refinement
+        
+    Returns
+    -------
+    hits : OverlapHits
+        All geometric overlap hits
+    labels : AnomalyLabels
+        Anomaly labels for the hits
+    """
+    if len(rays) == 0 or bvh.num_primitives == 0:
+        return OverlapHits.empty(), AnomalyLabels.empty()
+    
+    logger.info(f"Processing {len(rays)} rays with labeling in batches of {batch_size}")
+    
+    # First get overlap hits using existing parallel function
+    hits = query_bvh_parallel_jax(
+        bvh, segments, rays, guard_arcmin=guard_arcmin,
+        batch_size=batch_size, max_candidates_per_ray=max_candidates_per_ray,
+        max_hits_per_ray=max_hits_per_ray
+    )
+    
+    if len(hits) == 0:
+        return hits, AnomalyLabels.empty()
+    
+    # Now compute anomaly labels for the hits
+    from .anomaly_remote import label_anomalies_parallel
+    
+    # Convert rays to arrays for labeling
+    ray_origins, ray_directions, _ = rays_to_arrays(rays)
+    
+    # Convert segments to SegmentsSOA for consistent seeding
+    segments_soa = segments_to_soa(segments)
+    
+    # Build det_id list for mapping
+    det_ids_list = rays.det_id.to_pylist()
+    labels = label_anomalies_parallel(
+        hits, plane_params, ray_origins, ray_directions, det_ids_list, segments_soa,
+        batch_size=batch_size, max_variants_per_hit=max_variants_per_hit,
+        max_newton_iterations=max_newton_iterations
+    )
+    
+    logger.info(f"Computed {len(labels)} anomaly labels for {len(hits)} hits")
+    
+    return hits, labels

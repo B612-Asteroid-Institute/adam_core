@@ -221,6 +221,7 @@ def compute_orbital_elements_batch(
     # Extract orbital elements - we have a and e, need to compute i, Omega, omega, M
     a = plane_params.a.to_numpy()
     e = plane_params.e.to_numpy()
+    M0 = plane_params.M0.to_numpy()
     
     # Extract basis vectors
     p_vec = np.column_stack([
@@ -263,9 +264,8 @@ def compute_orbital_elements_batch(
     
     omega = np.arctan2(sin_omega, cos_omega)
     
-    # Set M0 = 0 for now (epoch mean anomaly)
-    # This would ideally come from the orbit epoch and time
-    M0 = np.zeros_like(a)
+    # M0 is the epoch mean anomaly from the original orbital elements
+    # (already extracted from plane_params above)
     
     # Stack into elements array [a, e, i, Omega, omega, M0]
     elements = np.column_stack([a, e, i, Omega, omega, M0])
