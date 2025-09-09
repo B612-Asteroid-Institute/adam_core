@@ -12,6 +12,7 @@ import pytest
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.geometry import geometric_overlap
+ labelfrom adam_core.geometry.anomaly_labeling import label_anomalies
 from adam_core.observations.detections import PointSourceDetections
 from adam_core.observations.exposures import Exposures
 from adam_core.observations.rays import rays_from_detections
@@ -114,11 +115,19 @@ class TestAnomalyLabelingCorrectness:
         ]
         rays = create_rays_at_positions(test_positions)
         
-        # Run geometric overlap with labeling
-        hits, labels = geometric_overlap(
-            segments_with_aabbs, rays, guard_arcmin=1.0, 
-            label_anomalies=True, plane_params=params
+        # Run geometric overlap first, then labeling separately
+        hits = geometric_overlap(
+            segments_with_aabbs, rays, guard_arcmin=1.0
         )
+        
+        # Create orbits from the original orbit for labeling
+        orbits = Orbits.from_kwargs(
+            orbit_id=[orbit.orbit_id.to_pylist()[0]],
+            coordinates=orbit.coordinates,
+        )
+        
+        # Run anomaly labeling
+        labels = label_anomalies(hits, rays, orbits)
         
         # Verify we got hits and labels
         assert len(hits) > 0, "Should find geometric overlaps"
@@ -152,11 +161,19 @@ class TestAnomalyLabelingCorrectness:
         
         rays = create_rays_at_positions([periapsis_pos, apoapsis_pos])
         
-        # Run geometric overlap with labeling
-        hits, labels = geometric_overlap(
-            segments_with_aabbs, rays, guard_arcmin=1.0,
-            label_anomalies=True, plane_params=params
+        # Run geometric overlap first, then labeling separately
+        hits = geometric_overlap(
+            segments_with_aabbs, rays, guard_arcmin=1.0
         )
+        
+        # Create orbits from the original orbit for labeling
+        orbits = Orbits.from_kwargs(
+            orbit_id=[orbit.orbit_id.to_pylist()[0]],
+            coordinates=orbit.coordinates,
+        )
+        
+        # Run anomaly labeling
+        labels = label_anomalies(hits, rays, orbits)
         
         if len(labels) > 0:
             # Radius should vary significantly for high-e orbit
@@ -186,11 +203,19 @@ class TestAnomalyLabelingCorrectness:
         
         rays = create_rays_at_positions(test_positions)
         
-        # Run geometric overlap with labeling
-        hits, labels = geometric_overlap(
-            segments_with_aabbs, rays, guard_arcmin=1.0,
-            label_anomalies=True, plane_params=params
+        # Run geometric overlap first, then labeling separately
+        hits = geometric_overlap(
+            segments_with_aabbs, rays, guard_arcmin=1.0
         )
+        
+        # Create orbits from the original orbit for labeling
+        orbits = Orbits.from_kwargs(
+            orbit_id=[orbit.orbit_id.to_pylist()[0]],
+            coordinates=orbit.coordinates,
+        )
+        
+        # Run anomaly labeling
+        labels = label_anomalies(hits, rays, orbits)
         
         if len(labels) > 0:
             # Check that anomaly values are physically reasonable
@@ -288,10 +313,12 @@ class TestAnomalyLabelingCorrectness:
         # Run labeling multiple times 
         results = []
         for _ in range(3):
-            hits, labels = geometric_overlap(
-                segments_with_aabbs, rays, guard_arcmin=1.0,
-                label_anomalies=True, plane_params=params
+            hits = geometric_overlap(
+                segments_with_aabbs, rays, guard_arcmin=1.0
             )
+            
+            # Run anomaly labeling
+            labels = label_anomalies(hits, rays, combined_orbit)
             if len(labels) > 0:
                 # Extract sort keys
                 det_ids = labels.det_id.to_pylist()
