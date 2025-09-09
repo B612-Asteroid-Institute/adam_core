@@ -12,7 +12,7 @@ import pytest
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.geometry import geometric_overlap
- labelfrom adam_core.geometry.anomaly_labeling import label_anomalies
+from adam_core.geometry.anomaly_labeling import label_anomalies
 from adam_core.observations.detections import PointSourceDetections
 from adam_core.observations.exposures import Exposures
 from adam_core.observations.rays import rays_from_detections
