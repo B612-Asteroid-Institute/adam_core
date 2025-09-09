@@ -16,6 +16,13 @@ from .jax_overlap import *
 from .jax_remote import *
 from .anomaly_kernels import *
 from .anomaly_labeling import *
+from .anomaly_remote import *
+from .clock_gating import *
+from .sharding import *
+from .sharding_types import *
+from .sharded_query import *
+from .sharded_query_ray import *
+from ..observations.rays import ephemeris_to_rays
 
 # Import OverlapHits from overlap module
 from .overlap import OverlapHits
@@ -40,6 +47,11 @@ __all__ = [
     "query_bvh",
     "query_bvh_parallel", 
     "geometric_overlap",
+    # Clock gating
+    "ClockGateConfig",
+    "ClockGateResults",
+    "apply_clock_gating",
+    "compute_orbital_positions_at_times",
     # JAX types
     "BVHArrays",
     "SegmentsSOA",
@@ -55,6 +67,8 @@ __all__ = [
     "bvh_shard_to_arrays",
     "segments_to_soa",
     "rays_to_arrays", 
+    # Conversions
+    "ephemeris_to_rays",
     "hits_soa_to_overlap_hits",
     "overlap_hits_to_soa",
     "hits_soa_to_anomaly_labels_soa",
@@ -73,4 +87,22 @@ __all__ = [
     # Ray remote functions
     "process_ray_batch_remote",
     "query_bvh_parallel_jax",
+    "query_bvh_parallel_with_labeling",
+    # Ray anomaly labeling
+    "process_anomaly_batch_remote",
+    "label_anomalies_parallel",
+    # Sharding
+    "ShardMeta",
+    "ShardManifest", 
+    "ShardData",
+    "build_bvh_shards",
+    "save_shard",
+    "save_manifest",
+    "load_shard",
+    "estimate_shard_bytes",
+    # Sharded query
+    "query_manifest_local",
+    "query_manifest_ray",
+    "estimate_query_memory",
+    "estimate_ray_query_resources",
 ]

@@ -176,11 +176,24 @@ class SegmentsSOA:
     
     # Segment midpoint distance for guard band scaling
     r_mid_au: jax.Array  # float64[num_segments]
+
+    # Segment-to-orbit mapping (compact index into per-shard orbit_ids)
+    orbit_id_index: jax.Array  # int32[num_segments]
     
     # Optional: orbital plane normal for advanced guard band computation
     n_x: Optional[jax.Array] = None  # float64[num_segments]
     n_y: Optional[jax.Array] = None  # float64[num_segments]
     n_z: Optional[jax.Array] = None  # float64[num_segments]
+    
+    @classmethod
+    def empty(cls) -> "SegmentsSOA":
+        zeros = jnp.array([], dtype=jnp.float64)
+        return cls(
+            x0=zeros, y0=zeros, z0=zeros,
+            x1=zeros, y1=zeros, z1=zeros,
+            r_mid_au=zeros,
+            orbit_id_index=jnp.array([], dtype=jnp.int32),
+        )
     
     @property
     def num_segments(self) -> int:
@@ -208,7 +221,7 @@ class SegmentsSOA:
         n_segs = self.num_segments
         
         # Check shapes
-        for arr in [self.y0, self.z0, self.x1, self.y1, self.z1, self.r_mid_au]:
+        for arr in [self.y0, self.z0, self.x1, self.y1, self.z1, self.r_mid_au, self.orbit_id_index]:
             assert arr.shape == (n_segs,)
         
         if self.n_x is not None:
@@ -219,6 +232,7 @@ class SegmentsSOA:
         # Check dtypes
         for arr in [self.x0, self.y0, self.z0, self.x1, self.y1, self.z1, self.r_mid_au]:
             assert arr.dtype == jnp.float64
+        assert self.orbit_id_index.dtype == jnp.int32
 
 
 @dataclass
@@ -378,7 +392,7 @@ jax.tree_util.register_pytree_node(
     SegmentsSOA,
     lambda segs: (
         (segs.x0, segs.y0, segs.z0, segs.x1, segs.y1, segs.z1, segs.r_mid_au,
-         segs.n_x, segs.n_y, segs.n_z),
+         segs.orbit_id_index, segs.n_x, segs.n_y, segs.n_z),
         None
     ),
     lambda aux_data, children: SegmentsSOA(*children)
@@ -585,6 +599,7 @@ def save_segments_soa(segments: SegmentsSOA, filepath: Union[str, Path]) -> None
         "y1": segments_np.y1,
         "z1": segments_np.z1,
         "r_mid_au": segments_np.r_mid_au,
+        "orbit_id_index": segments_np.orbit_id_index,
     }
     
     # Add normals if present
@@ -657,6 +672,7 @@ def load_segments_soa(
         y1=jnp.asarray(data['y1']),
         z1=jnp.asarray(data['z1']),
         r_mid_au=jnp.asarray(data['r_mid_au']),
+        orbit_id_index=jnp.asarray(data['orbit_id_index']).astype(jnp.int32),
         n_x=jnp.asarray(data['n_x']) if 'n_x' in data else None,
         n_y=jnp.asarray(data['n_y']) if 'n_y' in data else None,
         n_z=jnp.asarray(data['n_z']) if 'n_z' in data else None,

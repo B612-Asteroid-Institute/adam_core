@@ -9,7 +9,7 @@ observer positions and line-of-sight unit vectors.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
@@ -28,9 +28,13 @@ from .exposures import Exposures
 __all__ = [
     "ObservationRays",
     "rays_from_detections",
+    "ephemeris_to_rays",
 ]
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:  # Only for type checkers to avoid runtime import cycles
+    from ..orbits.ephemeris import Ephemeris
 
 
 class ObservationRays(qv.Table):
@@ -212,3 +216,93 @@ def rays_from_detections(
     logger.info(f"Created {len(rays)} observation rays from {len(detections)} detections")
     
     return rays
+
+
+def ephemeris_to_rays(
+    ephemeris: "Ephemeris",
+    observers: Observers | None = None,
+    det_id: list[str] | None = None,
+) -> ObservationRays:
+    """
+    Convert ephemeris (topocentric RA/Dec) to observation rays in SSB ecliptic frame.
+
+    Parameters
+    ----------
+    ephemeris : Ephemeris
+        Ephemeris with spherical coordinates (RA/Dec) from observer perspective.
+    observers : Observers, optional
+        If provided, these observers will be used for observer positions; otherwise,
+        observer states are computed from ephemeris times and station codes.
+    det_id : list[str], optional
+        Detection IDs to assign to rays; if omitted, synthetic IDs are generated.
+
+    Returns
+    -------
+    ObservationRays
+        Rays with observer positions and LOS unit vectors in SSB ecliptic frame.
+    """
+    # Lazily import to avoid circular import typing issues (type-only check)
+    try:
+        from ..orbits.ephemeris import Ephemeris  # noqa: WPS433 (local import)
+        _ = Ephemeris  # silence linter unused
+    except Exception:
+        Ephemeris = None  # type: ignore[assignment]
+
+    times = ephemeris.coordinates.time
+    station_codes = ephemeris.coordinates.origin.code
+
+    # Compute observer states if not provided, or if lengths don't align
+    # with per-ephemeris rows
+    if (observers is None) or (len(observers) != len(ephemeris)):
+        observers = Observers.from_codes(times=times, codes=station_codes)
+
+    # Observer positions to SSB ecliptic frame
+    observer_coords = transform_coordinates(
+        observers.coordinates,
+        CartesianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+
+    # Extract RA/Dec (radians) from ephemeris (equatorial frame)
+    ra_rad = ephemeris.coordinates.lon.to_numpy()
+    dec_rad = ephemeris.coordinates.lat.to_numpy()
+
+    # Build spherical LOS on unit sphere at the observer
+    spherical_coords = SphericalCoordinates.from_kwargs(
+        rho=np.ones(len(ephemeris)),
+        lon=ra_rad,
+        lat=dec_rad,
+        vrho=np.zeros(len(ephemeris)),
+        vlon=np.zeros(len(ephemeris)),
+        vlat=np.zeros(len(ephemeris)),
+        time=times,
+        origin=observer_coords.origin,
+        frame="equatorial",
+    )
+
+    # Convert to Cartesian in SSB ecliptic frame
+    cartesian_coords = transform_coordinates(
+        spherical_coords.to_cartesian(),
+        CartesianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+
+    los_vectors = cartesian_coords.r
+    magnitudes = np.linalg.norm(los_vectors, axis=1)
+    u_vectors = los_vectors / magnitudes[:, np.newaxis]
+
+    # Create or reuse detection IDs
+    if det_id is None:
+        det_id = [f"ephem_{i:06d}" for i in range(len(ephemeris))]
+
+    return ObservationRays.from_kwargs(
+        det_id=det_id,
+        time=times,
+        observer_code=station_codes.to_pylist(),
+        observer=observer_coords,
+        u_x=u_vectors[:, 0],
+        u_y=u_vectors[:, 1],
+        u_z=u_vectors[:, 2],
+    )

@@ -79,6 +79,8 @@ class OrbitsPlaneParams(qv.Table):
     a = qv.Float64Column()
     #: Eccentricity
     e = qv.Float64Column()
+    #: Mean anomaly at epoch in radians
+    M0 = qv.Float64Column()
     
     #: Coordinate frame
     frame = qv.StringAttribute(default="ecliptic")
@@ -334,9 +336,10 @@ def sample_ellipse_adaptive(
     # Compute orbital plane basis vectors
     p_hat, q_hat, n_hat = _compute_orbital_basis(kep_coords)
     
-    # Extract orbital elements
+    # Extract orbital elements (angles in radians)
     a = kep_coords.a.to_numpy()
     e = kep_coords.e.to_numpy()
+    M0 = np.radians(kep_coords.M.to_numpy())
     orbit_ids = orbits.orbit_id.to_pylist()
     times = coords.time
     
@@ -457,6 +460,7 @@ def sample_ellipse_adaptive(
         r0_z=r0[:, 2],
         a=a,
         e=e,
+        M0=M0,
         frame="ecliptic",
         origin=Origin.from_kwargs(code=[OriginCodes.SUN.name] * len(orbits)),
     )

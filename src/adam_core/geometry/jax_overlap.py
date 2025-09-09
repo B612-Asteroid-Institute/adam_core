@@ -34,6 +34,7 @@ from .bvh import BVHShard
 from .jax_kernels import OverlapBackend, compute_overlap_hits_jax, compute_overlap_hits_numpy
 from .jax_types import OrbitIdMapping
 from .overlap import OverlapHits
+from .jax_types import HitsSOA
 
 __all__ = [
     "query_bvh_jax",
@@ -57,6 +58,7 @@ def query_bvh_jax(
     max_variants_per_hit: int = 2,
     max_newton_iterations: int = 10,
     plane_params: Optional[OrbitsPlaneParams] = None,
+    fixed_num_rays: Optional[int] = None,
 ) -> Union[OverlapHits, Tuple[OverlapHits, AnomalyLabels]]:
     """
     JAX-accelerated BVH query with legacy-compatible interface.
@@ -117,6 +119,17 @@ def query_bvh_jax(
     jax_bvh = bvh_shard_to_arrays(bvh, orbit_mapping, device=device)
     jax_segments = segments_to_soa(segments, device=device)
     ray_origins, ray_directions, observer_distances = rays_to_arrays(rays, device=device)
+
+    # Optional padding to a fixed number of rays to stabilize JAX compilation shapes
+    orig_num_rays = int(ray_origins.shape[0])
+    if fixed_num_rays is not None and fixed_num_rays > orig_num_rays:
+        pad_n = fixed_num_rays - orig_num_rays
+        pad_o = jax.numpy.zeros((pad_n, 3), dtype=ray_origins.dtype)
+        pad_d = jax.numpy.zeros((pad_n, 3), dtype=ray_directions.dtype)
+        pad_obs = jax.numpy.zeros((pad_n,), dtype=observer_distances.dtype)
+        ray_origins = jax.numpy.concatenate([ray_origins, pad_o], axis=0)
+        ray_directions = jax.numpy.concatenate([ray_directions, pad_d], axis=0)
+        observer_distances = jax.numpy.concatenate([observer_distances, pad_obs], axis=0)
     
     # Aggregate candidates using CPU traversal
     candidates = aggregate_candidates(
@@ -140,6 +153,18 @@ def query_bvh_jax(
         hits_soa = compute_overlap_hits_numpy(candidates, guard_arcmin, max_hits_per_ray)
     else:
         raise ValueError(f"Unknown backend: {backend}")
+
+    # Trim hits from padded rays if padding was applied
+    if fixed_num_rays is not None and fixed_num_rays > orig_num_rays and hits_soa.num_hits > 0:
+        mask = hits_soa.det_indices < jax.numpy.asarray(orig_num_rays, dtype=jax.numpy.int32)
+        idx = jax.numpy.nonzero(mask, size=hits_soa.num_hits)[0]
+        hits_soa = HitsSOA(
+            det_indices=hits_soa.det_indices[idx],
+            orbit_indices=hits_soa.orbit_indices[idx],
+            seg_ids=hits_soa.seg_ids[idx],
+            leaf_ids=hits_soa.leaf_ids[idx],
+            distances_au=hits_soa.distances_au[idx],
+        )
     
     # Convert back to legacy format
     det_ids = [rays.det_id[i].as_py() for i in range(len(rays))]

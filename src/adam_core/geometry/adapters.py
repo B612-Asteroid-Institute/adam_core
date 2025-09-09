@@ -26,7 +26,9 @@ from .anomaly import AnomalyLabels
 
 __all__ = [
     "bvh_shard_to_arrays",
-    "segments_to_soa", 
+    "bvh_arrays_to_shard",
+    "segments_to_soa",
+    "segments_soa_to_segments", 
     "rays_to_arrays",
     "hits_soa_to_overlap_hits",
     "overlap_hits_to_soa",
@@ -89,6 +91,54 @@ def bvh_shard_to_arrays(
     return arrays
 
 
+def bvh_arrays_to_shard(arrays: BVHArrays, orbit_ids: Optional[list[str]] = None) -> BVHShard:
+    """
+    Convert JAX-native BVHArrays back to legacy BVHShard.
+    
+    Parameters
+    ----------
+    arrays : BVHArrays
+        JAX BVH arrays structure
+        
+    Returns
+    -------
+    BVHShard
+        Legacy BVH structure
+    """
+    from .bvh import BVHShard
+    
+    # Convert JAX arrays to numpy
+    nodes_min = np.array(arrays.nodes_min)
+    nodes_max = np.array(arrays.nodes_max)
+    left_child = np.array(arrays.left_child)
+    right_child = np.array(arrays.right_child)
+    first_prim = np.array(arrays.first_prim)
+    prim_count = np.array(arrays.prim_count)
+    prim_row_index = np.array(arrays.prim_row_index)
+    
+    # Reconstruct per-primitive metadata
+    orbit_id_index = np.array(arrays.orbit_id_index)
+    if orbit_ids is not None and len(orbit_ids) > 0:
+        prim_orbit_ids = [orbit_ids[int(idx)] for idx in orbit_id_index]
+    else:
+        # Fallback to dummy IDs if orbit_ids not provided
+        prim_orbit_ids = [f"orbit_{int(idx)}" for idx in orbit_id_index]
+
+    prim_seg_ids = np.array(arrays.prim_seg_ids)
+    
+    return BVHShard(
+        nodes_min=nodes_min,
+        nodes_max=nodes_max,
+        left_child=left_child,
+        right_child=right_child,
+        first_prim=first_prim,
+        prim_count=prim_count,
+        prim_orbit_ids=prim_orbit_ids,
+        prim_seg_ids=prim_seg_ids,
+        prim_row_index=prim_row_index,
+    )
+
+
 def segments_to_soa(
     segments: OrbitPolylineSegments,
     device: Optional[jax.Device] = None,
@@ -111,6 +161,12 @@ def segments_to_soa(
     SegmentsSOA
         JAX-native segments representation
     """
+    # Compute stable per-segment orbit index using first-occurrence order
+    orbit_ids_list = segments.orbit_id.to_pylist()
+    unique_ids_in_order = list(dict.fromkeys(orbit_ids_list))
+    id_to_idx = {oid: i for i, oid in enumerate(unique_ids_in_order)}
+    orbit_id_index_np = np.array([id_to_idx[oid] for oid in orbit_ids_list], dtype=np.int32)
+
     # Extract arrays with zero-copy where possible
     # PyArrow -> NumPy is zero-copy for compatible dtypes
     soa = SegmentsSOA(
@@ -121,6 +177,7 @@ def segments_to_soa(
         y1=jnp.asarray(segments.y1.to_numpy(zero_copy_only=False)),
         z1=jnp.asarray(segments.z1.to_numpy(zero_copy_only=False)),
         r_mid_au=jnp.asarray(segments.r_mid_au.to_numpy(zero_copy_only=False)),
+        orbit_id_index=jnp.asarray(orbit_id_index_np),
     )
     
     # Include normals if requested and available
@@ -137,6 +194,53 @@ def segments_to_soa(
     logger.debug(f"Converted {soa.num_segments} segments to SoA format")
     
     return soa
+
+
+def segments_soa_to_segments(soa: SegmentsSOA, orbit_ids: list[str]) -> OrbitPolylineSegments:
+    """
+    Convert JAX-native SegmentsSOA back to OrbitPolylineSegments.
+    
+    Parameters
+    ----------
+    soa : SegmentsSOA
+        JAX segments structure
+        
+    Returns
+    -------
+    OrbitPolylineSegments
+        Quivr table with segments
+    """
+    from ..orbits.polyline import OrbitPolylineSegments
+    
+    # Convert JAX arrays to numpy
+    num_segments = soa.num_segments
+    
+    # Reconstruct orbit_id strings via orbit_id_index
+    seg_ids = list(range(num_segments))
+    seg_orbit_ids = [orbit_ids[int(idx)] for idx in np.array(soa.orbit_id_index)]
+    
+    return OrbitPolylineSegments.from_kwargs(
+        orbit_id=seg_orbit_ids,
+        seg_id=seg_ids,
+        x0=np.array(soa.x0),
+        y0=np.array(soa.y0),
+        z0=np.array(soa.z0),
+        x1=np.array(soa.x1),
+        y1=np.array(soa.y1),
+        z1=np.array(soa.z1),
+        # Compute AABBs from endpoints
+        aabb_min_x=np.minimum(np.array(soa.x0), np.array(soa.x1)),
+        aabb_min_y=np.minimum(np.array(soa.y0), np.array(soa.y1)),
+        aabb_min_z=np.minimum(np.array(soa.z0), np.array(soa.z1)),
+        aabb_max_x=np.maximum(np.array(soa.x0), np.array(soa.x1)),
+        aabb_max_y=np.maximum(np.array(soa.y0), np.array(soa.y1)),
+        aabb_max_z=np.maximum(np.array(soa.z0), np.array(soa.z1)),
+        r_mid_au=np.array(soa.r_mid_au),
+        # Compute normals (dummy values for now)
+        n_x=np.zeros(num_segments),
+        n_y=np.zeros(num_segments),
+        n_z=np.ones(num_segments),
+    )
 
 
 def rays_to_arrays(
