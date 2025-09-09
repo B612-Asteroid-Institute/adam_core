@@ -52,6 +52,8 @@ __all__ = [
     "ClockGateResults",
     "apply_clock_gating",
     "compute_orbital_positions_at_times",
+    # Anomaly labeling
+    "label_anomalies",
     # JAX types
     "BVHArrays",
     "SegmentsSOA",
@@ -79,7 +81,6 @@ __all__ = [
     # JAX kernels
     "ray_segment_distances_jax",
     "compute_overlap_hits_jax",
-    "OverlapBackend",
     # JAX explicit API
     "query_bvh_jax",
     "geometric_overlap_jax", 
@@ -87,7 +88,6 @@ __all__ = [
     # Ray remote functions
     "process_ray_batch_remote",
     "query_bvh_parallel_jax",
-    "query_bvh_parallel_with_labeling",
     # Ray anomaly labeling
     "process_anomaly_batch_remote",
     "label_anomalies_parallel",
