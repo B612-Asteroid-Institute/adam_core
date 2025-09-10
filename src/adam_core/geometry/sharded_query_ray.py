@@ -40,7 +40,7 @@ def _query_shard_remote(
 ) -> dict[str, Any]:
     """
     Ray remote function to query a single shard across multiple ray batches.
-    
+
     Parameters
     ----------
     manifest_dir_str : str
@@ -55,23 +55,23 @@ def _query_shard_remote(
         Base guard radius in arcminutes.
     alpha : float
         Guard inflation factor.
-        
+
     Returns
     -------
     dict
         OverlapHits table as dictionary of arrays.
     """
+    from .jax_overlap import query_bvh_jax
     from .sharding import load_shard
     from .sharding_types import ShardMeta
-    from .jax_overlap import query_bvh_jax
-    
+
     t0 = time.perf_counter()
 
     # Reconstruct types
     manifest_dir = Path(manifest_dir_str)
     meta = ShardMeta.from_dict(meta_dict)
     rays = ray.get(rays_ref)
-    
+
     # Load shard with memory mapping (once per task)
     segments, bvh_shard = load_shard(manifest_dir, meta)
     t_load = time.perf_counter()
@@ -79,7 +79,9 @@ def _query_shard_remote(
     # Compute effective guard
     guard_eff = _compute_effective_guard(guard_arcmin, meta.max_chord_arcmin, alpha)
 
-    print(f"[ray-shard {meta.shard_id}] loaded in {t_load - t0:.3f}s, guard_eff={guard_eff:.3f}")
+    print(
+        f"[ray-shard {meta.shard_id}] loaded in {t_load - t0:.3f}s, guard_eff={guard_eff:.3f}"
+    )
 
     # Process all ray batches for this shard
     shard_hits = []
@@ -91,11 +93,11 @@ def _query_shard_remote(
     for batch_indices in ray_batch_indices:
         if len(batch_indices) == 0:
             continue
-            
+
         tb = time.perf_counter()
         # Extract ray batch
         ray_batch = rays.take(batch_indices)
-        
+
         # Query BVH for this batch
         batch_hits = query_bvh_jax(
             rays=ray_batch,
@@ -107,19 +109,23 @@ def _query_shard_remote(
         q_time = time.perf_counter() - tb
         batch_times.append(q_time)
 
-        print(f"[ray-shard {meta.shard_id}] batch size={len(batch_indices)} queried in {q_time:.3f}s, hits={len(batch_hits)}")
+        print(
+            f"[ray-shard {meta.shard_id}] batch size={len(batch_indices)} queried in {q_time:.3f}s, hits={len(batch_hits)}"
+        )
 
         if len(batch_hits) > 0:
             shard_hits.append(batch_hits)
-    
+
     # Merge all batches for this shard
     if shard_hits:
         merged_hits = _merge_overlap_hits(shard_hits)
         # Convert to dictionary for Ray serialization
         return {
-            col_name: getattr(merged_hits, col_name).to_numpy(zero_copy_only=False)
-            if col_name not in {"det_id", "orbit_id"}
-            else getattr(merged_hits, col_name).to_pylist()
+            col_name: (
+                getattr(merged_hits, col_name).to_numpy(zero_copy_only=False)
+                if col_name not in {"det_id", "orbit_id"}
+                else getattr(merged_hits, col_name).to_pylist()
+            )
             for col_name in merged_hits.schema.names
         }
     else:
@@ -138,11 +144,11 @@ def query_manifest_ray(
 ) -> OverlapHits:
     """
     Query a sharded BVH manifest using Ray for parallel processing.
-    
+
     This function distributes shard queries across Ray workers, with each
     worker loading a shard via memory mapping and processing all ray batches
     for that shard locally to amortize I/O costs.
-    
+
     Parameters
     ----------
     manifest : ShardManifest
@@ -160,7 +166,7 @@ def query_manifest_ray(
     manifest_dir : Path, optional
         Directory containing manifest and shard files.
         If None, inferred from manifest file location.
-        
+
     Returns
     -------
     OverlapHits
@@ -168,19 +174,19 @@ def query_manifest_ray(
     """
     if manifest_dir is None:
         raise ValueError("manifest_dir must be provided")
-    
+
     if not ray.is_initialized():
         raise RuntimeError("Ray must be initialized before calling query_manifest_ray")
-    
+
     logger.info(f"Ray query: {len(manifest.shards)} shards, {len(rays)} rays")
     logger.info(f"Guard: {guard_arcmin} arcmin, alpha: {alpha}")
     logger.info(f"Ray batch size: {ray_batch_size}, max concurrency: {max_concurrency}")
-    
+
     start_time = time.time()
-    
+
     # Put rays in object store once
     rays_ref = ray.put(rays)
-    
+
     # Precompute ray batch indices (use one batch if small to avoid extra JAX compiles)
     num_rays = len(rays)
     if ray_batch_size >= num_rays:
@@ -193,7 +199,7 @@ def query_manifest_ray(
             ray_batch_indices.append(batch_indices)
 
     print(f"[driver] created {len(ray_batch_indices)} ray batches")
-    
+
     # Submit shard tasks with concurrency control
     shard_results: list[OverlapHits] = []
     active: list[tuple[int, str, ray.ObjectRef]] = []
@@ -240,20 +246,24 @@ def query_manifest_ray(
 
     # Merge all shard results
     final_hits = _merge_overlap_hits(shard_results)
-    
+
     total_time = time.time() - start_time
     rays_per_sec = len(rays) / total_time if total_time > 0 else 0
-    
-    print(f"[driver] query complete: hits={len(final_hits)}, total={total_time:.2f}s, rays/s={rays_per_sec:.0f}")
-    
+
+    print(
+        f"[driver] query complete: hits={len(final_hits)}, total={total_time:.2f}s, rays/s={rays_per_sec:.0f}"
+    )
+
     # Log hit distribution
     if len(final_hits) > 0:
         distances = final_hits.distance_au.to_numpy(zero_copy_only=False)
-        logger.info(f"Hit distances: "
-                   f"min={np.min(distances):.6f} AU, "
-                   f"max={np.max(distances):.6f} AU, "
-                   f"mean={np.mean(distances):.6f} AU")
-    
+        logger.info(
+            f"Hit distances: "
+            f"min={np.min(distances):.6f} AU, "
+            f"max={np.max(distances):.6f} AU, "
+            f"mean={np.mean(distances):.6f} AU"
+        )
+
     return final_hits
 
 
@@ -264,7 +274,7 @@ def estimate_ray_query_resources(
 ) -> dict[str, Any]:
     """
     Estimate resource requirements for Ray-parallel sharded query.
-    
+
     Parameters
     ----------
     manifest : ShardManifest
@@ -273,7 +283,7 @@ def estimate_ray_query_resources(
         Ray batch size for processing.
     max_concurrency : int, optional
         Maximum concurrent shard tasks.
-        
+
     Returns
     -------
     dict
@@ -285,25 +295,24 @@ def estimate_ray_query_resources(
     """
     # Find largest shard
     max_shard_bytes = max(meta.total_bytes for meta in manifest.shards)
-    
+
     # Determine concurrency
     concurrent_shards = min(
-        len(manifest.shards),
-        max_concurrency or len(manifest.shards)
+        len(manifest.shards), max_concurrency or len(manifest.shards)
     )
-    
+
     # Estimate ray batch memory
     ray_batch_bytes = ray_batch_size * 200  # ~200 bytes per ray
-    
+
     # Peak memory: concurrent shards * (shard + ray batch + overhead)
     peak_memory_bytes = concurrent_shards * (
         max_shard_bytes + ray_batch_bytes + int(0.1 * max_shard_bytes)
     )
-    
+
     return {
-        'max_shard_bytes': max_shard_bytes,
-        'concurrent_shards': concurrent_shards,
-        'peak_memory_bytes': peak_memory_bytes,
-        'ray_batch_bytes': ray_batch_bytes,
-        'total_shards': len(manifest.shards),
+        "max_shard_bytes": max_shard_bytes,
+        "concurrent_shards": concurrent_shards,
+        "peak_memory_bytes": peak_memory_bytes,
+        "ray_batch_bytes": ray_batch_bytes,
+        "total_shards": len(manifest.shards),
     }

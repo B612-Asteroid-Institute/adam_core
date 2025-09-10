@@ -7,46 +7,46 @@ and algorithms for efficient geometric queries.
 The public API uses JAX-accelerated implementations by default for optimal performance.
 """
 
-from .bvh import *
-from .jax_types import *
+from ..observations.rays import ephemeris_to_rays
 from .adapters import *
 from .aggregator import *
-from .jax_kernels import *
-from .jax_overlap import *
-from .jax_remote import *
+
+# Import AnomalyLabels from anomaly module
+from .anomaly import AnomalyLabels
 from .anomaly_kernels import *
 from .anomaly_labeling import *
 from .anomaly_remote import *
-from .projection import *
+from .bvh import *
 from .clock_gating import *
-from .sharding import *
-from .sharding_types import *
-from .sharded_query import *
-from .sharded_query_ray import *
-from ..observations.rays import ephemeris_to_rays
+from .jax_kernels import *
+
+# Define canonical API that routes to JAX implementations
+from .jax_overlap import *
+from .jax_overlap import geometric_overlap_jax as geometric_overlap
+from .jax_overlap import query_bvh_jax as query_bvh
+from .jax_remote import *
+from .jax_remote import query_bvh_parallel_jax as query_bvh_parallel
+from .jax_types import *
 
 # Import OverlapHits from overlap module
 from .overlap import OverlapHits
-
-# Import AnomalyLabels from anomaly module  
-from .anomaly import AnomalyLabels
-
-# Define canonical API that routes to JAX implementations
-from .jax_overlap import query_bvh_jax as query_bvh
-from .jax_overlap import geometric_overlap_jax as geometric_overlap
-from .jax_remote import query_bvh_parallel_jax as query_bvh_parallel
+from .projection import *
+from .sharded_query import *
+from .sharded_query_ray import *
+from .sharding import *
+from .sharding_types import *
 
 __all__ = [
     # BVH construction and persistence
     "BVHShard",
-    "build_bvh", 
+    "build_bvh",
     "save_bvh",
     "load_bvh",
     # Public API (JAX-backed by default)
     "OverlapHits",
     "AnomalyLabels",
     "query_bvh",
-    "query_bvh_parallel", 
+    "query_bvh_parallel",
     "geometric_overlap",
     # Clock gating
     "ClockGateConfig",
@@ -63,18 +63,18 @@ __all__ = [
     # JAX types
     "BVHArrays",
     "SegmentsSOA",
-    "HitsSOA", 
+    "HitsSOA",
     "AnomalyLabelsSOA",
     "OrbitIdMapping",
     # JAX persistence
     "save_bvh_arrays",
     "load_bvh_arrays",
-    "save_segments_soa", 
+    "save_segments_soa",
     "load_segments_soa",
     # Adapters
     "bvh_shard_to_arrays",
     "segments_to_soa",
-    "rays_to_arrays", 
+    "rays_to_arrays",
     # Conversions
     "ephemeris_to_rays",
     "hits_soa_to_overlap_hits",
@@ -89,17 +89,16 @@ __all__ = [
     "compute_overlap_hits_jax",
     # JAX explicit API
     "query_bvh_jax",
-    "geometric_overlap_jax", 
+    "geometric_overlap_jax",
     "benchmark_jax_vs_legacy",
     # Ray remote functions
     "process_ray_batch_remote",
     "query_bvh_parallel_jax",
     # Ray anomaly labeling
     "process_anomaly_batch_remote",
-    "label_anomalies_parallel",
     # Sharding
     "ShardMeta",
-    "ShardManifest", 
+    "ShardManifest",
     "ShardData",
     "build_bvh_shards",
     "save_shard",

@@ -4,12 +4,11 @@ Hardening tests for geometric overlap: negative controls, angular checks, determ
 
 import numpy as np
 import pytest
-
 from adam_assist import ASSISTPropagator
 
-from adam_core.geometry import build_bvh, query_bvh, ephemeris_to_rays
+from adam_core.geometry import build_bvh, ephemeris_to_rays, query_bvh
 from adam_core.observers.observers import Observers
-from adam_core.orbits.polyline import sample_ellipse_adaptive, compute_segment_aabbs
+from adam_core.orbits.polyline import compute_segment_aabbs, sample_ellipse_adaptive
 from adam_core.orbits.query.sbdb import query_sbdb
 from adam_core.orbits.variants import VariantOrbits
 from adam_core.time import Timestamp
@@ -38,19 +37,25 @@ def _rotate_los_by_arcmin(u: np.ndarray, angle_arcmin: float) -> np.ndarray:
     cos = np.cos(angle_rad)
     sin = np.sin(angle_rad)
     cross_term = np.cross(a, u)
-    proj = (a * (a * u).sum(axis=-1, keepdims=True))
+    proj = a * (a * u).sum(axis=-1, keepdims=True)
     u_rot = u * cos + cross_term * sin + proj * (1.0 - cos)
     return _unit_vector(u_rot)
 
 
 def _build_basic_ephemerides(sbdb_id: str, n_variants: int = 10, n_epochs: int = 21):
     nominal = query_sbdb([sbdb_id])[0:1]
-    variants = VariantOrbits.create(nominal, method="monte-carlo", num_samples=n_variants, seed=42)
+    variants = VariantOrbits.create(
+        nominal, method="monte-carlo", num_samples=n_variants, seed=42
+    )
     epoch_start = nominal.coordinates.time.mjd().to_numpy()[0]
     times = Timestamp.from_mjd(
         np.linspace(epoch_start, epoch_start + 90, n_epochs), scale="tdb"
     )
-    stations = ["X05"] * (n_epochs // 3) + ["T08"] * (n_epochs // 3) + ["I41"] * (n_epochs // 3)
+    stations = (
+        ["X05"] * (n_epochs // 3)
+        + ["T08"] * (n_epochs // 3)
+        + ["I41"] * (n_epochs // 3)
+    )
     observers = Observers.from_codes(times=times, codes=stations)
     prop = ASSISTPropagator()
     ephem = prop.generate_ephemeris(variants, observers, max_processes=1)
@@ -80,13 +85,21 @@ class TestHardening:
         rays = ephemeris_to_rays(ephem, observers=observers, det_id=det_ids)
 
         # Offset LOS by +5 arcmin
-        u = np.column_stack([rays.u_x.to_numpy(), rays.u_y.to_numpy(), rays.u_z.to_numpy()])
+        u = np.column_stack(
+            [rays.u_x.to_numpy(), rays.u_y.to_numpy(), rays.u_z.to_numpy()]
+        )
         u_rot = _rotate_los_by_arcmin(u, angle_arcmin=5.0)
-        rays_offset = rays.set_column("u_x", u_rot[:, 0]).set_column("u_y", u_rot[:, 1]).set_column("u_z", u_rot[:, 2])
+        rays_offset = (
+            rays.set_column("u_x", u_rot[:, 0])
+            .set_column("u_y", u_rot[:, 1])
+            .set_column("u_z", u_rot[:, 2])
+        )
 
         # Query with tiny guard
         hits = query_bvh(bvh, segs_aabb, rays_offset, guard_arcmin=guard_arcmin)
-        assert len(hits) == 0, f"Expected 0 hits at guard={guard_arcmin}′ after +5′ offset, got {len(hits)}"
+        assert (
+            len(hits) == 0
+        ), f"Expected 0 hits at guard={guard_arcmin}′ after +5′ offset, got {len(hits)}"
 
     @pytest.mark.parametrize("guard_arcmin", [0.1, 0.05])
     def test_angular_separation_spotcheck(self, guard_arcmin):
@@ -114,16 +127,22 @@ class TestHardening:
         det_to_idx = {d: i for i, d in enumerate(det_id_list)}
 
         # Arrays for rays and segments
-        u_arr = np.column_stack([rays.u_x.to_numpy(), rays.u_y.to_numpy(), rays.u_z.to_numpy()])
-        O_arr = np.column_stack([
-            rays.observer.x.to_numpy(), rays.observer.y.to_numpy(), rays.observer.z.to_numpy()
-        ])
-        P0_arr = np.column_stack([
-            segments.x0.to_numpy(), segments.y0.to_numpy(), segments.z0.to_numpy()
-        ])
-        P1_arr = np.column_stack([
-            segments.x1.to_numpy(), segments.y1.to_numpy(), segments.z1.to_numpy()
-        ])
+        u_arr = np.column_stack(
+            [rays.u_x.to_numpy(), rays.u_y.to_numpy(), rays.u_z.to_numpy()]
+        )
+        O_arr = np.column_stack(
+            [
+                rays.observer.x.to_numpy(),
+                rays.observer.y.to_numpy(),
+                rays.observer.z.to_numpy(),
+            ]
+        )
+        P0_arr = np.column_stack(
+            [segments.x0.to_numpy(), segments.y0.to_numpy(), segments.z0.to_numpy()]
+        )
+        P1_arr = np.column_stack(
+            [segments.x1.to_numpy(), segments.y1.to_numpy(), segments.z1.to_numpy()]
+        )
 
         # Gather sampled pairs
         hit_det_ids = hits.det_id.to_pylist()
@@ -160,5 +179,6 @@ class TestHardening:
         dots = np.clip((dir_to_seg * U).sum(axis=1), -1.0, 1.0)
         ang = np.arccos(dots)
         guard_rad = np.deg2rad(guard_arcmin / 60.0)
-        assert np.all(ang < guard_rad + 1e-8), "Some hits exceed guard angular separation"
-
+        assert np.all(
+            ang < guard_rad + 1e-8
+        ), "Some hits exceed guard angular separation"

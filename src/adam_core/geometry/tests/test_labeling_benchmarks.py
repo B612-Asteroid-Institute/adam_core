@@ -9,6 +9,7 @@ added by setting JAX platform if available.
 from __future__ import annotations
 
 import os
+
 import numpy as np
 import pytest
 
@@ -48,7 +49,9 @@ def _make_orbits(n_orbits: int) -> Orbits:
     return Orbits.from_kwargs(orbit_id=orbit_ids, coordinates=cart)
 
 
-def _make_hits_and_rays(n_hits: int, n_orbits: int) -> tuple[OverlapHits, ObservationRays]:
+def _make_hits_and_rays(
+    n_hits: int, n_orbits: int
+) -> tuple[OverlapHits, ObservationRays]:
     rng = np.random.default_rng(42)
     # det_ids
     det_ids = [f"det_{i:07d}" for i in range(n_hits)]
@@ -71,8 +74,12 @@ def _make_hits_and_rays(n_hits: int, n_orbits: int) -> tuple[OverlapHits, Observ
     u_vecs = rng.normal(size=(n_hits, 3))
     u_vecs /= np.linalg.norm(u_vecs, axis=1, keepdims=True)
     observer = CartesianCoordinates.from_kwargs(
-        x=np.zeros(n_hits), y=np.zeros(n_hits), z=np.zeros(n_hits),
-        vx=np.zeros(n_hits), vy=np.zeros(n_hits), vz=np.zeros(n_hits),
+        x=np.zeros(n_hits),
+        y=np.zeros(n_hits),
+        z=np.zeros(n_hits),
+        vx=np.zeros(n_hits),
+        vy=np.zeros(n_hits),
+        vz=np.zeros(n_hits),
         time=times,
         origin=Origin.from_kwargs(code=[OriginCodes.SUN.name] * n_hits),
         frame="ecliptic",
@@ -82,7 +89,9 @@ def _make_hits_and_rays(n_hits: int, n_orbits: int) -> tuple[OverlapHits, Observ
         time=times,
         observer_code=["500"] * n_hits,
         observer=observer,
-        u_x=u_vecs[:, 0], u_y=u_vecs[:, 1], u_z=u_vecs[:, 2],
+        u_x=u_vecs[:, 0],
+        u_y=u_vecs[:, 1],
+        u_z=u_vecs[:, 2],
     )
     return hits, rays
 
@@ -131,12 +140,14 @@ def test_label_anomalies_throughput_cpu(benchmark, n_hits):
         # With strict filtering
         (2000, 3, 0.1, 5.0, 1e-6),
         (20000, 3, 0.1, 5.0, 1e-6),
-    ]
+    ],
 )
-def test_multi_anomaly_throughput_cpu(benchmark, n_hits, max_k, eccentricity, inc_deg, filter_thr):
+def test_multi_anomaly_throughput_cpu(
+    benchmark, n_hits, max_k, eccentricity, inc_deg, filter_thr
+):
     """
     Benchmark multi-anomaly labeling throughput on CPU.
-    
+
     Compares K=1 vs K=3 performance to measure multi-candidate overhead.
     """
     # Generate synthetic data (reuse helpers above)
@@ -164,15 +175,14 @@ def test_multi_anomaly_throughput_cpu(benchmark, n_hits, max_k, eccentricity, in
     cart = CartesianCoordinates.from_keplerian(kep)
     orbits = Orbits.from_kwargs(orbit_id=orbit_ids, coordinates=cart)
     hits, rays = _make_hits_and_rays(n_hits, n_orbits)
-    
+
     def _run():
         return label_anomalies(
-            hits, rays, orbits, max_k=max_k,
-            snap_error_max_au=filter_thr
+            hits, rays, orbits, max_k=max_k, snap_error_max_au=filter_thr
         )
 
     result = benchmark(_run)
-    
+
     # Attach throughput metrics
     mean_time = benchmark.stats.stats.mean
     if mean_time > 0:
@@ -184,5 +194,3 @@ def test_multi_anomaly_throughput_cpu(benchmark, n_hits, max_k, eccentricity, in
         benchmark.extra_info["inc_deg"] = inc_deg
         benchmark.extra_info["filter_thr"] = filter_thr
         benchmark.extra_info["n_candidates"] = len(result)
-
-

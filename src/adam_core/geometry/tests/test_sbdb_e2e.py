@@ -12,11 +12,11 @@ from adam_assist import ASSISTPropagator
 
 from adam_core.geometry import (
     build_bvh,
-    query_bvh,
     ephemeris_to_rays,
+    query_bvh,
 )
 from adam_core.observers.observers import Observers
-from adam_core.orbits.polyline import sample_ellipse_adaptive, compute_segment_aabbs
+from adam_core.orbits.polyline import compute_segment_aabbs, sample_ellipse_adaptive
 from adam_core.orbits.query.sbdb import query_sbdb
 from adam_core.orbits.variants import VariantOrbits
 from adam_core.time import Timestamp
@@ -28,7 +28,7 @@ class TestSBDBEndToEnd:
     def test_sbdb_e2e_recovery_ci(self):
         """
         CI-sized SBDB end-to-end recovery test.
-        
+
         Uses 10 variants × 21 epochs × 3 stations = 630 observations.
         Verifies 100% recovery with 1 arcmin guard radius.
         """
@@ -45,7 +45,7 @@ class TestSBDBEndToEnd:
     def test_sbdb_e2e_recovery_full(self):
         """
         Full-scale SBDB end-to-end recovery test.
-        
+
         Uses 100 variants × 21 epochs × 3 stations = 6300 observations.
         Verifies 100% recovery with 1 arcmin guard radius.
         """
@@ -62,7 +62,7 @@ class TestSBDBEndToEnd:
     def test_sbdb_guard_sweep_ci(self, guard_arcmin):
         """
         CI-sized guard tolerance sweep for 1998 SG172.
-        
+
         Tests recovery at different guard radii to find failure threshold.
         Uses dynamic polyline sampling that gets tighter for smaller guards.
         """
@@ -75,10 +75,10 @@ class TestSBDBEndToEnd:
             max_chord_arcmin = guard_arcmin * 1.5  # 1.5x guard size for tiny guards
         else:
             max_chord_arcmin = guard_arcmin * 1.2  # Very tight for sub-arcsec guards
-        
+
         # Expect 100% recovery at all guard sizes; fail fast if not met
         expected_recovery = 1.0
-            
+
         self._run_sbdb_e2e_test(
             sbdb_id="1998 SG172",
             n_variants=10,
@@ -89,28 +89,55 @@ class TestSBDBEndToEnd:
         )
 
     @pytest.mark.sbdb_full
-    @pytest.mark.parametrize("sbdb_id,guard_arcmin", [
-        # Inner main-belt, low-e, low-i (~2.2 AU)
-        ("8 Flora", 1.0), ("8 Flora", 0.5), ("8 Flora", 0.25), ("8 Flora", 0.1),
-        # High-e NEO (perihelion ~0.6 AU, aphelion ~1.5 AU)
-        ("1862 Apollo", 1.0), ("1862 Apollo", 0.5), ("1862 Apollo", 0.25), ("1862 Apollo", 0.1),
-        # High-i main-belt (~2.8 AU, i~34°)
-        ("20 Massalia", 1.0), ("20 Massalia", 0.5), ("20 Massalia", 0.25), ("20 Massalia", 0.1),
-        # High-e Amor NEO (perihelion ~1.1 AU, aphelion ~2.8 AU)
-        ("1221 Amor", 1.0), ("1221 Amor", 0.5), ("1221 Amor", 0.25), ("1221 Amor", 0.1),
-        # Outer main-belt, moderate-e (~3.1 AU)
-        ("324 Bamberga", 1.0), ("324 Bamberga", 0.5), ("324 Bamberga", 0.25), ("324 Bamberga", 0.1),
-        # Very high-i (~63°), moderate distance (~2.4 AU)
-        ("944 Hidalgo", 1.0), ("944 Hidalgo", 0.5), ("944 Hidalgo", 0.25), ("944 Hidalgo", 0.1),
-        # Jupiter Trojan (~5.2 AU, L4 point)
-        ("588 Achilles", 1.0), ("588 Achilles", 0.5), ("588 Achilles", 0.25), ("588 Achilles", 0.1),
-        # Baseline (Izevic) - moderate distance, moderate-e
-        ("1998 SG172", 1.0), ("1998 SG172", 0.5), ("1998 SG172", 0.25), ("1998 SG172", 0.1),
-    ])
+    @pytest.mark.parametrize(
+        "sbdb_id,guard_arcmin",
+        [
+            # Inner main-belt, low-e, low-i (~2.2 AU)
+            ("8 Flora", 1.0),
+            ("8 Flora", 0.5),
+            ("8 Flora", 0.25),
+            ("8 Flora", 0.1),
+            # High-e NEO (perihelion ~0.6 AU, aphelion ~1.5 AU)
+            ("1862 Apollo", 1.0),
+            ("1862 Apollo", 0.5),
+            ("1862 Apollo", 0.25),
+            ("1862 Apollo", 0.1),
+            # High-i main-belt (~2.8 AU, i~34°)
+            ("20 Massalia", 1.0),
+            ("20 Massalia", 0.5),
+            ("20 Massalia", 0.25),
+            ("20 Massalia", 0.1),
+            # High-e Amor NEO (perihelion ~1.1 AU, aphelion ~2.8 AU)
+            ("1221 Amor", 1.0),
+            ("1221 Amor", 0.5),
+            ("1221 Amor", 0.25),
+            ("1221 Amor", 0.1),
+            # Outer main-belt, moderate-e (~3.1 AU)
+            ("324 Bamberga", 1.0),
+            ("324 Bamberga", 0.5),
+            ("324 Bamberga", 0.25),
+            ("324 Bamberga", 0.1),
+            # Very high-i (~63°), moderate distance (~2.4 AU)
+            ("944 Hidalgo", 1.0),
+            ("944 Hidalgo", 0.5),
+            ("944 Hidalgo", 0.25),
+            ("944 Hidalgo", 0.1),
+            # Jupiter Trojan (~5.2 AU, L4 point)
+            ("588 Achilles", 1.0),
+            ("588 Achilles", 0.5),
+            ("588 Achilles", 0.25),
+            ("588 Achilles", 0.1),
+            # Baseline (Izevic) - moderate distance, moderate-e
+            ("1998 SG172", 1.0),
+            ("1998 SG172", 0.5),
+            ("1998 SG172", 0.25),
+            ("1998 SG172", 0.1),
+        ],
+    )
     def test_sbdb_guard_sweep_full(self, sbdb_id, guard_arcmin):
         """
         Full-scale guard tolerance sweep across diverse orbit types.
-        
+
         Tests recovery across different distances, eccentricities, and inclinations
         to find failure thresholds and understand geometric sensitivity.
         """
@@ -121,10 +148,10 @@ class TestSBDBEndToEnd:
             max_chord_arcmin = guard_arcmin * 2  # 2x guard size
         else:
             max_chord_arcmin = guard_arcmin * 1.5  # 1.5x guard size for tiny guards
-        
+
         # Expect 100% recovery at all guard sizes; fail fast if not met
         expected_recovery = 1.0
-            
+
         self._run_sbdb_e2e_test(
             sbdb_id=sbdb_id,
             n_variants=100,
@@ -145,7 +172,7 @@ class TestSBDBEndToEnd:
     ):
         """
         Run the SBDB end-to-end recovery test with specified parameters.
-        
+
         Parameters
         ----------
         sbdb_id : str
@@ -166,10 +193,14 @@ class TestSBDBEndToEnd:
         nominal_orbits = query_sbdb([sbdb_id])
         assert len(nominal_orbits) == 1
         nominal_orbit = nominal_orbits[0:1]  # Keep as table with 1 row
-        
-        print(f"Nominal orbit epoch: {nominal_orbit.coordinates.time.mjd().to_numpy()[0]:.1f} MJD")
-        print(f"Nominal orbit has covariance: {nominal_orbit.coordinates.covariance is not None}")
-        
+
+        print(
+            f"Nominal orbit epoch: {nominal_orbit.coordinates.time.mjd().to_numpy()[0]:.1f} MJD"
+        )
+        print(
+            f"Nominal orbit has covariance: {nominal_orbit.coordinates.covariance is not None}"
+        )
+
         # Step 2: Generate orbit variants from covariance
         print(f"Generating {n_variants} orbit variants from covariance...")
         variant_orbits = VariantOrbits.create(
@@ -178,47 +209,49 @@ class TestSBDBEndToEnd:
             num_samples=n_variants,
             seed=42,
         )
-        
+
         print(f"Generated {len(variant_orbits)} variants")
-        
+
         # Step 3: Create observation epochs (spanning ~3 months)
         epoch_start_mjd = nominal_orbit.coordinates.time.mjd().to_numpy()[0]
         epoch_span_days = 90  # 3 months
-        
+
         if n_epochs % 3 != 0:
-            raise ValueError(f"n_epochs ({n_epochs}) must be multiple of 3 for 3 stations")
-        
+            raise ValueError(
+                f"n_epochs ({n_epochs}) must be multiple of 3 for 3 stations"
+            )
+
         epochs_per_station = n_epochs // 3
         epoch_mjds = np.linspace(
-            epoch_start_mjd,
-            epoch_start_mjd + epoch_span_days,
-            n_epochs
+            epoch_start_mjd, epoch_start_mjd + epoch_span_days, n_epochs
         )
-        
+
         # Assign stations: first 1/3 to X05, middle 1/3 to T08, last 1/3 to I41
         station_codes = (
-            ["X05"] * epochs_per_station +
-            ["T08"] * epochs_per_station +
-            ["I41"] * epochs_per_station
+            ["X05"] * epochs_per_station
+            + ["T08"] * epochs_per_station
+            + ["I41"] * epochs_per_station
         )
-        
+
         observation_times = Timestamp.from_mjd(epoch_mjds, scale="tdb")
-        
-        print(f"Created {n_epochs} epochs from {epoch_start_mjd:.1f} to {epoch_start_mjd + epoch_span_days:.1f} MJD")
+
+        print(
+            f"Created {n_epochs} epochs from {epoch_start_mjd:.1f} to {epoch_start_mjd + epoch_span_days:.1f} MJD"
+        )
         print(f"Station assignment: {epochs_per_station} epochs each for X05, T08, I41")
-        
+
         # Step 4: Generate ephemerides for all variants
         print(f"Generating ephemerides for {len(variant_orbits)} variants...")
-        
+
         # Initialize assist propagator (following existing test patterns)
         propagator = ASSISTPropagator()
-        
+
         # Create observers for each epoch/station combination
         observers = Observers.from_codes(
             times=observation_times,
             codes=station_codes,
         )
-        
+
         # Generate ephemerides for all variants (with error handling for invalid variants)
         try:
             ephemerides = propagator.generate_ephemeris(
@@ -229,11 +262,13 @@ class TestSBDBEndToEnd:
         except ValueError as e:
             if "Distance from observer is NaN" in str(e):
                 # Some covariance samples may be invalid; reduce sample size and retry
-                print(f"Warning: Invalid variants detected, reducing sample size from {n_variants} to {n_variants//2}")
+                print(
+                    f"Warning: Invalid variants detected, reducing sample size from {n_variants} to {n_variants//2}"
+                )
                 variant_orbits = VariantOrbits.create(
                     nominal_orbit,
                     method="monte-carlo",
-                    num_samples=n_variants//2,
+                    num_samples=n_variants // 2,
                     seed=42,
                 )
                 ephemerides = propagator.generate_ephemeris(
@@ -241,46 +276,50 @@ class TestSBDBEndToEnd:
                     observers,
                     max_processes=1,
                 )
-                print(f"Successfully generated ephemerides with {len(variant_orbits)} variants")
+                print(
+                    f"Successfully generated ephemerides with {len(variant_orbits)} variants"
+                )
             else:
                 raise
-        
+
         print(f"Generated {len(ephemerides)} ephemeris points")
-        
+
         # Step 5: Convert ephemerides to observation rays
         print("Converting ephemerides to observation rays...")
-        
+
         # Create detection IDs
         det_ids = [
             f"{ephemerides.orbit_id[i].as_py()}:{ephemerides.coordinates.origin.code[i].as_py()}:{i}"
             for i in range(len(ephemerides))
         ]
-        
+
         # Use convenience function and reuse already-created observers
         rays = ephemeris_to_rays(ephemerides, observers=observers, det_id=det_ids)
-        
+
         print(f"Created {len(rays)} observation rays")
-        
+
         # Step 6: Build BVH from nominal orbit polyline
         print("Building BVH from nominal orbit polyline...")
-        
+
         # Sample nominal orbit polyline
         plane_params, segments = sample_ellipse_adaptive(
             nominal_orbit,
             max_chord_arcmin=max_chord_arcmin,
         )
-        
-        print(f"Sampled {len(segments)} polyline segments with max chord {max_chord_arcmin} arcmin")
-        
+
+        print(
+            f"Sampled {len(segments)} polyline segments with max chord {max_chord_arcmin} arcmin"
+        )
+
         # Compute segment AABBs and build BVH
         segments_with_aabbs = compute_segment_aabbs(segments)
         bvh = build_bvh(segments_with_aabbs)
-        
+
         print(f"Built BVH with {len(bvh.nodes_min)} nodes")
-        
+
         # Step 7: Run geometric overlap query
         print(f"Running geometric overlap with {guard_arcmin} arcmin guard...")
-        
+
         # Query BVH for overlaps using high-level API
         overlap_hits = query_bvh(
             bvh,
@@ -288,30 +327,36 @@ class TestSBDBEndToEnd:
             rays,
             guard_arcmin=guard_arcmin,
         )
-        
+
         print(f"Found {len(overlap_hits)} total hits")
-        
+
         # Step 8: Verify recovery
         print("Verifying recovery...")
-        
+
         # Extract hit detection IDs
         if len(overlap_hits) > 0:
             hit_det_ids = set(overlap_hits.det_id.to_pylist())
         else:
             hit_det_ids = set()
-        
+
         # All rays should have hits (100% recovery)
         all_det_ids = set(det_ids)
         missed_det_ids = all_det_ids - hit_det_ids
-        
+
         recovery_fraction = len(hit_det_ids) / len(all_det_ids)
-        
-        print(f"Recovery: {len(hit_det_ids)}/{len(all_det_ids)} = {recovery_fraction:.3f}")
-        print(f"Guard: {guard_arcmin} arcmin, Polyline: {max_chord_arcmin} arcmin, Segments: {len(segments)}")
-        
+
+        print(
+            f"Recovery: {len(hit_det_ids)}/{len(all_det_ids)} = {recovery_fraction:.3f}"
+        )
+        print(
+            f"Guard: {guard_arcmin} arcmin, Polyline: {max_chord_arcmin} arcmin, Segments: {len(segments)}"
+        )
+
         if missed_det_ids:
-            print(f"Missed detections: {sorted(list(missed_det_ids))[:10]}...")  # Show first 10
-        
+            print(
+                f"Missed detections: {sorted(list(missed_det_ids))[:10]}..."
+            )  # Show first 10
+
         # Assert recovery based on expected threshold
         if expected_recovery > 0.0:
             assert recovery_fraction >= expected_recovery, (
@@ -320,7 +365,9 @@ class TestSBDBEndToEnd:
                 f"Object: {sbdb_id}, Guard: {guard_arcmin} arcmin. "
                 f"Consider increasing guard radius or tightening polyline max chord."
             )
-            print(f"✓ SBDB E2E recovery test passed! ({recovery_fraction:.1%} ≥ {expected_recovery:.1%})")
+            print(
+                f"✓ SBDB E2E recovery test passed! ({recovery_fraction:.1%} ≥ {expected_recovery:.1%})"
+            )
         else:
             print(f"ℹ SBDB E2E recovery logged: {recovery_fraction:.1%} (no assertion)")
 
@@ -355,7 +402,9 @@ class TestSBDBEndToEnd:
         if n_epochs % 3 != 0:
             raise ValueError("n_epochs must be multiple of 3")
         epochs_per_station = n_epochs // 3
-        epoch_mjds = np.linspace(epoch_start_mjd, epoch_start_mjd + epoch_span_days, n_epochs)
+        epoch_mjds = np.linspace(
+            epoch_start_mjd, epoch_start_mjd + epoch_span_days, n_epochs
+        )
         station_codes = (
             ["X05"] * epochs_per_station
             + ["T08"] * epochs_per_station
@@ -411,7 +460,9 @@ class TestSBDBEndToEnd:
             guard_arcmin=guard_arcmin,
         )
 
-        hit_det_ids = set(overlap_hits.det_id.to_pylist()) if len(overlap_hits) > 0 else set()
+        hit_det_ids = (
+            set(overlap_hits.det_id.to_pylist()) if len(overlap_hits) > 0 else set()
+        )
         all_det_ids = set(det_ids)
         recovery_fraction = len(hit_det_ids) / len(all_det_ids)
 
@@ -458,19 +509,22 @@ class TestSBDBEndToEnd:
                 found_metrics = m
                 break
 
-        assert found_chord is not None, (
-            f"No chord in sweep achieved 100% recovery for guard={guard_arcmin} arcmin"
-        )
+        assert (
+            found_chord is not None
+        ), f"No chord in sweep achieved 100% recovery for guard={guard_arcmin} arcmin"
         print(
             f"RESULT: guard={guard_arcmin}′ minimal chord={found_chord}′ "
             f"segs/orbit={found_metrics['num_segments']} nodes={found_metrics['num_bvh_nodes']}"
         )
 
-    @pytest.mark.parametrize("sbdb_id", [
-        "1862 Apollo",   # high-e NEO
-        "944 Hidalgo",   # very high-i
-        "1221 Amor",     # high-e Amor NEO
-    ])
+    @pytest.mark.parametrize(
+        "sbdb_id",
+        [
+            "1862 Apollo",  # high-e NEO
+            "944 Hidalgo",  # very high-i
+            "1221 Amor",  # high-e Amor NEO
+        ],
+    )
     def test_min_segments_for_100pct_ci_extremes(self, sbdb_id):
         """
         For high-e and high-i objects, sweep chord sizes at a tight guard (0.1′)
@@ -497,9 +551,9 @@ class TestSBDBEndToEnd:
                 found_metrics = m
                 break
 
-        assert found_chord is not None, (
-            f"No chord in sweep achieved 100% recovery for {sbdb_id} at guard={guard_arcmin} arcmin"
-        )
+        assert (
+            found_chord is not None
+        ), f"No chord in sweep achieved 100% recovery for {sbdb_id} at guard={guard_arcmin} arcmin"
         print(
             f"RESULT: {sbdb_id} guard={guard_arcmin}′ minimal chord={found_chord}′ "
             f"segs/orbit={found_metrics['num_segments']} nodes={found_metrics['num_bvh_nodes']}"
