@@ -41,19 +41,3 @@ class AnomalyLabels(qv.Table):
     snap_error = qv.Float64Column()  # Residual from ellipse fit
     plane_distance_au = qv.Float64Column()  # Distance from orbital plane (AU)
 
-    @classmethod
-    def empty(cls) -> AnomalyLabels:
-        """Create an empty AnomalyLabels table."""
-        return cls.from_kwargs(
-            det_id=[],
-            orbit_id=[],
-            seg_id=[],
-            variant_id=[],
-            f_rad=[],
-            E_rad=[],
-            M_rad=[],
-            n_rad_day=[],
-            r_au=[],
-            snap_error=[],
-            plane_distance_au=[],
-        )
