@@ -243,15 +243,22 @@ class TestAnomalyLabelingCorrectness:
         # Create test rays
         rays = create_rays_at_positions([[1.0, 0.5, 0.0], [0.0, 1.0, 0.0]])
         
+        # Create orbits from the original orbit for labeling
+        orbits = Orbits.from_kwargs(
+            orbit_id=[orbit.orbit_id.to_pylist()[0]],
+            coordinates=orbit.coordinates,
+        )
+        
         # Run labeling twice
-        hits1, labels1 = geometric_overlap(
-            segments_with_aabbs, rays, guard_arcmin=1.0,
-            label_anomalies=True, plane_params=params
+        hits1 = geometric_overlap(
+            segments_with_aabbs, rays, guard_arcmin=1.0
         )
-        hits2, labels2 = geometric_overlap(
-            segments_with_aabbs, rays, guard_arcmin=1.0,
-            label_anomalies=True, plane_params=params
+        labels1 = label_anomalies(hits1, rays, orbits)
+        
+        hits2 = geometric_overlap(
+            segments_with_aabbs, rays, guard_arcmin=1.0
         )
+        labels2 = label_anomalies(hits2, rays, orbits)
         
         # Results should be identical
         assert len(labels1) == len(labels2), "Should get same number of labels"
@@ -333,3 +340,117 @@ class TestAnomalyLabelingCorrectness:
                 assert results[0][0] == results[i][0], "det_id order should be consistent"
                 assert results[0][1] == results[i][1], "orbit_id order should be consistent"
                 assert np.array_equal(results[0][2], results[i][2]), "variant_id order should be consistent"
+    
+    def test_multi_anomaly_support(self):
+        """Test multi-anomaly support with max_k > 1."""
+        # Create test orbit and rays
+        orbit = create_orbit_with_elements(a=1.0, e=0.1)  # Slightly eccentric for more interesting geometry
+        params, segments = sample_ellipse_adaptive(orbit, max_chord_arcmin=1.0)
+        segments_with_aabbs = compute_segment_aabbs(segments, guard_arcmin=1.0)
+        
+        # Create rays at multiple positions
+        test_positions = [
+            [1.0, 0.0, 0.0],      # Near periapsis
+            [0.0, 1.0, 0.0],      # 90° position
+            [-0.9, 0.0, 0.0],     # Near apoapsis
+        ]
+        rays = create_rays_at_positions(test_positions)
+        
+        # Run geometric overlap
+        hits = geometric_overlap(segments_with_aabbs, rays, guard_arcmin=1.0)
+        
+        # Create orbits for labeling
+        orbits = Orbits.from_kwargs(
+            orbit_id=[orbit.orbit_id.to_pylist()[0]],
+            coordinates=orbit.coordinates,
+        )
+        
+        # Test with max_k=3 to get multiple candidates
+        labels = label_anomalies(hits, rays, orbits, max_k=3)
+        
+        if len(labels) > 0:
+            # Check that variant_id is properly assigned
+            variant_ids = labels.variant_id.to_numpy()
+            assert np.all(variant_ids >= 0), "All variant_ids should be non-negative"
+            assert np.all(variant_ids < 3), "All variant_ids should be < max_k"
+            
+            # Check that results are sorted by canonical order
+            det_ids = labels.det_id.to_pylist()
+            orbit_ids = labels.orbit_id.to_pylist()
+            snap_errors = labels.snap_error.to_numpy()
+            
+            # Verify sorting: (det_id, orbit_id, variant_id, snap_error)
+            for i in range(1, len(labels)):
+                curr_det = det_ids[i]
+                prev_det = det_ids[i-1]
+                curr_orbit = orbit_ids[i]
+                prev_orbit = orbit_ids[i-1]
+                curr_variant = variant_ids[i]
+                prev_variant = variant_ids[i-1]
+                curr_snap = snap_errors[i]
+                prev_snap = snap_errors[i-1]
+                
+                # Check sort order (skip NaN comparisons)
+                if curr_det == prev_det and curr_orbit == prev_orbit:
+                    if curr_variant == prev_variant:
+                        # Only check ordering for non-NaN values
+                        if not (np.isnan(curr_snap) or np.isnan(prev_snap)):
+                            assert curr_snap >= prev_snap, "snap_error should be ascending within same (det,orbit,variant)"
+                    else:
+                        assert curr_variant > prev_variant, "variant_id should be ascending within same (det,orbit)"
+
+    def test_multi_anomaly_with_filtering(self):
+        """Test multi-anomaly support with snap error filtering."""
+        # Create test orbit and rays
+        orbit = create_orbit_with_elements(a=1.0, e=0.05)
+        params, segments = sample_ellipse_adaptive(orbit, max_chord_arcmin=1.0)
+        segments_with_aabbs = compute_segment_aabbs(segments, guard_arcmin=1.0)
+        
+        test_positions = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        rays = create_rays_at_positions(test_positions)
+        
+        hits = geometric_overlap(segments_with_aabbs, rays, guard_arcmin=1.0)
+        
+        orbits = Orbits.from_kwargs(
+            orbit_id=[orbit.orbit_id.to_pylist()[0]],
+            coordinates=orbit.coordinates,
+        )
+        
+        # Test with very strict snap error filtering
+        labels_strict = label_anomalies(hits, rays, orbits, max_k=3, snap_error_max_au=1e-6)
+        
+        # Test with lenient filtering
+        labels_lenient = label_anomalies(hits, rays, orbits, max_k=3, snap_error_max_au=1.0)
+        
+        # Lenient should have >= strict results
+        assert len(labels_lenient) >= len(labels_strict)
+        
+        # All snap errors in strict should be <= threshold
+        if len(labels_strict) > 0:
+            strict_snap_errors = labels_strict.snap_error.to_numpy()
+            assert np.all(strict_snap_errors <= 1e-6), "All snap errors should be below strict threshold"
+
+    def test_multi_anomaly_k1_compatibility(self):
+        """Test that max_k=1 produces same results as original implementation."""
+        # Create test orbit and rays
+        orbit = create_orbit_with_elements(a=1.0, e=0.0)
+        params, segments = sample_ellipse_adaptive(orbit, max_chord_arcmin=1.0)
+        segments_with_aabbs = compute_segment_aabbs(segments, guard_arcmin=1.0)
+        
+        test_positions = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        rays = create_rays_at_positions(test_positions)
+        
+        hits = geometric_overlap(segments_with_aabbs, rays, guard_arcmin=1.0)
+        
+        orbits = Orbits.from_kwargs(
+            orbit_id=[orbit.orbit_id.to_pylist()[0]],
+            coordinates=orbit.coordinates,
+        )
+        
+        # Test with max_k=1 (should behave like original)
+        labels_k1 = label_anomalies(hits, rays, orbits, max_k=1)
+        
+        if len(labels_k1) > 0:
+            # All variant_ids should be 0
+            variant_ids = labels_k1.variant_id.to_numpy()
+            assert np.all(variant_ids == 0), "All variant_ids should be 0 for max_k=1"

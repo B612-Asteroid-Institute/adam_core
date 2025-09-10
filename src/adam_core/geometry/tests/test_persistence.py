@@ -48,6 +48,7 @@ def sample_segments_soa():
         y1=jnp.array([0.1, 0.2], dtype=jnp.float64),
         z1=jnp.array([0.0, 0.0], dtype=jnp.float64),
         r_mid_au=jnp.array([1.05, 2.05], dtype=jnp.float64),
+        orbit_id_index=jnp.array([0, 0], dtype=jnp.int32),
         n_x=jnp.array([0.0, 0.0], dtype=jnp.float64),
         n_y=jnp.array([0.0, 0.0], dtype=jnp.float64),
         n_z=jnp.array([1.0, 1.0], dtype=jnp.float64),
@@ -65,6 +66,7 @@ def sample_segments_soa_no_normals():
         y1=jnp.array([0.1, 0.2], dtype=jnp.float64),
         z1=jnp.array([0.0, 0.0], dtype=jnp.float64),
         r_mid_au=jnp.array([1.05, 2.05], dtype=jnp.float64),
+        orbit_id_index=jnp.array([0, 0], dtype=jnp.int32),
     )
 
 
