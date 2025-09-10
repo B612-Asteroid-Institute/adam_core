@@ -124,6 +124,12 @@ class TestShardingTypes:
             float_dtype="float64",
             segments_npz="test_shard_001_segments.npz",
             bvh_npz="test_shard_001_bvh.npz",
+            orbit_ids_json="test_shard_001_orbit_ids.json",
+            segments_bytes=10_000_000,
+            bvh_bytes=8_000_000,
+            orbit_ids_bytes=50_000,
+            total_bytes=18_050_000,
+            file_hashes={},
             estimated_bytes=50_000_000,
         )
         
@@ -151,6 +157,12 @@ class TestShardingTypes:
             float_dtype="float64",
             segments_npz="shard_001_segments.npz",
             bvh_npz="shard_001_bvh.npz",
+            orbit_ids_json="shard_001_orbit_ids.json",
+            segments_bytes=5_000_000,
+            bvh_bytes=4_000_000,
+            orbit_ids_bytes=25_000,
+            total_bytes=9_025_000,
+            file_hashes={},
             estimated_bytes=25_000_000,
         )
         
@@ -329,6 +341,12 @@ class TestShardedQuery:
             float_dtype="float64",
             segments_npz="test.npz",
             bvh_npz="test.npz",
+            orbit_ids_json="test_orbit_ids.json",
+            segments_bytes=20_000_000,
+            bvh_bytes=15_000_000,
+            orbit_ids_bytes=50_000,
+            total_bytes=35_050_000,
+            file_hashes={},
             estimated_bytes=50_000_000,
         )
         

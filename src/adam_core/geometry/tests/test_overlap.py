@@ -12,6 +12,7 @@ from adam_core.geometry import (
     geometric_overlap,
     query_bvh,
     query_bvh_parallel,
+    label_anomalies,
 )
 from adam_core.observations.detections import PointSourceDetections
 from adam_core.observations.exposures import Exposures
@@ -476,24 +477,16 @@ class TestAnomalyLabeling:
         orbits, params, segments = create_test_orbit_and_segments()
         rays = create_test_rays()
         
-        # Test without anomaly labeling (should return just OverlapHits)
-        result_no_labels = geometric_overlap(segments, rays, guard_arcmin=1.0, label_anomalies=False)
-        assert isinstance(result_no_labels, OverlapHits)
-        
-        # Test with anomaly labeling (should return tuple)
-        result_with_labels = geometric_overlap(segments, rays, guard_arcmin=1.0, label_anomalies=True, plane_params=params)
-        assert isinstance(result_with_labels, tuple)
-        assert len(result_with_labels) == 2
-        
-        hits, labels = result_with_labels
+        # Decoupled API: compute hits, then label_anomalies
+        hits = geometric_overlap(segments, rays, guard_arcmin=1.0)
         assert isinstance(hits, OverlapHits)
         
-        # Import AnomalyLabels for type check
+        labels = label_anomalies(hits, rays, orbits)
         from adam_core.geometry import AnomalyLabels
         assert isinstance(labels, AnomalyLabels)
         
-        # Should have same hits regardless of labeling flag
-        assert len(hits) == len(result_no_labels)
+        # Sanity: number of labels equals hits (single-variant path)
+        assert len(labels) == len(hits)
     
     def test_query_bvh_with_anomaly_labeling(self):
         """Test that query_bvh works with anomaly labeling flag."""
@@ -503,18 +496,11 @@ class TestAnomalyLabeling:
         from adam_core.geometry.bvh import build_bvh
         bvh = build_bvh(segments)
         
-        # Test without anomaly labeling
-        result_no_labels = query_bvh(bvh, segments, rays, guard_arcmin=1.0, label_anomalies=False)
-        assert isinstance(result_no_labels, OverlapHits)
-        
-        # Test with anomaly labeling
-        result_with_labels = query_bvh(bvh, segments, rays, guard_arcmin=1.0, label_anomalies=True, plane_params=params)
-        assert isinstance(result_with_labels, tuple)
-        assert len(result_with_labels) == 2
-        
-        hits, labels = result_with_labels
+        # Decoupled API: query hits then label
+        hits = query_bvh(bvh, segments, rays, guard_arcmin=1.0)
         assert isinstance(hits, OverlapHits)
         
+        labels = label_anomalies(hits, rays, orbits)
         from adam_core.geometry import AnomalyLabels
         assert isinstance(labels, AnomalyLabels)
     
@@ -526,39 +512,17 @@ class TestAnomalyLabeling:
         empty_segments = OrbitPolylineSegments.empty()
         empty_rays = ObservationRays.empty()
         
-        result = geometric_overlap(empty_segments, empty_rays, label_anomalies=True, plane_params=None)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        
-        hits, labels = result
+        hits = geometric_overlap(empty_segments, empty_rays)
+        assert isinstance(hits, OverlapHits)
         assert len(hits) == 0
-        assert len(labels) == 0
     
     def test_anomaly_labeling_parameters(self):
         """Test anomaly labeling with different parameters."""
         orbits, params, segments = create_test_orbit_and_segments()
         rays = create_test_rays()
         
-        # Test with different max_variants_per_hit
-        result1 = geometric_overlap(
-            segments, rays, guard_arcmin=1.0, label_anomalies=True, 
-            max_variants_per_hit=1, plane_params=params
-        )
-        result2 = geometric_overlap(
-            segments, rays, guard_arcmin=1.0, label_anomalies=True, 
-            max_variants_per_hit=3, plane_params=params
-        )
+        hits = geometric_overlap(segments, rays, guard_arcmin=1.0)
+        labels = label_anomalies(hits, rays, orbits)
         
-        assert isinstance(result1, tuple)
-        assert isinstance(result2, tuple)
-        
-        hits1, labels1 = result1
-        hits2, labels2 = result2
-        
-        # Should have same hits
-        assert len(hits1) == len(hits2)
-        
-        # Labels might differ due to different variant limits
-        from adam_core.geometry import AnomalyLabels
-        assert isinstance(labels1, AnomalyLabels)
-        assert isinstance(labels2, AnomalyLabels)
+        # Single-variant path: labels count equals hits
+        assert len(labels) == len(hits)
