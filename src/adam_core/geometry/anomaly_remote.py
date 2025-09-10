@@ -7,14 +7,15 @@ parameters and follows the pattern of @ray.remote functions.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import ray
 
-from ..orbits.polyline import OrbitsPlaneParams
+from ..orbits.orbits import Orbits
+from ..observations.rays import ObservationRays
 from .adapters import anomaly_labels_soa_to_anomaly_labels, hits_soa_to_anomaly_labels_soa
 from .anomaly import AnomalyLabels
 from .anomaly_labeling import label_anomalies
@@ -161,79 +162,62 @@ def process_anomaly_batch_remote(
 
 def label_anomalies_parallel(
     hits: OverlapHits,
-    plane_params: OrbitsPlaneParams,
-    ray_origins: np.ndarray,
-    ray_directions: np.ndarray,
-    det_ids: List[str],
-    segments_soa: SegmentsSOA,
+    orbits: Orbits,
+    rays: ObservationRays,
+    segments_soa: SegmentsSOA | None = None,
     batch_size: int = 1000,
-    max_variants_per_hit: int = 2,
-    max_newton_iterations: int = 10,
+    max_k: int = 1,
+    snap_error_max_au: float | None = None,
+    dedupe_angle_tol: float = 1e-4,
+    max_variants_per_hit: int = 2,  # Deprecated, use max_k
+    max_newton_iterations: int = 10,  # Deprecated
     device: Optional[jax.Device] = None,
 ) -> AnomalyLabels:
     """
-    Compute anomaly labels in parallel using Ray remote functions.
+    Parallel labeling with multi-anomaly support.
+    
+    Currently delegates to the core label_anomalies function. For large workloads,
+    this could be extended to use Ray batching with fixed-shape padding.
+    
+    Parameters
+    ----------
+    hits : OverlapHits
+        Geometric overlaps between observations and test orbits.
+    orbits : Orbits
+        Original orbit data containing Keplerian elements.
+    rays : ObservationRays
+        Observation rays containing timing information.
+    segments_soa : SegmentsSOA, optional
+        Deprecated, not used in current implementation.
+    batch_size : int, default=1000
+        Batch size for potential Ray parallelization (not currently used).
+    max_k : int, default=1
+        Maximum number of anomaly variants per (det_id, orbit_id) pair.
+    snap_error_max_au : float, optional
+        Maximum allowed snap error (AU). Candidates above this are filtered out.
+    dedupe_angle_tol : float, default=1e-4
+        Angular tolerance (radians) for deduplicating near-identical solutions.
+    max_variants_per_hit : int, default=2
+        Deprecated parameter, use max_k instead.
+    max_newton_iterations : int, default=10
+        Deprecated parameter, Newton iterations are fixed in JAX kernels.
+    device : jax.Device, optional
+        Deprecated parameter, JAX device selection is automatic.
+        
+    Returns
+    -------
+    AnomalyLabels
+        Table with anomaly labels, potentially with multiple variants per hit.
     """
     if len(hits) == 0:
         return AnomalyLabels.empty()
     
-    logger.info(f"Computing anomaly labels for {len(hits)} hits (synchronous)")
+    # Use max_k if provided, otherwise fall back to max_variants_per_hit for compatibility
+    effective_max_k = max_k if max_k > 1 else max_variants_per_hit
     
-    # Compute orbital elements and bases once
-    # Inline computation since compute_orbital_elements_batch was removed
-    from adam_core.orbits.orbits import Orbits
-    orbits = Orbits.from_kwargs(
-        orbit_id=plane_params.orbit_id,
-        coordinates=plane_params.coordinates,
+    return label_anomalies(
+        hits, rays, orbits, 
+        max_k=effective_max_k,
+        snap_error_max_au=snap_error_max_au,
+        dedupe_angle_tol=dedupe_angle_tol
     )
-    kep = orbits.coordinates.to_keplerian()
-    orbit_ids_arr = orbits.table.column("orbit_id")
-    a_arr_np = kep.a.to_numpy()
-    e_arr_np = kep.e.to_numpy()
-    M0_deg_np = kep.M.to_numpy() * (180.0 / np.pi)
-    epoch_mjd_np = kep.time.mjd().to_numpy()
-    GM_sun_au3_per_day2 = 2.959122082855911e-4
-    n_deg_per_day_np = np.sqrt(GM_sun_au3_per_day2 / (a_arr_np ** 3)) * (180.0 / np.pi)
-    
-    orbital_elements = jnp.column_stack([
-        a_arr_np, e_arr_np, M0_deg_np, n_deg_per_day_np, epoch_mjd_np, epoch_mjd_np  # duplicate for compatibility
-    ])
-    
-    # Orbital bases from plane params (placeholder - this would need proper implementation)
-    n_orbits = len(plane_params)
-    orbital_bases = jnp.zeros((n_orbits, 3, 3))  # Identity matrices as placeholder
-    
-    # Build mappings
-    orbit_ids = plane_params.orbit_id.to_pylist()
-    orbit_mapping = OrbitIdMapping.from_orbit_ids(orbit_ids)
-    det_id_to_index = {d: i for i, d in enumerate(det_ids)}
-    
-    # Convert hits to SoA (indices align with det_ids and orbit_mapping)
-    hits_soa = overlap_hits_to_soa(hits, det_id_to_index, orbit_mapping)
-    
-    # Convert to JAX arrays
-    ray_origins_jax = jnp.asarray(ray_origins)
-    ray_directions_jax = jnp.asarray(ray_directions)
-    
-    # Run labeling kernel
-    labels_soa = label_anomalies(
-        hits_soa,
-        segments_soa,
-        ray_origins_jax,
-        ray_directions_jax,
-        jnp.asarray(orbital_elements),
-        jnp.asarray(orbital_bases),
-        max_variants_per_hit=max_variants_per_hit,
-        max_newton_iterations=max_newton_iterations,
-    )
-    
-    # Convert to quivr table
-    det_index_to_id = {i: det_ids[i] for i in range(len(det_ids))}
-    labels = anomaly_labels_soa_to_anomaly_labels(
-        labels_soa,
-        det_id_mapping=det_index_to_id,
-        orbit_mapping=orbit_mapping,
-    )
-    
-    logger.info(f"Computed {len(labels)} anomaly labels from {len(hits)} hits")
-    return labels

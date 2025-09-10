@@ -17,6 +17,7 @@ from .jax_remote import *
 from .anomaly_kernels import *
 from .anomaly_labeling import *
 from .anomaly_remote import *
+from .projection import *
 from .clock_gating import *
 from .sharding import *
 from .sharding_types import *
@@ -54,6 +55,11 @@ __all__ = [
     "compute_orbital_positions_at_times",
     # Anomaly labeling
     "label_anomalies",
+    # Projection utilities
+    "compute_orbital_plane_normal",
+    "ray_to_plane_distance",
+    "project_ray_to_orbital_plane",
+    "ellipse_snap_distance",
     # JAX types
     "BVHArrays",
     "SegmentsSOA",
