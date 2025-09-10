@@ -361,9 +361,8 @@ def _ellipse_snap_multi_kernel(
 
     # Create multiple seeds: primary, +π, -π, +π/2, -π/2 (fixed size for JAX)
     seed_offsets = jnp.array([0.0, jnp.pi, -jnp.pi, jnp.pi / 2, -jnp.pi / 2])
-    # Use fixed-size array and mask instead of dynamic slicing
+    # Always evaluate all seeds; selection to top-K happens after evaluation
     seeds = E_primary + seed_offsets  # All 5 seeds
-    seed_mask = jnp.arange(len(seed_offsets)) < max_k  # Which seeds to use
 
     # Solve for each seed using vmap
     def solve_single_seed(E_seed):
@@ -372,12 +371,10 @@ def _ellipse_snap_multi_kernel(
     vmap_solve = jax.vmap(solve_single_seed)
     all_distances, all_E = vmap_solve(seeds)
 
-    # Apply seed mask to filter out unused seeds
-    # Mask non-finite results as invalid as well
+    # Mask non-finite results as invalid; do not pre-mask by max_k
     finite_mask = jnp.logical_and(jnp.isfinite(all_distances), jnp.isfinite(all_E))
-    seed_valid_mask = jnp.logical_and(seed_mask, finite_mask)
-    candidate_distances = jnp.where(seed_valid_mask, all_distances, jnp.inf)
-    candidate_E = jnp.where(seed_valid_mask, all_E, jnp.nan)
+    candidate_distances = jnp.where(finite_mask, all_distances, jnp.inf)
+    candidate_E = jnp.where(finite_mask, all_E, jnp.nan)
 
     # Build output by taking first max_k valid candidates
     output_distances = jnp.full(max_k, jnp.inf)
@@ -392,7 +389,7 @@ def _ellipse_snap_multi_kernel(
         idx = sorted_indices[i]
 
         # Check if this candidate should be added
-        is_valid_seed = seed_valid_mask[idx]
+        is_valid_seed = finite_mask[idx]
         has_space = count < max_k
         should_add = jnp.logical_and(is_valid_seed, has_space)
 

@@ -32,6 +32,7 @@ Notes
 
 from pathlib import Path
 from typing import Any, Dict
+import logging
 from functools import partial
 
 import jax
@@ -62,6 +63,8 @@ from .projection import (
 
 # Use the canonical AnomalyLabels from anomaly.py
 AnomalyLabels = CanonicalAnomalyLabels
+
+logger = logging.getLogger(__name__)
 
 
 def label_anomalies_worker(
@@ -131,6 +134,17 @@ def label_anomalies_worker(
         ]
     )
 
+    # Debug inputs summary
+    try:
+        logger.warning(
+            "inputs: n_hits=%d, rays_nonfinite_o=%d, rays_nonfinite_d=%d",
+            n_hits,
+            int(np.sum(~np.isfinite(ray_origins))),
+            int(np.sum(~np.isfinite(ray_directions))),
+        )
+    except Exception:
+        pass
+
     # Extract orbital elements (aligned orbits)
     kep = orbits.coordinates.to_keplerian()
     a_hit = kep.a.to_numpy()
@@ -139,6 +153,11 @@ def label_anomalies_worker(
     i_hit = np.radians(kep.i.to_numpy())
     raan_hit = np.radians(kep.raan.to_numpy())
     ap_hit = np.radians(kep.ap.to_numpy())
+    # Sanitize undefined angles (circular or zero-inclination cases)
+    # For e≈0, ap is undefined; for i≈0, raan is undefined. Use 0 as canonical.
+    i_hit = np.nan_to_num(i_hit, nan=0.0)
+    raan_hit = np.nan_to_num(raan_hit, nan=0.0)
+    ap_hit = np.nan_to_num(ap_hit, nan=0.0)
     # Mean anomaly stored in degrees; keep degrees for downstream M computation
     M0_hit = kep.M.to_numpy()
     epoch_hit = kep.time.mjd().to_numpy()
@@ -149,6 +168,28 @@ def label_anomalies_worker(
     sin_raan = np.sin(raan_hit)
     cos_raan = np.cos(raan_hit)
     plane_normals = np.column_stack([sin_i * sin_raan, -sin_i * cos_raan, cos_i])
+
+    # Debug elements summary
+    try:
+        def _stats(arr: np.ndarray) -> tuple[float, float, int]:
+            return (float(np.nanmin(arr)), float(np.nanmax(arr)), int(np.sum(~np.isfinite(arr))))
+        a_stats = _stats(a_hit)
+        e_stats = _stats(e_hit)
+        i_stats = _stats(i_hit)
+        raan_stats = _stats(raan_hit)
+        ap_stats = _stats(ap_hit)
+        pn_nonfinite = int(np.sum(~np.isfinite(plane_normals)))
+        logger.warning(
+            "elements: a[min,max,nonfin]=%s e[min,max,nonfin]=%s i[min,max,nonfin]=%s raan[min,max,nonfin]=%s ap[min,max,nonfin]=%s plane_normals_nonfin=%d",
+            a_stats,
+            e_stats,
+            i_stats,
+            raan_stats,
+            ap_stats,
+            pn_nonfinite,
+        )
+    except Exception:
+        pass
 
     # Pad to next multiple of chunk_size and compute via fixed-size chunks
     n = ray_origins.shape[0]
@@ -280,6 +321,21 @@ def label_anomalies_worker(
     )
     r_arr = expanded_a * (1 - expanded_e * np.cos(E_rad_arr))
     n_rad_day_arr = np.radians(expanded_n)
+
+    # Debug: per-hit candidate stats to diagnose seed loss
+    try:
+        valid_counts = np.sum(valid_mask_mat, axis=1)
+        min_snap = np.min(snap_errors_mat, axis=1)
+        num_zero = int(np.sum(valid_counts == 0))
+        if num_zero > 0:
+            zero_idx = np.where(valid_counts == 0)[0]
+            sample = zero_idx[:10]
+            logger.warning(
+                f"anomaly_labeling: {num_zero} hits have zero valid candidates; "
+                f"sample idx={sample.tolist()}, min_snap_sample={min_snap[sample].tolist()}"
+            )
+    except Exception:
+        pass
 
     # Build Arrow arrays via indexed take to keep consistency
     det_id_sel = pc.take(hits.table["det_id"], pa.array(sel_hit_idx, type=pa.int64()))
