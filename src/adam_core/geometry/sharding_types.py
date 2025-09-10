@@ -18,40 +18,40 @@ from typing import Any
 class ShardMeta:
     """
     Metadata for a single BVH shard.
-    
+
     A shard contains a contiguous range of orbit IDs and their associated
     polyline segments and BVH nodes, stored in memory-mappable .npz files.
     """
-    
+
     # Shard identification
     shard_id: str
     orbit_id_start: str
     orbit_id_end: str
-    
+
     # Content statistics
     num_orbits: int
     num_segments: int
     num_bvh_nodes: int
-    
+
     # Build parameters
     max_chord_arcmin: float
     float_dtype: str
-    
+
     # File paths (relative to manifest directory)
     segments_npz: str
     bvh_npz: str
     orbit_ids_json: str  # v1.1.0: JSON list of orbit IDs for this shard
-    
+
     # File sizes and integrity (v1.1.0)
     segments_bytes: int
     bvh_bytes: int
     orbit_ids_bytes: int
     total_bytes: int
     file_hashes: dict[str, str]  # filename -> sha256 hex
-    
+
     # Legacy field for backward compatibility
     estimated_bytes: int
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -73,18 +73,20 @@ class ShardMeta:
             "file_hashes": self.file_hashes,
             "estimated_bytes": self.estimated_bytes,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ShardMeta:
         """Create from dictionary loaded from JSON with backward compatibility."""
         # v1.1.0 fields with defaults for v1.0.0 compatibility
-        orbit_ids_json = data.get("orbit_ids_json", f"{data['shard_id']}_orbit_ids.json")
+        orbit_ids_json = data.get(
+            "orbit_ids_json", f"{data['shard_id']}_orbit_ids.json"
+        )
         segments_bytes = data.get("segments_bytes", 0)
         bvh_bytes = data.get("bvh_bytes", 0)
         orbit_ids_bytes = data.get("orbit_ids_bytes", 0)
         total_bytes = data.get("total_bytes", data["estimated_bytes"])
         file_hashes = data.get("file_hashes", {})
-        
+
         return cls(
             shard_id=data["shard_id"],
             orbit_id_start=data["orbit_id_start"],
@@ -110,26 +112,26 @@ class ShardMeta:
 class ShardManifest:
     """
     Manifest describing a complete sharded BVH index.
-    
+
     Contains metadata for all shards and global statistics about the
     sharded index. Can be serialized to/from JSON.
     """
-    
+
     # Build metadata
     version: str
     build_time: str  # ISO format
     max_chord_arcmin: float
     float_dtype: str
-    
+
     # Shards
     shards: list[ShardMeta]
-    
+
     # Global statistics
     total_orbits: int
     total_segments: int
     total_bvh_nodes: int
     total_estimated_bytes: int
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -143,7 +145,7 @@ class ShardManifest:
             "total_bvh_nodes": self.total_bvh_nodes,
             "total_estimated_bytes": self.total_estimated_bytes,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ShardManifest:
         """Create from dictionary loaded from JSON."""
@@ -158,12 +160,12 @@ class ShardManifest:
             total_bvh_nodes=data["total_bvh_nodes"],
             total_estimated_bytes=data["total_estimated_bytes"],
         )
-    
+
     def save(self, path: Path) -> None:
         """Save manifest to JSON file."""
         with open(path, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
-    
+
     @classmethod
     def load(cls, path: Path) -> ShardManifest:
         """Load manifest from JSON file."""
@@ -176,16 +178,16 @@ class ShardManifest:
 class ShardData:
     """
     In-memory representation of shard data before persistence.
-    
+
     Contains the actual orbit segments and BVH for a single shard,
     along with metadata needed for saving.
     """
-    
+
     # Data
     segments: Any  # OrbitPolylineSegments
     bvh: Any  # BVHShard
     orbit_mapping: Any  # OrbitIdMapping
-    
+
     # Metadata
     shard_id: str
     orbit_id_start: str

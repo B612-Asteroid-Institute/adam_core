@@ -19,10 +19,13 @@ import numpy as np
 import quivr as qv
 
 from ..orbits.orbits import Orbits
-from ..orbits.polyline import OrbitPolylineSegments, compute_segment_aabbs, sample_ellipse_adaptive
+from ..orbits.polyline import (
+    OrbitPolylineSegments,
+    compute_segment_aabbs,
+    sample_ellipse_adaptive,
+)
 from .bvh import build_bvh
-from .jax_types import OrbitIdMapping
-from .jax_types import save_bvh_arrays, save_segments_soa
+from .jax_types import OrbitIdMapping, save_bvh_arrays, save_segments_soa
 from .sharding_types import ShardData, ShardManifest, ShardMeta
 
 logger = logging.getLogger(__name__)
@@ -41,7 +44,7 @@ def estimate_shard_bytes(
 ) -> int:
     """
     Estimate memory usage for a shard with given parameters.
-    
+
     Parameters
     ----------
     num_orbits : int
@@ -50,26 +53,26 @@ def estimate_shard_bytes(
         Average number of segments per orbit.
     float_dtype : str, default "float64"
         Floating point precision ("float32" or "float64").
-        
+
     Returns
     -------
     int
         Estimated bytes for the shard.
     """
     num_segments = num_orbits * seg_per_orbit
-    
+
     # Bytes per float
     float_bytes = 8 if float_dtype == "float64" else 4
-    
+
     # Segment storage: 7 floats per segment (x0,y0,z0,x1,y1,z1,r_mid_au)
     segment_bytes = num_segments * 7 * float_bytes
-    
+
     # BVH storage: roughly 2*N nodes for N segments, 6 floats per node (min/max xyz)
     bvh_bytes = num_segments * 2 * 6 * float_bytes
-    
+
     # Orbit mapping and metadata overhead (~10% of data)
     overhead_bytes = int(0.1 * (segment_bytes + bvh_bytes))
-    
+
     return segment_bytes + bvh_bytes + overhead_bytes
 
 
@@ -81,7 +84,7 @@ def _determine_shard_boundaries(
 ) -> list[tuple[int, int]]:
     """
     Determine shard boundaries based on target byte size.
-    
+
     Parameters
     ----------
     orbit_ids : list[str]
@@ -92,7 +95,7 @@ def _determine_shard_boundaries(
         Target size per shard in bytes.
     float_dtype : str
         Floating point precision.
-        
+
     Returns
     -------
     list[tuple[int, int]]
@@ -102,10 +105,10 @@ def _determine_shard_boundaries(
     boundaries = []
     start_idx = 0
     current_bytes = 0
-    
+
     for i, seg_count in enumerate(segments_per_orbit):
         orbit_bytes = estimate_shard_bytes(1, seg_count, float_dtype)
-        
+
         # If adding this orbit would exceed target, finalize current shard
         if current_bytes > 0 and current_bytes + orbit_bytes > target_shard_bytes:
             boundaries.append((start_idx, i))
@@ -113,11 +116,11 @@ def _determine_shard_boundaries(
             current_bytes = orbit_bytes
         else:
             current_bytes += orbit_bytes
-    
+
     # Add final shard
     if start_idx < len(orbit_ids):
         boundaries.append((start_idx, len(orbit_ids)))
-    
+
     return boundaries
 
 
@@ -129,7 +132,7 @@ def build_bvh_shards(
 ) -> list[ShardData]:
     """
     Build BVH shards from orbits.
-    
+
     Parameters
     ----------
     orbits : Orbits
@@ -140,7 +143,7 @@ def build_bvh_shards(
         Target size per shard in bytes.
     float_dtype : str, default "float64"
         Floating point precision ("float32" or "float64").
-        
+
     Returns
     -------
     list[ShardData]
@@ -149,42 +152,42 @@ def build_bvh_shards(
     logger.info(f"Building BVH shards for {len(orbits)} orbits")
     logger.info(f"Target shard size: {target_shard_bytes / 1e9:.1f} GB")
     logger.info(f"Max chord: {max_chord_arcmin} arcmin")
-    
+
     # Sample all orbits to get segment counts
     logger.info("Sampling orbits to determine shard boundaries...")
     all_segments = []
     segments_per_orbit = []
     orbit_ids = orbits.orbit_id.to_pylist()
-    
+
     for i, orbit_id in enumerate(orbit_ids):
         if i % 1000 == 0:
             logger.info(f"Sampled {i}/{len(orbit_ids)} orbits")
-        
+
         # Sample single orbit
         single_orbit = orbits.take([i])
         plane_params, segments = sample_ellipse_adaptive(single_orbit, max_chord_arcmin)
         all_segments.append(segments)
         segments_per_orbit.append(len(segments))
-    
+
     logger.info(f"Total segments: {sum(segments_per_orbit)}")
     logger.info(f"Avg segments/orbit: {np.mean(segments_per_orbit):.1f}")
-    
+
     # Determine shard boundaries
     boundaries = _determine_shard_boundaries(
         orbit_ids, segments_per_orbit, target_shard_bytes, float_dtype
     )
-    
+
     logger.info(f"Creating {len(boundaries)} shards")
-    
+
     # Build shards
     shards = []
     for shard_idx, (start_idx, end_idx) in enumerate(boundaries):
         logger.info(f"Building shard {shard_idx + 1}/{len(boundaries)}")
-        
+
         # Combine segments for this shard
         shard_segments_list = all_segments[start_idx:end_idx]
         shard_orbit_ids = orbit_ids[start_idx:end_idx]
-        
+
         # Concatenate all segments
         if len(shard_segments_list) == 1:
             shard_segments = shard_segments_list[0]
@@ -194,20 +197,22 @@ def build_bvh_shards(
             for col_name in shard_segments_list[0].schema.names:
                 combined_arrays = []
                 for segments in shard_segments_list:
-                    combined_arrays.append(getattr(segments, col_name).to_numpy(zero_copy_only=False))
+                    combined_arrays.append(
+                        getattr(segments, col_name).to_numpy(zero_copy_only=False)
+                    )
                 combined_data[col_name] = np.concatenate(combined_arrays)
-            
+
             shard_segments = OrbitPolylineSegments.from_kwargs(**combined_data)
-        
+
         # Compute AABBs
         aabbs = compute_segment_aabbs(shard_segments)
-        
+
         # Build BVH
         bvh = build_bvh(aabbs)
-        
+
         # Create orbit mapping
         orbit_mapping = OrbitIdMapping.from_orbit_ids(shard_orbit_ids)
-        
+
         # Create shard data
         shard_id = f"shard_{shard_idx:04d}"
         shard_data = ShardData(
@@ -220,12 +225,14 @@ def build_bvh_shards(
             max_chord_arcmin=max_chord_arcmin,
             float_dtype=float_dtype,
         )
-        
+
         shards.append(shard_data)
-        
-        logger.info(f"Shard {shard_idx}: {len(shard_orbit_ids)} orbits, "
-                   f"{len(shard_segments)} segments")
-    
+
+        logger.info(
+            f"Shard {shard_idx}: {len(shard_orbit_ids)} orbits, "
+            f"{len(shard_segments)} segments"
+        )
+
     return shards
 
 
@@ -241,66 +248,68 @@ def _compute_file_hash(file_path: Path) -> str:
 def save_shard(out_dir: Path, shard: ShardData) -> ShardMeta:
     """
     Save a shard to disk and return its metadata.
-    
+
     Parameters
     ----------
     out_dir : Path
         Output directory for shard files.
     shard : ShardData
         Shard data to save.
-        
+
     Returns
     -------
     ShardMeta
         Metadata for the saved shard.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # File paths
     segments_npz = f"{shard.shard_id}_segments.npz"
     bvh_npz = f"{shard.shard_id}_bvh.npz"
     orbit_ids_json = f"{shard.shard_id}_orbit_ids.json"
-    
+
     segments_path = out_dir / segments_npz
     bvh_path = out_dir / bvh_npz
     orbit_ids_path = out_dir / orbit_ids_json
-    
+
     logger.info(f"Saving shard {shard.shard_id} to {out_dir}")
-    
+
     # Save segments
     from .adapters import segments_to_soa
+
     segments_soa = segments_to_soa(shard.segments)
     save_segments_soa(segments_soa, segments_path)
-    
+
     # Save BVH
     from .adapters import bvh_shard_to_arrays
+
     bvh_arrays = bvh_shard_to_arrays(shard.bvh, shard.orbit_mapping)
     save_bvh_arrays(bvh_arrays, bvh_path)
-    
+
     # Save orbit IDs (v1.1.0)
     orbit_ids = list(shard.orbit_mapping.index_to_id)
-    with open(orbit_ids_path, 'w') as f:
+    with open(orbit_ids_path, "w") as f:
         json.dump(orbit_ids, f)
-    
+
     # Compute file sizes and hashes
     segments_bytes = segments_path.stat().st_size
     bvh_bytes = bvh_path.stat().st_size
     orbit_ids_bytes = orbit_ids_path.stat().st_size
     total_bytes = segments_bytes + bvh_bytes + orbit_ids_bytes
-    
+
     file_hashes = {
         segments_npz: _compute_file_hash(segments_path),
         bvh_npz: _compute_file_hash(bvh_path),
         orbit_ids_json: _compute_file_hash(orbit_ids_path),
     }
-    
+
     # Legacy estimate for backward compatibility
     estimated_bytes = estimate_shard_bytes(
         len(shard.orbit_mapping.id_to_index),
         len(shard.segments),
         shard.float_dtype,
     )
-    
+
     # Create metadata
     meta = ShardMeta(
         shard_id=shard.shard_id,
@@ -321,9 +330,9 @@ def save_shard(out_dir: Path, shard: ShardData) -> ShardMeta:
         file_hashes=file_hashes,
         estimated_bytes=estimated_bytes,
     )
-    
+
     logger.info(f"Saved shard {shard.shard_id}: {total_bytes / 1e6:.1f} MB")
-    
+
     return meta
 
 
@@ -335,7 +344,7 @@ def save_manifest(
 ) -> ShardManifest:
     """
     Save all shards and create a manifest.
-    
+
     Parameters
     ----------
     out_dir : Path
@@ -346,20 +355,20 @@ def save_manifest(
         Maximum chord length used.
     float_dtype : str
         Floating point precision used.
-        
+
     Returns
     -------
     ShardManifest
         The created manifest.
     """
     logger.info(f"Saving {len(shards)} shards to {out_dir}")
-    
+
     # Save all shards
     shard_metas = []
     for shard in shards:
         meta = save_shard(out_dir, shard)
         shard_metas.append(meta)
-    
+
     # Create manifest
     manifest = ShardManifest(
         version=MANIFEST_VERSION,
@@ -372,15 +381,17 @@ def save_manifest(
         total_bvh_nodes=sum(meta.num_bvh_nodes for meta in shard_metas),
         total_estimated_bytes=sum(meta.estimated_bytes for meta in shard_metas),
     )
-    
+
     # Save manifest
     manifest_path = out_dir / "manifest.json"
     manifest.save(manifest_path)
-    
-    logger.info(f"Saved manifest: {manifest.total_orbits} orbits, "
-               f"{manifest.total_segments} segments, "
-               f"{manifest.total_estimated_bytes / 1e9:.1f} GB")
-    
+
+    logger.info(
+        f"Saved manifest: {manifest.total_orbits} orbits, "
+        f"{manifest.total_segments} segments, "
+        f"{manifest.total_estimated_bytes / 1e9:.1f} GB"
+    )
+
     return manifest
 
 
@@ -390,14 +401,14 @@ def load_shard(
 ) -> tuple[Any, Any]:  # (OrbitPolylineSegments, BVHShard)
     """
     Load a shard from disk with memory mapping.
-    
+
     Parameters
     ----------
     manifest_dir : Path
         Directory containing the manifest and shard files.
     meta : ShardMeta
         Metadata for the shard to load.
-        
+
     Returns
     -------
     tuple[OrbitPolylineSegments, BVHShard]
@@ -405,25 +416,27 @@ def load_shard(
     """
     from .adapters import bvh_arrays_to_shard, segments_soa_to_segments
     from .jax_types import load_bvh_arrays, load_segments_soa
-    
+
     # Load with memory mapping
     segments_path = manifest_dir / meta.segments_npz
     bvh_path = manifest_dir / meta.bvh_npz
     orbit_ids_path = manifest_dir / meta.orbit_ids_json
-    
+
     segments_soa = load_segments_soa(segments_path, mmap_mode="r")
     bvh_arrays = load_bvh_arrays(bvh_path, mmap_mode="r")
-    
+
     # Load orbit IDs (v1.1.0) with fallback for v1.0.0
     if orbit_ids_path.exists():
         with open(orbit_ids_path) as f:
             orbit_ids = json.load(f)
     else:
         orbit_ids = [f"orbit_{i}" for i in range(meta.num_orbits)]
-        logger.warning(f"Missing orbit_ids.json for shard {meta.shard_id}, using dummy IDs")
-    
+        logger.warning(
+            f"Missing orbit_ids.json for shard {meta.shard_id}, using dummy IDs"
+        )
+
     # Convert to high-level types using orbit_id_index
     segments = segments_soa_to_segments(segments_soa, orbit_ids)
     bvh_shard = bvh_arrays_to_shard(bvh_arrays, orbit_ids=orbit_ids)
-    
+
     return segments, bvh_shard

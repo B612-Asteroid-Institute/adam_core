@@ -9,12 +9,12 @@ observer positions and line-of-sight unit vectors.
 from __future__ import annotations
 
 import logging
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import numpy.typing as npt
-import quivr as qv
 import pyarrow.compute as pc
+import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
@@ -40,30 +40,30 @@ if TYPE_CHECKING:  # Only for type checkers to avoid runtime import cycles
 class ObservationRays(qv.Table):
     """
     Observation rays representing line-of-sight vectors from observers to detections.
-    
+
     Each row represents a ray from an observer position to a detected source,
     with both the observer position and line-of-sight direction in the SSB
     ecliptic frame for consistent geometric queries.
     """
-    
+
     #: Unique identifier for the detection
     det_id = qv.LargeStringColumn()
-    
+
     #: Time of the observation
     time = Timestamp.as_column()
-    
+
     #: Observatory code for the observer
     observer_code = qv.LargeStringColumn()
-    
+
     #: Observer position and velocity in SSB ecliptic frame
     observer = CartesianCoordinates.as_column()
-    
+
     #: Line-of-sight unit vector x-component in SSB ecliptic frame
     u_x = qv.Float64Column()
-    
-    #: Line-of-sight unit vector y-component in SSB ecliptic frame  
+
+    #: Line-of-sight unit vector y-component in SSB ecliptic frame
     u_y = qv.Float64Column()
-    
+
     #: Line-of-sight unit vector z-component in SSB ecliptic frame
     u_z = qv.Float64Column()
 
@@ -75,11 +75,11 @@ def rays_from_detections(
 ) -> ObservationRays:
     """
     Convert point source detections to observation rays in SSB ecliptic frame.
-    
+
     This function joins detections with exposures to obtain observatory codes,
     computes observer positions at detection times, and converts RA/Dec
     coordinates to line-of-sight unit vectors in the SSB ecliptic frame.
-    
+
     Parameters
     ----------
     detections : PointSourceDetections
@@ -88,7 +88,7 @@ def rays_from_detections(
         Exposure information including observatory codes
     frame_in : {"equatorial", "ecliptic"}, default="equatorial"
         Input coordinate frame for RA/Dec values
-        
+
     Returns
     -------
     rays : ObservationRays
@@ -97,7 +97,7 @@ def rays_from_detections(
     """
     if len(detections) == 0:
         return ObservationRays.empty()
-    
+
     # Pre-filter detections to only those with matching exposures (inner-join semantics)
     # This ensures tests expecting zero rays on no match will pass
     det_has_match_mask = pc.is_in(detections.exposure_id, exposures.id)
@@ -107,34 +107,35 @@ def rays_from_detections(
 
     # Link detections to exposures to get observatory codes
     det_exp_linkage = detections.link_to_exposures(exposures)
-    
+
     # Collect all linked detections and exposures
     all_linked_detections = []
     all_linked_exposures = []
-    
+
     for exposure_id, linked_dets, linked_exps in det_exp_linkage.iterate():
         # Skip any empty groups defensively
         if len(linked_dets) == 0:
             continue
         all_linked_detections.append(linked_dets)
         all_linked_exposures.append(linked_exps)
-    
+
     if len(all_linked_detections) == 0:
         logger.warning("No detections could be linked to exposures")
         return ObservationRays.empty()
-    
+
     # Concatenate all linked data
     import quivr as qv
+
     linked_detections = qv.concatenate(all_linked_detections)
     linked_exposures = qv.concatenate(all_linked_exposures)
-    
+
     # Get unique observatory codes and times for observer state computation
     observatory_codes = linked_exposures.observatory_code.to_pylist()
     detection_times = linked_detections.time
-    
+
     # Compute observer states in SSB ecliptic frame
     observers = Observers.from_codes(observatory_codes, detection_times)
-    
+
     # Ensure observers are in SSB ecliptic frame
     observer_coords = observers.coordinates
     origin_codes = observer_coords.origin.code.to_pylist()
@@ -162,15 +163,15 @@ def rays_from_detections(
             origin=observer_coords.origin,
             frame="ecliptic",
         )
-    
+
     # Convert RA/Dec to line-of-sight unit vectors
     ra_deg = linked_detections.ra.to_numpy()
     dec_deg = linked_detections.dec.to_numpy()
-    
+
     # Convert degrees to radians
     ra_rad = np.radians(ra_deg)
     dec_rad = np.radians(dec_deg)
-    
+
     # Create spherical coordinates on unit sphere
     spherical_coords = SphericalCoordinates.from_kwargs(
         rho=np.ones(len(linked_detections)),
@@ -183,7 +184,7 @@ def rays_from_detections(
         origin=observer_coords.origin,
         frame=frame_in,
     )
-    
+
     # Convert to Cartesian coordinates in SSB ecliptic frame
     if frame_in != "ecliptic":
         cartesian_coords = transform_coordinates(
@@ -194,14 +195,14 @@ def rays_from_detections(
         )
     else:
         cartesian_coords = spherical_coords.to_cartesian()
-    
+
     # Extract and normalize line-of-sight unit vectors
     los_vectors = cartesian_coords.r  # Position vectors are already unit vectors
     los_magnitudes = np.linalg.norm(los_vectors, axis=1)
-    
+
     # Normalize to ensure unit vectors (handle any numerical errors)
     u_vectors = los_vectors / los_magnitudes[:, np.newaxis]
-    
+
     # Create observation rays table
     rays = ObservationRays.from_kwargs(
         det_id=linked_detections.id.to_pylist(),
@@ -212,9 +213,11 @@ def rays_from_detections(
         u_y=u_vectors[:, 1],
         u_z=u_vectors[:, 2],
     )
-    
-    logger.info(f"Created {len(rays)} observation rays from {len(detections)} detections")
-    
+
+    logger.info(
+        f"Created {len(rays)} observation rays from {len(detections)} detections"
+    )
+
     return rays
 
 
@@ -244,6 +247,7 @@ def ephemeris_to_rays(
     # Lazily import to avoid circular import typing issues (type-only check)
     try:
         from ..orbits.ephemeris import Ephemeris  # noqa: WPS433 (local import)
+
         _ = Ephemeris  # silence linter unused
     except Exception:
         Ephemeris = None  # type: ignore[assignment]

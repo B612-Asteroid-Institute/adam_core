@@ -14,7 +14,6 @@ __all__ = [
 
 
 class KeplerianCoordinates(qv.Table):
-
     a = qv.Float64Column()
     e = qv.Float64Column()
     i = qv.Float64Column()
