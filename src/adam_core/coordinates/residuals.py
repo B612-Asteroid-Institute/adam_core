@@ -161,7 +161,10 @@ class Residuals(qv.Table):
 
     @classmethod
     def calculate(
-        cls, observed: CoordinateType, predicted: CoordinateType
+        cls,
+        observed: CoordinateType,
+        predicted: CoordinateType,
+        custom_coordinates: bool = False,
     ) -> "Residuals":
         """
         Calculate the residuals between the observed and predicted coordinates. Residuals
@@ -180,20 +183,24 @@ class Residuals(qv.Table):
         predicted : CoordinateType (N, D) or (1, D)
             Predicted coordinates. If a single coordinate is provided, it is broadcasted
             to the same shape as the observed coordinates.
+        custom_coordinates : bool, optional
+            If True, the coordinate class will not be checked against the supported coordinate classes
+            included in adam_core.
 
         Returns
         -------
         residuals : `~adam_core.coordinates.residuals.Residuals`
             Residuals between the observed and predicted coordinates.
         """
-        if not isinstance(observed, SUPPORTED_COORDINATES):
-            raise TypeError(
-                f"Observed coordinates must be one of {SUPPORTED_COORDINATES}, not {type(observed)}."
-            )
-        if not isinstance(predicted, SUPPORTED_COORDINATES):
-            raise TypeError(
-                f"Predicted coordinates must be one of {SUPPORTED_COORDINATES}, not {type(predicted)}."
-            )
+        if not custom_coordinates:
+            if not isinstance(observed, SUPPORTED_COORDINATES):
+                raise TypeError(
+                    f"Observed coordinates must be one of {SUPPORTED_COORDINATES}, not {type(observed)}."
+                )
+            if not isinstance(predicted, SUPPORTED_COORDINATES):
+                raise TypeError(
+                    f"Predicted coordinates must be one of {SUPPORTED_COORDINATES}, not {type(predicted)}."
+                )
         if type(observed) is not type(predicted):
             raise TypeError(
                 "Observed and predicted coordinates must be the same type, "
