@@ -134,16 +134,7 @@ def label_anomalies_worker(
         ]
     )
 
-    # Debug inputs summary
-    try:
-        logger.warning(
-            "inputs: n_hits=%d, rays_nonfinite_o=%d, rays_nonfinite_d=%d",
-            n_hits,
-            int(np.sum(~np.isfinite(ray_origins))),
-            int(np.sum(~np.isfinite(ray_directions))),
-        )
-    except Exception:
-        pass
+    # Removed verbose input logging for benchmarking
 
     # Extract orbital elements (aligned orbits)
     kep = orbits.coordinates.to_keplerian()
@@ -169,27 +160,7 @@ def label_anomalies_worker(
     cos_raan = np.cos(raan_hit)
     plane_normals = np.column_stack([sin_i * sin_raan, -sin_i * cos_raan, cos_i])
 
-    # Debug elements summary
-    try:
-        def _stats(arr: np.ndarray) -> tuple[float, float, int]:
-            return (float(np.nanmin(arr)), float(np.nanmax(arr)), int(np.sum(~np.isfinite(arr))))
-        a_stats = _stats(a_hit)
-        e_stats = _stats(e_hit)
-        i_stats = _stats(i_hit)
-        raan_stats = _stats(raan_hit)
-        ap_stats = _stats(ap_hit)
-        pn_nonfinite = int(np.sum(~np.isfinite(plane_normals)))
-        logger.warning(
-            "elements: a[min,max,nonfin]=%s e[min,max,nonfin]=%s i[min,max,nonfin]=%s raan[min,max,nonfin]=%s ap[min,max,nonfin]=%s plane_normals_nonfin=%d",
-            a_stats,
-            e_stats,
-            i_stats,
-            raan_stats,
-            ap_stats,
-            pn_nonfinite,
-        )
-    except Exception:
-        pass
+    # Removed verbose elements logging for benchmarking
 
     # Pad to next multiple of chunk_size and compute via fixed-size chunks
     n = ray_origins.shape[0]
@@ -322,20 +293,7 @@ def label_anomalies_worker(
     r_arr = expanded_a * (1 - expanded_e * np.cos(E_rad_arr))
     n_rad_day_arr = np.radians(expanded_n)
 
-    # Debug: per-hit candidate stats to diagnose seed loss
-    try:
-        valid_counts = np.sum(valid_mask_mat, axis=1)
-        min_snap = np.min(snap_errors_mat, axis=1)
-        num_zero = int(np.sum(valid_counts == 0))
-        if num_zero > 0:
-            zero_idx = np.where(valid_counts == 0)[0]
-            sample = zero_idx[:10]
-            logger.warning(
-                f"anomaly_labeling: {num_zero} hits have zero valid candidates; "
-                f"sample idx={sample.tolist()}, min_snap_sample={min_snap[sample].tolist()}"
-            )
-    except Exception:
-        pass
+    # Removed per-hit candidate diagnostics to avoid logging overhead during benchmarks
 
     # Build Arrow arrays via indexed take to keep consistency
     det_id_sel = pc.take(hits.table["det_id"], pa.array(sel_hit_idx, type=pa.int64()))
@@ -394,7 +352,7 @@ def label_anomalies(
     hits: OverlapHits,
     rays: ObservationRays,
     orbits: Orbits,
-    max_k: int = 3,
+    max_k: int = 1,
     chunk_size: int = 8192,
     max_processes: int = 0,
     snap_error_max_au: float | None = None,
@@ -416,7 +374,7 @@ def label_anomalies(
         Observation rays containing timing information.
     orbits : Orbits
         Original orbit data containing Keplerian elements.
-    max_k : int, default=3
+    max_k : int, default=1
         Maximum number of anomaly variants per (det_id, orbit_id) pair.
         For K>1, multiple seeds are used to find alternate solutions.
     chunk_size : int, default=8192
@@ -579,8 +537,24 @@ def _compute_candidates_kernel(
         point_2d = transform_to_perifocal_2d(projected_point, i_val, raan_val, ap_val)
 
         # Compute multi-candidate snap distances and anomalies
+        # Compute in-plane direction bias: project ray direction to plane and map to perifocal 2D
+        # u_plane_3d = (I - n n^T) * d
+        # Normalize for numerical stability; if too small, bias is effectively disabled downstream
+        n = plane_normal
+        d = ray_direction
+        u_plane_3d = d - jnp.dot(d, n) * n
+        u_norm = jnp.linalg.norm(u_plane_3d)
+        u_plane_3d_unit = jnp.where(u_norm > 1e-12, u_plane_3d / (u_norm + 1e-30), jnp.zeros_like(u_plane_3d))
+
+        # Transform direction to perifocal 2D by applying same rotation as for points
+        # Use transform_to_perifocal_2d on a synthetic point one unit along u_plane_3d_unit
+        dir_point_3d = projected_point + u_plane_3d_unit  # a point one unit ahead along direction
+        dir_point_2d = transform_to_perifocal_2d(dir_point_3d, i_val, raan_val, ap_val)
+        # The in-plane direction in 2D is the difference in perifocal coords
+        direction_2d = dir_point_2d - point_2d
+
         snap_distances, E_values, valid_mask = ellipse_snap_distance_multi_seed(
-            point_2d, a_val, e_val, max_k, 10, dedupe_angle_tol
+            point_2d, a_val, e_val, max_k, 10, dedupe_angle_tol, direction_2d
         )
 
         # Convert eccentric anomaly to true anomaly

@@ -12,7 +12,6 @@ from adam_core.geometry import (
     geometric_overlap,
     label_anomalies,
     query_bvh,
-    query_bvh_parallel,
 )
 from adam_core.observations.detections import PointSourceDetections
 from adam_core.observations.exposures import Exposures
@@ -111,34 +110,38 @@ class TestOverlapHits:
 class TestQueryBvh:
     """Test BVH querying functionality."""
 
-    def test_empty_inputs(self):
+    def test_empty_inputs(self, bvh_index, rays):
         """Test with empty inputs."""
-        from adam_core.geometry.bvh import BVHShard
+        from adam_core.geometry.bvh import BVHIndex, BVHNodes, BVHPrimitives
         from adam_core.observations.rays import ObservationRays
         from adam_core.orbits.polyline import OrbitPolylineSegments
 
-        empty_bvh = BVHShard(
-            nodes_min=np.empty((0, 3)),
-            nodes_max=np.empty((0, 3)),
-            left_child=np.empty(0, dtype=np.int32),
-            right_child=np.empty(0, dtype=np.int32),
-            first_prim=np.empty(0, dtype=np.int32),
-            prim_count=np.empty(0, dtype=np.int32),
-            prim_orbit_ids=[],
-            prim_seg_ids=np.empty(0, dtype=np.int32),
-            prim_row_index=np.empty(0, dtype=np.int32),
+        empty_nodes = BVHNodes.from_kwargs(
+            nodes_min_x=np.array([], dtype=float),
+            nodes_min_y=np.array([], dtype=float),
+            nodes_min_z=np.array([], dtype=float),
+            nodes_max_x=np.array([], dtype=float),
+            nodes_max_y=np.array([], dtype=float),
+            nodes_max_z=np.array([], dtype=float),
+            left_child=np.array([], dtype=np.int32),
+            right_child=np.array([], dtype=np.int32),
+            first_prim=np.array([], dtype=np.int32),
+            prim_count=np.array([], dtype=np.int32),
         )
+        empty_prims = BVHPrimitives.from_kwargs(
+            segment_row_index=np.array([], dtype=np.int32),
+            prim_seg_ids=np.array([], dtype=np.int32),
+        )
+        empty_bvh = BVHIndex(segments=OrbitPolylineSegments.empty(), nodes=empty_nodes, prims=empty_prims)
 
-        empty_segments = OrbitPolylineSegments.empty()
         empty_rays = ObservationRays.empty()
 
-        hits = query_bvh(empty_bvh, empty_segments, empty_rays)
+        hits = query_bvh(empty_bvh, empty_rays)
         assert len(hits) == 0
 
-    def test_basic_overlap_detection(self):
+    def test_basic_overlap_detection(self, bvh_index, rays):
         """Test basic overlap detection with simple geometry."""
         orbits, params, segments = create_test_orbit_and_segments()
-        rays = create_test_rays()
 
         # Use geometric_overlap for simplicity
         hits = geometric_overlap(
@@ -156,7 +159,7 @@ class TestQueryBvh:
             assert hits.leaf_id[i].as_py() >= 0
             assert hits.distance_au[i].as_py() >= 0.0
 
-    def test_no_hits_with_tight_guard(self):
+    def test_no_hits_with_tight_guard(self, bvh_index):
         """Test that tight guard band produces no hits for distant rays."""
         orbits, params, segments = create_test_orbit_and_segments()
 
@@ -193,19 +196,16 @@ class TestQueryBvh:
         # Should find no hits
         assert len(hits) == 0
 
-    def test_max_hits_per_ray_limit(self):
+    def test_max_hits_per_ray_limit(self, bvh_index, rays):
         """Test max_hits_per_ray parameter."""
         orbits, params, segments = create_test_orbit_and_segments()
-        rays = create_test_rays()
 
-        from adam_core.geometry.bvh import build_bvh
+        from adam_core.geometry.bvh import build_bvh_index_from_segments
 
-        bvh = build_bvh(segments)
+        bvh = build_bvh_index_from_segments(segments)
 
         # Query with limit
-        hits_limited = query_bvh(
-            bvh, segments, rays, guard_arcmin=10.0, max_hits_per_ray=2
-        )
+        hits_limited = query_bvh(bvh, rays, guard_arcmin=10.0, max_hits_per_ray=2)
 
         # Count hits per ray
         hit_counts = {}
@@ -391,7 +391,8 @@ class TestIntegration:
 class TestQueryBvhParallel:
     """Test parallel BVH querying functionality."""
 
-    def test_parallel_vs_serial_consistency(self):
+    @pytest.mark.parametrize("max_processes", [0, 2])
+    def test_parallel_vs_serial_consistency(self, max_processes):
         """Test that parallel and serial implementations give same results."""
         import ray
 
@@ -406,12 +407,10 @@ class TestQueryBvhParallel:
         hits_serial = geometric_overlap(segments, rays, guard_arcmin=1.0)
 
         # For parallel, we need to build BVH first
-        from adam_core.geometry.bvh import build_bvh
+        from adam_core.geometry.bvh import build_bvh_index_from_segments
 
-        bvh = build_bvh(segments)
-        hits_parallel = query_bvh_parallel(
-            bvh, segments, rays, guard_arcmin=1.0, batch_size=5
-        )
+        bvh = build_bvh_index_from_segments(segments)
+        hits_parallel = query_bvh(bvh, rays, guard_arcmin=1.0, batch_size=5, max_processes=max_processes)
 
         # Should have same number of hits
         assert len(hits_serial) == len(hits_parallel)
@@ -441,28 +440,37 @@ class TestQueryBvhParallel:
         if not ray.is_initialized():
             ray.init(ignore_reinit_error=True)
 
-        from adam_core.geometry.bvh import BVHShard
+        from adam_core.geometry.bvh import BVHIndex, BVHNodes, BVHPrimitives
         from adam_core.observations.rays import ObservationRays
         from adam_core.orbits.polyline import OrbitPolylineSegments
 
-        # Empty BVH
-        empty_bvh = BVHShard(
-            nodes_min=np.array([]).reshape(0, 3),
-            nodes_max=np.array([]).reshape(0, 3),
+        # Empty BVHIndex
+        empty_nodes = BVHNodes.from_kwargs(
+            nodes_min_x=np.array([], dtype=float),
+            nodes_min_y=np.array([], dtype=float),
+            nodes_min_z=np.array([], dtype=float),
+            nodes_max_x=np.array([], dtype=float),
+            nodes_max_y=np.array([], dtype=float),
+            nodes_max_z=np.array([], dtype=float),
             left_child=np.array([], dtype=np.int32),
             right_child=np.array([], dtype=np.int32),
             first_prim=np.array([], dtype=np.int32),
             prim_count=np.array([], dtype=np.int32),
-            prim_orbit_ids=[],
-            prim_seg_ids=np.array([], dtype=np.int32),
-            prim_row_index=np.array([], dtype=np.int32),
         )
+        empty_prims = BVHPrimitives.from_kwargs(
+            segment_row_index=np.array([], dtype=np.int32),
+            prim_seg_ids=np.array([], dtype=np.int32),
+        )
+        empty_bvh = BVHIndex(segments=OrbitPolylineSegments.empty(), nodes=empty_nodes, prims=empty_prims)
 
         empty_segments = OrbitPolylineSegments.empty()
         empty_rays = ObservationRays.empty()
 
-        hits = query_bvh_parallel(
-            empty_bvh, empty_segments, empty_rays, guard_arcmin=1.0
+        hits = query_bvh(
+            empty_bvh,
+            empty_rays,
+            guard_arcmin=1.0,
+            max_processes=2,
         )
         assert len(hits) == 0
 
@@ -477,14 +485,14 @@ class TestQueryBvhParallel:
         rays = create_test_rays()
 
         # Test different batch sizes
-        from adam_core.geometry.bvh import build_bvh
+        from adam_core.geometry.bvh import build_bvh_index_from_segments
 
-        bvh = build_bvh(segments)
-        hits_small = query_bvh_parallel(
-            bvh, segments, rays, guard_arcmin=1.0, batch_size=2
+        bvh = build_bvh_index_from_segments(segments)
+        hits_small = query_bvh(
+            bvh, rays, guard_arcmin=1.0, batch_size=2, max_processes=2
         )
-        hits_large = query_bvh_parallel(
-            bvh, segments, rays, guard_arcmin=1.0, batch_size=100
+        hits_large = query_bvh(
+            bvh, rays, guard_arcmin=1.0, batch_size=100, max_processes=2
         )
 
         # Should get same results regardless of batch size
@@ -516,12 +524,12 @@ class TestAnomalyLabeling:
         orbits, params, segments = create_test_orbit_and_segments()
         rays = create_test_rays()
 
-        from adam_core.geometry.bvh import build_bvh
+        from adam_core.geometry.bvh import build_bvh_index_from_segments
 
-        bvh = build_bvh(segments)
+        bvh = build_bvh_index_from_segments(segments)
 
         # Decoupled API: query hits then label
-        hits = query_bvh(bvh, segments, rays, guard_arcmin=1.0)
+        hits = query_bvh(bvh, rays, guard_arcmin=1.0)
         assert isinstance(hits, OverlapHits)
 
         labels = label_anomalies(hits, rays, orbits)

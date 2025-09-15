@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import logging
 from typing import Tuple
+from functools import partial
 
 import numpy as np
 import numpy.typing as npt
+import jax
+import jax.numpy as jnp
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -118,18 +121,18 @@ class OrbitPolylineSegments(qv.Table):
     z1 = qv.Float64Column()
 
     #: AABB minimum bound - x component in AU
-    aabb_min_x = qv.Float64Column()
+    aabb_min_x = qv.Float64Column(nullable=True)
     #: AABB minimum bound - y component in AU
-    aabb_min_y = qv.Float64Column()
+    aabb_min_y = qv.Float64Column(nullable=True)
     #: AABB minimum bound - z component in AU
-    aabb_min_z = qv.Float64Column()
+    aabb_min_z = qv.Float64Column(nullable=True)
 
     #: AABB maximum bound - x component in AU
-    aabb_max_x = qv.Float64Column()
+    aabb_max_x = qv.Float64Column(nullable=True)
     #: AABB maximum bound - y component in AU
-    aabb_max_y = qv.Float64Column()
+    aabb_max_y = qv.Float64Column(nullable=True)
     #: AABB maximum bound - z component in AU
-    aabb_max_z = qv.Float64Column()
+    aabb_max_z = qv.Float64Column(nullable=True)
 
     #: Heliocentric distance at segment midpoint in AU
     r_mid_au = qv.Float64Column()
@@ -141,6 +144,37 @@ class OrbitPolylineSegments(qv.Table):
     #: Orbital plane normal vector - z component (duplicated for convenience)
     n_z = qv.Float64Column()
 
+
+@partial(jax.jit, static_argnums=(4,))
+def _sample_positions_jax(
+    a: jnp.ndarray,
+    e: jnp.ndarray,
+    p_hat: jnp.ndarray,
+    q_hat: jnp.ndarray,
+    n_points: int,
+) -> jnp.ndarray:
+    """
+    JAX-jitted sampler for orbit positions at uniformly spaced true anomalies.
+
+    Parameters
+    ----------
+    a : (N,) semi-major axes
+    e : (N,) eccentricities
+    p_hat : (N,3) unit vectors towards perihelion
+    q_hat : (N,3) unit vectors perpendicular to p in the orbital plane
+    n_points : int, number of true anomaly samples on [0, 2pi)
+    """
+    p = a * (1.0 - e * e)
+    f = jnp.linspace(0.0, 2.0 * jnp.pi, int(n_points) + 1, dtype=a.dtype)[:-1]
+    cos_f = jnp.cos(f)
+    sin_f = jnp.sin(f)
+
+    r = p[:, None] / (1.0 + e[:, None] * cos_f[None, :])
+    x_orb = r * cos_f[None, :]
+    y_orb = r * sin_f[None, :]
+
+    positions = x_orb[..., None] * p_hat[:, None, :] + y_orb[..., None] * q_hat[:, None, :]
+    return positions  # (N, n_points, 3)
 
 def _compute_orbital_basis(
     kep_coords: KeplerianCoordinates,
@@ -358,6 +392,62 @@ def sample_ellipse_adaptive(
     # Convert max chord constraint to radians
     theta_max = max_chord_arcmin * np.pi / (180 * 60)
 
+    # Prepare JAX sampling grid (always use JAX path)
+    # Grid resolution scales with allowed segments; cap high but allow tight chord limits
+    grid_points = int(min(max_segments_per_orbit * 2, 131072))
+    grid_points = max(grid_points, 64)
+
+    # JAX will implicitly convert NumPy to device arrays
+    positions_jax = _sample_positions_jax(
+        a,
+        e,
+        p_hat,
+        q_hat,
+        grid_points,
+    )
+    # Bring back to NumPy for downstream Quivr operations
+    positions = np.asarray(positions_jax)
+
+    # Initial selection: coarse uniform subset
+    n_initial = min(1024, grid_points)
+    stride = max(grid_points // n_initial, 1)
+    initial_idx = np.arange(0, grid_points, stride, dtype=np.int32)
+
+    selected = np.zeros((len(orbits), grid_points), dtype=bool)
+    selected[:, initial_idx] = True
+
+    # Fixed number of refinement iterations to limit work; validated by tests
+    max_iterations = 6
+    for _ in range(max_iterations):
+        any_change = False
+        for i, orbit_id in enumerate(orbit_ids):
+            idx = np.flatnonzero(selected[i])
+            if len(idx) < 3:
+                continue
+            to_add = []
+            for j in range(len(idx)):
+                i0 = idx[j]
+                i1 = idx[(j + 1) % len(idx)]
+                # steps forward on circular grid
+                step = (i1 - i0) % grid_points
+                if step == 0:
+                    step = grid_points
+                # Endpoints
+                p0 = positions[i, i0]
+                p1 = positions[i, i1]
+                chord = float(np.linalg.norm(p1 - p0))
+                r_mid = float(np.linalg.norm((p0 + p1) * 0.5))
+                max_chord_au = float(theta_max * max(r_mid, 1.0))
+                if chord > max_chord_au and step > 1:
+                    mid = (i0 + step // 2) % grid_points
+                    if not selected[i, mid]:
+                        to_add.append(mid)
+            if to_add:
+                selected[i, np.array(to_add, dtype=np.int32)] = True
+                any_change = True
+        if not any_change:
+            break
+
     # Collect all segments across orbits
     all_orbit_ids = []
     all_seg_ids = []
@@ -367,108 +457,30 @@ def sample_ellipse_adaptive(
     all_n_x, all_n_y, all_n_z = [], [], []
 
     for i, orbit_id in enumerate(orbit_ids):
-        # Start with uniform sampling
-        n_initial = 1024
-        f_samples = np.linspace(0, 2 * np.pi, n_initial + 1)[
-            :-1
-        ]  # Exclude 2π (same as 0)
-
-        # Iteratively refine segments that violate chord constraint
-        segments_to_check = [
-            (f_samples[j], f_samples[(j + 1) % len(f_samples)])
-            for j in range(len(f_samples))
-        ]
-        final_f_values = set(f_samples)
-
-        iteration = 0
-        max_iterations = 10
-
-        while (
-            segments_to_check
-            and len(final_f_values) < max_segments_per_orbit
-            and iteration < max_iterations
-        ):
-            new_segments = []
-
-            for f0, f1 in segments_to_check:
-                # Compute positions at segment endpoints
-                pos0 = _sample_ellipse_points(
-                    np.array([a[i]]),
-                    np.array([e[i]]),
-                    p_hat[i : i + 1],
-                    q_hat[i : i + 1],
-                    np.array([[f0]]),
-                )[0, 0]
-
-                pos1 = _sample_ellipse_points(
-                    np.array([a[i]]),
-                    np.array([e[i]]),
-                    p_hat[i : i + 1],
-                    q_hat[i : i + 1],
-                    np.array([[f1]]),
-                )[0, 0]
-
-                # Chord length and midpoint distance
-                chord_length = np.linalg.norm(pos1 - pos0)
-                r_mid = np.linalg.norm((pos0 + pos1) / 2)
-
-                # Maximum allowed chord length at this distance
-                max_chord_au = theta_max * max(r_mid, 1.0)
-
-                if chord_length > max_chord_au:
-                    # Split this segment
-                    f_mid = (f0 + f1) / 2
-                    if f1 < f0:  # Handle wrap-around
-                        f_mid = (f0 + f1 + 2 * np.pi) / 2
-                        if f_mid > 2 * np.pi:
-                            f_mid -= 2 * np.pi
-
-                    final_f_values.add(f_mid)
-                    new_segments.append((f0, f_mid))
-                    new_segments.append((f_mid, f1))
-
-            segments_to_check = new_segments
-            iteration += 1
-
-        if len(final_f_values) >= max_segments_per_orbit:
-            logger.warning(
-                f"Orbit {orbit_id} hit segment limit {max_segments_per_orbit}"
-            )
-
-        # Sort final anomaly values
-        f_final = sorted(final_f_values)
-
-        # Compute final positions
-        positions = _sample_ellipse_points(
-            np.array([a[i]]),
-            np.array([e[i]]),
-            p_hat[i : i + 1],
-            q_hat[i : i + 1],
-            np.array([f_final]),
-        )[
-            0
-        ]  # Shape: (n_points, 3)
-
-        # Create segments
-        for j in range(len(f_final)):
-            j_next = (j + 1) % len(f_final)
-
-            pos0 = positions[j]
-            pos1 = positions[j_next]
-            r_mid = np.linalg.norm((pos0 + pos1) / 2)
+        idx = np.flatnonzero(selected[i])
+        if len(idx) == 0:
+            continue
+        idx_sorted = np.sort(idx)
+        P = len(idx_sorted)
+        for j in range(P):
+            i0 = idx_sorted[j]
+            i1 = idx_sorted[(j + 1) % P]
+            p0 = positions[i, i0]
+            p1 = positions[i, i1]
+            r_mid = float(np.linalg.norm((p0 + p1) * 0.5))
 
             all_orbit_ids.append(orbit_id)
             all_seg_ids.append(j)
-            all_x0.append(pos0[0])
-            all_y0.append(pos0[1])
-            all_z0.append(pos0[2])
-            all_x1.append(pos1[0])
-            all_y1.append(pos1[1])
-            all_z1.append(pos1[2])
+            all_x0.append(float(p0[0]))
+            all_y0.append(float(p0[1]))
+            all_z0.append(float(p0[2]))
+            all_x1.append(float(p1[0]))
+            all_y1.append(float(p1[1]))
+            all_z1.append(float(p1[2]))
             all_r_mid.append(r_mid)
-            all_n_x.append(n_hat[i, 0])
-            all_n_y.append(n_hat[i, 1])
-            all_n_z.append(n_hat[i, 2])
+            all_n_x.append(float(n_hat[i, 0]))
+            all_n_y.append(float(n_hat[i, 1]))
+            all_n_z.append(float(n_hat[i, 2]))
 
     # Create plane parameters table
     plane_params = OrbitsPlaneParams.from_kwargs(
@@ -503,12 +515,12 @@ def sample_ellipse_adaptive(
         x1=all_x1,
         y1=all_y1,
         z1=all_z1,
-        aabb_min_x=[np.nan] * len(all_orbit_ids),  # To be filled
-        aabb_min_y=[np.nan] * len(all_orbit_ids),
-        aabb_min_z=[np.nan] * len(all_orbit_ids),
-        aabb_max_x=[np.nan] * len(all_orbit_ids),
-        aabb_max_y=[np.nan] * len(all_orbit_ids),
-        aabb_max_z=[np.nan] * len(all_orbit_ids),
+        aabb_min_x=[None] * len(all_orbit_ids),  # To be filled
+        aabb_min_y=[None] * len(all_orbit_ids),
+        aabb_min_z=[None] * len(all_orbit_ids),
+        aabb_max_x=[None] * len(all_orbit_ids),
+        aabb_max_y=[None] * len(all_orbit_ids),
+        aabb_max_z=[None] * len(all_orbit_ids),
         r_mid_au=all_r_mid,
         n_x=all_n_x,
         n_y=all_n_y,

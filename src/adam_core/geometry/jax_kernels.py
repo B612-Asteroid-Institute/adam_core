@@ -24,7 +24,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-OverlapBackend = Literal["jax", "numpy"]
+OverlapBackend = Literal["jax"]
 
 
 @jax.jit
@@ -241,87 +241,4 @@ def compute_overlap_hits_jax(
     )
 
 
-def compute_overlap_hits_numpy(
-    batch: CandidateBatch,
-    guard_arcmin: float = 1.0,
-    max_hits_per_ray: Optional[int] = None,
-) -> HitsSOA:
-    """
-    NumPy fallback for overlap computation (for comparison/debugging).
-
-    Parameters are the same as compute_overlap_hits_jax.
-    """
-    # Convert to numpy
-    batch_cpu = jax.device_get(batch)
-
-    # Convert guard band to radians
-    theta_guard = guard_arcmin * jnp.pi / (180 * 60)
-
-    all_ray_indices = []
-    all_orbit_indices = []
-    all_seg_ids = []
-    all_leaf_ids = []
-    all_distances = []
-
-    # Process each ray individually (like the original implementation)
-    for ray_idx in range(batch_cpu.batch_size):
-        if not jnp.any(batch_cpu.mask[ray_idx]):
-            continue
-
-        ray_origin = batch_cpu.ray_origins[ray_idx]
-        ray_direction = batch_cpu.ray_directions[ray_idx]
-        d_obs = batch_cpu.observer_distances[ray_idx]
-
-        ray_hits = []
-
-        # Process each candidate for this ray
-        for cand_idx in range(batch_cpu.max_candidates):
-            if not batch_cpu.mask[ray_idx, cand_idx]:
-                continue
-
-            seg_start = batch_cpu.seg_starts[ray_idx, cand_idx]
-            seg_end = batch_cpu.seg_ends[ray_idx, cand_idx]
-            r_mid = batch_cpu.r_mids[ray_idx, cand_idx]
-
-            # Compute distance (numpy version of the kernel)
-            distance = float(
-                _ray_segment_distance_single(
-                    jnp.asarray(ray_origin),
-                    jnp.asarray(ray_direction),
-                    jnp.asarray(seg_start),
-                    jnp.asarray(seg_end),
-                )
-            )
-
-            # Check guard band
-            max_distance = theta_guard * max(r_mid, d_obs)
-
-            if distance <= max_distance:
-                orbit_idx = batch_cpu.orbit_indices[ray_idx, cand_idx]
-                seg_id = batch_cpu.seg_ids[ray_idx, cand_idx]
-                leaf_id = batch_cpu.leaf_ids[ray_idx, cand_idx]
-                ray_hits.append((orbit_idx, seg_id, leaf_id, distance))
-
-        # Sort by distance and apply limit
-        ray_hits.sort(key=lambda x: x[3])
-        if max_hits_per_ray is not None:
-            ray_hits = ray_hits[:max_hits_per_ray]
-
-        # Add to results
-        for orbit_idx, seg_id, leaf_id, distance in ray_hits:
-            all_ray_indices.append(batch_cpu.ray_indices[ray_idx])
-            all_orbit_indices.append(orbit_idx)
-            all_seg_ids.append(seg_id)
-            all_leaf_ids.append(leaf_id)
-            all_distances.append(distance)
-
-    if len(all_ray_indices) == 0:
-        return HitsSOA.empty()
-
-    return HitsSOA(
-        det_indices=jnp.asarray(all_ray_indices, dtype=jnp.int32),
-        orbit_indices=jnp.asarray(all_orbit_indices, dtype=jnp.int32),
-        seg_ids=jnp.asarray(all_seg_ids, dtype=jnp.int32),
-        leaf_ids=jnp.asarray(all_leaf_ids, dtype=jnp.int32),
-        distances_au=jnp.asarray(all_distances, dtype=jnp.float64),
-    )
+## Removed NumPy fallback implementation (compute_overlap_hits_numpy)
