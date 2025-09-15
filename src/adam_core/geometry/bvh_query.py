@@ -16,6 +16,7 @@ import logging
 from typing import Optional
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from ..observations.rays import ObservationRays
@@ -25,9 +26,8 @@ from .adapters import (
     rays_to_numpy_arrays,
     segments_to_numpy_soa,
 )
-from .aggregator import aggregate_candidates
+from .aggregator import aggregate_candidates, CandidateBatch
 from .bvh import BVHIndex
-from .jax_kernels import compute_overlap_hits_jax
 from .jax_types import HitsSOA, OrbitIdMapping, BVHArrays
 from ..ray_cluster import initialize_use_ray
 from .overlap import OverlapHits
@@ -39,6 +39,8 @@ __all__ = [
     "query_bvh_index",
     "geometric_overlap_jax",
     "benchmark_jax_vs_legacy",
+    "ray_segment_distances_jax",
+    "compute_overlap_hits",
 ]
 
 logger = logging.getLogger(__name__)
@@ -47,92 +49,218 @@ logger = logging.getLogger(__name__)
 ## (removed _query_bvh_single; use query_bvh_worker directly)
 
 
-def query_bvh_worker(
-    bvh_arrays: BVHArrays,
-    segments: OrbitPolylineSegments,
-    rays: ObservationRays,
-    *,
+@jax.jit
+def _ray_segment_distance_single(
+    ray_origin: jax.Array,
+    ray_direction: jax.Array,
+    seg_start: jax.Array,
+    seg_end: jax.Array,
+) -> jax.Array:
+    """
+    Compute minimum distance between a ray and a line segment (single pair).
+
+    JAX-compatible implementation with stable numerics.
+
+    Parameters
+    ----------
+    ray_origin : jax.Array (3,)
+        Ray origin point
+    ray_direction : jax.Array (3,)
+        Ray direction vector (should be normalized)
+    seg_start : jax.Array (3,)
+        Segment start point
+    seg_end : jax.Array (3,)
+        Segment end point
+
+    Returns
+    -------
+    distance : jax.Array (scalar)
+        Minimum distance between ray and segment
+    """
+    # Vector from ray origin to segment start
+    w0 = ray_origin - seg_start
+
+    # Segment direction vector
+    seg_dir = seg_end - seg_start
+    seg_length_sq = jnp.dot(seg_dir, seg_dir)
+
+    # Handle degenerate segment (point)
+    is_degenerate = seg_length_sq < 1e-15
+
+    # For degenerate segments, compute distance from ray to point
+    cross_prod = jnp.cross(ray_direction, w0)
+    point_distance = jnp.linalg.norm(cross_prod)
+
+    # For non-degenerate segments, compute closest approach parameters
+    a = jnp.dot(ray_direction, ray_direction)  # Should be 1 if normalized
+    b = jnp.dot(ray_direction, seg_dir)
+    c = seg_length_sq
+    d = jnp.dot(ray_direction, w0)
+    e = jnp.dot(seg_dir, w0)
+
+    denom = a * c - b * b
+
+    # Handle parallel case
+    is_parallel = jnp.abs(denom) < 1e-15
+    parallel_distance = jnp.linalg.norm(cross_prod)
+
+    # For non-parallel segments, compute parameters
+    t_ray = jnp.where(is_parallel, 0.0, (b * e - c * d) / denom)
+    t_seg = jnp.where(is_parallel, 0.0, (a * e - b * d) / denom)
+
+    # Clamp ray parameter to non-negative (ray, not line)
+    t_ray = jnp.maximum(0.0, t_ray)
+
+    # Clamp segment parameter to [0, 1]
+    t_seg = jnp.clip(t_seg, 0.0, 1.0)
+
+    # For clamped segments, recompute t_ray
+    is_clamped = (t_seg == 0.0) | (t_seg == 1.0)
+    seg_point = seg_start + t_seg * seg_dir
+    ray_to_seg = seg_point - ray_origin
+    t_ray_recalc = jnp.maximum(0.0, jnp.dot(ray_to_seg, ray_direction))
+    t_ray = jnp.where(is_clamped, t_ray_recalc, t_ray)
+
+    # Compute closest points and distance
+    ray_point = ray_origin + t_ray * ray_direction
+    seg_point = seg_start + t_seg * seg_dir
+    segment_distance = jnp.linalg.norm(ray_point - seg_point)
+
+    # Return appropriate distance based on segment type
+    return jnp.where(
+        is_degenerate,
+        point_distance,
+        jnp.where(is_parallel, parallel_distance, segment_distance),
+    )
+
+
+@jax.jit
+def ray_segment_distances_jax(
+    ray_origins: jax.Array,
+    ray_directions: jax.Array,
+    seg_starts: jax.Array,
+    seg_ends: jax.Array,
+    mask: jax.Array,
+) -> jax.Array:
+    """
+    Vectorized ray-segment distance computation using JAX.
+
+    Parameters
+    ----------
+    ray_origins : jax.Array (B, 3)
+        Ray origin points for B rays
+    ray_directions : jax.Array (B, 3)
+        Ray direction vectors for B rays
+    seg_starts : jax.Array (B, K, 3)
+        Segment start points (K candidates per ray)
+    seg_ends : jax.Array (B, K, 3)
+        Segment end points (K candidates per ray)
+    mask : jax.Array (B, K)
+        Boolean mask indicating valid candidates
+
+    Returns
+    -------
+    distances : jax.Array (B, K)
+        Minimum distances between rays and segments
+        Invalid entries (mask=False) have distance=inf
+    """
+    # Vectorize over both batch and candidate dimensions
+    distance_fn = jax.vmap(
+        jax.vmap(_ray_segment_distance_single, in_axes=(None, None, 0, 0)),
+        in_axes=(0, 0, 0, 0),
+    )
+
+    distances = distance_fn(ray_origins, ray_directions, seg_starts, seg_ends)
+
+    # Mask invalid candidates with infinity
+    distances = jnp.where(mask, distances, jnp.inf)
+
+    return distances
+
+
+def compute_overlap_hits(
+    batch: CandidateBatch,
     guard_arcmin: float = 1.0,
     max_hits_per_ray: Optional[int] = None,
-    max_candidates_per_ray: int = 64,
-    fixed_num_rays: Optional[int] = None,
-) -> OverlapHits:
+) -> HitsSOA:
     """
-    Core BVH batch worker (serial). Returns OverlapHits for the batch.
+    Compute geometric overlap hits using JAX kernels.
+
+    Note: This function is not JIT-compiled due to dynamic output shapes.
+    The inner distance computation is JIT-compiled for performance.
+
+    Parameters
+    ----------
+    batch : CandidateBatch
+        Aggregated candidates from BVH traversal
+    guard_arcmin : float, default=1.0
+        Guard band tolerance in arcminutes
+    max_hits_per_ray : int, optional
+        Maximum number of hits to return per ray
+
+    Returns
+    -------
+    HitsSOA
+        Geometric overlap hits within guard band
     """
-    if len(rays) == 0 or bvh_arrays.num_primitives == 0:
-        return OverlapHits.empty()
+    # Convert guard band to radians
+    theta_guard = guard_arcmin * jnp.pi / (180 * 60)
 
-    # Allow receiving object refs under Ray
-    try:
-        import ray  # type: ignore
-        if isinstance(bvh_arrays, ray.ObjectRef):
-            bvh_arrays = ray.get(bvh_arrays)
-        if isinstance(segments, ray.ObjectRef):
-            segments = ray.get(segments)
-        if isinstance(rays, ray.ObjectRef):
-            rays = ray.get(rays)
-    except Exception:
-        pass
-
-    # Build supporting structures at the worker boundary
-    orbit_mapping = OrbitIdMapping.from_orbit_ids(segments.orbit_id.to_pylist())
-    segments_soa = segments_to_numpy_soa(segments)
-
-    # Rays to NumPy (host)
-    ro, rd, obs = rays_to_numpy_arrays(rays)
-    ray_origins_np = np.asarray(ro)
-    ray_directions_np = np.asarray(rd)
-    observer_distances_np = np.asarray(obs)
-
-    # Optional fixed-shape padding for stability across batches
-    orig_num = int(ray_origins_np.shape[0])
-    if fixed_num_rays is not None and fixed_num_rays > orig_num:
-        pad_n = fixed_num_rays - orig_num
-        pad_o = np.zeros((pad_n, 3), dtype=ray_origins_np.dtype)
-        pad_d = np.zeros((pad_n, 3), dtype=ray_directions_np.dtype)
-        pad_obs = np.zeros((pad_n,), dtype=observer_distances_np.dtype)
-        ray_origins_np = np.concatenate([ray_origins_np, pad_o], axis=0)
-        ray_directions_np = np.concatenate([ray_directions_np, pad_d], axis=0)
-        observer_distances_np = np.concatenate([observer_distances_np, pad_obs], axis=0)
-
-    # Aggregate candidates and compute hits
-    candidates = aggregate_candidates(
-        bvh_arrays,
-        segments_soa,
-        ray_origins_np,
-        ray_directions_np,
-        observer_distances_np,
-        max_candidates_per_ray=max_candidates_per_ray,
-    )
-    hits_soa = compute_overlap_hits_jax(
-        candidates, guard_arcmin=guard_arcmin, max_hits_per_ray=max_hits_per_ray
+    # Compute distances for all candidates (JIT-compiled)
+    distances = ray_segment_distances_jax(
+        batch.ray_origins,
+        batch.ray_directions,
+        batch.seg_starts,
+        batch.seg_ends,
+        batch.mask,
     )
 
-    # Trim hits from padded trailing rows if we padded
-    if (
-        fixed_num_rays is not None
-        and fixed_num_rays > orig_num
-        and hits_soa.num_hits > 0
-    ):
-        mask = hits_soa.det_indices < jax.numpy.asarray(orig_num, dtype=jax.numpy.int32)
-        idx = jax.numpy.nonzero(mask, size=hits_soa.num_hits)[0]
-        hits_soa = HitsSOA(
-            det_indices=hits_soa.det_indices[idx],
-            orbit_indices=hits_soa.orbit_indices[idx],
-            seg_ids=hits_soa.seg_ids[idx],
-            leaf_ids=hits_soa.leaf_ids[idx],
-            distances_au=hits_soa.distances_au[idx],
-        )
+    # Compute dynamic guard band: θ * max(r_mid, d_obs)
+    # Broadcast observer distances to match candidate shape
+    d_obs_expanded = batch.observer_distances[:, None]  # (B, 1)
+    max_distances = theta_guard * jnp.maximum(batch.r_mids, d_obs_expanded)
 
-    # Convert to quivr table for this batch
-    det_ids = rays.det_id.to_pylist()
-    batch_hits = hits_soa_to_overlap_hits(hits_soa, det_ids, orbit_mapping)
-    return batch_hits
+    # Apply guard band filter
+    valid_hits = batch.mask & (distances <= max_distances)
 
+    # Sort candidates by distance within each ray and optionally take top-K per ray
+    B = batch.batch_size
+    K = batch.max_candidates
+    distances_valid = jnp.where(valid_hits, distances, jnp.inf)
 
-# Ray remote wrapper over the same worker
-query_bvh_worker_remote = ray.remote(query_bvh_worker)
+    take_k = K if max_hits_per_ray is None else int(max_hits_per_ray)
+    # Order candidate indices by ascending distance per ray
+    order = jnp.argsort(distances_valid, axis=1)
+    ordered_cands = order[:, :take_k]
+    ordered_dists = jnp.take_along_axis(distances_valid, ordered_cands, axis=1)
+    valid_top = jnp.isfinite(ordered_dists)
+
+    # Flatten per-ray selections, keeping only finite distances
+    rows = jnp.repeat(jnp.arange(B)[:, None], take_k, axis=1)
+    flat_rows = rows.reshape(-1)
+    flat_cands = ordered_cands.reshape(-1)
+    flat_valid = valid_top.reshape(-1)
+
+    keep_rows = flat_rows[flat_valid]
+    keep_cands = flat_cands[flat_valid]
+
+    if keep_rows.size == 0:
+        return HitsSOA.empty()
+
+    # Extract hit data in sorted order per ray
+    hit_ray_indices = batch.ray_indices[keep_rows]
+    hit_orbit_indices = batch.orbit_indices[keep_rows, keep_cands]
+    hit_seg_ids = batch.seg_ids[keep_rows, keep_cands]
+    hit_leaf_ids = batch.leaf_ids[keep_rows, keep_cands]
+    hit_distances = distances[keep_rows, keep_cands]
+
+    return HitsSOA(
+        det_indices=hit_ray_indices,
+        orbit_indices=hit_orbit_indices,
+        seg_ids=hit_seg_ids,
+        leaf_ids=hit_leaf_ids,
+        distances_au=hit_distances,
+    )
 
 
 def query_bvh(
@@ -207,7 +335,7 @@ def geometric_overlap_jax(
     from .bvh import build_bvh_index_from_segments
 
     index = build_bvh_index_from_segments(segments, max_leaf_size=max_leaf_size)
-    return query_bvh_worker_index(
+    return query_bvh_worker(
         index,
         rays,
         guard_arcmin=guard_arcmin,
@@ -215,7 +343,7 @@ def geometric_overlap_jax(
     )
 
 
-def query_bvh_worker_index(
+def query_bvh_worker(
     index: BVHIndex,
     rays: ObservationRays,
     *,
@@ -250,7 +378,7 @@ def query_bvh_worker_index(
         observer_distances_np,
         max_candidates_per_ray=max_candidates_per_ray,
     )
-    hits_soa = compute_overlap_hits_jax(
+    hits_soa = compute_overlap_hits(
         candidates, guard_arcmin=guard_arcmin, max_hits_per_ray=max_hits_per_ray
     )
 
@@ -274,7 +402,7 @@ def query_bvh_worker_index(
     return hits_soa_to_overlap_hits(hits_soa, det_ids, orbit_mapping)
 
 
-query_bvh_worker_index_remote = ray.remote(query_bvh_worker_index)
+query_bvh_worker_remote = ray.remote(query_bvh_worker)
 
 
 def query_bvh_index(
@@ -292,7 +420,7 @@ def query_bvh_index(
         for start in range(0, len(rays), batch_size):
             end = min(start + batch_size, len(rays))
             results.append(
-                query_bvh_worker_index(
+                query_bvh_worker(
                     index,
                     rays[start:end],
                     guard_arcmin=guard_arcmin,
@@ -311,7 +439,7 @@ def query_bvh_index(
     max_active = max(1, int(1.5 * max_processes))
     for start in range(0, len(rays), batch_size):
         end = min(start + batch_size, len(rays))
-        fut = query_bvh_worker_index_remote.remote(
+        fut = query_bvh_worker_remote.remote(
             index_ref,
             rays[start:end],
             guard_arcmin=guard_arcmin,
@@ -382,7 +510,7 @@ def benchmark_jax_vs_legacy(
     # Warmup JAX (compile kernels)
     logger.info("Warming up JAX kernels...")
     for _ in range(warmup_trials):
-        _ = query_bvh_worker_index(index, rays, guard_arcmin)
+        _ = query_bvh_worker(index, rays, guard_arcmin)
 
     # Benchmark JAX
     jax_times = []

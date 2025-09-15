@@ -128,7 +128,7 @@ def test_bvhindex_orbit_mapping_consistency_with_shuffle():
     expected = np.asarray([id_to_idx[seg_orbit_ids[row]] for row in np.asarray(index.prims.segment_row_index)], dtype=np.int32)
 
     # Build BVHArrays and ensure aggregator can derive orbit indices from segments
-    from adam_core.geometry.bvh_query import query_bvh_worker_index
+    from adam_core.geometry.bvh_query import query_bvh_worker
     # No rays necessary here; just ensure no exceptions when building arrays
     arrays = index.to_bvh_arrays()
     assert arrays.num_primitives == len(index.prims)
