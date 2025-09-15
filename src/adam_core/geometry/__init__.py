@@ -15,38 +15,33 @@ from .aggregator import *
 from .anomaly import AnomalyLabels
 from .anomaly_kernels import *
 from .anomaly_labeling import *
-from .anomaly_remote import *
 from .bvh import *
 from .clock_gating import *
 from .jax_kernels import *
 
 # Define canonical API that routes to JAX implementations
-from .jax_overlap import *
-from .jax_overlap import geometric_overlap_jax as geometric_overlap
-from .jax_overlap import query_bvh_jax as query_bvh
-from .jax_remote import *
-from .jax_remote import query_bvh_parallel_jax as query_bvh_parallel
+from .bvh_query import *
+from .bvh_query import geometric_overlap_jax as geometric_overlap
+from .bvh_query import query_bvh, query_bvh_index  # unified entrypoints
 from .jax_types import *
 
 # Import OverlapHits from overlap module
 from .overlap import OverlapHits
 from .projection import *
-from .sharded_query import *
-from .sharded_query_ray import *
-from .sharding import *
-from .sharding_types import *
+## Sharding is being removed; stop exporting sharded modules
 
 __all__ = [
-    # BVH construction and persistence
-    "BVHShard",
-    "build_bvh",
-    "save_bvh",
-    "load_bvh",
+    # BVHIndex API (quivr/parquet)
+    # Monolithic BVHIndex API (quivr/parquet)
+    "BVHIndex",
+    "BVHNodes",
+    "BVHPrimitives",
+    "build_bvh_index_from_segments",
+    "query_bvh_index",
     # Public API (JAX-backed by default)
     "OverlapHits",
     "AnomalyLabels",
     "query_bvh",
-    "query_bvh_parallel",
     "geometric_overlap",
     # Clock gating
     "ClockGateConfig",
@@ -72,7 +67,7 @@ __all__ = [
     "save_segments_soa",
     "load_segments_soa",
     # Adapters
-    "bvh_shard_to_arrays",
+    # shard adapters removed
     "segments_to_soa",
     "rays_to_arrays",
     # Conversions
@@ -87,27 +82,14 @@ __all__ = [
     # JAX kernels
     "ray_segment_distances_jax",
     "compute_overlap_hits_jax",
-    # JAX explicit API
-    "query_bvh_jax",
+    # JAX explicit API (kept for power users)
     "geometric_overlap_jax",
     "benchmark_jax_vs_legacy",
-    # Ray remote functions
-    "process_ray_batch_remote",
-    "query_bvh_parallel_jax",
-    # Ray anomaly labeling
-    "process_anomaly_batch_remote",
-    # Sharding
-    "ShardMeta",
-    "ShardManifest",
-    "ShardData",
-    "build_bvh_shards",
-    "save_shard",
-    "save_manifest",
-    "load_shard",
-    "estimate_shard_bytes",
-    # Sharded query
-    "query_manifest_local",
-    "query_manifest_ray",
-    "estimate_query_memory",
-    "estimate_ray_query_resources",
+    # Monolithic BVHIndex API (quivr/parquet)
+    "BVHIndex",
+    "BVHNodes",
+    "BVHPrimitives",
+    "query_bvh_index",
+    "build_bvh_index_from_segments",
+    "build_bvh_index",
 ]

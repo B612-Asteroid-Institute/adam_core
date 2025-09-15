@@ -89,8 +89,7 @@ class BVHArrays:
     prim_count: jax.Array  # int32[num_nodes] (0 for internal nodes)
 
     # Primitive arrays (parallel, length = total primitives)
-    prim_row_index: jax.Array  # int32[num_primitives] - segment row lookup
-    orbit_id_index: jax.Array  # int32[num_primitives] - compact orbit indices
+    prim_row_index: jax.Array  # int32[num_primitives] - segment row lookup (alias of segment_row_index in BVHPrimitives)
     prim_seg_ids: jax.Array  # int32[num_primitives] - segment IDs
 
     @property
@@ -105,7 +104,7 @@ class BVHArrays:
 
     def get_leaf_primitives(
         self, node_idx: int
-    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+    ) -> tuple[jax.Array, jax.Array]:
         """
         Get primitive indices for a leaf node.
 
@@ -128,13 +127,11 @@ class BVHArrays:
             return (
                 jnp.array([], dtype=jnp.int32),
                 jnp.array([], dtype=jnp.int32),
-                jnp.array([], dtype=jnp.int32),
             )
 
         slice_end = first + count
         return (
             self.prim_row_index[first:slice_end],
-            self.orbit_id_index[first:slice_end],
             self.prim_seg_ids[first:slice_end],
         )
 
@@ -150,7 +147,6 @@ class BVHArrays:
         assert self.prim_count.shape == (n_nodes,)
 
         n_prims = self.num_primitives
-        assert self.orbit_id_index.shape == (n_prims,)
         assert self.prim_seg_ids.shape == (n_prims,)
 
         # Check dtypes
@@ -162,7 +158,6 @@ class BVHArrays:
         assert self.first_prim.dtype == jnp.int32
         assert self.prim_count.dtype == jnp.int32
         assert self.prim_row_index.dtype == jnp.int32
-        assert self.orbit_id_index.dtype == jnp.int32
         assert self.prim_seg_ids.dtype == jnp.int32
 
 
@@ -433,7 +428,6 @@ jax.tree_util.register_pytree_node(
             bvh.first_prim,
             bvh.prim_count,
             bvh.prim_row_index,
-            bvh.orbit_id_index,
             bvh.prim_seg_ids,
         ),
         None,

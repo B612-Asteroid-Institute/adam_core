@@ -9,140 +9,378 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+import quivr as qv
+from quivr import concatenate
+from ..utils.iter import _iterate_chunk_indices
+from ..orbits.polyline import sample_ellipse_adaptive, compute_segment_aabbs
+from ..ray_cluster import initialize_use_ray
+import ray
 
 import numpy as np
 import numpy.typing as npt
 
 from ..orbits.polyline import OrbitPolylineSegments
+from ..orbits.orbits import Orbits
+from .jax_types import BVHArrays
 
 __all__ = [
-    "BVHShard",
-    "build_bvh",
-    "save_bvh",
-    "load_bvh",
+    "BVHNodes",
+    "BVHPrimitives",
+    "BVHIndex",
+    "build_bvh_index_from_segments",
+    "build_bvh_index",
 ]
 
 logger = logging.getLogger(__name__)
 
 
-class BVHShard:
+class BVHNodes(qv.Table):
     """
-    A bounding volume hierarchy for efficient ray-segment intersection queries.
+    Quivr table representing BVH nodes for a shard.
+    """
 
-    This class represents a binary tree of axis-aligned bounding boxes (AABBs)
-    built over a collection of orbit segments. The tree enables logarithmic-time
-    queries for finding segments that potentially intersect with a given ray.
+    nodes_min_x = qv.Float64Column()
+    nodes_min_y = qv.Float64Column()
+    nodes_min_z = qv.Float64Column()
+    nodes_max_x = qv.Float64Column()
+    nodes_max_y = qv.Float64Column()
+    nodes_max_z = qv.Float64Column()
 
-    Attributes
-    ----------
-    nodes_min : np.ndarray (N, 3)
-        Minimum bounds of each BVH node
-    nodes_max : np.ndarray (N, 3)
-        Maximum bounds of each BVH node
-    left_child : np.ndarray (N,)
-        Index of left child node (-1 for leaves)
-    right_child : np.ndarray (N,)
-        Index of right child node (-1 for leaves)
-    first_prim : np.ndarray (N,)
-        Index of first primitive in leaf node (-1 for internal nodes)
-    prim_count : np.ndarray (N,)
-        Number of primitives in leaf node (0 for internal nodes)
-    prim_orbit_ids : list[str]
-        Orbit IDs for each primitive (parallel to flattened segments)
-    prim_seg_ids : np.ndarray (M,)
-        Segment IDs for each primitive
-    prim_row_index : np.ndarray (M,)
-        Row indices into original segments table for O(1) lookup
+    left_child = qv.Int32Column()
+    right_child = qv.Int32Column()
+
+    first_prim = qv.Int32Column()
+    prim_count = qv.Int32Column()
+
+    # Attributes
+    shard_id = qv.StringAttribute(default="")
+    version = qv.StringAttribute(default="1.0.0")
+    float_dtype = qv.StringAttribute(default="float64")
+
+
+class BVHPrimitives(qv.Table):
+    """
+    Quivr table representing BVH primitive arrays for a shard.
+    """
+
+    segment_row_index = qv.Int32Column()
+    prim_seg_ids = qv.Int32Column()
+
+    # Attributes
+    shard_id = qv.StringAttribute(default="")
+    version = qv.StringAttribute(default="1.0.0")
+
+
+class BVHIndex:
+    """
+    Convenience wrapper bundling segments, nodes, and primitives for a BVH index.
+
+    Provides simple parquet IO helpers consistent with other quivr table patterns.
     """
 
     def __init__(
         self,
-        nodes_min: npt.NDArray[np.float64],
-        nodes_max: npt.NDArray[np.float64],
-        left_child: npt.NDArray[np.int32],
-        right_child: npt.NDArray[np.int32],
-        first_prim: npt.NDArray[np.int32],
-        prim_count: npt.NDArray[np.int32],
-        prim_orbit_ids: list[str],
-        prim_seg_ids: npt.NDArray[np.int32],
-        prim_row_index: npt.NDArray[np.int32],
-    ):
-        self.nodes_min = nodes_min
-        self.nodes_max = nodes_max
-        self.left_child = left_child
-        self.right_child = right_child
-        self.first_prim = first_prim
-        self.prim_count = prim_count
-        self.prim_orbit_ids = prim_orbit_ids
-        self.prim_seg_ids = prim_seg_ids
-        self.prim_row_index = prim_row_index
+        segments: "OrbitPolylineSegments",
+        nodes: BVHNodes,
+        prims: BVHPrimitives,
+    ) -> None:
+        self.segments = segments
+        self.nodes = nodes
+        self.prims = prims
 
-        # Validate structure
-        assert len(nodes_min) == len(nodes_max) == len(left_child) == len(right_child)
-        assert len(nodes_min) == len(first_prim) == len(prim_count)
-        assert len(prim_orbit_ids) == len(prim_seg_ids) == len(prim_row_index)
+    @classmethod
+    def from_parquet(cls, directory: str) -> "BVHIndex":
+        from ..orbits.polyline import OrbitPolylineSegments
 
-    @property
-    def num_nodes(self) -> int:
-        """Number of nodes in the BVH."""
-        return len(self.nodes_min)
+        # Standard file names within the index directory
+        seg_path = f"{directory.rstrip('/')}/segments.parquet"
+        nodes_path = f"{directory.rstrip('/')}/bvh_nodes.parquet"
+        prims_path = f"{directory.rstrip('/')}/bvh_prims.parquet"
 
-    @property
-    def num_primitives(self) -> int:
-        """Number of primitives (segments) in the BVH."""
-        return len(self.prim_orbit_ids)
+        segments = OrbitPolylineSegments.from_parquet(seg_path)
+        nodes = BVHNodes.from_parquet(nodes_path)
+        prims = BVHPrimitives.from_parquet(prims_path)
+        return cls(segments=segments, nodes=nodes, prims=prims)
 
-    def is_leaf(self, node_idx: int) -> bool:
-        """Check if a node is a leaf."""
-        return self.left_child[node_idx] == -1
+    def to_parquet(self, directory: str) -> None:
+        # Standard file names within the index directory
+        seg_path = f"{directory.rstrip('/')}/segments.parquet"
+        nodes_path = f"{directory.rstrip('/')}/bvh_nodes.parquet"
+        prims_path = f"{directory.rstrip('/')}/bvh_prims.parquet"
 
-    def get_leaf_primitives(
-        self, node_idx: int
-    ) -> tuple[list[str], npt.NDArray[np.int32], npt.NDArray[np.int32]]:
+        self.segments.to_parquet(seg_path)
+        self.nodes.to_parquet(nodes_path)
+        self.prims.to_parquet(prims_path)
+
+    # ----- Convenience helpers -----
+    def get_nodes_min_max_numpy(self) -> tuple[np.ndarray, np.ndarray]:
         """
-        Get primitives contained in a leaf node.
-
-        Parameters
-        ----------
-        node_idx : int
-            Index of the leaf node
-
-        Returns
-        -------
-        orbit_ids : list[str]
-            Orbit IDs of primitives in this leaf
-        seg_ids : np.ndarray
-            Segment IDs of primitives in this leaf
-        row_indices : np.ndarray
-            Row indices into original segments table for O(1) lookup
+        Return stacked node AABB arrays as NumPy with shape (num_nodes, 3).
         """
-        if not self.is_leaf(node_idx):
-            raise ValueError(f"Node {node_idx} is not a leaf")
+        nodes_min = np.column_stack(
+            [
+                np.asarray(self.nodes.nodes_min_x),
+                np.asarray(self.nodes.nodes_min_y),
+                np.asarray(self.nodes.nodes_min_z),
+            ]
+        )
+        nodes_max = np.column_stack(
+            [
+                np.asarray(self.nodes.nodes_max_x),
+                np.asarray(self.nodes.nodes_max_y),
+                np.asarray(self.nodes.nodes_max_z),
+            ]
+        )
+        return nodes_min, nodes_max
 
-        first = self.first_prim[node_idx]
-        count = self.prim_count[node_idx]
+    def to_bvh_arrays(self) -> BVHArrays:
+        """
+        Materialize a BVHArrays view from Quivr tables.
 
-        if first == -1 or count == 0:
-            return [], np.array([], dtype=np.int32), np.array([], dtype=np.int32)
+        Computes is_leaf from child pointers to avoid redundant state.
+        """
+        nodes_min, nodes_max = self.get_nodes_min_max_numpy()
 
-        orbit_ids = self.prim_orbit_ids[first : first + count]
-        seg_ids = self.prim_seg_ids[first : first + count]
-        row_indices = self.prim_row_index[first : first + count]
+        left_child = np.asarray(self.nodes.left_child, dtype=np.int32)
+        right_child = np.asarray(self.nodes.right_child, dtype=np.int32)
+        is_leaf = (left_child == -1) if left_child.size else np.array([], dtype=bool)
 
-        return orbit_ids, seg_ids, row_indices
+        first_prim = np.asarray(self.nodes.first_prim, dtype=np.int32)
+        prim_count = np.asarray(self.nodes.prim_count, dtype=np.int32)
+
+        prim_row_index = np.asarray(self.prims.segment_row_index, dtype=np.int32)
+        prim_seg_ids = np.asarray(self.prims.prim_seg_ids, dtype=np.int32)
+
+        arrays = BVHArrays(
+            nodes_min=nodes_min,
+            nodes_max=nodes_max,
+            left_child=left_child,
+            right_child=right_child,
+            is_leaf=is_leaf,
+            first_prim=np.asarray(first_prim, dtype=np.int32),
+            prim_count=np.asarray(prim_count, dtype=np.int32),
+            prim_row_index=prim_row_index,
+            prim_seg_ids=prim_seg_ids,
+        )
+        # Validate structure early to catch inconsistencies
+        arrays.validate_structure()
+        return arrays
+
+    def validate(self) -> None:
+        """
+        Validate invariants across nodes and primitives.
+        """
+        n_nodes = len(self.nodes)
+        n_prims = len(self.prims)
+
+        # Basic length checks
+        assert all(
+            len(col) == n_nodes
+            for col in [
+                self.nodes.nodes_min_x,
+                self.nodes.nodes_min_y,
+                self.nodes.nodes_min_z,
+                self.nodes.nodes_max_x,
+                self.nodes.nodes_max_y,
+                self.nodes.nodes_max_z,
+                self.nodes.left_child,
+                self.nodes.right_child,
+                self.nodes.first_prim,
+                self.nodes.prim_count,
+            ]
+        ), "Node columns must have consistent length"
+
+        assert all(
+            len(col) == n_prims
+            for col in [
+                self.prims.segment_row_index,
+                self.prims.prim_seg_ids,
+            ]
+        ), "Primitive columns must have consistent length"
+
+        # Leaf status derived from children
+        left_child = np.asarray(self.nodes.left_child, dtype=np.int32)
+        right_child = np.asarray(self.nodes.right_child, dtype=np.int32)
+        is_leaf = left_child == -1
+        # If a node is a leaf (left -1), right must be -1 too
+        if np.any(is_leaf):
+            assert np.all(right_child[is_leaf] == -1)
+
+        # first_prim/prim_count ranges within primitive arrays
+        first = np.asarray(self.nodes.first_prim, dtype=np.int32)
+        count = np.asarray(self.nodes.prim_count, dtype=np.int32)
+        total = len(self.prims.segment_row_index)
+
+        # Internal nodes must have count == 0 and first == -1
+        internal_mask = ~is_leaf
+        if np.any(internal_mask):
+            assert np.all(count[internal_mask] == 0)
+            assert np.all(first[internal_mask] == -1)
+
+        # Leaf nodes must have valid ranges when count > 0
+        leaf_mask = is_leaf
+        with_prims = leaf_mask & (count > 0)
+        if np.any(with_prims):
+            assert np.all(first[with_prims] >= 0)
+            assert np.all(first[with_prims] + count[with_prims] <= total)
 
 
-def _compute_aabb(
-    segments: OrbitPolylineSegments,
+def orbits_to_segments_worker(
+    orbits: Orbits,
+    max_chord_arcmin: float = 2.0,
+    guard_arcmin: float = 1.0,
+) -> OrbitPolylineSegments:
+    _, segs = sample_ellipse_adaptive(orbits, max_chord_arcmin=max_chord_arcmin)
+    segs = compute_segment_aabbs(segs, guard_arcmin=guard_arcmin)
+    return segs
+
+
+@ray.remote
+def orbits_segments_worker_remote(
+    orbits: Orbits,
+    max_chord_arcmin: float = 2.0,
+    guard_arcmin: float = 1.0,
+) -> OrbitPolylineSegments:
+    return orbits_to_segments_worker(orbits, max_chord_arcmin=max_chord_arcmin, guard_arcmin=guard_arcmin)
+
+
+
+def build_bvh_index(
+    orbits: Orbits,
+    *,
+    max_chord_arcmin: float = 2.0,
+    guard_arcmin: float = 1.0,
+    max_leaf_size: int = 8,
+    chunk_size_orbits: int = 1000,
+    max_processes: int = 0,
+) -> BVHIndex:
+    """
+    High-level builder with orbit chunking: Orbits → segments → AABBs → BVHIndex.
+
+    Chunks the input orbits to bound peak memory during sampling/AABB computation.
+    """
+
+    num_orbits = len(orbits)
+    if num_orbits == 0:
+        return BVHIndex(
+            segments=OrbitPolylineSegments.empty(),
+            nodes=BVHNodes.empty(),
+            prims=BVHPrimitives.empty(),
+        )
+
+    chunk_definitions: list[tuple[int, int]] = []
+    for chunk in _iterate_chunk_indices(orbits, chunk_size_orbits):
+        chunk_definitions.append(chunk)
+
+    segments_chunks: list[OrbitPolylineSegments] = []
+
+    if max_processes is None or max_processes <= 1:
+        for start, end in chunk_definitions:
+            segs = orbits_to_segments_worker(
+                orbits[start:end],
+                max_chord_arcmin=max_chord_arcmin,
+                guard_arcmin=guard_arcmin,
+            )
+            segments_chunks.append(segs)
+    else:
+        initialize_use_ray(num_cpus=max_processes)
+        futures: list[ray.ObjectRef] = []
+        for start, end in chunk_definitions:
+            future = orbits_segments_worker_remote.remote(
+                orbits[start:end],
+                max_chord_arcmin=max_chord_arcmin,
+                guard_arcmin=guard_arcmin,
+            )
+            futures.append(future)
+            if len(futures) >= max_processes * 1.5:
+                finished, futures = ray.wait(futures, num_returns=1)
+                segments_chunks.append(ray.get(finished[0]))
+        while futures:
+            finished, futures = ray.wait(futures, num_returns=1)
+            segments_chunks.append(ray.get(finished[0]))
+
+
+    # Concatenate all segments (defragment into a single contiguous table)
+    segments_all = (
+        concatenate(segments_chunks, defrag=True)
+        if segments_chunks
+        else segments_chunks[0]
+    )
+
+    # Build BVH over all segments
+    return build_bvh_index_from_segments(segments_all, max_leaf_size=max_leaf_size)
+
+
+def build_bvh_index_from_segments(
+    segments: "OrbitPolylineSegments", max_leaf_size: int = 8
+) -> BVHIndex:
+    """
+    Build a monolithic BVHIndex from polyline segments.
+    """
+    # Internal array-based builder
+    (
+        nodes_min_arr,
+        nodes_max_arr,
+        left_child_arr,
+        right_child_arr,
+        first_prim_arr,
+        prim_count_arr,
+        prim_orbit_ids,
+        prim_seg_ids,
+        prim_row_indices,
+    ) = _build_bvh_arrays(segments, max_leaf_size=max_leaf_size)
+
+    nodes = BVHNodes.from_kwargs(
+        nodes_min_x=(
+            nodes_min_arr[:, 0] if len(nodes_min_arr) else np.array([], dtype=float)
+        ),
+        nodes_min_y=(
+            nodes_min_arr[:, 1] if len(nodes_min_arr) else np.array([], dtype=float)
+        ),
+        nodes_min_z=(
+            nodes_min_arr[:, 2] if len(nodes_min_arr) else np.array([], dtype=float)
+        ),
+        nodes_max_x=(
+            nodes_max_arr[:, 0] if len(nodes_max_arr) else np.array([], dtype=float)
+        ),
+        nodes_max_y=(
+            nodes_max_arr[:, 1] if len(nodes_max_arr) else np.array([], dtype=float)
+        ),
+        nodes_max_z=(
+            nodes_max_arr[:, 2] if len(nodes_max_arr) else np.array([], dtype=float)
+        ),
+        left_child=left_child_arr,
+        right_child=right_child_arr,
+        first_prim=first_prim_arr,
+        prim_count=prim_count_arr,
+        shard_id="index",
+    )
+
+    prims = BVHPrimitives.from_kwargs(
+        segment_row_index=prim_row_indices,
+        prim_seg_ids=prim_seg_ids,
+        shard_id="index",
+    )
+
+    return BVHIndex(segments=segments, nodes=nodes, prims=prims)
+
+
+def _compute_aabb_from_arrays(
+    min_x: npt.NDArray[np.float64],
+    min_y: npt.NDArray[np.float64],
+    min_z: npt.NDArray[np.float64],
+    max_x: npt.NDArray[np.float64],
+    max_y: npt.NDArray[np.float64],
+    max_z: npt.NDArray[np.float64],
     indices: Optional[npt.NDArray[np.int32]] = None,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
-    Compute axis-aligned bounding box for a set of segments.
+    Compute axis-aligned bounding box for a set of segments using pre-extracted arrays.
 
     Parameters
     ----------
-    segments : OrbitPolylineSegments
-        Segments to bound
+    min_x, min_y, min_z, max_x, max_y, max_z : np.ndarray
+        Arrays containing per-segment AABB bounds
     indices : np.ndarray, optional
         Indices of segments to include (if None, use all)
 
@@ -153,24 +391,29 @@ def _compute_aabb(
     aabb_max : np.ndarray (3,)
         Maximum bounds
     """
-    if indices is not None:
+    if indices is None:
+        if min_x.size == 0:
+            return np.full(3, np.inf), np.full(3, -np.inf)
+        sel_min_x = min_x
+        sel_min_y = min_y
+        sel_min_z = min_z
+        sel_max_x = max_x
+        sel_max_y = max_y
+        sel_max_z = max_z
+    else:
         if len(indices) == 0:
             return np.full(3, np.inf), np.full(3, -np.inf)
-        segments = segments.take(indices)
+        sel_min_x = min_x[indices]
+        sel_min_y = min_y[indices]
+        sel_min_z = min_z[indices]
+        sel_max_x = max_x[indices]
+        sel_max_y = max_y[indices]
+        sel_max_z = max_z[indices]
 
-    if len(segments) == 0:
-        return np.full(3, np.inf), np.full(3, -np.inf)
-
-    # Use precomputed AABBs from segments
-    min_x = np.min(segments.aabb_min_x.to_numpy())
-    min_y = np.min(segments.aabb_min_y.to_numpy())
-    min_z = np.min(segments.aabb_min_z.to_numpy())
-
-    max_x = np.max(segments.aabb_max_x.to_numpy())
-    max_y = np.max(segments.aabb_max_y.to_numpy())
-    max_z = np.max(segments.aabb_max_z.to_numpy())
-
-    return np.array([min_x, min_y, min_z]), np.array([max_x, max_y, max_z])
+    return (
+        np.array([sel_min_x.min(), sel_min_y.min(), sel_min_z.min()]),
+        np.array([sel_max_x.max(), sel_max_y.max(), sel_max_z.max()]),
+    )
 
 
 def _compute_centroids(segments: OrbitPolylineSegments) -> npt.NDArray[np.float64]:
@@ -207,16 +450,21 @@ def _compute_centroids(segments: OrbitPolylineSegments) -> npt.NDArray[np.float6
 
 
 def _build_bvh_recursive(
-    segments: OrbitPolylineSegments,
     indices: npt.NDArray[np.int32],
-    centroids: npt.NDArray[np.float64],
+    start: int,
+    end: int,
+    min_x: npt.NDArray[np.float64],
+    min_y: npt.NDArray[np.float64],
+    min_z: npt.NDArray[np.float64],
+    max_x: npt.NDArray[np.float64],
+    max_y: npt.NDArray[np.float64],
+    max_z: npt.NDArray[np.float64],
     nodes_min: list[npt.NDArray[np.float64]],
     nodes_max: list[npt.NDArray[np.float64]],
     left_child: list[int],
     right_child: list[int],
     first_prim: list[int],
     prim_count: list[int],
-    leaf_indices_by_node: list[list[int]],
     max_leaf_size: int = 8,
 ) -> int:
     """
@@ -246,69 +494,87 @@ def _build_bvh_recursive(
     """
     node_idx = len(nodes_min)
 
-    # Compute AABB for this node
-    aabb_min, aabb_max = _compute_aabb(segments, indices)
+    # Compute AABB for this node using pre-extracted arrays to avoid Arrow overhead
+    aabb_min, aabb_max = _compute_aabb_from_arrays(
+        min_x, min_y, min_z, max_x, max_y, max_z, indices[start:end]
+    )
     nodes_min.append(aabb_min)
     nodes_max.append(aabb_max)
 
     # Check if we should create a leaf
-    if len(indices) <= max_leaf_size:
+    count_here = end - start
+    if count_here <= max_leaf_size:
         # Create leaf node
         left_child.append(-1)
         right_child.append(-1)
-        # Defer packing of primitives until after the full tree is built.
-        first_prim.append(-1)
-        prim_count.append(len(indices))
-        # Record exact indices for this leaf
-        leaf_indices_by_node.append(indices.tolist())
+        # Temporarily store range in the global indices array; will repoint after packing
+        first_prim.append(start)
+        prim_count.append(count_here)
         return node_idx
 
     # Find best split axis (largest extent)
     extent = aabb_max - aabb_min
     split_axis = np.argmax(extent)
 
-    # Sort indices by centroid along split axis
-    axis_centroids = centroids[indices, split_axis]
-    sorted_order = np.argsort(axis_centroids)
-    sorted_indices = indices[sorted_order]
+    # Split indices by centroid along split axis using argpartition (O(n))
+    if split_axis == 0:
+        axis_centroids = (min_x + max_x) * 0.5
+    elif split_axis == 1:
+        axis_centroids = (min_y + max_y) * 0.5
+    else:
+        axis_centroids = (min_z + max_z) * 0.5
 
-    # Split at median
-    mid = len(sorted_indices) // 2
-    left_indices = sorted_indices[:mid]
-    right_indices = sorted_indices[mid:]
+    # Work on the subrange [start:end]
+    sub = indices[start:end]
+    sub_centroids = axis_centroids[sub]
+    mid = count_here // 2
+    part_order = np.argpartition(sub_centroids, mid)
+    # Reorder indices in place for this node's subrange
+    indices[start:end] = sub[part_order]
+    mid_idx = start + mid
 
     # Create internal node
     left_child.append(-1)  # Will be filled by recursive call
     right_child.append(-1)  # Will be filled by recursive call
     first_prim.append(-1)
     prim_count.append(0)
-    leaf_indices_by_node.append([])  # Placeholder for internal node
+    # Placeholder alignment for internal node
 
     # Recursively build children
     left_idx = _build_bvh_recursive(
-        segments,
-        left_indices,
-        centroids,
+        indices,
+        start,
+        mid_idx,
+        min_x,
+        min_y,
+        min_z,
+        max_x,
+        max_y,
+        max_z,
         nodes_min,
         nodes_max,
         left_child,
         right_child,
         first_prim,
         prim_count,
-        leaf_indices_by_node,
         max_leaf_size,
     )
     right_idx = _build_bvh_recursive(
-        segments,
-        right_indices,
-        centroids,
+        indices,
+        mid_idx,
+        end,
+        min_x,
+        min_y,
+        min_z,
+        max_x,
+        max_y,
+        max_z,
         nodes_min,
         nodes_max,
         left_child,
         right_child,
         first_prim,
         prim_count,
-        leaf_indices_by_node,
         max_leaf_size,
     )
 
@@ -319,50 +585,48 @@ def _build_bvh_recursive(
     return node_idx
 
 
-def build_bvh(
+def _build_bvh_arrays(
     segments: OrbitPolylineSegments,
     max_leaf_size: int = 8,
-) -> BVHShard:
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    list[str],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+]:
     """
-    Build a bounding volume hierarchy over orbit segments.
-
-    This function constructs a binary tree of axis-aligned bounding boxes
-    using a median split strategy. The resulting BVH enables efficient
-    ray-segment intersection queries.
-
-    Parameters
-    ----------
-    segments : OrbitPolylineSegments
-        Input segments with precomputed AABBs
-    max_leaf_size : int, default=8
-        Maximum number of primitives per leaf node
-
-    Returns
-    -------
-    bvh : BVHShard
-        Constructed BVH ready for queries
+    Build a BVH over orbit segments and return raw arrays (no object wrapper).
     """
     if len(segments) == 0:
-        return BVHShard(
-            nodes_min=np.empty((0, 3)),
-            nodes_max=np.empty((0, 3)),
-            left_child=np.empty(0, dtype=np.int32),
-            right_child=np.empty(0, dtype=np.int32),
-            first_prim=np.empty(0, dtype=np.int32),
-            prim_count=np.empty(0, dtype=np.int32),
-            prim_orbit_ids=[],
-            prim_seg_ids=np.empty(0, dtype=np.int32),
-            prim_row_index=np.empty(0, dtype=np.int32),
+        return (
+            np.empty((0, 3)),
+            np.empty((0, 3)),
+            np.empty(0, dtype=np.int32),
+            np.empty(0, dtype=np.int32),
+            np.empty(0, dtype=np.int32),
+            np.empty(0, dtype=np.int32),
+            [],
+            np.empty(0, dtype=np.int32),
+            np.empty(0, dtype=np.int32),
         )
 
-    # Validate that AABBs are computed
-    if np.any(np.isnan(segments.aabb_min_x.to_numpy())):
-        raise ValueError(
-            "Segments must have computed AABBs. Call compute_segment_aabbs() first."
-        )
+    # Validate that AABBs are computed (null-safe)
+    import pyarrow.compute as pc
+    if pc.any(pc.is_null(segments.aabb_min_x)).as_py():
+        raise ValueError("Segments must have computed AABBs. Call compute_segment_aabbs() first.")
 
-    # Compute centroids for splitting
-    centroids = _compute_centroids(segments)
+    # Pre-extract per-segment AABBs
+    min_x = segments.aabb_min_x.to_numpy()
+    min_y = segments.aabb_min_y.to_numpy()
+    min_z = segments.aabb_min_z.to_numpy()
+    max_x = segments.aabb_max_x.to_numpy()
+    max_y = segments.aabb_max_y.to_numpy()
+    max_z = segments.aabb_max_z.to_numpy()
 
     # Initialize node arrays
     nodes_min = []
@@ -371,21 +635,25 @@ def build_bvh(
     right_child = []
     first_prim = []
     prim_count = []
-    leaf_indices_by_node: list[list[int]] = []
 
     # Build BVH recursively
     indices = np.arange(len(segments), dtype=np.int32)
     root_idx = _build_bvh_recursive(
-        segments,
         indices,
-        centroids,
+        0,
+        int(len(indices)),
+        min_x,
+        min_y,
+        min_z,
+        max_x,
+        max_y,
+        max_z,
         nodes_min,
         nodes_max,
         left_child,
         right_child,
         first_prim,
         prim_count,
-        leaf_indices_by_node,
         max_leaf_size,
     )
 
@@ -399,7 +667,7 @@ def build_bvh(
     first_prim_arr = np.array(first_prim, dtype=np.int32)
     prim_count_arr = np.array(prim_count, dtype=np.int32)
 
-    # Pack leaf primitives contiguously
+    # Pack leaf primitives contiguously without storing per-leaf lists
     packed_prim_indices: list[int] = []
     node_first_offsets = np.full(len(nodes_min_arr), -1, dtype=np.int32)
     node_counts = np.array(prim_count_arr, dtype=np.int32)
@@ -407,11 +675,13 @@ def build_bvh(
     offset = 0
     for node_idx in range(len(nodes_min_arr)):
         if left_child_arr[node_idx] == -1:  # leaf
-            leaf_inds = leaf_indices_by_node[node_idx]
-            if leaf_inds:
+            count = int(node_counts[node_idx])
+            if count > 0:
+                start = int(first_prim_arr[node_idx])
                 node_first_offsets[node_idx] = offset
-                packed_prim_indices.extend(leaf_inds)
-                offset += len(leaf_inds)
+                slice_inds = indices[start : start + count]
+                packed_prim_indices.extend(slice_inds.tolist())
+                offset += count
 
     packed_prim_indices_arr = np.array(packed_prim_indices, dtype=np.int32)
 
@@ -426,116 +696,21 @@ def build_bvh(
     first_prim_arr = node_first_offsets
     prim_count_arr = node_counts
 
-    bvh = BVHShard(
-        nodes_min=nodes_min_arr,
-        nodes_max=nodes_max_arr,
-        left_child=left_child_arr,
-        right_child=right_child_arr,
-        first_prim=first_prim_arr,
-        prim_count=prim_count_arr,
-        prim_orbit_ids=prim_orbit_ids,
-        prim_seg_ids=prim_seg_ids,
-        prim_row_index=prim_row_indices,
-    )
-
     logger.info(
-        f"Built BVH with {bvh.num_nodes} nodes over {bvh.num_primitives} segments"
+        f"Built BVH with {len(nodes_min_arr)} nodes over {len(prim_orbit_ids)} segments"
     )
 
-    return bvh
-
-
-def save_bvh(bvh: BVHShard, filepath: str) -> None:
-    """
-    Save a BVH to disk for later loading with memory mapping.
-
-    This function saves all BVH arrays to a compressed .npz file that can be
-    efficiently loaded and memory-mapped for read-only access by multiple workers.
-
-    Parameters
-    ----------
-    bvh : BVHShard
-        BVH to save
-    filepath : str
-        Path to save the BVH file (should end with .npz)
-
-    Examples
-    --------
-    >>> bvh = build_bvh(segments)
-    >>> save_bvh(bvh, "orbit_bvh.npz")
-    """
-    import os
-
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-
-    # Save all BVH arrays to compressed npz file
-    np.savez_compressed(
-        filepath,
-        nodes_min=bvh.nodes_min,
-        nodes_max=bvh.nodes_max,
-        left_child=bvh.left_child,
-        right_child=bvh.right_child,
-        first_prim=bvh.first_prim,
-        prim_count=bvh.prim_count,
-        prim_orbit_ids=np.array(bvh.prim_orbit_ids, dtype="U"),  # Unicode string array
-        prim_seg_ids=bvh.prim_seg_ids,
-        prim_row_index=bvh.prim_row_index,
+    return (
+        nodes_min_arr,
+        nodes_max_arr,
+        left_child_arr,
+        right_child_arr,
+        first_prim_arr,
+        prim_count_arr,
+        prim_orbit_ids,
+        prim_seg_ids,
+        prim_row_indices,
     )
 
-    logger.info(f"Saved BVH with {bvh.num_nodes} nodes to {filepath}")
 
-
-def load_bvh(filepath: str, mmap_mode: Optional[str] = "r") -> BVHShard:
-    """
-    Load a BVH from disk with optional memory mapping.
-
-    This function loads a BVH from a .npz file created by save_bvh().
-    Memory mapping allows multiple processes to share the same BVH data
-    without duplicating it in memory.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to the BVH file (.npz)
-    mmap_mode : str, optional
-        Memory mapping mode for numpy arrays:
-        - 'r': read-only (default, recommended for workers)
-        - 'r+': read-write
-        - None: load into memory (no memory mapping)
-
-    Returns
-    -------
-    bvh : BVHShard
-        Loaded BVH ready for queries
-
-    Examples
-    --------
-    >>> bvh = load_bvh("orbit_bvh.npz", mmap_mode='r')  # Memory-mapped read-only
-    >>> bvh = load_bvh("orbit_bvh.npz", mmap_mode=None)  # Load into memory
-    """
-    if mmap_mode is not None:
-        # Load with memory mapping
-        data = np.load(filepath, mmap_mode=mmap_mode)
-    else:
-        # Load into memory
-        data = np.load(filepath)
-
-    # Reconstruct BVH from saved arrays
-    bvh = BVHShard(
-        nodes_min=data["nodes_min"],
-        nodes_max=data["nodes_max"],
-        left_child=data["left_child"],
-        right_child=data["right_child"],
-        first_prim=data["first_prim"],
-        prim_count=data["prim_count"],
-        prim_orbit_ids=data["prim_orbit_ids"].tolist(),  # Convert back to list
-        prim_seg_ids=data["prim_seg_ids"],
-        prim_row_index=data["prim_row_index"],
-    )
-
-    logger.info(
-        f"Loaded BVH with {bvh.num_nodes} nodes from {filepath} (mmap_mode={mmap_mode})"
-    )
-
-    return bvh
+## Removed legacy save/load stubs; BVHIndex parquet IO is canonical

@@ -81,6 +81,7 @@ test = [
     "pytest-mock",
     "pytest-xdist",
     "pytest",
+    "pytest-profiling",
     "isort",
     "mypy",
     "ruff",
