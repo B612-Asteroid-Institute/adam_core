@@ -20,16 +20,16 @@ import quivr as qv
 from ..observations.rays import ObservationRays
 from ..orbits.polyline import OrbitPolylineSegments
 from .anomaly import AnomalyLabels
-from .bvh import BVHShard
 from .jax_types import AnomalyLabelsSOA, BVHArrays, HitsSOA, OrbitIdMapping, SegmentsSOA
 from .overlap import OverlapHits
 
 __all__ = [
-    "bvh_shard_to_arrays",
-    "bvh_arrays_to_shard",
+    ## shard adapters removed; keep Quivr-first
     "segments_to_soa",
+    "segments_to_numpy_soa",
     "segments_soa_to_segments",
     "rays_to_arrays",
+    "rays_to_numpy_arrays",
     "hits_soa_to_overlap_hits",
     "overlap_hits_to_soa",
     "hits_soa_to_anomaly_labels_soa",
@@ -39,106 +39,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-def bvh_shard_to_arrays(
-    bvh: BVHShard, orbit_mapping: OrbitIdMapping, device: Optional[jax.Device] = None
-) -> BVHArrays:
-    """
-    Convert legacy BVHShard to JAX-native BVHArrays.
-
-    Parameters
-    ----------
-    bvh : BVHShard
-        Legacy BVH structure
-    orbit_mapping : OrbitIdMapping
-        Mapping to convert string orbit IDs to indices
-    device : jax.Device, optional
-        JAX device to place arrays on (default: CPU)
-
-    Returns
-    -------
-    BVHArrays
-        JAX-native BVH representation
-    """
-    # Convert orbit ID strings to compact indices
-    orbit_indices = orbit_mapping.map_to_indices(bvh.prim_orbit_ids)
-
-    # Compute is_leaf array for efficiency
-    is_leaf = bvh.left_child == -1
-
-    # Convert to JAX arrays (zero-copy from numpy where possible)
-    arrays = BVHArrays(
-        nodes_min=jnp.asarray(bvh.nodes_min),
-        nodes_max=jnp.asarray(bvh.nodes_max),
-        left_child=jnp.asarray(bvh.left_child),
-        right_child=jnp.asarray(bvh.right_child),
-        is_leaf=jnp.asarray(is_leaf),
-        first_prim=jnp.asarray(bvh.first_prim),
-        prim_count=jnp.asarray(bvh.prim_count),
-        prim_row_index=jnp.asarray(bvh.prim_row_index),
-        orbit_id_index=jnp.asarray(orbit_indices),
-        prim_seg_ids=jnp.asarray(bvh.prim_seg_ids),
-    )
-
-    # Move to specified device if requested
-    if device is not None:
-        arrays = jax.device_put(arrays, device)
-
-    arrays.validate_structure()
-    logger.debug(
-        f"Converted BVH with {arrays.num_nodes} nodes, {arrays.num_primitives} primitives"
-    )
-
-    return arrays
-
-
-def bvh_arrays_to_shard(
-    arrays: BVHArrays, orbit_ids: Optional[list[str]] = None
-) -> BVHShard:
-    """
-    Convert JAX-native BVHArrays back to legacy BVHShard.
-
-    Parameters
-    ----------
-    arrays : BVHArrays
-        JAX BVH arrays structure
-
-    Returns
-    -------
-    BVHShard
-        Legacy BVH structure
-    """
-    from .bvh import BVHShard
-
-    # Convert JAX arrays to numpy
-    nodes_min = np.array(arrays.nodes_min)
-    nodes_max = np.array(arrays.nodes_max)
-    left_child = np.array(arrays.left_child)
-    right_child = np.array(arrays.right_child)
-    first_prim = np.array(arrays.first_prim)
-    prim_count = np.array(arrays.prim_count)
-    prim_row_index = np.array(arrays.prim_row_index)
-
-    # Reconstruct per-primitive metadata
-    orbit_id_index = np.array(arrays.orbit_id_index)
-    if orbit_ids is not None and len(orbit_ids) > 0:
-        prim_orbit_ids = [orbit_ids[int(idx)] for idx in orbit_id_index]
-    else:
-        # Fallback to dummy IDs if orbit_ids not provided
-        prim_orbit_ids = [f"orbit_{int(idx)}" for idx in orbit_id_index]
-
-    prim_seg_ids = np.array(arrays.prim_seg_ids)
-
-    return BVHShard(
-        nodes_min=nodes_min,
-        nodes_max=nodes_max,
-        left_child=left_child,
-        right_child=right_child,
-        first_prim=first_prim,
-        prim_count=prim_count,
-        prim_orbit_ids=prim_orbit_ids,
-        prim_seg_ids=prim_seg_ids,
-        prim_row_index=prim_row_index,
-    )
+## (removed shard adapters; keep Quivr tables until kernel boundaries)
 
 
 def segments_to_soa(
@@ -174,28 +75,55 @@ def segments_to_soa(
     # Extract arrays with zero-copy where possible
     # PyArrow -> NumPy is zero-copy for compatible dtypes
     soa = SegmentsSOA(
-        x0=jnp.asarray(segments.x0.to_numpy(zero_copy_only=False)),
-        y0=jnp.asarray(segments.y0.to_numpy(zero_copy_only=False)),
-        z0=jnp.asarray(segments.z0.to_numpy(zero_copy_only=False)),
-        x1=jnp.asarray(segments.x1.to_numpy(zero_copy_only=False)),
-        y1=jnp.asarray(segments.y1.to_numpy(zero_copy_only=False)),
-        z1=jnp.asarray(segments.z1.to_numpy(zero_copy_only=False)),
-        r_mid_au=jnp.asarray(segments.r_mid_au.to_numpy(zero_copy_only=False)),
-        orbit_id_index=jnp.asarray(orbit_id_index_np),
+        x0=np.asarray(segments.x0.to_numpy(zero_copy_only=False)),
+        y0=np.asarray(segments.y0.to_numpy(zero_copy_only=False)),
+        z0=np.asarray(segments.z0.to_numpy(zero_copy_only=False)),
+        x1=np.asarray(segments.x1.to_numpy(zero_copy_only=False)),
+        y1=np.asarray(segments.y1.to_numpy(zero_copy_only=False)),
+        z1=np.asarray(segments.z1.to_numpy(zero_copy_only=False)),
+        r_mid_au=np.asarray(segments.r_mid_au.to_numpy(zero_copy_only=False)),
+        orbit_id_index=np.asarray(orbit_id_index_np),
     )
 
     # Include normals if requested and available
     if include_normals and hasattr(segments, "n_x"):
-        soa.n_x = jnp.asarray(segments.n_x.to_numpy(zero_copy_only=False))
-        soa.n_y = jnp.asarray(segments.n_y.to_numpy(zero_copy_only=False))
-        soa.n_z = jnp.asarray(segments.n_z.to_numpy(zero_copy_only=False))
-
-    # Move to specified device if requested
-    if device is not None:
-        soa = jax.device_put(soa, device)
+        soa.n_x = np.asarray(segments.n_x.to_numpy(zero_copy_only=False))
+        soa.n_y = np.asarray(segments.n_y.to_numpy(zero_copy_only=False))
+        soa.n_z = np.asarray(segments.n_z.to_numpy(zero_copy_only=False))
 
     soa.validate_structure()
     logger.debug(f"Converted {soa.num_segments} segments to SoA format")
+
+    return soa
+
+
+def segments_to_numpy_soa(
+    segments: OrbitPolylineSegments,
+    include_normals: bool = False,
+) -> SegmentsSOA:
+    """
+    Convert OrbitPolylineSegments to SegmentsSOA using NumPy arrays.
+    """
+    orbit_ids_list = segments.orbit_id.to_pylist()
+    unique_ids_in_order = list(dict.fromkeys(orbit_ids_list))
+    id_to_idx = {oid: i for i, oid in enumerate(unique_ids_in_order)}
+    orbit_id_index_np = np.array([id_to_idx[oid] for oid in orbit_ids_list], dtype=np.int32)
+
+    soa = SegmentsSOA(
+        x0=np.asarray(segments.x0.to_numpy(zero_copy_only=False)),
+        y0=np.asarray(segments.y0.to_numpy(zero_copy_only=False)),
+        z0=np.asarray(segments.z0.to_numpy(zero_copy_only=False)),
+        x1=np.asarray(segments.x1.to_numpy(zero_copy_only=False)),
+        y1=np.asarray(segments.y1.to_numpy(zero_copy_only=False)),
+        z1=np.asarray(segments.z1.to_numpy(zero_copy_only=False)),
+        r_mid_au=np.asarray(segments.r_mid_au.to_numpy(zero_copy_only=False)),
+        orbit_id_index=np.asarray(orbit_id_index_np),
+    )
+
+    if include_normals and hasattr(segments, "n_x"):
+        soa.n_x = np.asarray(segments.n_x.to_numpy(zero_copy_only=False))
+        soa.n_y = np.asarray(segments.n_y.to_numpy(zero_copy_only=False))
+        soa.n_z = np.asarray(segments.n_z.to_numpy(zero_copy_only=False))
 
     return soa
 
@@ -294,19 +222,34 @@ def rays_to_arrays(
         observer_distances[i] = np.linalg.norm(ray_origins[i])
 
     # Convert to JAX arrays
-    ray_origins_jax = jnp.asarray(ray_origins)
-    ray_directions_jax = jnp.asarray(ray_directions)
-    observer_distances_jax = jnp.asarray(observer_distances)
+    # Return NumPy arrays; JAX will convert at kernel boundary if needed
+    logger.debug(f"Converted {num_rays} rays to NumPy arrays")
 
-    # Move to specified device if requested
-    if device is not None:
-        ray_origins_jax = jax.device_put(ray_origins_jax, device)
-        ray_directions_jax = jax.device_put(ray_directions_jax, device)
-        observer_distances_jax = jax.device_put(observer_distances_jax, device)
+    return ray_origins, ray_directions, observer_distances
 
-    logger.debug(f"Converted {num_rays} rays to JAX arrays")
 
-    return ray_origins_jax, ray_directions_jax, observer_distances_jax
+def rays_to_numpy_arrays(
+    rays: ObservationRays,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Convert ObservationRays to NumPy arrays (host-side construction only).
+    """
+    num_rays = len(rays)
+    ray_origins = np.zeros((num_rays, 3), dtype=np.float64)
+    ray_directions = np.zeros((num_rays, 3), dtype=np.float64)
+    observer_distances = np.zeros(num_rays, dtype=np.float64)
+
+    for i in range(num_rays):
+        observer_coords = rays.observer[i]
+        ray_origins[i, 0] = observer_coords.x[0].as_py()
+        ray_origins[i, 1] = observer_coords.y[0].as_py()
+        ray_origins[i, 2] = observer_coords.z[0].as_py()
+        ray_directions[i, 0] = rays.u_x[i].as_py()
+        ray_directions[i, 1] = rays.u_y[i].as_py()
+        ray_directions[i, 2] = rays.u_z[i].as_py()
+        observer_distances[i] = np.linalg.norm(ray_origins[i])
+
+    return ray_origins, ray_directions, observer_distances
 
 
 def hits_soa_to_overlap_hits(

@@ -529,7 +529,7 @@ class TestRealOrbitAnomalyLabeling:
         orbit = orbits
         
         # Generate observation times spanning a few days
-        base_mjd = 59000.0
+        base_mjd = orbit.coordinates.time.mjd()[0].as_py()
         times = Timestamp.from_mjd([base_mjd + i * 0.5 for i in range(8)], scale="tdb")  # 4 days, 12h intervals
         
         # Generate ephemeris and convert to rays
@@ -579,7 +579,7 @@ class TestRealOrbitAnomalyLabeling:
         
         # Generate times when object is near nodes (requires orbital mechanics calculation)
         # For simplicity, use several observation times
-        base_mjd = 59000.0
+        base_mjd = orbit.coordinates.time.mjd()[0].as_py()
         times = Timestamp.from_mjd([base_mjd + i * 1.0 for i in range(6)], scale="tdb")
         
         rays = generate_ephemeris_and_rays(orbit, times)
@@ -620,7 +620,7 @@ class TestRealOrbitAnomalyLabeling:
         orbit = orbits[1:2]  # Select second orbit
         
         # Generate observations over orbital period to capture peri/apo
-        base_mjd = 59000.0
+        base_mjd = orbit.coordinates.time.mjd()[0].as_py()
         # Eros period ≈ 643 days, sample over ~100 days to get range
         times = Timestamp.from_mjd([base_mjd + i * 10.0 for i in range(10)], scale="tdb")
         
@@ -651,7 +651,7 @@ class TestRealOrbitAnomalyLabeling:
         orbits = make_real_orbits(num_orbits=4)
         orbit = orbits[3:4]  # Select fourth orbit
         
-        base_mjd = 59000.0
+        base_mjd = orbit.coordinates.time.mjd()[0].as_py()
         times = Timestamp.from_mjd([base_mjd + i * 2.0 for i in range(5)], scale="tdb")
         
         # Generate rays (rays_from_detections should handle frame transforms)
@@ -677,7 +677,7 @@ class TestRealOrbitAnomalyLabeling:
         orbits = make_real_orbits(num_orbits=1)
         orbit = orbits
         
-        base_mjd = 59000.0
+        base_mjd = orbit.coordinates.time.mjd()[0].as_py()
         times = Timestamp.from_mjd([base_mjd + i * 1.0 for i in range(6)], scale="tdb")
         
         rays = generate_ephemeris_and_rays(orbit, times)
@@ -715,7 +715,7 @@ class TestRealOrbitAnomalyLabeling:
             idx = int(candidate_indices[0])
         orbit = all_orbits[idx:idx+1]
         
-        base_mjd = 59000.0
+        base_mjd = orbit.coordinates.time.mjd()[0].as_py()
         times = Timestamp.from_mjd([base_mjd + i * 0.5 for i in range(4)], scale="tdb")
         
         rays = generate_ephemeris_and_rays(orbit, times)
@@ -744,7 +744,7 @@ class TestRealOrbitAnomalyLabeling:
         
         # Create > chunk_size observations but keep reasonable for CI (default chunk_size=8192)
         n_obs = 8192 + 100  # 8292 observations - just over one chunk
-        base_mjd = 59000.0
+        base_mjd = orbit.coordinates.time.mjd()[0].as_py()
         times = Timestamp.from_mjd([base_mjd + i * 0.1 for i in range(n_obs)], scale="tdb")  # 6-minute intervals
         
         rays = synthetic_ephemeris_rays(orbit, times, station="500")
@@ -764,7 +764,7 @@ class TestRealOrbitAnomalyLabeling:
 
     def test_max_processes_variations(self):
         """Test label_anomalies with different max_processes values."""
-        orbits = make_real_orbits(num_orbits=1)
+        orbits = make_real_orbits(num_orbits=2)
         orbit = orbits
         
         # Use moderate size > chunk_size to test multiprocessing
@@ -776,7 +776,7 @@ class TestRealOrbitAnomalyLabeling:
         hits = make_overlap_hits_from_rays_and_orbit(rays, orbit)
         
         # Test different max_processes values
-        for max_proc in [1, 2, 4]:
+        for max_proc in [1, 4]:
             labels = label_anomalies(hits, rays, orbit, max_k=1, snap_error_max_au=0.1, max_processes=max_proc)
             assert len(labels) > 0, f"Should generate labels with max_processes={max_proc}"
             

@@ -235,19 +235,17 @@ def aggregate_candidates(
 
             if bvh_cpu.is_leaf[node_idx]:
                 # Process leaf node - collect all candidates
-                row_indices, orbit_inds, seg_id_vals = bvh_cpu.get_leaf_primitives(
-                    node_idx
-                )
+                row_indices, seg_id_vals = bvh_cpu.get_leaf_primitives(node_idx)
 
                 for i in range(len(row_indices)):
                     if len(candidates) >= K:
                         break
 
                     row_idx = int(row_indices[i])
-                    orbit_idx = int(orbit_inds[i])
                     seg_id = int(seg_id_vals[i])
 
-                    candidates.append((row_idx, orbit_idx, seg_id, node_idx))
+                    # Defer orbit index lookup until packing stage
+                    candidates.append((row_idx, seg_id, node_idx))
             else:
                 # Internal node - add children to stack
                 left_child = int(bvh_cpu.left_child[node_idx])
@@ -265,7 +263,7 @@ def aggregate_candidates(
             # Extract segment data using row indices
             segments_cpu = jax.device_get(segments)
 
-            for i, (row_idx, orbit_idx, seg_id, leaf_id) in enumerate(candidates[:K]):
+            for i, (row_idx, seg_id, leaf_id) in enumerate(candidates[:K]):
                 seg_starts[ray_idx, i] = [
                     segments_cpu.x0[row_idx],
                     segments_cpu.y0[row_idx],
@@ -277,24 +275,24 @@ def aggregate_candidates(
                     segments_cpu.z1[row_idx],
                 ]
                 r_mids[ray_idx, i] = segments_cpu.r_mid_au[row_idx]
-                orbit_indices[ray_idx, i] = orbit_idx
+                orbit_indices[ray_idx, i] = int(segments_cpu.orbit_id_index[row_idx])
                 seg_ids[ray_idx, i] = seg_id
                 leaf_ids[ray_idx, i] = leaf_id
                 mask[ray_idx, i] = True
 
-    # Convert to JAX arrays
+    # Keep NumPy arrays; JAX will convert implicitly at kernel boundary
     batch = CandidateBatch(
-        ray_indices=jnp.asarray(ray_indices),
-        ray_origins=jnp.asarray(ray_origins_cpu),
-        ray_directions=jnp.asarray(ray_directions_cpu),
-        observer_distances=jnp.asarray(observer_distances_cpu),
-        seg_starts=jnp.asarray(seg_starts),
-        seg_ends=jnp.asarray(seg_ends),
-        r_mids=jnp.asarray(r_mids),
-        orbit_indices=jnp.asarray(orbit_indices),
-        seg_ids=jnp.asarray(seg_ids),
-        leaf_ids=jnp.asarray(leaf_ids),
-        mask=jnp.asarray(mask),
+        ray_indices=np.asarray(ray_indices, dtype=np.int32),
+        ray_origins=np.asarray(ray_origins_cpu, dtype=np.float64),
+        ray_directions=np.asarray(ray_directions_cpu, dtype=np.float64),
+        observer_distances=np.asarray(observer_distances_cpu, dtype=np.float64),
+        seg_starts=np.asarray(seg_starts, dtype=np.float64),
+        seg_ends=np.asarray(seg_ends, dtype=np.float64),
+        r_mids=np.asarray(r_mids, dtype=np.float64),
+        orbit_indices=np.asarray(orbit_indices, dtype=np.int32),
+        seg_ids=np.asarray(seg_ids, dtype=np.int32),
+        leaf_ids=np.asarray(leaf_ids, dtype=np.int32),
+        mask=np.asarray(mask, dtype=bool),
     )
 
     # Move to specified device if requested
@@ -303,7 +301,7 @@ def aggregate_candidates(
 
     batch.validate_structure()
 
-    total_candidates = int(jnp.sum(batch.mask))
+    total_candidates = int(np.sum(batch.mask))
     logger.debug(
         f"Aggregated {total_candidates} candidates from {num_rays} rays (max {K} per ray)"
     )

@@ -328,13 +328,26 @@ def ellipse_snap_distance_multi_seed(
     max_k: int = 3,
     max_iterations: int = 10,
     dedupe_angle_tol: float = 1e-4,
+    direction_2d: jax.Array | None = None,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """
     Compute up to K candidate solutions for minimum distance from a 2D point to an ellipse.
 
     Single compiled function parameterized by static max_k/max_iterations; avoids per-K wrappers.
     """
-    return _ellipse_snap_multi_kernel(point_2d, a, e, max_k, max_iterations, dedupe_angle_tol)
+    # If direction_2d not provided, use a zero vector (no bias)
+    if direction_2d is None:
+        direction_2d = jnp.array([0.0, 0.0])
+
+    return _ellipse_snap_multi_kernel(
+        point_2d,
+        a,
+        e,
+        max_k,
+        max_iterations,
+        dedupe_angle_tol,
+        direction_2d,
+    )
 
 
 # Removed K-specific wrappers in favor of a single JIT with static max_k
@@ -347,6 +360,7 @@ def _ellipse_snap_multi_kernel(
     max_k: int,
     max_iterations: int,
     dedupe_angle_tol: float,
+    direction_2d: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Core kernel for multi-seed ellipse snapping."""
     x, y = point_2d[0], point_2d[1]
@@ -376,24 +390,64 @@ def _ellipse_snap_multi_kernel(
     candidate_distances = jnp.where(finite_mask, all_distances, jnp.inf)
     candidate_E = jnp.where(finite_mask, all_E, jnp.nan)
 
-    # Build output by taking first max_k valid candidates
+    # Build output by taking first max_k valid candidates with direction tie-break
     output_distances = jnp.full(max_k, jnp.inf)
     output_E = jnp.full(max_k, jnp.nan)
     output_valid = jnp.zeros(max_k, dtype=bool)
 
-    # Sort by distance and take first max_k valid candidates
-    sorted_indices = jnp.argsort(candidate_distances)
+    # Compute candidate points on ellipse in 2D for tie-break scoring
+    # Note: for non-finite candidates, these values are ignored via masks below
+    b = a * jnp.sqrt(1 - e_eff * e_eff)
+    cosE_all = jnp.cos(candidate_E)
+    sinE_all = jnp.sin(candidate_E)
+    qx = a * (cosE_all - e_eff)
+    qy = b * sinE_all
 
-    def add_candidate(carry, i):
+    # Normalize direction_2d; if near-zero, disable bias
+    dir_norm = jnp.linalg.norm(direction_2d)
+    has_dir = dir_norm > 1e-12
+    dir_unit = jnp.where(
+        has_dir,
+        direction_2d / (dir_norm + 1e-30),
+        jnp.array([0.0, 0.0]),
+    )
+
+    # Directional score: dot(dir_unit, Q - P)
+    dx = qx - point_2d[0]
+    dy = qy - point_2d[1]
+    s_i = dir_unit[0] * dx + dir_unit[1] * dy
+
+    # Determine best candidate: smallest distance; if within epsilon of best, prefer larger s_i
+    min_d = jnp.min(candidate_distances)
+    eps = jnp.maximum(1e-8, 1e-3 * (min_d + 1e-30))
+    within = candidate_distances <= (min_d + eps)
+    # Mask invalid seeds
+    candidate_mask = jnp.logical_and(finite_mask, jnp.isfinite(candidate_distances))
+    tie_mask = jnp.logical_and(candidate_mask, within)
+
+    # If no valid ties (shouldn't happen if any finite), fall back to pure min
+    # Build a score that selects the tie with max s_i; otherwise selects argmin distance
+    # Primary selection among ties
+    tie_scores = jnp.where(tie_mask, s_i, -jnp.inf)
+    best_idx_dir = jnp.argmax(tie_scores)
+    # Fallback index by distance only
+    best_idx_dist = jnp.argmin(candidate_distances)
+    # Choose direction-biased index if direction provided; else use distance-only
+    best_idx = jnp.where(has_dir, best_idx_dir, best_idx_dist)
+
+    # Construct order: best_idx first, then remaining by ascending distance
+    indices = jnp.arange(seeds.shape[0])
+    not_best = indices != best_idx
+    # Add inf to best to exclude from remaining sort
+    rem_dist = jnp.where(not_best, candidate_distances, jnp.inf)
+    rem_order = jnp.argsort(rem_dist)
+    order = jnp.concatenate([jnp.array([best_idx]), rem_order])
+
+    def add_candidate(carry, idx):
         out_dist, out_E, out_valid, count = carry
-        idx = sorted_indices[i]
-
-        # Check if this candidate should be added
-        is_valid_seed = finite_mask[idx]
+        is_valid_seed = candidate_mask[idx]
         has_space = count < max_k
         should_add = jnp.logical_and(is_valid_seed, has_space)
-
-        # Add to output arrays
         new_out_dist = out_dist.at[count].set(
             jnp.where(should_add, candidate_distances[idx], out_dist[count])
         )
@@ -404,12 +458,11 @@ def _ellipse_snap_multi_kernel(
             jnp.where(should_add, True, out_valid[count])
         )
         new_count = jnp.where(should_add, count + 1, count)
-
         return (new_out_dist, new_out_E, new_out_valid, new_count), None
 
     init_carry = (output_distances, output_E, output_valid, 0)
     (final_distances, final_E, final_valid, _), _ = lax.scan(
-        add_candidate, init_carry, jnp.arange(len(seeds))
+        add_candidate, init_carry, order
     )
 
     return final_distances, final_E, final_valid

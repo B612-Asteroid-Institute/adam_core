@@ -20,7 +20,6 @@ except ImportError:
     RAY_AVAILABLE = False
 
 from adam_core.geometry.adapters import (
-    bvh_shard_to_arrays,
     rays_to_arrays,
     segments_to_soa,
 )
@@ -31,6 +30,12 @@ from adam_core.geometry.jax_kernels import (
     ray_segment_distances_jax,
 )
 from adam_core.geometry.jax_types import BVHArrays, HitsSOA, SegmentsSOA
+from adam_core.geometry.bvh import build_bvh_index_from_segments
+from adam_core.orbits.orbits import Orbits
+from adam_core.orbits.polyline import sample_ellipse_adaptive, compute_segment_aabbs
+from adam_core.coordinates.cartesian import CartesianCoordinates
+from adam_core.coordinates.origin import Origin, OriginCodes
+from adam_core.time import Timestamp
 
 
 # Test data generators
@@ -255,9 +260,8 @@ class TestRayParallelBenchmarks:
 
     def test_serial_vs_parallel_consistency(self, benchmark):
         """Benchmark that parallel gives same results as serial (consistency check)."""
-        from adam_core.geometry.bvh import BVHShard
-        from adam_core.geometry.jax_overlap import geometric_overlap_jax
-        from adam_core.geometry.jax_remote import query_bvh_parallel_jax
+        from adam_core.geometry.bvh_query import geometric_overlap_jax
+        # Parallel orchestration is now via query_bvh with max_processes>1
         from adam_core.observations.rays import ObservationRays
         from adam_core.orbits.polyline import OrbitPolylineSegments
 
@@ -333,23 +337,47 @@ class TestGPUBenchmarks:
         assert result.ray_origins.shape == (512, 3)
 
 
+## Removed NumPy backend comparison benchmark
+
+
 @pytest.mark.benchmark
-class TestBackendComparison:
-    """Compare different computational backends."""
+class TestBVHBuildBenchmarks:
+    """Benchmark BVH index construction performance."""
 
-    def test_jax_vs_numpy_backend(self, benchmark):
-        """Compare JAX vs NumPy backend performance."""
-        from adam_core.geometry.jax_kernels import compute_overlap_hits_numpy
+    def _generate_orbits(self, n: int = 20, seed: int = 42) -> Orbits:
+        rng = np.random.default_rng(seed)
+        times = Timestamp.from_mjd([59000.0] * n, scale="tdb")
+        x = rng.uniform(0.5, 2.5, size=n)
+        y = rng.uniform(-0.2, 0.2, size=n)
+        z = rng.uniform(-0.3, 0.3, size=n)
+        vx = rng.uniform(-0.002, 0.002, size=n)
+        vy = rng.uniform(0.012, 0.022, size=n)
+        vz = rng.uniform(-0.002, 0.002, size=n)
 
-        batch = generate_candidate_batch(batch_size=128, max_candidates=32)
-        guard_arcmin = 1.0
-        max_hits_per_ray = 10
-
-        # Benchmark NumPy backend
-        result = benchmark(
-            compute_overlap_hits_numpy, batch, guard_arcmin, max_hits_per_ray
+        coords = CartesianCoordinates.from_kwargs(
+            x=x,
+            y=y,
+            z=z,
+            vx=vx,
+            vy=vy,
+            vz=vz,
+            time=times,
+            origin=Origin.from_kwargs(code=[OriginCodes.SUN.name] * n),
+            frame="ecliptic",
         )
-        assert isinstance(result, HitsSOA)
+
+        return Orbits.from_kwargs(
+            orbit_id=[f"bench_{i}" for i in range(n)], coordinates=coords
+        )
+
+    @pytest.mark.parametrize("n", [10, 1000, 1000000])
+    def test_bvh_build(self, benchmark, n):
+        orbits = self._generate_orbits(n=n)
+        _, segments = sample_ellipse_adaptive(orbits, max_chord_arcmin=2.0)
+        segments_aabb = compute_segment_aabbs(segments, guard_arcmin=1.0)
+
+        result = benchmark(lambda: build_bvh_index_from_segments(segments_aabb))
+        assert result.nodes is not None and result.prims is not None
 
 
 if __name__ == "__main__":

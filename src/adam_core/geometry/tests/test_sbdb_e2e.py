@@ -11,7 +11,7 @@ import pytest
 from adam_assist import ASSISTPropagator
 
 from adam_core.geometry import (
-    build_bvh,
+    build_bvh_index_from_segments,
     ephemeris_to_rays,
     query_bvh,
 )
@@ -311,11 +311,10 @@ class TestSBDBEndToEnd:
             f"Sampled {len(segments)} polyline segments with max chord {max_chord_arcmin} arcmin"
         )
 
-        # Compute segment AABBs and build BVH
+        # Compute segment AABBs and build BVH index
         segments_with_aabbs = compute_segment_aabbs(segments)
-        bvh = build_bvh(segments_with_aabbs)
-
-        print(f"Built BVH with {len(bvh.nodes_min)} nodes")
+        bvh = build_bvh_index_from_segments(segments_with_aabbs)
+        print(f"Built BVH with {len(bvh.nodes)} nodes")
 
         # Step 7: Run geometric overlap query
         print(f"Running geometric overlap with {guard_arcmin} arcmin guard...")
@@ -323,7 +322,6 @@ class TestSBDBEndToEnd:
         # Query BVH for overlaps using high-level API
         overlap_hits = query_bvh(
             bvh,
-            segments_with_aabbs,
             rays,
             guard_arcmin=guard_arcmin,
         )
@@ -450,12 +448,11 @@ class TestSBDBEndToEnd:
             max_chord_arcmin=max_chord_arcmin,
         )
         segments_with_aabbs = compute_segment_aabbs(segments)
-        bvh = build_bvh(segments_with_aabbs)
+        bvh = build_bvh_index_from_segments(segments_with_aabbs)
 
         # Query
         overlap_hits = query_bvh(
             bvh,
-            segments_with_aabbs,
             rays,
             guard_arcmin=guard_arcmin,
         )
@@ -471,7 +468,7 @@ class TestSBDBEndToEnd:
             "guard_arcmin": guard_arcmin,
             "max_chord_arcmin": max_chord_arcmin,
             "num_segments": len(segments),
-            "num_bvh_nodes": len(bvh.nodes_min),
+            "num_bvh_nodes": len(bvh.nodes),
             "num_hits": len(overlap_hits),
             "num_rays": len(rays),
             "recovery_fraction": recovery_fraction,

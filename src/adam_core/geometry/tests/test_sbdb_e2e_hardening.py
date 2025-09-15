@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from adam_assist import ASSISTPropagator
 
-from adam_core.geometry import build_bvh, ephemeris_to_rays, query_bvh
+from adam_core.geometry import build_bvh_index_from_segments, ephemeris_to_rays, query_bvh
 from adam_core.observers.observers import Observers
 from adam_core.orbits.polyline import compute_segment_aabbs, sample_ellipse_adaptive
 from adam_core.orbits.query.sbdb import query_sbdb
@@ -65,7 +65,7 @@ def _build_basic_ephemerides(sbdb_id: str, n_variants: int = 10, n_epochs: int =
 def _build_index(nominal, chord_arcmin: float):
     _, segments = sample_ellipse_adaptive(nominal, max_chord_arcmin=chord_arcmin)
     segs_aabb = compute_segment_aabbs(segments)
-    bvh = build_bvh(segs_aabb)
+    bvh = build_bvh_index_from_segments(segs_aabb)
     return segments, segs_aabb, bvh
 
 
@@ -96,7 +96,7 @@ class TestHardening:
         )
 
         # Query with tiny guard
-        hits = query_bvh(bvh, segs_aabb, rays_offset, guard_arcmin=guard_arcmin)
+        hits = query_bvh(bvh, rays_offset, guard_arcmin=guard_arcmin)
         assert (
             len(hits) == 0
         ), f"Expected 0 hits at guard={guard_arcmin}′ after +5′ offset, got {len(hits)}"
@@ -112,7 +112,7 @@ class TestHardening:
             for i in range(len(ephem))
         ]
         rays = ephemeris_to_rays(ephem, observers=observers, det_id=det_ids)
-        hits = query_bvh(bvh, segs_aabb, rays, guard_arcmin=guard_arcmin)
+        hits = query_bvh(bvh, rays, guard_arcmin=guard_arcmin)
         assert len(hits) > 0
 
         # Sample subset

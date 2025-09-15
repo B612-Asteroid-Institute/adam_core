@@ -297,12 +297,12 @@ class TestComputeSegmentAabbs:
             x1=[1.0, 2.0],
             y1=[1.0, 1.0],
             z1=[0.0, 0.0],
-            aabb_min_x=[np.nan, np.nan],
-            aabb_min_y=[np.nan, np.nan],
-            aabb_min_z=[np.nan, np.nan],
-            aabb_max_x=[np.nan, np.nan],
-            aabb_max_y=[np.nan, np.nan],
-            aabb_max_z=[np.nan, np.nan],
+            aabb_min_x=[None, None],
+            aabb_min_y=[None, None],
+            aabb_min_z=[None, None],
+            aabb_max_x=[None, None],
+            aabb_max_y=[None, None],
+            aabb_max_z=[None, None],
             r_mid_au=[0.7, 1.5],  # Approximate midpoint distances
             n_x=[0.0, 0.0],
             n_y=[0.0, 0.0],
@@ -311,9 +311,10 @@ class TestComputeSegmentAabbs:
 
         result = compute_segment_aabbs(segments, guard_arcmin=1.0)
 
-        # Check that AABBs are no longer NaN
-        assert not np.any(np.isnan(result.aabb_min_x.to_numpy()))
-        assert not np.any(np.isnan(result.aabb_max_x.to_numpy()))
+        # Check that AABBs are populated (no nulls remain)
+        import pyarrow.compute as pc
+        assert not pc.any(pc.is_null(result.aabb_min_x)).as_py()
+        assert not pc.any(pc.is_null(result.aabb_max_x)).as_py()
 
         # Check that AABBs contain segment endpoints
         for i in range(len(result)):
@@ -355,12 +356,12 @@ class TestComputeSegmentAabbs:
             x1=[1.0],
             y1=[0.0],
             z1=[0.0],
-            aabb_min_x=[np.nan],
-            aabb_min_y=[np.nan],
-            aabb_min_z=[np.nan],
-            aabb_max_x=[np.nan],
-            aabb_max_y=[np.nan],
-            aabb_max_z=[np.nan],
+            aabb_min_x=[None],
+            aabb_min_y=[None],
+            aabb_min_z=[None],
+            aabb_max_x=[None],
+            aabb_max_y=[None],
+            aabb_max_z=[None],
             r_mid_au=[0.5],
             n_x=[0.0],
             n_y=[0.0],
@@ -403,7 +404,8 @@ class TestIntegration:
         # Verify results
         assert len(params) == len(orbits)
         assert len(segments_with_aabbs) > 0
-        assert not np.any(np.isnan(segments_with_aabbs.aabb_min_x.to_numpy()))
+        import pyarrow.compute as pc
+        assert not pc.any(pc.is_null(segments_with_aabbs.aabb_min_x)).as_py()
 
         # Check that each orbit has segments
         orbit_ids_params = set(params.orbit_id.to_pylist())
