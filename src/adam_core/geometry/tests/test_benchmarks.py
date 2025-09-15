@@ -11,22 +11,15 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import ray
 
-try:
-    import ray
-
-    RAY_AVAILABLE = True
-except ImportError:
-    RAY_AVAILABLE = False
 
 from adam_core.geometry.adapters import (
-    rays_to_arrays,
     segments_to_soa,
 )
 from adam_core.geometry.aggregator import CandidateBatch
-from adam_core.geometry.jax_kernels import (
-    OverlapBackend,
-    compute_overlap_hits_jax,
+from adam_core.geometry.bvh_query import (
+    compute_overlap_hits,
     ray_segment_distances_jax,
 )
 from adam_core.geometry.jax_types import BVHArrays, HitsSOA, SegmentsSOA
@@ -199,11 +192,11 @@ class TestJAXKernelBenchmarks:
         max_hits_per_ray = 10
 
         # Warm up
-        _ = compute_overlap_hits_jax(batch, guard_arcmin, max_hits_per_ray)
+        _ = compute_overlap_hits(batch, guard_arcmin, max_hits_per_ray)
 
         # Benchmark
         result = benchmark(
-            compute_overlap_hits_jax, batch, guard_arcmin, max_hits_per_ray
+            compute_overlap_hits, batch, guard_arcmin, max_hits_per_ray
         )
         assert isinstance(result, HitsSOA)
 

@@ -28,7 +28,6 @@ __all__ = [
     "segments_to_soa",
     "segments_to_numpy_soa",
     "segments_soa_to_segments",
-    "rays_to_arrays",
     "rays_to_numpy_arrays",
     "hits_soa_to_overlap_hits",
     "overlap_hits_to_soa",
@@ -175,58 +174,6 @@ def segments_soa_to_segments(
         n_y=np.zeros(num_segments),
         n_z=np.ones(num_segments),
     )
-
-
-def rays_to_arrays(
-    rays: ObservationRays, device: Optional[jax.Device] = None
-) -> tuple[jax.Array, jax.Array, jax.Array]:
-    """
-    Convert ObservationRays to JAX arrays.
-
-    Parameters
-    ----------
-    rays : ObservationRays
-        Quivr table with ray data
-    device : jax.Device, optional
-        JAX device to place arrays on (default: CPU)
-
-    Returns
-    -------
-    ray_origins : jax.Array
-        Ray origin points, shape (num_rays, 3)
-    ray_directions : jax.Array
-        Ray direction vectors, shape (num_rays, 3)
-    observer_distances : jax.Array
-        Observer distances from origin, shape (num_rays,)
-    """
-    num_rays = len(rays)
-
-    # Extract ray origins and directions
-    ray_origins = np.zeros((num_rays, 3), dtype=np.float64)
-    ray_directions = np.zeros((num_rays, 3), dtype=np.float64)
-    observer_distances = np.zeros(num_rays, dtype=np.float64)
-
-    for i in range(num_rays):
-        # Extract observer coordinates
-        observer_coords = rays.observer[i]
-        ray_origins[i, 0] = observer_coords.x[0].as_py()
-        ray_origins[i, 1] = observer_coords.y[0].as_py()
-        ray_origins[i, 2] = observer_coords.z[0].as_py()
-
-        # Extract ray directions
-        ray_directions[i, 0] = rays.u_x[i].as_py()
-        ray_directions[i, 1] = rays.u_y[i].as_py()
-        ray_directions[i, 2] = rays.u_z[i].as_py()
-
-        # Compute observer distance
-        observer_distances[i] = np.linalg.norm(ray_origins[i])
-
-    # Convert to JAX arrays
-    # Return NumPy arrays; JAX will convert at kernel boundary if needed
-    logger.debug(f"Converted {num_rays} rays to NumPy arrays")
-
-    return ray_origins, ray_directions, observer_distances
-
 
 def rays_to_numpy_arrays(
     rays: ObservationRays,

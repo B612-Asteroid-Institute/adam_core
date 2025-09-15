@@ -17,7 +17,6 @@ from .anomaly_kernels import *
 from .anomaly_labeling import *
 from .bvh import *
 from .clock_gating import *
-from .jax_kernels import *
 
 # Define canonical API that routes to JAX implementations
 from .bvh_query import *
@@ -69,7 +68,6 @@ __all__ = [
     # Adapters
     # shard adapters removed
     "segments_to_soa",
-    "rays_to_arrays",
     # Conversions
     "ephemeris_to_rays",
     "hits_soa_to_overlap_hits",
@@ -81,7 +79,7 @@ __all__ = [
     "aggregate_candidates",
     # JAX kernels
     "ray_segment_distances_jax",
-    "compute_overlap_hits_jax",
+    "compute_overlap_hits",
     # JAX explicit API (kept for power users)
     "geometric_overlap_jax",
     "benchmark_jax_vs_legacy",
