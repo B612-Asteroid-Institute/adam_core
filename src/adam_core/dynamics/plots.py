@@ -10,6 +10,7 @@ from ..constants import KM_P_AU
 from ..constants import Constants as c
 from ..coordinates import (
     CartesianCoordinates,
+    GeodeticCoordinates,
     Origin,
     OriginCodes,
     SphericalCoordinates,
@@ -902,22 +903,19 @@ def plot_risk_corridor(
             "No Earth impacts found. Other collision objects are not supported yet."
         )
 
-    # Transform impact coordinates to ITRF
-    impacts = impacts.set_column(
-        "collision_coordinates",
-        transform_coordinates(
-            impacts.collision_coordinates,
-            representation_out=SphericalCoordinates,
-            frame_out="itrf93",
-            origin_out=OriginCodes.EARTH,
-        ),
+    # Transform impact coordinates to ITRF93 Geodetic Coordinates
+    geodetic_impacts = transform_coordinates(
+        impacts.collision_coordinates,
+        representation_out=GeodeticCoordinates,
+        frame_out="itrf93",
+        origin_out=OriginCodes.EARTH,
     )
 
     # Sort all data by time
-    times = impacts.collision_coordinates.time.to_astropy()
+    times = geodetic_impacts.time.to_astropy()
     time_order = np.argsort(times.mjd)
-    lon = impacts.collision_coordinates.lon.to_numpy(zero_copy_only=False)[time_order]
-    lat = impacts.collision_coordinates.lat.to_numpy(zero_copy_only=False)[time_order]
+    lon = geodetic_impacts.lon.to_numpy(zero_copy_only=False)[time_order]
+    lat = geodetic_impacts.lat.to_numpy(zero_copy_only=False)[time_order]
     times = times[time_order]
 
     # Convert times to minutes since first impact
