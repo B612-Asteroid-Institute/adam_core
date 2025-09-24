@@ -264,6 +264,7 @@ class EphemerisMixin:
                     coordinates=spherical_coordinates,
                     weights=np.repeat(orbit.weights[0], len(observers)),
                     weights_cov=np.repeat(orbit.weights_cov[0], len(observers)),
+                    aberrated_coordinates=propagated_orbits_aberrated.coordinates,
                 )
                 ephemeris_chunks.append(ephemeris)
         # Build once at the end
