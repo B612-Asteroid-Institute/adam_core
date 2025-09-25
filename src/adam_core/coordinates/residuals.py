@@ -165,16 +165,15 @@ class Residuals(qv.Table):
         observed: CoordinateType,
         predicted: CoordinateType,
         custom_coordinates: bool = False,
+        use_predicted_covariance: bool = True,
     ) -> "Residuals":
         """
         Calculate the residuals between the observed and predicted coordinates. Residuals
-        are defined as the observed coordinates minus the predicted coordinates. The observed
-        coordinate's covariance matrix is used to calculate the chi2 and degrees of freedom.
+        are defined as the observed coordinates minus the predicted coordinates.
 
-        TODO: We may want to add support for a single predicted coordinate and covariance
-            compared to multiple observed coordinates and covariances.
-            Add support for cases where both the observed and predicted coordinates have
-            covariances. Maybe a Kolmogorov-Smirnov test?
+        The covariance used for chi2 is the sum of the observed covariance and (optionally)
+        the predicted covariance. If a single predicted coordinate is provided, it is
+        broadcast to the same length as the observed coordinates.
 
         Parameters
         ----------
@@ -186,6 +185,9 @@ class Residuals(qv.Table):
         custom_coordinates : bool, optional
             If True, the coordinate class will not be checked against the supported coordinate classes
             included in adam_core.
+        use_predicted_covariance : bool, optional
+            If True, include predicted covariance in the chi2 calculation (i.e., use Σ_obs + Σ_pred).
+            If False, use only the observed covariance (Σ_obs).
 
         Returns
         -------
@@ -214,18 +216,62 @@ class Residuals(qv.Table):
             raise ValueError(
                 f"Observed ({observed.frame}) and predicted ({predicted.frame}) coordinates must have the same frame."
             )
+
         # Extract the observed and predicted values
         observed_values = observed.values
         observed_covariances = observed.covariance.to_matrix()
         predicted_values = predicted.values
 
-        # Create the output arrays
+        # Broadcast predicted values to match observed length if needed
         N, D = observed_values.shape
+        if len(predicted_values) == 1:
+            predicted_values = np.broadcast_to(predicted_values, (N, D))
+        elif len(predicted_values) != N:
+            raise ValueError(
+                f"Predicted coordinates must have length 1 or match observed length ({N}), got {len(predicted_values)}."
+            )
+
+        # Predicted covariances (optional)
+        if use_predicted_covariance:
+            try:
+                predicted_covariances = predicted.covariance.to_matrix()
+            except Exception:
+                predicted_covariances = np.full(
+                    (
+                        len(predicted),
+                        observed_covariances.shape[1],
+                        observed_covariances.shape[2],
+                    ),
+                    np.nan,
+                )
+
+            # Broadcast to N if needed
+            if predicted_covariances.shape[0] == 1 and N > 1:
+                predicted_covariances = np.broadcast_to(
+                    predicted_covariances, observed_covariances.shape
+                )
+            elif predicted_covariances.shape[0] != N:
+                if len(predicted) == 1:
+                    predicted_covariances = np.broadcast_to(
+                        predicted_covariances, observed_covariances.shape
+                    )
+                else:
+                    raise ValueError(
+                        f"Predicted covariance length must be 1 or {N}, got {predicted_covariances.shape[0]}"
+                    )
+
+            # Replace NaNs in predicted covariance with 0 so missing entries contribute nothing
+            predicted_covariances = np.where(
+                np.isnan(predicted_covariances), 0.0, predicted_covariances
+            )
+        else:
+            predicted_covariances = np.zeros_like(observed_covariances)
+
+        # Create the output arrays
         p = np.empty(N, dtype=np.float64)
         chi2s = np.empty(N, dtype=np.float64)
 
         # Calculate the degrees of freedom for every coordinate
-        # Number of coordinate dimensions less the number of quantities that are NaN
         dof = D - np.sum(np.isnan(observed_values), axis=1)
 
         # Calculate the array of residuals
@@ -235,15 +281,23 @@ class Residuals(qv.Table):
         # 1. Bound residuals in longitude to the range [-180, 180] degrees and
         #    adjust the signs of the residuals that cross the 0/360 degree boundary.
         # 2. Apply the cos(latitude) factor to the residuals in longitude and longitudinal
-        #    velocity
+        #    velocity. Apply the same scaling to covariances.
         if isinstance(observed, SphericalCoordinates):
             # Bound the longitude residuals to the range [-180, 180] degrees
             residuals = bound_longitude_residuals(observed_values, residuals)
 
-            # Apply the cos(latitude) factor to the residuals and covariance matrix
+            # Apply the cos(latitude) factor to the residuals and observed covariance
             residuals, observed_covariances = apply_cosine_latitude_correction(
                 observed_values[:, 2], residuals, observed_covariances
             )
+
+            # Apply the same scaling to the predicted covariances (without touching residuals again)
+            _, predicted_covariances = apply_cosine_latitude_correction(
+                observed_values[:, 2], np.zeros_like(residuals), predicted_covariances
+            )
+
+        # Total covariance = observed + predicted (predicted may be zeros if disabled)
+        total_covariances = observed_covariances + predicted_covariances
 
         # Batch the coordinates and covariances into groups that have the same
         # number of dimensions that have missing values (represented by NaNs)
@@ -252,7 +306,7 @@ class Residuals(qv.Table):
             batch_dimensions,
             batch_coords,
             batch_covariances,
-        ) = _batch_coords_and_covariances(observed_values, observed_covariances)
+        ) = _batch_coords_and_covariances(observed_values, total_covariances)
 
         for indices, dimensions, coords, covariances in zip(
             batch_indices, batch_dimensions, batch_coords, batch_covariances
