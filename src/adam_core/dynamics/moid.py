@@ -247,7 +247,7 @@ def calculate_perturber_moids(
         perturbers = perturber
 
     moids = PerturberMOIDs.empty()
-    use_ray = initialize_use_ray(num_cpus=max_processes)
+    use_ray, num_cpus = initialize_use_ray(num_cpus=max_processes)
 
     if use_ray:
 

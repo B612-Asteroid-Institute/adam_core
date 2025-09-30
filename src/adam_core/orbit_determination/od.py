@@ -658,7 +658,7 @@ def differential_correction(
     if max_processes is None:
         max_processes = mp.cpu_count()
 
-    use_ray = initialize_use_ray(num_cpus=max_processes)
+    use_ray, num_cpus = initialize_use_ray(num_cpus=max_processes)
     if use_ray:
         refs_to_free = []
 

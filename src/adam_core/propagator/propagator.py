@@ -301,7 +301,8 @@ class EphemerisMixin:
             "auto", "sigma-point", "monte-carlo"
         ] = "monte-carlo",
         num_samples: int = 1000,
-        chunk_size: int = 100,
+        chunk_size: Union[int, Literal["auto"]] = "auto",
+        max_chunk_size: int = 1000,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
     ) -> Ephemeris:
@@ -326,8 +327,14 @@ class EphemerisMixin:
             will be automatically selected based on the covariance matrix. The default is 'monte-carlo'.
         num_samples : int, optional
             The number of samples to draw when sampling with monte-carlo.
-        chunk_size : int, optional
-            Number of orbits to send to each job.
+        chunk_size : int or "auto", optional
+            Number of orbits to send to each job. If "auto" then the chunk size will be automatically
+            determined based on the number of processes and the number of orbits up to a maximum of max_chunk_size.
+            If propagating with covariance then the "auto" chunk size calculation will be based on the number of samples
+            and the number of processes.
+        max_chunk_size : int, optional
+            Maximum chunk size to use. If the chunk size is automatically determined and it is greater than this value,
+            then the chunk size will be set to this value. This is useful to limit the memory usage of the ray cluster.
         max_processes : int or None, optional
             Number of processes to launch. If None then the number of
             processes will be equal to the number of cores on the machine. If 1
@@ -362,17 +369,34 @@ class EphemerisMixin:
                 seed=seed,
             )
 
-        if max_processes is None:
-            max_processes = mp.cpu_count()
+        use_ray, num_cpus = initialize_use_ray(num_cpus=max_processes)
 
-        if max_processes > 1:
+        if use_ray:
 
             if RAY_INSTALLED is False:
                 raise ImportError(
                     "Ray must be installed to use the ray parallel backend"
                 )
 
-            initialize_use_ray(num_cpus=max_processes)
+            if chunk_size == "auto":
+                if covariance is True:
+                    if covariance_method == "monte-carlo":
+                        chunk_size = max(
+                            1, ((num_samples + 1) * len(orbits)) // num_cpus
+                        )
+                    elif covariance_method == "sigma-point":
+                        chunk_size = max(1, ((13 + 1) * len(orbits)) // num_cpus)
+                    else:
+                        raise ValueError(
+                            f"Invalid covariance method: {covariance_method}"
+                        )
+
+                else:
+                    chunk_size = max(1, len(orbits) // num_cpus)
+
+                chunk_size = min(chunk_size, max_chunk_size)
+
+            print(f"Chunk size: {chunk_size}")
 
             # Add orbits and observers to object store if
             # they haven't already been added
@@ -586,7 +610,8 @@ class Propagator(ABC, EphemerisMixin):
             "auto", "sigma-point", "monte-carlo"
         ] = "monte-carlo",
         num_samples: int = 1000,
-        chunk_size: int = 100,
+        chunk_size: Union[int, Literal["auto"]] = "auto",
+        max_chunk_size: int = 1000,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
     ) -> Orbits:
@@ -611,8 +636,14 @@ class Propagator(ABC, EphemerisMixin):
             will be automatically selected based on the covariance matrix. The default is 'monte-carlo'.
         num_samples : int, optional
             The number of samples to draw when sampling with monte-carlo.
-        chunk_size : int, optional
-            Number of orbits to send to each job.
+        chunk_size : int or "auto"
+            Number of orbits to send to each job. If "auto" then the chunk size will be automatically
+            determined based on the number of processes and the number of orbits up to a maximum of max_chunk_size.
+            If propagating with covariance then the "auto" chunk size calculation will be based on the number of samples
+            and the number of processes.
+        max_chunk_size : int, optional
+            Maximum chunk size to use. If the chunk size is automatically determined and it is greater than this value,
+            then the chunk size will be set to this value. This is useful to limit the memory usage of the ray cluster.
         max_processes : int or None, optional
             Maximum number of processes to launch. If None then the number of
             processes will be equal to the number of cores on the machine. If 1
@@ -624,10 +655,9 @@ class Propagator(ABC, EphemerisMixin):
         propagated : `~adam_core.orbits.orbits.Orbits`
             Propagated orbits.
         """
-        if max_processes is None:
-            max_processes = mp.cpu_count()
+        use_ray, num_cpus = initialize_use_ray(num_cpus=max_processes)
 
-        if max_processes > 1:
+        if use_ray:
             propagated_list: List[Orbits] = []
             variants_list: List[VariantOrbits] = []
 
@@ -636,7 +666,25 @@ class Propagator(ABC, EphemerisMixin):
                     "Ray must be installed to use the ray parallel backend"
                 )
 
-            initialize_use_ray(num_cpus=max_processes)
+            if chunk_size == "auto":
+                if covariance is True:
+                    if covariance_method == "monte-carlo":
+                        chunk_size = max(
+                            1, ((num_samples + 1) * len(orbits)) // num_cpus
+                        )
+                    elif covariance_method == "sigma-point":
+                        chunk_size = max(1, ((13 + 1) * len(orbits)) // num_cpus)
+                    else:
+                        raise ValueError(
+                            f"Invalid covariance method: {covariance_method}"
+                        )
+
+                else:
+                    chunk_size = max(1, len(orbits) // num_cpus)
+
+                chunk_size = min(chunk_size, max_chunk_size)
+
+            print(f"Chunk size: {chunk_size}")
 
             # Add orbits and times to object store if
             # they haven't already been added
