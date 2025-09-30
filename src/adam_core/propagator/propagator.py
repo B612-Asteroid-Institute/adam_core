@@ -92,8 +92,8 @@ class EphemerisMixin:
 
     def _add_light_time(
         self,
-        orbits,
-        observers,
+        orbits: Orbits,
+        observers: ObserverType,
         lt_tol: float = 1e-12,
         max_iter: int = 10,
     ) -> Tuple[Orbits, np.ndarray]:
@@ -164,12 +164,6 @@ class EphemerisMixin:
         """
         A generic ephemeris implementation, which can be used or overridden by subclasses.
         """
-
-        if isinstance(orbits, Orbits):
-            ephemeris_chunks: List[Ephemeris] = []
-        elif isinstance(orbits, VariantOrbits):
-            ephemeris_chunks: List[VariantEphemeris] = []
-
         # Sort observers by time and code to ensure consistent ordering
         # As further propagation will order by time as well
         observers = observers.sort_by(
@@ -185,103 +179,100 @@ class EphemerisMixin:
                 origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
             ),
         )
+        observers_barycentric_tiled = qv.concatenate(
+            [observers_barycentric] * len(orbits)
+        )
 
-        for orbit in orbits:
-            # Propagate orbits to sorted observer times
-            propagated_orbits = self.propagate_orbits(orbit, observers.coordinates.time)
+        # Propagate orbits to sorted observer times
+        # Returns orbits sorted by orbit_id and time
+        propagated_orbits = self.propagate_orbits(
+            orbits, observers.coordinates.time, max_processes=1
+        )
 
-            # Transform both the orbits and observers to the barycenter if they are not already.
-            propagated_orbits_barycentric = propagated_orbits.set_column(
-                "coordinates",
-                transform_coordinates(
-                    propagated_orbits.coordinates,
-                    CartesianCoordinates,
-                    frame_out="ecliptic",
-                    origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
-                ),
-            )
+        # Transform both the orbits and observers to the barycenter if they are not already.
+        propagated_orbits_barycentric = propagated_orbits.set_column(
+            "coordinates",
+            transform_coordinates(
+                propagated_orbits.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            ),
+        )
 
-            num_orbits = len(propagated_orbits_barycentric.orbit_id.unique())
+        propagated_orbits_aberrated, light_time = self._add_light_time(
+            propagated_orbits_barycentric,
+            observers_barycentric_tiled,
+            lt_tol=1e-12,
+        )
 
-            observer_codes = np.tile(
-                observers.code.to_numpy(zero_copy_only=False), num_orbits
-            )
+        topocentric_state = (
+            propagated_orbits_aberrated.coordinates.values
+            - observers_barycentric_tiled.coordinates.values
+        )
+        topocentric_coordinates = CartesianCoordinates.from_kwargs(
+            x=topocentric_state[:, 0],
+            y=topocentric_state[:, 1],
+            z=topocentric_state[:, 2],
+            vx=topocentric_state[:, 3],
+            vy=topocentric_state[:, 4],
+            vz=topocentric_state[:, 5],
+            covariance=None,
+            # The ephemeris times are at the point of the observer,
+            # not the aberrated orbit
+            time=observers_barycentric_tiled.coordinates.time,
+            origin=Origin.from_kwargs(
+                code=observers_barycentric_tiled.code.to_numpy(zero_copy_only=False)
+            ),
+            frame="ecliptic",
+        )
 
-            propagated_orbits_aberrated, light_time = self._add_light_time(
-                propagated_orbits_barycentric,
-                observers_barycentric,
-                lt_tol=1e-12,
-            )
+        spherical_coordinates = SphericalCoordinates.from_cartesian(
+            topocentric_coordinates
+        )
+        light_time = np.array(light_time)
 
-            topocentric_state = (
-                propagated_orbits_aberrated.coordinates.values
-                - observers_barycentric.coordinates.values
-            )
-            topocentric_coordinates = CartesianCoordinates.from_kwargs(
-                x=topocentric_state[:, 0],
-                y=topocentric_state[:, 1],
-                z=topocentric_state[:, 2],
-                vx=topocentric_state[:, 3],
-                vy=topocentric_state[:, 4],
-                vz=topocentric_state[:, 5],
-                covariance=None,
-                # The ephemeris times are at the point of the observer,
-                # not the aberrated orbit
-                time=observers.coordinates.time,
-                origin=Origin.from_kwargs(code=observer_codes),
-                frame="ecliptic",
-            )
+        spherical_coordinates = transform_coordinates(
+            spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
+        )
 
-            spherical_coordinates = SphericalCoordinates.from_cartesian(
-                topocentric_coordinates
-            )
+        # Ephemeris are generally compared in UTC, so rescale the time
+        spherical_coordinates = spherical_coordinates.set_column(
+            "time",
+            spherical_coordinates.time.rescale("utc"),
+        )
 
-            light_time = np.array(light_time)
-
-            spherical_coordinates = transform_coordinates(
-                spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
-            )
-
-            # Ephemeris are generally compared in UTC, so rescale the time
-            spherical_coordinates = spherical_coordinates.set_column(
-                "time",
-                spherical_coordinates.time.rescale("utc"),
-            )
-
-            if isinstance(orbit, Orbits):
-                ephemeris = Ephemeris.from_kwargs(
-                    orbit_id=propagated_orbits_barycentric.orbit_id,
-                    object_id=propagated_orbits_barycentric.object_id,
-                    coordinates=spherical_coordinates,
-                    light_time=light_time,
-                    aberrated_coordinates=propagated_orbits_aberrated.coordinates,
-                )
-                ephemeris_chunks.append(ephemeris)
-            elif isinstance(orbit, VariantOrbits):
-                ephemeris = VariantEphemeris.from_kwargs(
-                    orbit_id=propagated_orbits_barycentric.orbit_id,
-                    object_id=propagated_orbits_barycentric.object_id,
-                    coordinates=spherical_coordinates,
-                    weights=np.repeat(orbit.weights[0], len(observers)),
-                    weights_cov=np.repeat(orbit.weights_cov[0], len(observers)),
-                    aberrated_coordinates=propagated_orbits_aberrated.coordinates,
-                )
-                ephemeris_chunks.append(ephemeris)
-        # Build once at the end
         if isinstance(orbits, Orbits):
-            ephemeris_total = (
-                qv.concatenate(ephemeris_chunks)
-                if len(ephemeris_chunks) > 0
-                else Ephemeris.empty()
+            ephemeris = Ephemeris.from_kwargs(
+                orbit_id=propagated_orbits_barycentric.orbit_id,
+                object_id=propagated_orbits_barycentric.object_id,
+                coordinates=spherical_coordinates,
+                light_time=light_time,
+                aberrated_coordinates=propagated_orbits_aberrated.coordinates,
             )
-        else:
-            ephemeris_total = (
-                qv.concatenate(ephemeris_chunks)
-                if len(ephemeris_chunks) > 0
-                else VariantEphemeris.empty()
+        elif isinstance(orbits, VariantOrbits):
+
+            # Sort input orbits by orbit_id and time to match the sorted propagated orbits
+            # (we need this so we can properly tile weights and weights_cov)
+            orbits_sorted = orbits.sort_by(
+                ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
             )
 
-        ephemeris_total = ephemeris_total.sort_by(
+            ephemeris = VariantEphemeris.from_kwargs(
+                orbit_id=propagated_orbits_barycentric.orbit_id,
+                object_id=propagated_orbits_barycentric.object_id,
+                coordinates=spherical_coordinates,
+                weights=np.tile(
+                    orbits_sorted.weights.to_numpy(zero_copy_only=False), len(observers)
+                ),
+                weights_cov=np.tile(
+                    orbits_sorted.weights_cov.to_numpy(zero_copy_only=False),
+                    len(observers),
+                ),
+                aberrated_coordinates=propagated_orbits_aberrated.coordinates,
+            )
+
+        ephemeris = ephemeris.sort_by(
             [
                 "orbit_id",
                 "coordinates.time.days",
@@ -290,7 +281,7 @@ class EphemerisMixin:
             ]
         )
 
-        return ephemeris_total
+        return ephemeris
 
     def generate_ephemeris(
         self,
@@ -333,9 +324,6 @@ class EphemerisMixin:
             processes will be equal to the number of cores on the machine. If 1
             then no multiprocessing will be used. If "ray" is the parallel_backend and a ray instance
             is initialized already then this argument is ignored.
-        parallel_backend : {'cf', 'ray'}, optional
-            The parallel backend to use. 'cf' uses concurrent.futures and 'ray' uses ray. The default is 'cf'.
-            To use ray, ray must be installed.
 
         Returns
         -------

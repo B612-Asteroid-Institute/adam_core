@@ -382,7 +382,7 @@ def test_generate_ephemeris_performance_benchmark():
     """
     # Create a moderately sized test case
     orbits = make_real_orbits(10)
-    times = Timestamp.from_mjd(np.arange(60001, 60005), scale="tdb")
+    times = Timestamp.from_mjd(np.arange(60001, 60101), scale="tdb")
     observers = Observers.from_code("500", times)
 
     prop = ASSISTPropagator()
@@ -394,7 +394,7 @@ def test_generate_ephemeris_performance_benchmark():
         orbits,
         observers,
         covariance=True,
-        num_samples=10,
+        num_samples=100,
         max_processes=1,
         chunk_size=1,
         seed=42,
@@ -407,7 +407,7 @@ def test_generate_ephemeris_performance_benchmark():
         orbits,
         observers,
         covariance=True,
-        num_samples=10,
+        num_samples=100,
         max_processes=4,
         chunk_size=1,
         seed=42,
