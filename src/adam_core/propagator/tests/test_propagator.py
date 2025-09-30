@@ -381,8 +381,8 @@ def test_generate_ephemeris_performance_benchmark():
     multiprocessing provides a benefit rather than a penalty.
     """
     # Create a moderately sized test case
-    orbits = make_real_orbits(15)
-    times = Timestamp.from_mjd(np.arange(60001, 60005), scale="tdb")
+    orbits = make_real_orbits(10)
+    times = Timestamp.from_mjd(np.arange(60001, 60101), scale="tdb")
     observers = Observers.from_code("500", times)
 
     prop = ASSISTPropagator()
