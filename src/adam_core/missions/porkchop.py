@@ -701,7 +701,7 @@ def generate_porkchop_data(
     if max_processes is None:
         max_processes = mp.cpu_count()
 
-    use_ray = initialize_use_ray(max_processes)
+    use_ray, num_cpus = initialize_use_ray(max_processes)
 
     lambert_results = LambertSolutions.empty()
     if use_ray:
