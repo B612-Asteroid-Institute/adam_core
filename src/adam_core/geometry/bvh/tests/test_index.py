@@ -287,11 +287,11 @@ def test_distances_and_guard_pairs_jax(benchmark, theta_guard, W):
 @pytest.mark.parametrize("max_chord_arcmin", [0.5, 1.0, 2.0])
 @pytest.mark.parametrize("max_segments_per_orbit", [8192, 65536])
 def test_sample_ellipse_adaptive(
-    benchmark, synthetic_orbits_stratified_ci, max_chord_arcmin, max_segments_per_orbit
+    benchmark, orbits_synthetic_stratified_ci, max_chord_arcmin, max_segments_per_orbit
 ):
     orbits_plane_params, orbits_polyline_segments = benchmark(
         lambda: sample_ellipse_adaptive(
-            synthetic_orbits_stratified_ci,
+            orbits_synthetic_stratified_ci,
             max_chord_arcmin=max_chord_arcmin,
             max_segments_per_orbit=max_segments_per_orbit,
         )
@@ -329,12 +329,12 @@ def test_build_bvh_index_from_segments(benchmark, segments_aabbs, max_leaf_size)
 
 
 @pytest.mark.benchmark
-def test_build_bvh_index_benchmark(benchmark, synthetic_orbits_stratified_ci):
+def test_build_bvh_index_benchmark(benchmark, orbits_synthetic_stratified_ci):
     """Benchmark BVH index building with optimal parameters."""
 
     def _build() -> BVHIndex:
         return build_bvh_index(
-            synthetic_orbits_stratified_ci,
+            orbits_synthetic_stratified_ci,
             max_chord_arcmin=5.0,  # Optimal from analysis
             guard_arcmin=0.65,  # Optimal from analysis
             max_leaf_size=64,  # Optimal from analysis

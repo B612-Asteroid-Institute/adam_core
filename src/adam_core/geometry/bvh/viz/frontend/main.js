@@ -48,7 +48,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   let data = null;
   let maxDepth = 0;
 
-  function getRayLengthAU() {l
+  function getRayLengthAU() {
     let v = parseFloat(rayLen.value);
     if (!Number.isFinite(v)) v = 3;
     if (v < 0.1) v = 0.1;

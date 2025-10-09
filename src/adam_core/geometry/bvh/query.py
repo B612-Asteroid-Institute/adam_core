@@ -793,7 +793,7 @@ def query_bvh_worker(
                 leaf_id=[],
                 distance_au=[],
                 query_guard_arcmin=float(guard_arcmin),
-                query_batch_size=int(end - start),
+                query_batch_size=0,
                 query_max_processes=0,
             ),
             QueryBVHTelemetry(
@@ -811,8 +811,6 @@ def query_bvh_worker(
     leaf_ids_arr = cand.leaf_id
 
     N = int(len(det_idx))
-
-    # Segment orbit IDs for final formatting (Arrow-based; subset later)
 
     theta_guard = guard_arcmin * np.pi / (180.0 * 60.0)
 
