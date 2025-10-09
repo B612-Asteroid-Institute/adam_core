@@ -17,8 +17,8 @@ from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.keplerian import KeplerianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.geometry.anomaly_labeling import label_anomalies
-from adam_core.geometry.overlap import OverlapHits
-from adam_core.observations.rays import ObservationRays
+from adam_core.geometry.bvh.query import OverlapHits
+from adam_core.geometry.rays import ObservationRays
 from adam_core.orbits.orbits import Orbits
 from adam_core.time import Timestamp
 

@@ -30,10 +30,10 @@ Notes
   keeping shapes fixed for JIT stability.
 """
 
-from pathlib import Path
-from typing import Any, Dict
 import logging
 from functools import partial
+from pathlib import Path
+from typing import Any, Dict
 
 import jax
 import jax.numpy as jnp
@@ -47,8 +47,8 @@ from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import OriginCodes
 from adam_core.coordinates.transform import transform_coordinates
 from adam_core.dynamics.kepler import solve_kepler as jax_solve_kepler
-from adam_core.geometry.overlap import OverlapHits
-from adam_core.observations.rays import ObservationRays
+from adam_core.geometry.bvh import OverlapHits
+from adam_core.geometry.bvh import ObservationRays
 from adam_core.orbits.orbits import Orbits
 from adam_core.utils.iter import _iterate_chunk_indices
 
@@ -121,9 +121,9 @@ def label_anomalies_worker(
 
     ray_origins = np.column_stack(
         [
-            rays.observer.x.to_numpy(zero_copy_only=False),
-            rays.observer.y.to_numpy(zero_copy_only=False),
-            rays.observer.z.to_numpy(zero_copy_only=False),
+            rays.observer.coordinates.x.to_numpy(zero_copy_only=False),
+            rays.observer.coordinates.y.to_numpy(zero_copy_only=False),
+            rays.observer.coordinates.z.to_numpy(zero_copy_only=False),
         ]
     )
     ray_directions = np.column_stack(
@@ -211,7 +211,13 @@ def label_anomalies_worker(
 
     for start in range(0, padded_n, chunk_size):
         end = start + chunk_size
-        (plane_distances_chunk, snap_errors_chunk, nu_values_chunk, valid_mask_chunk, n_valid_chunk) = _compute_candidates_jax(
+        (
+            plane_distances_chunk,
+            snap_errors_chunk,
+            nu_values_chunk,
+            valid_mask_chunk,
+            n_valid_chunk,
+        ) = _compute_candidates_jax(
             jo[start:end],
             jd[start:end],
             jnorm[start:end],
@@ -235,7 +241,6 @@ def label_anomalies_worker(
     nu_values = jnp.concatenate(nu_chunks, axis=0)
     valid_mask = jnp.concatenate(mask_chunks, axis=0)
     n_valid = jnp.concatenate(nvalid_chunks, axis=0)
-
 
     # TODO: some kind of check to make sure every hit has at least one valid candidate
 
@@ -263,7 +268,9 @@ def label_anomalies_worker(
 
     # Compute orbital elements for each candidate
     expanded_times = (
-        rays.time.mjd().to_numpy(zero_copy_only=False).astype(float)[sel_hit_idx]
+        rays.observer.coordinates.time.mjd()
+        .to_numpy(zero_copy_only=False)
+        .astype(float)[sel_hit_idx]
     )
     expanded_a = a_hit[sel_hit_idx]
     expanded_e = e_hit[sel_hit_idx]
@@ -406,7 +413,7 @@ def label_anomalies(
     """
     if len(hits) == 0:
         return CanonicalAnomalyLabels.empty()
-    
+
     # Align rays to hits using det_id (duplicate rays per hit as needed)
     hit_ray_idx = pc.index_in(hits.column("det_id"), rays.column("det_id"))
     if pc.any(pc.is_null(hit_ray_idx)).as_py():
@@ -419,7 +426,9 @@ def label_anomalies(
         raise ValueError("Every hit must have a corresponding orbit")
     orbits = orbits.take(hit_orbit_idx)
 
-    assert len(hits) == len(rays) == len(orbits), "Every hit must have a corresponding ray and orbit"
+    assert (
+        len(hits) == len(rays) == len(orbits)
+    ), "Every hit must have a corresponding ray and orbit"
 
     # Enforce heliocentric-ecliptic coordinates
     orbits = orbits.set_column(
@@ -437,28 +446,32 @@ def label_anomalies(
     if max_processes <= 1:
         # Serial execution using worker
         for start, end in _iterate_chunk_indices(hits, chunk_size):
-            results.append(label_anomalies_worker(
-                hits[start:end],
-                rays[start:end],
-                orbits[start:end],
-                max_k=max_k,
-                chunk_size=chunk_size,
-                snap_error_max_au=snap_error_max_au,
-                dedupe_angle_tol=dedupe_angle_tol,
-            ))
+            results.append(
+                label_anomalies_worker(
+                    hits[start:end],
+                    rays[start:end],
+                    orbits[start:end],
+                    max_k=max_k,
+                    chunk_size=chunk_size,
+                    snap_error_max_au=snap_error_max_au,
+                    dedupe_angle_tol=dedupe_angle_tol,
+                )
+            )
     else:
         # Queue ray remote tasks using backpressure logic
         futures = []
         for start, end in _iterate_chunk_indices(hits, chunk_size):
-            futures.append(_label_anomalies_worker_remote.remote(
-                hits[start:end],
-                rays[start:end],
-                orbits[start:end],
-                max_k=max_k,
-                chunk_size=chunk_size,
-                snap_error_max_au=snap_error_max_au,
-                dedupe_angle_tol=dedupe_angle_tol,
-            ))
+            futures.append(
+                _label_anomalies_worker_remote.remote(
+                    hits[start:end],
+                    rays[start:end],
+                    orbits[start:end],
+                    max_k=max_k,
+                    chunk_size=chunk_size,
+                    snap_error_max_au=snap_error_max_au,
+                    dedupe_angle_tol=dedupe_angle_tol,
+                )
+            )
             if len(futures) >= max_processes * 1.5:
                 finished, futures = ray.wait(futures, num_returns=1)
                 results.append(ray.get(finished[0]))
@@ -467,7 +480,14 @@ def label_anomalies(
             results.append(ray.get(finished[0]))
 
     labels = qv.concatenate(results, defrag=True)
-    labels = labels.sort_by([("det_id", "ascending"), ("orbit_id", "ascending"), ("variant_id", "ascending"), ("snap_error", "ascending")])
+    labels = labels.sort_by(
+        [
+            ("det_id", "ascending"),
+            ("orbit_id", "ascending"),
+            ("variant_id", "ascending"),
+            ("snap_error", "ascending"),
+        ]
+    )
     return labels
 
 
@@ -544,11 +564,15 @@ def _compute_candidates_kernel(
         d = ray_direction
         u_plane_3d = d - jnp.dot(d, n) * n
         u_norm = jnp.linalg.norm(u_plane_3d)
-        u_plane_3d_unit = jnp.where(u_norm > 1e-12, u_plane_3d / (u_norm + 1e-30), jnp.zeros_like(u_plane_3d))
+        u_plane_3d_unit = jnp.where(
+            u_norm > 1e-12, u_plane_3d / (u_norm + 1e-30), jnp.zeros_like(u_plane_3d)
+        )
 
         # Transform direction to perifocal 2D by applying same rotation as for points
         # Use transform_to_perifocal_2d on a synthetic point one unit along u_plane_3d_unit
-        dir_point_3d = projected_point + u_plane_3d_unit  # a point one unit ahead along direction
+        dir_point_3d = (
+            projected_point + u_plane_3d_unit
+        )  # a point one unit ahead along direction
         dir_point_2d = transform_to_perifocal_2d(dir_point_3d, i_val, raan_val, ap_val)
         # The in-plane direction in 2D is the difference in perifocal coords
         direction_2d = dir_point_2d - point_2d

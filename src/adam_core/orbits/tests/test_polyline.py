@@ -282,8 +282,10 @@ class TestComputeSegmentAabbs:
     def test_empty_segments(self):
         """Test with empty segments."""
         empty_segments = OrbitPolylineSegments.empty()
-        result = compute_segment_aabbs(empty_segments)
-        assert len(result) == 0
+        result = compute_segment_aabbs(
+            empty_segments, guard_arcmin=1.0, epsilon_n_au=1e-6
+        )
+        assert all(arr.size == 0 for arr in result)
 
     def test_aabb_computation(self):
         """Test basic AABB computation."""
@@ -297,52 +299,32 @@ class TestComputeSegmentAabbs:
             x1=[1.0, 2.0],
             y1=[1.0, 1.0],
             z1=[0.0, 0.0],
-            aabb_min_x=[None, None],
-            aabb_min_y=[None, None],
-            aabb_min_z=[None, None],
-            aabb_max_x=[None, None],
-            aabb_max_y=[None, None],
-            aabb_max_z=[None, None],
             r_mid_au=[0.7, 1.5],  # Approximate midpoint distances
             n_x=[0.0, 0.0],
             n_y=[0.0, 0.0],
             n_z=[1.0, 1.0],
         )
 
-        result = compute_segment_aabbs(segments, guard_arcmin=1.0)
-
-        # Check that AABBs are populated (no nulls remain)
-        import pyarrow.compute as pc
-        assert not pc.any(pc.is_null(result.aabb_min_x)).as_py()
-        assert not pc.any(pc.is_null(result.aabb_max_x)).as_py()
+        min_x, min_y, min_z, max_x, max_y, max_z = compute_segment_aabbs(
+            segments, guard_arcmin=1.0, epsilon_n_au=1e-6
+        )
 
         # Check that AABBs contain segment endpoints
-        for i in range(len(result)):
-            x0, y0, z0 = (
-                result.x0[i].as_py(),
-                result.y0[i].as_py(),
-                result.z0[i].as_py(),
-            )
-            x1, y1, z1 = (
-                result.x1[i].as_py(),
-                result.y1[i].as_py(),
-                result.z1[i].as_py(),
-            )
-
-            min_x = result.aabb_min_x[i].as_py()
-            max_x = result.aabb_max_x[i].as_py()
-            min_y = result.aabb_min_y[i].as_py()
-            max_y = result.aabb_max_y[i].as_py()
-            min_z = result.aabb_min_z[i].as_py()
-            max_z = result.aabb_max_z[i].as_py()
+        for i in range(len(segments)):
+            x0 = segments.x0[i].as_py()
+            y0 = segments.y0[i].as_py()
+            z0 = segments.z0[i].as_py()
+            x1 = segments.x1[i].as_py()
+            y1 = segments.y1[i].as_py()
+            z1 = segments.z1[i].as_py()
 
             # Both endpoints should be inside AABB
-            assert min_x <= x0 <= max_x
-            assert min_y <= y0 <= max_y
-            assert min_z <= z0 <= max_z
-            assert min_x <= x1 <= max_x
-            assert min_y <= y1 <= max_y
-            assert min_z <= z1 <= max_z
+            assert min_x[i] <= x0 <= max_x[i]
+            assert min_y[i] <= y0 <= max_y[i]
+            assert min_z[i] <= z0 <= max_z[i]
+            assert min_x[i] <= x1 <= max_x[i]
+            assert min_y[i] <= y1 <= max_y[i]
+            assert min_z[i] <= z1 <= max_z[i]
 
     def test_guard_band_padding(self):
         """Test that guard band padding is applied."""
@@ -356,12 +338,6 @@ class TestComputeSegmentAabbs:
             x1=[1.0],
             y1=[0.0],
             z1=[0.0],
-            aabb_min_x=[None],
-            aabb_min_y=[None],
-            aabb_min_z=[None],
-            aabb_max_x=[None],
-            aabb_max_y=[None],
-            aabb_max_z=[None],
             r_mid_au=[0.5],
             n_x=[0.0],
             n_y=[0.0],
@@ -369,7 +345,9 @@ class TestComputeSegmentAabbs:
         )
 
         guard_arcmin = 2.0
-        result = compute_segment_aabbs(segments, guard_arcmin=guard_arcmin)
+        min_x, min_y, min_z, max_x, max_y, max_z = compute_segment_aabbs(
+            segments, guard_arcmin=guard_arcmin, epsilon_n_au=1e-6
+        )
 
         # Compute expected padding
         theta_guard = guard_arcmin * np.pi / (180 * 60)
@@ -377,15 +355,14 @@ class TestComputeSegmentAabbs:
         expected_pad = theta_guard * 1.0
 
         # Check that padding was applied
-        min_x = result.aabb_min_x[0].as_py()
-        max_x = result.aabb_max_x[0].as_py()
-
         # Unpadded AABB would be [0, 1] in x
         # With padding should be approximately [0-pad, 1+pad]
-        assert min_x < 0.0
-        assert max_x > 1.0
-        assert abs(min_x - (-expected_pad)) < expected_pad * 0.1  # Allow some tolerance
-        assert abs(max_x - (1.0 + expected_pad)) < expected_pad * 0.1
+        assert min_x[0] < 0.0
+        assert max_x[0] > 1.0
+        assert (
+            abs(min_x[0] - (-expected_pad)) < expected_pad * 0.1
+        )  # Allow some tolerance
+        assert abs(max_x[0] - (1.0 + expected_pad)) < expected_pad * 0.1
 
 
 class TestIntegration:
@@ -399,17 +376,16 @@ class TestIntegration:
         params, segments = sample_ellipse_adaptive(orbits, max_chord_arcmin=0.5)
 
         # Compute AABBs
-        segments_with_aabbs = compute_segment_aabbs(segments, guard_arcmin=1.0)
+        aabbs = compute_segment_aabbs(segments, guard_arcmin=1.0, epsilon_n_au=1e-6)
 
         # Verify results
         assert len(params) == len(orbits)
-        assert len(segments_with_aabbs) > 0
-        import pyarrow.compute as pc
-        assert not pc.any(pc.is_null(segments_with_aabbs.aabb_min_x)).as_py()
+        assert len(segments) > 0
+        assert all(arr.size == len(segments) for arr in aabbs)
 
         # Check that each orbit has segments
         orbit_ids_params = set(params.orbit_id.to_pylist())
-        orbit_ids_segments = set(segments_with_aabbs.orbit_id.to_pylist())
+        orbit_ids_segments = set(segments.orbit_id.to_pylist())
         assert orbit_ids_params == orbit_ids_segments
 
     def test_high_eccentricity_orbit(self):
@@ -441,3 +417,111 @@ class TestIntegration:
         # Verify parameters
         assert len(params) == 1
         assert params.e[0].as_py() > 0.8  # Should be high eccentricity
+
+
+def _make_one_orbit():
+    times = Timestamp.from_mjd([59000.0], scale="tdb")
+    coords = CartesianCoordinates.from_kwargs(
+        x=[1.0],
+        y=[0.0],
+        z=[0.0],
+        vx=[0.0],
+        vy=[0.017202],
+        vz=[0.0],
+        time=times,
+        origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
+        frame="ecliptic",
+    )
+    return Orbits.from_kwargs(orbit_id=["o1"], coordinates=coords)
+
+
+@pytest.mark.parametrize("max_chord_arcmin", [0.5, 1.0, 2.0])
+def test_sample_ellipse_adaptive_segment_counts_monotonic(max_chord_arcmin):
+    orbits = _make_one_orbit()
+    _, segs = sample_ellipse_adaptive(
+        orbits, max_chord_arcmin=max_chord_arcmin, max_segments_per_orbit=8192
+    )
+    assert len(segs) > 0
+
+
+def test_sample_ellipse_adaptive_determinism_and_continuity():
+    orbits = _make_one_orbit()
+    _, s1 = sample_ellipse_adaptive(
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+    )
+    _, s2 = sample_ellipse_adaptive(
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+    )
+    assert len(s1) == len(s2)
+    assert np.allclose(s1.x0.to_numpy(), s2.x0.to_numpy())
+    assert np.allclose(s1.y0.to_numpy(), s2.y0.to_numpy())
+    assert np.allclose(s1.z0.to_numpy(), s2.z0.to_numpy())
+    assert np.allclose(s1.x1.to_numpy(), s2.x1.to_numpy())
+    if len(s1) > 1:
+        end_pts = np.column_stack(
+            [s1.x1.to_numpy(), s1.y1.to_numpy(), s1.z1.to_numpy()]
+        )
+        start_pts = np.column_stack(
+            [s1.x0.to_numpy(), s1.y0.to_numpy(), s1.z0.to_numpy()]
+        )
+        deltas = np.linalg.norm(end_pts[:-1] - start_pts[1:], axis=1)
+        assert np.all(deltas < 1e-9)
+
+
+def test_compute_segment_aabbs_contains_endpoints():
+    orbits = _make_one_orbit()
+    _, segs = sample_ellipse_adaptive(
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+    )
+    aabbs = compute_segment_aabbs(segs, guard_arcmin=1.0, epsilon_n_au=1e-6)
+    min_x = np.minimum(segs.x0.to_numpy(), segs.x1.to_numpy())
+    max_x = np.maximum(segs.x0.to_numpy(), segs.x1.to_numpy())
+    min_y = np.minimum(segs.y0.to_numpy(), segs.y1.to_numpy())
+    max_y = np.maximum(segs.y0.to_numpy(), segs.y1.to_numpy())
+    min_z = np.minimum(segs.z0.to_numpy(), segs.z1.to_numpy())
+    max_z = np.maximum(segs.z0.to_numpy(), segs.z1.to_numpy())
+    mnx, mny, mnz, mxx, mxy, mxz = aabbs
+    assert np.all(mnx <= min_x + 1e-12)
+    assert np.all(mxx >= max_x - 1e-12)
+    assert np.all(mny <= min_y + 1e-12)
+    assert np.all(mxy >= max_y - 1e-12)
+    assert np.all(mnz <= min_z + 1e-12)
+    assert np.all(mxz >= max_z - 1e-12)
+
+
+@pytest.mark.parametrize("guard_arcmin_list", [[0.5, 1.0, 2.0]])
+def test_compute_segment_aabbs_guard_monotonic_and_sagitta_guard(guard_arcmin_list):
+    orbits = _make_one_orbit()
+    _, segs = sample_ellipse_adaptive(
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+    )
+    extents_baseline = []
+    extents_sagitta = []
+    for g in guard_arcmin_list:
+        a = compute_segment_aabbs(
+            segs, guard_arcmin=g, epsilon_n_au=1e-6, padding_method="baseline"
+        )
+        s = compute_segment_aabbs(
+            segs, guard_arcmin=g, epsilon_n_au=1e-6, padding_method="sagitta_guard"
+        )
+        a_mx_extent = (a[3] - a[0]) + (a[4] - a[1]) + (a[5] - a[2])
+        s_mx_extent = (s[3] - s[0]) + (s[4] - s[1]) + (s[5] - s[2])
+        extents_baseline.append(np.mean(a_mx_extent))
+        extents_sagitta.append(np.mean(s_mx_extent))
+    for i in range(len(extents_baseline) - 1):
+        assert extents_baseline[i] <= extents_baseline[i + 1] + 1e-12
+        assert extents_sagitta[i] <= extents_sagitta[i + 1] + 1e-12
+
+
+def test_empty_inputs_return_empty_tables():
+    params, segs = sample_ellipse_adaptive(
+        Orbits.empty(), max_chord_arcmin=1.0, max_segments_per_orbit=1024
+    )
+    assert isinstance(params, OrbitsPlaneParams) and isinstance(
+        segs, OrbitPolylineSegments
+    )
+    assert len(params) == 0 and len(segs) == 0
+    segs2 = compute_segment_aabbs(
+        OrbitPolylineSegments.empty(), guard_arcmin=1.0, epsilon_n_au=1e-6
+    )
+    assert all(arr.size == 0 for arr in segs2)
