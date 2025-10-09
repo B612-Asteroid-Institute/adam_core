@@ -21,9 +21,8 @@ import quivr as qv
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
-from ..observations.rays import ObservationRays
 from ..orbits.polyline import OrbitsPlaneParams
-from ..time import Timestamp
+from .rays import ObservationRays
 
 __all__ = [
     "ClockGateConfig",
@@ -386,12 +385,12 @@ def apply_clock_gating(
     max_extrapolation_days = float(config.max_extrapolation_days.to_numpy()[0])
 
     # Extract ray information
-    obs_times_mjd = observation_rays.time.mjd().to_numpy()
+    obs_times_mjd = observation_rays.observer.coordinates.time.mjd().to_numpy()
     observer_positions = np.column_stack(
         [
-            observation_rays.observer.x.to_numpy(),
-            observation_rays.observer.y.to_numpy(),
-            observation_rays.observer.z.to_numpy(),
+            observation_rays.observer.coordinates.x.to_numpy(),
+            observation_rays.observer.coordinates.y.to_numpy(),
+            observation_rays.observer.coordinates.z.to_numpy(),
         ]
     )
     ray_directions = np.column_stack(
@@ -521,12 +520,12 @@ def _apply_clock_gating_legacy(
 ) -> ClockGateResults:
     """Legacy NumPy implementation for validation."""
     # Extract ray information
-    obs_times_mjd = observation_rays.time.mjd().to_numpy()
+    obs_times_mjd = observation_rays.observer.coordinates.time.mjd().to_numpy()
     observer_positions = np.column_stack(
         [
-            observation_rays.observer.x.to_numpy(),
-            observation_rays.observer.y.to_numpy(),
-            observation_rays.observer.z.to_numpy(),
+            observation_rays.observer.coordinates.x.to_numpy(),
+            observation_rays.observer.coordinates.y.to_numpy(),
+            observation_rays.observer.coordinates.z.to_numpy(),
         ]
     )
     ray_directions = np.column_stack(
