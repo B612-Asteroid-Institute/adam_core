@@ -7,9 +7,9 @@ import pytest
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
+from adam_core.geometry.rays import ObservationRays, rays_from_detections
 from adam_core.observations.detections import PointSourceDetections
 from adam_core.observations.exposures import Exposures
-from adam_core.observations.rays import ObservationRays, rays_from_detections
 from adam_core.time import Timestamp
 
 
@@ -82,7 +82,7 @@ class TestObservationRays:
 
         assert len(rays) == 1
         assert rays.det_id[0].as_py() == "test_det"
-        assert rays.observer_code[0].as_py() == "X05"
+        assert rays.observer.code[0].as_py() == "X05"
 
 
 class TestRaysFromDetections:
@@ -140,7 +140,7 @@ class TestRaysFromDetections:
         assert ray_det_ids == expected_det_ids
 
         # Check that observatory codes are correct
-        ray_obs_codes = rays.observer_code.to_pylist()
+        ray_obs_codes = rays.observer.code.to_pylist()
         expected_obs_codes = exposures.observatory_code.to_pylist()
         assert ray_obs_codes == expected_obs_codes
 
@@ -235,7 +235,7 @@ class TestRaysFromDetections:
 
         # Times should match between detections and rays
         det_times = detections.time.mjd().to_numpy()
-        ray_times = rays.time.mjd().to_numpy()
+        ray_times = rays.observer.coordinates.time.mjd().to_numpy()
 
         # Sort both arrays since order might differ due to linkage
         det_times_sorted = np.sort(det_times)
@@ -251,9 +251,9 @@ class TestRaysFromDetections:
 
         # Should have different observer positions for different observatories
         # Use vectorized operations to get all positions at once
-        obs_x = rays.observer.x.to_numpy()
-        obs_y = rays.observer.y.to_numpy()
-        obs_z = rays.observer.z.to_numpy()
+        obs_x = rays.observer.coordinates.x.to_numpy()
+        obs_y = rays.observer.coordinates.y.to_numpy()
+        obs_z = rays.observer.coordinates.z.to_numpy()
 
         # Positions should be different (not all the same)
         # Check that positions vary across the dataset

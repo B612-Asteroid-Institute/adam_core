@@ -40,4 +40,3 @@ class AnomalyLabels(qv.Table):
     # Quality metrics
     snap_error = qv.Float64Column()  # Residual from ellipse fit
     plane_distance_au = qv.Float64Column()  # Distance from orbital plane (AU)
-

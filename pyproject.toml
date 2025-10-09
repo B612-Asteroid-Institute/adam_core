@@ -85,7 +85,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.3.2",
+    "adam-assist>=0.3.4",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.1",
@@ -93,6 +93,8 @@ test = [
     "plotly>=5.24.1",
     "nbformat>=4.2.0",
     "oem>=0.4.5",
+    "pytest-xdist>=3.8.0",
+    "PyYAML>=6.0.2",
 ]
 
 [tool.black]
@@ -131,3 +133,6 @@ test = "pytest --benchmark-skip -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
+bench_query = "python src/adam_core/geometry/tests/bench_runner.py query {args}"
+bench_index = "python src/adam_core/geometry/tests/bench_runner.py index {args}"
+bench_crossmatch = "python src/adam_core/geometry/tests/benchmark_crossmatch.py {args}"

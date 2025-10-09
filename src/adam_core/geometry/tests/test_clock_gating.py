@@ -15,7 +15,7 @@ from adam_core.geometry.clock_gating import (
     apply_clock_gating,
     compute_orbital_positions_at_times,
 )
-from adam_core.observations.rays import ObservationRays
+from adam_core.geometry.rays import ObservationRays
 from adam_core.orbits.orbits import Orbits
 from adam_core.orbits.polyline import sample_ellipse_adaptive
 from adam_core.time import Timestamp
@@ -33,7 +33,9 @@ class TestClockGating:
         )
 
         empty_obs = ObservationRays.empty()
-        empty_params = sample_ellipse_adaptive(Orbits.empty())[0]
+        empty_params = sample_ellipse_adaptive(
+            Orbits.empty(), max_chord_arcmin=1.0, max_segments_per_orbit=1024
+        )[0]
 
         result = apply_clock_gating(empty_obs, empty_params, config)
         assert len(result) == 0
@@ -61,7 +63,9 @@ class TestClockGating:
             coordinates=coords,
         )
 
-        plane_params, _ = sample_ellipse_adaptive(orbit)
+        plane_params, _ = sample_ellipse_adaptive(
+            orbit, max_chord_arcmin=1.0, max_segments_per_orbit=1024
+        )
 
         # Create observation rays near the predicted orbital positions
         # Observe at epoch + 0.25 periods (90 degrees mean anomaly)
@@ -179,7 +183,9 @@ class TestClockGating:
             coordinates=coords,
         )
 
-        plane_params, _ = sample_ellipse_adaptive(orbit)
+        plane_params, _ = sample_ellipse_adaptive(
+            orbit, max_chord_arcmin=1.0, max_segments_per_orbit=1024
+        )
 
         # Create observation rays: one good (predicted), one bad (opposite)
         obs_times = Timestamp.from_mjd([59000.0 + 91.3, 59000.0 + 91.3], scale="tdb")
@@ -275,7 +281,9 @@ class TestClockGating:
             coordinates=coords,
         )
 
-        plane_params, _ = sample_ellipse_adaptive(orbit)
+        plane_params, _ = sample_ellipse_adaptive(
+            orbit, max_chord_arcmin=1.0, max_segments_per_orbit=1024
+        )
 
         # Create observation ray far in the future (beyond extrapolation limit)
         obs_time = times.mjd().to_numpy()[0] + 1000.0  # 1000 days later
@@ -371,7 +379,9 @@ class TestClockGating:
             coordinates=coords,
         )
 
-        plane_params, _ = sample_ellipse_adaptive(orbit)
+        plane_params, _ = sample_ellipse_adaptive(
+            orbit, max_chord_arcmin=1.0, max_segments_per_orbit=1024
+        )
 
         # Create observation at half period (should be at apoapsis)
         half_period = 365.25 / 2
@@ -462,7 +472,9 @@ class TestClockGating:
             coordinates=coords,
         )
 
-        plane_params, _ = sample_ellipse_adaptive(orbit)
+        plane_params, _ = sample_ellipse_adaptive(
+            orbit, max_chord_arcmin=1.0, max_segments_per_orbit=1024
+        )
 
         # Create multiple observation rays
         obs_times = Timestamp.from_mjd([59000.0 + 91.3, 59000.0 + 182.6], scale="tdb")

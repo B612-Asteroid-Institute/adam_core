@@ -9,21 +9,24 @@ with guard band padding, and represent the results in quivr tables.
 from __future__ import annotations
 
 import logging
-from typing import Tuple
 from functools import partial
+from typing import Literal, Tuple
 
-import numpy as np
-import numpy.typing as npt
 import jax
 import jax.numpy as jnp
+import numpy as np
+import numpy.typing as npt
 import quivr as qv
+import ray
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.keplerian import KeplerianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.transform import transform_coordinates
 from ..orbits.orbits import Orbits
+from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
+from ..utils.iter import _iterate_chunk_indices
 
 __all__ = [
     "OrbitsPlaneParams",
@@ -90,14 +93,18 @@ class OrbitsPlaneParams(qv.Table):
     #: Origin of coordinate system
     origin = Origin.as_column()
 
+    # Provenance: sampling parameters
+    sample_max_chord_arcmin = qv.FloatAttribute(default=0.0)
+    sample_max_segments_per_orbit = qv.IntAttribute(default=0)
+
 
 class OrbitPolylineSegments(qv.Table):
     """
-    Polyline segments representing orbital ellipses with AABBs for BVH construction.
+    Polyline segments representing orbital ellipses used for BVH construction.
 
     Each row represents a line segment connecting two consecutive points on an
-    orbital ellipse, with precomputed axis-aligned bounding boxes for efficient
-    geometric queries.
+    orbital ellipse. AABBs are no longer stored on the segments; they are
+    computed in-memory during BVH construction and recorded on BVH nodes.
     """
 
     #: Unique identifier for the orbit
@@ -106,43 +113,211 @@ class OrbitPolylineSegments(qv.Table):
     #: Segment identifier within the orbit (0-based)
     seg_id = qv.Int32Column()
 
-    #: Segment start point - x component in AU (SSB frame)
-    x0 = qv.Float64Column()
-    #: Segment start point - y component in AU (SSB frame)
-    y0 = qv.Float64Column()
-    #: Segment start point - z component in AU (SSB frame)
-    z0 = qv.Float64Column()
+    #: Segment start point - x component in AU (SSB frame) [float32]
+    x0 = qv.Float32Column()
+    #: Segment start point - y component in AU (SSB frame) [float32]
+    y0 = qv.Float32Column()
+    #: Segment start point - z component in AU (SSB frame) [float32]
+    z0 = qv.Float32Column()
 
-    #: Segment end point - x component in AU (SSB frame)
-    x1 = qv.Float64Column()
-    #: Segment end point - y component in AU (SSB frame)
-    y1 = qv.Float64Column()
-    #: Segment end point - z component in AU (SSB frame)
-    z1 = qv.Float64Column()
+    #: Segment end point - x component in AU (SSB frame) [float32]
+    x1 = qv.Float32Column()
+    #: Segment end point - y component in AU (SSB frame) [float32]
+    y1 = qv.Float32Column()
+    #: Segment end point - z component in AU (SSB frame) [float32]
+    z1 = qv.Float32Column()
 
-    #: AABB minimum bound - x component in AU
-    aabb_min_x = qv.Float64Column(nullable=True)
-    #: AABB minimum bound - y component in AU
-    aabb_min_y = qv.Float64Column(nullable=True)
-    #: AABB minimum bound - z component in AU
-    aabb_min_z = qv.Float64Column(nullable=True)
+    #: Heliocentric distance at segment midpoint in AU [float32]
+    r_mid_au = qv.Float32Column()
 
-    #: AABB maximum bound - x component in AU
-    aabb_max_x = qv.Float64Column(nullable=True)
-    #: AABB maximum bound - y component in AU
-    aabb_max_y = qv.Float64Column(nullable=True)
-    #: AABB maximum bound - z component in AU
-    aabb_max_z = qv.Float64Column(nullable=True)
+    #: Orbital plane normal vector - x component [float32]
+    n_x = qv.Float32Column()
+    #: Orbital plane normal vector - y component [float32]
+    n_y = qv.Float32Column()
+    #: Orbital plane normal vector - z component [float32]
+    n_z = qv.Float32Column()
 
-    #: Heliocentric distance at segment midpoint in AU
-    r_mid_au = qv.Float64Column()
+    # Provenance: sampling parameters (AABB provenance is stored on BVH nodes)
+    sample_max_chord_arcmin = qv.FloatAttribute(default=0.0)
+    sample_max_segments_per_orbit = qv.IntAttribute(default=0)
 
-    #: Orbital plane normal vector - x component (duplicated for convenience)
-    n_x = qv.Float64Column()
-    #: Orbital plane normal vector - y component (duplicated for convenience)
-    n_y = qv.Float64Column()
-    #: Orbital plane normal vector - z component (duplicated for convenience)
-    n_z = qv.Float64Column()
+
+@partial(jax.jit, static_argnames=("use_sagitta_guard",))
+def _compute_aabbs_kernel(
+    x0: jnp.ndarray,
+    y0: jnp.ndarray,
+    z0: jnp.ndarray,
+    x1: jnp.ndarray,
+    y1: jnp.ndarray,
+    z1: jnp.ndarray,
+    r_mid: jnp.ndarray,
+    n_x: jnp.ndarray,
+    n_y: jnp.ndarray,
+    n_z: jnp.ndarray,
+    theta_guard: float,
+    theta_c: float,
+    epsilon_n_au: float,
+    *,
+    use_sagitta_guard: bool,
+) -> Tuple[
+    jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
+]:
+    # Type constants to input dtype to avoid float64 promotion
+    dtype = x0.dtype
+    one = jnp.array(1.0, dtype=dtype)
+    eight = jnp.array(8.0, dtype=dtype)
+
+    # Unpadded AABBs
+    min_x = jnp.minimum(x0, x1)
+    max_x = jnp.maximum(x0, x1)
+    min_y = jnp.minimum(y0, y1)
+    max_y = jnp.maximum(y0, y1)
+    min_z = jnp.minimum(z0, z1)
+    max_z = jnp.maximum(z0, z1)
+
+    # In-plane padding
+    r_eff = jnp.maximum(r_mid, one)
+    pad_guard = jnp.array(theta_guard, dtype=dtype) * r_eff
+    theta_c_typed = jnp.array(theta_c, dtype=dtype)
+    pad_sagitta = (theta_c_typed * theta_c_typed / eight) * r_eff
+    if use_sagitta_guard:
+        pad_in_plane = jnp.maximum(pad_guard, pad_sagitta)
+    else:
+        pad_in_plane = pad_guard
+
+    # Apply in-plane padding
+    min_x = min_x - pad_in_plane
+    max_x = max_x + pad_in_plane
+    min_y = min_y - pad_in_plane
+    max_y = max_y + pad_in_plane
+    min_z = min_z - pad_in_plane
+    max_z = max_z + pad_in_plane
+
+    # Padding along orbital plane normal
+    epsilon_typed = jnp.array(epsilon_n_au, dtype=dtype)
+    abs_nx = jnp.abs(n_x)
+    abs_ny = jnp.abs(n_y)
+    abs_nz = jnp.abs(n_z)
+    min_x = min_x - epsilon_typed * abs_nx
+    max_x = max_x + epsilon_typed * abs_nx
+    min_y = min_y - epsilon_typed * abs_ny
+    max_y = max_y + epsilon_typed * abs_ny
+    min_z = min_z - epsilon_typed * abs_nz
+    max_z = max_z + epsilon_typed * abs_nz
+
+    return min_x, min_y, min_z, max_x, max_y, max_z
+
+
+def _compute_aabbs_chunk(
+    segments: OrbitPolylineSegments,
+    guard_arcmin: float,
+    epsilon_n_au: float,
+    *,
+    padding_method: "PaddingMethod",
+    window_len: int | None = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if len(segments) == 0:
+        return (
+            np.array([], dtype=np.float64),
+            np.array([], dtype=np.float64),
+            np.array([], dtype=np.float64),
+            np.array([], dtype=np.float64),
+            np.array([], dtype=np.float64),
+            np.array([], dtype=np.float64),
+        )
+
+    theta_guard = guard_arcmin * np.pi / (180.0 * 60.0)
+    sample_chord_arcmin = float(getattr(segments, "sample_max_chord_arcmin", 0.0))
+    theta_c = sample_chord_arcmin * np.pi / (180.0 * 60.0)
+    use_sagitta_guard = padding_method == "sagitta_guard"
+
+    # Use NumPy inputs; pad to fixed window_len for stable JIT shape if requested
+    x0_np = segments.x0.to_numpy()
+    y0_np = segments.y0.to_numpy()
+    z0_np = segments.z0.to_numpy()
+    x1_np = segments.x1.to_numpy()
+    y1_np = segments.y1.to_numpy()
+    z1_np = segments.z1.to_numpy()
+    r_mid_np = segments.r_mid_au.to_numpy()
+    n_x_np = segments.n_x.to_numpy()
+    n_y_np = segments.n_y.to_numpy()
+    n_z_np = segments.n_z.to_numpy()
+
+    orig_len = len(x0_np)
+    if window_len is not None and orig_len < window_len:
+        pad = window_len - orig_len
+
+        def pad1(a: np.ndarray) -> np.ndarray:
+            return np.pad(a, (0, pad))
+
+        def pad3(a: np.ndarray) -> np.ndarray:
+            return np.pad(a, (0, pad))
+
+        x0 = pad1(x0_np)
+        y0 = pad1(y0_np)
+        z0 = pad1(z0_np)
+        x1 = pad1(x1_np)
+        y1 = pad1(y1_np)
+        z1 = pad1(z1_np)
+        r_mid = pad1(r_mid_np)
+        n_x = pad1(n_x_np)
+        n_y = pad1(n_y_np)
+        n_z = pad1(n_z_np)
+    else:
+        x0 = x0_np
+        y0 = y0_np
+        z0 = z0_np
+        x1 = x1_np
+        y1 = y1_np
+        z1 = z1_np
+        r_mid = r_mid_np
+        n_x = n_x_np
+        n_y = n_y_np
+        n_z = n_z_np
+
+    out = _compute_aabbs_kernel(
+        x0,
+        y0,
+        z0,
+        x1,
+        y1,
+        z1,
+        r_mid,
+        n_x,
+        n_y,
+        n_z,
+        float(theta_guard),
+        float(theta_c),
+        float(epsilon_n_au),
+        use_sagitta_guard=use_sagitta_guard,
+    )
+    # Convert to NumPy
+    outs = tuple(np.asarray(arr) for arr in out)
+    if window_len is not None and orig_len < window_len:
+        outs = tuple(o[:orig_len] for o in outs)
+    return outs  # type: ignore[return-value]
+
+
+@ray.remote
+def _compute_aabbs_worker_remote(
+    start: int,
+    segments: OrbitPolylineSegments,
+    guard_arcmin: float,
+    epsilon_n_au: float,
+    *,
+    padding_method: "PaddingMethod",
+    window_len: int | None = None,
+) -> Tuple[
+    int, Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+]:
+    res = _compute_aabbs_chunk(
+        segments,
+        guard_arcmin=guard_arcmin,
+        epsilon_n_au=epsilon_n_au,
+        padding_method=padding_method,
+        window_len=window_len,
+    )
+    return start, res
 
 
 @partial(jax.jit, static_argnums=(4,))
@@ -173,8 +348,11 @@ def _sample_positions_jax(
     x_orb = r * cos_f[None, :]
     y_orb = r * sin_f[None, :]
 
-    positions = x_orb[..., None] * p_hat[:, None, :] + y_orb[..., None] * q_hat[:, None, :]
+    positions = (
+        x_orb[..., None] * p_hat[:, None, :] + y_orb[..., None] * q_hat[:, None, :]
+    )
     return positions  # (N, n_points, 3)
+
 
 def _compute_orbital_basis(
     kep_coords: KeplerianCoordinates,
@@ -331,8 +509,8 @@ def _sample_ellipse_points(
 
 def sample_ellipse_adaptive(
     orbits: Orbits,
-    max_chord_arcmin: float = 0.3,
-    max_segments_per_orbit: int = 65536,
+    max_chord_arcmin: float,
+    max_segments_per_orbit: int,
 ) -> Tuple[OrbitsPlaneParams, OrbitPolylineSegments]:
     """
     Sample orbital ellipses adaptively based on chord length constraints.
@@ -345,9 +523,9 @@ def sample_ellipse_adaptive(
     ----------
     orbits : Orbits
         Input orbits to sample
-    max_chord_arcmin : float, default=0.3
+    max_chord_arcmin : float
         Maximum allowed chord length in arcminutes as seen from 1 AU
-    max_segments_per_orbit : int, default=8192
+    max_segments_per_orbit : int
         Maximum number of segments per orbit to prevent explosion
 
     Returns
@@ -462,6 +640,13 @@ def sample_ellipse_adaptive(
             continue
         idx_sorted = np.sort(idx)
         P = len(idx_sorted)
+        # Enforce strict cap on segments per orbit by uniformly thinning if needed
+        if P > int(max_segments_per_orbit):
+            take = int(max_segments_per_orbit)
+            # Evenly spaced selection over the circular ring
+            sel = (np.linspace(0, P, num=take, endpoint=False)).astype(np.int64)
+            idx_sorted = idx_sorted[sel]
+            P = take
         for j in range(P):
             i0 = idx_sorted[j]
             i1 = idx_sorted[(j + 1) % P]
@@ -471,16 +656,16 @@ def sample_ellipse_adaptive(
 
             all_orbit_ids.append(orbit_id)
             all_seg_ids.append(j)
-            all_x0.append(float(p0[0]))
-            all_y0.append(float(p0[1]))
-            all_z0.append(float(p0[2]))
-            all_x1.append(float(p1[0]))
-            all_y1.append(float(p1[1]))
-            all_z1.append(float(p1[2]))
-            all_r_mid.append(r_mid)
-            all_n_x.append(float(n_hat[i, 0]))
-            all_n_y.append(float(n_hat[i, 1]))
-            all_n_z.append(float(n_hat[i, 2]))
+            all_x0.append(np.float32(p0[0]))
+            all_y0.append(np.float32(p0[1]))
+            all_z0.append(np.float32(p0[2]))
+            all_x1.append(np.float32(p1[0]))
+            all_y1.append(np.float32(p1[1]))
+            all_z1.append(np.float32(p1[2]))
+            all_r_mid.append(np.float32(r_mid))
+            all_n_x.append(np.float32(n_hat[i, 0]))
+            all_n_y.append(np.float32(n_hat[i, 1]))
+            all_n_z.append(np.float32(n_hat[i, 2]))
 
     # Create plane parameters table
     plane_params = OrbitsPlaneParams.from_kwargs(
@@ -503,6 +688,8 @@ def sample_ellipse_adaptive(
         M0=M0,
         frame="ecliptic",
         origin=Origin.from_kwargs(code=[OriginCodes.SUN.name] * len(orbits)),
+        sample_max_chord_arcmin=float(max_chord_arcmin),
+        sample_max_segments_per_orbit=int(max_segments_per_orbit),
     )
 
     # Create segments table (AABBs will be filled by compute_segment_aabbs)
@@ -515,16 +702,12 @@ def sample_ellipse_adaptive(
         x1=all_x1,
         y1=all_y1,
         z1=all_z1,
-        aabb_min_x=[None] * len(all_orbit_ids),  # To be filled
-        aabb_min_y=[None] * len(all_orbit_ids),
-        aabb_min_z=[None] * len(all_orbit_ids),
-        aabb_max_x=[None] * len(all_orbit_ids),
-        aabb_max_y=[None] * len(all_orbit_ids),
-        aabb_max_z=[None] * len(all_orbit_ids),
         r_mid_au=all_r_mid,
         n_x=all_n_x,
         n_y=all_n_y,
         n_z=all_n_z,
+        sample_max_chord_arcmin=float(max_chord_arcmin),
+        sample_max_segments_per_orbit=int(max_segments_per_orbit),
     )
 
     logger.info(f"Sampled {len(orbits)} orbits into {len(segments)} segments")
@@ -532,97 +715,126 @@ def sample_ellipse_adaptive(
     return plane_params, segments
 
 
+PaddingMethod = Literal["baseline", "sagitta_guard"]
+
+
 def compute_segment_aabbs(
     segments: OrbitPolylineSegments,
-    guard_arcmin: float = 1.0,
-    epsilon_n_au: float = 1e-6,
-) -> OrbitPolylineSegments:
+    guard_arcmin: float,
+    epsilon_n_au: float,
+    *,
+    padding_method: PaddingMethod = "baseline",
+    max_processes: int | None = 1,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
     """
     Compute axis-aligned bounding boxes for orbit segments with guard band padding.
 
-    Parameters
-    ----------
-    segments : OrbitPolylineSegments
-        Input segments with endpoints but potentially missing AABBs
-    guard_arcmin : float, default=1.0
-        Guard band in arcminutes for in-plane padding
-    epsilon_n_au : float, default=1e-6
-        Small padding along orbital plane normal in AU
-
-    Returns
-    -------
-    segments_with_aabbs : OrbitPolylineSegments
-        Segments with filled AABB columns
+    Uses a JAX JIT kernel for per-element math. When max_processes > 1, shards the
+    segments and computes AABBs in parallel with Ray, using backpressure to limit
+    outstanding futures.
     """
     if len(segments) == 0:
-        return segments
+        return (
+            np.array([], dtype=np.float32),
+            np.array([], dtype=np.float32),
+            np.array([], dtype=np.float32),
+            np.array([], dtype=np.float32),
+            np.array([], dtype=np.float32),
+            np.array([], dtype=np.float32),
+        )
 
-    # Convert guard band to radians
-    theta_guard = guard_arcmin * np.pi / (180 * 60)
+    if padding_method not in ("baseline", "sagitta_guard"):
+        raise ValueError(f"Unknown padding_method: {padding_method}")
 
-    # Extract segment endpoints
-    x0 = segments.x0.to_numpy()
-    y0 = segments.y0.to_numpy()
-    z0 = segments.z0.to_numpy()
-    x1 = segments.x1.to_numpy()
-    y1 = segments.y1.to_numpy()
-    z1 = segments.z1.to_numpy()
+    # Fixed window length for stable shapes
+    WINDOW_LEN = 8192
 
-    # Segment midpoint distances
-    r_mid = segments.r_mid_au.to_numpy()
+    # Single-process path: iterate in fixed windows to keep JAX shapes stable
+    if max_processes is None or max_processes <= 1:
+        n = len(segments)
+        out_min_x = np.empty(n, dtype=np.float32)
+        out_min_y = np.empty(n, dtype=np.float32)
+        out_min_z = np.empty(n, dtype=np.float32)
+        out_max_x = np.empty(n, dtype=np.float32)
+        out_max_y = np.empty(n, dtype=np.float32)
+        out_max_z = np.empty(n, dtype=np.float32)
 
-    # Orbital plane normals
-    n_x = segments.n_x.to_numpy()
-    n_y = segments.n_y.to_numpy()
-    n_z = segments.n_z.to_numpy()
+        for s in range(0, n, WINDOW_LEN):
+            e = min(s + WINDOW_LEN, n)
+            rmin_x, rmin_y, rmin_z, rmax_x, rmax_y, rmax_z = _compute_aabbs_chunk(
+                segments[s:e],
+                guard_arcmin=guard_arcmin,
+                epsilon_n_au=epsilon_n_au,
+                padding_method=padding_method,
+                window_len=WINDOW_LEN,
+            )
+            out_min_x[s:e] = rmin_x
+            out_min_y[s:e] = rmin_y
+            out_min_z[s:e] = rmin_z
+            out_max_x[s:e] = rmax_x
+            out_max_y[s:e] = rmax_y
+            out_max_z[s:e] = rmax_z
 
-    # Compute unpadded AABBs
-    min_x = np.minimum(x0, x1)
-    max_x = np.maximum(x0, x1)
-    min_y = np.minimum(y0, y1)
-    max_y = np.maximum(y0, y1)
-    min_z = np.minimum(z0, z1)
-    max_z = np.maximum(z0, z1)
+        return out_min_x, out_min_y, out_min_z, out_max_x, out_max_y, out_max_z
 
-    # In-plane padding based on guard band and distance (conservative: at least 1 AU)
-    pad_in_plane = theta_guard * np.maximum(r_mid, 1.0)
+    # Parallel path with Ray
+    initialize_use_ray(num_cpus=max_processes)
 
-    # Apply in-plane padding (conservative - pad all directions)
-    min_x -= pad_in_plane
-    max_x += pad_in_plane
-    min_y -= pad_in_plane
-    max_y += pad_in_plane
-    min_z -= pad_in_plane
-    max_z += pad_in_plane
+    n = len(segments)
+    # Use fixed-size shards for shape stability
+    chunk_size = WINDOW_LEN
 
-    # Additional small padding along orbital plane normal
-    min_x -= epsilon_n_au * np.abs(n_x)
-    max_x += epsilon_n_au * np.abs(n_x)
-    min_y -= epsilon_n_au * np.abs(n_y)
-    max_y += epsilon_n_au * np.abs(n_y)
-    min_z -= epsilon_n_au * np.abs(n_z)
-    max_z += epsilon_n_au * np.abs(n_z)
+    # Pre-allocate outputs
+    out_min_x = np.empty(n, dtype=np.float32)
+    out_min_y = np.empty(n, dtype=np.float32)
+    out_min_z = np.empty(n, dtype=np.float32)
+    out_max_x = np.empty(n, dtype=np.float32)
+    out_max_y = np.empty(n, dtype=np.float32)
+    out_max_z = np.empty(n, dtype=np.float32)
 
-    # Create new segments table with filled AABBs
-    segments_with_aabbs = OrbitPolylineSegments.from_kwargs(
-        orbit_id=segments.orbit_id.to_pylist(),
-        seg_id=segments.seg_id.to_pylist(),
-        x0=segments.x0.to_pylist(),
-        y0=segments.y0.to_pylist(),
-        z0=segments.z0.to_pylist(),
-        x1=segments.x1.to_pylist(),
-        y1=segments.y1.to_pylist(),
-        z1=segments.z1.to_pylist(),
-        aabb_min_x=min_x.tolist(),
-        aabb_min_y=min_y.tolist(),
-        aabb_min_z=min_z.tolist(),
-        aabb_max_x=max_x.tolist(),
-        aabb_max_y=max_y.tolist(),
-        aabb_max_z=max_z.tolist(),
-        r_mid_au=segments.r_mid_au.to_pylist(),
-        n_x=segments.n_x.to_pylist(),
-        n_y=segments.n_y.to_pylist(),
-        n_z=segments.n_z.to_pylist(),
-    )
+    futures: list[ray.ObjectRef] = []
+    max_active = max(1, int(1.5 * int(max_processes)))
+    for start, end in _iterate_chunk_indices(segments, chunk_size):
+        fut = _compute_aabbs_worker_remote.remote(
+            start,
+            segments[start:end],
+            guard_arcmin,
+            epsilon_n_au,
+            padding_method=padding_method,
+            window_len=WINDOW_LEN,
+        )
+        futures.append(fut)
+        if len(futures) >= max_active:
+            finished, futures = ray.wait(futures, num_returns=1)
+            s, res = ray.get(finished[0])
+            e = s + len(res[0])
+            (
+                out_min_x[s:e],
+                out_min_y[s:e],
+                out_min_z[s:e],
+                out_max_x[s:e],
+                out_max_y[s:e],
+                out_max_z[s:e],
+            ) = res
 
-    return segments_with_aabbs
+    while futures:
+        finished, futures = ray.wait(futures, num_returns=1)
+        s, res = ray.get(finished[0])
+        e = s + len(res[0])
+        (
+            out_min_x[s:e],
+            out_min_y[s:e],
+            out_min_z[s:e],
+            out_max_x[s:e],
+            out_max_y[s:e],
+            out_max_z[s:e],
+        ) = res
+
+    return out_min_x, out_min_y, out_min_z, out_max_x, out_max_y, out_max_z

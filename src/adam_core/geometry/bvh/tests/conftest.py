@@ -18,15 +18,15 @@ from adam_core.coordinates.keplerian import KeplerianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.dynamics.propagation import propagate_2body
-from adam_core.geometry.bvh.index import BVHIndex, build_bvh_index_from_segments
-from adam_core.geometry.rays import ObservationRays, ephemeris_to_rays
-from adam_core.observers.observers import Observers
+from adam_core.geometry.bvh import BVHIndex, build_bvh_index_from_segments, ObservationRays, ephemeris_to_rays
+from adam_core.observers.observers import Observerss
 from adam_core.orbits.ephemeris import Ephemeris
 from adam_core.orbits.orbits import Orbits
 from adam_core.orbits.polyline import compute_segment_aabbs, sample_ellipse_adaptive
 from adam_core.ray_cluster import initialize_use_ray
 from adam_core.time import Timestamp
 from adam_core.utils.helpers.orbits import make_real_orbits
+from adam_core.observers import Observers
 
 # Canonical epoch for geometry completeness tests
 EPOCH_MJD = 60000.0
@@ -107,7 +107,7 @@ def bvh_index(_geom_testdata_dir):
 
 @pytest.fixture(scope="session")
 def rays_many(_geom_testdata_dir):
-    from adam_core.observations.rays import ObservationRays
+    from adam_core.geometry.rays import ObservationRays
 
     return ObservationRays.from_parquet(_geom_testdata_dir / "rays_many.parquet")
 
@@ -1360,3 +1360,44 @@ def small_orbits() -> Orbits:
 
 
 # index_small fixture moved to bvh/tests/conftest.py
+
+
+# BVH-specific fixtures
+import pytest
+
+from adam_core.geometry.bvh.index import BVHIndex, build_bvh_index_from_segments
+from adam_core.geometry.rays import ObservationRays
+from adam_core.orbits.orbits import Orbits
+
+
+@pytest.fixture(scope="session")
+def segments_aabbs(simple_orbits):
+    from adam_core.orbits.polyline import sample_ellipse_adaptive
+
+    _, segs = sample_ellipse_adaptive(
+        simple_orbits, max_chord_arcmin=1.0, max_segments_per_orbit=256
+    )
+    return segs
+
+
+@pytest.fixture(scope="session")
+def rays(_geom_testdata_dir):
+    return ObservationRays.from_parquet(_geom_testdata_dir / "rays_small.parquet")
+
+
+@pytest.fixture(scope="session")
+def synthetic_orbits_stratified_ci() -> Orbits:
+    """Load CI-sized synthetic population (IMB/MBA/OMB/TJN/CEN/TNO) from disk cache.
+
+    Set ADAM_GEOM_CACHE_AUTO_BUILD=1 to auto-generate if missing.
+    """
+    name = "synthetic_stratified_ci"
+    # Use creator that builds if missing
+    return get_or_create_orbits(name)
+
+
+@pytest.fixture(scope="function", params=[(64, 16), (256, 32)])
+def index_small(segments_aabbs, request) -> BVHIndex:
+    N, leaf_size = request.param
+    idx = build_bvh_index_from_segments(segments_aabbs[:N], max_leaf_size=leaf_size)
+    return idx
