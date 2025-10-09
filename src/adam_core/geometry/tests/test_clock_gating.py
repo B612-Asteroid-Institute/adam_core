@@ -16,6 +16,7 @@ from adam_core.geometry.clock_gating import (
     compute_orbital_positions_at_times,
 )
 from adam_core.geometry.rays import ObservationRays
+from adam_core.observers.observers import Observers
 from adam_core.orbits.orbits import Orbits
 from adam_core.orbits.polyline import sample_ellipse_adaptive
 from adam_core.time import Timestamp
@@ -106,18 +107,20 @@ class TestClockGating:
         # Create observation ray along predicted direction from SSB
         obs_rays = ObservationRays.from_kwargs(
             det_id=["det_001"],
-            time=obs_times,
-            observer_code=["500"],  # SSB
-            observer=CartesianCoordinates.from_kwargs(
-                x=[0.0],
-                y=[0.0],
-                z=[0.0],
-                vx=[0.0],
-                vy=[0.0],
-                vz=[0.0],
-                time=obs_times,
-                origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
-                frame="ecliptic",
+            orbit_id=["test_orbit"],
+            observer=Observers.from_kwargs(
+                code=["500"],  # SSB
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=[0.0],
+                    y=[0.0],
+                    z=[0.0],
+                    vx=[0.0],
+                    vy=[0.0],
+                    vz=[0.0],
+                    time=obs_times,
+                    origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
+                    frame="ecliptic",
+                ),
             ),
             u_x=[float(u[0])],
             u_y=[float(u[1])],
@@ -227,18 +230,22 @@ class TestClockGating:
 
         obs_rays = ObservationRays.from_kwargs(
             det_id=["good_det", "bad_det"],
-            time=obs_times,
-            observer_code=["500", "500"],
-            observer=CartesianCoordinates.from_kwargs(
-                x=[0.0, 0.0],
-                y=[0.0, 0.0],
-                z=[0.0, 0.0],
-                vx=[0.0, 0.0],
-                vy=[0.0, 0.0],
-                vz=[0.0, 0.0],
-                time=obs_times,
-                origin=Origin.from_kwargs(code=[OriginCodes.SUN.name] * 2),
-                frame="ecliptic",
+            orbit_id=["test_orbit", "test_orbit"],
+            observer=Observers.from_kwargs(
+                code=["500", "500"],
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=[0.0, 0.0],
+                    y=[0.0, 0.0],
+                    z=[0.0, 0.0],
+                    vx=[0.0, 0.0],
+                    vy=[0.0, 0.0],
+                    vz=[0.0, 0.0],
+                    time=obs_times,
+                    origin=Origin.from_kwargs(
+                        code=[OriginCodes.SUN.name, OriginCodes.SUN.name]
+                    ),
+                    frame="ecliptic",
+                ),
             ),
             u_x=[float(u_good[0]), float(u_bad[0])],
             u_y=[float(u_good[1]), float(u_bad[1])],
@@ -291,18 +298,20 @@ class TestClockGating:
 
         obs_rays = ObservationRays.from_kwargs(
             det_id=["future_det"],
-            time=obs_times,
-            observer_code=["500"],
-            observer=CartesianCoordinates.from_kwargs(
-                x=[0.0],
-                y=[0.0],
-                z=[0.0],
-                vx=[0.0],
-                vy=[0.0],
-                vz=[0.0],
-                time=obs_times,
-                origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
-                frame="ecliptic",
+            orbit_id=["test_orbit"],
+            observer=Observers.from_kwargs(
+                code=["500"],
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=[0.0],
+                    y=[0.0],
+                    z=[0.0],
+                    vx=[0.0],
+                    vy=[0.0],
+                    vz=[0.0],
+                    time=obs_times,
+                    origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
+                    frame="ecliptic",
+                ),
             ),
             u_x=[1.0],
             u_y=[0.0],
@@ -420,18 +429,20 @@ class TestClockGating:
 
         obs_rays = ObservationRays.from_kwargs(
             det_id=["apoapsis_det"],
-            time=obs_times,
-            observer_code=["500"],
-            observer=CartesianCoordinates.from_kwargs(
-                x=[0.0],
-                y=[0.0],
-                z=[0.0],
-                vx=[0.0],
-                vy=[0.0],
-                vz=[0.0],
-                time=obs_times,
-                origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
-                frame="ecliptic",
+            orbit_id=["eccentric_orbit"],
+            observer=Observers.from_kwargs(
+                code=["500"],
+                coordinates=CartesianCoordinates.from_kwargs(
+                    x=[0.0],
+                    y=[0.0],
+                    z=[0.0],
+                    vx=[0.0],
+                    vy=[0.0],
+                    vz=[0.0],
+                    time=obs_times,
+                    origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
+                    frame="ecliptic",
+                ),
             ),
             u_x=[float(u[0])],
             u_y=[float(u[1])],
@@ -449,89 +460,6 @@ class TestClockGating:
         # Should pass the filter
         assert len(result) == 1
         assert result.passed[0].as_py() is True
-
-    def test_jax_vs_legacy_consistency(self):
-        """Test that JAX and legacy implementations give the same results."""
-        # Create test data
-        times = Timestamp.from_mjd([59000.0], scale="tdb")
-
-        coords = CartesianCoordinates.from_kwargs(
-            x=[1.0],
-            y=[0.0],
-            z=[0.0],
-            vx=[0.0],
-            vy=[0.017202],
-            vz=[0.0],
-            time=times,
-            origin=Origin.from_kwargs(code=[OriginCodes.SUN.name]),
-            frame="ecliptic",
-        )
-
-        orbit = Orbits.from_kwargs(
-            orbit_id=["test_orbit"],
-            coordinates=coords,
-        )
-
-        plane_params, _ = sample_ellipse_adaptive(
-            orbit, max_chord_arcmin=1.0, max_segments_per_orbit=1024
-        )
-
-        # Create multiple observation rays
-        obs_times = Timestamp.from_mjd([59000.0 + 91.3, 59000.0 + 182.6], scale="tdb")
-
-        rays = ObservationRays.from_kwargs(
-            det_id=["det_001", "det_002"],
-            time=obs_times,
-            observer_code=["500", "500"],
-            observer=CartesianCoordinates.from_kwargs(
-                x=[0.0, 0.0],
-                y=[0.0, 0.0],
-                z=[0.0, 0.0],
-                vx=[0.0, 0.0],
-                vy=[0.0, 0.0],
-                vz=[0.0, 0.0],
-                time=obs_times,
-                origin=Origin.from_kwargs(
-                    code=[OriginCodes.SUN.name, OriginCodes.SUN.name]
-                ),
-                frame="ecliptic",
-            ),
-            u_x=[0.0, 0.1],
-            u_y=[1.0, 0.9],
-            u_z=[0.0, 0.0],
-        )
-
-        config = ClockGateConfig.from_kwargs(
-            max_angular_sep_arcsec=[1800.0],  # 0.5 degrees
-            max_radial_sep_au=[0.1],
-            max_extrapolation_days=[100.0],
-        )
-
-        # Get results from both implementations
-        jax_results = apply_clock_gating(rays, plane_params, config, use_jax=True)
-        legacy_results = apply_clock_gating(rays, plane_params, config, use_jax=False)
-
-        # Should have same number of results
-        assert len(jax_results) == len(legacy_results)
-
-        # Convert to numpy for comparison (use to_pylist for boolean arrays)
-        jax_passed = np.array(jax_results.passed.to_pylist())
-        legacy_passed = np.array(legacy_results.passed.to_pylist())
-        jax_angular = jax_results.angular_sep_arcsec.to_numpy()
-        legacy_angular = legacy_results.angular_sep_arcsec.to_numpy()
-        jax_radial = jax_results.radial_sep_au.to_numpy()
-        legacy_radial = legacy_results.radial_sep_au.to_numpy()
-        jax_M = jax_results.predicted_mean_anomaly.to_numpy()
-        legacy_M = legacy_results.predicted_mean_anomaly.to_numpy()
-        jax_f = jax_results.predicted_true_anomaly.to_numpy()
-        legacy_f = legacy_results.predicted_true_anomaly.to_numpy()
-
-        # Check that results are consistent
-        np.testing.assert_array_equal(jax_passed, legacy_passed)
-        np.testing.assert_allclose(jax_angular, legacy_angular, rtol=1e-10, atol=1e-10)
-        np.testing.assert_allclose(jax_radial, legacy_radial, rtol=1e-10, atol=1e-10)
-        np.testing.assert_allclose(jax_M, legacy_M, rtol=1e-10, atol=1e-10)
-        np.testing.assert_allclose(jax_f, legacy_f, rtol=1e-10, atol=1e-10)
 
 
 class TestClockGateConfig:

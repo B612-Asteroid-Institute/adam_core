@@ -2,7 +2,7 @@
 Kepler clock gating for fast detection-orbit filtering.
 
 This module implements fast orbital mechanics-based filtering to eliminate
-impossible detection-orbit pairings early in the THOR pipeline. Clock gating
+impossible detection pairings as they relate to an orbit. Clock gating
 uses Kepler's laws to predict where an orbit should be at observation times
 and rejects pairings that are geometrically impossible within tolerances.
 """
@@ -18,9 +18,6 @@ import jax.numpy as jnp
 import numpy as np
 import quivr as qv
 
-from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.origin import OriginCodes
-from ..coordinates.spherical import SphericalCoordinates
 from ..orbits.polyline import OrbitsPlaneParams
 from .rays import ObservationRays
 

@@ -7,9 +7,10 @@ import pytest
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
-from adam_core.geometry.rays import ObservationRays, rays_from_detections
+from adam_core.geometry.rays import ObservationRays, detections_to_rays
 from adam_core.observations.detections import PointSourceDetections
 from adam_core.observations.exposures import Exposures
+from adam_core.observers import Observers
 from adam_core.time import Timestamp
 
 
@@ -72,9 +73,11 @@ class TestObservationRays:
 
         rays = ObservationRays.from_kwargs(
             det_id=["test_det"],
-            time=times,
-            observer_code=["X05"],
-            observer=observer_coords,
+            orbit_id=["test_orbit"],
+            observer=Observers.from_kwargs(
+                code=["X05"],
+                coordinates=observer_coords,
+            ),
             u_x=[1.0],
             u_y=[0.0],
             u_z=[0.0],
@@ -93,7 +96,7 @@ class TestRaysFromDetections:
         empty_detections = PointSourceDetections.empty()
         empty_exposures = Exposures.empty()
 
-        rays = rays_from_detections(empty_detections, empty_exposures)
+        rays = detections_to_rays(empty_detections, empty_exposures)
         assert len(rays) == 0
 
     def test_no_matching_exposures(self):
@@ -122,14 +125,14 @@ class TestRaysFromDetections:
             depth_5sigma=[22.0],
         )
 
-        rays = rays_from_detections(detections, exposures)
+        rays = detections_to_rays(detections, exposures)
         assert len(rays) == 0
 
     def test_basic_ray_construction(self):
         """Test basic ray construction functionality."""
         detections, exposures = create_test_detections_and_exposures()
 
-        rays = rays_from_detections(detections, exposures, frame_in="equatorial")
+        rays = detections_to_rays(detections, exposures)
 
         # Should have rays for all detections
         assert len(rays) == len(detections)
@@ -148,7 +151,7 @@ class TestRaysFromDetections:
         """Test that line-of-sight vectors are properly normalized."""
         detections, exposures = create_test_detections_and_exposures()
 
-        rays = rays_from_detections(detections, exposures)
+        rays = detections_to_rays(detections, exposures)
 
         # Check that all u vectors are unit vectors
         for i in range(len(rays)):
@@ -186,7 +189,7 @@ class TestRaysFromDetections:
             depth_5sigma=[22.0],
         )
 
-        rays = rays_from_detections(detections, exposures, frame_in="equatorial")
+        rays = detections_to_rays(detections, exposures)
 
         # At vernal equinox (RA=0, Dec=0), the direction should be close to +X in ecliptic
         u_x = rays.u_x[0].as_py()
@@ -202,19 +205,19 @@ class TestRaysFromDetections:
         """Test that observer coordinates are in SSB ecliptic frame."""
         detections, exposures = create_test_detections_and_exposures()
 
-        rays = rays_from_detections(detections, exposures)
+        rays = detections_to_rays(detections, exposures)
 
         # Check that all observer coordinates are in ecliptic frame with SUN origin
-        # Frame is a table attribute (scalar), origin codes are a column (array)
-        assert rays.observer.frame == "ecliptic"
-        origin_codes = rays.observer.origin.code.to_pylist()
+        # Frame is a table attribute (scalar) on coordinates, origin codes are a column (array)
+        assert rays.observer.coordinates.frame == "ecliptic"
+        origin_codes = rays.observer.coordinates.origin.code.to_pylist()
         assert all(code == OriginCodes.SUN.name for code in origin_codes)
 
     def test_ecliptic_input_frame(self):
         """Test with input coordinates already in ecliptic frame."""
         detections, exposures = create_test_detections_and_exposures()
 
-        rays = rays_from_detections(detections, exposures, frame_in="ecliptic")
+        rays = detections_to_rays(detections, exposures)
 
         # Should still produce valid rays
         assert len(rays) == len(detections)
@@ -231,7 +234,7 @@ class TestRaysFromDetections:
         """Test that ray times match detection times."""
         detections, exposures = create_test_detections_and_exposures()
 
-        rays = rays_from_detections(detections, exposures)
+        rays = detections_to_rays(detections, exposures)
 
         # Times should match between detections and rays
         det_times = detections.time.mjd().to_numpy()
@@ -247,7 +250,7 @@ class TestRaysFromDetections:
         """Test with detections from multiple observatories."""
         detections, exposures = create_test_detections_and_exposures()
 
-        rays = rays_from_detections(detections, exposures)
+        rays = detections_to_rays(detections, exposures)
 
         # Should have different observer positions for different observatories
         # Use vectorized operations to get all positions at once
@@ -314,7 +317,7 @@ class TestIntegration:
         )
 
         # Convert to rays
-        rays = rays_from_detections(detections, exposures)
+        rays = detections_to_rays(detections, exposures)
 
         # Verify results
         assert len(rays) == n_detections
@@ -328,7 +331,7 @@ class TestIntegration:
         assert np.all(np.abs(magnitudes - 1.0) < 1e-10)
 
         # All observers should be in SSB ecliptic frame - use vectorized operations
-        # Frame is a table attribute (scalar), origin codes are a column (array)
-        assert rays.observer.frame == "ecliptic"
-        origin_codes = rays.observer.origin.code.to_pylist()
+        # Frame is a table attribute (scalar) on coordinates, origin codes are a column (array)
+        assert rays.observer.coordinates.frame == "ecliptic"
+        origin_codes = rays.observer.coordinates.origin.code.to_pylist()
         assert all(code == OriginCodes.SUN.name for code in origin_codes)

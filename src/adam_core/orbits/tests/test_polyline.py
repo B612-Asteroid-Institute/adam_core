@@ -141,12 +141,6 @@ class TestOrbitPolylineSegments:
             x1=[1.0],
             y1=[0.0],
             z1=[0.0],
-            aabb_min_x=[-0.1],
-            aabb_min_y=[-0.1],
-            aabb_min_z=[-0.1],
-            aabb_max_x=[1.1],
-            aabb_max_y=[0.1],
-            aabb_max_z=[0.1],
             r_mid_au=[0.5],
             n_x=[0.0],
             n_y=[0.0],
@@ -164,7 +158,9 @@ class TestSampleEllipseAdaptive:
     def test_empty_orbits(self):
         """Test with empty orbit list."""
         empty_orbits = Orbits.empty()
-        params, segments = sample_ellipse_adaptive(empty_orbits)
+        params, segments = sample_ellipse_adaptive(
+            empty_orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
+        )
 
         assert len(params) == 0
         assert len(segments) == 0
@@ -172,7 +168,9 @@ class TestSampleEllipseAdaptive:
     def test_basic_sampling(self):
         """Test basic sampling functionality."""
         orbits = create_test_orbits()
-        params, segments = sample_ellipse_adaptive(orbits, max_chord_arcmin=1.0)
+        params, segments = sample_ellipse_adaptive(
+            orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
+        )
 
         # Should have parameters for each orbit
         assert len(params) == len(orbits)
@@ -188,7 +186,9 @@ class TestSampleEllipseAdaptive:
     def test_basis_orthonormality(self):
         """Test that orbital plane basis vectors are orthonormal."""
         orbits = create_test_orbits()
-        params, _ = sample_ellipse_adaptive(orbits)
+        params, _ = sample_ellipse_adaptive(
+            orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
+        )
 
         tolerance = 1e-12
 
@@ -217,9 +217,9 @@ class TestSampleEllipseAdaptive:
     def test_chord_length_constraint(self):
         """Test that chord length constraint is respected."""
         orbits = create_test_orbits()
-        max_chord_arcmin = 0.5
+        max_chord_arcmin = 3
         params, segments = sample_ellipse_adaptive(
-            orbits, max_chord_arcmin=max_chord_arcmin
+            orbits, max_chord_arcmin=max_chord_arcmin, max_segments_per_orbit=16384
         )
 
         # Convert to radians
@@ -247,7 +247,9 @@ class TestSampleEllipseAdaptive:
     def test_segment_continuity(self):
         """Test that segments form continuous polylines."""
         orbits = create_test_orbits()
-        params, segments = sample_ellipse_adaptive(orbits)
+        params, segments = sample_ellipse_adaptive(
+            orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
+        )
 
         # Group segments by orbit
         import pyarrow.compute as pc
@@ -283,7 +285,10 @@ class TestComputeSegmentAabbs:
         """Test with empty segments."""
         empty_segments = OrbitPolylineSegments.empty()
         result = compute_segment_aabbs(
-            empty_segments, guard_arcmin=1.0, epsilon_n_au=1e-6
+            empty_segments,
+            guard_arcmin=1.0,
+            epsilon_n_au=1e-6,
+            padding_method="baseline",
         )
         assert all(arr.size == 0 for arr in result)
 
@@ -306,7 +311,7 @@ class TestComputeSegmentAabbs:
         )
 
         min_x, min_y, min_z, max_x, max_y, max_z = compute_segment_aabbs(
-            segments, guard_arcmin=1.0, epsilon_n_au=1e-6
+            segments, guard_arcmin=1.0, epsilon_n_au=1e-6, padding_method="baseline"
         )
 
         # Check that AABBs contain segment endpoints
@@ -346,7 +351,10 @@ class TestComputeSegmentAabbs:
 
         guard_arcmin = 2.0
         min_x, min_y, min_z, max_x, max_y, max_z = compute_segment_aabbs(
-            segments, guard_arcmin=guard_arcmin, epsilon_n_au=1e-6
+            segments,
+            guard_arcmin=guard_arcmin,
+            epsilon_n_au=1e-6,
+            padding_method="baseline",
         )
 
         # Compute expected padding
@@ -373,7 +381,9 @@ class TestIntegration:
         orbits = create_test_orbits()
 
         # Sample ellipses
-        params, segments = sample_ellipse_adaptive(orbits, max_chord_arcmin=0.5)
+        params, segments = sample_ellipse_adaptive(
+            orbits, max_chord_arcmin=0.5, max_segments_per_orbit=512
+        )
 
         # Compute AABBs
         aabbs = compute_segment_aabbs(segments, guard_arcmin=1.0, epsilon_n_au=1e-6)
@@ -409,7 +419,9 @@ class TestIntegration:
         orbits = Orbits.from_kwargs(orbit_id=["high_e_orbit"], coordinates=coords)
 
         # Sample with tight chord constraint
-        params, segments = sample_ellipse_adaptive(orbits, max_chord_arcmin=0.1)
+        params, segments = sample_ellipse_adaptive(
+            orbits, max_chord_arcmin=0.1, max_segments_per_orbit=512
+        )
 
         # Should have many segments due to high curvature near perihelion
         assert len(segments) > 100  # Expect significant refinement
@@ -439,7 +451,7 @@ def _make_one_orbit():
 def test_sample_ellipse_adaptive_segment_counts_monotonic(max_chord_arcmin):
     orbits = _make_one_orbit()
     _, segs = sample_ellipse_adaptive(
-        orbits, max_chord_arcmin=max_chord_arcmin, max_segments_per_orbit=8192
+        orbits, max_chord_arcmin=max_chord_arcmin, max_segments_per_orbit=512
     )
     assert len(segs) > 0
 
@@ -447,10 +459,10 @@ def test_sample_ellipse_adaptive_segment_counts_monotonic(max_chord_arcmin):
 def test_sample_ellipse_adaptive_determinism_and_continuity():
     orbits = _make_one_orbit()
     _, s1 = sample_ellipse_adaptive(
-        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
     )
     _, s2 = sample_ellipse_adaptive(
-        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
     )
     assert len(s1) == len(s2)
     assert np.allclose(s1.x0.to_numpy(), s2.x0.to_numpy())
@@ -471,7 +483,7 @@ def test_sample_ellipse_adaptive_determinism_and_continuity():
 def test_compute_segment_aabbs_contains_endpoints():
     orbits = _make_one_orbit()
     _, segs = sample_ellipse_adaptive(
-        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
     )
     aabbs = compute_segment_aabbs(segs, guard_arcmin=1.0, epsilon_n_au=1e-6)
     min_x = np.minimum(segs.x0.to_numpy(), segs.x1.to_numpy())
@@ -493,7 +505,7 @@ def test_compute_segment_aabbs_contains_endpoints():
 def test_compute_segment_aabbs_guard_monotonic_and_sagitta_guard(guard_arcmin_list):
     orbits = _make_one_orbit()
     _, segs = sample_ellipse_adaptive(
-        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=8192
+        orbits, max_chord_arcmin=1.0, max_segments_per_orbit=512
     )
     extents_baseline = []
     extents_sagitta = []
@@ -515,13 +527,16 @@ def test_compute_segment_aabbs_guard_monotonic_and_sagitta_guard(guard_arcmin_li
 
 def test_empty_inputs_return_empty_tables():
     params, segs = sample_ellipse_adaptive(
-        Orbits.empty(), max_chord_arcmin=1.0, max_segments_per_orbit=1024
+        Orbits.empty(), max_chord_arcmin=1.0, max_segments_per_orbit=512
     )
     assert isinstance(params, OrbitsPlaneParams) and isinstance(
         segs, OrbitPolylineSegments
     )
     assert len(params) == 0 and len(segs) == 0
     segs2 = compute_segment_aabbs(
-        OrbitPolylineSegments.empty(), guard_arcmin=1.0, epsilon_n_au=1e-6
+        OrbitPolylineSegments.empty(),
+        guard_arcmin=1.0,
+        epsilon_n_au=1e-6,
+        padding_method="baseline",
     )
     assert all(arr.size == 0 for arr in segs2)

@@ -97,16 +97,20 @@ def compute_recall_metrics_from_hits(
 # Grid infrastructure removed - using fixed optimal parameters
 
 
-def test_query_bvh_basic_and_max_processes(segments_aabbs, rays):
+def test_query_bvh_basic_and_max_processes(segments_aabbs, rays_2b):
     # Build a fresh index to ensure valid depth/stack size
     index = build_bvh_index_from_segments(segments_aabbs[:256], max_leaf_size=32)
-    hits0, _ = query_bvh(index, rays, guard_arcmin=5.0, batch_size=64, max_processes=0)
-    hits2, _ = query_bvh(index, rays, guard_arcmin=5.0, batch_size=64, max_processes=2)
+    hits0, _ = query_bvh(
+        index, rays_2b, guard_arcmin=5.0, batch_size=64, max_processes=0
+    )
+    hits2, _ = query_bvh(
+        index, rays_2b, guard_arcmin=5.0, batch_size=64, max_processes=2
+    )
     assert isinstance(hits0, OverlapHits) and isinstance(hits2, OverlapHits)
     assert len(hits0) == len(hits2)
 
 
-def test_query_bvh_raises_on_empty_inputs(segments_aabbs, rays):
+def test_query_bvh_raises_on_empty_inputs(segments_aabbs, rays_2b):
     index = build_bvh_index_from_segments(segments_aabbs[:64], max_leaf_size=16)
     from adam_core.geometry.rays import ObservationRays
 
@@ -120,7 +124,7 @@ def test_query_bvh_raises_on_empty_inputs(segments_aabbs, rays):
         segments=index.segments[:0], nodes=BVHNodes.empty(), prims=BVHPrimitives.empty()
     )
     with pytest.raises(ValueError, match="index has no nodes/primitives"):
-        query_bvh(empty_index, rays)
+        query_bvh(empty_index, rays_2b)
 
 
 def test_distances_and_guard_pairs_jax_shapes():
@@ -178,56 +182,27 @@ def test_ray_segment_distances_pairs_jax_shapes():
 
 
 @pytest.mark.benchmark
-def test_query_bvh_benchmark(benchmark):
-    """Benchmark BVH querying with optimal parameters."""
-    from adam_core.geometry.tests.conftest import (
-        get_or_create_ephemeris,
-        get_or_create_index,
-        get_or_create_noise_rays,
-        get_or_create_observers,
-        get_or_create_rays,
-    )
-
-    population = "synthetic_stratified_ci"
-
-    # Use optimal parameters
-    observers = get_or_create_observers()
-    ephem = get_or_create_ephemeris(population, "nb", observers)  # Use n-body
-    rays = get_or_create_rays(ephem, population)
-    noise = get_or_create_noise_rays(observers, per_sqdeg=1.0)
-
-    index = get_or_create_index(
-        population_name=population,
-        max_leaf_size=64,
-        max_chord_arcmin=5.0,
-        index_guard_arcmin=0.65,
-        padding_method="baseline",
-        epsilon_n_au=1e-9,
-        max_segments_per_orbit=512,
-        require_prebuilt=False,  # Build if not exists
-    )
-
-    combined_rays = rays  # or concatenate with noise if needed
+def test_query_bvh_benchmark(benchmark, index_optimal, rays_nbody):
+    """Benchmark BVH querying with optimal parameters (cached fixtures, n-body rays)."""
 
     def _run() -> OverlapHits:
         return query_bvh(
-            index,
-            combined_rays,
-            guard_arcmin=0.65,  # Optimal from analysis
-            batch_size=16384,  # Optimal from analysis
+            index_optimal,
+            rays_nbody,
+            guard_arcmin=0.65,
+            batch_size=16384,
             max_processes=1,
-            window_size=32768,  # Optimal from analysis
+            window_size=32768,
         )
 
     result = benchmark(_run)
     hits, telemetry = result
     assert isinstance(hits, OverlapHits)
-    print(f"[query_bvh_benchmark] result: {len(hits)}")
+    stats = compute_recall_metrics_from_hits(rays_nbody, hits)
 
-    # Persist minimal completeness stats and telemetry (post-timing)
-    stats = compute_recall_metrics_from_hits(combined_rays, hits)
+    # Assert 100% recall
+    assert stats["recall_signal"] == 1.0
 
-    # Add metrics as benchmark extra info
     benchmark.extra_info.update(
         {
             "max_chord_arcmin": 5.0,
@@ -240,7 +215,6 @@ def test_query_bvh_benchmark(benchmark):
             "window_size": 32768,
             "batch_size": 16384,
             "noise_per_sqdeg": 1.0,
-            "ephem_model": "nb",
             # Recall metrics
             "num_signal_available": stats["num_signal_available"],
             "num_signal_hits": stats["num_signal_hits"],

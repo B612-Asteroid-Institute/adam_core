@@ -17,9 +17,7 @@ import numpy.typing as npt
 import pyarrow.compute as pc
 
 from ...rays import ObservationRays
-from .. import BVHIndex
-from .. import OverlapHits
-
+from .. import BVHIndex, OverlapHits
 
 
 class OrbitNodesResult(TypedDict):
@@ -335,9 +333,7 @@ def orbit_segments_endpoints(index: BVHIndex, orbit_id: str) -> npt.NDArray[np.f
     y1 = segs_sel.y1.to_numpy(zero_copy_only=False)
     z1 = segs_sel.z1.to_numpy(zero_copy_only=False)
 
-    out = (
-        np.column_stack([x0, y0, z0, x1, y1, z1]).astype(np.float32, copy=False)
-    )
+    out = np.column_stack([x0, y0, z0, x1, y1, z1]).astype(np.float32, copy=False)
     return out
 
 
