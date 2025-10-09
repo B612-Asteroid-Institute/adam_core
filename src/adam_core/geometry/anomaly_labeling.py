@@ -48,7 +48,7 @@ from adam_core.coordinates.origin import OriginCodes
 from adam_core.coordinates.transform import transform_coordinates
 from adam_core.dynamics.kepler import solve_kepler as jax_solve_kepler
 from adam_core.geometry.bvh import OverlapHits
-from adam_core.geometry.bvh import ObservationRays
+from adam_core.geometry.rays import ObservationRays
 from adam_core.orbits.orbits import Orbits
 from adam_core.utils.iter import _iterate_chunk_indices
 

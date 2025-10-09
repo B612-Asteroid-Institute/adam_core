@@ -16,11 +16,8 @@ from typing import Optional, Union
 import numpy as np
 
 from ...rays import ObservationRays
-from .. import BVHIndex
-from .. import OverlapHits
-from ..viz import prepare_view_data_single_orbit
-from ..viz import ViewData
-
+from .. import BVHIndex, OverlapHits
+from ..viz import ViewData, prepare_view_data_single_orbit
 
 
 def save_view_data_npz(
