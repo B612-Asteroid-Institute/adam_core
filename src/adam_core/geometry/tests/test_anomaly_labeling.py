@@ -126,6 +126,43 @@ def test_label_anomalies_throughput_cpu(benchmark, n_hits):
         benchmark.extra_info["n_hits"] = n_hits
 
 
+def test_label_anomalies_frame_origin_enforcement_raises(
+    index_optimal, bvh_hits, rays_nb, orbits_synthetic_stratified_ci
+):
+    # Build rays not in ecliptic to trigger frame assertion
+    rays = rays_nb[:2]
+    # Force frame mismatch by changing observer coordinates frame attribute
+    rays_bad = rays.set_column(
+        "observer",
+        rays.observer.set_column(
+            "coordinates",
+            CartesianCoordinates.from_kwargs(
+                x=rays.observer.coordinates.x,
+                y=rays.observer.coordinates.y,
+                z=rays.observer.coordinates.z,
+                vx=rays.observer.coordinates.vx,
+                vy=rays.observer.coordinates.vy,
+                vz=rays.observer.coordinates.vz,
+                time=rays.observer.coordinates.time,
+                origin=rays.observer.coordinates.origin,
+                frame="equatorial",
+            ),
+        ),
+    )
+
+    if len(bvh_hits) == 0:
+        raise ValueError("No hits; cannot test enforcement")
+
+    keep_orb = pc.is_in(
+        orbits_synthetic_stratified_ci.orbit_id, pc.unique(bvh_hits.orbit_id)
+    )
+    orbits_used = orbits_synthetic_stratified_ci.apply_mask(keep_orb)
+    with pytest.raises(AssertionError):
+        _ = label_anomalies(
+            bvh_hits, rays_bad, orbits_used, max_k=1, chunk_size=16, max_processes=0
+        )
+
+
 @pytest.mark.benchmark
 @pytest.mark.parametrize(
     "n_hits,max_k,eccentricity,inc_deg,filter_thr",

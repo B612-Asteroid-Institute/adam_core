@@ -10,6 +10,7 @@ The public API uses JAX-accelerated implementations by default for optimal perfo
 from .anomaly import AnomalyLabels
 from .anomaly_labeling import *
 from .bvh import *
+from .clock_gating import *
 from .projection import *
 
 __all__ = [
@@ -24,6 +25,14 @@ __all__ = [
     "ray_to_plane_distance",
     "project_ray_to_orbital_plane",
     "ellipse_snap_distance",
+    "ClockGatingCandidates",
+    "ClockGatedEdges",
+    "KeplerChains",
+    "KeplerChainMembers",
+    "prepare_clock_gating_candidates",
+    "build_clock_gated_edges",
+    "extract_kepler_chains",
+    "kepler_clock_gate",
     "ephemeris_to_rays",
     "find_bvh_matches",
     "build_bvh_index",
