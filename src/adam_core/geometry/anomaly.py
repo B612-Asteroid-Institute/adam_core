@@ -40,3 +40,10 @@ class AnomalyLabels(qv.Table):
     # Quality metrics
     snap_error = qv.Float64Column()  # Residual from ellipse fit
     plane_distance_au = qv.Float64Column()  # Distance from orbital plane (AU)
+
+    # In-plane unit tangent direction at the anomaly (perifocal coordinates)
+    t_hat_plane_x = qv.Float32Column()
+    t_hat_plane_y = qv.Float32Column()
+
+    # Mean-anomaly uncertainty (radians), derived from snap_error
+    sigma_M_rad = qv.Float64Column()

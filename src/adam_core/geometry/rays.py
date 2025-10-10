@@ -216,6 +216,17 @@ def ephemeris_to_rays(
     station_codes = ephemeris.coordinates.origin.code
     observers = Observers.from_codes(times=times, codes=station_codes)
 
+    # Ensure observer coordinates are in ecliptic frame with SUN origin
+    observers = observers.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SUN,
+        ),
+    )
+
     spherical_coords = ephemeris.coordinates.set_column(
         "rho",
         np.ones(len(ephemeris)),
@@ -225,6 +236,7 @@ def ephemeris_to_rays(
         spherical_coords,
         CartesianCoordinates,
         frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
     )
 
     los_points_ssb = cartesian_coords.r
@@ -245,7 +257,7 @@ def ephemeris_to_rays(
 
     return ObservationRays.from_kwargs(
         det_id=det_id,
-        orbit_id=ephemeris.orbit_id.to_pylist(),
+        orbit_id=ephemeris.orbit_id,
         observer=observers,
         u_x=u_vectors[:, 0],
         u_y=u_vectors[:, 1],

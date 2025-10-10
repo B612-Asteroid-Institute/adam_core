@@ -114,9 +114,11 @@ def label_anomalies_worker(
     assert (
         len(hits) == len(rays) == len(orbits)
     ), "Every hit must have a corresponding ray and orbit"
-    assert rays.observer.frame == "ecliptic", "Rays must be in ecliptic frame"
+    assert (
+        rays.observer.coordinates.frame == "ecliptic"
+    ), "Rays must be in ecliptic frame"
     assert pc.all(
-        pc.equal(rays.observer.origin.code, OriginCodes.SUN.name)
+        pc.equal(rays.observer.coordinates.origin.code, OriginCodes.SUN.name)
     ).as_py(), "Rays must have SUN origin"
 
     ray_origins = np.column_stack(
@@ -300,6 +302,23 @@ def label_anomalies_worker(
     r_arr = expanded_a * (1 - expanded_e * np.cos(E_rad_arr))
     n_rad_day_arr = np.radians(expanded_n)
 
+    # Compute in-plane tangent unit vector at E and mean-anomaly uncertainty sigma_M
+    # r'(E) = [-a*sin(E), b*cos(E)] with b = a*sqrt(1-e^2)
+    b_arr = expanded_a * np.sqrt(np.maximum(1.0 - expanded_e**2, 0.0))
+    sinE_arr = np.sin(E_rad_arr)
+    cosE_arr = np.cos(E_rad_arr)
+    rprime_x = -expanded_a * sinE_arr
+    rprime_y = b_arr * cosE_arr
+    rprime_norm = np.sqrt(rprime_x * rprime_x + rprime_y * rprime_y)
+    inv_rprime_norm = 1.0 / (rprime_norm + 1e-30)
+    t_hat_x_arr = rprime_x * inv_rprime_norm
+    t_hat_y_arr = rprime_y * inv_rprime_norm
+
+    # Approximate sigma_E from snap_error via local linearization: sigma_E ≈ d_snap / ||r'(E)||
+    sigma_E_arr = snap_errors * inv_rprime_norm
+    # Convert to sigma_M using dM/dE = 1 - e*cos(E)
+    sigma_M_rad_arr = (1.0 - expanded_e * cosE_arr) * sigma_E_arr
+
     # Removed per-hit candidate diagnostics to avoid logging overhead during benchmarks
 
     # Build Arrow arrays via indexed take to keep consistency
@@ -321,6 +340,9 @@ def label_anomalies_worker(
         r_au=r_arr,
         snap_error=snap_errors,
         plane_distance_au=plane_distances,
+        t_hat_plane_x=t_hat_x_arr.astype(np.float32),
+        t_hat_plane_y=t_hat_y_arr.astype(np.float32),
+        sigma_M_rad=sigma_M_rad_arr,
     )
 
     # Sort deterministically (canonical order)

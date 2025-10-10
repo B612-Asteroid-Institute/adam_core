@@ -1,637 +1,695 @@
 """
-Kepler clock gating for fast detection-orbit filtering.
+Kepler clock gating: build time-consistent edges between anomaly-labeled detections.
 
-This module implements fast orbital mechanics-based filtering to eliminate
-impossible detection pairings as they relate to an orbit. Clock gating
-uses Kepler's laws to predict where an orbit should be at observation times
-and rejects pairings that are geometrically impossible within tolerances.
+Public API produces quivr tables and follows adam_core chunking/Ray patterns.
 """
 
 from __future__ import annotations
 
-import functools
-import logging
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from typing import Iterable, Optional, Tuple
 
-import jax
-import jax.numpy as jnp
 import numpy as np
+import pyarrow as pa
+import pyarrow.compute as pc
 import quivr as qv
+import ray
 
-from ..orbits.polyline import OrbitsPlaneParams
+from ..coordinates.keplerian import KeplerianCoordinates
+from ..orbits.orbits import Orbits
+from ..ray_cluster import initialize_use_ray
+from ..time import Timestamp
+from ..utils.iter import _iterate_chunk_indices
+from .anomaly import AnomalyLabels
 from .rays import ObservationRays
 
 __all__ = [
-    "ClockGateConfig",
-    "ClockGateResults",
-    "apply_clock_gating",
-    "compute_orbital_positions_at_times",
+    "ClockGatingCandidates",
+    "ClockGatedEdges",
+    "KeplerChains",
+    "KeplerChainMembers",
+    "prepare_clock_gating_candidates",
+    "build_clock_gated_edges",
+    "extract_kepler_chains",
+    "kepler_clock_gate",
 ]
 
-logger = logging.getLogger(__name__)
 
+class ClockGatingCandidates(qv.Table):
+    """
+    Per-orbit candidate vertices for kepler clock gating.
 
-class ClockGateConfig(qv.Table):
-    """Configuration parameters for clock gating."""
+    Rows correspond to anomaly-labeled detections augmented with timing and
+    orbit eccentricity. These are grouped by `orbit_id` downstream.
+    """
 
-    #: Maximum angular separation tolerance in arcseconds
-    max_angular_sep_arcsec = qv.Float64Column()
-    #: Maximum radial distance tolerance in AU
-    max_radial_sep_au = qv.Float64Column()
-    #: Maximum time span for valid extrapolation in days
-    max_extrapolation_days = qv.Float64Column()
-
-
-class ClockGateResults(qv.Table):
-    """Results of clock gating filter."""
-
-    #: Detection identifier
     det_id = qv.LargeStringColumn()
-    #: Orbit identifier
     orbit_id = qv.LargeStringColumn()
-    #: Whether the pairing passed the filter
-    passed = qv.BooleanColumn()
-    #: Angular separation in arcseconds
-    angular_sep_arcsec = qv.Float64Column()
-    #: Radial separation in AU
-    radial_sep_au = qv.Float64Column()
-    #: Time extrapolation from orbit epoch in days
-    extrapolation_days = qv.Float64Column()
-    #: Predicted mean anomaly at observation time (radians)
-    predicted_mean_anomaly = qv.Float64Column()
-    #: Predicted true anomaly at observation time (radians)
-    predicted_true_anomaly = qv.Float64Column()
+    seg_id = qv.Int32Column()
+    variant_id = qv.Int32Column()
+
+    time_tdb_mjd = qv.Float64Column()
+    night_id = qv.Int64Column()
+    observer_code = qv.LargeStringColumn()
+
+    # Anomalies and dynamics
+    M_rad = qv.Float64Column()
+    n_rad_day = qv.Float64Column()
+    f_rad = qv.Float64Column()
+    e = qv.Float64Column()
+    sigma_M_rad = qv.Float64Column()
+
+    # Optional guards / hints
+    t_hat_plane_x = qv.Float32Column()
+    t_hat_plane_y = qv.Float32Column()
+    sky_pa_deg = qv.Float32Column(nullable=True)
 
 
-@jax.jit
-def _solve_kepler_equation_jax(
-    M: jax.Array,
-    e: jax.Array,
-    max_iterations: int = 10,
-    tolerance: float = 1e-12,
-) -> jax.Array:
+class ClockGatedEdges(qv.Table):
     """
-    Solve Kepler's equation M = E - e*sin(E) for eccentric anomaly E.
+    Accepted time-consistent edges between candidates for a specific orbit.
+    """
 
-    Uses Newton-Raphson iteration with JAX for performance.
+    orbit_id = qv.LargeStringColumn()
+    i_index = qv.Int32Column()
+    j_index = qv.Int32Column()
+    k_revs = qv.Int16Column()
+    resid_days = qv.Float32Column()
+    dt_days = qv.Float32Column()
+    dM_wrapped_rad = qv.Float32Column()
+    same_night = qv.BooleanColumn()
+
+    # Parameters recorded for provenance
+    tau_min_minutes = qv.FloatAttribute(default=0.0)
+    alpha_min_per_day = qv.FloatAttribute(default=0.0)
+    beta = qv.FloatAttribute(default=0.0)
+    gamma = qv.FloatAttribute(default=0.0)
+    time_bin_minutes = qv.IntAttribute(default=0)
+    max_bins_ahead = qv.IntAttribute(default=0)
+    heading_max_deg = qv.FloatAttribute(default=np.nan)
+
+
+class KeplerChainMembers(qv.Table):
+    orbit_id = qv.LargeStringColumn()
+    chain_id = qv.Int64Column()
+    cand_index = qv.Int32Column()
+
+
+class KeplerChains(qv.Table):
+    orbit_id = qv.LargeStringColumn()
+    chain_id = qv.Int64Column()
+    size = qv.Int32Column()
+    t_min_mjd = qv.Float64Column()
+    t_max_mjd = qv.Float64Column()
+
+
+def _factorize_strings(arr: pa.Array) -> pa.Array:
+    """
+    Map each string to its position in the unique set [0..K-1] (Arrow-backed).
+    """
+    uniq = pc.unique(arr)
+    return pc.index_in(arr, uniq)
+
+
+def _floor_days(mjd: pa.Array) -> pa.Array:
+    return pc.cast(pc.floor(mjd), pa.int64())
+
+
+def _compute_night_id(codes: pa.Array, time_mjd: pa.Array) -> pa.Array:
+    """
+    Stable per-night grouping key from observer code and integer MJD.
+    """
+    code_idx = _factorize_strings(codes)
+    day = _floor_days(time_mjd)
+    # Combine into a single Int64 key: (code_idx << 32) | (day & 0xFFFFFFFF)
+    code_i64 = pc.cast(code_idx, pa.int64())
+    day_masked = pc.bit_wise_and(day, pa.scalar(0xFFFFFFFF, type=pa.int64()))
+    return pc.bit_wise_or(pc.shift_left(code_i64, 32), day_masked)
+
+
+def prepare_clock_gating_candidates(
+    labels: AnomalyLabels,
+    rays: ObservationRays,
+    orbits: Orbits,
+    *,
+    include_sky_pa: bool = False,
+) -> ClockGatingCandidates:
+    """
+    Join anomaly labels with observation times and orbit eccentricities.
 
     Parameters
     ----------
-    M : jax.Array
-        Mean anomaly (radians)
-    e : jax.Array
-        Eccentricity
-    max_iterations : int
-        Maximum Newton-Raphson iterations
-    tolerance : float
-        Convergence tolerance
+    labels : AnomalyLabels
+        Anomaly labels for (det_id, orbit_id[, variant]).
+    rays : ObservationRays
+        Rays providing det_id, observer code, and times.
+    orbits : Orbits
+        Original orbits to derive eccentricity values.
+    include_sky_pa : bool, default False
+        If True and a sky position angle column is present upstream, include it.
 
     Returns
     -------
-    E : jax.Array
-        Eccentric anomaly (radians)
+    ClockGatingCandidates
+        Candidates table grouped later by orbit_id for edge building.
     """
-    # Initial guess for eccentric anomaly
-    E = M + e * jnp.sin(M)
+    if len(labels) == 0:
+        return ClockGatingCandidates.empty()
 
-    def body_fun(carry):
-        E, _ = carry
-        f = E - e * jnp.sin(E) - M
-        df_dE = 1 - e * jnp.cos(E)
-        E_new = E - f / df_dE
-        return E_new, jnp.abs(E_new - E)
+    # Align rays to labels via det_id
+    idx_in_rays = pc.index_in(labels.det_id, rays.det_id)
+    if pc.any(pc.is_null(idx_in_rays)).as_py():
+        raise ValueError("prepare_clock_gating_candidates: every label must have a ray")
+    rays_sel = rays.take(idx_in_rays)
 
-    def cond_fun(carry):
-        _, residual = carry
-        return residual > tolerance
-
-    E_final, _ = jax.lax.while_loop(cond_fun, body_fun, (E, jnp.array(1.0)))
-
-    # Fallback to fori_loop for fixed iterations if while_loop doesn't converge
-    def newton_step(i, E):
-        f = E - e * jnp.sin(E) - M
-        df_dE = 1 - e * jnp.cos(E)
-        return E - f / df_dE
-
-    E_final = jax.lax.fori_loop(0, max_iterations, newton_step, E_final)
-
-    return E_final
-
-
-@jax.jit
-def _eccentric_to_true_anomaly_jax(
-    E: jax.Array,
-    e: jax.Array,
-) -> jax.Array:
-    """
-    Convert eccentric anomaly to true anomaly.
-
-    Parameters
-    ----------
-    E : jax.Array
-        Eccentric anomaly (radians)
-    e : jax.Array
-        Eccentricity
-
-    Returns
-    -------
-    f : jax.Array
-        True anomaly (radians)
-    """
-    # tan(f/2) = sqrt((1+e)/(1-e)) * tan(E/2)
-    tan_half_E = jnp.tan(E / 2)
-    tan_half_f = jnp.sqrt((1 + e) / (1 - e)) * tan_half_E
-    f = 2 * jnp.arctan(tan_half_f)
-
-    return f
-
-
-@jax.jit
-def _orbital_position_from_anomaly_jax(
-    f: jax.Array,
-    a: jax.Array,
-    e: jax.Array,
-    p_hat: jax.Array,
-    q_hat: jax.Array,
-) -> jax.Array:
-    """
-    Compute 3D orbital position from true anomaly and orbital elements.
-
-    Parameters
-    ----------
-    f : jax.Array
-        True anomaly (radians)
-    a : jax.Array
-        Semi-major axis (AU)
-    e : jax.Array
-        Eccentricity
-    p_hat : jax.Array (3,)
-        Orbital basis vector towards perihelion
-    q_hat : jax.Array (3,)
-        Orbital basis vector perpendicular to p in orbital plane
-
-    Returns
-    -------
-    position : jax.Array (3,)
-        3D position in SSB ecliptic frame (AU)
-    """
-    # Compute radial distance
-    cos_f = jnp.cos(f)
-    sin_f = jnp.sin(f)
-
-    r = a * (1 - e * e) / (1 + e * cos_f)
-
-    # Position in orbital plane
-    x_orb = r * cos_f
-    y_orb = r * sin_f
-
-    # Transform to 3D
-    position = x_orb * p_hat + y_orb * q_hat
-
-    return position
-
-
-@jax.jit
-def compute_orbital_positions_at_times(
-    plane_params_elements: jax.Array,  # [a, e, M0, n]
-    plane_params_bases: jax.Array,  # [p_hat, q_hat] (2, 3)
-    epoch_mjd: jax.Array,
-    obs_times_mjd: jax.Array,
-) -> Tuple[jax.Array, jax.Array, jax.Array]:
-    """
-    Compute orbital positions at observation times using Kepler's laws.
-
-    Parameters
-    ----------
-    plane_params_elements : jax.Array (4,)
-        Orbital elements [a, e, M0, n] where n is mean motion (rad/day)
-    plane_params_bases : jax.Array (2, 3)
-        Orbital plane basis vectors [p_hat, q_hat]
-    epoch_mjd : jax.Array
-        Epoch time (MJD)
-    obs_times_mjd : jax.Array (N,)
-        Observation times (MJD)
-
-    Returns
-    -------
-    positions : jax.Array (N, 3)
-        3D positions at observation times (AU)
-    mean_anomalies : jax.Array (N,)
-        Mean anomalies at observation times (radians)
-    true_anomalies : jax.Array (N,)
-        True anomalies at observation times (radians)
-    """
-    a, e, M0, n = plane_params_elements
-    p_hat, q_hat = plane_params_bases
-
-    # Compute mean anomalies at observation times
-    dt = obs_times_mjd - epoch_mjd
-    mean_anomalies = M0 + n * dt
-
-    # Wrap mean anomalies to [0, 2π)
-    mean_anomalies = jnp.mod(mean_anomalies, 2 * jnp.pi)
-
-    # Solve Kepler's equation for eccentric anomalies
-    eccentric_anomalies = jax.vmap(_solve_kepler_equation_jax, in_axes=(0, None))(
-        mean_anomalies, e
+    # Times as TDB MJD
+    times_mjd = (
+        rays_sel.observer.coordinates.time.rescale("tdb")
+        .mjd()
+        .to_numpy(zero_copy_only=False)
     )
 
-    # Convert to true anomalies
-    true_anomalies = jax.vmap(_eccentric_to_true_anomaly_jax, in_axes=(0, None))(
-        eccentric_anomalies, e
-    )
+    # Observer codes aligned to labels
+    obs_codes = rays_sel.observer.code
 
-    # Compute 3D positions
-    positions = jax.vmap(
-        _orbital_position_from_anomaly_jax, in_axes=(0, None, None, None, None)
-    )(true_anomalies, a, e, p_hat, q_hat)
+    # Compute night_id (Int64)
+    night_id = _compute_night_id(obs_codes, pa.array(times_mjd))
 
-    return positions, mean_anomalies, true_anomalies
-
-
-@functools.partial(jax.jit, static_argnames=["num_rays", "num_orbits"])
-def _apply_clock_gating_jax(
-    obs_times_mjd: jax.Array,  # (num_rays,)
-    obs_positions: jax.Array,  # (num_rays, 3)
-    ray_directions: jax.Array,  # (num_rays, 3)
-    orbit_elements: jax.Array,  # (num_orbits, 4) - [a, e, M0, n]
-    orbit_bases: jax.Array,  # (num_orbits, 2, 3) - [p_hat, q_hat]
-    epoch_mjds: jax.Array,  # (num_orbits,)
-    max_angular_sep_rad: float,
-    max_radial_sep_au: float,
-    max_extrapolation_days: float,
-    typical_distance_au: float = 2.5,
-    num_rays: int = 0,
-    num_orbits: int = 0,
-) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    """
-    JAX-compiled clock gating computation.
-
-    Returns
-    -------
-    passed_mask : jax.Array (num_orbits, num_rays)
-        Boolean mask indicating which ray-orbit pairs passed gating
-    angular_sep_arcsec : jax.Array (num_orbits, num_rays)
-        Angular separations in arcseconds
-    radial_sep_au : jax.Array (num_orbits, num_rays)
-        Radial separations in AU
-    extrapolation_days : jax.Array (num_orbits, num_rays)
-        Time extrapolation in days
-    predicted_M : jax.Array (num_orbits, num_rays)
-        Predicted mean anomalies
-    predicted_f : jax.Array (num_orbits, num_rays)
-        Predicted true anomalies
-    predicted_positions : jax.Array (num_orbits, num_rays, 3)
-        Predicted 3D positions
-    """
-    # Approximate observed positions using typical distance
-    obs_positions_approx = obs_positions + typical_distance_au * ray_directions
-    obs_norms = jnp.linalg.norm(obs_positions_approx, axis=1)  # (num_rays,)
-
-    def process_single_orbit(orbit_idx):
-        """Process a single orbit against all rays."""
-        # Extract orbital elements and basis
-        a, e, M0, n = orbit_elements[orbit_idx]
-        p_hat, q_hat = orbit_bases[orbit_idx]
-        epoch_mjd = epoch_mjds[orbit_idx]
-
-        # Compute predicted positions for all observation times
-        elements_jax = jnp.array([a, e, M0, n])
-        bases_jax = jnp.array([p_hat, q_hat])
-
-        pred_positions, pred_M, pred_f = compute_orbital_positions_at_times(
-            elements_jax, bases_jax, epoch_mjd, obs_times_mjd
+    # Orbit eccentricities by joining labels.orbit_id to orbits.orbit_id
+    # Convert orbits to Keplerian once
+    if len(orbits) == 0:
+        raise ValueError("prepare_clock_gating_candidates: orbits is empty")
+    kep: KeplerianCoordinates = orbits.coordinates.to_keplerian()
+    # Indices of labels.orbit_id within orbits.orbit_id
+    idx_in_orbits = pc.index_in(labels.orbit_id, orbits.orbit_id)
+    if pc.any(pc.is_null(idx_in_orbits)).as_py():
+        raise ValueError(
+            "prepare_clock_gating_candidates: label orbit_id missing in orbits"
         )
+    e_aligned = pc.take(pa.array(kep.e), idx_in_orbits).to_numpy(zero_copy_only=False)
 
-        # Time validity check
-        dt = jnp.abs(obs_times_mjd - epoch_mjd)
-        time_valid = dt <= max_extrapolation_days
-
-        # Angular separation computation
-        pred_norms = jnp.linalg.norm(pred_positions, axis=1)
-        denom = jnp.maximum(obs_norms * pred_norms, 1e-15)
-        cos_theta = jnp.sum(obs_positions_approx * pred_positions, axis=1) / denom
-        cos_theta = jnp.clip(cos_theta, -1.0, 1.0)
-        angular_separation = jnp.arccos(cos_theta)  # radians
-
-        # Radial separation
-        radial_separation = jnp.abs(pred_norms - obs_norms)
-
-        # Gating decision (angle + time, ignoring radial for now as it's too restrictive)
-        passed_mask = time_valid & (angular_separation <= max_angular_sep_rad)
-
-        # Convert angular separation to arcseconds
-        angular_sep_arcsec = angular_separation * 180.0 / jnp.pi * 3600.0
-
-        return (
-            passed_mask,
-            angular_sep_arcsec,
-            radial_separation,
-            dt,
-            pred_M,
-            pred_f,
-            pred_positions,
+    # Optional sky PA if present upstream; otherwise fill nulls
+    if include_sky_pa and hasattr(rays_sel, "sky_pa_deg"):
+        sky_pa = pc.take(
+            rays_sel.sky_pa_deg, pc.indices_nonzero(pc.greater_equal(idx_in_rays, 0))
         )
-
-    # Process all orbits in parallel
-    results = jax.vmap(process_single_orbit)(jnp.arange(num_orbits))
-
-    return results
-
-
-def apply_clock_gating(
-    observation_rays: ObservationRays,
-    plane_params: OrbitsPlaneParams,
-    config: ClockGateConfig,
-    use_jax: bool = True,
-) -> ClockGateResults:
-    """
-    Apply clock gating filter to observation rays and orbital plane parameters.
-
-    This function computes predicted orbital positions at observation times
-    and filters out detection-orbit pairings that exceed geometric tolerances.
-
-    Parameters
-    ----------
-    observation_rays : ObservationRays
-        Observation rays to filter
-    plane_params : OrbitsPlaneParams
-        Orbital plane parameters including elements and basis vectors
-    config : ClockGateConfig
-        Clock gating configuration parameters
-    use_jax : bool, default=True
-        Whether to use JAX-compiled computation for performance
-
-    Returns
-    -------
-    results : ClockGateResults
-        Clock gating filter results
-    """
-    if len(observation_rays) == 0 or len(plane_params) == 0:
-        return ClockGateResults.empty()
-
-    logger.info(
-        f"Applying clock gating to {len(observation_rays)} observation rays and {len(plane_params)} orbits (JAX={use_jax})"
-    )
-
-    # Extract configuration (as scalars)
-    max_angular_sep_rad = (
-        float(config.max_angular_sep_arcsec.to_numpy()[0]) / 3600.0 * np.pi / 180.0
-    )
-    max_radial_sep_au = float(config.max_radial_sep_au.to_numpy()[0])
-    max_extrapolation_days = float(config.max_extrapolation_days.to_numpy()[0])
-
-    # Extract ray information
-    obs_times_mjd = observation_rays.observer.coordinates.time.mjd().to_numpy()
-    observer_positions = np.column_stack(
-        [
-            observation_rays.observer.coordinates.x.to_numpy(),
-            observation_rays.observer.coordinates.y.to_numpy(),
-            observation_rays.observer.coordinates.z.to_numpy(),
-        ]
-    )
-    ray_directions = np.column_stack(
-        [
-            observation_rays.u_x.to_numpy(),
-            observation_rays.u_y.to_numpy(),
-            observation_rays.u_z.to_numpy(),
-        ]
-    )
-
-    # Extract orbital parameters
-    orbit_ids = plane_params.orbit_id.to_pylist()
-    epoch_mjds = plane_params.t0.mjd().to_numpy()
-    a_arr = plane_params.a.to_numpy()
-    e_arr = plane_params.e.to_numpy()
-    M0_arr = plane_params.M0.to_numpy()
-
-    # Compute mean motions
-    k = 0.01720209895  # rad/day * AU^(3/2)
-    n_arr = k / (a_arr * np.sqrt(a_arr))
-
-    # Basis vectors
-    p_vecs = np.column_stack(
-        [
-            plane_params.p_x.to_numpy(),
-            plane_params.p_y.to_numpy(),
-            plane_params.p_z.to_numpy(),
-        ]
-    )
-    q_vecs = np.column_stack(
-        [
-            plane_params.q_x.to_numpy(),
-            plane_params.q_y.to_numpy(),
-            plane_params.q_z.to_numpy(),
-        ]
-    )
-
-    if use_jax:
-        # Use JAX-compiled computation
-        orbit_elements = jnp.column_stack(
-            [a_arr, e_arr, M0_arr, n_arr]
-        )  # (num_orbits, 4)
-        orbit_bases = jnp.stack([p_vecs, q_vecs], axis=1)  # (num_orbits, 2, 3)
-
-        # Call JAX kernel
-        (
-            passed_mask,
-            angular_sep_arcsec,
-            radial_sep_au,
-            extrapolation_days,
-            predicted_M,
-            predicted_f,
-            predicted_positions,
-        ) = _apply_clock_gating_jax(
-            jnp.asarray(obs_times_mjd),
-            jnp.asarray(observer_positions),
-            jnp.asarray(ray_directions),
-            orbit_elements,
-            orbit_bases,
-            jnp.asarray(epoch_mjds),
-            max_angular_sep_rad,
-            max_radial_sep_au,
-            max_extrapolation_days,
-            num_rays=len(observation_rays),
-            num_orbits=len(plane_params),
-        )
-
-        # Convert to numpy and flatten for table construction
-        passed_mask_np = np.asarray(passed_mask).flatten()
-        angular_sep_np = np.asarray(angular_sep_arcsec).flatten()
-        radial_sep_np = np.asarray(radial_sep_au).flatten()
-        extrapolation_np = np.asarray(extrapolation_days).flatten()
-        predicted_M_np = np.asarray(predicted_M).flatten()
-        predicted_f_np = np.asarray(predicted_f).flatten()
-
     else:
-        # Use legacy NumPy computation (kept for validation)
-        return _apply_clock_gating_legacy(
-            observation_rays,
-            plane_params,
-            config,
-            max_angular_sep_rad,
-            max_radial_sep_au,
-            max_extrapolation_days,
+        sky_pa = pa.nulls(len(labels), type=pa.float32())
+
+    # Assemble candidates from Arrow-backed columns to minimize copies
+    out = ClockGatingCandidates.from_kwargs(
+        det_id=labels.det_id,
+        orbit_id=labels.orbit_id,
+        seg_id=labels.seg_id,
+        variant_id=labels.variant_id,
+        time_tdb_mjd=times_mjd,
+        night_id=night_id,
+        observer_code=obs_codes,
+        M_rad=labels.M_rad,
+        n_rad_day=labels.n_rad_day,
+        f_rad=labels.f_rad,
+        e=e_aligned,
+        sigma_M_rad=labels.sigma_M_rad,
+        t_hat_plane_x=labels.t_hat_plane_x,
+        t_hat_plane_y=labels.t_hat_plane_y,
+        sky_pa_deg=sky_pa,
+    )
+
+    if out.fragmented():
+        out = qv.defragment(out)
+    return out
+
+
+# ---- Edge building: declarations (implemented below) ----
+
+
+def build_clock_gated_edges(
+    candidates: ClockGatingCandidates,
+    *,
+    tau_min_minutes: float = 15.0,
+    alpha_min_per_day: float = 0.02,
+    beta: float = 1.0,
+    gamma: float = 0.5,
+    time_bin_minutes: int = 60,
+    max_bins_ahead: int = 72,
+    heading_max_deg: float | None = None,
+    chunk_size: int = 200_000,
+    max_processes: int | None = 1,
+) -> ClockGatedEdges:
+    if len(candidates) == 0:
+        return ClockGatedEdges.empty()
+
+    # Serial path: iterate per orbit
+    if max_processes is None or max_processes <= 1:
+        all_edges: list[ClockGatedEdges] = []
+        for orbit_id in candidates.orbit_id.unique():
+            orbit_id_str = orbit_id.as_py()
+            mask = pc.equal(candidates.orbit_id, orbit_id)
+            cands_i = candidates.apply_mask(mask)
+            edges_i = _edges_worker_per_orbit(
+                cands_i,
+                tau_min_minutes=tau_min_minutes,
+                alpha_min_per_day=alpha_min_per_day,
+                beta=beta,
+                gamma=gamma,
+                time_bin_minutes=time_bin_minutes,
+                max_bins_ahead=max_bins_ahead,
+                heading_max_deg=heading_max_deg,
+            )
+            if len(edges_i) > 0:
+                all_edges.append(edges_i)
+        if not all_edges:
+            return ClockGatedEdges.empty()
+        edges = qv.concatenate(all_edges, defrag=True)
+        return edges
+
+    # Ray parallel path: shard by orbit_id
+    initialize_use_ray(num_cpus=max_processes)
+    candidates_ref = ray.put(candidates)
+    futures: list[ray.ObjectRef] = []
+    out_parts: list[ClockGatedEdges] = []
+    max_active = max(1, int(1.5 * max_processes))
+
+    for orbit_id in candidates.orbit_id.unique():
+        orbit_id_str = orbit_id.as_py()
+        fut = _edges_worker_per_orbit_remote.remote(
+            candidates_ref,
+            orbit_id_str,
+            tau_min_minutes=tau_min_minutes,
+            alpha_min_per_day=alpha_min_per_day,
+            beta=beta,
+            gamma=gamma,
+            time_bin_minutes=time_bin_minutes,
+            max_bins_ahead=max_bins_ahead,
+            heading_max_deg=heading_max_deg,
         )
+        futures.append(fut)
+        if len(futures) >= max_active:
+            finished, futures = ray.wait(futures, num_returns=1)
+            out_parts.append(ray.get(finished[0]))
 
-    # Build result arrays
-    det_ids_list = observation_rays.det_id.to_pylist()
-    num_rays = len(det_ids_list)
-    num_orbits = len(orbit_ids)
+    while futures:
+        finished, futures = ray.wait(futures, num_returns=1)
+        out_parts.append(ray.get(finished[0]))
 
-    all_det_ids = []
-    all_orbit_ids = []
+    out_parts = [p for p in out_parts if len(p) > 0]
+    if not out_parts:
+        return ClockGatedEdges.empty()
+    return qv.concatenate(out_parts, defrag=True)
 
-    for orbit_id in orbit_ids:
-        all_det_ids.extend(det_ids_list)
-        all_orbit_ids.extend([orbit_id] * num_rays)
 
-    # Create results table
-    results = ClockGateResults.from_kwargs(
-        det_id=all_det_ids,
-        orbit_id=all_orbit_ids,
-        passed=passed_mask_np.tolist(),
-        angular_sep_arcsec=angular_sep_np.tolist(),
-        radial_sep_au=radial_sep_np.tolist(),
-        extrapolation_days=extrapolation_np.tolist(),
-        predicted_mean_anomaly=predicted_M_np.tolist(),
-        predicted_true_anomaly=predicted_f_np.tolist(),
+def extract_kepler_chains(
+    candidates: ClockGatingCandidates,
+    edges: ClockGatedEdges,
+    *,
+    min_size: int = 6,
+    min_span_days: float = 3.0,
+) -> tuple[KeplerChains, KeplerChainMembers]: ...
+
+
+def kepler_clock_gate(
+    labels: AnomalyLabels,
+    rays: ObservationRays,
+    orbits: Orbits,
+    *,
+    tau_min_minutes: float = 15.0,
+    alpha_min_per_day: float = 0.02,
+    beta: float = 1.0,
+    gamma: float = 0.5,
+    time_bin_minutes: int = 60,
+    max_bins_ahead: int = 72,
+    per_night_cap: int = 2,
+    heading_max_deg: float | None = None,
+    chunk_size: int = 200_000,
+    max_processes: int | None = 1,
+    promote_min_size: int = 6,
+    promote_min_span_days: float = 3.0,
+) -> tuple[ClockGatingCandidates, ClockGatedEdges, KeplerChains, KeplerChainMembers]:
+    cands = prepare_clock_gating_candidates(labels, rays, orbits)
+    edges = build_clock_gated_edges(
+        cands,
+        tau_min_minutes=tau_min_minutes,
+        alpha_min_per_day=alpha_min_per_day,
+        beta=beta,
+        gamma=gamma,
+        time_bin_minutes=time_bin_minutes,
+        max_bins_ahead=max_bins_ahead,
+        per_night_cap=per_night_cap,
+        heading_max_deg=heading_max_deg,
+        chunk_size=chunk_size,
+        max_processes=max_processes,
+    )
+    chains, members = extract_kepler_chains(
+        cands,
+        edges,
+        min_size=promote_min_size,
+        min_span_days=promote_min_span_days,
+    )
+    return cands, edges, chains, members
+
+
+# ------------------
+# Internal utilities
+# ------------------
+
+
+def _wrap_2pi(x: np.ndarray) -> np.ndarray:
+    y = np.mod(x, 2.0 * np.pi)
+    return np.where(y < 0.0, y + 2.0 * np.pi, y)
+
+
+def _choose_k(n: np.ndarray, dt: np.ndarray, dM_wrapped: np.ndarray) -> np.ndarray:
+    k = np.rint((n * dt - dM_wrapped) / (2.0 * np.pi)).astype(np.int64)
+    return np.maximum(k, 0)
+
+
+def _clock_residual(
+    n: np.ndarray, dt: np.ndarray, dM_wrapped: np.ndarray, k: np.ndarray
+) -> np.ndarray:
+    return dt - (dM_wrapped + 2.0 * np.pi * k) / (n + 1e-18)
+
+
+def _dM_df(e: np.ndarray, f: np.ndarray) -> np.ndarray:
+    num = (1.0 - e * e) ** 1.5
+    den = (1.0 + e * np.cos(f)) ** 2
+    return num / (den + 1e-18)
+
+
+def _tau(
+    dt: np.ndarray,
+    tau_min: float,
+    alpha: float,
+    beta: float,
+    sigma_Mi: np.ndarray,
+    gamma: float,
+    dMdf_i: np.ndarray,
+) -> np.ndarray:
+    return tau_min + alpha * dt + beta * sigma_Mi + gamma * np.abs(dMdf_i)
+
+
+def _edges_worker_per_orbit(
+    cands: ClockGatingCandidates,
+    *,
+    tau_min_minutes: float,
+    alpha_min_per_day: float,
+    beta: float,
+    gamma: float,
+    time_bin_minutes: int,
+    max_bins_ahead: int,
+    heading_max_deg: float | None,
+) -> ClockGatedEdges:
+    N = len(cands)
+    if N == 0:
+        return ClockGatedEdges.empty()
+
+    # Extract numpy arrays
+    t = cands.time_tdb_mjd.to_numpy(zero_copy_only=False).astype(float)
+    M = cands.M_rad.to_numpy(zero_copy_only=False).astype(float)
+    n = cands.n_rad_day.to_numpy(zero_copy_only=False).astype(float)
+    f = cands.f_rad.to_numpy(zero_copy_only=False).astype(float)
+    e = cands.e.to_numpy(zero_copy_only=False).astype(float)
+    sigma_M = cands.sigma_M_rad.to_numpy(zero_copy_only=False).astype(float)
+    night_id = cands.night_id.to_numpy(zero_copy_only=False).astype(np.int64)
+    orbit_id = cands.orbit_id.to_pylist()[0] if len(cands) > 0 else ""
+
+    # Optional heading
+    if heading_max_deg is not None and "sky_pa_deg" in cands.table.column_names:
+        sky_pa = cands.sky_pa_deg.to_numpy(zero_copy_only=False).astype(float)
+        has_pa = ~np.isnan(sky_pa)
+    else:
+        sky_pa = None
+        has_pa = None
+
+    # Convert n from rad/day already; ensure float64
+    n = n.astype(float)
+
+    # Time binning
+    bin_w = float(time_bin_minutes) / 1440.0
+    t0 = float(np.min(t))
+    bin_idx = np.floor((t - t0) / bin_w).astype(np.int64)
+
+    # Build bins dict {bin: np.ndarray of indices}
+    bins: dict[int, np.ndarray] = {}
+    for b in np.unique(bin_idx):
+        bins[int(b)] = np.nonzero(bin_idx == b)[0]
+
+    edges_i_list: list[int] = []
+    edges_j_list: list[int] = []
+    edges_k_list: list[int] = []
+    edges_resid_list: list[float] = []
+    edges_dt_list: list[float] = []
+    edges_dM_list: list[float] = []
+    edges_same_night_list: list[bool] = []
+
+    tau_min = float(tau_min_minutes) / 1440.0
+    alpha = float(alpha_min_per_day) / 1440.0
+
+    # Helper heading check
+    def heading_ok(i: int, j: int) -> bool:
+        if sky_pa is None:
+            return True
+        if not (has_pa[i] and has_pa[j]):
+            return True
+        dpa = abs(sky_pa[j] - sky_pa[i])
+        dpa = min(dpa, 360.0 - dpa)
+        return dpa <= float(heading_max_deg)
+
+    # Collect same-night edges (no capping now, but keep flagging for diagnostics)
+
+    # Iterate bin pairs
+    for b in sorted(bins.keys()):
+        I = bins[b]
+        if I.size == 0:
+            continue
+        for da in range(1, max_bins_ahead + 1):
+            b2 = b + da
+            if b2 not in bins:
+                # Skip gaps but continue scanning further bins
+                continue
+            J = bins[b2]
+            if J.size == 0:
+                continue
+
+            # Vectorized vs scalar path: J typically small; iterate I and vectorize over J
+            for i in I:
+                t_i = t[i]
+                dt = t[J] - t_i
+                if not np.any(dt > 0.0):
+                    continue
+                valid_dt = dt > 0.0
+                Jv = J[valid_dt]
+                dt_v = dt[valid_dt]
+
+                # Optional heading guard
+                if sky_pa is not None and heading_max_deg is not None:
+                    headmask = np.array([heading_ok(i, j) for j in Jv], dtype=bool)
+                    if not np.any(headmask):
+                        continue
+                    Jv = Jv[headmask]
+                    dt_v = dt_v[headmask]
+                    if Jv.size == 0:
+                        continue
+
+                dM = _wrap_2pi(M[Jv] - M[i])
+                k = _choose_k(n[i], dt_v, dM)
+                resid = _clock_residual(n[i], dt_v, dM, k)
+                dMdf_i = _dM_df(e[i], f[i])
+                tau = _tau(dt_v, tau_min, alpha, beta, sigma_M[i], gamma, dMdf_i)
+
+                keep = np.abs(resid) <= tau
+                if not np.any(keep):
+                    continue
+                Jk = Jv[keep]
+                dt_k = dt_v[keep]
+                dM_k = dM[keep]
+                k_k = k[keep]
+                resid_k = resid[keep]
+
+                # Per-night grouping
+                same_mask = night_id[Jk] == night_id[i]
+                # Emit cross-night edges immediately (no cap)
+                if np.any(~same_mask):
+                    nn = np.nonzero(~same_mask)[0]
+                    for idx in nn:
+                        j = int(Jk[idx])
+                        edges_i_list.append(int(i))
+                        edges_j_list.append(j)
+                        edges_k_list.append(int(k_k[idx]))
+                        edges_resid_list.append(float(resid_k[idx]))
+                        edges_dt_list.append(float(dt_k[idx]))
+                        edges_dM_list.append(float(dM_k[idx]))
+                        edges_same_night_list.append(False)
+
+                # Collect same-night edges (no capping)
+                if np.any(same_mask):
+                    sn = np.nonzero(same_mask)[0]
+                    for idx in sn:
+                        j = int(Jk[idx])
+                        edges_i_list.append(int(i))
+                        edges_j_list.append(int(j))
+                        edges_k_list.append(int(k_k[idx]))
+                        edges_resid_list.append(float(resid_k[idx]))
+                        edges_dt_list.append(float(dt_k[idx]))
+                        edges_dM_list.append(float(dM_k[idx]))
+                        edges_same_night_list.append(True)
+
+    # No per-night capping: all edges already appended
+
+    if not edges_i_list:
+        return ClockGatedEdges.empty()
+
+    # Build table
+    edges_tbl = ClockGatedEdges.from_kwargs(
+        orbit_id=[orbit_id] * len(edges_i_list),
+        i_index=np.asarray(edges_i_list, dtype=np.int32),
+        j_index=np.asarray(edges_j_list, dtype=np.int32),
+        k_revs=np.asarray(edges_k_list, dtype=np.int16),
+        resid_days=np.asarray(edges_resid_list, dtype=np.float32),
+        dt_days=np.asarray(edges_dt_list, dtype=np.float32),
+        dM_wrapped_rad=np.asarray(edges_dM_list, dtype=np.float32),
+        same_night=np.asarray(edges_same_night_list, dtype=bool),
+        tau_min_minutes=float(tau_min_minutes),
+        alpha_min_per_day=float(alpha_min_per_day),
+        beta=float(beta),
+        gamma=float(gamma),
+        time_bin_minutes=int(time_bin_minutes),
+        max_bins_ahead=int(max_bins_ahead),
+        heading_max_deg=float(heading_max_deg) if heading_max_deg is not None else -1.0,
+    )
+    if edges_tbl.fragmented():
+        edges_tbl = qv.defragment(edges_tbl)
+    return edges_tbl
+
+
+@ray.remote
+def _edges_worker_per_orbit_remote(
+    candidates: ClockGatingCandidates,
+    orbit_id: str,
+    *,
+    tau_min_minutes: float,
+    alpha_min_per_day: float,
+    beta: float,
+    gamma: float,
+    time_bin_minutes: int,
+    max_bins_ahead: int,
+    heading_max_deg: float | None,
+) -> ClockGatedEdges:
+    mask = pc.equal(candidates.orbit_id, orbit_id)
+    cands_i = candidates.apply_mask(mask)
+    return _edges_worker_per_orbit(
+        cands_i,
+        tau_min_minutes=tau_min_minutes,
+        alpha_min_per_day=alpha_min_per_day,
+        beta=beta,
+        gamma=gamma,
+        time_bin_minutes=time_bin_minutes,
+        max_bins_ahead=max_bins_ahead,
+        heading_max_deg=heading_max_deg,
     )
 
-    n_passed = int(np.sum(passed_mask_np))
-    n_total = len(passed_mask_np)
-    logger.info(
-        f"Clock gating: {n_passed}/{n_total} ({100*n_passed/n_total:.1f}%) pairings passed"
-    )
 
-    return results
+def extract_kepler_chains(
+    candidates: ClockGatingCandidates,
+    edges: ClockGatedEdges,
+    *,
+    min_size: int = 6,
+    min_span_days: float = 3.0,
+) -> tuple[KeplerChains, KeplerChainMembers]:
+    if len(candidates) == 0 or len(edges) == 0:
+        return KeplerChains.empty(), KeplerChainMembers.empty()
 
+    chains_out: list[KeplerChains] = []
+    members_out: list[KeplerChainMembers] = []
 
-def _apply_clock_gating_legacy(
-    observation_rays: ObservationRays,
-    plane_params: OrbitsPlaneParams,
-    config: ClockGateConfig,
-    max_angular_sep_rad: float,
-    max_radial_sep_au: float,
-    max_extrapolation_days: float,
-) -> ClockGateResults:
-    """Legacy NumPy implementation for validation."""
-    # Extract ray information
-    obs_times_mjd = observation_rays.observer.coordinates.time.mjd().to_numpy()
-    observer_positions = np.column_stack(
-        [
-            observation_rays.observer.coordinates.x.to_numpy(),
-            observation_rays.observer.coordinates.y.to_numpy(),
-            observation_rays.observer.coordinates.z.to_numpy(),
+    # Group by orbit
+    for orbit_id in candidates.orbit_id.unique():
+        oid = orbit_id.as_py()
+        cand_mask = pc.equal(candidates.orbit_id, orbit_id)
+        edge_mask = pc.equal(edges.orbit_id, orbit_id)
+        cands_i = candidates.apply_mask(cand_mask)
+        edges_i = edges.apply_mask(edge_mask)
+        if len(cands_i) == 0 or len(edges_i) == 0:
+            continue
+
+        N = len(cands_i)
+        # Build union-find over [0..N-1]
+        parent = np.arange(N, dtype=np.int32)
+        rank = np.zeros(N, dtype=np.int32)
+
+        def find(x: int) -> int:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a: int, b: int) -> None:
+            ra, rb = find(a), find(b)
+            if ra == rb:
+                return
+            if rank[ra] < rank[rb]:
+                ra, rb = rb, ra
+            parent[rb] = ra
+            if rank[ra] == rank[rb]:
+                rank[ra] += 1
+
+        ii = edges_i.i_index.to_numpy(zero_copy_only=False).astype(np.int32)
+        jj = edges_i.j_index.to_numpy(zero_copy_only=False).astype(np.int32)
+        for a, b in zip(ii, jj):
+            union(int(a), int(b))
+
+        # Components
+        comp_members: dict[int, list[int]] = {}
+        for idx in range(N):
+            r = find(idx)
+            comp_members.setdefault(r, []).append(idx)
+
+        # Summarize and promote
+        t = cands_i.time_tdb_mjd.to_numpy(zero_copy_only=False).astype(float)
+        comps = []
+        for root, members in comp_members.items():
+            tm = t[members]
+            comps.append((members, len(members), float(np.min(tm)), float(np.max(tm))))
+        # Filter and order deterministically
+        comps = [
+            c
+            for c in comps
+            if c[1] >= int(min_size) and (c[3] - c[2]) >= float(min_span_days)
         ]
-    )
-    ray_directions = np.column_stack(
-        [
-            observation_rays.u_x.to_numpy(),
-            observation_rays.u_y.to_numpy(),
-            observation_rays.u_z.to_numpy(),
-        ]
-    )
+        if not comps:
+            continue
+        comps.sort(key=lambda x: (-x[1], x[2], x[3]))
 
-    # Approximate observed positions
-    typical_distance = 2.5  # AU
-    obs_positions = observer_positions + typical_distance * ray_directions
-    obs_norms = np.linalg.norm(obs_positions, axis=1)
+        chain_ids = []
+        sizes = []
+        tmins = []
+        tmaxs = []
+        members_chain_ids = []
+        members_indices = []
+        for chain_id, (members, size, t_min, t_max) in enumerate(comps):
+            chain_ids.append(chain_id)
+            sizes.append(size)
+            tmins.append(t_min)
+            tmaxs.append(t_max)
+            members_chain_ids.extend([chain_id] * len(members))
+            members_indices.extend(members)
 
-    # Results lists
-    all_det_ids = []
-    all_orbit_ids = []
-    all_passed = []
-    all_angular_sep = []
-    all_radial_sep = []
-    all_extrapolation = []
-    all_predicted_M = []
-    all_predicted_f = []
-
-    # Vectorized plane params
-    orbit_ids = plane_params.orbit_id.to_pylist()
-    epoch_mjds = plane_params.t0.mjd().to_numpy()
-    a_arr = plane_params.a.to_numpy()
-    e_arr = plane_params.e.to_numpy()
-    M0_arr = plane_params.M0.to_numpy()
-    p_x_arr = plane_params.p_x.to_numpy()
-    p_y_arr = plane_params.p_y.to_numpy()
-    p_z_arr = plane_params.p_z.to_numpy()
-    q_x_arr = plane_params.q_x.to_numpy()
-    q_y_arr = plane_params.q_y.to_numpy()
-    q_z_arr = plane_params.q_z.to_numpy()
-
-    # Process each orbit
-    for i in range(len(plane_params)):
-        orbit_id = orbit_ids[i]
-        epoch_mjd = float(epoch_mjds[i])
-
-        # Extract orbital elements and basis
-        a = float(a_arr[i])
-        e = float(e_arr[i])
-        M0 = float(M0_arr[i])
-
-        # Compute mean motion (rad/day) - using Gaussian constant
-        k = 0.01720209895  # rad/day * AU^(3/2)
-        n = k / (a * np.sqrt(a))
-
-        # Basis vectors
-        p_hat = np.array([p_x_arr[i], p_y_arr[i], p_z_arr[i]], dtype=float)
-        q_hat = np.array([q_x_arr[i], q_y_arr[i], q_z_arr[i]], dtype=float)
-
-        # Convert to JAX arrays
-        elements_jax = jnp.array([a, e, M0, n])
-        bases_jax = jnp.array([p_hat, q_hat])
-        epoch_jax = jnp.array(epoch_mjd)
-        obs_times_jax = jnp.array(obs_times_mjd)
-
-        # Compute predicted positions
-        pred_positions, pred_M, pred_f = compute_orbital_positions_at_times(
-            elements_jax, bases_jax, epoch_jax, obs_times_jax
+        chains_tbl = KeplerChains.from_kwargs(
+            orbit_id=[oid] * len(chain_ids),
+            chain_id=np.asarray(chain_ids, dtype=np.int64),
+            size=np.asarray(sizes, dtype=np.int32),
+            t_min_mjd=np.asarray(tmins, dtype=np.float64),
+            t_max_mjd=np.asarray(tmaxs, dtype=np.float64),
         )
+        members_tbl = KeplerChainMembers.from_kwargs(
+            orbit_id=[oid] * len(members_chain_ids),
+            chain_id=np.asarray(members_chain_ids, dtype=np.int64),
+            cand_index=np.asarray(members_indices, dtype=np.int32),
+        )
+        chains_out.append(chains_tbl)
+        members_out.append(members_tbl)
 
-        pred_positions_np = np.array(pred_positions)  # (N,3)
-        pred_M_np = np.array(pred_M)  # (N,)
-        pred_f_np = np.array(pred_f)  # (N,)
-
-        # Vectorized time validity
-        dt = np.abs(obs_times_mjd - epoch_mjd)
-        time_valid = dt <= max_extrapolation_days
-
-        # Vectorized angular separation
-        pred_norms = np.linalg.norm(pred_positions_np, axis=1)
-        denom = np.maximum(obs_norms * pred_norms, 1e-15)
-        cos_theta = np.einsum("ij,ij->i", obs_positions, pred_positions_np) / denom
-        cos_theta = np.clip(cos_theta, -1.0, 1.0)
-        angular_separation = np.arccos(cos_theta)  # radians
-
-        # Vectorized radial separation
-        radial_separation = np.abs(pred_norms - obs_norms)
-
-        # Gating decision (angle + time)
-        passed_mask = time_valid & (angular_separation <= max_angular_sep_rad)
-
-        # Extend results
-        det_ids_list = observation_rays.det_id.to_pylist()
-        all_det_ids.extend(det_ids_list)
-        all_orbit_ids.extend([orbit_id] * len(det_ids_list))
-        all_passed.extend(passed_mask.tolist())
-        all_angular_sep.extend((angular_separation * 180.0 / np.pi * 3600.0).tolist())
-        all_radial_sep.extend(radial_separation.tolist())
-        all_extrapolation.extend(dt.tolist())
-        all_predicted_M.extend(pred_M_np.tolist())
-        all_predicted_f.extend(pred_f_np.tolist())
-
-    # Create results table
-    results = ClockGateResults.from_kwargs(
-        det_id=all_det_ids,
-        orbit_id=all_orbit_ids,
-        passed=all_passed,
-        angular_sep_arcsec=all_angular_sep,
-        radial_sep_au=all_radial_sep,
-        extrapolation_days=all_extrapolation,
-        predicted_mean_anomaly=all_predicted_M,
-        predicted_true_anomaly=all_predicted_f,
+    if not chains_out:
+        return KeplerChains.empty(), KeplerChainMembers.empty()
+    return qv.concatenate(chains_out, defrag=True), qv.concatenate(
+        members_out, defrag=True
     )
-
-    return results

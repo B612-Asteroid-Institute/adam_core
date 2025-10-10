@@ -328,6 +328,20 @@ def test_build_bvh_index_from_segments(benchmark, segments_aabbs, max_leaf_size)
     )
 
 
+def test_build_bvh_index_e2e(orbits_synthetic_stratified_ci):
+    index = build_bvh_index(
+        orbits_synthetic_stratified_ci,
+        max_chord_arcmin=5.0,
+        guard_arcmin=0.65,
+        max_leaf_size=64,
+        max_processes=1,
+        max_segments_per_orbit=512,
+        epsilon_n_au=1e-9,
+        padding_method="baseline",
+    )
+    index.validate()
+
+
 @pytest.mark.benchmark
 def test_build_bvh_index_benchmark(benchmark, orbits_synthetic_stratified_ci):
     """Benchmark BVH index building with optimal parameters."""
