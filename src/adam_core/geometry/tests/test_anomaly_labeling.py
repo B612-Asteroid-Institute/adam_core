@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
+import pyarrow.compute as pc
 import pytest
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -127,10 +128,10 @@ def test_label_anomalies_throughput_cpu(benchmark, n_hits):
 
 
 def test_label_anomalies_frame_origin_enforcement_raises(
-    index_optimal, bvh_hits, rays_nb, orbits_synthetic_stratified_ci
+    bvh_hits, rays_nbody, orbits_synthetic_stratified_ci
 ):
     # Build rays not in ecliptic to trigger frame assertion
-    rays = rays_nb[:2]
+    rays = rays_nbody[:2]
     # Force frame mismatch by changing observer coordinates frame attribute
     rays_bad = rays.set_column(
         "observer",
@@ -157,7 +158,7 @@ def test_label_anomalies_frame_origin_enforcement_raises(
         orbits_synthetic_stratified_ci.orbit_id, pc.unique(bvh_hits.orbit_id)
     )
     orbits_used = orbits_synthetic_stratified_ci.apply_mask(keep_orb)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         _ = label_anomalies(
             bvh_hits, rays_bad, orbits_used, max_k=1, chunk_size=16, max_processes=0
         )

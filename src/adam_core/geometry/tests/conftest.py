@@ -474,7 +474,7 @@ def index_small(segments_aabbs, request) -> BVHIndex:
 
 
 @pytest.fixture(scope="session")
-def bvh_hits(index_optimal, rays_nbody):
+def bvh_hits(_fixture_cache_root, index_optimal, rays_nbody):
     idx_root = Path(_fixture_cache_root) / "hits" / "nb"
     path = idx_root / "hits.parquet"
     _ensure_dir(idx_root)
@@ -495,7 +495,7 @@ def bvh_hits(index_optimal, rays_nbody):
 
 
 @pytest.fixture(scope="session")
-def anomaly_labels(bvh_hits, rays_nbody, orbits_synthetic_stratified_ci):
+def anomaly_labels(_fixture_cache_root, bvh_hits, rays_nbody, orbits_synthetic_stratified_ci):
     path = (
         Path(_fixture_cache_root) / "anomaly_labels" / "nb" / "anomaly_labels.parquet"
     )
