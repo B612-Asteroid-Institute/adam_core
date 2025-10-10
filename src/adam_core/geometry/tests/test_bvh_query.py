@@ -181,6 +181,21 @@ def test_ray_segment_distances_pairs_jax_shapes():
     assert d.shape == (W,)
 
 
+def test_query_bvh_e2e(index_optimal, rays_nbody):
+    hits, telemetry = query_bvh(
+        index_optimal,
+        rays_nbody,
+        guard_arcmin=0.65,
+        window_size=32768,
+        batch_size=16384,
+        max_processes=1,
+    )
+    print(telemetry)
+    assert isinstance(hits, OverlapHits)
+    stats = compute_recall_metrics_from_hits(rays_nbody, hits)
+    assert stats["recall_signal"] == 1.0
+
+
 @pytest.mark.benchmark
 def test_query_bvh_benchmark(benchmark, index_optimal, rays_nbody):
     """Benchmark BVH querying with optimal parameters (cached fixtures, n-body rays)."""

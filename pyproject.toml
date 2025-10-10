@@ -81,7 +81,6 @@ test = [
     "pytest-mock",
     "pytest-xdist",
     "pytest",
-    "pytest-profiling",
     "isort",
     "mypy",
     "ruff",
@@ -95,7 +94,6 @@ test = [
     "nbformat>=4.2.0",
     "oem>=0.4.5",
     "pytest-xdist>=3.8.0",
-    "PyYAML>=6.0.2",
 ]
 
 [tool.black]
@@ -134,6 +132,3 @@ test = "pytest --benchmark-skip -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
-bench_query = "python src/adam_core/geometry/tests/bench_runner.py query {args}"
-bench_index = "python src/adam_core/geometry/tests/bench_runner.py index {args}"
-bench_crossmatch = "python src/adam_core/geometry/tests/benchmark_crossmatch.py {args}"
