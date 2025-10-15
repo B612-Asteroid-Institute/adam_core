@@ -25,8 +25,8 @@ class AnomalyLabels(qv.Table):
     """
 
     # Hit identification
-    det_id = qv.StringColumn()
-    orbit_id = qv.StringColumn()
+    det_id = qv.LargeStringColumn()
+    orbit_id = qv.LargeStringColumn()
     seg_id = qv.Int32Column()
     variant_id = qv.Int32Column()  # 0, 1, 2, ... for multiple variants per hit
 
