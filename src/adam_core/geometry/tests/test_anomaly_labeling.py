@@ -87,8 +87,7 @@ def _make_hits_and_rays(
     )
     rays = ObservationRays.from_kwargs(
         det_id=det_ids,
-        time=times,
-        observer_code=["500"] * n_hits,
+        orbit_id=[None] * n_hits,
         observer=observer,
         u_x=u_vecs[:, 0],
         u_y=u_vecs[:, 1],

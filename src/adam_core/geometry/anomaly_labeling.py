@@ -52,7 +52,7 @@ from adam_core.geometry.rays import ObservationRays
 from adam_core.orbits.orbits import Orbits
 from adam_core.utils.iter import _iterate_chunk_indices
 
-from .anomaly import AnomalyLabels as CanonicalAnomalyLabels
+from .anomaly import AnomalyLabels
 from .projection import (
     ellipse_snap_distance,
     ellipse_snap_distance_multi_seed,
@@ -60,9 +60,6 @@ from .projection import (
     ray_to_plane_distance,
     transform_to_perifocal_2d,
 )
-
-# Use the canonical AnomalyLabels from anomaly.py
-AnomalyLabels = CanonicalAnomalyLabels
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +73,7 @@ def label_anomalies_worker(
     snap_error_max_au: float | None,
     dedupe_angle_tol: float,
     chunk_size: int = 8192,
-) -> CanonicalAnomalyLabels:
+) -> AnomalyLabels:
     """
     Core worker for anomaly labeling with chunking and padding.
 
@@ -103,12 +100,12 @@ def label_anomalies_worker(
 
     Returns
     -------
-    CanonicalAnomalyLabels
+    AnomalyLabels
         Sorted anomaly labels
     """
     n_hits = len(hits)
     if n_hits == 0:
-        return CanonicalAnomalyLabels.empty()
+        return AnomalyLabels.empty()
 
     # Sanity checks for inputs.
     assert (
@@ -136,8 +133,6 @@ def label_anomalies_worker(
         ]
     )
 
-    # Removed verbose input logging for benchmarking
-
     # Extract orbital elements (aligned orbits)
     kep = orbits.coordinates.to_keplerian()
     a_hit = kep.a.to_numpy()
@@ -161,8 +156,6 @@ def label_anomalies_worker(
     sin_raan = np.sin(raan_hit)
     cos_raan = np.cos(raan_hit)
     plane_normals = np.column_stack([sin_i * sin_raan, -sin_i * cos_raan, cos_i])
-
-    # Removed verbose elements logging for benchmarking
 
     # Pad to next multiple of chunk_size and compute via fixed-size chunks
     n = ray_origins.shape[0]
@@ -319,16 +312,33 @@ def label_anomalies_worker(
     # Convert to sigma_M using dM/dE = 1 - e*cos(E)
     sigma_M_rad_arr = (1.0 - expanded_e * cosE_arr) * sigma_E_arr
 
-    # Removed per-hit candidate diagnostics to avoid logging overhead during benchmarks
-
     # Build Arrow arrays via indexed take to keep consistency
+    # Guard: ensure sel_hit_idx is within [0, n_hits) to avoid nulls from take
+    if sel_hit_idx.size > 0:
+        min_idx = int(sel_hit_idx.min())
+        max_idx = int(sel_hit_idx.max())
+        if min_idx < 0 or max_idx >= n_hits:
+            num_invalid = int(
+                np.count_nonzero((sel_hit_idx < 0) | (sel_hit_idx >= n_hits))
+            )
+            raise ValueError(
+                f"label_anomalies_worker: sel_hit_idx contains {num_invalid} invalid indices "
+                f"(min={min_idx}, max={max_idx}, n_hits={n_hits})"
+            )
     det_id_sel = pc.take(hits.table["det_id"], pa.array(sel_hit_idx, type=pa.int64()))
     orbit_id_sel = pc.take(
         hits.table["orbit_id"], pa.array(sel_hit_idx, type=pa.int64())
     )
     seg_id_sel = pc.take(hits.table["seg_id"], pa.array(sel_hit_idx, type=pa.int64()))
+    # Validate take did not introduce nulls in non-nullable seg_id
+    if pc.any(pc.is_null(seg_id_sel)).as_py():
+        null_cnt = pc.sum(pc.is_null(seg_id_sel)).as_py()
+        raise ValueError(
+            f"label_anomalies_worker: seg_id selection produced {null_cnt} nulls; "
+            f"this indicates invalid indices or schema mismatch upstream"
+        )
 
-    labels = CanonicalAnomalyLabels.from_kwargs(
+    labels = AnomalyLabels.from_kwargs(
         det_id=det_id_sel,
         orbit_id=orbit_id_sel,
         seg_id=seg_id_sel,
@@ -359,7 +369,7 @@ def _label_anomalies_worker_remote(
     chunk_size: int,
     snap_error_max_au: float | None,
     dedupe_angle_tol: float,
-) -> CanonicalAnomalyLabels:
+) -> AnomalyLabels:
     """
     Ray remote wrapper for the anomaly labeling worker.
 
@@ -386,7 +396,7 @@ def label_anomalies(
     max_processes: int = 0,
     snap_error_max_au: float | None = None,
     dedupe_angle_tol: float = 1e-4,
-) -> CanonicalAnomalyLabels:
+) -> AnomalyLabels:
     """
     Compute anomaly labels for observation-orbit overlaps.
 
@@ -434,7 +444,7 @@ def label_anomalies(
     - Ray dispatch: max_processes > 1 enables Ray parallelism with the same worker.
     """
     if len(hits) == 0:
-        return CanonicalAnomalyLabels.empty()
+        return AnomalyLabels.empty()
 
     # Align rays to hits using det_id (duplicate rays per hit as needed)
     hit_ray_idx = pc.index_in(hits.column("det_id"), rays.column("det_id"))
@@ -628,156 +638,3 @@ def _compute_candidates_kernel(
 
     vmap_compute = jax.vmap(compute_single_hit_candidates)
     return vmap_compute(ray_origins, ray_directions, plane_normals, a, e, i, raan, ap)
-
-
-@jax.jit
-def _compute_metrics_vectorized_with_normals(
-    ray_origins: jax.Array,
-    ray_directions: jax.Array,
-    plane_normals: jax.Array,
-    a: jax.Array,
-    e: jax.Array,
-    i: jax.Array,
-    raan: jax.Array,
-    ap: jax.Array,
-) -> tuple[jax.Array, jax.Array]:
-    """
-    Vectorized computation of projection metrics using JAX with precomputed plane normals.
-    """
-
-    def compute_single_metrics(
-        ray_origin, ray_direction, plane_normal, a_val, e_val, i_val, raan_val, ap_val
-    ):
-        # Plane distance (observer offset to plane)
-        plane_distance = ray_to_plane_distance(ray_origin, ray_direction, plane_normal)
-
-        # Project ray to orbital plane
-        projected_point = project_ray_to_orbital_plane(
-            ray_origin, ray_direction, plane_normal
-        )
-
-        # Transform to perifocal 2D coordinates
-        point_2d = transform_to_perifocal_2d(projected_point, i_val, raan_val, ap_val)
-
-        # Compute snap distance to ellipse
-        snap_distance, _ = ellipse_snap_distance(point_2d, a_val, e_val)
-
-        return plane_distance, snap_distance
-
-    vmap_compute = jax.vmap(compute_single_metrics)
-    plane_distances, snap_errors = vmap_compute(
-        ray_origins, ray_directions, plane_normals, a, e, i, raan, ap
-    )
-    return plane_distances, snap_errors
-
-
-def _compute_anomalies_at_time(
-    elements: Dict[str, Any], time_mjd: float
-) -> tuple[float, float, float, float, float]:
-    """
-    Compute orbital anomalies at a given time using 2-body Keplerian motion.
-
-    Parameters
-    ----------
-    elements : dict
-        Orbital elements with keys: a, e, M0_deg, n_deg_per_day, epoch_mjd
-    time_mjd : float
-        Time at which to compute anomalies (MJD)
-
-    Returns
-    -------
-    tuple[float, float, float, float, float]
-        Mean anomaly (degrees), mean motion (deg/day), heliocentric distance (AU), E (rad), f (rad)
-    """
-    # Extract elements
-    a = elements["a"]
-    e = elements["e"]
-    M0_deg = elements["M0_deg"]
-    n_deg_per_day = elements["n_deg_per_day"]
-    epoch_mjd = elements["epoch_mjd"]
-
-    # Compute mean anomaly at observation time
-    dt_days = time_mjd - epoch_mjd
-    M_deg = (M0_deg + n_deg_per_day * dt_days) % 360.0
-    M_rad = np.radians(M_deg)
-
-    # Solve Kepler for true anomaly (JAX function returns nu)
-    nu_rad = float(jax_solve_kepler(float(e), float(M_rad)))
-    # Compute eccentric anomaly from true anomaly (elliptic case assumed here)
-    if e < 1.0:
-        # E from nu
-        sinE = np.sqrt(1 - e**2) * np.sin(nu_rad) / (1 + e * np.cos(nu_rad))
-        cosE = (e + np.cos(nu_rad)) / (1 + e * np.cos(nu_rad))
-        E_rad = float(np.arctan2(sinE, cosE))
-    else:
-        # For non-elliptic, set E to NaN (not used) and keep r via conic formula
-        E_rad = float("nan")
-
-    # Radius from conic equation r = a(1 - e cos E) for elliptic; fallback to elliptical form for e<1
-    r_au = a * (1 - e * np.cos(E_rad)) if e < 1.0 else a * (e * np.cosh(E_rad) - 1.0)
-
-    return M_deg, n_deg_per_day, float(r_au), float(E_rad), float(nu_rad)
-
-
-def _compute_plane_distance(
-    elements: Dict[str, Any], det_id: str, rays: ObservationRays
-) -> float:
-    """
-    Compute the distance from the detection ray to the orbital plane.
-
-    This is a placeholder implementation that returns a small random value.
-    In a full implementation, this would:
-    1. Extract the orbital plane normal from the elements
-    2. Get the observer position and ray direction for this detection
-    3. Compute the perpendicular distance from the ray to the plane
-
-    Parameters
-    ----------
-    elements : dict
-        Orbital elements for the orbit
-    det_id : str
-        Detection ID
-    rays : ObservationRays
-        Observation rays containing ray geometry
-
-    Returns
-    -------
-    float
-        Distance from ray to orbital plane in AU
-    """
-    # Placeholder: return a small value for testing
-    # Real implementation would compute actual geometric distance
-    return 0.001  # AU
-
-
-def _compute_snap_error(
-    elements: Dict[str, Any], det_id: str, rays: ObservationRays, seg_id: int
-) -> float:
-    """
-    Compute the projection error when snapping the detection to the ellipse.
-
-    This is a placeholder implementation that returns a small random value.
-    In a full implementation, this would:
-    1. Project the detection ray onto the orbital plane
-    2. Find the nearest point on the ellipse to the projected point
-    3. Compute the distance between the projected point and nearest ellipse point
-
-    Parameters
-    ----------
-    elements : dict
-        Orbital elements for the orbit
-    det_id : str
-        Detection ID
-    rays : ObservationRays
-        Observation rays containing ray geometry
-    seg_id : int
-        Segment ID from the BVH hit
-
-    Returns
-    -------
-    float
-        Snap error in AU
-    """
-    # Placeholder: return a small value for testing
-    # Real implementation would compute actual projection error
-    return 0.0005  # AU

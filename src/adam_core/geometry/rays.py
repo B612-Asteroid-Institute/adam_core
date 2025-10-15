@@ -28,7 +28,7 @@ from ..observations.source_catalog import SourceCatalog
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..ray_cluster import initialize_use_ray
-from ..utils.iter import _iterate_chunk_indices
+from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
 
 __all__ = [
     "ObservationRays",
@@ -189,29 +189,11 @@ def detections_to_rays(
     return rays
 
 
-def ephemeris_to_rays(
+def ephemeris_to_rays_worker(
     ephemeris: Ephemeris,
     det_id: list[str] | None = None,
 ) -> ObservationRays:
-    """
-    Convert ephemeris (topocentric RA/Dec) to observation rays in SSB ecliptic frame.
-
-    Parameters
-    ----------
-    ephemeris : Ephemeris
-        Ephemeris with spherical coordinates (RA/Dec) from observer perspective.
-    det_id : list[str], optional
-        Detection IDs to assign to rays; if omitted, synthetic IDs are generated.
-
-    Returns
-    -------
-    ObservationRays
-        Rays with observer positions and LOS unit vectors in SSB ecliptic frame.
-    """
-
-    if len(ephemeris) == 0:
-        return ObservationRays.empty()
-
+    ephemeris = qv.defragment(ephemeris)
     times = ephemeris.coordinates.time
     station_codes = ephemeris.coordinates.origin.code
     observers = Observers.from_codes(times=times, codes=station_codes)
@@ -255,7 +237,7 @@ def ephemeris_to_rays(
     if det_id is None:
         det_id = [f"ephem_{i:06d}" for i in range(len(ephemeris))]
 
-    return ObservationRays.from_kwargs(
+    rays = ObservationRays.from_kwargs(
         det_id=det_id,
         orbit_id=ephemeris.orbit_id,
         observer=observers,
@@ -263,6 +245,77 @@ def ephemeris_to_rays(
         u_y=u_vectors[:, 1],
         u_z=u_vectors[:, 2],
     )
+    rays = qv.defragment(rays)
+    return rays
+
+
+@ray.remote
+def ephemeris_to_rays_worker_remote(
+    ephemeris: Ephemeris,
+    det_id: list[str] | None = None,
+) -> ObservationRays:
+    return ephemeris_to_rays_worker(ephemeris, det_id)
+
+
+def ephemeris_to_rays(
+    ephemeris: Ephemeris,
+    det_id: list[str] | None = None,
+    max_processes: int | None = 1,
+    chunk_size: int = 10_000,
+) -> ObservationRays:
+    """
+    Convert ephemeris (topocentric RA/Dec) to observation rays in SSB ecliptic frame.
+
+    Parameters
+    ----------
+    ephemeris : Ephemeris
+        Ephemeris with spherical coordinates (RA/Dec) from observer perspective.
+    det_id : list[str], optional
+        Detection IDs to assign to rays; if omitted, synthetic IDs are generated.
+    max_processes : int | None
+        Number of processes to use. If None or <=1, runs single-threaded.
+        If >1, uses Ray to parallelize processing across chunks.
+    chunk_size : int
+        Number of ephemeris rows to process per chunk when using Ray parallelization.
+    Returns
+    -------
+    ObservationRays
+        Rays with observer positions and LOS unit vectors in SSB ecliptic frame.
+    """
+
+    if len(ephemeris) == 0:
+        return ObservationRays.empty()
+
+    rays = ObservationRays.empty()
+    if max_processes is None or max_processes <= 1:
+        for start, end in _iterate_chunk_indices(ephemeris, chunk_size=chunk_size):
+            ephemeris_chunk = ephemeris[start:end]
+            det_id_chunk = det_id[start:end]
+            rays = qv.concatenate(
+                [rays, ephemeris_to_rays_worker(ephemeris_chunk, det_id_chunk)]
+            )
+        return rays
+
+    initialize_use_ray(num_cpus=max_processes)
+    futures = []
+    for start, end in _iterate_chunk_indices(ephemeris, chunk_size=chunk_size):
+        if len(futures) >= max_processes * 1.5:
+            finished, futures = ray.wait(futures, num_returns=1)
+            rays_chunk = ray.get(finished[0])
+            rays = qv.concatenate([rays, rays_chunk])
+        ephemeris_chunk = ephemeris[start:end]
+        det_id_chunk = det_id[start:end]
+
+        futures.append(
+            ephemeris_to_rays_worker_remote.remote(ephemeris_chunk, det_id_chunk)
+        )
+
+    while futures:
+        finished, futures = ray.wait(futures, num_returns=1)
+        rays_chunk = ray.get(finished[0])
+        rays = qv.concatenate([rays, rays_chunk])
+
+    return rays
 
 
 def source_catalog_to_rays_worker(
@@ -346,7 +399,7 @@ def source_catalog_to_rays_worker(
     los_magnitudes = np.linalg.norm(los_vectors, axis=1)
     u_vectors = los_vectors / los_magnitudes[:, np.newaxis]
 
-    return ObservationRays.from_kwargs(
+    rays = ObservationRays.from_kwargs(
         det_id=source_catalog.id,
         orbit_id=source_catalog.object_id,
         observer=observers,
@@ -354,6 +407,8 @@ def source_catalog_to_rays_worker(
         u_y=u_vectors[:, 1],
         u_z=u_vectors[:, 2],
     )
+    rays = qv.defragment(rays)
+    return rays
 
 
 @ray.remote
