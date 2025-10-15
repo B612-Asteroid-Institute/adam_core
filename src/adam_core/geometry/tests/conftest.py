@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 import quivr as qv
 import ray
@@ -495,7 +497,9 @@ def bvh_hits(_fixture_cache_root, index_optimal, rays_nbody):
 
 
 @pytest.fixture(scope="session")
-def anomaly_labels(_fixture_cache_root, bvh_hits, rays_nbody, orbits_synthetic_stratified_ci):
+def anomaly_labels(
+    _fixture_cache_root, bvh_hits, rays_nbody, orbits_synthetic_stratified_ci
+):
     path = (
         Path(_fixture_cache_root) / "anomaly_labels" / "nb" / "anomaly_labels.parquet"
     )
@@ -507,6 +511,237 @@ def anomaly_labels(_fixture_cache_root, bvh_hits, rays_nbody, orbits_synthetic_s
         labels = label_anomalies(
             bvh_hits,
             rays_nbody,
+            orbits_synthetic_stratified_ci,
+            max_k=1,
+            chunk_size=4096,
+            max_processes=1,
+        )
+        labels.to_parquet(str(path))
+        return labels
+
+
+# ---------------------------- Noise-augmented fixtures ----------------------------
+
+
+@pytest.fixture(scope="session")
+def ephemeris_noise(_fixture_cache_root: Path, ephemeris_nb: Ephemeris) -> Ephemeris:
+    """Create a noise Ephemeris per unique exposure in the N-body ephemeris.
+
+    For each (observer.code, exact MJD) group in ephemeris_nb:
+      - Compute a boresight from signal directions (from ephemeris rays later)
+      - Define a spherical cap that encloses signal
+      - Sample ~10 per deg^2 uniformly within that cap to create a noise ephemeris row-set
+    """
+    # Cache under pytest cache root
+    root = Path(_fixture_cache_root) / "ephemeris" / "noise"
+    _ensure_dir(root)
+    path = root / "synthetic_stratified_ci.parquet"
+    lock = path.parent / (path.name + ".lock")
+    with _file_lock(lock):
+        if path.exists():
+            return Ephemeris.from_parquet(path)
+
+        if len(ephemeris_nb) == 0:
+            return Ephemeris.empty()
+
+        # Build exposure key from observers in ephemeris
+        codes = ephemeris_nb.coordinates.origin.code
+        mjd = ephemeris_nb.coordinates.time.mjd()
+        sep = pa.scalar("||", type=pa.large_string())
+        key = pc.binary_join_element_wise(
+            pc.cast(codes, pa.large_string()),
+            sep,
+            pc.cast(pc.cast(mjd, pa.large_string()), pa.large_string()),
+        )
+        uniq_keys = pc.unique(key)
+
+        noise_per_sqdeg = 10.0
+        rng = np.random.default_rng(123)
+        out_chunks: list[Ephemeris] = []
+
+        # Derive boresight from ephemeris LOS approximated by direction to object in SSB ecliptic frame
+        # Here, we approximate LOS by the unit vector of spherical coordinates converted to Cartesian
+        # (rho=1 at given lon/lat), since ephemeris_to_rays will do the proper transform later.
+        # We just need a representative direction cluster per exposure.
+        lon = ephemeris_nb.coordinates.lon.to_numpy()
+        lat = ephemeris_nb.coordinates.lat.to_numpy()
+        u_all = np.column_stack(
+            [
+                np.cos(np.deg2rad(lat)) * np.cos(np.deg2rad(lon)),
+                np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon)),
+                np.sin(np.deg2rad(lat)),
+            ]
+        )
+
+        for k in uniq_keys.to_pylist():
+            mask = pc.equal(key, k)
+            idx = np.nonzero(np.asarray(mask))[0]
+            if idx.size == 0:
+                continue
+            u_sig = u_all[idx]
+            u_sig /= np.linalg.norm(u_sig, axis=1, keepdims=True) + 1e-30
+            u0 = u_sig.mean(axis=0)
+            u0 /= np.linalg.norm(u0) + 1e-30
+            dot = np.clip(u_sig @ u0, -1.0, 1.0)
+            theta_max = float(np.arccos(np.min(dot)))
+            A_sr = 2.0 * np.pi * (1.0 - np.cos(theta_max))
+            A_deg2 = A_sr * (180.0 / np.pi) ** 2
+            n_noise = int(np.ceil(noise_per_sqdeg * max(A_deg2, 1e-6)))
+            if n_noise <= 0:
+                continue
+            # Sample spherical cap around u0
+            z = rng.uniform(np.cos(theta_max), 1.0, size=n_noise)
+            phi = rng.uniform(0.0, 2.0 * np.pi, size=n_noise)
+            theta = np.arccos(z)
+            a = np.array([1.0, 0.0, 0.0])
+            if abs(np.dot(a, u0)) > 0.9:
+                a = np.array([0.0, 1.0, 0.0])
+            v = np.cross(u0, a)
+            v /= np.linalg.norm(v) + 1e-30
+            w = np.cross(u0, v)
+            u = np.cos(theta)[:, None] * u0[None, :] + np.sin(theta)[:, None] * (
+                np.cos(phi)[:, None] * v[None, :] + np.sin(phi)[:, None] * w[None, :]
+            )
+            # Convert unit vectors to spherical lon/lat in degrees
+            x, y, zc = u[:, 0], u[:, 1], u[:, 2]
+            lon_deg = (np.degrees(np.arctan2(y, x)) + 360.0) % 360.0
+            lat_deg = np.degrees(np.arcsin(np.clip(zc, -1.0, 1.0)))
+            # Build SphericalCoordinates for noise
+            from adam_core.coordinates.origin import Origin
+            from adam_core.coordinates.spherical import SphericalCoordinates
+
+            # Build repeated time and origin arrays to length n_noise
+            time_rep = ephemeris_nb.coordinates.time.take(
+                pa.array([idx[0]] * n_noise, type=pa.int64())
+            )
+            origin_rep = Origin.from_kwargs(
+                code=ephemeris_nb.coordinates.origin.code.take(
+                    pa.array([idx[0]] * n_noise, type=pa.int64())
+                )
+            )
+            sph = SphericalCoordinates.from_kwargs(
+                rho=np.ones(n_noise),
+                lon=lon_deg,
+                lat=lat_deg,
+                vrho=np.zeros(n_noise),
+                vlon=np.zeros(n_noise),
+                vlat=np.zeros(n_noise),
+                time=time_rep,
+                origin=origin_rep,
+                frame="equatorial",
+            )
+            ephem_chunk = Ephemeris.from_kwargs(
+                orbit_id=[f"noise_{k}_{i:05d}" for i in range(n_noise)],
+                object_id=[None] * n_noise,
+                coordinates=sph,
+                alpha=[None] * n_noise,
+                light_time=[None] * n_noise,
+                aberrated_coordinates=None,
+            )
+            out_chunks.append(ephem_chunk)
+
+        if not out_chunks:
+            ephem_out = Ephemeris.empty()
+        else:
+            ephem_out = qv.concatenate(out_chunks, defrag=True)
+        ephem_out.to_parquet(path)
+        return ephem_out
+
+
+@pytest.fixture(scope="session")
+def rays_noise(
+    _fixture_cache_root: Path, ephemeris_noise: Ephemeris
+) -> ObservationRays:
+    """Rays derived from noise ephemeris; persisted under pytest cache root."""
+    root = Path(_fixture_cache_root) / "rays" / "noise"
+    _ensure_dir(root)
+    path = root / "synthetic_stratified_ci.parquet"
+    lock = path.parent / (path.name + ".lock")
+    with _file_lock(lock):
+        if path.exists():
+            return ObservationRays.from_parquet(path)
+        if len(ephemeris_noise) == 0:
+            return ObservationRays.empty()
+        # Convert noise ephemeris to rays (det_id from orbit_id)
+        rays = ephemeris_to_rays(
+            ephemeris_noise,
+            det_id=ephemeris_noise.orbit_id.to_pylist(),
+            max_processes=4,
+            chunk_size=10_000,
+        )
+        rays.to_parquet(path)
+        return rays
+
+
+@pytest.fixture(scope="session")
+def rays_nbody_with_noise(
+    _fixture_cache_root: Path, rays_nbody: ObservationRays, rays_noise: ObservationRays
+) -> ObservationRays:
+    """Concatenate signal and noise rays; persisted under pytest cache root."""
+    if len(rays_noise) == 0:
+        return rays_nbody
+    root = Path(_fixture_cache_root) / "rays" / "nb_noise"
+    _ensure_dir(root)
+    path = root / "synthetic_stratified_ci.parquet"
+    lock = root / ".lock"
+    with _file_lock(lock):
+        if path.exists():
+            return ObservationRays.from_parquet(path)
+        rays = qv.concatenate([rays_nbody, rays_noise], defrag=True)
+        rays.to_parquet(path)
+        return rays
+
+
+@pytest.fixture(scope="session")
+def bvh_hits_with_noise(
+    _fixture_cache_root: Path,
+    index_optimal: BVHIndex,
+    rays_nbody_with_noise: ObservationRays,
+):
+    if len(rays_nbody_with_noise) == 0:
+        return OverlapHits.empty()
+    idx_root = Path(_fixture_cache_root) / "hits" / "nb_noise"
+    path = idx_root / "hits.parquet"
+    _ensure_dir(idx_root)
+    lock = idx_root / ".lock"
+    with _file_lock(lock):
+        if path.exists():
+            return OverlapHits.from_parquet(str(path))
+        hits, _ = query_bvh(
+            index_optimal,
+            rays_nbody_with_noise,
+            guard_arcmin=0.65,
+            batch_size=16384,
+            max_processes=1,
+            window_size=32768,
+        )
+        hits.to_parquet(str(path))
+        return hits
+
+
+@pytest.fixture(scope="session")
+def anomaly_labels_with_noise(
+    _fixture_cache_root: Path,
+    bvh_hits_with_noise: OverlapHits,
+    rays_nbody_with_noise: ObservationRays,
+    orbits_synthetic_stratified_ci: Orbits,
+):
+    if len(bvh_hits_with_noise) == 0:
+        return AnomalyLabels.empty()
+    path = (
+        Path(_fixture_cache_root)
+        / "anomaly_labels"
+        / "nb_noise"
+        / "anomaly_labels.parquet"
+    )
+    _ensure_dir(path.parent)
+    lock = path.parent / ".lock"
+    with _file_lock(lock):
+        if path.exists():
+            return AnomalyLabels.from_parquet(str(path))
+        labels = label_anomalies(
+            bvh_hits_with_noise,
+            rays_nbody_with_noise,
             orbits_synthetic_stratified_ci,
             max_k=1,
             chunk_size=4096,
