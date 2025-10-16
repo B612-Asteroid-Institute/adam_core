@@ -21,7 +21,6 @@ from .origin import OriginCodes
 from .spherical import SphericalCoordinates
 
 config.update("jax_enable_x64", True)
-config.update("jax_platform_name", "cpu")
 
 TRANSFORM_EQ2EC = np.zeros((6, 6))
 TRANSFORM_EQ2EC[0:3, 0:3] = c.TRANSFORM_EQ2EC
