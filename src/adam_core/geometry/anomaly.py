@@ -31,19 +31,20 @@ class AnomalyLabels(qv.Table):
     variant_id = qv.Int32Column()  # 0, 1, 2, ... for multiple variants per hit
 
     # Anomaly values at epoch
-    f_rad = qv.Float64Column()  # True anomaly (radians)
-    E_rad = qv.Float64Column()  # Eccentric anomaly (radians)
-    M_rad = qv.Float64Column()  # Mean anomaly (radians)
-    n_rad_day = qv.Float64Column()  # Mean motion (radians/day)
-    r_au = qv.Float64Column()  # Heliocentric distance (AU)
+    f_rad = qv.Float32Column()  # True anomaly (radians)
+    E_rad = qv.Float32Column()  # Eccentric anomaly (radians)
+    M_rad = qv.Float32Column()  # Mean anomaly (radians)
+    e = qv.Float32Column()      # Eccentricity (dimensionless)
+    n_rad_day = qv.Float32Column()  # Mean motion (radians/day)
+    r_au = qv.Float32Column()  # Heliocentric distance (AU)
 
     # Quality metrics
-    snap_error = qv.Float64Column()  # Residual from ellipse fit
-    plane_distance_au = qv.Float64Column()  # Distance from orbital plane (AU)
+    snap_error = qv.Float32Column()  # Residual from ellipse fit
+    plane_distance_au = qv.Float32Column()  # Distance from orbital plane (AU)
 
     # In-plane unit tangent direction at the anomaly (perifocal coordinates)
     t_hat_plane_x = qv.Float32Column()
     t_hat_plane_y = qv.Float32Column()
 
     # Mean-anomaly uncertainty (radians), derived from snap_error
-    sigma_M_rad = qv.Float64Column()
+    sigma_M_rad = qv.Float32Column()

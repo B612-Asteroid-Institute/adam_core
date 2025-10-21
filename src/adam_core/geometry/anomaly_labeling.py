@@ -32,8 +32,6 @@ Notes
 
 import logging
 from functools import partial
-from pathlib import Path
-from typing import Any, Dict
 
 import jax
 import jax.numpy as jnp
@@ -54,7 +52,6 @@ from adam_core.utils.iter import _iterate_chunk_indices
 
 from .anomaly import AnomalyLabels
 from .projection import (
-    ellipse_snap_distance,
     ellipse_snap_distance_multi_seed,
     project_ray_to_orbital_plane,
     ray_to_plane_distance,
@@ -124,33 +121,33 @@ def label_anomalies_worker(
             rays.observer.coordinates.y.to_numpy(zero_copy_only=False),
             rays.observer.coordinates.z.to_numpy(zero_copy_only=False),
         ]
-    )
+    ).astype(np.float32, copy=False)
     ray_directions = np.column_stack(
         [
             rays.u_x.to_numpy(zero_copy_only=False),
             rays.u_y.to_numpy(zero_copy_only=False),
             rays.u_z.to_numpy(zero_copy_only=False),
         ]
-    )
+    ).astype(np.float32, copy=False)
 
     # Extract orbital elements (aligned orbits)
     kep = orbits.coordinates.to_keplerian()
-    a_hit = kep.a.to_numpy()
-    e_hit = kep.e.to_numpy()
+    a_hit = kep.a.to_numpy().astype(np.float32, copy=False)
+    e_hit = kep.e.to_numpy().astype(np.float32, copy=False)
     # Convert angular elements to radians for geometry kernels
-    i_hit = np.radians(kep.i.to_numpy())
-    raan_hit = np.radians(kep.raan.to_numpy())
-    ap_hit = np.radians(kep.ap.to_numpy())
+    i_hit = np.radians(kep.i.to_numpy()).astype(np.float32, copy=False)
+    raan_hit = np.radians(kep.raan.to_numpy()).astype(np.float32, copy=False)
+    ap_hit = np.radians(kep.ap.to_numpy()).astype(np.float32, copy=False)
     # Sanitize undefined angles (circular or zero-inclination cases)
     # For e≈0, ap is undefined; for i≈0, raan is undefined. Use 0 as canonical.
-    i_hit = np.nan_to_num(i_hit, nan=0.0)
-    raan_hit = np.nan_to_num(raan_hit, nan=0.0)
-    ap_hit = np.nan_to_num(ap_hit, nan=0.0)
+    i_hit = np.nan_to_num(i_hit, nan=0.0).astype(np.float32, copy=False)
+    raan_hit = np.nan_to_num(raan_hit, nan=0.0).astype(np.float32, copy=False)
+    ap_hit = np.nan_to_num(ap_hit, nan=0.0).astype(np.float32, copy=False)
     # Mean anomaly stored in degrees; keep degrees for downstream M computation
-    M0_hit = kep.M.to_numpy()
+    M0_hit = kep.M.to_numpy().astype(np.float32, copy=False)
     epoch_hit = kep.time.mjd().to_numpy()
     # Mean motion in degrees/day from semimajor axis and mu
-    n_hit = kep.n  # degrees/day (numpy array)
+    n_hit = kep.n.astype(np.float32)  # degrees/day (numpy array)
     sin_i = np.sin(i_hit)
     cos_i = np.cos(i_hit)
     sin_raan = np.sin(raan_hit)
@@ -164,37 +161,37 @@ def label_anomalies_worker(
 
     if pad > 0:
         # Safe pad rows
-        zeros3_ro = np.zeros((pad, 3), dtype=ray_origins.dtype)
-        zeros3_norm = np.zeros((pad, 3), dtype=plane_normals.dtype)
+        zeros3_ro = np.zeros((pad, 3), dtype=np.float32)
+        zeros3_norm = np.zeros((pad, 3), dtype=np.float32)
         ray_origins = np.vstack([ray_origins, zeros3_ro])
         # Use +Y unit direction for padded rows to avoid degeneracy
         pad_dirs = np.column_stack(
             [
-                np.zeros(pad, dtype=ray_directions.dtype),
-                np.ones(pad, dtype=ray_directions.dtype),
-                np.zeros(pad, dtype=ray_directions.dtype),
+                np.zeros(pad, dtype=np.float32),
+                np.ones(pad, dtype=np.float32),
+                np.zeros(pad, dtype=np.float32),
             ]
         )
         ray_directions = np.vstack([ray_directions, pad_dirs])
-        a_hit = np.concatenate([a_hit, np.zeros(pad, dtype=a_hit.dtype)])
-        e_hit = np.concatenate([e_hit, np.zeros(pad, dtype=e_hit.dtype)])
-        i_hit = np.concatenate([i_hit, np.zeros(pad, dtype=i_hit.dtype)])
-        raan_hit = np.concatenate([raan_hit, np.zeros(pad, dtype=raan_hit.dtype)])
-        ap_hit = np.concatenate([ap_hit, np.zeros(pad, dtype=ap_hit.dtype)])
-        M0_hit = np.concatenate([M0_hit, np.zeros(pad, dtype=M0_hit.dtype)])
-        n_hit = np.concatenate([n_hit, np.zeros(pad, dtype=n_hit.dtype)])
+        a_hit = np.concatenate([a_hit, np.zeros(pad, dtype=np.float32)])
+        e_hit = np.concatenate([e_hit, np.zeros(pad, dtype=np.float32)])
+        i_hit = np.concatenate([i_hit, np.zeros(pad, dtype=np.float32)])
+        raan_hit = np.concatenate([raan_hit, np.zeros(pad, dtype=np.float32)])
+        ap_hit = np.concatenate([ap_hit, np.zeros(pad, dtype=np.float32)])
+        M0_hit = np.concatenate([M0_hit, np.zeros(pad, dtype=np.float32)])
+        n_hit = np.concatenate([n_hit, np.zeros(pad, dtype=np.float32)])
         epoch_hit = np.concatenate([epoch_hit, np.zeros(pad, dtype=epoch_hit.dtype)])
         plane_normals = np.vstack([plane_normals, zeros3_norm])
 
     # Convert once to JAX arrays to avoid per-chunk host->device copies
-    jo = jnp.asarray(ray_origins)
-    jd = jnp.asarray(ray_directions)
-    jnorm = jnp.asarray(plane_normals)
-    ja = jnp.asarray(a_hit)
-    je = jnp.asarray(e_hit)
-    ji = jnp.asarray(i_hit)
-    jraan = jnp.asarray(raan_hit)
-    jap = jnp.asarray(ap_hit)
+    jo = ray_origins
+    jd = ray_directions
+    jnorm = plane_normals
+    ja = a_hit
+    je = e_hit
+    ji = i_hit
+    jraan = raan_hit
+    jap = ap_hit
 
     plane_chunks = []
     snap_chunks = []
@@ -235,15 +232,12 @@ def label_anomalies_worker(
     snap_errors = jnp.concatenate(snap_chunks, axis=0)
     nu_values = jnp.concatenate(nu_chunks, axis=0)
     valid_mask = jnp.concatenate(mask_chunks, axis=0)
-    n_valid = jnp.concatenate(nvalid_chunks, axis=0)
-
-    # TODO: some kind of check to make sure every hit has at least one valid candidate
 
     # Remove padding here
     # Restrict to original (unpadded) hits and move to NumPy for host-side ops
-    plane_distances_mat = np.asarray(plane_distances[:n_hits, :])
-    snap_errors_mat = np.asarray(snap_errors[:n_hits, :])
-    nu_values_mat = np.asarray(nu_values[:n_hits, :])
+    plane_distances_mat = np.asarray(plane_distances[:n_hits, :], dtype=np.float32)
+    snap_errors_mat = np.asarray(snap_errors[:n_hits, :], dtype=np.float32)
+    nu_values_mat = np.asarray(nu_values[:n_hits, :], dtype=np.float32)
     valid_mask_mat = np.asarray(valid_mask[:n_hits, :], dtype=bool)
 
     # Expand without Python loops
@@ -262,23 +256,9 @@ def label_anomalies_worker(
     nu_candidates = nu_values_mat.reshape(-1)[flat_mask]
 
     # Compute orbital elements for each candidate
-    expanded_times = (
-        rays.observer.coordinates.time.mjd()
-        .to_numpy(zero_copy_only=False)
-        .astype(float)[sel_hit_idx]
-    )
     expanded_a = a_hit[sel_hit_idx]
     expanded_e = e_hit[sel_hit_idx]
-    expanded_M0 = M0_hit[sel_hit_idx]
     expanded_n = n_hit[sel_hit_idx]
-    expanded_epoch = epoch_hit[sel_hit_idx]
-
-    epoch_clean = np.where(np.isnan(expanded_epoch), expanded_times, expanded_epoch)
-    M0_clean = np.where(np.isnan(expanded_M0), 0.0, expanded_M0)
-    dt_days = expanded_times - epoch_clean
-    # expanded_n is degrees/day; keep degrees here
-    M_deg_arr = (M0_clean + expanded_n * dt_days) % 360.0
-    M_rad_arr = np.radians(M_deg_arr)
 
     # Compute E and r from nu (true anomaly from projection)
     E_rad_arr = np.where(
@@ -291,26 +271,29 @@ def label_anomalies_worker(
             (expanded_e + np.cos(nu_candidates))
             / (1 + expanded_e * np.cos(nu_candidates)),
         ),
-    )
-    r_arr = expanded_a * (1 - expanded_e * np.cos(E_rad_arr))
-    n_rad_day_arr = np.radians(expanded_n)
+    ).astype(np.float32, copy=False)
+    r_arr = (expanded_a * (1 - expanded_e * np.cos(E_rad_arr))).astype(np.float32, copy=False)
+    n_rad_day_arr = np.radians(expanded_n).astype(np.float32, copy=False)
+    # Geometric mean anomaly (no M0/n*dt): M = E - e*sin(E), wrapped to [0, 2pi)
+    M_geom = (E_rad_arr - expanded_e * np.sin(E_rad_arr)).astype(np.float32, copy=False)
+    M_rad_arr = np.mod(M_geom, np.float32(2.0 * np.pi)).astype(np.float32, copy=False)
 
     # Compute in-plane tangent unit vector at E and mean-anomaly uncertainty sigma_M
     # r'(E) = [-a*sin(E), b*cos(E)] with b = a*sqrt(1-e^2)
-    b_arr = expanded_a * np.sqrt(np.maximum(1.0 - expanded_e**2, 0.0))
+    b_arr = (expanded_a * np.sqrt(np.maximum(1.0 - expanded_e**2, 0.0))).astype(np.float32, copy=False)
     sinE_arr = np.sin(E_rad_arr)
     cosE_arr = np.cos(E_rad_arr)
-    rprime_x = -expanded_a * sinE_arr
-    rprime_y = b_arr * cosE_arr
-    rprime_norm = np.sqrt(rprime_x * rprime_x + rprime_y * rprime_y)
-    inv_rprime_norm = 1.0 / (rprime_norm + 1e-30)
-    t_hat_x_arr = rprime_x * inv_rprime_norm
-    t_hat_y_arr = rprime_y * inv_rprime_norm
+    rprime_x = (-expanded_a * sinE_arr).astype(np.float32, copy=False)
+    rprime_y = (b_arr * cosE_arr).astype(np.float32, copy=False)
+    rprime_norm = np.sqrt(rprime_x * rprime_x + rprime_y * rprime_y).astype(np.float32, copy=False)
+    inv_rprime_norm = np.float32(1.0) / (rprime_norm + np.float32(1e-30))
+    t_hat_x_arr = (rprime_x * inv_rprime_norm).astype(np.float32, copy=False)
+    t_hat_y_arr = (rprime_y * inv_rprime_norm).astype(np.float32, copy=False)
 
     # Approximate sigma_E from snap_error via local linearization: sigma_E ≈ d_snap / ||r'(E)||
-    sigma_E_arr = snap_errors * inv_rprime_norm
+    sigma_E_arr = (snap_errors * inv_rprime_norm).astype(np.float32, copy=False)
     # Convert to sigma_M using dM/dE = 1 - e*cos(E)
-    sigma_M_rad_arr = (1.0 - expanded_e * cosE_arr) * sigma_E_arr
+    sigma_M_rad_arr = (np.float32(1.0) - expanded_e * cosE_arr) * sigma_E_arr
 
     # Build Arrow arrays via indexed take to keep consistency
     # Guard: ensure sel_hit_idx is within [0, n_hits) to avoid nulls from take
@@ -346,6 +329,7 @@ def label_anomalies_worker(
         f_rad=nu_candidates,
         E_rad=E_rad_arr,
         M_rad=M_rad_arr,
+        e=expanded_e,
         n_rad_day=n_rad_day_arr,
         r_au=r_arr,
         snap_error=snap_errors,

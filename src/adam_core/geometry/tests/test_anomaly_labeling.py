@@ -15,6 +15,7 @@ import pyarrow.compute as pc
 import pytest
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
+from adam_core.observers import Observers
 from adam_core.coordinates.keplerian import KeplerianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.geometry.anomaly_labeling import label_anomalies
@@ -74,16 +75,19 @@ def _make_hits_and_rays(
     times = Timestamp.from_mjd(60000.0 + rng.random(n_hits) * 1.0, scale="tdb")
     u_vecs = rng.normal(size=(n_hits, 3))
     u_vecs /= np.linalg.norm(u_vecs, axis=1, keepdims=True)
-    observer = CartesianCoordinates.from_kwargs(
-        x=np.zeros(n_hits),
-        y=np.zeros(n_hits),
-        z=np.zeros(n_hits),
-        vx=np.zeros(n_hits),
-        vy=np.zeros(n_hits),
-        vz=np.zeros(n_hits),
-        time=times,
-        origin=Origin.from_kwargs(code=[OriginCodes.SUN.name] * n_hits),
-        frame="ecliptic",
+    observer = Observers.from_kwargs(
+        code=[OriginCodes.SUN.name] * n_hits,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=np.zeros(n_hits),
+            y=np.zeros(n_hits),
+            z=np.zeros(n_hits),
+            vx=np.zeros(n_hits),
+            vy=np.zeros(n_hits),
+            vz=np.zeros(n_hits),
+            time=times,
+            origin=Origin.from_kwargs(code=[OriginCodes.SUN.name] * n_hits),
+            frame="ecliptic",
+        ),
     )
     rays = ObservationRays.from_kwargs(
         det_id=det_ids,
