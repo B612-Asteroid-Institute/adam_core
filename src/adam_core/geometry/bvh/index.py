@@ -234,12 +234,10 @@ class BVHIndex:
 def orbits_to_segments_worker(
     orbits: Orbits,
     max_chord_arcmin: float,
-    guard_arcmin: float,
     max_segments_per_orbit: int,
-    epsilon_n_au: float,
-    padding_method: str,
 ) -> OrbitPolylineSegments:
     # Use a conservative default for max segments per orbit to balance fidelity and cost
+    orbits = qv.defragment(orbits)
     _, segs = sample_ellipse_adaptive(
         orbits,
         max_chord_arcmin=max_chord_arcmin,
@@ -253,19 +251,9 @@ def orbits_to_segments_worker(
 def orbits_segments_worker_remote(
     orbits: Orbits,
     max_chord_arcmin: float,
-    guard_arcmin: float,
     max_segments_per_orbit: int,
-    epsilon_n_au: float,
-    padding_method: str,
 ) -> OrbitPolylineSegments:
-    return orbits_to_segments_worker(
-        orbits,
-        max_chord_arcmin=max_chord_arcmin,
-        guard_arcmin=guard_arcmin,
-        max_segments_per_orbit=max_segments_per_orbit,
-        epsilon_n_au=epsilon_n_au,
-        padding_method=padding_method,
-    )
+    return orbits_to_segments_worker(orbits, max_chord_arcmin=max_chord_arcmin, max_segments_per_orbit=max_segments_per_orbit)
 
 
 def build_bvh_index(
@@ -305,10 +293,7 @@ def build_bvh_index(
             segs = orbits_to_segments_worker(
                 orbits[start:end],
                 max_chord_arcmin=max_chord_arcmin,
-                guard_arcmin=guard_arcmin,
                 max_segments_per_orbit=max_segments_per_orbit,
-                epsilon_n_au=epsilon_n_au,
-                padding_method=padding_method,
             )
             segments_chunks.append(segs)
     else:
@@ -318,10 +303,7 @@ def build_bvh_index(
             future = orbits_segments_worker_remote.remote(
                 orbits[start:end],
                 max_chord_arcmin=max_chord_arcmin,
-                guard_arcmin=guard_arcmin,
                 max_segments_per_orbit=max_segments_per_orbit,
-                epsilon_n_au=epsilon_n_au,
-                padding_method=padding_method,
             )
             futures.append(future)
             if len(futures) >= max_processes * 1.5:

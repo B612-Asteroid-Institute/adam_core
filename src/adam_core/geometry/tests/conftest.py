@@ -555,7 +555,7 @@ def ephemeris_noise(_fixture_cache_root: Path, ephemeris_nb: Ephemeris) -> Ephem
         )
         uniq_keys = pc.unique(key)
 
-        noise_per_sqdeg = 10.0
+        noise_per_sqdeg = 1.0
         rng = np.random.default_rng(123)
         out_chunks: list[Ephemeris] = []
 

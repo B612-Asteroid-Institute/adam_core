@@ -7,15 +7,17 @@ Public API produces quivr tables and follows adam_core chunking/Ray patterns.
 from __future__ import annotations
 
 from typing import Callable, Dict, List, NamedTuple
+import uuid
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 import ray
 from numba import njit
+from functools import partial
+import jax
+import jax.numpy as jnp
 
 from ..coordinates.keplerian import KeplerianCoordinates
 from ..orbits.orbits import Orbits
@@ -38,6 +40,9 @@ __all__ = [
 # Edge streaming: flush edges when accumulator grows beyond this many pairs
 _EDGES_FLUSH_THRESHOLD = 500_000
 
+# Default refinement tolerance in mean anomaly (radians): 0.036 arcseconds
+_DEFAULT_REFINE_TOL_M_RAD = 1e-5
+
 
 class ClockGatingCandidates(qv.Table):
     """
@@ -47,7 +52,8 @@ class ClockGatingCandidates(qv.Table):
     observation time and orbit eccentricity. Downstream, rows are grouped by
     `orbit_id` and only time-consistent pairs are connected.
     """
-
+    # Stable candidate identifier for downstream chain membership/output
+    cand_id = qv.LargeStringColumn()
     det_id = qv.LargeStringColumn()
     orbit_id = qv.LargeStringColumn()
     seg_id = qv.Int32Column()
@@ -89,6 +95,8 @@ class ClockGatingCandidates(qv.Table):
     t_hat_plane_y = qv.Float32Column()
 
 
+
+
 class ClockGatedEdges(qv.Table):
     """
     Accepted time-consistent edges between candidates for a specific orbit.
@@ -106,23 +114,19 @@ class ClockGatedEdges(qv.Table):
     same_night = qv.BooleanColumn()
 
     # Parameters recorded for provenance
-    tau_min_minutes = qv.FloatAttribute(default=0.0)
-    alpha_min_per_day = qv.FloatAttribute(default=0.0)
-    beta = qv.FloatAttribute(default=0.0)
-    gamma = qv.FloatAttribute(default=0.0)
+
     time_bin_minutes = qv.IntAttribute(default=0)
     max_bins_ahead = qv.IntAttribute(default=0)
     horizon_days = qv.FloatAttribute(default=0.0)
-    per_night_cap = qv.IntAttribute(default=0)
-    max_k_span = qv.IntAttribute(default=0)
     batch_size = qv.IntAttribute(default=0)
-    window_size = qv.IntAttribute(default=0)
+    mband_padding_bins = qv.FloatAttribute(default=1.0)
+    refine_tol_M_rad = qv.FloatAttribute(default=0.0)
 
 
 class KeplerChainMembers(qv.Table):
     orbit_id = qv.LargeStringColumn()
     chain_id = qv.Int64Column()
-    cand_index = qv.Int32Column()
+    cand_id = qv.LargeStringColumn()
 
 
 class KeplerChains(qv.Table):
@@ -243,14 +247,14 @@ def prepare_clock_gating_candidates(
 
     # Why: Build a contiguous Arrow-backed table once to feed vectorized kernels
     # without per-column copies.
-    # Cast numeric columns to Float32 where appropriate and precompute helpers
-    M_rad_f32 = labels.M_rad.cast("float32")
-    n_rad_day_f32 = labels.n_rad_day.cast("float32")
-    f_rad_f32 = labels.f_rad.cast("float32")
+    # Labels are Float32; only cast orbit eccentricity materialized from Keplerian
     e_f32 = pa.array(label_eccentricity).cast(pa.float32())
-    sigma_M_rad_f32 = labels.sigma_M_rad.cast("float32")
+
+    # Assign a random UUID per candidate row for stable identity downstream
+    cand_id_array = pa.array([str(uuid.uuid4()) for _ in range(len(labels))])
 
     candidates_table = ClockGatingCandidates.from_kwargs(
+        cand_id=cand_id_array,
         det_id=labels.det_id,
         orbit_id=labels.orbit_id,
         seg_id=labels.seg_id,
@@ -258,11 +262,11 @@ def prepare_clock_gating_candidates(
         time_tdb_mjd=observation_time_tdb_mjd,
         night_id=night_id_per_label,
         observer_code=rays_for_labels.observer.code,
-        M_rad=M_rad_f32,
-        n_rad_day=n_rad_day_f32,
-        f_rad=f_rad_f32,
+        M_rad=labels.M_rad,
+        n_rad_day=labels.n_rad_day,
+        f_rad=labels.f_rad,
         e=e_f32,
-        sigma_M_rad=sigma_M_rad_f32,
+        sigma_M_rad=labels.sigma_M_rad,
         t_hat_plane_x=labels.t_hat_plane_x,
         t_hat_plane_y=labels.t_hat_plane_y,
     )
@@ -279,19 +283,16 @@ def prepare_clock_gating_candidates(
 def build_clock_gated_edges(
     candidates: ClockGatingCandidates,
     *,
-    tau_min_minutes: float = 15.0,
-    alpha_min_per_day: float = 0.02,
-    beta: float = 1.0,
-    gamma: float = 0.5,
     time_bin_minutes: int = 120,
-    max_bins_ahead: int = 72,
+    max_bins_ahead: int | None = None,
     horizon_days: float = 90.0,
-    per_night_cap: int = 0,
-    max_k_span: int = 1,
-    kernel_col_window_size: int = 2048,
     max_processes: int | None = 1,
-    intra_bin_chunk_size: int = 100,
     inter_bin_chunk_size: int = 1000,
+    mband_padding_bins: float = 0.5,
+    mband_floor_per_day_rad: float | None = None,
+    refine_tol_M_rad: float = _DEFAULT_REFINE_TOL_M_RAD,
+    refine_window_size: int = 16384,
+    diagnostics_sample_rate: float = 0.0,
 ) -> ClockGatedEdges:
     """
     Build time-consistent edges between candidate detections for each orbit.
@@ -304,8 +305,6 @@ def build_clock_gated_edges(
     ----------
     candidates
         Candidate vertices (single orbit).
-    tau_min_minutes, alpha_min_per_day, beta, gamma
-        Tolerance policy parameters (see _tau).
     time_bin_minutes
         Width of time bins used to limit pairwise comparisons.
     max_bins_ahead
@@ -313,13 +312,6 @@ def build_clock_gated_edges(
         horizon_days; effective lookahead is limited by both).
     horizon_days
         Absolute lookahead horizon in days for inter-bin scanning.
-    per_night_cap
-        Maximum number of same-night outgoing edges per source detection.
-    max_k_span
-        Sweep size around the nearest integer revolutions k at bin center.
-    kernel_col_window_size
-        Number of destination columns (j) per kernel call; shapes are padded to
-        this width to avoid JAX recompilation.
     max_processes
         If > 1, shard by orbit_id and run in parallel with Ray.
     """
@@ -333,11 +325,6 @@ def build_clock_gated_edges(
         candidates,
         time_bin_minutes,
     )
-    tolerance_scalars = _compute_per_detection_scalars(
-        candidates,
-        tau_min_minutes,
-        alpha_min_per_day,
-    )
 
     bin_pairs = calculate_bin_pairs(bin_index, max_bins_ahead, horizon_days)
     futures = []
@@ -348,65 +335,31 @@ def build_clock_gated_edges(
         candidates_ref = ray.put(candidates)
         # bin_index_ref = ray.put(bin_index)
 
-    for bin_id_chunk in _iterate_chunks(bin_index.unique_bins, chunk_size=intra_bin_chunk_size):
-        if max_processes < 2:
-            per_bin_intra_bin_edges = intra_bin_edges_worker(
-                candidates,
-                bin_index,
-                tolerance_scalars,
-                bin_id_chunk,
-                beta=beta,
-                gamma=gamma,
-                horizon_days=horizon_days,
-                per_night_cap=per_night_cap,
-                kernel_col_window_size=kernel_col_window_size,
-            )
-            all_edges_list.append(per_bin_intra_bin_edges)
-        else:
-            futures.append(intra_bin_edges_worker_remote.remote(
-                candidates_ref,
-                bin_index,
-                tolerance_scalars,
-                bin_id_chunk,
-                beta=beta,
-                gamma=gamma,
-                horizon_days=horizon_days,
-                per_night_cap=per_night_cap,
-                kernel_col_window_size=kernel_col_window_size,
-            ))
-
-            if len(futures) >= max_processes * 1.5:
-                finished, futures = ray.wait(futures, num_returns=1)
-                result = ray.get(finished[0])
-                all_edges_list.append(result)
+    # Intra-bin edges are now handled by inter-bin worker by allowing src==dst bin pairs.
 
     for bin_pairs_chunk in _iterate_chunks(bin_pairs, chunk_size=inter_bin_chunk_size):
         if max_processes < 2:
             per_bin_inter_bin_edges = inter_bin_edges_worker(
                 candidates,
                 bin_index,
-                tolerance_scalars,
                 bin_pairs_chunk,
-                beta=beta,
-                gamma=gamma,
-                horizon_days=horizon_days,
-                per_night_cap=per_night_cap,
-                kernel_col_window_size=kernel_col_window_size,
-                max_k_span=max_k_span,
+                mband_padding_bins=mband_padding_bins,
+                mband_floor_per_day_rad=mband_floor_per_day_rad,
+                refine_tol_M_rad=refine_tol_M_rad,
+                refine_window_size=refine_window_size,
+                diagnostics_sample_rate=diagnostics_sample_rate,
             )
             all_edges_list.append(per_bin_inter_bin_edges)
         else:
             futures.append(inter_bin_edges_worker_remote.remote(
                 candidates_ref,
                 bin_index,
-                tolerance_scalars,
                 bin_pairs_chunk,
-                beta=beta,
-                gamma=gamma,
-                horizon_days=horizon_days,
-                per_night_cap=per_night_cap,
-                kernel_col_window_size=kernel_col_window_size,
-                max_k_span=max_k_span,
+                mband_padding_bins=float(mband_padding_bins),
+                mband_floor_per_day_rad=mband_floor_per_day_rad,
+                refine_tol_M_rad=float(refine_tol_M_rad),
+                refine_window_size=int(refine_window_size),
+                diagnostics_sample_rate=float(diagnostics_sample_rate),
             ))
 
             if len(futures) >= max_processes * 1.5:
@@ -425,20 +378,17 @@ def build_clock_gated_edges(
 def kepler_clock_gate(
     candidates: ClockGatingCandidates,
     *,
-    tau_min_minutes: float = 15.0,
-    alpha_min_per_day: float = 0.02,
-    beta: float = 1.0,
-    gamma: float = 0.5,
     time_bin_minutes: int = 120,
-    max_bins_ahead: int = 72,
+    max_bins_ahead: int | None = None,
     horizon_days: float = 90.0,
-    per_night_cap: int = 0,
-    max_k_span: int = 1,
-    kernel_col_window_size: int = 2048,
     max_processes: int | None = 1,
     promote_min_size: int = 6,
     promote_min_span_days: float = 3.0,
-    stream_to_disk: str | None = None,
+    mband_padding_bins: float = 0.5,
+    mband_floor_per_day_rad: float | None = None,
+    refine_tol_M_rad: float = _DEFAULT_REFINE_TOL_M_RAD,
+    refine_window_size: int = 16384,
+    diagnostics_sample_rate: float = 0.0,
 ) -> tuple[KeplerChains, KeplerChainMembers]:
     """
     Complete Kepler clock-gating stage: build edges and chains from candidates.
@@ -447,8 +397,6 @@ def kepler_clock_gate(
     ----------
     candidates
         Candidate vertices (one orbit at a time downstream).
-    tau_min_minutes, alpha_min_per_day, beta, gamma
-        Tolerance policy parameters (see _tau).
     time_bin_minutes
         Width of time bins used to limit pairwise comparisons.
     max_bins_ahead
@@ -456,28 +404,7 @@ def kepler_clock_gate(
         horizon_days; effective lookahead is limited by both).
     horizon_days
         Absolute lookahead horizon in days for inter-bin scanning.
-    per_night_cap
-        Maximum number of same-night outgoing edges per source detection.
-    max_k_span
-        Sweep size around the nearest integer revolutions k at bin center.
-    kernel_col_window_size
-        Number of destination columns (j) per kernel call; shapes are padded to
-        this width to avoid JAX recompilation.
-    max_processes
-        If > 1, shard by orbit_id and run in parallel with Ray.
-    promote_min_size
-        Minimum size of a chain to promote.
-    promote_min_span_days
-        Minimum span of a chain to promote.
-    stream_to_disk
-        Optional directory path on disk to stream accumulated edges to avoid memory pressure.
 
-    Returns
-    -------
-    chains
-        Promoted chains.
-    members
-        Membership table for the chains.
     """
 
     # Since the edge finding and chain building
@@ -493,18 +420,17 @@ def kepler_clock_gate(
 
         orbit_edges: ClockGatedEdges | str = build_clock_gated_edges(
             candidates_for_orbit,
-            tau_min_minutes=tau_min_minutes,
-            alpha_min_per_day=alpha_min_per_day,
-            beta=beta,
-            gamma=gamma,
             time_bin_minutes=time_bin_minutes,
             max_bins_ahead=max_bins_ahead,
             horizon_days=horizon_days,
-            per_night_cap=per_night_cap,
-            max_k_span=max_k_span,
-            kernel_col_window_size=kernel_col_window_size,
             max_processes=max_processes,
+            mband_padding_bins=mband_padding_bins,
+            mband_floor_per_day_rad=mband_floor_per_day_rad,
+            refine_tol_M_rad=refine_tol_M_rad,
+            refine_window_size=refine_window_size,
+            diagnostics_sample_rate=diagnostics_sample_rate,
         )
+
         orbit_chains, orbit_chain_members = extract_kepler_chains(
             candidates_for_orbit,
             orbit_edges,
@@ -529,85 +455,6 @@ def _wrap_2pi(angles_rad: np.ndarray) -> np.ndarray:
     return np.where(wrapped_angles < 0.0, wrapped_angles + 2.0 * np.pi, wrapped_angles)
 
 
-def _wrap_2pi_jax(angles_rad: jnp.ndarray) -> jnp.ndarray:
-    # Why: JAX variant for use inside JIT-compiled kernels, mirroring numpy
-    # behavior for 2π-periodic normalization.
-    wrapped_angles = jnp.mod(angles_rad, 2.0 * jnp.pi)
-    return jnp.where(
-        wrapped_angles < 0.0, wrapped_angles + 2.0 * jnp.pi, wrapped_angles
-    )
-
-
-def _pair_kernel_impl(
-    t_i: jnp.ndarray,
-    M_i: jnp.ndarray,
-    n_i: jnp.ndarray,
-    sigmaMi_i: jnp.ndarray,
-    dMdf_i: jnp.ndarray,
-    t_j: jnp.ndarray,
-    M_j: jnp.ndarray,
-    tau_min_days: jnp.float32,
-    alpha_days_per_day: jnp.float32,
-    beta: jnp.float32,
-    gamma: jnp.float32,
-    horizon_days: jnp.float32,
-    valid_i: jnp.ndarray,
-    valid_j: jnp.ndarray,
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    # Shapes: t_i[B], t_j[W]; everything float32/int32
-    # Why: Compute forward-in-time deltas within a finite horizon to limit
-    # candidate pairs to physically plausible and computationally bounded windows.
-    delta_time_days_matrix = t_j[None, :] - t_i[:, None]
-    forward_time_mask = jnp.logical_and(
-        delta_time_days_matrix > 0.0, delta_time_days_matrix <= horizon_days
-    )
-
-    # Why: Mean anomaly is 2π-periodic; wrap its difference before estimating
-    # integer revolution counts to avoid branch cut artifacts.
-    delta_wrapped_mean_anomaly_rad = _wrap_2pi_jax(M_j[None, :] - M_i[:, None])
-    two_pi = jnp.float32(2.0 * jnp.pi)
-    fractional_revolutions = (
-        n_i[:, None] * delta_time_days_matrix - delta_wrapped_mean_anomaly_rad
-    ) / two_pi
-    rounded_revolutions = jnp.maximum(jnp.rint(fractional_revolutions), 0.0).astype(
-        jnp.int32
-    )
-
-    # Why: Convert angular uncertainties to time by scaling with 1/n so τ has
-    # units of days and is comparable to time residuals, especially for small n.
-    tiny_epsilon = jnp.float32(1e-8)
-    timing_residual_days = delta_time_days_matrix - (
-        delta_wrapped_mean_anomaly_rad
-        + two_pi * rounded_revolutions.astype(jnp.float32)
-    ) / (n_i[:, None] + tiny_epsilon)
-    inverse_mean_motion = 1.0 / (n_i[:, None] + tiny_epsilon)
-    time_tolerance_days = (
-        tau_min_days
-        + alpha_days_per_day * delta_time_days_matrix
-        + beta * (sigmaMi_i[:, None] * inverse_mean_motion)
-        + gamma * (jnp.abs(dMdf_i[:, None]) * inverse_mean_motion)
-    )
-
-    # Why: Only accept pairs that move forward in time and whose clock residual
-    # is consistent with the adaptive tolerance policy.
-    keep_mask = jnp.logical_and(
-        forward_time_mask, jnp.abs(timing_residual_days) <= time_tolerance_days
-    )
-    # Apply valid row/col masks (padding)
-    keep_mask = jnp.logical_and(keep_mask, valid_i[:, None])
-    keep_mask = jnp.logical_and(keep_mask, valid_j[None, :])
-    return (
-        keep_mask,
-        rounded_revolutions,
-        timing_residual_days,
-        delta_time_days_matrix,
-        delta_wrapped_mean_anomaly_rad,
-    )
-
-
-pair_kernel = jax.jit(_pair_kernel_impl, static_argnames=())
-
-
 """Removed unused helpers _choose_k and _clock_residual (now superseded by pair_kernel)."""
 
 
@@ -618,6 +465,9 @@ def _mband_union_mask_numba(
     halfwidth: np.float32,
     two_pi: np.float32,
 ) -> np.ndarray:
+    """
+    Compute the union of M-bands for a given set of centers and halfwidths.
+    """
     N = M_sorted_j.shape[0]
     out = np.zeros(N, dtype=np.bool_)
     for ci in range(centers.shape[0]):
@@ -666,29 +516,53 @@ def _dM_df(eccentricity: np.ndarray, true_anomaly_rad: np.ndarray) -> np.ndarray
     return numerator / (denominator + 1e-18)
 
 
-def _tau(
-    delta_time_days: np.ndarray,
-    tau_min_days: float,
-    alpha_days_per_day: float,
-    beta_sigma_scale: float,
-    sigma_mean_anomaly_rad: np.ndarray,
-    gamma_dmdf_scale: float,
-    dM_df_at_i: np.ndarray,
-) -> np.ndarray:
-    """
-    Adaptive tolerance policy τ_ij in days.
+# ---------------------
+# JAX refinement kernel
+# ---------------------
 
-    τ = τ_min + α Δt + β σ_M + γ |dM/df|.
+@jax.jit
+def _refine_edges_M_only_kernel(
+    M_i: jax.Array,
+    n_i: jax.Array,
+    t_i: jax.Array,
+    M_j: jax.Array,
+    t_j: jax.Array,
+    tol_M: jax.Array,
+    valid_mask: jax.Array,
+) -> jax.Array:
     """
-    # Why: Combine fixed, time-linear, and state-dependent terms to produce a
-    # unit-correct time tolerance for the clock residual test.
-    return (
-        tau_min_days
-        + alpha_days_per_day * delta_time_days
-        + beta_sigma_scale * sigma_mean_anomaly_rad
-        + gamma_dmdf_scale * np.abs(dM_df_at_i)
-    )
+    Fixed-shape kernel: mean-anomaly residual vs predicted M_i + n_i * dt.
+    Accept if |wrap_shortest(M_j - M_pred)| <= tol_M for valid rows.
 
+    Parameters
+    ----------
+    M_i
+        Mean anomaly of the source candidate in radians.
+    n_i
+        Mean motion of the source candidate in radians per day.
+    t_i
+        Time of the source candidate in days.
+    M_j
+        Mean anomaly of the destination candidate in radians.
+    t_j
+        Time of the destination candidate in days.
+    tol_M
+        Static tolerance in mean anomaly (radians).
+    valid_mask
+        Mask of valid rows.
+
+    Returns
+    -------
+    keep
+        Mask of valid rows.
+    """
+    two_pi = jnp.float32(2.0 * jnp.pi)
+    dt = t_j - t_i
+    M_pred = jnp.mod(M_i + n_i * dt, two_pi)
+    # Shortest signed difference in [-pi, pi]
+    resid = ((M_j - M_pred + jnp.pi) % (2.0 * jnp.pi)) - jnp.pi
+    keep = jnp.abs(resid) <= tol_M
+    return jnp.logical_and(keep, valid_mask)
 
 # -------------------------------
 # Refactor helpers (NamedTuples)
@@ -718,6 +592,8 @@ class BinIndex(NamedTuple):
     bin_to_sorted_times: Dict[int, np.ndarray]
     bin_to_M_order_positions: Dict[int, np.ndarray]
     bin_to_sorted_M: Dict[int, np.ndarray]
+    bin_to_F_order_positions: Dict[int, np.ndarray]
+    bin_to_sorted_F: Dict[int, np.ndarray]
 
 
 class ToleranceScalars(NamedTuple):
@@ -726,13 +602,67 @@ class ToleranceScalars(NamedTuple):
     dM_df_per_candidate: np.ndarray
 
 
-class EdgeAccumulator(NamedTuple):
-    source_candidate_indices: List[int]
-    dest_candidate_indices: List[int]
-    k_revolutions_rounded: List[int]
-    delta_time_days: List[float]
-    is_same_night: List[bool]
-    outgoing_same_night_edge_counts: np.ndarray
+class PairBuffer:
+    """Growable SoA buffer for provisional or accepted pairs."""
+
+    def __init__(self, initial_capacity: int = 16384) -> None:
+        cap = 1024 if int(initial_capacity) <= 0 else int(initial_capacity)
+        self._size = 0
+        self._cap = cap
+        self.src = np.empty(cap, dtype=np.int32)
+        self.dst = np.empty(cap, dtype=np.int32)
+        self.k = np.empty(cap, dtype=np.int16)
+        self.dt = np.empty(cap, dtype=np.float32)
+        self.same = np.empty(cap, dtype=np.bool_)
+
+    @property
+    def size(self) -> int:
+        return self._size
+
+    def clear(self) -> None:
+        self._size = 0
+
+    def _ensure_capacity(self, additional: int) -> None:
+        required = self._size + int(additional)
+        if required <= self._cap:
+            return
+        new_cap = self._cap * 2
+        if new_cap < required:
+            new_cap = required
+        self.src = self._resize(self.src, new_cap)
+        self.dst = self._resize(self.dst, new_cap)
+        self.k = self._resize(self.k, new_cap)
+        self.dt = self._resize(self.dt, new_cap)
+        self.same = self._resize(self.same, new_cap)
+        self._cap = new_cap
+
+    def _resize(self, arr: np.ndarray, new_cap: int) -> np.ndarray:
+        out = np.empty(new_cap, dtype=arr.dtype)
+        s = self._size
+        if s > 0:
+            out[:s] = arr[:s]
+        return out
+
+    def append_many(
+        self,
+        src_indices: np.ndarray,
+        dst_indices: np.ndarray,
+        k_vals: np.ndarray,
+        dt_vals: np.ndarray,
+        same_flags: np.ndarray,
+    ) -> None:
+        n = int(dst_indices.shape[0])
+        if n == 0:
+            return
+        self._ensure_capacity(n)
+        s = self._size
+        e = s + n
+        self.src[s:e] = src_indices.astype(np.int32, copy=False)
+        self.dst[s:e] = dst_indices.astype(np.int32, copy=False)
+        self.k[s:e] = k_vals.astype(np.int16, copy=False)
+        self.dt[s:e] = dt_vals.astype(np.float32, copy=False)
+        self.same[s:e] = same_flags.astype(np.bool_, copy=False)
+        self._size = e
 
 
 def _extract_kernel_arrays(candidates_for_orbit: ClockGatingCandidates) -> KernelArrays:
@@ -804,6 +734,12 @@ def _build_bins_and_m_index(
     t0_min_days = float(np.min(time_mjd_abs)) if time_mjd_abs.size > 0 else 0.0
     time_tdb_mjd_days = (time_mjd_abs - t0_min_days).astype(np.float32, copy=False)
     mean_anomaly_wrapped_rad = candidates_for_orbit.M_wrapped_rad_f32().to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
+    # Wrap true anomaly to [0, 2pi)
+    f_vals = candidates_for_orbit.f_rad.to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
+    true_anomaly_wrapped_rad = np.mod(f_vals, np.float32(2.0 * np.pi))
+    mask_neg = true_anomaly_wrapped_rad < 0.0
+    if np.any(mask_neg):
+        true_anomaly_wrapped_rad[mask_neg] += np.float32(2.0 * np.pi)
 
     bin_index = np.floor((time_tdb_mjd_days - 0.0) / bin_width_days).astype(
         np.int64
@@ -819,6 +755,8 @@ def _build_bins_and_m_index(
     bin_to_sorted_times: Dict[int, np.ndarray] = {}
     bin_to_M_order_positions: Dict[int, np.ndarray] = {}
     bin_to_sorted_M: Dict[int, np.ndarray] = {}
+    bin_to_F_order_positions: Dict[int, np.ndarray] = {}
+    bin_to_sorted_F: Dict[int, np.ndarray] = {}
 
     for position_in_unique, bin_id in enumerate(unique_bins):
         start = first_index_per_bin[position_in_unique]
@@ -839,12 +777,20 @@ def _build_bins_and_m_index(
         )
         wrapped_M_sorted = wrapped_M_unsorted_for_bin[order_positions_by_wrapped_M]
 
+        wrapped_F_unsorted_for_bin = true_anomaly_wrapped_rad[idx_unsorted]
+        order_positions_by_wrapped_F = np.argsort(
+            wrapped_F_unsorted_for_bin, kind="stable"
+        )
+        wrapped_F_sorted = wrapped_F_unsorted_for_bin[order_positions_by_wrapped_F]
+
         b_int = int(bin_id)
         bin_to_unsorted_indices[b_int] = idx_unsorted
         bin_to_time_sorted_indices[b_int] = idx_time_sorted
         bin_to_sorted_times[b_int] = times_sorted_within_bin
         bin_to_M_order_positions[b_int] = order_positions_by_wrapped_M
         bin_to_sorted_M[b_int] = wrapped_M_sorted
+        bin_to_F_order_positions[b_int] = order_positions_by_wrapped_F
+        bin_to_sorted_F[b_int] = wrapped_F_sorted
 
     return BinIndex(
         bin_width_days=bin_width_days,
@@ -855,291 +801,75 @@ def _build_bins_and_m_index(
         bin_to_sorted_times=bin_to_sorted_times,
         bin_to_M_order_positions=bin_to_M_order_positions,
         bin_to_sorted_M=bin_to_sorted_M,
+        bin_to_F_order_positions=bin_to_F_order_positions,
+        bin_to_sorted_F=bin_to_sorted_F,
     )
 
 
-def _compute_per_detection_scalars(
-    candidates_for_orbit: ClockGatingCandidates,
-    tau_min_minutes: float,
-    alpha_min_per_day: float,
-) -> ToleranceScalars:
-    # Why: Convert policy parameters to days to match kernel units.
-    tau_min_days = float(tau_min_minutes) / 1440.0
-    alpha_days_per_day = float(alpha_min_per_day) / 1440.0
-    # Use method-based precompute for dM/df from the candidates table (Float32)
-    dM_df_per_detection = candidates_for_orbit.dM_df_f32().to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
-    return ToleranceScalars(
-        tau_min_days=tau_min_days,
-        alpha_days_per_day=alpha_days_per_day,
-        dM_df_per_candidate=dM_df_per_detection,
-    )
+def _init_edge_buffer(initial_capacity: int = 16384) -> PairBuffer:
+    return PairBuffer(initial_capacity=initial_capacity)
 
 
-def _init_edge_accumulator(num_candidates: int) -> EdgeAccumulator:
-    # Why: Centralized constructor to keep accumulator shape consistent and
-    # initialize per-source same-night quotas.
-    return EdgeAccumulator(
-        source_candidate_indices=[],
-        dest_candidate_indices=[],
-        k_revolutions_rounded=[],
-        delta_time_days=[],
-        is_same_night=[],
-        outgoing_same_night_edge_counts=np.zeros(num_candidates, dtype=np.int32),
-    )
+# -----------------------------
+# (removed duplicate PairBuffer definition)
+# -----------------------------
 
+# ---- Simple M-band inter-bin worker (diagnostic baseline) ----
 
-def intra_bin_edges_worker(
-    candidates: ClockGatingCandidates,
-    bin_index: BinIndex,
-    tolerance_scalars: ToleranceScalars,
-    bin_ids: List[int],
-    *,
-    beta: float,
-    gamma: float,
-    horizon_days: float,
-    per_night_cap: int,
-    kernel_col_window_size: int,
-) -> ClockGatedEdges:
+def _floor_per_day_from_n(mean_motion_rad_per_day: float) -> float:
+    """Return an n-based floor in rad/day (no eccentricity).
+
+    Piecewise schedule chosen from sweep behavior:
+      - n >= 0.05               -> 0.01
+      - 0.02 <= n < 0.05        -> 0.03
+      - 0.006 <= n < 0.02       -> 0.03
+      - 0.001 <= n < 0.006      -> 0.05
+      - n < 0.001               -> 0.07
     """
-    Worker function for building clock-gated edges within a single bin.
+    n = float(mean_motion_rad_per_day)
+    if n >= 0.05:
+        return 0.01
+    if n >= 0.02:
+        return 0.03
+    if n >= 0.006:
+        return 0.03
+    if n >= 0.001:
+        return 0.05
+    return 0.07
 
-    Returns a `ClockGatedEdges` table built of intra-bin edges,
-    following the adaptive τ policy and band-limited M queries.
-    """
-    # One-time numpy views for required columns
-    time_rel_days = (
-        candidates.time_tdb_mjd.to_numpy(zero_copy_only=False).astype(np.float64)
-    )
-    if time_rel_days.size > 0:
-        t0 = float(np.min(time_rel_days))
-        time_rel_days = (time_rel_days - t0).astype(np.float32, copy=False)
-    else:
-        time_rel_days = time_rel_days.astype(np.float32, copy=False)
-    M_wrapped = candidates.M_wrapped_rad_f32().to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
-    n_rad_day = candidates.n_rad_day.to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
-    sigma_M = candidates.sigma_M_rad.to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
-    night_id = candidates.night_id.to_numpy(zero_copy_only=False).astype(np.int64, copy=False)
-
-    edge_accumulator = _init_edge_accumulator(len(time_rel_days))
-    
-    for bin_id in bin_ids:
-        b_int = int(bin_id)
-        indices_in_bin_sorted_by_time = bin_index.bin_to_time_sorted_indices.get(b_int)
-        if indices_in_bin_sorted_by_time is None or indices_in_bin_sorted_by_time.size == 0:
-            return ClockGatedEdges.empty()
-
-        num_candidates_in_bin = int(indices_in_bin_sorted_by_time.size)
-        # Why: Preallocate destination buffers once per bin and reuse across windows.
-        dest_time_buffer = np.zeros((int(kernel_col_window_size),), dtype=np.float32)
-        dest_wrapped_M_buffer = np.zeros((int(kernel_col_window_size),), dtype=np.float32)
-        dest_valid_mask = np.zeros((int(kernel_col_window_size),), dtype=bool)
-
-        for source_pos_in_bin in range(num_candidates_in_bin):
-            source_index = int(indices_in_bin_sorted_by_time[source_pos_in_bin])
-            source_time_array = time_rel_days[
-                source_index : source_index + 1
-            ]
-            source_wrapped_M_array = M_wrapped[
-                source_index : source_index + 1
-            ]
-            source_mean_motion_array = n_rad_day[
-                source_index : source_index + 1
-            ]
-            source_sigma_M_array = sigma_M[
-                source_index : source_index + 1
-            ]
-            source_dMdf_array = tolerance_scalars.dM_df_per_candidate[
-                source_index : source_index + 1
-            ]
-            source_valid_mask = np.asarray([True], dtype=bool)
-
-            for j_block_start in range(
-                source_pos_in_bin + 1, num_candidates_in_bin, int(kernel_col_window_size)
-            ):
-                j_block_end = min(
-                    num_candidates_in_bin, j_block_start + int(kernel_col_window_size)
-                )
-                dest_indices_window = indices_in_bin_sorted_by_time[
-                    j_block_start:j_block_end
-                ]
-                num_dest_in_window = j_block_end - j_block_start
-                if num_dest_in_window > 0:
-                    dest_time_buffer[:num_dest_in_window] = time_rel_days[dest_indices_window]
-                    dest_wrapped_M_buffer[:num_dest_in_window] = M_wrapped[dest_indices_window]
-                if num_dest_in_window < int(kernel_col_window_size):
-                    dest_time_buffer[num_dest_in_window:] = 0.0
-                    dest_wrapped_M_buffer[num_dest_in_window:] = 0.0
-                dest_valid_mask[:] = False
-                dest_valid_mask[:num_dest_in_window] = True
-
-                (
-                    keep_mask,
-                    rounded_revs_matrix,
-                    _resid_unused,
-                    delta_time_days_matrix,
-                    _dM_unused,
-                ) = pair_kernel(
-                    source_time_array,
-                    source_wrapped_M_array,
-                    source_mean_motion_array,
-                    source_sigma_M_array,
-                    source_dMdf_array,
-                    dest_time_buffer,
-                    dest_wrapped_M_buffer,
-                    tolerance_scalars.tau_min_days,
-                    tolerance_scalars.alpha_days_per_day,
-                    beta,
-                    gamma,
-                    horizon_days,
-                    valid_i=source_valid_mask,
-                    valid_j=dest_valid_mask,
-                )
-                # Convert kernel outputs once per window (drop resid/dM)
-                keep_np = np.asarray(keep_mask)
-                rounded_revs_np = np.asarray(rounded_revs_matrix)
-                dt_np = np.asarray(delta_time_days_matrix)
-                if not np.any(keep_np):
-                    continue
-                accepted_dest_cols = np.nonzero(keep_np[0])[0]
-                if accepted_dest_cols.size == 0:
-                    continue
-                source_indices_global = np.full(
-                    accepted_dest_cols.shape[0], source_index, dtype=np.int32
-                )
-                dest_indices_global = dest_indices_window[accepted_dest_cols]
-                same_night_mask = (night_id[dest_indices_global] == night_id[source_index])
-                k_revs_for_kept = rounded_revs_np[0, accepted_dest_cols]
-                delta_time_days_kept = dt_np[0, accepted_dest_cols]
-
-                keep_after_quota_mask = np.ones(source_indices_global.shape[0], dtype=bool)
-                if per_night_cap > 0 and np.any(same_night_mask):
-                    remaining_same_night_quota = (
-                        per_night_cap
-                        - edge_accumulator.outgoing_same_night_edge_counts[source_index]
-                    )
-
-                    if remaining_same_night_quota <= 0:
-                        keep_after_quota_mask[same_night_mask] = False
-                    else:
-                        same_night_true_indices = np.nonzero(same_night_mask)[0]
-                        if same_night_true_indices.size > remaining_same_night_quota:
-                            keep_after_quota_mask[
-                                same_night_true_indices[remaining_same_night_quota:]
-                            ] = False
-                        edge_accumulator.outgoing_same_night_edge_counts[
-                            source_index
-                        ] += min(remaining_same_night_quota, same_night_true_indices.size)
-
-                # apply mask and append in bulk
-                if np.any(keep_after_quota_mask):
-                    edge_accumulator.source_candidate_indices.extend(
-                        source_indices_global[keep_after_quota_mask].tolist()
-                    )
-                    edge_accumulator.dest_candidate_indices.extend(
-                        dest_indices_global[keep_after_quota_mask].astype(np.int32).tolist()
-                    )
-                    edge_accumulator.k_revolutions_rounded.extend(
-                        k_revs_for_kept[keep_after_quota_mask].astype(np.int16).tolist()
-                    )
-                    edge_accumulator.delta_time_days.extend(
-                        delta_time_days_kept[keep_after_quota_mask]
-                        .astype(np.float32)
-                        .tolist()
-                    )
-                    edge_accumulator.is_same_night.extend(
-                        same_night_mask[keep_after_quota_mask].tolist()
-                    )
-
-    orbit_id_str = candidates.orbit_id.unique()[0].as_py() if len(candidates) > 0 else ""
-    clock_gated_edges = ClockGatedEdges.from_kwargs(
-        orbit_id=[orbit_id_str] * len(edge_accumulator.source_candidate_indices),
-        i_index=edge_accumulator.source_candidate_indices,
-        j_index=edge_accumulator.dest_candidate_indices,
-        k_revs=edge_accumulator.k_revolutions_rounded,
-        dt_days=edge_accumulator.delta_time_days,
-        same_night=edge_accumulator.is_same_night,
-        tau_min_minutes=tolerance_scalars.tau_min_days * 60.0,
-        alpha_min_per_day=tolerance_scalars.alpha_days_per_day * 60.0,
-        beta=beta,
-        gamma=gamma,
-        window_size=kernel_col_window_size,
-    )
-
-    return clock_gated_edges
-
-
-@ray.remote
-def intra_bin_edges_worker_remote(
-    candidates: ClockGatingCandidates,
-    bin_index: BinIndex,
-    tolerance_scalars: ToleranceScalars,
-    bin_ids: List[int],
-    *,
-    beta: float,
-    gamma: float,
-    horizon_days: float,
-    per_night_cap: int,
-    kernel_col_window_size: int,
-) -> ClockGatedEdges:
-    return intra_bin_edges_worker(
-        candidates,
-        bin_index,
-        tolerance_scalars,
-        bin_ids,
-        beta=beta,
-        gamma=gamma,
-        horizon_days=horizon_days,
-        per_night_cap=per_night_cap,
-        kernel_col_window_size=kernel_col_window_size,
-    )
 
 def inter_bin_edges_worker(
     candidates: ClockGatingCandidates,
     bin_index: BinIndex,
-    tolerance_scalars: ToleranceScalars,
     bin_pairs: List[tuple[int, int]],
     *,
-    beta: float,
-    gamma: float,
-    horizon_days: float,
-    per_night_cap: int,
-    kernel_col_window_size: int,
-    max_k_span: int,
+    mband_padding_bins: float = 0.5,
+    mband_floor_per_day_rad: float | None = None,
+    refine_tol_M_rad: float = _DEFAULT_REFINE_TOL_M_RAD,
+    refine_window_size: int = 16384,
+    diagnostics_sample_rate: float = 0.0,
 ) -> ClockGatedEdges:
     """
-    Worker function for building clock-gated edges between bins.
+    Build inter-bin edges using a dial-free mean-anomaly bin-sweep rule.
 
-    Parameters
-    ----------
-    kernel_arrays
-        Kernel arrays for the orbit.
-    bin_index
-        Bin index for the orbit.
-    tolerance_scalars
-        Tolerance scalars for the orbit.
-    source_bin_id
-        Source bin ID.
-    dest_bin_id
-        Dest bin ID.
-    beta
-        Beta parameter.
-    gamma
-        Gamma parameter.
-    horizon_days
-        Horizon days.
-    per_night_cap
-        Per night cap.
-    kernel_col_window_size
-        Kernel column window size.
-    max_k_span
-        Represents the number of revolutions around the orbit that are considered for the kernel.
+    For each source detection i in a source bin and each destination bin [t0, t1],
+    accept any j in that destination bin whose mean anomaly lies within the
+    minimal wrapped arc swept by i from t0 to t1. Implemented via center/halfwidth:
 
-    Returns
-    -------
-    ClockGatedEdges
-        Clock-gated edges between bins.
+        t_c = (t0 + t1) / 2
+        M_center = wrap(M_i + n_i * (t_c - t_i))
+        H_M = n_i * (bin_width_days / 2)
+
+    Membership: |wrap_shortest(M_j - M_center)| <= H_M and dt = t_j - t_i >= 0.
+
+    Optional bin-based padding: inflate halfwidth by `mband_padding_bins` bins
+    (unitless): H_M = n_i * bin_width_days * (0.5 + mband_padding_bins).
+
+    Intentionally ignores all higher-level dials (tau/alpha/beta/gamma, caps,
+    dM/df scaling, padding, k-span, min-dt, per-night quotas). This is a
+    diagnostic/simple baseline.
     """
-    # One-time numpy views
+    # One-time numpy views aligned with local time origin
     time_rel_days = (
         candidates.time_tdb_mjd.to_numpy(zero_copy_only=False).astype(np.float64)
     )
@@ -1148,209 +878,201 @@ def inter_bin_edges_worker(
         time_rel_days = (time_rel_days - t0).astype(np.float32, copy=False)
     else:
         time_rel_days = time_rel_days.astype(np.float32, copy=False)
+
     M_wrapped = candidates.M_wrapped_rad_f32().to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
     n_rad_day = candidates.n_rad_day.to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
-    sigma_M = candidates.sigma_M_rad.to_numpy(zero_copy_only=False).astype(np.float32, copy=False)
     night_id = candidates.night_id.to_numpy(zero_copy_only=False).astype(np.int64, copy=False)
 
-    N = time_rel_days.shape[0]
-    edge_accumulator = _init_edge_accumulator(N)
+    edge_buffer = _init_edge_buffer()
+    tol_val = np.float32(refine_tol_M_rad)
 
-    for source_bin_id, dest_bin_id in bin_pairs:
+    two_pi = np.float32(2.0 * np.pi)
+    bin_width_days = float(bin_index.bin_width_days)
+    bin_width_days_f32 = np.float32(bin_width_days)
+    pad_bins_scalar = np.float32(mband_padding_bins) if float(mband_padding_bins) > 0.0 else np.float32(0.0)
+
+    # Group destination bins by source bin to avoid recomputing per-dest invariants for each source i
+    pairs_by_src: Dict[int, List[int]] = {}
+    for src, dst in bin_pairs:
+        lst = pairs_by_src.get(src)
+        if lst is None:
+            pairs_by_src[src] = [dst]
+        else:
+            lst.append(dst)
+
+    for source_bin_id, dest_bin_list in pairs_by_src.items():
         indices_time_sorted = bin_index.bin_to_time_sorted_indices.get(source_bin_id)
         if indices_time_sorted is None or indices_time_sorted.size == 0:
-            return ClockGatedEdges.empty()
+            continue
 
-        idx_unsorted_j = bin_index.bin_to_unsorted_indices.get(dest_bin_id)
-        if idx_unsorted_j is None or idx_unsorted_j.size == 0:
-            return ClockGatedEdges.empty()
+        # Precompute per-destination bin data reused across all sources i in the same source bin
+        dest_data_map: Dict[int, tuple[np.ndarray, np.ndarray, np.ndarray, np.float32]] = {}
+        for dest_bin_id in dest_bin_list:
+            idx_unsorted_j = bin_index.bin_to_unsorted_indices.get(dest_bin_id)
+            if idx_unsorted_j is None or idx_unsorted_j.size == 0:
+                continue
+            M_sorted_j = bin_index.bin_to_sorted_M[dest_bin_id]
+            M_order_j = bin_index.bin_to_M_order_positions[dest_bin_id]
+            M_sorted_j_f32 = M_sorted_j if M_sorted_j.dtype == np.float32 else M_sorted_j.astype(np.float32, copy=False)
+            t_center_f32 = (np.float32(dest_bin_id) + np.float32(0.5)) * bin_width_days_f32
+            dest_data_map[dest_bin_id] = (idx_unsorted_j, M_order_j, M_sorted_j_f32, t_center_f32)
 
-        # Check the horizon against the source bin
-        # Work in the same (relative) time frame as time_rel_days
-        t_center = (source_bin_id + 0.5) * bin_index.bin_width_days
-        dt_center = float(t_center - time_rel_days[indices_time_sorted[0]])
-        if dt_center <= 0.0 or dt_center > float(horizon_days):
-            return ClockGatedEdges.empty()
+        if not dest_data_map:
+            continue
 
-        M_sorted_j = bin_index.bin_to_sorted_M[dest_bin_id]
-        M_order_j = bin_index.bin_to_M_order_positions[dest_bin_id]
+        centers_buffer = np.empty(1, dtype=np.float32)
 
-        two_pi = np.float32(2.0 * np.pi)
-        max_k_span = np.int64(max_k_span)
+        # Growable flattened staging for provisional pairs in this source bin
+        stage = PairBuffer(initial_capacity=8192)
 
-        # Process one detection in source bin at a time
+        # Process each source detection i once per source bin and reuse per-i constants
         for i_pos in range(indices_time_sorted.size):
             i_idx = int(indices_time_sorted[i_pos])
-            time_i = float(time_rel_days[i_idx])
-            mean_anomaly_i = float(M_wrapped[i_idx])
-            mean_motion_i = float(n_rad_day[i_idx])
-            sigma_i = float(sigma_M[i_idx])
-            dMdf_i = float(tolerance_scalars.dM_df_per_candidate[i_idx])
+            time_i = time_rel_days[i_idx]
+            mean_anomaly_i = M_wrapped[i_idx]
+            mean_motion_i = n_rad_day[i_idx]
             night_id_i = int(night_id[i_idx])
 
-            # De-dup mask for this i
-            seen_j = np.zeros(N, dtype=bool)
+            # Per-source half-width in M (constant across all destination bins)
+            # H_base = n_i * bin_width_days * (0.5 + pad_bins)
+            H_base = mean_motion_i * (bin_width_days_f32 * (np.float32(0.5) + pad_bins_scalar))
+            if H_base < 0.0:
+                H_base = np.float32(0.0)
+            if mband_floor_per_day_rad is None:
+                floor_per_day = np.float32(_floor_per_day_from_n(float(mean_motion_i)))
+            else:
+                floor_per_day = np.float32(mband_floor_per_day_rad)
+            H_floor = (floor_per_day if floor_per_day > 0.0 else np.float32(0.0)) * bin_width_days_f32
+            H_M = H_base if H_base >= H_floor else H_floor
 
-            # 1-element i buffers for kernel (views, no new allocations)
-            times_i_arr = time_rel_days[i_idx : i_idx + 1]
-            mean_anomaly_i_arr = M_wrapped[i_idx : i_idx + 1]
-            mean_motion_i_arr = n_rad_day[i_idx : i_idx + 1]
-            sigma_i_arr = sigma_M[i_idx : i_idx + 1]
-            dMdf_i_arr = tolerance_scalars.dM_df_per_candidate[i_idx : i_idx + 1]
-            i_valid = np.asarray([True], dtype=bool)
+            # Sweep destination bins for this source i
+            for dest_bin_id, (idx_unsorted_j, M_order_j, M_sorted_j_f32, t_center_f32) in dest_data_map.items():
+                dt_center = t_center_f32 - time_i
+                # Center of swept M-band
+                M_center = mean_anomaly_i + mean_motion_i * dt_center
+                # Wrap to [0, 2pi)
+                M_center = np.mod(M_center, two_pi)
+                centers_buffer[0] = M_center
 
-
-            # Build band positions for this single i
-            t_center = (dest_bin_id + 0.5) * bin_index.bin_width_days
-            dt_center = float(t_center - time_i)
-            if dt_center <= 0.0 or dt_center > float(horizon_days):
-                continue
-
-            tau_center_days = float(
-                tolerance_scalars.tau_min_days
-                + tolerance_scalars.alpha_days_per_day * dt_center
-                + beta * sigma_i
-                + gamma * abs(dMdf_i)
-            )
-            mband_floor = 1e-5
-            band_halfwidth_M_rad = float(
-                max(
-                    mband_floor,
-                    mean_motion_i
-                    * (tau_center_days + 2.0 * bin_index.bin_width_days),
+                pos_mask_union = _mband_union_mask_numba(
+                    M_sorted_j_f32,
+                    centers_buffer,
+                    H_M,
+                    two_pi,
                 )
-            )
-            k_star_estimate = int(np.rint((mean_motion_i * dt_center) / two_pi))
-            k_lo = max(0, int(k_star_estimate - max_k_span))
-            k_hi = int(k_star_estimate + max_k_span)
-            ks = np.arange(k_lo, k_hi + 1, dtype=np.int64)
-            if ks.size == 0:
-                continue
 
-            centers = _wrap_2pi(
-                mean_anomaly_i + mean_motion_i * dt_center - two_pi * ks
-            )
-            centers = np.atleast_1d(centers).astype(np.float32, copy=False)
-            pos_mask_union = _mband_union_mask_numba(
-                M_sorted_j.astype(np.float32, copy=False),
-                centers,
-                band_halfwidth_M_rad,
-                two_pi,
-            )
-
-            band_positions = np.nonzero(pos_mask_union)[0]
-            if band_positions.size == 0:
-                continue
-            candidate_j_indices = idx_unsorted_j[M_order_j[band_positions]]
-
-            # Preallocate j buffers once per b2 and reuse
-            times_j_block = np.zeros(
-                (int(kernel_col_window_size),), dtype=np.float32
-            )
-            mean_anomaly_j_block = np.zeros(
-                (int(kernel_col_window_size),), dtype=np.float32
-            )
-            j_valid_mask = np.zeros((int(kernel_col_window_size),), dtype=bool)
-
-            for js in range(0, candidate_j_indices.size, kernel_col_window_size):
-                j_indices_window = candidate_j_indices[js: js + kernel_col_window_size]
-                if j_indices_window.size == 0:
+                band_positions = np.nonzero(pos_mask_union)[0]
+                if band_positions.size == 0:
                     continue
-                count_j = j_indices_window.size
-                if count_j > 0:
-                    times_j_block[:count_j] = time_rel_days[j_indices_window]
-                    mean_anomaly_j_block[:count_j] = M_wrapped[j_indices_window]
-                if count_j < kernel_col_window_size:
-                    times_j_block[count_j:] = 0.0
-                    mean_anomaly_j_block[count_j:] = 0.0
-                j_valid_mask[:] = False
-                j_valid_mask[:count_j] = True
 
-                keep, k_hat, _resid_unused, dt_mat, _dM_unused = pair_kernel(
-                    times_i_arr,
-                    mean_anomaly_i_arr,
-                    mean_motion_i_arr,
-                    sigma_i_arr,
-                    dMdf_i_arr,
-                    times_j_block,
-                    mean_anomaly_j_block,
-                    tolerance_scalars.tau_min_days,
-                    tolerance_scalars.alpha_days_per_day,
-                    beta,
-                    gamma,
-                    horizon_days,
-                    valid_i=i_valid,
-                    valid_j=j_valid_mask,
+                candidate_j_indices = idx_unsorted_j[M_order_j[band_positions]]
+                if candidate_j_indices.size == 0:
+                    continue
+
+                # Forward-time filter (dt >= 0)
+                dt_vals = time_rel_days[candidate_j_indices] - time_i
+                keep_dt = dt_vals >= 0.0
+                if not np.any(keep_dt):
+                    continue
+                candidate_j_indices = candidate_j_indices[keep_dt]
+                dt_vals = dt_vals[keep_dt]
+
+                k_vals = np.rint((mean_motion_i * dt_vals) / two_pi).astype(np.int16, copy=False)
+                same_vec = (night_id[candidate_j_indices] == night_id_i)
+
+                # Stage flattened rows for refinement (amortized growth)
+                count = int(candidate_j_indices.size)
+                if count == 0:
+                    continue
+                stage.append_many(
+                    np.full(count, int(i_idx), dtype=np.int32),
+                    candidate_j_indices.astype(np.int32, copy=False),
+                    dt_vals.astype(np.float32, copy=False),
+                    k_vals.astype(np.int16, copy=False),
+                    same_vec.astype(np.bool_, copy=False),
                 )
-                keep_np = np.asarray(keep)
-                if not np.any(keep_np):
-                    continue
 
-                # Process single i row
-                cols = np.nonzero(keep_np[0])[0]
-                if cols.size == 0:
-                    continue
-                jg_all = j_indices_window[cols].astype(int)
-                mask_seen = ~seen_j[jg_all]
-                if not np.any(mask_seen):
-                    continue
-                jg = jg_all[mask_seen]
-                cols2 = cols[mask_seen]
-                dt_vals = np.asarray(dt_mat)[0, cols2]
-                within_horizon = (dt_vals > 0.0) & (dt_vals <= float(horizon_days))
-                if not np.any(within_horizon):
-                    continue
-                jg = jg[within_horizon]
-                cols2 = cols2[within_horizon]
-                dt_vals = dt_vals[within_horizon]
-                same_vec = night_id[jg] == night_id_i
+                if float(diagnostics_sample_rate) > 0.0:
+                    if np.random.random() < float(diagnostics_sample_rate):
+                        for idx_loc in range(min(3, candidate_j_indices.size)):
+                            print(
+                                f"[diag simple] dt={float(dt_vals[idx_loc]):.6f} k={int(k_vals[idx_loc])} same={bool(same_vec[idx_loc])} H_M={float(H_M):.6f}"
+                            )
 
-                if per_night_cap > 0 and np.any(same_vec):
-                    quota = per_night_cap - edge_accumulator.outgoing_same_night_edge_counts[i_idx]
-                    if quota <= 0:
-                        same_vec[:] = False
-                    else:
-                        same_true_idx = np.nonzero(same_vec)[0]
-                        if same_true_idx.size > quota:
-                            drop_idx = same_true_idx[quota:]
-                            same_vec[drop_idx] = False
-                        edge_accumulator.outgoing_same_night_edge_counts[
-                            i_idx
-                        ] += min(quota, same_true_idx.size)
+        # After finishing the i loop for this source bin, run refinement over staged rows
+        if stage.size > 0:
+            # Preallocate fixed-size buffers for JAX kernel
+            win = int(refine_window_size) if int(refine_window_size) > 0 else 16384
+            # Per-window numpy buffers
+            Mi_buf = np.zeros(win, dtype=np.float32)
+            Ni_buf = np.zeros(win, dtype=np.float32)
+            Ti_buf = np.zeros(win, dtype=np.float32)
+            Mj_buf = np.zeros(win, dtype=np.float32)
+            Tj_buf = np.zeros(win, dtype=np.float32)
+            valid_buf = np.zeros(win, dtype=np.bool_)
 
-                k_vals = np.asarray(k_hat)[0, cols2]
+            tol_buf = jnp.full((win,), tol_val, dtype=jnp.float32)
 
-                if jg.size > 0:
-                    edge_accumulator.source_candidate_indices.extend(
-                        [int(i_idx)] * int(jg.size)
+            # Gather state vectors for staged pairs
+            Mi_all = M_wrapped[stage.src[: stage.size]]
+            Ni_all = n_rad_day[stage.src[: stage.size]]
+            Ti_all = time_rel_days[stage.src[: stage.size]]
+            Mj_all = M_wrapped[stage.dst[: stage.size]]
+            Tj_all = time_rel_days[stage.dst[: stage.size]]
+
+            L = int(stage.size)
+            start = 0
+            while start < L:
+                end = min(start + win, L)
+                cur = end - start
+                # Fill buffers
+                Mi_buf[:cur] = Mi_all[start:end]
+                Ni_buf[:cur] = Ni_all[start:end]
+                Ti_buf[:cur] = Ti_all[start:end]
+                Mj_buf[:cur] = Mj_all[start:end]
+                Tj_buf[:cur] = Tj_all[start:end]
+                valid_buf[:cur] = True
+                if cur < win:
+                    Mi_buf[cur:] = 0.0
+                    Ni_buf[cur:] = 0.0
+                    Ti_buf[cur:] = 0.0
+                    Mj_buf[cur:] = 0.0
+                    Tj_buf[cur:] = 0.0
+                    valid_buf[cur:] = False
+
+                keep_mask = _refine_edges_M_only_kernel(
+                    Mi_buf,
+                    Ni_buf,
+                    Ti_buf,
+                    Mj_buf,
+                    Tj_buf,
+                    tol_buf,
+                    valid_buf,
+                )
+
+                keep_np = np.asarray(keep_mask)
+                if np.any(keep_np[:cur]):
+                    sel = np.nonzero(keep_np[:cur])[0]
+                    edge_buffer.append_many(
+                        stage.src[start:end][sel],
+                        stage.dst[start:end][sel],
+                        stage.k[start:end][sel],
+                        stage.dt[start:end][sel],
+                        stage.same[start:end][sel],
                     )
-                    edge_accumulator.dest_candidate_indices.extend(
-                        jg.astype(np.int32).tolist()
-                    )
-                    edge_accumulator.k_revolutions_rounded.extend(
-                        k_vals.astype(np.int16).tolist()
-                    )
-                    edge_accumulator.delta_time_days.extend(
-                        dt_vals.astype(np.float32).tolist()
-                    )
-                    edge_accumulator.is_same_night.extend(
-                        (night_id[jg] == night_id_i).tolist()
-                    )
-                    seen_j[jg] = True
+
+                start = end
 
     orbit_id_str = candidates.orbit_id.unique()[0].as_py() if len(candidates) > 0 else ""
     edges = ClockGatedEdges.from_kwargs(
-        orbit_id=[orbit_id_str] * len(edge_accumulator.source_candidate_indices),
-        i_index=edge_accumulator.source_candidate_indices,
-        j_index=edge_accumulator.dest_candidate_indices,
-        k_revs=edge_accumulator.k_revolutions_rounded,
-        dt_days=edge_accumulator.delta_time_days,
-        same_night=edge_accumulator.is_same_night,
-        tau_min_minutes=tolerance_scalars.tau_min_days * 60.0,
-        alpha_min_per_day=tolerance_scalars.alpha_days_per_day * 60.0,
-        beta=beta,
-        gamma=gamma,
-        window_size=kernel_col_window_size,
+        orbit_id=[orbit_id_str] * int(edge_buffer.size),
+        i_index=edge_buffer.src[: edge_buffer.size].astype(np.int32),
+        j_index=edge_buffer.dst[: edge_buffer.size].astype(np.int32),
+        k_revs=edge_buffer.k[: edge_buffer.size].astype(np.int16),
+        dt_days=edge_buffer.dt[: edge_buffer.size].astype(np.float32),
+        same_night=edge_buffer.same[: edge_buffer.size],
+        mband_padding_bins=float(mband_padding_bins),
+        refine_tol_M_rad=float(refine_tol_M_rad),
     )
     return edges
 
@@ -1359,58 +1081,65 @@ def inter_bin_edges_worker(
 def inter_bin_edges_worker_remote(
     candidates: ClockGatingCandidates,
     bin_index: BinIndex,
-    tolerance_scalars: ToleranceScalars,
     bin_pairs: List[tuple[int, int]],
     *,
-    beta: float,
-    gamma: float,
-    horizon_days: float,
-    per_night_cap: int,
-    kernel_col_window_size: int,
-    max_k_span: int,
+    mband_padding_bins: float,
+    mband_floor_per_day_rad: float,
+    refine_tol_M_rad: float,
+    refine_window_size: int,
+    diagnostics_sample_rate: float,
 ) -> ClockGatedEdges:
     return inter_bin_edges_worker(
         candidates,
         bin_index,
-        tolerance_scalars,
         bin_pairs,
-        beta=beta,
-        gamma=gamma,
-        horizon_days=horizon_days,
-        per_night_cap=per_night_cap,
-        kernel_col_window_size=kernel_col_window_size,
-        max_k_span=max_k_span,
+        mband_padding_bins=mband_padding_bins,
+        mband_floor_per_day_rad=mband_floor_per_day_rad,
+        refine_tol_M_rad=refine_tol_M_rad,
+        refine_window_size=int(refine_window_size),
+        diagnostics_sample_rate=diagnostics_sample_rate,
     )
 
 
 def calculate_bin_pairs(
-    bin_index: BinIndex, max_bins_ahead: int, horizon_days: float
+    bin_index: BinIndex, max_bins_ahead: int | None, horizon_days: float
 ) -> list[tuple[int, int]]:
     """
     Determines pairs of bins to process for inter-bin edges based on time ordering and filters.
     """
-    bin_pairs = []
-    for source_bin_id in bin_index.unique_bins:
-        for dest_bin_id in bin_index.unique_bins:
-            if dest_bin_id > source_bin_id:
-                bin_pairs.append((source_bin_id, dest_bin_id))
+    bin_pairs: list[tuple[int, int]] = []
+    unique_bins = bin_index.unique_bins
+    bin_width_days = float(bin_index.bin_width_days)
+    if bin_width_days <= 0.0:
+        return bin_pairs
+
+    # Convert horizon in days to a maximum number of bins
+    horizon_bins = int(np.floor(float(horizon_days) / bin_width_days)) if float(horizon_days) > 0.0 else 0
+
+    # Convert unique bins to Python ints for faster membership tests
+    unique_bin_ints = [int(b) for b in unique_bins.tolist()]
+    unique_bin_set = set(unique_bin_ints)
+
+    for src_bin_int in unique_bin_ints:
+        # Compute farthest destination bin allowed by both constraints
+        if max_bins_ahead is None:
+            max_dst_by_ahead = src_bin_int + (horizon_bins if horizon_bins > 0 else 10**9)
+        else:
+            mba = int(max_bins_ahead)
+            max_dst_by_ahead = src_bin_int + (mba if mba > 0 else (horizon_bins if horizon_bins > 0 else 10**9))
+        max_dst_by_horizon = src_bin_int + horizon_bins if horizon_bins > 0 else max_dst_by_ahead
+        max_dst = min(max_dst_by_ahead, max_dst_by_horizon)
+
+        # Iterate contiguous destination indices and include only those that exist
+        # Allow same-bin pairs (src==dst)
+        for dst_bin_int in range(src_bin_int, max_dst + 1):
+            if dst_bin_int not in unique_bin_set:
+                continue
+            if (float(dst_bin_int - src_bin_int) * bin_width_days) > float(horizon_days):
+                continue
+            bin_pairs.append((src_bin_int, dst_bin_int))
+
     return bin_pairs
-
-def uf_find(uf_parent: np.ndarray, x: int) -> int:
-    while uf_parent[x] != x:
-        uf_parent[x] = uf_parent[uf_parent[x]]
-        x = uf_parent[x]
-    return x
-
-def uf_union(uf_parent: np.ndarray, uf_rank: np.ndarray, a: int, b: int) -> None:
-    ra, rb = uf_find(uf_parent, a), uf_find(uf_parent, b)
-    if ra == rb:
-        return
-    if uf_rank[ra] < uf_rank[rb]:
-        ra, rb = rb, ra
-    uf_parent[rb] = ra
-    if uf_rank[ra] == uf_rank[rb]:
-        uf_rank[ra] += 1
 
 
 @njit(cache=True)
@@ -1532,10 +1261,12 @@ def extract_kepler_chains(
         t_min_mjd=tmins_out,
         t_max_mjd=tmaxs_out,
     )
+    # Map member indices to stable candidate IDs for persistence
+    members_cand_id = pc.take(candidates.cand_id, pa.array(members_indices, type=pa.int64()))
     members = KeplerChainMembers.from_kwargs(
         orbit_id=[orbit_id_str] * len(members_chain_ids),
         chain_id=members_chain_ids,
-        cand_index=members_indices,
+        cand_id=members_cand_id,
     )
 
     return chains, members
