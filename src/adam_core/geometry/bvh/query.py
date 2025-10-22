@@ -18,7 +18,7 @@ from numba import njit
 
 from ...ray_cluster import initialize_use_ray
 import os
-from ...utils.iter import _iterate_chunk_indices, _iterate_chunks
+from ...utils.iter import _iterate_chunks
 from ..rays import ObservationRays
 from .index import BVHIndex, get_leaf_primitives_numpy
 from .sharded import (
@@ -333,12 +333,13 @@ def find_bvh_matches(
     nodes_min_np, nodes_max_np = nodes.min_max_numpy()
     left_child_np = np.asarray(nodes.left_child, dtype=np.int32)
     right_child_np = np.asarray(nodes.right_child, dtype=np.int32)
-    first_prim_np = np.asarray(nodes.first_prim, dtype=np.int32)
+    # first_prim_np = np.asarray(nodes.first_prim, dtype=np.int32)
     prim_count_np = np.asarray(nodes.prim_count, dtype=np.int32)
 
     # Primitive arrays
-    packed_row_np = np.asarray(index.prims.segment_row_index, dtype=np.int32)
-    packed_seg_np = np.asarray(index.prims.prim_seg_ids, dtype=np.int32)
+    # Packed arrays available if needed for downstream processing
+    # packed_row_np = np.asarray(index.prims.segment_row_index, dtype=np.int32)
+    # packed_seg_np = np.asarray(index.prims.prim_seg_ids, dtype=np.int32)
 
     # Rays: observer positions and LOS directions (NumPy)
     ro_x = rays.observer.coordinates.x.to_numpy()
@@ -983,7 +984,7 @@ def route_rays_to_shards(
     *,
     batch_size: int = 65536,
     packet_size: int = 64,
-    max_shards_per_packet: int = 8,
+    max_shards_per_packet: Optional[int] = None,
 ) -> tuple[ShardAssignments, QueryBVHTelemetry]:
     """
     Traverse TLAS to assign each detection to one or more shard_ids.
@@ -1072,8 +1073,9 @@ def route_rays_to_shards(
             shard_slice = tlas_prims.shard_id.to_pylist()[first : first + count]
             rays_idx = np.nonzero(mask)[0]
             for r in rays_idx:
-                if len(per_ray_shards[r]) >= max_shards_per_packet:
-                    continue
+                if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                    if len(per_ray_shards[r]) >= max_shards_per_packet:
+                        continue
                 per_ray_shards[r].update(shard_slice)
 
         # Materialize output rows
@@ -1081,9 +1083,10 @@ def route_rays_to_shards(
             shards_r = list(per_ray_shards[r])
             if not shards_r:
                 continue
-            if len(shards_r) > max_shards_per_packet:
-                shards_r = shards_r[:max_shards_per_packet]
-                capped += 1
+            if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                if len(shards_r) > max_shards_per_packet:
+                    shards_r = shards_r[:max_shards_per_packet]
+                    capped += 1
             det = det_ids[start + r]
             for sid in shards_r:
                 out_det.append(det)
@@ -1113,7 +1116,7 @@ def write_routed_rays_by_shard(
     batch_size: int = 65536,
     packet_size: int = 64,
     max_open_writers: int = 256,
-    max_shards_per_packet: int = 8,
+    max_shards_per_packet: Optional[int] = None,
 ) -> tuple[int, QueryBVHTelemetry]:
     """
     Stream TLAS routing and append rays into per-shard Parquet files at output_dir.
@@ -1157,7 +1160,6 @@ def write_routed_rays_by_shard(
     # Setup Parquet writers (LRU)
     from pyarrow import parquet as pq
     import pyarrow as pa
-    import quivr as qv
 
     schema = ObservationRays.empty().table.schema
     class _Writer:
@@ -1249,8 +1251,10 @@ def write_routed_rays_by_shard(
             shard_slice = tlas_prims.shard_id.to_pylist()[first : first + count]
             for r in np.nonzero(mask)[0]:
                 lst = per_ray_shards[r]
-                if len(lst) < max_shards_per_packet:
-                    # Append (allow dup; will unique shortly)
+                if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                    if len(lst) < max_shards_per_packet:
+                        lst.extend(shard_slice)
+                else:
                     lst.extend(shard_slice)
 
         # Unique per-shard and batch write by shard
@@ -1297,7 +1301,7 @@ def query_bvh_sharded(
     batch_size: int = 65536,
     window_size: int = 32768,
     packet_size: int = 64,
-    max_shards_per_packet: int = 8,
+    max_shards_per_packet: Optional[int] = 8,
 ) -> tuple[OverlapHits, QueryBVHTelemetry]:
     """
     Single-node orchestration: TLAS-route rays, query only referenced shards, merge hits.
@@ -1336,7 +1340,7 @@ def query_bvh_sharded(
     for sid in shard_ids:
         mask = pa.compute.equal(tbl["shard_id"], pa.scalar(sid))
         det_ids_sid = pa.compute.take(tbl["det_id"], pa.compute.indices_nonzero(mask))
-        det_list = det_ids_sid.to_pylist()
+        # det_list = det_ids_sid.to_pylist()
         # Filter rays for this shard
         mask_det = pa.compute.is_in(rays.det_id, det_ids_sid)
         rays_sid = rays.apply_mask(mask_det)
