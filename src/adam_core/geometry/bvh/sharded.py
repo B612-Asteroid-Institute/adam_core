@@ -600,7 +600,6 @@ def _iter_orbits_batches(
     orbits_source: Union[Orbits, str],
     *,
     chunk_size_orbits: int,
-    orbits_parquet_batch_rows: int,
 ) -> Iterator[Orbits]:
     """
     Yield `Orbits` batches from either an in-memory table or a Parquet file path.
@@ -612,7 +611,7 @@ def _iter_orbits_batches(
 
     # Parquet path
     pf = pq.ParquetFile(orbits_source)
-    for rb in pf.iter_batches(batch_size=orbits_parquet_batch_rows):
+    for rb in pf.iter_batches(batch_size=chunk_size_orbits):
         tbl = pa.Table.from_batches([rb])
         yield Orbits.from_pyarrow(tbl)
 
@@ -638,7 +637,6 @@ def _sampling_pass(
     orbits_source: Union[Orbits, str],
     *,
     chunk_size_orbits: int,
-    orbits_parquet_batch_rows: int,
     sample_fraction: float,
     max_chord_arcmin: float,
     max_segments_per_orbit: int,
@@ -648,8 +646,7 @@ def _sampling_pass(
     max_sample_segments = 500_000
     for batch in _iter_orbits_batches(
         orbits_source,
-        chunk_size_orbits=chunk_size_orbits,
-        orbits_parquet_batch_rows=orbits_parquet_batch_rows,
+        chunk_size_orbits=chunk_size_orbits
     ):
         if len(batch) == 0:
             continue
@@ -738,7 +735,6 @@ def build_bvh_index_sharded(
     padding_method: str = "baseline",
     chunk_size_orbits: int = 10_000,
     max_processes: Optional[int] = 1,
-    orbits_parquet_batch_rows: int = 1_000_000,
     max_open_writers: int = 256,
 ) -> "ShardedBVH":
     """
@@ -759,7 +755,6 @@ def build_bvh_index_sharded(
     space_min, space_max, sample_codes = _sampling_pass(
         orbits_source,
         chunk_size_orbits=chunk_size_orbits,
-        orbits_parquet_batch_rows=orbits_parquet_batch_rows,
         sample_fraction=sample_fraction,
         max_chord_arcmin=max_chord_arcmin,
         max_segments_per_orbit=max_segments_per_orbit,
@@ -801,7 +796,6 @@ def build_bvh_index_sharded(
         for batch in _iter_orbits_batches(
             orbits_source,
             chunk_size_orbits=chunk_size_orbits,
-            orbits_parquet_batch_rows=orbits_parquet_batch_rows,
         ):
             if len(batch) == 0:
                 continue
@@ -843,7 +837,6 @@ def build_bvh_index_sharded(
         for batch in _iter_orbits_batches(
             orbits_source,
             chunk_size_orbits=chunk_size_orbits,
-            orbits_parquet_batch_rows=orbits_parquet_batch_rows,
         ):
             if len(batch) == 0:
                 continue
