@@ -42,7 +42,7 @@ dependencies = [
   "requests",
   "scipy",
   "spiceypy",
-  "quivr>=0.7.5",
+  "quivr>=0.8.1",
   "mpc-obscodes",
   "naif-de440",
   "naif-leapseconds",
@@ -84,7 +84,7 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.3.2",
+    "adam-assist>=0.3.4",
     "ipython>=8.32.0",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.1",
@@ -92,6 +92,7 @@ test = [
     "plotly>=5.24.1",
     "nbformat>=4.2.0",
     "oem>=0.4.5",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.black]
