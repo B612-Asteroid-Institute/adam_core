@@ -372,15 +372,64 @@ def ADES_to_string(
         for col, prec_col in columns_precision.items():
             if col in ades.columns:
                 ades[col] = [
-                    f"{i:.{prec_col}f}" if i is not None or not np.isnan(i) else ""
+                    f"{i:.{prec_col}f}" if (i is not None and not np.isnan(i)) else ""
                     for i in ades[col]
                 ]
 
         # Rename the columns to match the ADES format
         ades.rename(columns={"rmsRACosDec": "rmsRA"}, inplace=True)
 
+        # Enforce specific ADES-required relative column ordering when present.
+        def _enforce_group_order(df, group):
+            present = [c for c in group if c in df.columns]
+            if len(present) <= 1:
+                return df
+            present_set = set(present)
+            new_cols = []
+            inserted = False
+            for col in df.columns:
+                if col in present_set:
+                    if not inserted:
+                        new_cols.extend(present)
+                        inserted = True
+                    # skip subsequent present columns
+                    continue
+                new_cols.append(col)
+            return df[new_cols]
+
+        # Groups based on ADES spec conventions
+        groups = [
+            ["obsTime", "rmsTime", "precTime", "uncTime"],
+            ["ra", "dec", "rmsRA", "rmsDec", "rmsCorr"],
+            ["raStar", "decStar"],
+            ["deltaRA", "deltaDec"],
+            ["dist", "pa", "rmsDist", "rmsPA"],
+            [
+                "sys",
+                "ctr",
+                "pos1",
+                "pos2",
+                "pos3",
+                "vel1",
+                "vel2",
+                "vel3",
+                "poscov11",
+                "poscov12",
+                "poscov13",
+                "poscov22",
+                "poscov23",
+                "poscov33",
+            ],
+            ["trx", "rcv", "frq", "delay", "rmsDelay", "doppler", "rmsDoppler"],
+            ["mag", "rmsMag", "band", "fltr", "photAp", "photCat", "nucMag", "rmsFit"],
+            ["logSNR", "seeing", "exp"],
+            ["stn", "mode", "astCat", "obsCenter"],
+        ]
+        for group in groups:
+            ades = _enforce_group_order(ades, group)
+
         ades_string += ades.to_csv(
-            sep="|", header=True, index=False, float_format="%.16f"
+            sep="|", header=True, index=False, float_format="%.16f", na_rep=""
         )
 
     return ades_string

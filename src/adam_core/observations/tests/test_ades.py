@@ -869,3 +869,116 @@ def test_ADES_writer_omits_all_null_optional_headers():
     assert "pos1" not in header_line
     assert "delay" not in header_line
     assert "photAp" not in header_line
+
+
+def test_ADES_writer_enforces_group_orders():
+    """Ensure key ADES groups are ordered in header when present."""
+    observations = ADESObservations.from_kwargs(
+        permID=["X3"],
+        obsSubID=["o1"],
+        obsTime=Timestamp.from_mjd([60436.0], scale="utc"),
+        ra=[200.0],
+        dec=[10.0],
+        rmsRACosDec=[0.5],
+        rmsDec=[0.6],
+        rmsCorr=[0.01],
+        # Optical groups
+        raStar=[200.1],
+        decStar=[10.1],
+        deltaRA=[0.12],
+        deltaDec=[-0.34],
+        dist=[1.23],
+        pa=[33.3],
+        rmsDist=[0.02],
+        rmsPA=[0.04],
+        # Generic coords/covariance
+        sys=["J2000"],
+        ctr=[2],
+        pos1=[1.0],
+        pos2=[2.0],
+        pos3=[3.0],
+        vel1=[0.1],
+        vel2=[0.2],
+        vel3=[0.3],
+        poscov11=[0.1],
+        poscov12=[0.01],
+        poscov13=[0.001],
+        poscov22=[0.2],
+        poscov23=[0.02],
+        poscov33=[0.3],
+        # Radar
+        trx=["TX"],
+        rcv=["RX"],
+        frq=[8560.0],
+        delay=[100.0],
+        rmsDelay=[0.1],
+        doppler=[-10.0],
+        rmsDoppler=[0.01],
+        # Photometry
+        mag=[21.0],
+        rmsMag=[0.1],
+        band=["r"],
+        fltr=["r"],
+        photAp=["3.0"],
+        photCat=["PS1"],
+        nucMag=[20.0],
+        rmsFit=[0.02],
+        logSNR=[1.5],
+        seeing=[1.2],
+        exp=[30.0],
+        # Station/context
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+        obsCenter=["Center"],
+    )
+
+    s = ADES_to_string(observations, None)
+    header_line = next((line for line in s.split("\n") if line and not line.startswith("#")), "")
+    cols = header_line.split("|")
+
+    def assert_increasing(sequence):
+        idx = [cols.index(c) for c in sequence if c in cols]
+        assert idx == sorted(idx), f"Order incorrect for group {sequence}: {idx}"
+
+    # Time group
+    assert_increasing(["obsTime", "rmsTime", "precTime", "uncTime"])
+    # RA/Dec group
+    assert_increasing(["ra", "dec", "rmsRA", "rmsDec", "rmsCorr"])
+    # Optical groups
+    assert_increasing(["raStar", "decStar"])
+    assert_increasing(["deltaRA", "deltaDec"])
+    assert_increasing(["dist", "pa", "rmsDist", "rmsPA"])
+    # Generic coords/covariance
+    assert_increasing(["sys", "ctr", "pos1", "pos2", "pos3", "vel1", "vel2", "vel3", "poscov11", "poscov12", "poscov13", "poscov22", "poscov23", "poscov33"])
+    # Radar
+    assert_increasing(["trx", "rcv", "frq", "delay", "rmsDelay", "doppler", "rmsDoppler"])
+    # Photometry
+    assert_increasing(["mag", "rmsMag", "band", "fltr", "photAp", "photCat", "nucMag", "rmsFit"])
+    # Meta
+    assert_increasing(["stn", "mode", "astCat", "obsCenter"])
+
+
+def test_ADES_writer_nulls_emit_empty_cells_not_nan():
+    """Ensure missing numeric values serialize as empty fields, not 'nan'."""
+    observations = ADESObservations.from_kwargs(
+        permID=["A", "A"],
+        obsSubID=["1", "2"],
+        obsTime=Timestamp.from_mjd([60430.0, 60430.1], scale="utc"),
+        ra=[10.0, 10.1],
+        dec=[-5.0, -5.1],
+        mag=[21.0, None],  # second row missing
+        band=["r", "r"],
+        stn=["695", "695"],
+        mode=["CCD", "CCD"],
+        astCat=["Gaia2", "Gaia2"],
+    )
+
+    s = ADES_to_string(observations, None)
+    lines = [ln for ln in s.split("\n") if ln and not ln.startswith("#")]
+    header = lines[0].split("|")
+    row2 = lines[1].split("|")
+
+    mag_idx = header.index("mag") if "mag" in header else -1
+    assert mag_idx != -1, "mag should be present in header"
+    assert row2[mag_idx] == "", f"Expected empty cell for null mag, got {row2[mag_idx]!r}"
