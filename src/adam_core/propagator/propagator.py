@@ -147,14 +147,15 @@ class EphemerisMixin:
         )
         observers_barycentric_tiled_values = observers_barycentric_tiled.coordinates.r
 
+        chunk_size = 200
         for (
             propagated_orbits_barycentric_chunk,
             propagated_orbits_barycentric_time_chunk,
             observers_barycentric_tiled_chunk,
         ) in zip(
-            process_in_chunks(propagated_orbits_barycentric_values),
-            process_in_chunks(propagated_orbits_barycentric_time),
-            process_in_chunks(observers_barycentric_tiled_values),
+            process_in_chunks(propagated_orbits_barycentric_values, chunk_size),
+            process_in_chunks(propagated_orbits_barycentric_time, chunk_size),
+            process_in_chunks(observers_barycentric_tiled_values, chunk_size),
         ):
             propagated_orbits_aberrated_chunk, light_time_chunk = add_light_time(
                 propagated_orbits_barycentric_chunk,
