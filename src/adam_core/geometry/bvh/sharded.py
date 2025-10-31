@@ -22,6 +22,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple, Union
 
+import pyarrow.compute as pc
+
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
@@ -47,6 +49,17 @@ __all__ = [
     "ShardMetadata",
     "ShardAssignments",
     "ShardedSegments",
+    "ShardingParams",
+    "ShardCuts",
+    "ShardMortonRanges",
+    "WrittenParts",
+    "ShardStatsChunk",
+    "compute_sharding_params",
+    "derive_morton_ranges",
+    "route_and_write_sharded_chunk",
+    "build_shard_index_from_parts",
+    "build_tlas_from_shards",
+    "assemble_sharded_bvh",
     "ShardedBVH",
     "build_bvh_index_sharded",
     "FilesystemShardResolver",
@@ -147,9 +160,9 @@ class ShardAssignments(qv.Table):
 
 class ShardedSegments(qv.Table):
     """
-    Segments plus a temporary shard-assignment column for routing/writing.
+    Segments plus an assigned `shard_id` for routing/writing.
 
-    Not written to disk directly; `_shard_tmp` is dropped before persistence.
+    Not written to disk directly; `shard_id` is dropped before persistence.
     """
 
     # Segment columns mirroring `OrbitPolylineSegments`
@@ -169,12 +182,150 @@ class ShardedSegments(qv.Table):
     n_y = qv.Float32Column()
     n_z = qv.Float32Column()
 
-    # Temporary shard assignment (int32 index)
-    _shard_tmp = qv.Int32Column()
+    # Assigned shard identifier
+    shard_id = qv.LargeStringColumn()
 
     # Carry over sampling provenance as attributes for consistency
     sample_max_chord_arcmin = qv.FloatAttribute(default=0.0)
     sample_max_segments_per_orbit = qv.IntAttribute(default=0)
+
+    # ------------ helpers ------------
+    def unique_shard_ids(self) -> list[str]:
+        ids = np.asarray(self.shard_id.to_pylist(), dtype=object)
+        if ids.size == 0:
+            return []
+        return np.unique(ids).tolist()
+
+
+    def per_shard_stats(
+        self,
+        *,
+        guard_arcmin: float,
+        epsilon_n_au: float,
+        padding_method: PaddingMethod,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        # Compute per-segment AABBs
+        # Reuse polyline kernel on-the-fly (single process)
+        x0 = self.x0.to_numpy()
+        y0 = self.y0.to_numpy()
+        z0 = self.z0.to_numpy()
+        x1 = self.x1.to_numpy()
+        y1 = self.y1.to_numpy()
+        z1 = self.z1.to_numpy()
+        segs = OrbitPolylineSegments.from_kwargs(
+            orbit_id=self.orbit_id,
+            seg_id=self.seg_id,
+            x0=x0, y0=y0, z0=z0,
+            x1=x1, y1=y1, z1=z1,
+            r_mid_au=self.r_mid_au,
+            n_x=self.n_x, n_y=self.n_y, n_z=self.n_z,
+        )
+        min_x, min_y, min_z, max_x, max_y, max_z = compute_segment_aabbs(
+            segs,
+            guard_arcmin=float(guard_arcmin),
+            epsilon_n_au=float(epsilon_n_au),
+            padding_method=padding_method,  # type: ignore[arg-type]
+            max_processes=1,
+        )
+        seg_mins = np.column_stack([min_x, min_y, min_z])
+        seg_maxs = np.column_stack([max_x, max_y, max_z])
+        ids = np.asarray(self.shard_id.to_pylist(), dtype=object)
+        if ids.size == 0:
+            return ids, np.empty((0, 3)), np.empty((0, 3)), np.empty((0,), dtype=np.int64)
+        uniq = np.unique(ids)
+        shard_min = np.empty((uniq.size, 3), dtype=np.float64)
+        shard_max = np.empty((uniq.size, 3), dtype=np.float64)
+        shard_count = np.empty((uniq.size,), dtype=np.int64)
+        for i, sid in enumerate(uniq):
+            mask = (ids == sid)
+            loc_mins = seg_mins[mask]
+            loc_maxs = seg_maxs[mask]
+            shard_min[i] = loc_mins.min(axis=0)
+            shard_max[i] = loc_maxs.max(axis=0)
+            shard_count[i] = int(mask.sum())
+        return uniq, shard_min, shard_max, shard_count
+
+
+# ============================
+# New quivr tables for staging
+# ============================
+
+
+class ShardingParams(qv.Table):
+    """
+    Sharding parameters derived from the sampling pass.
+    Single-row table with [space_min/space_max] bounds and num_shards attribute.
+    """
+
+    space_min_x = qv.Float64Column()
+    space_min_y = qv.Float64Column()
+    space_min_z = qv.Float64Column()
+
+    space_max_x = qv.Float64Column()
+    space_max_y = qv.Float64Column()
+    space_max_z = qv.Float64Column()
+
+    # Attributes
+    num_shards = qv.IntAttribute(default=0)
+    version = qv.StringAttribute(default="1.0.0")
+
+
+class ShardCuts(qv.Table):
+    """
+    Morton cut points keyed by `shard_id` (one row per boundary, num_shards-1 rows).
+    The `cut_point` is the exclusive upper bound for the shard with `shard_id`.
+    """
+
+    shard_id = qv.LargeStringColumn()
+    cut_point = qv.UInt64Column()
+
+    # Attributes
+    version = qv.StringAttribute(default="1.0.0")
+
+
+class ShardMortonRanges(qv.Table):
+    """
+    Per-shard Morton code ranges [lo, hi) used at build/query time.
+    """
+
+    shard_id = qv.LargeStringColumn()
+    morton_lo = qv.UInt64Column()
+    morton_hi = qv.UInt64Column()
+
+    # Attributes
+    version = qv.StringAttribute(default="1.0.0")
+
+
+class WrittenParts(qv.Table):
+    """
+    Outputs from routing a single chunk: where parts were written and how many rows.
+    """
+
+    shard_id = qv.LargeStringColumn()
+    chunk_id = qv.LargeStringColumn()
+    rel_path = qv.LargeStringColumn()
+    rows = qv.Int64Column()
+
+    # Attributes
+    version = qv.StringAttribute(default="1.0.0")
+
+
+class ShardStatsChunk(qv.Table):
+    """
+    Per-shard stats computed for a single chunk: AABB and count.
+    """
+
+    shard_id = qv.LargeStringColumn()
+    min_x = qv.Float32Column()
+    min_y = qv.Float32Column()
+    min_z = qv.Float32Column()
+    max_x = qv.Float32Column()
+    max_y = qv.Float32Column()
+    max_z = qv.Float32Column()
+    count = qv.Int64Column()
+
+    # Attributes
+    version = qv.StringAttribute(default="1.0.0")
 
 
 # ============================
@@ -184,30 +335,14 @@ class ShardedSegments(qv.Table):
 
 def segments_and_shards_worker(
     orbits: Orbits,
-    space_min: npt.NDArray[np.float64],
-    space_max: npt.NDArray[np.float64],
-    cut_points: List[int],
+    params: ShardingParams,
+    cuts: ShardCuts,
     *,
     max_chord_arcmin: float,
     max_segments_per_orbit: int,
-    guard_arcmin: float,
-    epsilon_n_au: float,
-    padding_method: PaddingMethod,
-) -> Tuple[
-    ShardedSegments,
-    npt.NDArray[np.int32],
-    npt.NDArray[np.float64],
-    npt.NDArray[np.float64],
-    npt.NDArray[np.int64],
-]:
+) -> ShardedSegments:
     if len(orbits) == 0:
-        return (
-            ShardedSegments.empty(),
-            np.array([], dtype=np.int32),
-            np.empty((0, 3), dtype=np.float64),
-            np.empty((0, 3), dtype=np.float64),
-            np.empty((0,), dtype=np.int64),
-        )
+        return ShardedSegments.empty()
 
     segs = orbits_to_segments_worker(
         orbits,
@@ -215,43 +350,29 @@ def segments_and_shards_worker(
         max_segments_per_orbit=max_segments_per_orbit,
     )
     if len(segs) == 0:
-        return (
-            ShardedSegments.empty(),
-            np.array([], dtype=np.int32),
-            np.empty((0, 3), dtype=np.float64),
-            np.empty((0, 3), dtype=np.float64),
-            np.empty((0,), dtype=np.int64),
-        )
+        return ShardedSegments.empty()
+
+    # Build Morton assignments from params/cuts
+    space_min = np.array([
+        float(params.space_min_x[0]),
+        float(params.space_min_y[0]),
+        float(params.space_min_z[0]),
+    ], dtype=np.float64)
+    space_max = np.array([
+        float(params.space_max_x[0]),
+        float(params.space_max_y[0]),
+        float(params.space_max_z[0]),
+    ], dtype=np.float64)
+    cut_points = [int(v) for v in cuts.cut_point.to_numpy().tolist()]
 
     cents = _compute_centroids(segs)
     codes = _morton3d_encode_uint64(_normalize_points(cents, space_min, space_max))
     shard_idx = _assign_shards(codes, cut_points)
 
-    # Single-process AABB computation to avoid nested Ray inside worker
-    min_x, min_y, min_z, max_x, max_y, max_z = compute_segment_aabbs(
-        segs,
-        guard_arcmin=guard_arcmin,
-        epsilon_n_au=epsilon_n_au,
-        padding_method=padding_method,  # type: ignore[arg-type]
-        max_processes=1,
-    )
-    seg_mins = np.column_stack([min_x, min_y, min_z])
-    seg_maxs = np.column_stack([max_x, max_y, max_z])
+    # Map to shard_id strings via naming convention
+    shard_ids = [f"shard_{int(i):05d}" for i in shard_idx.tolist()]
 
-    uniq = np.unique(shard_idx.astype(np.int32))
-    shard_min_chunk = np.empty((uniq.size, 3), dtype=np.float64)
-    shard_max_chunk = np.empty((uniq.size, 3), dtype=np.float64)
-    shard_counts_chunk = np.empty((uniq.size,), dtype=np.int64)
-    for i, s in enumerate(uniq):
-        rows_bool = shard_idx == s
-        # rows_bool must have at least one True for each uniq
-        loc_mins = seg_mins[rows_bool]
-        loc_maxs = seg_maxs[rows_bool]
-        shard_min_chunk[i] = loc_mins.min(axis=0)
-        shard_max_chunk[i] = loc_maxs.max(axis=0)
-        shard_counts_chunk[i] = int(rows_bool.sum())
-
-    # Build transport table with shard assignment
+    # Build transport table with explicit shard_id
     sharded = ShardedSegments.from_kwargs(
         orbit_id=segs.orbit_id.to_pylist(),
         seg_id=segs.seg_id.to_numpy(),
@@ -265,45 +386,28 @@ def segments_and_shards_worker(
         n_x=segs.n_x.to_numpy(),
         n_y=segs.n_y.to_numpy(),
         n_z=segs.n_z.to_numpy(),
-        _shard_tmp=shard_idx.astype(np.int32),
+        shard_id=shard_ids,
         sample_max_chord_arcmin=float(getattr(segs, "sample_max_chord_arcmin", 0.0)),
-        sample_max_segments_per_orbit=int(
-            getattr(segs, "sample_max_segments_per_orbit", 0)
-        ),
+        sample_max_segments_per_orbit=int(getattr(segs, "sample_max_segments_per_orbit", 0)),
     )
-
-    return sharded, uniq, shard_min_chunk, shard_max_chunk, shard_counts_chunk
+    return sharded
 
 
 @ray.remote
 def segments_and_shards_worker_remote(
     orbits: Orbits,
-    space_min: npt.NDArray[np.float64],
-    space_max: npt.NDArray[np.float64],
-    cut_points: List[int],
+    params: ShardingParams,
+    cuts: ShardCuts,
     *,
     max_chord_arcmin: float,
     max_segments_per_orbit: int,
-    guard_arcmin: float,
-    epsilon_n_au: float,
-    padding_method: PaddingMethod,
-) -> Tuple[
-    ShardedSegments,
-    npt.NDArray[np.int32],
-    npt.NDArray[np.float64],
-    npt.NDArray[np.float64],
-    npt.NDArray[np.int64],
-]:
+) -> ShardedSegments:
     return segments_and_shards_worker(
         orbits,
-        space_min,
-        space_max,
-        cut_points,
+        params,
+        cuts,
         max_chord_arcmin=max_chord_arcmin,
         max_segments_per_orbit=max_segments_per_orbit,
-        guard_arcmin=guard_arcmin,
-        epsilon_n_au=epsilon_n_au,
-        padding_method=padding_method,
     )
 
 # ============================
@@ -313,20 +417,16 @@ def segments_and_shards_worker_remote(
 
 def build_shard_index_worker(
     sid: str,
-    sdir: str,
+    segs: OrbitPolylineSegments,
     *,
     max_leaf_size: int,
     guard_arcmin: float,
     epsilon_n_au: float,
     padding_method: PaddingMethod,
     max_processes: Optional[int],
-) -> Tuple[str, npt.NDArray[np.float32], npt.NDArray[np.float32], int, int]:
-    seg_path = os.path.join(sdir, "segments.parquet")
-    if not os.path.exists(seg_path):
-        return sid, np.zeros(3, dtype=np.float32), np.zeros(3, dtype=np.float32), 0, 0
-    segs = OrbitPolylineSegments.from_parquet(seg_path)
+) -> Tuple[str, BVHIndex, npt.NDArray[np.float32], npt.NDArray[np.float32], int, int]:
     if len(segs) == 0:
-        return sid, np.zeros(3, dtype=np.float32), np.zeros(3, dtype=np.float32), 0, 0
+        return sid, BVHIndex.empty(), np.zeros(3, dtype=np.float32), np.zeros(3, dtype=np.float32), 0, 0
 
     idx = build_bvh_index_from_segments(
         segs,
@@ -336,7 +436,6 @@ def build_shard_index_worker(
         padding_method=padding_method,
         max_processes=max_processes,
     )
-    idx.to_parquet(sdir)
 
     node_min = np.column_stack(
         [
@@ -354,23 +453,23 @@ def build_shard_index_worker(
     )
     root_min = node_min.min(axis=0).astype(np.float32, copy=False)
     root_max = node_max.max(axis=0).astype(np.float32, copy=False)
-    return sid, root_min, root_max, int(len(idx.nodes)), int(len(idx.prims))
+    return sid, idx, root_min, root_max, int(len(idx.nodes)), int(len(idx.prims))
 
 
 @ray.remote
 def build_shard_index_remote(
     sid: str,
-    sdir: str,
+    segs: OrbitPolylineSegments,
     *,
     max_leaf_size: int,
     guard_arcmin: float,
     epsilon_n_au: float,
     padding_method: PaddingMethod,
     max_processes: Optional[int],
-) -> Tuple[str, npt.NDArray[np.float32], npt.NDArray[np.float32], int, int]:
+) -> Tuple[str, BVHIndex, npt.NDArray[np.float32], npt.NDArray[np.float32], int, int]:
     return build_shard_index_worker(
         sid,
-        sdir,
+        segs,
         max_leaf_size=max_leaf_size,
         guard_arcmin=guard_arcmin,
         epsilon_n_au=epsilon_n_au,
@@ -681,6 +780,220 @@ def _sampling_pass(
     return space_min, space_max, sample_codes
 
 
+def compute_sharding_params(
+    orbits_source: Union[Orbits, str],
+    *,
+    num_shards: Optional[int] = None,
+    target_shard_size_gb: Optional[float] = None,
+    sample_fraction: float = 0.01,
+    max_chord_arcmin: float = 5.0,
+    max_segments_per_orbit: int = 512,
+    chunk_size_orbits: int = 10_000,
+) -> Tuple[ShardingParams, ShardCuts]:
+    """
+    Compute sharding parameters (space bounds and cut points) and return quivr tables.
+    """
+    space_min, space_max, sample_codes = _sampling_pass(
+        orbits_source,
+        chunk_size_orbits=chunk_size_orbits,
+        sample_fraction=sample_fraction,
+        max_chord_arcmin=max_chord_arcmin,
+        max_segments_per_orbit=max_segments_per_orbit,
+    )
+
+    # Determine number of shards (guarded and early-return friendly)
+    if num_shards is not None:
+        num_shards_val = int(num_shards)
+    elif target_shard_size_gb is None:
+        num_shards_val = 512
+    else:
+        est_bytes_per_segment = 64.0
+        est_total_segments = float(sample_codes.shape[0]) / float(max(sample_fraction, 1e-12))
+        total_bytes = est_total_segments * est_bytes_per_segment
+        num_shards_val = max(1, int(math.ceil(total_bytes / (target_shard_size_gb * (1024**3)))))
+
+    # Cut points from sample codes
+    cut_points = _compute_cut_points(sample_codes, num_shards_val)
+
+    params = ShardingParams.from_kwargs(
+        space_min_x=[float(space_min[0])],
+        space_min_y=[float(space_min[1])],
+        space_min_z=[float(space_min[2])],
+        space_max_x=[float(space_max[0])],
+        space_max_y=[float(space_max[1])],
+        space_max_z=[float(space_max[2])],
+        num_shards=int(num_shards_val),
+        version="1.0.0",
+    )
+    # Build one row per shard: last shard gets +inf as its upper bound
+    shard_ids_all = [f"shard_{s:05d}" for s in range(int(num_shards_val))]
+    cut_points_all: list[np.uint64] = [np.uint64(cp) for cp in cut_points]
+    cut_points_all.append(np.iinfo(np.uint64).max)
+    cuts = ShardCuts.from_kwargs(
+        shard_id=shard_ids_all,
+        cut_point=cut_points_all,
+    )
+    return params, cuts
+
+
+def derive_morton_ranges(cuts: ShardCuts, num_shards: int) -> ShardMortonRanges:
+    """
+    Derive per-shard Morton ranges [lo, hi) from cut points. Returns a table keyed by shard_id.
+    """
+    morton_lo: list[np.uint64] = []
+    morton_hi: list[np.uint64] = []
+    shard_ids: list[str] = []
+    # Extract cut points in order
+    if len(cuts) == 0 or num_shards <= 1:
+        for s in range(max(1, num_shards)):
+            shard_ids.append(f"shard_{s:05d}")
+            morton_lo.append(np.uint64(0))
+            morton_hi.append(np.iinfo(np.uint64).max)
+        return ShardMortonRanges.from_kwargs(
+            shard_id=shard_ids,
+            morton_lo=morton_lo,
+            morton_hi=morton_hi,
+        )
+
+    # Build hi bounds from cuts; last shard bound should be +inf already in cuts
+    sorted_cuts = np.asarray(cuts.cut_point.to_numpy(), dtype=np.uint64)
+    last = np.uint64(0)
+    for s in range(num_shards):
+        hi = np.uint64(sorted_cuts[s])
+        morton_lo.append(last)
+        morton_hi.append(hi)
+        last = hi
+    return ShardMortonRanges.from_kwargs(
+        shard_id=cuts.shard_id,
+        morton_lo=morton_lo,
+        morton_hi=morton_hi,
+    )
+
+
+def route_and_write_sharded_chunk(
+    orbits: Orbits,
+    *,
+    params: ShardingParams,
+    cuts: ShardCuts,
+    output_root: str,
+    chunk_id: str,
+    max_chord_arcmin: float,
+    max_segments_per_orbit: int,
+    guard_arcmin: float,
+    epsilon_n_au: float,
+    padding_method: PaddingMethod,
+    max_open_writers: int = 256,
+    single_file_per_shard: bool = True,
+) -> Tuple[WrittenParts, ShardStatsChunk]:
+    """
+    Route an `Orbits` chunk into shard-specific segment files under a per-chunk subfolder.
+    Writes: <output_root>/<shard_id>/segments/<chunk_id>/segments.parquet
+    Returns small quivr tables describing written parts and per-shard chunk stats.
+    """
+    if len(orbits) == 0:
+        return WrittenParts.empty(), ShardStatsChunk.empty()
+
+    # Compute segments + shard assignment for this chunk
+    sharded_batch = segments_and_shards_worker(
+        orbits,
+        params,
+        cuts,
+        max_chord_arcmin=max_chord_arcmin,
+        max_segments_per_orbit=max_segments_per_orbit,
+    )
+    if len(sharded_batch) == 0:
+        return WrittenParts.empty(), ShardStatsChunk.empty()
+
+    # Compute per-shard stats vectorized
+    uniq_ids, shard_min_chunk, shard_max_chunk, shard_counts_chunk = sharded_batch.per_shard_stats(
+        guard_arcmin=guard_arcmin,
+        epsilon_n_au=epsilon_n_au,
+        padding_method=padding_method,
+    )
+
+    # Write one file per (shard, chunk)
+    shard_ids = list(uniq_ids.tolist()) if isinstance(uniq_ids, np.ndarray) else list(uniq_ids)
+    for shard_id in shard_ids:
+        sub = sharded_batch.select("shard_id", shard_id)
+        if len(sub) == 0:
+            continue
+        shard_dir = os.path.join(output_root, shard_id, "segments", str(chunk_id))
+        os.makedirs(shard_dir, exist_ok=True)
+        seg_path = os.path.join(shard_dir, "segments.parquet")
+        segs = OrbitPolylineSegments.from_kwargs(
+            orbit_id=sub.orbit_id,
+            seg_id=sub.seg_id,
+            x0=sub.x0,
+            y0=sub.y0,
+            z0=sub.z0,
+            x1=sub.x1,
+            y1=sub.y1,
+            z1=sub.z1,
+            r_mid_au=sub.r_mid_au,
+            n_x=sub.n_x,
+            n_y=sub.n_y,
+            n_z=sub.n_z,
+        )
+        segs.to_parquet(seg_path)
+
+    # Build vectorized manifests
+    sid = np.asarray(shard_ids, dtype=object)
+    rel = np.char.add(np.char.add(np.char.add(sid, "/segments/"), str(chunk_id)), "/segments.parquet")
+    chunk_arr = np.full(sid.shape, str(chunk_id), dtype=object)
+
+    written_parts = WrittenParts.from_kwargs(
+        shard_id=sid.tolist(),
+        chunk_id=chunk_arr.tolist(),
+        rel_path=rel.tolist(),
+        rows=shard_counts_chunk.astype(np.int64, copy=False),
+    )
+
+    stats_tbl = ShardStatsChunk.from_kwargs(
+        shard_id=sid.tolist(),
+        min_x=shard_min_chunk[:, 0].astype(np.float32, copy=False),
+        min_y=shard_min_chunk[:, 1].astype(np.float32, copy=False),
+        min_z=shard_min_chunk[:, 2].astype(np.float32, copy=False),
+        max_x=shard_max_chunk[:, 0].astype(np.float32, copy=False),
+        max_y=shard_max_chunk[:, 1].astype(np.float32, copy=False),
+        max_z=shard_max_chunk[:, 2].astype(np.float32, copy=False),
+        count=shard_counts_chunk.astype(np.int64, copy=False),
+    )
+
+    return written_parts, stats_tbl
+
+
+@ray.remote
+def route_and_write_sharded_chunk_remote(
+    orbits: Orbits,
+    *,
+    params: ShardingParams,
+    cuts: ShardCuts,
+    output_root: str,
+    chunk_id: str,
+    max_chord_arcmin: float,
+    max_segments_per_orbit: int,
+    guard_arcmin: float,
+    epsilon_n_au: float,
+    padding_method: PaddingMethod,
+    max_open_writers: int = 256,
+    single_file_per_shard: bool = True,
+) -> Tuple[WrittenParts, ShardStatsChunk]:
+    return route_and_write_sharded_chunk(
+        orbits,
+        params=params,
+        cuts=cuts,
+        output_root=output_root,
+        chunk_id=chunk_id,
+        max_chord_arcmin=max_chord_arcmin,
+        max_segments_per_orbit=max_segments_per_orbit,
+        guard_arcmin=guard_arcmin,
+        epsilon_n_au=epsilon_n_au,
+        padding_method=padding_method,
+        max_open_writers=max_open_writers,
+        single_file_per_shard=single_file_per_shard,
+    )
+
+
 def _write_sharded_batch(
     tbl: pa.Table,
     uniq: npt.NDArray[np.int32],
@@ -696,10 +1009,10 @@ def _write_sharded_batch(
     shard_counts: npt.NDArray[np.int64],
 ) -> None:
     for i, s in enumerate(uniq.tolist()):
-        mask = pa.compute.equal(tbl["_shard_tmp"], pa.scalar(int(s), type=pa.int32()))
+        mask = pa.compute.equal(tbl["shard_id"], pa.scalar(str(s), type=pa.string()))
         if not pa.compute.any(mask).as_py():
             continue
-        sub = tbl.filter(mask).drop_columns(["_shard_tmp"])
+        sub = tbl.filter(mask).drop_columns(["shard_id"])
         if sub.num_rows == 0:
             continue
         shard_id = f"shard_{s:05d}"
@@ -718,6 +1031,243 @@ def _write_sharded_batch(
         shard_min[s] = np.minimum(shard_min[s], shard_min_chunk[i])
         shard_max[s] = np.maximum(shard_max[s], shard_max_chunk[i])
         shard_counts[s] += int(shard_counts_chunk[i])
+
+
+def build_shard_index_from_parts(
+    shard_id: str,
+    shard_dir: str,
+    *,
+    morton_ranges: Optional[ShardMortonRanges] = None,
+    max_leaf_size: int,
+    guard_arcmin: float,
+    epsilon_n_au: float,
+    padding_method: PaddingMethod,
+    max_processes: Optional[int],
+) -> ShardMetadata:
+    """
+    Build BVH for a single shard from dataset parts under <shard_dir>/segments/*/*.parquet
+    (or fallback to <shard_dir>/segments.parquet). Writes BVH files into shard_dir
+    and returns a single-row ShardMetadata.
+    """
+    # Gather segment part files
+    parts: list[str] = []
+    for root, _dirs, files in os.walk(shard_dir):
+        for fn in files:
+            if fn == "segments.parquet":
+                parts.append(os.path.join(root, fn))
+
+    segs_all: OrbitPolylineSegments = OrbitPolylineSegments.empty()
+    seg_tables: list[OrbitPolylineSegments] = [
+        OrbitPolylineSegments.from_parquet(p) for p in parts
+    ]
+    segs_all = qv.concatenate([segs_all, *seg_tables], defrag=True)
+
+    # Build BVH index
+    # Initialize as empty
+    idx = build_bvh_index_from_segments(
+        segs_all,
+        max_leaf_size=max_leaf_size,
+        guard_arcmin=guard_arcmin,
+        epsilon_n_au=epsilon_n_au,
+        padding_method=padding_method,
+        max_processes=max_processes,
+    )
+    node_min = np.column_stack(
+        [
+            np.asarray(idx.nodes.nodes_min_x),
+            np.asarray(idx.nodes.nodes_min_y),
+            np.asarray(idx.nodes.nodes_min_z),
+        ]
+    )
+    node_max = np.column_stack(
+        [
+            np.asarray(idx.nodes.nodes_max_x),
+            np.asarray(idx.nodes.nodes_max_y),
+            np.asarray(idx.nodes.nodes_max_z),
+        ]
+    )
+    num_nodes = int(len(idx.nodes))
+    num_prims = int(len(idx.prims))
+
+    # Persist BVH to shard directory
+    idx.to_parquet(shard_dir)
+
+    # Compute root AABB
+
+    root_min = np.zeros(3, dtype=np.float32)
+    root_max = np.zeros(3, dtype=np.float32)
+    if len(node_min) > 0:
+        root_min = node_min.min(axis=0).astype(np.float32, copy=False)
+        root_max = node_max.max(axis=0).astype(np.float32, copy=False)
+
+    # num_segments is row count of segment input
+    num_segments = int(len(segs_all))
+
+    # Determine morton range
+    if morton_ranges is not None and len(morton_ranges) > 0:
+        mask = pc.equal(morton_ranges.shard_id, shard_id)
+        row = morton_ranges.apply_mask(mask)
+        if len(row) > 0:
+            morton_lo = np.uint64(int(row.morton_lo[0]))
+            morton_hi = np.uint64(int(row.morton_hi[0]))
+        else:
+            morton_lo = np.uint64(0)
+            morton_hi = np.iinfo(np.uint64).max
+    else:
+        morton_lo = np.uint64(0)
+        morton_hi = np.iinfo(np.uint64).max
+
+    meta_row = ShardMetadata.from_kwargs(
+        shard_id=[shard_id],
+        min_x=[float(root_min[0])],
+        min_y=[float(root_min[1])],
+        min_z=[float(root_min[2])],
+        max_x=[float(root_max[0])],
+        max_y=[float(root_max[1])],
+        max_z=[float(root_max[2])],
+        num_segments=[int(num_segments)],
+        num_nodes=[int(num_nodes)],
+        num_prims=[int(num_prims)],
+        morton_lo=[morton_lo],
+        morton_hi=[morton_hi],
+        local_dir=[shard_dir],
+        build_max_leaf_size=int(max_leaf_size),
+        guard_arcmin=float(guard_arcmin),
+        epsilon_n_au=float(epsilon_n_au),
+        padding_method=str(padding_method),
+    )
+    return meta_row
+
+
+@ray.remote
+def build_shard_index_from_parts_remote(
+    shard_id: str,
+    shard_dir: str,
+    *,
+    morton_ranges: Optional[ShardMortonRanges] = None,
+    max_leaf_size: int,
+    guard_arcmin: float,
+    epsilon_n_au: float,
+    padding_method: PaddingMethod,
+    max_processes: Optional[int],
+) -> ShardMetadata:
+    return build_shard_index_from_parts(
+        shard_id,
+        shard_dir,
+        morton_ranges=morton_ranges,
+        max_leaf_size=max_leaf_size,
+        guard_arcmin=guard_arcmin,
+        epsilon_n_au=epsilon_n_au,
+        padding_method=padding_method,
+        max_processes=max_processes,
+    )
+
+
+def build_tlas_from_shards(shards: ShardMetadata) -> Tuple[BVHNodes, TLASPrimitives]:
+    """Construct TLAS nodes and primitives directly from `ShardMetadata`."""
+    if len(shards) == 0:
+        return BVHNodes.empty(), TLASPrimitives.empty()
+    mins = np.column_stack([
+        shards.min_x.to_numpy(),
+        shards.min_y.to_numpy(),
+        shards.min_z.to_numpy(),
+    ])
+    maxs = np.column_stack([
+        shards.max_x.to_numpy(),
+        shards.max_y.to_numpy(),
+        shards.max_z.to_numpy(),
+    ])
+    shard_ids = shards.shard_id.to_pylist()
+    morton_lo = shards.morton_lo.to_numpy()
+    morton_hi = shards.morton_hi.to_numpy()
+
+    n = len(shard_ids)
+    if n == 0:
+        return BVHNodes.empty(), TLASPrimitives.empty()
+
+    nodes_min, nodes_max, left_child, right_child, first_prim, prim_count, prim_order = build_bvh_nodes_from_aabbs(
+        mins[:, 0], mins[:, 1], mins[:, 2], maxs[:, 0], maxs[:, 1], maxs[:, 2], max_leaf_size=4
+    )
+
+    # Compute bvh_max_depth for TLAS nodes
+    if len(left_child) == 0:
+        max_depth_val = 0
+    else:
+        tot_nodes = int(len(left_child))
+        parent = np.full((tot_nodes,), -1, dtype=np.int32)
+        for i in range(tot_nodes):
+            lc = int(left_child[i])
+            rc = int(right_child[i])
+            if lc >= 0:
+                parent[lc] = i
+            if rc >= 0:
+                parent[rc] = i
+        roots = np.nonzero(parent == -1)[0]
+        root_idx = int(roots[0]) if roots.size > 0 else 0
+        max_depth_val = 1
+        visited = np.zeros((tot_nodes,), dtype=np.bool_)
+        stack: list[tuple[int, int]] = [(root_idx, 1)]
+        while stack:
+            node, depth = stack.pop()
+            if visited[node]:
+                break
+            visited[node] = True
+            lc = int(left_child[node])
+            rc = int(right_child[node])
+            if lc >= 0:
+                stack.append((lc, depth + 1))
+            if rc >= 0:
+                stack.append((rc, depth + 1))
+            if lc < 0 and rc < 0 and depth > max_depth_val:
+                max_depth_val = depth
+
+    tlas_nodes = BVHNodes.from_kwargs(
+        nodes_min_x=(nodes_min[:, 0] if len(nodes_min) else np.array([], dtype=np.float32)),
+        nodes_min_y=(nodes_min[:, 1] if len(nodes_min) else np.array([], dtype=np.float32)),
+        nodes_min_z=(nodes_min[:, 2] if len(nodes_min) else np.array([], dtype=np.float32)),
+        nodes_max_x=(nodes_max[:, 0] if len(nodes_max) else np.array([], dtype=np.float32)),
+        nodes_max_y=(nodes_max[:, 1] if len(nodes_max) else np.array([], dtype=np.float32)),
+        nodes_max_z=(nodes_max[:, 2] if len(nodes_max) else np.array([], dtype=np.float32)),
+        left_child=left_child,
+        right_child=right_child,
+        first_prim=first_prim,
+        prim_count=prim_count,
+        shard_id="index",
+        build_max_leaf_size=4,
+        bvh_max_depth=int(max_depth_val),
+        aabb_guard_arcmin=0.0,
+        aabb_epsilon_n_au=0.0,
+        aabb_padding_method="baseline",
+    )
+
+    # Create primitives according to prim_order
+    if prim_order.size == 0:
+        return tlas_nodes, TLASPrimitives.empty()
+    shard_ids_arr = [shard_ids[i] for i in prim_order]
+    if morton_lo is None or morton_hi is None:
+        morton_lo_arr = np.zeros((prim_order.size,), dtype=np.uint64)
+        morton_hi_arr = np.zeros((prim_order.size,), dtype=np.uint64)
+    else:
+        morton_lo_arr = morton_lo[prim_order]
+        morton_hi_arr = morton_hi[prim_order]
+    tlas_prims = TLASPrimitives.from_kwargs(
+        shard_id=shard_ids_arr,
+        morton_lo=morton_lo_arr,
+        morton_hi=morton_hi_arr,
+    )
+
+    return tlas_nodes, tlas_prims
+
+
+
+def assemble_sharded_bvh(shards: ShardMetadata) -> "ShardedBVH":
+    """
+    Build TLAS over provided shard metadata and persist final manifest under index_dir.
+    Returns a ShardedBVH wrapper.
+    """
+    tlas_nodes, tlas_prims = build_tlas_from_shards(shards)
+    sharded = ShardedBVH(tlas_nodes=tlas_nodes, tlas_prims=tlas_prims, shards=shards)
+    return sharded
 
 
 def build_bvh_index_sharded(
@@ -750,181 +1300,111 @@ def build_bvh_index_sharded(
     os.makedirs(manifest_dir, exist_ok=True)
     os.makedirs(shards_root, exist_ok=True)
 
-    # Phase 0: sampling pass to estimate bounds and cut points
+    # Phase 0: compute sharding params and cut points
     logger.info("Sampling orbits for Morton partitioning")
-    space_min, space_max, sample_codes = _sampling_pass(
+    sharding_params, shard_cuts = compute_sharding_params(
         orbits_source,
-        chunk_size_orbits=chunk_size_orbits,
+        num_shards=num_shards,
+        target_shard_size_gb=target_shard_size_gb,
         sample_fraction=sample_fraction,
         max_chord_arcmin=max_chord_arcmin,
         max_segments_per_orbit=max_segments_per_orbit,
+        chunk_size_orbits=chunk_size_orbits,
     )
+    num_shards = int(sharding_params.num_shards)
+    morton_ranges = derive_morton_ranges(shard_cuts, num_shards)
 
-    # Determine num_shards
-    if num_shards is None:
-        if target_shard_size_gb is None:
-            num_shards = 512
-        else:
-            # Estimate bytes/segment from sample: segments.parquet table size / rows
-            # Conservative: assume ~64 bytes per segment (positions + metadata)
-            est_bytes_per_segment = 64.0
-            est_total_segments = float(sample_codes.shape[0]) / float(sample_fraction)
-            total_bytes = est_total_segments * est_bytes_per_segment
-            num_shards = max(1, int(math.ceil(total_bytes / (target_shard_size_gb * (1024**3)))))
-    num_shards = int(num_shards)
 
-    # Morton codes and cut points
-    cut_points = _compute_cut_points(sample_codes, num_shards)
 
-    # Manifest removed; metadata is derived from ShardMetadata
-
-    # Phase 1: streaming router and shard writers
-    # Prepare writers and per-shard stats
-    empty_schema = OrbitPolylineSegments.empty().table.schema
-    writers = _LRUWriters(capacity=max_open_writers)
-
-    shard_min = np.full((num_shards, 3), np.inf, dtype=np.float64)
-    shard_max = np.full((num_shards, 3), -np.inf, dtype=np.float64)
-    shard_counts = np.zeros((num_shards,), dtype=np.int64)
-
+    # Iterate through chunks of the orbits and generate shards of segments.
+    # Because the shards are also created in chunks, we have to aggregate them during the BVH building.
     use_ray = False
     if max_processes is not None and max_processes > 1:
         use_ray = initialize_use_ray(num_cpus=max_processes)
 
+    written_parts_all: WrittenParts = WrittenParts.empty()
+    stats_tbl_all: ShardStatsChunk = ShardStatsChunk.empty()
     if not use_ray:
-        # Serial path using the standalone worker and shared consumer
+        chunk_idx = 0
         for batch in _iter_orbits_batches(
             orbits_source,
             chunk_size_orbits=chunk_size_orbits,
         ):
             if len(batch) == 0:
                 continue
-            res = segments_and_shards_worker(
+            chunk_id = f"chunk_{chunk_idx:06d}"
+            written_parts, stats_tbl = route_and_write_sharded_chunk(
                 batch,
-                space_min,
-                space_max,
-                cut_points,
+                params=sharding_params,
+                cuts=shard_cuts,
+                output_root=shards_root,
+                chunk_id=chunk_id,
                 max_chord_arcmin=max_chord_arcmin,
                 max_segments_per_orbit=max_segments_per_orbit,
                 guard_arcmin=guard_arcmin,
                 epsilon_n_au=epsilon_n_au,
-                padding_method=padding_method,
+                padding_method=padding_method,  # type: ignore[arg-type]
+                max_open_writers=max_open_writers,
             )
-            sharded_batch, uniq_shards, shard_min_chunk, shard_max_chunk, shard_counts_chunk = res
-            _write_sharded_batch(
-                sharded_batch.table,
-                uniq_shards,
-                shard_min_chunk,
-                shard_max_chunk,
-                shard_counts_chunk,
-                shards_root=shards_root,
-                empty_schema=empty_schema,
-                writers=writers,
-                shard_min=shard_min,
-                shard_max=shard_max,
-                shard_counts=shard_counts,
-            )
+            written_parts_all = qv.concatenate([written_parts_all, written_parts], defrag=True)
+            stats_tbl_all = qv.concatenate([stats_tbl_all, stats_tbl], defrag=True)
+            chunk_idx += 1
     else:
-        # Parallel path: use Ray worker to compute segments, assignments, AABBs
+        # Parallel routing via Ray
         futures: list[ray.ObjectRef] = []
         max_active = max(1, int(1.5 * int(max_processes)))
-
-        # Reuse constants via object store
-        space_min_ref = ray.put(space_min)
-        space_max_ref = ray.put(space_max)
-        cut_points_ref = ray.put(cut_points)
-
+        chunk_idx = 0
         for batch in _iter_orbits_batches(
             orbits_source,
             chunk_size_orbits=chunk_size_orbits,
         ):
             if len(batch) == 0:
                 continue
-            fut = segments_and_shards_worker_remote.remote(
+            chunk_id = f"chunk_{chunk_idx:06d}"
+            fut = route_and_write_sharded_chunk_remote.remote(
                 batch,
-                space_min_ref,
-                space_max_ref,
-                cut_points_ref,
-                max_chord_arcmin=max_chord_arcmin,
-                max_segments_per_orbit=max_segments_per_orbit,
-                guard_arcmin=guard_arcmin,
-                epsilon_n_au=epsilon_n_au,
-                padding_method=padding_method,
+                sharding_params,
+                shard_cuts,
+                shards_root,
+                chunk_id,
+                max_chord_arcmin,
+                max_segments_per_orbit,
+                guard_arcmin,
+                epsilon_n_au,
+                padding_method,  # type: ignore[arg-type]
+                max_open_writers,
+                True,
             )
             futures.append(fut)
+            chunk_idx += 1
             if len(futures) >= max_active:
                 finished, futures = ray.wait(futures, num_returns=1)
-                sharded_batch, uniq_shards, shard_min_chunk, shard_max_chunk, shard_counts_chunk = ray.get(finished[0])
-                _write_sharded_batch(
-                    sharded_batch.table,
-                    uniq_shards,
-                    shard_min_chunk,
-                    shard_max_chunk,
-                    shard_counts_chunk,
-                    shards_root=shards_root,
-                    empty_schema=empty_schema,
-                    writers=writers,
-                    shard_min=shard_min,
-                    shard_max=shard_max,
-                    shard_counts=shard_counts,
-                )
+                written_parts, stats_tbl = ray.get(finished[0])
+
+                written_parts_all = qv.concatenate([written_parts_all, written_parts], defrag=True)
+                stats_tbl_all = qv.concatenate([stats_tbl_all, stats_tbl], defrag=True)
+       
 
         while futures:
             finished, futures = ray.wait(futures, num_returns=1)
-            sharded_batch, uniq_shards, shard_min_chunk, shard_max_chunk, shard_counts_chunk = ray.get(finished[0])
-            _write_sharded_batch(
-                sharded_batch.table,
-                uniq_shards,
-                shard_min_chunk,
-                shard_max_chunk,
-                shard_counts_chunk,
-                shards_root=shards_root,
-                empty_schema=empty_schema,
-                writers=writers,
-                shard_min=shard_min,
-                shard_max=shard_max,
-                shard_counts=shard_counts,
-            )
+            written_parts, stats_tr = ray.get(finished[0])
+            written_parts_all = qv.concatenate([written_parts_all, written_parts], defrag=True)
+            stats_tbl_all = qv.concatenate([stats_tbl_all, stats_tr], defrag=True)
 
-    writers.close_all()
 
-    # Initialize shard metadata
-    morton_lo = np.zeros((num_shards,), dtype=np.uint64)
-    morton_hi = np.zeros((num_shards,), dtype=np.uint64)
-    # Infer per-shard cut ranges from cut_points
-    # Ranges: [0, cut0), [cut0, cut1), ... [last, +inf)
-    last = np.uint64(0)
-    for s in range(num_shards):
-        lo = last
-        hi = np.iinfo(np.uint64).max if s == num_shards - 1 else np.uint64(cut_points[s])
-        morton_lo[s] = lo
-        morton_hi[s] = hi
-        last = hi
 
-    shard_ids = [f"shard_{s:05d}" for s in range(num_shards)]
-    shard_dirs = [os.path.join(shards_root, sid) for sid in shard_ids]
+    meta_tables: list[ShardMetadata] = []
 
-    # Prepare output arrays for metadata; finalize after BLAS build
-    min_x_out = shard_min[:, 0].astype(np.float32, copy=False)
-    min_y_out = shard_min[:, 1].astype(np.float32, copy=False)
-    min_z_out = shard_min[:, 2].astype(np.float32, copy=False)
-    max_x_out = shard_max[:, 0].astype(np.float32, copy=False)
-    max_y_out = shard_max[:, 1].astype(np.float32, copy=False)
-    max_z_out = shard_max[:, 2].astype(np.float32, copy=False)
-    num_nodes_out = np.zeros_like(shard_counts)
-    num_prims_out = np.zeros_like(shard_counts)
-
-    # Phase 2: per-shard BLAS build (parallel with Ray when enabled)
-
-    # Initialize Ray only if not already (use same decision as Phase 1)
+    # Phase 2: per-shard BLAS build from parts (parallel with Ray when enabled)
     if use_ray:
         futures2: list[ray.ObjectRef] = []
         max_active2 = max(1, int(1.5 * int(max_processes if max_processes is not None else 1)))
 
-        for sid, sdir in zip(shard_ids, shard_dirs):
-            fut = build_shard_index_remote.remote(
+        for sid, sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
+            fut = build_shard_index_from_parts_remote.remote(
                 sid,
                 sdir,
+                morton_ranges=morton_ranges,
                 max_leaf_size=int(max_leaf_size),
                 guard_arcmin=float(guard_arcmin),
                 epsilon_n_au=float(epsilon_n_au),
@@ -934,93 +1414,31 @@ def build_bvh_index_sharded(
             futures2.append(fut)
             if len(futures2) >= max_active2:
                 finished, futures2 = ray.wait(futures2, num_returns=1)
-                sid_r, root_min, root_max, nn, np_ = ray.get(finished[0])
-                i = int(sid_r.split("_")[-1])
-                min_x_out[i] = float(root_min[0])
-                min_y_out[i] = float(root_min[1])
-                min_z_out[i] = float(root_min[2])
-                max_x_out[i] = float(root_max[0])
-                max_y_out[i] = float(root_max[1])
-                max_z_out[i] = float(root_max[2])
-                num_nodes_out[i] = int(nn)
-                num_prims_out[i] = int(np_)
+                meta_row = ray.get(finished[0])
+                meta_tables.append(meta_row)
+
 
         while futures2:
             finished, futures2 = ray.wait(futures2, num_returns=1)
-            sid_r, root_min, root_max, nn, np_ = ray.get(finished[0])
-            i = int(sid_r.split("_")[-1])
-            min_x_out[i] = float(root_min[0])
-            min_y_out[i] = float(root_min[1])
-            min_z_out[i] = float(root_min[2])
-            max_x_out[i] = float(root_max[0])
-            max_y_out[i] = float(root_max[1])
-            max_z_out[i] = float(root_max[2])
-            num_nodes_out[i] = int(nn)
-            num_prims_out[i] = int(np_)
+            meta_row = ray.get(finished[0])
+            meta_tables.append(meta_row)
     else:
-        # Serial Phase 2 fallback
-        for sid, sdir in zip(shard_ids, shard_dirs):
-            sid_r, root_min, root_max, nn, np_ = build_shard_index_worker(
+        for sid, sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
+            meta_row = build_shard_index_from_parts(
                 sid,
                 sdir,
+                morton_ranges=morton_ranges,
                 max_leaf_size=int(max_leaf_size),
                 guard_arcmin=float(guard_arcmin),
                 epsilon_n_au=float(epsilon_n_au),
                 padding_method=str(padding_method),
                 max_processes=max_processes,
             )
-            i = int(sid_r.split("_")[-1])
-            min_x_out[i] = float(root_min[0])
-            min_y_out[i] = float(root_min[1])
-            min_z_out[i] = float(root_min[2])
-            max_x_out[i] = float(root_max[0])
-            max_y_out[i] = float(root_max[1])
-            max_z_out[i] = float(root_max[2])
-            num_nodes_out[i] = int(nn)
-            num_prims_out[i] = int(np_)
-
-    # Build ShardMetadata and persist
-    meta = ShardMetadata.from_kwargs(
-        shard_id=shard_ids,
-        min_x=min_x_out,
-        min_y=min_y_out,
-        min_z=min_z_out,
-        max_x=max_x_out,
-        max_y=max_y_out,
-        max_z=max_z_out,
-        num_segments=shard_counts,
-        num_nodes=num_nodes_out,
-        num_prims=num_prims_out,
-        morton_lo=morton_lo,
-        morton_hi=morton_hi,
-        local_dir=shard_dirs,
-        build_max_leaf_size=int(max_leaf_size),
-        guard_arcmin=float(guard_arcmin),
-        epsilon_n_au=float(epsilon_n_au),
-        padding_method=str(padding_method),
-    )
-
-    # Phase 3: TLAS build over shards
-    mins = np.column_stack([min_x_out, min_y_out, min_z_out])
-    maxs = np.column_stack([max_x_out, max_y_out, max_z_out])
-    tlas_nodes, tlas_prims = _build_tlas_from_shard_aabbs(
-        mins.astype(np.float32, copy=False),
-        maxs.astype(np.float32, copy=False),
-        shard_ids,
-        morton_lo=morton_lo,
-        morton_hi=morton_hi,
-    )
-    # Defer writing via ShardedBVH
-
-    # Write assembled ShardedBVH
-    sharded = ShardedBVH(
-        index_root=index_dir,
-        tlas_nodes=tlas_nodes,
-        tlas_prims=tlas_prims,
-        shards=meta,
-    )
-    sharded.to_dir(index_dir)
-    return sharded
+            meta_tables.append(meta_row)
+    
+    meta = qv.concatenate(meta_tables, defrag=True)
+    index = assemble_sharded_bvh(meta)
+    return index
 
 
 # ============================
@@ -1061,42 +1479,35 @@ class ShardedBVH:
     def __init__(
         self,
         *,
-        index_root: str,
         tlas_nodes: BVHNodes,
         tlas_prims: TLASPrimitives,
         shards: ShardMetadata,
     ) -> None:
-        self.index_root = index_root
         self.tlas_nodes = tlas_nodes
         self.tlas_prims = tlas_prims
         self.shards = shards
 
     @classmethod
     def from_dir(cls, index_root: str) -> "ShardedBVH":
-        manifest_dir = os.path.join(index_root, "manifest")
         tlas_nodes = BVHNodes.from_parquet(
-            os.path.join(manifest_dir, "tlas_nodes.parquet")
+            os.path.join(index_root, "tlas_nodes.parquet")
         )
         tlas_prims = TLASPrimitives.from_parquet(
-            os.path.join(manifest_dir, "tlas_prims.parquet")
+            os.path.join(index_root, "tlas_prims.parquet")
         )
         shards = ShardMetadata.from_parquet(
-            os.path.join(manifest_dir, "shards.parquet")
+            os.path.join(index_root, "shards.parquet")
         )
         return cls(
-            index_root=index_root,
             tlas_nodes=tlas_nodes,
             tlas_prims=tlas_prims,
             shards=shards,
         )
 
     def to_dir(self, index_root: Optional[str] = None) -> None:
-        base = index_root or self.index_root
-        manifest_dir = os.path.join(base, "manifest")
-        os.makedirs(manifest_dir, exist_ok=True)
-        self.tlas_nodes.to_parquet(os.path.join(manifest_dir, "tlas_nodes.parquet"))
-        self.tlas_prims.to_parquet(os.path.join(manifest_dir, "tlas_prims.parquet"))
-        self.shards.to_parquet(os.path.join(manifest_dir, "shards.parquet"))
+        self.tlas_nodes.to_parquet(os.path.join(index_root, "tlas_nodes.parquet"))
+        self.tlas_prims.to_parquet(os.path.join(index_root, "tlas_prims.parquet"))
+        self.shards.to_parquet(os.path.join(index_root, "shards.parquet"))
 
     def get_shard_metadata(self, shard_id: str) -> ShardMetadata:
         import pyarrow.compute as pc
