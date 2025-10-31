@@ -162,12 +162,17 @@ class BVHIndex:
         prims = BVHPrimitives.from_parquet(prims_path)
         return cls(segments=segments, nodes=nodes, prims=prims)
 
-    def to_parquet(self, directory: str) -> None:
+    def to_parquet(self, directory: str, defrag: bool = True) -> None:
         # Standard file names within the index directory
         os.makedirs(directory, exist_ok=True)
         seg_path = f"{directory.rstrip('/')}/segments.parquet"
         nodes_path = f"{directory.rstrip('/')}/bvh_nodes.parquet"
         prims_path = f"{directory.rstrip('/')}/bvh_prims.parquet"
+
+        if defrag:
+            self.segments = qv.defragment(self.segments)
+            self.nodes = qv.defragment(self.nodes)
+            self.prims = qv.defragment(self.prims)
 
         self.segments.to_parquet(seg_path)
         self.nodes.to_parquet(nodes_path)
