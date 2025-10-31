@@ -269,6 +269,29 @@ class ShardingParams(qv.Table):
     num_shards = qv.IntAttribute(default=0)
     version = qv.StringAttribute(default="1.0.0")
 
+    # Helpers
+    def encode_centroids(self, pts: npt.NDArray[np.float64]) -> npt.NDArray[np.uint64]:
+        """
+        Normalize 3D points using stored bounds and return 63-bit Morton codes.
+        """
+        space_min = np.array(
+            [
+                float(self.space_min_x[0]),
+                float(self.space_min_y[0]),
+                float(self.space_min_z[0]),
+            ],
+            dtype=np.float64,
+        )
+        space_max = np.array(
+            [
+                float(self.space_max_x[0]),
+                float(self.space_max_y[0]),
+                float(self.space_max_z[0]),
+            ],
+            dtype=np.float64,
+        )
+        return _morton3d_encode_uint64(_normalize_points(pts, space_min, space_max))
+
 
 class ShardCuts(qv.Table):
     """
@@ -281,6 +304,35 @@ class ShardCuts(qv.Table):
 
     # Attributes
     version = qv.StringAttribute(default="1.0.0")
+
+    def assign_shards(
+        self,
+        codes: npt.NDArray[np.uint64],
+        *,
+        return_ids: bool = True,
+    ) -> npt.NDArray:
+        cuts_np = self.cut_point.to_numpy().astype(np.uint64, copy=False)
+        idx = np.searchsorted(cuts_np, codes, side="right").astype(np.int32, copy=False)
+        if not return_ids:
+            return idx
+        ids_np = self.shard_id.to_numpy()
+        return ids_np[idx]
+
+    def morton_ranges(self) -> "ShardMortonRanges":
+        cuts_np = self.cut_point.to_numpy().astype(np.uint64, copy=False)
+        ids = self.shard_id  # quivr column acceptable in from_kwargs
+        morton_lo = np.empty((len(self),), dtype=np.uint64)
+        morton_hi = np.empty((len(self),), dtype=np.uint64)
+        lo = np.uint64(0)
+        for i in range(len(self)):
+            morton_lo[i] = lo
+            morton_hi[i] = cuts_np[i]
+            lo = cuts_np[i]
+        return ShardMortonRanges.from_kwargs(
+            shard_id=ids,
+            morton_lo=morton_lo,
+            morton_hi=morton_hi,
+        )
 
 
 class ShardMortonRanges(qv.Table):
@@ -353,24 +405,9 @@ def segments_and_shards_worker(
         return ShardedSegments.empty()
 
     # Build Morton assignments from params/cuts
-    space_min = np.array([
-        float(params.space_min_x[0]),
-        float(params.space_min_y[0]),
-        float(params.space_min_z[0]),
-    ], dtype=np.float64)
-    space_max = np.array([
-        float(params.space_max_x[0]),
-        float(params.space_max_y[0]),
-        float(params.space_max_z[0]),
-    ], dtype=np.float64)
-    cut_points = [int(v) for v in cuts.cut_point.to_numpy().tolist()]
-
     cents = _compute_centroids(segs)
-    codes = _morton3d_encode_uint64(_normalize_points(cents, space_min, space_max))
-    shard_idx = _assign_shards(codes, cut_points)
-
-    # Map to shard_id strings via naming convention
-    shard_ids = [f"shard_{int(i):05d}" for i in shard_idx.tolist()]
+    codes = params.encode_centroids(cents)
+    shard_ids = cuts.assign_shards(codes, return_ids=True).tolist()
 
     # Build transport table with explicit shard_id
     sharded = ShardedSegments.from_kwargs(
@@ -838,36 +875,15 @@ def compute_sharding_params(
 
 def derive_morton_ranges(cuts: ShardCuts, num_shards: int) -> ShardMortonRanges:
     """
-    Derive per-shard Morton ranges [lo, hi) from cut points. Returns a table keyed by shard_id.
+    Back-compat helper: delegate to ShardCuts.morton_ranges().
     """
-    morton_lo: list[np.uint64] = []
-    morton_hi: list[np.uint64] = []
-    shard_ids: list[str] = []
-    # Extract cut points in order
-    if len(cuts) == 0 or num_shards <= 1:
-        for s in range(max(1, num_shards)):
-            shard_ids.append(f"shard_{s:05d}")
-            morton_lo.append(np.uint64(0))
-            morton_hi.append(np.iinfo(np.uint64).max)
+    if len(cuts) == 0:
         return ShardMortonRanges.from_kwargs(
-            shard_id=shard_ids,
-            morton_lo=morton_lo,
-            morton_hi=morton_hi,
+            shard_id=["shard_00000"],
+            morton_lo=[np.uint64(0)],
+            morton_hi=[np.iinfo(np.uint64).max],
         )
-
-    # Build hi bounds from cuts; last shard bound should be +inf already in cuts
-    sorted_cuts = np.asarray(cuts.cut_point.to_numpy(), dtype=np.uint64)
-    last = np.uint64(0)
-    for s in range(num_shards):
-        hi = np.uint64(sorted_cuts[s])
-        morton_lo.append(last)
-        morton_hi.append(hi)
-        last = hi
-    return ShardMortonRanges.from_kwargs(
-        shard_id=cuts.shard_id,
-        morton_lo=morton_lo,
-        morton_hi=morton_hi,
-    )
+    return cuts.morton_ranges()
 
 
 def route_and_write_sharded_chunk(
