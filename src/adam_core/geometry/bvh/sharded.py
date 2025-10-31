@@ -311,15 +311,15 @@ class ShardCuts(qv.Table):
         *,
         return_ids: bool = True,
     ) -> npt.NDArray:
-        cuts_np = self.cut_point.to_numpy().astype(np.uint64, copy=False)
+        cuts_np = self.cut_point.to_numpy(zero_copy_only=False).astype(np.uint64, copy=False)
         idx = np.searchsorted(cuts_np, codes, side="right").astype(np.int32, copy=False)
         if not return_ids:
             return idx
-        ids_np = self.shard_id.to_numpy()
+        ids_np = self.shard_id.to_numpy(zero_copy_only=False)
         return ids_np[idx]
 
     def morton_ranges(self) -> "ShardMortonRanges":
-        cuts_np = self.cut_point.to_numpy().astype(np.uint64, copy=False)
+        cuts_np = self.cut_point.to_numpy(zero_copy_only=False).astype(np.uint64, copy=False)
         ids = self.shard_id  # quivr column acceptable in from_kwargs
         morton_lo = np.empty((len(self),), dtype=np.uint64)
         morton_hi = np.empty((len(self),), dtype=np.uint64)
