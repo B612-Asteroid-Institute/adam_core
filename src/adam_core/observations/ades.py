@@ -197,6 +197,7 @@ def ADES_to_string(
         "logSNR": 2,
         "seeing": 2,
     },
+    sort: bool = True,
 ) -> str:
     """
     Write ADES observations to a string.
@@ -222,6 +223,10 @@ def ADES_to_string(
         }
         The MPC enforces strict limits on these and submitters may need permission to send
         high-precision data.
+    sort : bool, optional
+        Whether to sort rows within each file (per observatory block) by IDs and
+        observation time (default True). Set to False to preserve the input row
+        order produced upstream.
 
     Returns
     -------
@@ -238,15 +243,16 @@ def ADES_to_string(
             raise ValueError(f"Observatory {obs} not found in obs_contexts")
 
         observations_obscode = observations.select("stn", obs)
-        observations_obscode = observations_obscode.sort_by(
-            [
-                ("provID", "ascending"),
-                ("permID", "ascending"),
-                ("trkSub", "ascending"),
-                ("obsTime.days", "ascending"),
-                ("obsTime.nanos", "ascending"),
-            ]
-        )
+        if sort:
+            observations_obscode = observations_obscode.sort_by(
+                [
+                    ("provID", "ascending"),
+                    ("permID", "ascending"),
+                    ("trkSub", "ascending"),
+                    ("obsTime.days", "ascending"),
+                    ("obsTime.nanos", "ascending"),
+                ]
+            )
 
         id_present = False
         if not pc.all(pc.is_null(observations_obscode.permID)).as_py():
