@@ -20,6 +20,7 @@ import math
 import logging
 from collections import OrderedDict
 from dataclasses import dataclass
+import pathlib
 from typing import Iterator, List, Optional, Tuple, Union
 
 import pyarrow.compute as pc
@@ -57,7 +58,7 @@ __all__ = [
     "compute_sharding_params",
     "derive_morton_ranges",
     "route_and_write_sharded_chunk",
-    "build_shard_index_from_parts",
+    "build_shard_index",
     "build_tlas_from_shards",
     "assemble_sharded_bvh",
     "ShardedBVH",
@@ -447,72 +448,6 @@ def segments_and_shards_worker_remote(
         max_segments_per_orbit=max_segments_per_orbit,
     )
 
-# ============================
-# Shard build worker (Ray remote)
-# ============================
-
-
-def build_shard_index_worker(
-    sid: str,
-    segs: OrbitPolylineSegments,
-    *,
-    max_leaf_size: int,
-    guard_arcmin: float,
-    epsilon_n_au: float,
-    padding_method: PaddingMethod,
-    max_processes: Optional[int],
-) -> Tuple[str, BVHIndex, npt.NDArray[np.float32], npt.NDArray[np.float32], int, int]:
-    if len(segs) == 0:
-        return sid, BVHIndex.empty(), np.zeros(3, dtype=np.float32), np.zeros(3, dtype=np.float32), 0, 0
-
-    idx = build_bvh_index_from_segments(
-        segs,
-        max_leaf_size=max_leaf_size,
-        guard_arcmin=guard_arcmin,
-        epsilon_n_au=epsilon_n_au,
-        padding_method=padding_method,
-        max_processes=max_processes,
-    )
-
-    node_min = np.column_stack(
-        [
-            np.asarray(idx.nodes.nodes_min_x),
-            np.asarray(idx.nodes.nodes_min_y),
-            np.asarray(idx.nodes.nodes_min_z),
-        ]
-    )
-    node_max = np.column_stack(
-        [
-            np.asarray(idx.nodes.nodes_max_x),
-            np.asarray(idx.nodes.nodes_max_y),
-            np.asarray(idx.nodes.nodes_max_z),
-        ]
-    )
-    root_min = node_min.min(axis=0).astype(np.float32, copy=False)
-    root_max = node_max.max(axis=0).astype(np.float32, copy=False)
-    return sid, idx, root_min, root_max, int(len(idx.nodes)), int(len(idx.prims))
-
-
-@ray.remote
-def build_shard_index_remote(
-    sid: str,
-    segs: OrbitPolylineSegments,
-    *,
-    max_leaf_size: int,
-    guard_arcmin: float,
-    epsilon_n_au: float,
-    padding_method: PaddingMethod,
-    max_processes: Optional[int],
-) -> Tuple[str, BVHIndex, npt.NDArray[np.float32], npt.NDArray[np.float32], int, int]:
-    return build_shard_index_worker(
-        sid,
-        segs,
-        max_leaf_size=max_leaf_size,
-        guard_arcmin=guard_arcmin,
-        epsilon_n_au=epsilon_n_au,
-        padding_method=padding_method,
-        max_processes=max_processes,
-    )
 
 # ============================
 # Morton utilities
@@ -1049,7 +984,7 @@ def _write_sharded_batch(
         shard_counts[s] += int(shard_counts_chunk[i])
 
 
-def build_shard_index_from_parts(
+def build_shard_index(
     shard_id: str,
     shard_dir: str,
     *,
@@ -1061,27 +996,38 @@ def build_shard_index_from_parts(
     max_processes: Optional[int],
 ) -> ShardMetadata:
     """
-    Build BVH for a single shard from dataset parts under <shard_dir>/segments/*/*.parquet
-    (or fallback to <shard_dir>/segments.parquet). Writes BVH files into shard_dir
-    and returns a single-row ShardMetadata.
+    Build BVH for a single shard from the provided OrbitPolylineSegments.
     """
-    # Gather segment part files
-    parts: list[str] = []
-    for root, _dirs, files in os.walk(shard_dir):
-        for fn in files:
-            if fn == "segments.parquet":
-                parts.append(os.path.join(root, fn))
-
-    segs_all: OrbitPolylineSegments = OrbitPolylineSegments.empty()
-    seg_tables: list[OrbitPolylineSegments] = [
-        OrbitPolylineSegments.from_parquet(p) for p in parts
-    ]
-    segs_all = qv.concatenate([segs_all, *seg_tables], defrag=True)
+    segments_path = pathlib.Path(shard_dir) / "segments.parquet"
+    if not segments_path.exists():
+        logger.info(f"No top level segments file found for shard {shard_id}, looking for chunked segments files...")
+        parts: list[str] = []
+        for root, _dirs, files in os.walk(shard_dir):
+            for fn in files:
+                if fn == "segments.parquet":
+                    parts.append(os.path.join(root, fn))
+        if not parts:
+            logger.info(f"No segments found for shard {shard_id}")
+            return ShardMetadata.empty()
+        
+        logger.info(f"{len(parts)} segment chunks found for shard {shard_id}, concatenating...")
+        segments: OrbitPolylineSegments = OrbitPolylineSegments.empty()
+        seg_tables: list[OrbitPolylineSegments] = [
+            OrbitPolylineSegments.from_parquet(p) for p in parts
+        ]
+        segments = qv.concatenate([segments, *seg_tables], defrag=True)
+        segments.to_parquet(str(segments_path))
+    else:
+        segments = OrbitPolylineSegments.from_parquet(str(segments_path))
+    
+    if len(segments) == 0:
+        logger.info(f"No segments found for shard {shard_id}")
+        return ShardMetadata.empty()
 
     # Build BVH index
     # Initialize as empty
     idx = build_bvh_index_from_segments(
-        segs_all,
+        segments,
         max_leaf_size=max_leaf_size,
         guard_arcmin=guard_arcmin,
         epsilon_n_au=epsilon_n_au,
@@ -1117,7 +1063,7 @@ def build_shard_index_from_parts(
         root_max = node_max.max(axis=0).astype(np.float32, copy=False)
 
     # num_segments is row count of segment input
-    num_segments = int(len(segs_all))
+    num_segments = int(len(segments))
 
     # Determine morton range
     if morton_ranges is not None and len(morton_ranges) > 0:
@@ -1156,7 +1102,7 @@ def build_shard_index_from_parts(
 
 
 @ray.remote
-def build_shard_index_from_parts_remote(
+def build_shard_index_remote(
     shard_id: str,
     shard_dir: str,
     *,
@@ -1167,7 +1113,7 @@ def build_shard_index_from_parts_remote(
     padding_method: PaddingMethod,
     max_processes: Optional[int],
 ) -> ShardMetadata:
-    return build_shard_index_from_parts(
+    return build_shard_index(
         shard_id,
         shard_dir,
         morton_ranges=morton_ranges,
@@ -1417,7 +1363,7 @@ def build_bvh_index_sharded(
         max_active2 = max(1, int(1.5 * int(max_processes if max_processes is not None else 1)))
 
         for sid, sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
-            fut = build_shard_index_from_parts_remote.remote(
+            fut = build_shard_index_remote.remote(
                 sid,
                 sdir,
                 morton_ranges=morton_ranges,
@@ -1440,7 +1386,7 @@ def build_bvh_index_sharded(
             meta_tables.append(meta_row)
     else:
         for sid, sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
-            meta_row = build_shard_index_from_parts(
+            meta_row = build_shard_index(
                 sid,
                 sdir,
                 morton_ranges=morton_ranges,
@@ -1521,9 +1467,12 @@ class ShardedBVH:
         )
 
     def to_dir(self, index_root: Optional[str] = None) -> None:
-        self.tlas_nodes.to_parquet(os.path.join(index_root, "tlas_nodes.parquet"))
-        self.tlas_prims.to_parquet(os.path.join(index_root, "tlas_prims.parquet"))
-        self.shards.to_parquet(os.path.join(index_root, "shards.parquet"))
+        if index_root is None:
+            index_root = os.getcwd()
+        pathlib.Path(index_root).mkdir(parents=True, exist_ok=True)
+        self.tlas_nodes.to_parquet(pathlib.Path(index_root) / "tlas_nodes.parquet")
+        self.tlas_prims.to_parquet(pathlib.Path(index_root) / "tlas_prims.parquet")
+        self.shards.to_parquet(pathlib.Path(index_root) / "shards.parquet")
 
     def get_shard_metadata(self, shard_id: str) -> ShardMetadata:
         import pyarrow.compute as pc
