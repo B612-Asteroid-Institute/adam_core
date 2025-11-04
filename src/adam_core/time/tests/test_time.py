@@ -720,3 +720,94 @@ def test_Timestamp_rescale_roundtrip():
     # Previous bugged output values
     assert t2.days.to_pylist() != [59004, 40004, 39999]
     assert t2.nanos.to_pylist() != [86400 * 1e9, 86400 * 1e9, 86400 * 1e9]
+
+
+@pytest.mark.benchmark(group="timestamp_rescale")
+# @pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt", "ut1"])
+# @pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt", "ut1"])
+@pytest.mark.parametrize("scale1", ["tai", "tdb", "tt"])
+@pytest.mark.parametrize("scale2", ["tai", "tdb", "tt"])
+@pytest.mark.parametrize("version", ["astropy", "new"])
+def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
+    original = Timestamp.from_kwargs(
+        days=[
+            -57032,
+            -36525,
+            -2,
+            -1,
+            0,
+            51544,
+            103088,
+            164178,
+            68000,
+            68000,
+            68010,
+            68020,
+        ],
+        nanos=[
+            50_000,
+            0,
+            123,
+            100_000_000,
+            200_000_000,
+            300_000_000,
+            400_000_000,
+            500_000_000,
+            1,
+            2,
+            3,
+            4,
+        ],
+        scale=scale1,
+    )
+
+    def check_delta(one, two, msg, max_nanos_allowed=0):
+        delta_days, delta_nanos = one.difference(two)
+        overflows = pc.greater_equal(delta_nanos, 43200e9)
+        underflows = pc.less(delta_nanos, -43200e9)
+        mask = pa.StructArray.from_arrays(
+            [overflows, underflows], names=["overflows", "underflows"]
+        )
+        delta_nanos = pc.case_when(
+            mask,
+            pc.subtract(delta_nanos, int(86400 * 1e9)),
+            pc.add(delta_nanos, int(86400 * 1e9)),
+            delta_nanos,
+        )
+        delta_days = pc.case_when(
+            mask,
+            pc.add(delta_days, 1),
+            pc.subtract(delta_days, 1),
+            delta_days,
+        )
+        max_nanos = pc.max(pc.abs(delta_nanos)).as_py()
+        if max_nanos > 0:
+            print(
+                f"Max delta in us {max_nanos / 1000.0}, tolerance {max_nanos_allowed / 1000.0}"
+            )
+        if max_nanos > max_nanos_allowed:
+            print(msg)
+            print(f"First  {one.days.to_pylist()} {one.nanos.to_pylist()}")
+            print(f"Second {two.days.to_pylist()} {two.nanos.to_pylist()}")
+            if pc.max(pc.abs(delta_days)).as_py() > 0:
+                print(f"Day diff:   {delta_days.to_pylist()}")
+            print(f"Nanos diff: {delta_nanos.to_pylist()}")
+            return False
+        return True
+
+    if version == "astropy":
+        rescaled = benchmark(original.rescale, scale2)
+    else:
+        rescaled = benchmark(original.rescale2, scale2)
+        baseline = original.rescale(scale2)
+        assert rescaled.scale == scale2
+        round_tripped = rescaled.rescale2(scale1)
+        assert check_delta(
+            original,
+            round_tripped,
+            f"No round trip match from {scale1} to {scale2}",
+            20,
+        )
+        assert check_delta(
+            rescaled, baseline, f"No match going from {scale1} to {scale2}", 40_000
+        )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import astropy.time
+import erfa
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -525,6 +526,63 @@ class Timestamp(qv.Table):
             return Timestamp.from_astropy(self.to_astropy().tdb)
         else:
             raise ValueError("Unknown scale: {}".format(new_scale))
+
+    def _tdb_correction(self, positive: bool):
+        # gssc.esa.int/navipedia/index.php/Transformations_between_Time_Systems
+        centuries = pc.divide(pc.subtract(self.jd(), 2_451_545), 36_525)
+        g = pc.multiply(
+            pc.add(pc.multiply(centuries, 35999.050), 357.528), erfa.D2PI / 360
+        )
+        delta = pc.multiply(
+            pc.sin(pc.add(g, pc.multiply(pc.sin(g), 0.0167))),
+            1658000 if positive else -1658000,
+        )
+        # TODO: cause of delta in us? pyarrow.lib.ArrowInvalid: Float value 1647496.974408 was truncated converting to int64
+        # safe=True results in truncation complaints
+        return delta.cast(pa.int64(), safe=False)
+
+    def rescale2(self, new_scale: str) -> Timestamp:
+        if self.scale == new_scale:
+            return self
+
+        def with_nanos(nanos):
+            tmp = self.add_nanos(nanos, False)
+            return Timestamp.from_kwargs(
+                days=tmp.days, nanos=tmp.nanos, scale=new_scale
+            )
+
+        TAI_TT = 32_184_000_000
+        correction = None
+        if self.scale == "tt":
+            if new_scale == "tai":
+                correction = -TAI_TT
+            elif new_scale == "tdb":
+                correction = self._tdb_correction(True)
+        elif self.scale == "tai":
+            if new_scale == "tt":
+                correction = TAI_TT
+            elif new_scale == "tdb":
+                correction = pc.add(self._tdb_correction(True), TAI_TT)
+        elif self.scale == "tdb":
+            if new_scale == "tt":
+                correction = self._tdb_correction(False)
+            elif new_scale == "tai":
+                correction = pc.add(self._tdb_correction(False), -TAI_TT)
+        if correction is not None:
+            return with_nanos(correction)
+
+        if self.scale == "utc":
+            ap = self.to_astropy()
+            leap_seconds = erfa.leap_seconds.get()
+            print(
+                f"{self.days} {ap.jd1} LEAP SEC ====== {type(leap_seconds)} {leap_seconds}"
+            )
+        # "tai", "utc", "tdb", "tt==TDT", "ut1"
+        # ap = self.to_astropy()
+        # if self.scale == "tai" and new_scale == "utc":
+        #    a, b = erfa.utctai(self.days, self.fractional_days())
+        #    return Timestamp.from_kwards(days = a, nanos = b, scale = new_scale)
+        return Timestamp.from_kwargs(days=self.days, nanos=self.nanos, scale=new_scale)
 
     def link(
         self, other: Timestamp, precision: str = "ns"
