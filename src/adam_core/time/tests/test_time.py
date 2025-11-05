@@ -1,3 +1,5 @@
+import warnings
+
 import astropy.time
 import astropy.units
 import numpy as np
@@ -722,46 +724,49 @@ def test_Timestamp_rescale_roundtrip():
     assert t2.nanos.to_pylist() != [86400 * 1e9, 86400 * 1e9, 86400 * 1e9]
 
 
-@pytest.mark.benchmark(group="timestamp_rescale")
-# @pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt", "ut1"])
-# @pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt", "ut1"])
-@pytest.mark.parametrize("scale1", ["tai", "tdb", "tt"])
-@pytest.mark.parametrize("scale2", ["tai", "tdb", "tt"])
-@pytest.mark.parametrize("version", ["astropy", "new"])
-def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
-    original = Timestamp.from_kwargs(
-        days=[
-            -57032,
-            -36525,
-            -2,
-            -1,
-            0,
-            51544,
-            103088,
-            164178,
-            68000,
-            68000,
-            68010,
-            68020,
-        ],
-        nanos=[
-            50_000,
-            0,
-            123,
-            100_000_000,
-            200_000_000,
-            300_000_000,
-            400_000_000,
-            500_000_000,
-            1,
-            2,
-            3,
-            4,
-        ],
-        scale=scale1,
-    )
+# Data for testing and benchmarking rescale functions
+RESCALE_DAYS = [
+    -57032,
+    -36525,
+    -2,
+    -1,
+    0,
+    51544,
+    103088,
+    164178,
+    68000,
+    68000,
+    68010,
+    68020,
+]
+RESCALE_NANOS = [
+    50_000,
+    0,
+    123,
+    100_000_000,
+    200_000_000,
+    300_000_000,
+    400_000_000,
+    500_000_000,
+    1,
+    2,
+    3,
+    4,
+]
 
-    def check_delta(one, two, msg, max_nanos_allowed=0):
+
+@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt", "ut1"])
+@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt", "ut1"])
+def test_Timestamp_rescale_correctness(scale1, scale2):
+    # Checks roundtrip match for time conversion from scale1 and scale2
+    # and match against astropy version of conversion.
+    # Note that in most cases we expect a delta on the order of tens of
+    # microseconds.
+
+    # A lot of pretty printing
+    def check_delta(one, two, msg, max_nanos_allowed):
+        # difference wants nanos to be positive, while we want the small
+        # abs delta, so adjust
         delta_days, delta_nanos = one.difference(two)
         overflows = pc.greater_equal(delta_nanos, 43200e9)
         underflows = pc.less(delta_nanos, -43200e9)
@@ -782,11 +787,13 @@ def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
         )
         max_nanos = pc.max(pc.abs(delta_nanos)).as_py()
         if max_nanos > 0:
-            print(
-                f"Max delta in us {max_nanos / 1000.0}, tolerance {max_nanos_allowed / 1000.0}"
+            warnings.warn(
+                f"Max delta in us {max_nanos / 1000.0}, tolerance {max_nanos_allowed / 1000.0}, {msg}"
             )
         if max_nanos > max_nanos_allowed:
-            print(msg)
+            print(
+                f"No {msg}, max delta in us {max_nanos / 1000.0}, tolerance {max_nanos_allowed / 1000.0}"
+            )
             print(f"First  {one.days.to_pylist()} {one.nanos.to_pylist()}")
             print(f"Second {two.days.to_pylist()} {two.nanos.to_pylist()}")
             if pc.max(pc.abs(delta_days)).as_py() > 0:
@@ -795,19 +802,58 @@ def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
             return False
         return True
 
+    # Tolerance for round trip, nanoseconds. UTC conversion relies on ERFA function calls,
+    # and sometimes produces large'ish deltas.
+    # TDB conversion seems to pick up rounding errors, but it's still small number of ns.
+    round_tolerance = 0
+    if "utc" in [scale1, scale2]:
+        round_tolerance = 35_000
+    elif "tdb" in [scale1, scale2] and "tai" in [scale1, scale2]:
+        round_tolerance = 20
+    # Tolerance for comparison to astropy. Again, UTC and TDB are the troublemakers.
+    astropy_tolerance = 0
+    if "tdb" in [scale1, scale2]:
+        astropy_tolerance = 40_000
+    elif "utc" in [scale1, scale2]:
+        astropy_tolerance = 35_000 if "tt" in [scale1, scale2] else 20_000
+
+    original = Timestamp.from_kwargs(
+        days=RESCALE_DAYS,
+        nanos=RESCALE_NANOS,
+        scale=scale1,
+    )
+
+    rescaled = original.rescale(scale2)
+    baseline = original.rescale_astropy(scale2)
+    assert rescaled.scale == scale2
+    round_tripped = rescaled.rescale(scale1)
+    assert check_delta(
+        original,
+        round_tripped,
+        f"round trip match from {scale1} to {scale2}",
+        round_tolerance,
+    )
+    assert check_delta(
+        rescaled, baseline, f"match going from {scale1} to {scale2}", astropy_tolerance
+    )
+
+
+@pytest.mark.benchmark(group="timestamp_rescale")
+@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt"])
+@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt"])
+@pytest.mark.parametrize("version", ["astropy", "new"])
+def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
+    # Compare speed of the new rescale implementation with astropy.
+    # Don't bother checking ut1, since we still use astropy for that.
+    # Don't check correctness here. It is checked in the function above.
+    original = Timestamp.from_kwargs(
+        days=RESCALE_DAYS,
+        nanos=RESCALE_NANOS,
+        scale=scale1,
+    )
+
     if version == "astropy":
-        rescaled = benchmark(original.rescale, scale2)
+        benchmark(original.rescale_astropy, scale2)
     else:
-        rescaled = benchmark(original.rescale2, scale2)
-        baseline = original.rescale(scale2)
+        rescaled = benchmark(original.rescale, scale2)
         assert rescaled.scale == scale2
-        round_tripped = rescaled.rescale2(scale1)
-        assert check_delta(
-            original,
-            round_tripped,
-            f"No round trip match from {scale1} to {scale2}",
-            20,
-        )
-        assert check_delta(
-            rescaled, baseline, f"No match going from {scale1} to {scale2}", 40_000
-        )
