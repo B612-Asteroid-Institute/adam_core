@@ -574,54 +574,60 @@ def test_Timestamp_link(rescale):
     # Test that the link method works as expected
     time = Timestamp.from_kwargs(
         days=[68000, 68000, 68010, 68010, 68020, 68020],
-        nanos=[1, 2, 3, 3, 4, 4],
+        nanos=[1_500, 2_500, 3_500, 3_500, 4_500, 4_500],
         scale="tdb",
     )
 
     other = Timestamp.from_kwargs(
-        days=[68000, 68000, 68010, 68020], nanos=[1, 2, 3, 4], scale="tdb"
+        days=[68000, 68000, 68010, 68020],
+        nanos=[1_500, 2_500, 3_500, 4_500],
+        scale="tdb",
     )
     if rescale:
         other = other.rescale("utc")
 
-    linkage = time.link(other)
+    # utc-tbd conversion adds a rounding error on the orider of 20ns
+    precision = "us" if rescale else "ns"
+    tail = 0 if rescale else 500
+    tol = 30 if rescale else 0
+    linkage = time.link(other, precision)
     assert len(linkage.all_unique_values) == 4
 
-    key = (68000, 1)
+    key = (68000, 1_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 1
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68000]
-    assert left_table.nanos.to_pylist() == [1]
+    assert np.allclose(left_table.nanos.to_numpy(), [1_500], atol=tol)
     assert right_table.days.to_pylist() == [68000]
-    assert right_table.nanos.to_pylist() == [1]
+    assert np.allclose(right_table.nanos.to_numpy(), [1_500], atol=tol)
 
-    key = (68000, 2)
+    key = (68000, 2_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 1
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68000]
-    assert left_table.nanos.to_pylist() == [2]
+    assert np.allclose(left_table.nanos.to_numpy(), [2_500], atol=tol)
     assert right_table.days.to_pylist() == [68000]
-    assert right_table.nanos.to_pylist() == [2]
+    assert np.allclose(right_table.nanos.to_numpy(), [2_500], atol=tol)
 
-    key = (68010, 3)
+    key = (68010, 3_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 2
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68010, 68010]
-    assert left_table.nanos.to_pylist() == [3, 3]
+    assert np.allclose(left_table.nanos.to_numpy(), [3_500, 3_500], atol=tol)
     assert right_table.days.to_pylist() == [68010]
-    assert right_table.nanos.to_pylist() == [3]
+    assert np.allclose(right_table.nanos.to_numpy(), [3_500], atol=tol)
 
-    key = (68020, 4)
+    key = (68020, 4_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 2
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68020, 68020]
-    assert left_table.nanos.to_pylist() == [4, 4]
+    assert np.allclose(left_table.nanos.to_numpy(), [4_500, 4_500], atol=tol)
     assert right_table.days.to_pylist() == [68020]
-    assert right_table.nanos.to_pylist() == [4]
+    assert np.allclose(right_table.nanos.to_numpy(), [4_500], atol=tol)
 
 
 def test_Timestamp_link_precision():
@@ -717,7 +723,7 @@ def test_Timestamp_rescale_roundtrip():
     t2 = t.rescale("utc").rescale("tdb")
     assert t2.scale == "tdb"
     assert t2.days.to_pylist() == [59005, 40005, 40000]
-    assert t2.nanos.to_pylist() == [0, 0, 0]
+    assert np.allclose(t2.nanos.to_numpy(), [0, 0, 0], atol=20)
 
     # Previous bugged output values
     assert t2.days.to_pylist() != [59004, 40004, 39999]
@@ -857,3 +863,28 @@ def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
     else:
         rescaled = benchmark(original.rescale, scale2)
         assert rescaled.scale == scale2
+
+
+@pytest.mark.benchmark(group="timestamp_rescale_roundtrip")
+@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt"])
+@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt"])
+@pytest.mark.parametrize("version", ["astropy", "new"])
+def test_Timestamp_rescale_roundtrip_benchmark(benchmark, scale1, scale2, version):
+    # Same as above, but for round trip
+    original = Timestamp.from_kwargs(
+        days=RESCALE_DAYS,
+        nanos=RESCALE_NANOS,
+        scale=scale1,
+    )
+
+    if version == "astropy":
+
+        def round():
+            return original.rescale_astropy(scale2).rescale_astropy(scale1)
+
+    else:
+
+        def round():
+            return original.rescale(scale2).rescale(scale1)
+
+    benchmark(round)
