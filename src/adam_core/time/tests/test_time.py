@@ -802,20 +802,20 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
             return False
         return True
 
-    # Tolerance for round trip, nanoseconds. UTC conversion relies on ERFA function calls,
-    # and sometimes produces large'ish deltas.
-    # TDB conversion seems to pick up rounding errors, but it's still small number of ns.
+    # Tolerance for round trip, nanoseconds. The conversion seems to pick up
+    # rounding errors, but it's still a small number of ns.
     round_tolerance = 0
-    if "utc" in [scale1, scale2]:
-        round_tolerance = 35_000
-    elif "tdb" in [scale1, scale2] and "tai" in [scale1, scale2]:
-        round_tolerance = 20
-    # Tolerance for comparison to astropy. Again, UTC and TDB are the troublemakers.
+    if (
+        "utc" in [scale1, scale2]
+        or "tdb" in [scale1, scale2]
+        and "tai" in [scale1, scale2]
+    ):
+        round_tolerance = 25
+    # Tolerance for comparison to astropy. TDB in astropy is using a different, more involved
+    # algorithm (location dependent), so the result can be off by tens of us.
     astropy_tolerance = 0
     if "tdb" in [scale1, scale2]:
-        astropy_tolerance = 40_000
-    elif "utc" in [scale1, scale2]:
-        astropy_tolerance = 35_000 if "tt" in [scale1, scale2] else 20_000
+        astropy_tolerance = 32_000
 
     original = Timestamp.from_kwargs(
         days=RESCALE_DAYS,

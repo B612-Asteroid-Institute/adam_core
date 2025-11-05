@@ -530,36 +530,40 @@ class Timestamp(qv.Table):
         else:
             raise ValueError("Unknown scale: {}".format(new_scale))
 
-    def _tt_tdb_correction(self, positive: bool):
-        """
-        Compute correction from TT to TDB in nanoseconds.
+    def _tt_tdb_correction(self, positive: bool) -> np.ndarray:
+        """Compute correction from TT to TDB in nanoseconds.
 
         If positive is False, add a minus sign to get TDB to TT correction.
         Math from
         gssc.esa.int/navipedia/index.php/Transformations_between_Time_Systems
+
+        Note that astropy/ERFA use a different algorithm that is based on
+        the location on Earth, but also seems to use a few approximations.
+        As a result the difference can be in some tens of microseconds.
         """
         # Going into numpy and then back is considerably faster than doing the
         # same calculation using pyarrow. The result is the same if delta is
         # rounded before astype. As written, delta is truncated, which may produce
-        # a 1ns difference. Difference to astropy is up to 30'ish us.
-        # Maybe they have more digits in constants?
-        centuries = (self.jd().to_numpy() - 2_451_545) / 36_525
-        g = (2 * np.pi / 360) * (35999.050 * centuries + 357.528)
+        # a 1ns difference.
+        days = self.days.to_numpy() - 51_545
+        fracs = self.nanos.to_numpy() / _NANOS_IN_DAY + 0.5
+        centuries = (days + fracs) / 36_525
+        g = np.radians(35999.050 * centuries + 357.528)
         delta = np.sin(g + 0.0167 * np.sin(g)) * 1658000
         if not positive:
             delta = -delta
         return delta.astype(np.int64)
-        # return pa.array(delta.astype(np.int64))
 
-    def _erfa_call(self, converter, correction):
+    def _erfa_call(
+        self, converter, correction: np.ndarray | int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Call the given ERFA converter function with appropriately prepared arguments.
+
+        Return a pair of JD components.
         """
-        Calls a given converted ERFA function with appropriately prepared arguments.
-        """
-        # Going via numpy is considerably faster than PyArrow compute.
         days = self.days.to_numpy() + 2400000
         frac = self.nanos.to_numpy() / _NANOS_IN_DAY + 0.5 + correction
-        a, b = converter(days, frac)
-        return a + b
+        return converter(days, frac)
 
     def rescale(self, new_scale: str) -> Timestamp:
         if self.scale == new_scale:
@@ -573,6 +577,18 @@ class Timestamp(qv.Table):
 
         TAI_TT_CORRECTION = 32_184_000_000
 
+        def from_jd_pair(
+            days: np.ndarray, fracs: np.ndarray, correction: np.ndarray | int
+        ) -> Timestamp:
+            # This is effectively Timestamp.from_jd(), but with two doubles instead of
+            # one to minimize rounding errors.
+            days = days - 2400000
+            nanos = np.round((fracs - 0.5) * _NANOS_IN_DAY + correction).astype(
+                np.int64
+            )
+            return Timestamp.from_kwargs(days=days, nanos=nanos, scale=new_scale)
+
+        # Delta in nanoseconds
         correction = None
         if self.scale == "tt":
             if new_scale == "tai" or new_scale == "utc":
@@ -593,15 +609,11 @@ class Timestamp(qv.Table):
                 correction = self._tt_tdb_correction(False) - TAI_TT_CORRECTION
         if correction is not None:
             if self.scale == "utc":
-                return Timestamp.from_jd(
-                    self._erfa_call(erfa.utctai, 0) + correction / _NANOS_IN_DAY,
-                    scale=new_scale,
-                )
+                jd1, jd2 = self._erfa_call(erfa.utctai, 0)
+                return from_jd_pair(jd1, jd2, correction)
             if new_scale == "utc":
-                return Timestamp.from_jd(
-                    self._erfa_call(erfa.taiutc, correction / _NANOS_IN_DAY),
-                    scale="utc",
-                )
+                jd1, jd2 = self._erfa_call(erfa.taiutc, correction / _NANOS_IN_DAY)
+                return from_jd_pair(jd1, jd2, 0)
             else:
                 tmp = self.add_nanos(correction, check_range=False)
                 return Timestamp.from_kwargs(
