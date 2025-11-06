@@ -22,6 +22,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 import pathlib
 from typing import Iterator, List, Optional, Tuple, Union
+import shutil
 
 import pyarrow.compute as pc
 
@@ -994,6 +995,7 @@ def build_shard_index(
     epsilon_n_au: float,
     padding_method: PaddingMethod,
     max_processes: Optional[int],
+    cleanup_chunked_segments: bool = True,
 ) -> ShardMetadata:
     """
     Build BVH for a single shard from the provided OrbitPolylineSegments.
@@ -1017,6 +1019,17 @@ def build_shard_index(
         ]
         segments = qv.concatenate([segments, *seg_tables], defrag=True)
         segments.to_parquet(str(segments_path))
+        # Optional cleanup of chunked files now that a consolidated file exists
+        if cleanup_chunked_segments:
+            segments_subdir = pathlib.Path(shard_dir) / "segments"
+            if segments_subdir.exists() and segments_subdir.is_dir():
+                try:
+                    shutil.rmtree(segments_subdir)
+                    logger.info(f"Cleaned up chunked segments under {segments_subdir}")
+                except Exception:
+                    logger.exception(
+                        "Failed to remove chunked segments directory %s", str(segments_subdir)
+                    )
     else:
         segments = OrbitPolylineSegments.from_parquet(str(segments_path))
     
@@ -1112,6 +1125,7 @@ def build_shard_index_remote(
     epsilon_n_au: float,
     padding_method: PaddingMethod,
     max_processes: Optional[int],
+    cleanup_chunked_segments: bool = True,
 ) -> ShardMetadata:
     return build_shard_index(
         shard_id,
@@ -1122,6 +1136,7 @@ def build_shard_index_remote(
         epsilon_n_au=epsilon_n_au,
         padding_method=padding_method,
         max_processes=max_processes,
+        cleanup_chunked_segments=cleanup_chunked_segments,
     )
 
 
@@ -1248,6 +1263,7 @@ def build_bvh_index_sharded(
     chunk_size_orbits: int = 10_000,
     max_processes: Optional[int] = 1,
     max_open_writers: int = 256,
+    cleanup_chunked_segments: bool = True,
 ) -> "ShardedBVH":
     """
     Build a sharded BVH index on disk using Morton partitioning and a TLAS.
@@ -1275,7 +1291,6 @@ def build_bvh_index_sharded(
     )
     num_shards = int(sharding_params.num_shards)
     morton_ranges = derive_morton_ranges(shard_cuts, num_shards)
-
 
 
     # Iterate through chunks of the orbits and generate shards of segments.
@@ -1325,17 +1340,17 @@ def build_bvh_index_sharded(
             chunk_id = f"chunk_{chunk_idx:06d}"
             fut = route_and_write_sharded_chunk_remote.remote(
                 batch,
-                sharding_params,
-                shard_cuts,
-                shards_root,
-                chunk_id,
-                max_chord_arcmin,
-                max_segments_per_orbit,
-                guard_arcmin,
-                epsilon_n_au,
-                padding_method,  # type: ignore[arg-type]
-                max_open_writers,
-                True,
+                params=sharding_params,
+                cuts=shard_cuts,
+                output_root=shards_root,
+                chunk_id=chunk_id,
+                max_chord_arcmin=max_chord_arcmin,
+                max_segments_per_orbit=max_segments_per_orbit,
+                guard_arcmin=guard_arcmin,
+                epsilon_n_au=epsilon_n_au,
+                padding_method=padding_method,  # type: ignore[arg-type]
+                max_open_writers=max_open_writers,
+                single_file_per_shard=True,
             )
             futures.append(fut)
             chunk_idx += 1
@@ -1353,8 +1368,6 @@ def build_bvh_index_sharded(
             written_parts_all = qv.concatenate([written_parts_all, written_parts], defrag=True)
             stats_tbl_all = qv.concatenate([stats_tbl_all, stats_tr], defrag=True)
 
-
-
     meta_tables: list[ShardMetadata] = []
 
     # Phase 2: per-shard BLAS build from parts (parallel with Ray when enabled)
@@ -1362,16 +1375,17 @@ def build_bvh_index_sharded(
         futures2: list[ray.ObjectRef] = []
         max_active2 = max(1, int(1.5 * int(max_processes if max_processes is not None else 1)))
 
-        for sid, sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
+        for sid, _sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
             fut = build_shard_index_remote.remote(
                 sid,
-                sdir,
+                os.path.join(shards_root, sid),
                 morton_ranges=morton_ranges,
                 max_leaf_size=int(max_leaf_size),
                 guard_arcmin=float(guard_arcmin),
                 epsilon_n_au=float(epsilon_n_au),
                 padding_method=str(padding_method),
-                max_processes=max_processes,
+                max_processes=1,
+                cleanup_chunked_segments=cleanup_chunked_segments,
             )
             futures2.append(fut)
             if len(futures2) >= max_active2:
@@ -1385,21 +1399,23 @@ def build_bvh_index_sharded(
             meta_row = ray.get(finished[0])
             meta_tables.append(meta_row)
     else:
-        for sid, sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
+        for sid, _sdir in zip(written_parts_all.shard_id.to_pylist(), written_parts_all.rel_path.to_pylist()):
             meta_row = build_shard_index(
                 sid,
-                sdir,
+                os.path.join(shards_root, sid),
                 morton_ranges=morton_ranges,
                 max_leaf_size=int(max_leaf_size),
                 guard_arcmin=float(guard_arcmin),
                 epsilon_n_au=float(epsilon_n_au),
                 padding_method=str(padding_method),
-                max_processes=max_processes,
+                max_processes=1,
+                cleanup_chunked_segments=cleanup_chunked_segments,
             )
             meta_tables.append(meta_row)
     
     meta = qv.concatenate(meta_tables, defrag=True)
     index = assemble_sharded_bvh(meta)
+    index.to_dir(index_dir)
     return index
 
 
