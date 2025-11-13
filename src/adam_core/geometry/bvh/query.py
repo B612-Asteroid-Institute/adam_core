@@ -787,6 +787,8 @@ def query_bvh_worker(
     key = obs_idx.astype(np.int64) * 10_000_000 + dbin.astype(np.int64)
     order = np.argsort(key, kind="stable")
     rays = rays.take(order)
+    # Drop ordering scratch to free memory
+    del obs_codes, u_x, u_y, u_z, dbin, obs_idx, key, order
 
     # Stage 1–2: candidate indices (Numba traversal + host assembly)
     candidates, bvh_telemetry = find_bvh_matches(index, rays)
@@ -796,6 +798,7 @@ def query_bvh_worker(
         seg_id=candidates.seg_id.to_numpy(),
         leaf_id=candidates.leaf_id.to_numpy(),
     )
+    del candidates
 
     if cand.det_idx.size == 0:
         return (
@@ -822,16 +825,12 @@ def query_bvh_worker(
     seg_rows = cand.seg_idx
     seg_ids_arr = cand.seg_id
     leaf_ids_arr = cand.leaf_id
+    # Release wrapper now that arrays are extracted
+    del cand
 
     N = int(len(det_idx))
 
     theta_guard = guard_arcmin * np.pi / (180.0 * 60.0)
-
-    hits_det_list = []
-    hits_orbit_id_list = []
-    hits_seg_id_list = []
-    hits_leaf_id_list = []
-    hits_dist_list = []
 
     pairs_within_guard = 0
 
@@ -864,18 +863,9 @@ def query_bvh_worker(
     )
     distances_np = np.asarray(distances_c).reshape(C * window_size)[:M]
     valid = np.asarray(within_c).reshape(C * window_size)[:M]
-    if np.any(valid):
-        keep = np.nonzero(valid)[0]
-        pairs_within_guard = int(keep.size)
-        hits_det_list.append(det_idx[keep])
-        # Arrow-take only kept orbit_ids instead of materializing full column to NumPy
-        seg_keep_idx = pa.array(seg_rows[keep], type=pa.int64())
-        hits_orbit_id_list.append(index.segments.orbit_id.take(seg_keep_idx))
-        hits_seg_id_list.append(seg_ids_arr[keep])
-        hits_leaf_id_list.append(leaf_ids_arr[keep])
-        hits_dist_list.append(distances_np[keep])
-
-    if not hits_det_list:
+    # Release device/host buffers and chunked indices
+    del distances_c, within_c, det_chunks, seg_chunks, geom
+    if not np.any(valid):
         return (
             OverlapHits.from_kwargs(
                 det_id=[],
@@ -897,40 +887,61 @@ def query_bvh_worker(
             ),
         )
 
-    det_concat = np.concatenate(hits_det_list).astype(np.int32, copy=False)
-    seg_id_concat = np.concatenate(hits_seg_id_list).astype(np.int32, copy=False)
-    leaf_id_concat = np.concatenate(hits_leaf_id_list).astype(np.int32, copy=False)
-    dist_concat = np.concatenate(hits_dist_list).astype(np.float64, copy=False)
-    hit_orbit_ids_arrow = pa.concat_arrays(hits_orbit_id_list)
+    # Keep only valid pairs; avoid intermediate list concatenations
+    keep = np.nonzero(valid)[0]
+    pairs_within_guard = int(keep.size)
+
+    det_kept = det_idx[keep].astype(np.int32, copy=False)
+    seg_rows_kept = seg_rows[keep]
+    seg_id_kept = seg_ids_arr[keep].astype(np.int32, copy=False)
+    leaf_id_kept = leaf_ids_arr[keep].astype(np.int32, copy=False)
+    dist_kept = distances_np[keep].astype(np.float64, copy=False)
+
+    # Arrow-take only kept orbit_ids instead of materializing full column to NumPy
+    seg_keep_idx = pa.array(seg_rows_kept, type=pa.int64())
+    hit_orbit_ids_arrow = index.segments.orbit_id.take(seg_keep_idx)
+    # Drop full arrays now that kept subsets are materialized
+    del det_idx, seg_rows, seg_ids_arr, leaf_ids_arr, distances_np, valid
 
     # Map indices back to string IDs and sort by (det_id, distance)
     # Map det_id via Arrow take and sort using Arrow to avoid large Python string arrays
-    det_keep_idx = pa.array(det_concat, type=pa.int64())
+    det_keep_idx = pa.array(det_kept, type=pa.int64())
     hit_det_ids_arrow = rays.det_id.take(det_keep_idx)
     sort_tbl = pa.table(
         {
             "det_id": hit_det_ids_arrow,
-            "distance": pa.array(dist_concat),
+            "distance": pa.array(dist_kept),
         }
     )
     order_arrow = pc.sort_indices(
         sort_tbl, sort_keys=[("det_id", "ascending"), ("distance", "ascending")]
     )
-    order = np.asarray(order_arrow)
+    del sort_tbl
 
-    det_sorted = pc.take(hit_det_ids_arrow, order)
-    orbit_sorted = pc.take(hit_orbit_ids_arrow, order)
+    det_sorted = pc.take(hit_det_ids_arrow, order_arrow)
+    orbit_sorted = pc.take(hit_orbit_ids_arrow, order_arrow)
+    del hit_det_ids_arrow  # no longer needed
+
+    # Reorder numeric arrays using Arrow indices to avoid NumPy conversions
+    seg_id_sorted = pc.take(pa.array(seg_id_kept), order_arrow)
+    leaf_id_sorted = pc.take(pa.array(leaf_id_kept), order_arrow)
+    dist_sorted = pc.take(pa.array(dist_kept), order_arrow)
 
     hits = OverlapHits.from_kwargs(
-        det_id=det_sorted.to_pylist(),
-        orbit_id=orbit_sorted.to_pylist(),
-        seg_id=seg_id_concat[order],
-        leaf_id=leaf_id_concat[order],
-        distance_au=dist_concat[order],
+        det_id=det_sorted,
+        orbit_id=orbit_sorted,
+        seg_id=seg_id_sorted,
+        leaf_id=leaf_id_sorted,
+        distance_au=dist_sorted,
         query_guard_arcmin=float(guard_arcmin),
         query_batch_size=0,
         query_max_processes=0,
     )
+    # Proactively release large intermediates before returning
+    del det_sorted, orbit_sorted, seg_id_sorted, leaf_id_sorted, dist_sorted
+    del det_kept, seg_rows_kept, seg_id_kept, leaf_id_kept, dist_kept
+    del order_arrow, hit_orbit_ids_arrow, seg_keep_idx
+    del rays
     return (
         hits,
         QueryBVHTelemetry(
