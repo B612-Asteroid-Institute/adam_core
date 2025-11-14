@@ -864,27 +864,3 @@ def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
         rescaled = benchmark(original.rescale, scale2)
         assert rescaled.scale == scale2
 
-
-@pytest.mark.benchmark(group="timestamp_rescale_roundtrip")
-@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt"])
-@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt"])
-@pytest.mark.parametrize("version", ["astropy", "new"])
-def test_Timestamp_rescale_roundtrip_benchmark(benchmark, scale1, scale2, version):
-    # Same as above, but for round trip
-    original = Timestamp.from_kwargs(
-        days=RESCALE_DAYS,
-        nanos=RESCALE_NANOS,
-        scale=scale1,
-    )
-
-    if version == "astropy":
-
-        def round():
-            return original.rescale_astropy(scale2).rescale_astropy(scale1)
-
-    else:
-
-        def round():
-            return original.rescale(scale2).rescale(scale1)
-
-    benchmark(round)
