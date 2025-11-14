@@ -863,4 +863,3 @@ def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
     else:
         rescaled = benchmark(original.rescale, scale2)
         assert rescaled.scale == scale2
-
