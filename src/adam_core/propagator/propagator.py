@@ -1,10 +1,11 @@
 import logging
 import multiprocessing as mp
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Tuple, Type, Union
+from typing import List, Literal, Optional, Type, Union
 
 import numpy as np
 import numpy.typing as npt
+import pyarrow as pa
 import quivr as qv
 
 from ..constants import Constants as c
@@ -180,6 +181,18 @@ class EphemerisMixin:
         ]
         light_time = light_time[: len(propagated_orbits_barycentric)]
 
+        # Guard against pathological light-time values before constructing timestamps.
+        if not np.all(np.isfinite(light_time)):
+            raise ValueError(
+                "Light travel time is NaN or too large and propagation will break."
+            )
+
+        # Compute emission times by subtracting light-time (in days) from the
+        # propagated (observer) times.
+        emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
+            pa.array(-light_time)
+        )
+
         propagated_orbits_aberrated = Orbits.from_kwargs(
             orbit_id=propagated_orbits_barycentric.orbit_id,
             object_id=propagated_orbits_barycentric.object_id,
@@ -191,7 +204,7 @@ class EphemerisMixin:
                 vy=propagated_orbits_aberrated[:, 4],
                 vz=propagated_orbits_aberrated[:, 5],
                 covariance=propagated_orbits_barycentric.coordinates.covariance,
-                time=propagated_orbits_barycentric.coordinates.time,
+                time=emission_times,
                 origin=propagated_orbits_barycentric.coordinates.origin,
                 frame=propagated_orbits_barycentric.coordinates.frame,
             ),
@@ -440,6 +453,7 @@ class EphemerisMixin:
 
         if covariance is False and len(variant_ephemeris) > 0:
             # If we decide that we do not need to guarantee that the time scale is in UTC
+            
             # then we may want to call:
             # if isinstance(observers, ray.ObjectRef):
             #     variant_ephemeris = ensure_input_time_scale(
