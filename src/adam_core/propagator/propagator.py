@@ -189,8 +189,10 @@ class EphemerisMixin:
 
         # Compute emission times by subtracting light-time (in days) from the
         # propagated (observer) times.
-        emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
-            pa.array(-light_time)
+        emission_times = (
+            propagated_orbits_barycentric.coordinates.time.add_fractional_days(
+                pa.array(-light_time)
+            )
         )
 
         propagated_orbits_aberrated = Orbits.from_kwargs(
@@ -453,7 +455,7 @@ class EphemerisMixin:
 
         if covariance is False and len(variant_ephemeris) > 0:
             # If we decide that we do not need to guarantee that the time scale is in UTC
-            
+
             # then we may want to call:
             # if isinstance(observers, ray.ObjectRef):
             #     variant_ephemeris = ensure_input_time_scale(
