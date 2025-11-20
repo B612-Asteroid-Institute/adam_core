@@ -99,6 +99,7 @@ dmypy.json
 .pyre/
 
 .vscode
+.cursor
 
 # Convenience file for docker development
 .docker_bash_history.txt

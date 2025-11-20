@@ -5,7 +5,6 @@ import numpy as np
 from jax import config, jacfwd, vmap
 
 config.update("jax_enable_x64", True)
-config.update("jax_platform_name", "cpu")
 
 __all__ = ["calc_jacobian"]
 

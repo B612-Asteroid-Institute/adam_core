@@ -81,10 +81,11 @@ def test_generate_ephemeris_with_custom_kernel(jwst_kernel, max_processes):
     assert np.all(ephemeris.light_time.to_numpy(zero_copy_only=False) > 0)
     assert np.all(ephemeris.light_time.to_numpy(zero_copy_only=False) < 0.04)
 
-    # Verify that coordinates.time - aberrated_coordinates.time equals light_time
-    time_difference_days, time_difference_nanos = ephemeris.coordinates.time.rescale(
-        "tdb"
-    ).difference(ephemeris.aberrated_coordinates.time)
+    # Verify that coordinates.time - aberrated_coordinates.time equals light_time.
+    # Rescale both to the same time scale before taking the difference.
+    coords_tdb = ephemeris.coordinates.time.rescale("tdb")
+    aberr_tdb = ephemeris.aberrated_coordinates.time.rescale("tdb")
+    time_difference_days, time_difference_nanos = coords_tdb.difference(aberr_tdb)
     fractional_days = pc.divide(time_difference_nanos, 86400 * 1e9)
     time_difference = pc.add(time_difference_days, fractional_days)
     np.testing.assert_allclose(
