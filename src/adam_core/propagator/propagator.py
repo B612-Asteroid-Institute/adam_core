@@ -12,13 +12,14 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from ..dynamics import propagate_2body
+from ..dynamics.aberrations import add_light_time
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
+from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
 from .types import EphemerisType, ObserverType, OrbitType, TimestampType
 from .utils import ensure_input_origin_and_frame, ensure_input_time_scale
@@ -90,74 +91,6 @@ class EphemerisMixin:
     Subclasses should implement the _generate_ephemeris method.
     """
 
-    def _add_light_time(
-        self,
-        orbits: Orbits,
-        observers: ObserverType,
-        lt_tol: float = 1e-12,
-        max_iter: int = 10,
-    ) -> Tuple[Orbits, np.ndarray]:
-        # Accumulate then concatenate once to reduce per-iteration overhead
-        aberrated_list: List[Orbits] = []
-        lts = np.zeros(len(orbits))
-        for i, (orbit, observer) in enumerate(zip(orbits, observers)):
-            # Set the running variables
-            lt_prev = 0
-            dlt = float("inf")
-            orbit_i = orbit
-            lt = 0
-
-            # Extract the observer's position which remains
-            # constant for all iterations
-            observer_position = observer.coordinates.r
-
-            # Calculate the orbit's current epoch (the epoch from which
-            # the light travel time will be calculated)
-            t0 = orbit_i.coordinates.time.rescale("tdb").mjd()[0].as_py()
-
-            iterations = 0
-            while dlt > lt_tol and iterations < max_iter:
-                iterations += 1
-
-                # Calculate the topocentric distance
-                rho = np.linalg.norm(orbit_i.coordinates.r - observer_position)
-                # If rho becomes too large, we are probably simulating a close encounter
-                # and our propagation will break
-                if np.isnan(rho) or rho > 1e12:
-                    raise ValueError(
-                        "Distance from observer is NaN or too large and propagation will break."
-                    )
-
-                # Calculate the light travel time
-                lt = rho / C
-
-                # Calculate the change in light travel time since the previous iteration
-                dlt = np.abs(lt - lt_prev)
-
-                if np.isnan(lt) or lt > 1e12:
-                    raise ValueError(
-                        "Light travel time is NaN or too large and propagation will break."
-                    )
-
-                # Calculate the new epoch and propagate the initial orbit to that epoch
-                # Should be sufficient to use 2body propagation for this
-                orbit_i = propagate_2body(
-                    orbit, Timestamp.from_mjd([t0 - lt], scale="tdb")
-                )
-
-                # Update the previous light travel time to this iteration's light travel time
-                lt_prev = lt
-
-            aberrated_list.append(orbit_i)
-            lts[i] = lt
-
-        orbits_aberrated = (
-            qv.concatenate(aberrated_list)
-            if len(aberrated_list) > 0
-            else Orbits.empty()
-        )
-        return orbits_aberrated, lts
-
     def _generate_ephemeris(
         self, orbits: OrbitType, observers: ObserverType
     ) -> EphemerisType:
@@ -200,10 +133,68 @@ class EphemerisMixin:
             ),
         )
 
-        propagated_orbits_aberrated, light_time = self._add_light_time(
-            propagated_orbits_barycentric,
-            observers_barycentric_tiled,
-            lt_tol=1e-12,
+        # Process in padded chunks
+        propagated_orbits_aberrated: np.ndarray = np.empty((0, 6))
+        light_time: np.ndarray = np.empty((0,))
+
+        propagated_orbits_barycentric_values = (
+            propagated_orbits_barycentric.coordinates.values
+        )
+        propagated_orbits_barycentric_time = (
+            propagated_orbits_barycentric.coordinates.time.mjd().to_numpy(
+                zero_copy_only=False
+            )
+        )
+        observers_barycentric_tiled_values = observers_barycentric_tiled.coordinates.r
+
+        chunk_size = 200
+        for (
+            propagated_orbits_barycentric_chunk,
+            propagated_orbits_barycentric_time_chunk,
+            observers_barycentric_tiled_chunk,
+        ) in zip(
+            process_in_chunks(propagated_orbits_barycentric_values, chunk_size),
+            process_in_chunks(propagated_orbits_barycentric_time, chunk_size),
+            process_in_chunks(observers_barycentric_tiled_values, chunk_size),
+        ):
+            propagated_orbits_aberrated_chunk, light_time_chunk = add_light_time(
+                propagated_orbits_barycentric_chunk,
+                propagated_orbits_barycentric_time_chunk,
+                observers_barycentric_tiled_chunk,
+                lt_tol=1e-12,
+                mu=c.MU,
+                max_iter=100,
+                tol=1e-15,
+            )
+            propagated_orbits_aberrated = np.concatenate(
+                (
+                    propagated_orbits_aberrated,
+                    np.array(propagated_orbits_aberrated_chunk),
+                )
+            )
+            light_time = np.concatenate((light_time, np.array(light_time_chunk)))
+
+        # Remove padding
+        propagated_orbits_aberrated = propagated_orbits_aberrated[
+            : len(propagated_orbits_barycentric)
+        ]
+        light_time = light_time[: len(propagated_orbits_barycentric)]
+
+        propagated_orbits_aberrated = Orbits.from_kwargs(
+            orbit_id=propagated_orbits_barycentric.orbit_id,
+            object_id=propagated_orbits_barycentric.object_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=propagated_orbits_aberrated[:, 0],
+                y=propagated_orbits_aberrated[:, 1],
+                z=propagated_orbits_aberrated[:, 2],
+                vx=propagated_orbits_aberrated[:, 3],
+                vy=propagated_orbits_aberrated[:, 4],
+                vz=propagated_orbits_aberrated[:, 5],
+                covariance=propagated_orbits_barycentric.coordinates.covariance,
+                time=propagated_orbits_barycentric.coordinates.time,
+                origin=propagated_orbits_barycentric.coordinates.origin,
+                frame=propagated_orbits_barycentric.coordinates.frame,
+            ),
         )
 
         topocentric_state = (
@@ -230,7 +221,6 @@ class EphemerisMixin:
         spherical_coordinates = SphericalCoordinates.from_cartesian(
             topocentric_coordinates
         )
-        light_time = np.array(light_time)
 
         spherical_coordinates = transform_coordinates(
             spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
