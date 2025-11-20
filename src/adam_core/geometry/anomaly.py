@@ -1,0 +1,50 @@
+"""
+Anomaly labeling data structures and functions.
+
+This module provides quivr.Table definitions for anomaly labels and functions
+to convert detection-orbit hits into orbital anomaly assignments.
+"""
+
+from __future__ import annotations
+
+import quivr as qv
+
+__all__ = [
+    "AnomalyLabels",
+]
+
+
+class AnomalyLabels(qv.Table):
+    """
+    Anomaly labels for detection-orbit hits.
+
+    Each row represents one anomaly variant for a detection-orbit pairing.
+    Multiple variants can exist for the same hit (ambiguous cases near nodes).
+
+    Sorted by: (det_id, orbit_id, variant_id, snap_error)
+    """
+
+    # Hit identification
+    det_id = qv.LargeStringColumn()
+    orbit_id = qv.LargeStringColumn()
+    seg_id = qv.Int32Column()
+    variant_id = qv.Int32Column()  # 0, 1, 2, ... for multiple variants per hit
+
+    # Anomaly values at epoch
+    f_rad = qv.Float32Column()  # True anomaly (radians)
+    E_rad = qv.Float32Column()  # Eccentric anomaly (radians)
+    M_rad = qv.Float32Column()  # Mean anomaly (radians)
+    e = qv.Float32Column()      # Eccentricity (dimensionless)
+    n_rad_day = qv.Float32Column()  # Mean motion (radians/day)
+    r_au = qv.Float32Column()  # Heliocentric distance (AU)
+
+    # Quality metrics
+    snap_error = qv.Float32Column()  # Residual from ellipse fit
+    plane_distance_au = qv.Float32Column()  # Distance from orbital plane (AU)
+
+    # In-plane unit tangent direction at the anomaly (perifocal coordinates)
+    t_hat_plane_x = qv.Float32Column()
+    t_hat_plane_y = qv.Float32Column()
+
+    # Mean-anomaly uncertainty (radians), derived from snap_error
+    sigma_M_rad = qv.Float32Column()
