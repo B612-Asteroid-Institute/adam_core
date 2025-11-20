@@ -1,3 +1,5 @@
+import warnings
+
 import astropy.time
 import astropy.units
 import numpy as np
@@ -572,54 +574,60 @@ def test_Timestamp_link(rescale):
     # Test that the link method works as expected
     time = Timestamp.from_kwargs(
         days=[68000, 68000, 68010, 68010, 68020, 68020],
-        nanos=[1, 2, 3, 3, 4, 4],
+        nanos=[1_500, 2_500, 3_500, 3_500, 4_500, 4_500],
         scale="tdb",
     )
 
     other = Timestamp.from_kwargs(
-        days=[68000, 68000, 68010, 68020], nanos=[1, 2, 3, 4], scale="tdb"
+        days=[68000, 68000, 68010, 68020],
+        nanos=[1_500, 2_500, 3_500, 4_500],
+        scale="tdb",
     )
     if rescale:
         other = other.rescale("utc")
 
-    linkage = time.link(other)
+    # utc-tbd conversion adds a rounding error on the orider of 20ns
+    precision = "us" if rescale else "ns"
+    tail = 0 if rescale else 500
+    tol = 30 if rescale else 0
+    linkage = time.link(other, precision)
     assert len(linkage.all_unique_values) == 4
 
-    key = (68000, 1)
+    key = (68000, 1_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 1
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68000]
-    assert left_table.nanos.to_pylist() == [1]
+    assert np.allclose(left_table.nanos.to_numpy(), [1_500], atol=tol)
     assert right_table.days.to_pylist() == [68000]
-    assert right_table.nanos.to_pylist() == [1]
+    assert np.allclose(right_table.nanos.to_numpy(), [1_500], atol=tol)
 
-    key = (68000, 2)
+    key = (68000, 2_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 1
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68000]
-    assert left_table.nanos.to_pylist() == [2]
+    assert np.allclose(left_table.nanos.to_numpy(), [2_500], atol=tol)
     assert right_table.days.to_pylist() == [68000]
-    assert right_table.nanos.to_pylist() == [2]
+    assert np.allclose(right_table.nanos.to_numpy(), [2_500], atol=tol)
 
-    key = (68010, 3)
+    key = (68010, 3_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 2
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68010, 68010]
-    assert left_table.nanos.to_pylist() == [3, 3]
+    assert np.allclose(left_table.nanos.to_numpy(), [3_500, 3_500], atol=tol)
     assert right_table.days.to_pylist() == [68010]
-    assert right_table.nanos.to_pylist() == [3]
+    assert np.allclose(right_table.nanos.to_numpy(), [3_500], atol=tol)
 
-    key = (68020, 4)
+    key = (68020, 4_000 + tail)
     left_table, right_table = linkage.select(key)
     assert len(left_table) == 2
     assert len(right_table) == 1
     assert left_table.days.to_pylist() == [68020, 68020]
-    assert left_table.nanos.to_pylist() == [4, 4]
+    assert np.allclose(left_table.nanos.to_numpy(), [4_500, 4_500], atol=tol)
     assert right_table.days.to_pylist() == [68020]
-    assert right_table.nanos.to_pylist() == [4]
+    assert np.allclose(right_table.nanos.to_numpy(), [4_500], atol=tol)
 
 
 def test_Timestamp_link_precision():
@@ -715,8 +723,143 @@ def test_Timestamp_rescale_roundtrip():
     t2 = t.rescale("utc").rescale("tdb")
     assert t2.scale == "tdb"
     assert t2.days.to_pylist() == [59005, 40005, 40000]
-    assert t2.nanos.to_pylist() == [0, 0, 0]
+    assert np.allclose(t2.nanos.to_numpy(), [0, 0, 0], atol=20)
 
     # Previous bugged output values
     assert t2.days.to_pylist() != [59004, 40004, 39999]
     assert t2.nanos.to_pylist() != [86400 * 1e9, 86400 * 1e9, 86400 * 1e9]
+
+
+# Data for testing and benchmarking rescale functions
+RESCALE_DAYS = [
+    -57032,
+    -36525,
+    -2,
+    -1,
+    0,
+    51544,
+    103088,
+    164178,
+    68000,
+    68000,
+    68010,
+    68020,
+]
+RESCALE_NANOS = [
+    50_000,
+    0,
+    123,
+    100_000_000,
+    200_000_000,
+    300_000_000,
+    400_000_000,
+    500_000_000,
+    1,
+    2,
+    3,
+    4,
+]
+
+
+@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt", "ut1"])
+@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt", "ut1"])
+def test_Timestamp_rescale_correctness(scale1, scale2):
+    # Checks roundtrip match for time conversion from scale1 and scale2
+    # and match against astropy version of conversion.
+    # Note that in most cases we expect a delta on the order of tens of
+    # microseconds.
+
+    # A lot of pretty printing
+    def check_delta(one, two, msg, max_nanos_allowed):
+        # difference wants nanos to be positive, while we want the small
+        # abs delta, so adjust
+        delta_days, delta_nanos = one.difference(two)
+        overflows = pc.greater_equal(delta_nanos, 43200e9)
+        underflows = pc.less(delta_nanos, -43200e9)
+        mask = pa.StructArray.from_arrays(
+            [overflows, underflows], names=["overflows", "underflows"]
+        )
+        delta_nanos = pc.case_when(
+            mask,
+            pc.subtract(delta_nanos, int(86400 * 1e9)),
+            pc.add(delta_nanos, int(86400 * 1e9)),
+            delta_nanos,
+        )
+        delta_days = pc.case_when(
+            mask,
+            pc.add(delta_days, 1),
+            pc.subtract(delta_days, 1),
+            delta_days,
+        )
+        max_nanos = pc.max(pc.abs(delta_nanos)).as_py()
+        if max_nanos > 0:
+            warnings.warn(
+                f"Max delta in us {max_nanos / 1000.0}, tolerance {max_nanos_allowed / 1000.0}, {msg}"
+            )
+        if max_nanos > max_nanos_allowed:
+            print(
+                f"No {msg}, max delta in us {max_nanos / 1000.0}, tolerance {max_nanos_allowed / 1000.0}"
+            )
+            print(f"First  {one.days.to_pylist()} {one.nanos.to_pylist()}")
+            print(f"Second {two.days.to_pylist()} {two.nanos.to_pylist()}")
+            if pc.max(pc.abs(delta_days)).as_py() > 0:
+                print(f"Day diff:   {delta_days.to_pylist()}")
+            print(f"Nanos diff: {delta_nanos.to_pylist()}")
+            return False
+        return True
+
+    # Tolerance for round trip, nanoseconds. The conversion seems to pick up
+    # rounding errors, but it's still a small number of ns.
+    round_tolerance = 0
+    if (
+        "utc" in [scale1, scale2]
+        or "tdb" in [scale1, scale2]
+        and "tai" in [scale1, scale2]
+    ):
+        round_tolerance = 25
+    # Tolerance for comparison to astropy. TDB in astropy is using a different, more involved
+    # algorithm (location dependent), so the result can be off by tens of us.
+    astropy_tolerance = 0
+    if "tdb" in [scale1, scale2]:
+        astropy_tolerance = 32_000
+
+    original = Timestamp.from_kwargs(
+        days=RESCALE_DAYS,
+        nanos=RESCALE_NANOS,
+        scale=scale1,
+    )
+
+    rescaled = original.rescale(scale2)
+    baseline = original.rescale_astropy(scale2)
+    assert rescaled.scale == scale2
+    round_tripped = rescaled.rescale(scale1)
+    assert check_delta(
+        original,
+        round_tripped,
+        f"round trip match from {scale1} to {scale2}",
+        round_tolerance,
+    )
+    assert check_delta(
+        rescaled, baseline, f"match going from {scale1} to {scale2}", astropy_tolerance
+    )
+
+
+@pytest.mark.benchmark(group="timestamp_rescale")
+@pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt"])
+@pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt"])
+@pytest.mark.parametrize("version", ["astropy", "new"])
+def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
+    # Compare speed of the new rescale implementation with astropy.
+    # Don't bother checking ut1, since we still use astropy for that.
+    # Don't check correctness here. It is checked in the function above.
+    original = Timestamp.from_kwargs(
+        days=RESCALE_DAYS,
+        nanos=RESCALE_NANOS,
+        scale=scale1,
+    )
+
+    if version == "astropy":
+        benchmark(original.rescale_astropy, scale2)
+    else:
+        rescaled = benchmark(original.rescale, scale2)
+        assert rescaled.scale == scale2

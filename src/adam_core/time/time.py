@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import astropy.time
+import erfa
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -16,6 +17,9 @@ SCALES = {
 
 # The Modified Julian Date of the J2000 epoch in TDB scale:
 _J2000_TDB_MJD = 51544.5
+
+# Nanoseconds in a day
+_NANOS_IN_DAY = 86400e9
 
 
 class Timestamp(qv.Table):
@@ -509,7 +513,7 @@ class Timestamp(qv.Table):
         uniqued = uniqued.replace_schema_metadata(self.table.schema.metadata)
         return Timestamp.from_pyarrow(uniqued)
 
-    def rescale(self, new_scale: str) -> Timestamp:
+    def rescale_astropy(self, new_scale: str) -> Timestamp:
 
         if self.scale == new_scale:
             return self
@@ -525,6 +529,100 @@ class Timestamp(qv.Table):
             return Timestamp.from_astropy(self.to_astropy().tdb)
         else:
             raise ValueError("Unknown scale: {}".format(new_scale))
+
+    def _tt_tdb_correction(self, positive: bool) -> np.ndarray:
+        """Compute correction from TT to TDB in nanoseconds.
+
+        If positive is False, add a minus sign to get TDB to TT correction.
+        Math from
+        gssc.esa.int/navipedia/index.php/Transformations_between_Time_Systems
+
+        Note that astropy/ERFA use a different algorithm that is based on
+        the location on Earth, but also seems to use a few approximations.
+        As a result the difference can be in some tens of microseconds.
+        """
+        # Going into numpy and then back is considerably faster than doing the
+        # same calculation using pyarrow. The result is the same if delta is
+        # rounded before astype. As written, delta is truncated, which may produce
+        # a 1ns difference.
+        days = self.days.to_numpy() - 51_545
+        fracs = self.nanos.to_numpy() / _NANOS_IN_DAY + 0.5
+        centuries = (days + fracs) / 36_525
+        g = np.radians(35999.050 * centuries + 357.528)
+        delta = np.sin(g + 0.0167 * np.sin(g)) * 1658000
+        if not positive:
+            delta = -delta
+        return delta.astype(np.int64)
+
+    def _erfa_call(
+        self, converter, correction: np.ndarray | int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Call the given ERFA converter function with appropriately prepared arguments.
+
+        Return a pair of JD components.
+        """
+        days = self.days.to_numpy() + 2400000
+        frac = self.nanos.to_numpy() / _NANOS_IN_DAY + 0.5 + correction
+        return converter(days, frac)
+
+    def rescale(self, new_scale: str) -> Timestamp:
+        if self.scale == new_scale:
+            return self
+
+        # ut1 requires delta interpolated from tables published by the IERS.
+        # ERFA functions expect the delta to be provided. Astropy does the
+        # file downloading and interpolating, so stick with it here.
+        if self.scale == "ut1" or new_scale == "ut1":
+            return self.rescale_astropy(new_scale)
+
+        TAI_TT_CORRECTION = 32_184_000_000
+
+        def from_jd_pair(
+            days: np.ndarray, fracs: np.ndarray, correction: np.ndarray | int
+        ) -> Timestamp:
+            # This is effectively Timestamp.from_jd(), but with two doubles instead of
+            # one to minimize rounding errors.
+            days = days - 2400000
+            nanos = np.round((fracs - 0.5) * _NANOS_IN_DAY + correction).astype(
+                np.int64
+            )
+            return Timestamp.from_kwargs(days=days, nanos=nanos, scale=new_scale)
+
+        # Delta in nanoseconds
+        correction = None
+        if self.scale == "tt":
+            if new_scale == "tai" or new_scale == "utc":
+                correction = -TAI_TT_CORRECTION
+            elif new_scale == "tdb":
+                correction = self._tt_tdb_correction(True)
+        elif self.scale == "tai" or self.scale == "utc":
+            if new_scale == "tt":
+                correction = TAI_TT_CORRECTION
+            elif new_scale == "tdb":
+                correction = self._tt_tdb_correction(True) + TAI_TT_CORRECTION
+            elif new_scale == "tai" or new_scale == "utc":
+                correction = 0
+        elif self.scale == "tdb":
+            if new_scale == "tt":
+                correction = self._tt_tdb_correction(False)
+            elif new_scale == "tai" or new_scale == "utc":
+                correction = self._tt_tdb_correction(False) - TAI_TT_CORRECTION
+        if correction is not None:
+            if self.scale == "utc":
+                jd1, jd2 = self._erfa_call(erfa.utctai, 0)
+                return from_jd_pair(jd1, jd2, correction)
+            if new_scale == "utc":
+                jd1, jd2 = self._erfa_call(erfa.taiutc, correction / _NANOS_IN_DAY)
+                return from_jd_pair(jd1, jd2, 0)
+            else:
+                tmp = self.add_nanos(correction, check_range=False)
+                return Timestamp.from_kwargs(
+                    days=tmp.days, nanos=tmp.nanos, scale=new_scale
+                )
+
+        raise ValueError(
+            "Rescale from {} to {} is not supported".format(self.scale, new_scale)
+        )
 
     def link(
         self, other: Timestamp, precision: str = "ns"
