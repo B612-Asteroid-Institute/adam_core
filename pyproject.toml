@@ -93,6 +93,7 @@ test = [
     "plotly>=5.24.1",
     "nbformat>=4.2.0",
     "oem>=0.4.5",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.black]
