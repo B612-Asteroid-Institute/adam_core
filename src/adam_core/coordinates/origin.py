@@ -59,9 +59,15 @@ class OriginGravitationalParameters(float, Enum):
     @classmethod
     def SOLAR_SYSTEM_BARYCENTER(cls) -> float:
         """
-        Return the gravitational parameter of the Solar System barycenter as approximated
+        Return the effective gravitational parameter of the Solar System barycenter as approximated
         by adding the gravitational parameters of the Sun, Mercury, Venus, Earth, Moon,
         Mars, Jupiter, Uranus, and Neptune.
+
+        This should only be used for calculating osculating elements with respect to the Solar System barycenter.
+
+        Horizons's effective gravitational parameter (as of 2025-11-26) for osculating elements with respect to the Solar System barycenter
+        is 1.3289051882019876E+11 km^3/s^2 which agrees to within 1e-6 with the value calculated here. Discrepancies are likely due to the inclusion
+        of small bodies not included in the calculation here.
 
         Returns
         -------
@@ -76,6 +82,7 @@ class OriginGravitationalParameters(float, Enum):
             + cls.MOON
             + cls.MARS_BARYCENTER
             + cls.JUPITER_BARYCENTER
+            + cls.SATURN_BARYCENTER
             + cls.URANUS_BARYCENTER
             + cls.NEPTUNE_BARYCENTER
             + cls.PLUTO_BARYCENTER
