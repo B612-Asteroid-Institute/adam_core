@@ -675,15 +675,23 @@ def _iter_orbits_batches(
 ) -> Iterator[Orbits]:
     """
     Yield `Orbits` batches from either an in-memory table or a Parquet file path.
+
+    When reading from Parquet, we mirror Quivr's `_load_parquet_table` behavior
+    by requesting only the columns that exist in the `Orbits` schema. This
+    allows Parquet files to contain extra columns (e.g., `bundle_id` from
+    `thor.orbit.TestOrbits`) without causing schema mismatches when materializing
+    `Orbits` tables for sharding.
     """
     if isinstance(orbits_source, Orbits):
         for s, e in _iterate_chunk_indices(orbits_source, chunk_size_orbits):
             yield orbits_source[s:e]
         return
 
-    # Parquet path
+    # Parquet path: request only the columns defined on Orbits so that
+    # extra columns in the file are ignored, matching Quivr's parquet loader.
+    orbit_columns = [field.name for field in Orbits.schema]
     pf = pq.ParquetFile(orbits_source)
-    for rb in pf.iter_batches(batch_size=chunk_size_orbits):
+    for rb in pf.iter_batches(batch_size=chunk_size_orbits, columns=orbit_columns):
         tbl = pa.Table.from_batches([rb])
         yield Orbits.from_pyarrow(tbl)
 
