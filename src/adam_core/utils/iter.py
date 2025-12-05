@@ -76,10 +76,14 @@ def qv_table_iter(
     # Discover all the files
     files = list(pathlib.Path(file_or_dir).glob(filename_pattern))
     logger.debug(f"Found {len(files)} files")
+    # Mirror Quivr's parquet loading behavior by only requesting the columns
+    # that exist in the target table schema. This allows Parquet files to have
+    # extra columns without breaking `from_pyarrow` due to schema mismatches.
+    column_names = [field.name for field in table_cls.schema]
     for file in files:
         pf = pq.ParquetFile(file)
         logger.debug(f"Processing file {file}")
-        for batch in pf.iter_batches(batch_size=max_chunk_size):
+        for batch in pf.iter_batches(batch_size=max_chunk_size, columns=column_names):
             tbl = pa.Table.from_batches([batch])
             yield table_cls.from_pyarrow(tbl)
         del pf
