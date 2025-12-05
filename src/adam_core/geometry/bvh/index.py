@@ -33,6 +33,7 @@ __all__ = [
     "build_bvh_index",
     "BVHLeafPrimitives",
     "get_leaf_primitives_numpy",
+    "build_bvh_nodes_from_aabbs",
 ]
 
 logger = logging.getLogger(__name__)
@@ -161,12 +162,17 @@ class BVHIndex:
         prims = BVHPrimitives.from_parquet(prims_path)
         return cls(segments=segments, nodes=nodes, prims=prims)
 
-    def to_parquet(self, directory: str) -> None:
+    def to_parquet(self, directory: str, defrag: bool = True) -> None:
         # Standard file names within the index directory
         os.makedirs(directory, exist_ok=True)
         seg_path = f"{directory.rstrip('/')}/segments.parquet"
         nodes_path = f"{directory.rstrip('/')}/bvh_nodes.parquet"
         prims_path = f"{directory.rstrip('/')}/bvh_prims.parquet"
+
+        if defrag:
+            self.segments = qv.defragment(self.segments)
+            self.nodes = qv.defragment(self.nodes)
+            self.prims = qv.defragment(self.prims)
 
         self.segments.to_parquet(seg_path)
         self.nodes.to_parquet(nodes_path)
@@ -1491,4 +1497,101 @@ def _build_bvh_arrays_lbvh(
     )
 
 
-## Removed legacy save/load stubs; BVHIndex parquet IO is canonical
+def build_bvh_nodes_from_aabbs(
+    min_x: npt.NDArray[np.float32],
+    min_y: npt.NDArray[np.float32],
+    min_z: npt.NDArray[np.float32],
+    max_x: npt.NDArray[np.float32],
+    max_y: npt.NDArray[np.float32],
+    max_z: npt.NDArray[np.float32],
+    *,
+    max_leaf_size: int = 8,
+) -> tuple[
+    npt.NDArray[np.float32],
+    npt.NDArray[np.float32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],  # primitive order mapping into input AABBs
+]:
+    """
+    Build a BVH over provided AABBs using a simple median-split strategy.
+
+    Returns node arrays and a primitive order array indicating the order of
+    primitives referenced by leaf ranges.
+    """
+    N = int(len(min_x))
+    if N == 0:
+        return (
+            np.empty((0, 3), dtype=np.float32),
+            np.empty((0, 3), dtype=np.float32),
+            np.empty((0,), dtype=np.int32),
+            np.empty((0,), dtype=np.int32),
+            np.empty((0,), dtype=np.int32),
+            np.empty((0,), dtype=np.int32),
+            np.empty((0,), dtype=np.int32),
+        )
+
+    mins = np.column_stack([min_x, min_y, min_z]).astype(np.float32, copy=False)
+    maxs = np.column_stack([max_x, max_y, max_z]).astype(np.float32, copy=False)
+
+    max_nodes = 2 * N - 1
+    nodes_min = np.zeros((max_nodes, 3), dtype=np.float32)
+    nodes_max = np.zeros((max_nodes, 3), dtype=np.float32)
+    left_child = np.full((max_nodes,), -1, dtype=np.int32)
+    right_child = np.full((max_nodes,), -1, dtype=np.int32)
+    first_prim = np.full((max_nodes,), -1, dtype=np.int32)
+    prim_count = np.zeros((max_nodes,), dtype=np.int32)
+    prim_order: list[int] = []
+
+    indices = np.arange(N, dtype=np.int32)
+
+    def build_node(idx_list: npt.NDArray[np.int32]) -> int:
+        node_index = build_node.next_index
+        build_node.next_index += 1
+        bb_min = mins[idx_list].min(axis=0)
+        bb_max = maxs[idx_list].max(axis=0)
+        nodes_min[node_index] = bb_min
+        nodes_max[node_index] = bb_max
+
+        if idx_list.size <= max_leaf_size:
+            start = len(prim_order)
+            prim_order.extend(idx_list.tolist())
+            count = idx_list.size
+            first_prim[node_index] = start
+            prim_count[node_index] = int(count)
+            return node_index
+
+        cents = 0.5 * (mins[idx_list] + maxs[idx_list])
+        extents = cents.max(axis=0) - cents.min(axis=0)
+        axis = int(np.argmax(extents))
+        order = np.argsort(cents[:, axis], kind="mergesort")
+        sorted_idx = idx_list[order]
+        mid = sorted_idx.size // 2
+        lc = build_node(sorted_idx[:mid])
+        rc = build_node(sorted_idx[mid:])
+        left_child[node_index] = lc
+        right_child[node_index] = rc
+        return node_index
+
+    build_node.next_index = 0  # type: ignore[attr-defined]
+    root = build_node(indices)
+    total_nodes = build_node.next_index  # type: ignore[attr-defined]
+
+    nodes_min = nodes_min[:total_nodes]
+    nodes_max = nodes_max[:total_nodes]
+    left_child = left_child[:total_nodes]
+    right_child = right_child[:total_nodes]
+    first_prim = first_prim[:total_nodes]
+    prim_count = prim_count[:total_nodes]
+
+    return (
+        nodes_min,
+        nodes_max,
+        left_child,
+        right_child,
+        first_prim,
+        prim_count,
+        np.asarray(prim_order, dtype=np.int32),
+    )

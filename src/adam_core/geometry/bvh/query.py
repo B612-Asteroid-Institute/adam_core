@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import List, Optional
 from functools import partial
 
 import jax
@@ -16,9 +17,16 @@ import ray
 from numba import njit
 
 from ...ray_cluster import initialize_use_ray
-from ...utils.iter import _iterate_chunk_indices, _iterate_chunks
+import os
+from ...utils.iter import _iterate_chunks
 from ..rays import ObservationRays
 from .index import BVHIndex, get_leaf_primitives_numpy
+from .sharded import (
+    ShardedBVH,
+    ShardAssignments,
+    FilesystemShardResolver,
+)
+from .index import BVHNodes
 
 __all__ = [
     "OverlapHits",
@@ -30,6 +38,10 @@ __all__ = [
     "QueryBVHTelemetry",
     "CandidatePairs",
     "find_bvh_matches",
+    # Sharded TLAS routing
+    "route_rays_to_shards",
+    "write_routed_rays_by_shard",
+    "query_bvh_sharded",
 ]
 
 logger = logging.getLogger(__name__)
@@ -321,12 +333,13 @@ def find_bvh_matches(
     nodes_min_np, nodes_max_np = nodes.min_max_numpy()
     left_child_np = np.asarray(nodes.left_child, dtype=np.int32)
     right_child_np = np.asarray(nodes.right_child, dtype=np.int32)
-    first_prim_np = np.asarray(nodes.first_prim, dtype=np.int32)
+    # first_prim_np = np.asarray(nodes.first_prim, dtype=np.int32)
     prim_count_np = np.asarray(nodes.prim_count, dtype=np.int32)
 
     # Primitive arrays
-    packed_row_np = np.asarray(index.prims.segment_row_index, dtype=np.int32)
-    packed_seg_np = np.asarray(index.prims.prim_seg_ids, dtype=np.int32)
+    # Packed arrays available if needed for downstream processing
+    # packed_row_np = np.asarray(index.prims.segment_row_index, dtype=np.int32)
+    # packed_seg_np = np.asarray(index.prims.prim_seg_ids, dtype=np.int32)
 
     # Rays: observer positions and LOS directions (NumPy)
     ro_x = rays.observer.coordinates.x.to_numpy()
@@ -774,6 +787,8 @@ def query_bvh_worker(
     key = obs_idx.astype(np.int64) * 10_000_000 + dbin.astype(np.int64)
     order = np.argsort(key, kind="stable")
     rays = rays.take(order)
+    # Drop ordering scratch to free memory
+    del obs_codes, u_x, u_y, u_z, dbin, obs_idx, key, order
 
     # Stage 1–2: candidate indices (Numba traversal + host assembly)
     candidates, bvh_telemetry = find_bvh_matches(index, rays)
@@ -783,6 +798,7 @@ def query_bvh_worker(
         seg_id=candidates.seg_id.to_numpy(),
         leaf_id=candidates.leaf_id.to_numpy(),
     )
+    del candidates
 
     if cand.det_idx.size == 0:
         return (
@@ -809,16 +825,12 @@ def query_bvh_worker(
     seg_rows = cand.seg_idx
     seg_ids_arr = cand.seg_id
     leaf_ids_arr = cand.leaf_id
+    # Release wrapper now that arrays are extracted
+    del cand
 
     N = int(len(det_idx))
 
     theta_guard = guard_arcmin * np.pi / (180.0 * 60.0)
-
-    hits_det_list = []
-    hits_orbit_id_list = []
-    hits_seg_id_list = []
-    hits_leaf_id_list = []
-    hits_dist_list = []
 
     pairs_within_guard = 0
 
@@ -851,18 +863,9 @@ def query_bvh_worker(
     )
     distances_np = np.asarray(distances_c).reshape(C * window_size)[:M]
     valid = np.asarray(within_c).reshape(C * window_size)[:M]
-    if np.any(valid):
-        keep = np.nonzero(valid)[0]
-        pairs_within_guard = int(keep.size)
-        hits_det_list.append(det_idx[keep])
-        # Arrow-take only kept orbit_ids instead of materializing full column to NumPy
-        seg_keep_idx = pa.array(seg_rows[keep], type=pa.int64())
-        hits_orbit_id_list.append(index.segments.orbit_id.take(seg_keep_idx))
-        hits_seg_id_list.append(seg_ids_arr[keep])
-        hits_leaf_id_list.append(leaf_ids_arr[keep])
-        hits_dist_list.append(distances_np[keep])
-
-    if not hits_det_list:
+    # Release device/host buffers and chunked indices
+    del distances_c, within_c, det_chunks, seg_chunks, geom
+    if not np.any(valid):
         return (
             OverlapHits.from_kwargs(
                 det_id=[],
@@ -884,40 +887,61 @@ def query_bvh_worker(
             ),
         )
 
-    det_concat = np.concatenate(hits_det_list).astype(np.int32, copy=False)
-    seg_id_concat = np.concatenate(hits_seg_id_list).astype(np.int32, copy=False)
-    leaf_id_concat = np.concatenate(hits_leaf_id_list).astype(np.int32, copy=False)
-    dist_concat = np.concatenate(hits_dist_list).astype(np.float64, copy=False)
-    hit_orbit_ids_arrow = pa.concat_arrays(hits_orbit_id_list)
+    # Keep only valid pairs; avoid intermediate list concatenations
+    keep = np.nonzero(valid)[0]
+    pairs_within_guard = int(keep.size)
+
+    det_kept = det_idx[keep].astype(np.int32, copy=False)
+    seg_rows_kept = seg_rows[keep]
+    seg_id_kept = seg_ids_arr[keep].astype(np.int32, copy=False)
+    leaf_id_kept = leaf_ids_arr[keep].astype(np.int32, copy=False)
+    dist_kept = distances_np[keep].astype(np.float64, copy=False)
+
+    # Arrow-take only kept orbit_ids instead of materializing full column to NumPy
+    seg_keep_idx = pa.array(seg_rows_kept, type=pa.int64())
+    hit_orbit_ids_arrow = index.segments.orbit_id.take(seg_keep_idx)
+    # Drop full arrays now that kept subsets are materialized
+    del det_idx, seg_rows, seg_ids_arr, leaf_ids_arr, distances_np, valid
 
     # Map indices back to string IDs and sort by (det_id, distance)
     # Map det_id via Arrow take and sort using Arrow to avoid large Python string arrays
-    det_keep_idx = pa.array(det_concat, type=pa.int64())
+    det_keep_idx = pa.array(det_kept, type=pa.int64())
     hit_det_ids_arrow = rays.det_id.take(det_keep_idx)
     sort_tbl = pa.table(
         {
             "det_id": hit_det_ids_arrow,
-            "distance": pa.array(dist_concat),
+            "distance": pa.array(dist_kept),
         }
     )
     order_arrow = pc.sort_indices(
         sort_tbl, sort_keys=[("det_id", "ascending"), ("distance", "ascending")]
     )
-    order = np.asarray(order_arrow)
+    del sort_tbl
 
-    det_sorted = pc.take(hit_det_ids_arrow, order)
-    orbit_sorted = pc.take(hit_orbit_ids_arrow, order)
+    det_sorted = pc.take(hit_det_ids_arrow, order_arrow)
+    orbit_sorted = pc.take(hit_orbit_ids_arrow, order_arrow)
+    del hit_det_ids_arrow  # no longer needed
+
+    # Reorder numeric arrays using Arrow indices to avoid NumPy conversions
+    seg_id_sorted = pc.take(pa.array(seg_id_kept), order_arrow)
+    leaf_id_sorted = pc.take(pa.array(leaf_id_kept), order_arrow)
+    dist_sorted = pc.take(pa.array(dist_kept), order_arrow)
 
     hits = OverlapHits.from_kwargs(
-        det_id=det_sorted.to_pylist(),
-        orbit_id=orbit_sorted.to_pylist(),
-        seg_id=seg_id_concat[order],
-        leaf_id=leaf_id_concat[order],
-        distance_au=dist_concat[order],
+        det_id=det_sorted,
+        orbit_id=orbit_sorted,
+        seg_id=seg_id_sorted,
+        leaf_id=leaf_id_sorted,
+        distance_au=dist_sorted,
         query_guard_arcmin=float(guard_arcmin),
         query_batch_size=0,
         query_max_processes=0,
     )
+    # Proactively release large intermediates before returning
+    del det_sorted, orbit_sorted, seg_id_sorted, leaf_id_sorted, dist_sorted
+    del det_kept, seg_rows_kept, seg_id_kept, leaf_id_kept, dist_kept
+    del order_arrow, hit_orbit_ids_arrow, seg_keep_idx
+    del rays
     return (
         hits,
         QueryBVHTelemetry(
@@ -929,6 +953,635 @@ def query_bvh_worker(
             pairs_within_guard=int(pairs_within_guard),
         ),
     )
+
+
+# ======================================
+# TLAS-only routing (no shard access)
+# ======================================
+
+
+@njit(cache=True, fastmath=False)
+def _packet_intersect_aabb_numba_minmax(
+    ro_pkt: np.ndarray,
+    rd_pkt: np.ndarray,
+    aabb_min: np.ndarray,
+    aabb_max: np.ndarray,
+    mask_in: np.ndarray,
+) -> np.ndarray:
+    return _packet_intersect_aabb_numba(ro_pkt, rd_pkt, aabb_min, aabb_max, mask_in)
+
+
+def _tlas_minmax_arrays(nodes: BVHNodes) -> tuple[np.ndarray, np.ndarray]:
+    nodes_min = np.column_stack(
+        [
+            np.asarray(nodes.nodes_min_x, dtype=np.float32),
+            np.asarray(nodes.nodes_min_y, dtype=np.float32),
+            np.asarray(nodes.nodes_min_z, dtype=np.float32),
+        ]
+    )
+    nodes_max = np.column_stack(
+        [
+            np.asarray(nodes.nodes_max_x, dtype=np.float32),
+            np.asarray(nodes.nodes_max_y, dtype=np.float32),
+            np.asarray(nodes.nodes_max_z, dtype=np.float32),
+        ]
+    )
+    return nodes_min, nodes_max
+
+
+def route_rays_to_shards(
+    sharded: ShardedBVH,
+    rays: ObservationRays,
+    *,
+    batch_size: int = 65536,
+    packet_size: int = 64,
+    max_shards_per_packet: Optional[int] = None,
+) -> tuple[ShardAssignments, QueryBVHTelemetry]:
+    """
+    Traverse TLAS to assign each detection to one or more shard_ids.
+
+    Returns ShardAssignments (det_id, shard_id) and telemetry summarizing routing.
+    """
+    if len(rays) == 0:
+        return ShardAssignments.empty(), QueryBVHTelemetry(
+            pairs_total=0,
+            pairs_within_guard=0,
+            truncation_occurred=False,
+            max_leaf_visits_observed=0,
+            rays_with_zero_candidates=0,
+            packets_traversed=0,
+        )
+
+    tlas_nodes = sharded.tlas_nodes
+    tlas_prims = sharded.tlas_prims
+
+    nodes_min_np, nodes_max_np = _tlas_minmax_arrays(tlas_nodes)
+    left_child_np = np.asarray(tlas_nodes.left_child, dtype=np.int32)
+    right_child_np = np.asarray(tlas_nodes.right_child, dtype=np.int32)
+    first_prim_np = np.asarray(tlas_nodes.first_prim, dtype=np.int32)
+    prim_count_np = np.asarray(tlas_nodes.prim_count, dtype=np.int32)
+
+    num_rays = len(rays)
+    ro_x = rays.observer.coordinates.x.to_numpy()
+    ro_y = rays.observer.coordinates.y.to_numpy()
+    ro_z = rays.observer.coordinates.z.to_numpy()
+    rd_x = rays.u_x.to_numpy()
+    rd_y = rays.u_y.to_numpy()
+    rd_z = rays.u_z.to_numpy()
+    ray_origins_cpu = np.column_stack([ro_x, ro_y, ro_z]).astype(np.float32, copy=False)
+    ray_directions_cpu = np.column_stack([rd_x, rd_y, rd_z]).astype(np.float32, copy=False)
+
+    # Packetization
+    num_rays_padded = ((num_rays + packet_size - 1) // packet_size) * packet_size
+    ray_origins_padded = np.zeros((num_rays_padded, 3), dtype=np.float32)
+    ray_directions_padded = np.zeros_like(ray_origins_padded)
+    ray_origins_padded[:num_rays] = ray_origins_cpu
+    ray_directions_padded[:num_rays] = ray_directions_cpu
+
+    det_ids: list[str] = rays.det_id.to_pylist()
+    out_det: List[str] = []
+    out_shard: List[str] = []
+
+    packets_traversed = 0
+    max_shards_observed = 0
+    capped = 0
+
+    # We'll visit TLAS using the same packet traversal used for BVH
+    for start in range(0, num_rays_padded, packet_size):
+        end = start + packet_size
+        P = min(packet_size, num_rays - start)
+        ro_pkt = ray_origins_padded[start:end]
+        rd_pkt = ray_directions_padded[start:end]
+
+        visited_tlas_nodes, visited_masks, num_vis = packet_traverse_bvh_numba(
+            nodes_min_np,
+            nodes_max_np,
+            left_child_np,
+            right_child_np,
+            ro_pkt,
+            rd_pkt,
+            int(max(16, int(np.ceil(np.log2(len(left_child_np) + 1))))),
+            1_000_000,
+        )
+        visited_tlas_nodes = visited_tlas_nodes[:num_vis]
+        visited_masks = visited_masks[:num_vis]
+
+        if int(num_vis) == 0:
+            continue
+        packets_traversed += 1
+
+        # Expand shard_ids per visited TLAS leaf
+        per_ray_shards: List[set[str]] = [set() for _ in range(P)]
+        for i, node_idx in enumerate(visited_tlas_nodes):
+            mask = visited_masks[i][:P]
+            if not np.any(mask):
+                continue
+            first = int(first_prim_np[node_idx])
+            count = int(prim_count_np[node_idx])
+            if count <= 0 or first < 0:
+                continue
+            # For TLAS, each primitive maps to a shard_id
+            shard_slice = tlas_prims.shard_id.to_pylist()[first : first + count]
+            rays_idx = np.nonzero(mask)[0]
+            for r in rays_idx:
+                if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                    if len(per_ray_shards[r]) >= max_shards_per_packet:
+                        continue
+                per_ray_shards[r].update(shard_slice)
+
+        # Materialize output rows
+        for r in range(P):
+            shards_r = list(per_ray_shards[r])
+            if not shards_r:
+                continue
+            if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                if len(shards_r) > max_shards_per_packet:
+                    shards_r = shards_r[:max_shards_per_packet]
+                    capped += 1
+            det = det_ids[start + r]
+            for sid in shards_r:
+                out_det.append(det)
+                out_shard.append(sid)
+
+        max_shards_observed = max(
+            max_shards_observed, max((len(s) for s in per_ray_shards), default=0)
+        )
+
+    assignments = ShardAssignments.from_kwargs(det_id=out_det, shard_id=out_shard)
+    telemetry = QueryBVHTelemetry(
+        pairs_total=len(assignments),
+        pairs_within_guard=0,
+        truncation_occurred=False,
+        max_leaf_visits_observed=max_shards_observed,
+        rays_with_zero_candidates=max(0, len(rays) - len(set(assignments.det_id.to_pylist()))),
+        packets_traversed=packets_traversed,
+    )
+    return assignments, telemetry
+
+
+def _route_rays_to_shards_chunk(
+    tlas_nodes: BVHNodes,
+    tlas_prims,
+    rays: ObservationRays,
+    *,
+    packet_size: int,
+    max_shards_per_packet: Optional[int],
+) -> tuple[ShardAssignments, QueryBVHTelemetry]:
+    nodes_min_np, nodes_max_np = _tlas_minmax_arrays(tlas_nodes)
+    left_child_np = np.asarray(tlas_nodes.left_child, dtype=np.int32)
+    right_child_np = np.asarray(tlas_nodes.right_child, dtype=np.int32)
+    first_prim_np = np.asarray(tlas_nodes.first_prim, dtype=np.int32)
+    prim_count_np = np.asarray(tlas_nodes.prim_count, dtype=np.int32)
+
+    num_rays = len(rays)
+    ro_x = rays.observer.coordinates.x.to_numpy()
+    ro_y = rays.observer.coordinates.y.to_numpy()
+    ro_z = rays.observer.coordinates.z.to_numpy()
+    rd_x = rays.u_x.to_numpy()
+    rd_y = rays.u_y.to_numpy()
+    rd_z = rays.u_z.to_numpy()
+    ray_origins_cpu = np.column_stack([ro_x, ro_y, ro_z]).astype(np.float32, copy=False)
+    ray_directions_cpu = np.column_stack([rd_x, rd_y, rd_z]).astype(np.float32, copy=False)
+
+    num_rays_padded = ((num_rays + packet_size - 1) // packet_size) * packet_size
+    ray_origins_padded = np.zeros((num_rays_padded, 3), dtype=np.float32)
+    ray_directions_padded = np.zeros_like(ray_origins_padded)
+    ray_origins_padded[:num_rays] = ray_origins_cpu
+    ray_directions_padded[:num_rays] = ray_directions_cpu
+
+    det_ids: list[str] = rays.det_id.to_pylist()
+    out_det: List[str] = []
+    out_shard: List[str] = []
+
+    packets_traversed = 0
+    max_shards_observed = 0
+    capped = 0
+
+    for start in range(0, num_rays_padded, packet_size):
+        end = start + packet_size
+        P = min(packet_size, num_rays - start)
+        ro_pkt = ray_origins_padded[start:end]
+        rd_pkt = ray_directions_padded[start:end]
+
+        visited_tlas_nodes, visited_masks, num_vis = packet_traverse_bvh_numba(
+            nodes_min_np,
+            nodes_max_np,
+            left_child_np,
+            right_child_np,
+            ro_pkt,
+            rd_pkt,
+            int(max(16, int(np.ceil(np.log2(len(left_child_np) + 1))))),
+            1_000_000,
+        )
+        visited_tlas_nodes = visited_tlas_nodes[:num_vis]
+        visited_masks = visited_masks[:num_vis]
+
+        if int(num_vis) == 0:
+            continue
+        packets_traversed += 1
+
+        per_ray_shards: List[set[str]] = [set() for _ in range(P)]
+        for i, node_idx in enumerate(visited_tlas_nodes):
+            mask = visited_masks[i][:P]
+            if not np.any(mask):
+                continue
+            first = int(first_prim_np[node_idx])
+            count = int(prim_count_np[node_idx])
+            if count <= 0 or first < 0:
+                continue
+            shard_slice = tlas_prims.shard_id.to_pylist()[first : first + count]
+            rays_idx = np.nonzero(mask)[0]
+            for r in rays_idx:
+                if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                    if len(per_ray_shards[r]) >= max_shards_per_packet:
+                        continue
+                per_ray_shards[r].update(shard_slice)
+
+        for r in range(P):
+            shards_r = list(per_ray_shards[r])
+            if not shards_r:
+                continue
+            if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                if len(shards_r) > max_shards_per_packet:
+                    shards_r = shards_r[:max_shards_per_packet]
+                    capped += 1
+            det = det_ids[start + r]
+            for sid in shards_r:
+                out_det.append(det)
+                out_shard.append(sid)
+
+        max_shards_observed = max(
+            max_shards_observed, max((len(s) for s in per_ray_shards), default=0)
+        )
+
+    assignments = ShardAssignments.from_kwargs(det_id=out_det, shard_id=out_shard)
+    telemetry = QueryBVHTelemetry(
+        pairs_total=len(assignments),
+        pairs_within_guard=0,
+        truncation_occurred=False,
+        max_leaf_visits_observed=max_shards_observed,
+        rays_with_zero_candidates=max(0, len(rays) - len(set(assignments.det_id.to_pylist()))),
+        packets_traversed=packets_traversed,
+    )
+    return assignments, telemetry
+
+
+@ray.remote
+def route_rays_to_shards_chunk_remote(
+    tlas_nodes: BVHNodes,
+    tlas_prims,
+    rays: ObservationRays,
+    *,
+    packet_size: int,
+    max_shards_per_packet: Optional[int],
+) -> tuple[ShardAssignments, QueryBVHTelemetry]:
+    return _route_rays_to_shards_chunk(
+        tlas_nodes,
+        tlas_prims,
+        rays,
+        packet_size=packet_size,
+        max_shards_per_packet=max_shards_per_packet,
+    )
+
+
+def _route_rays_to_shards_parallel(
+    sharded: ShardedBVH,
+    rays: ObservationRays,
+    *,
+    batch_size: int,
+    packet_size: int,
+    max_shards_per_packet: Optional[int],
+    max_processes: int,
+) -> tuple[ShardAssignments, QueryBVHTelemetry]:
+    initialize_use_ray(num_cpus=max_processes)
+    tlas_nodes_ref = ray.put(sharded.tlas_nodes)
+    tlas_prims_ref = ray.put(sharded.tlas_prims)
+
+    futures: list[ray.ObjectRef] = []
+    assignments_parts: list[ShardAssignments] = []
+    telemetry_agg = QueryBVHTelemetry(
+        pairs_total=0,
+        pairs_within_guard=0,
+        truncation_occurred=False,
+        max_leaf_visits_observed=0,
+        rays_with_zero_candidates=0,
+        packets_traversed=0,
+    )
+    max_active = max(1, int(1.5 * max_processes))
+    for chunk in _iterate_chunks(rays, batch_size):
+        fut = route_rays_to_shards_chunk_remote.remote(
+            tlas_nodes_ref,
+            tlas_prims_ref,
+            chunk,
+            packet_size=packet_size,
+            max_shards_per_packet=max_shards_per_packet,
+        )
+        futures.append(fut)
+        if len(futures) >= max_active:
+            finished, futures = ray.wait(futures, num_returns=1)
+            part, tel = ray.get(finished[0])
+            assignments_parts.append(part)
+            telemetry_agg = QueryBVHTelemetry(
+                pairs_total=telemetry_agg.pairs_total + tel.pairs_total,
+                pairs_within_guard=0,
+                truncation_occurred=telemetry_agg.truncation_occurred or tel.truncation_occurred,
+                max_leaf_visits_observed=max(telemetry_agg.max_leaf_visits_observed, tel.max_leaf_visits_observed),
+                rays_with_zero_candidates=telemetry_agg.rays_with_zero_candidates + tel.rays_with_zero_candidates,
+                packets_traversed=telemetry_agg.packets_traversed + tel.packets_traversed,
+            )
+    while futures:
+        finished, futures = ray.wait(futures, num_returns=1)
+        part, tel = ray.get(finished[0])
+        assignments_parts.append(part)
+        telemetry_agg = QueryBVHTelemetry(
+            pairs_total=telemetry_agg.pairs_total + tel.pairs_total,
+            pairs_within_guard=0,
+            truncation_occurred=telemetry_agg.truncation_occurred or tel.truncation_occurred,
+            max_leaf_visits_observed=max(telemetry_agg.max_leaf_visits_observed, tel.max_leaf_visits_observed),
+            rays_with_zero_candidates=telemetry_agg.rays_with_zero_candidates + tel.rays_with_zero_candidates,
+            packets_traversed=telemetry_agg.packets_traversed + tel.packets_traversed,
+        )
+
+    if not assignments_parts:
+        return ShardAssignments.empty(), telemetry_agg
+    assignments = qv.concatenate(assignments_parts, defrag=True)
+    return assignments, telemetry_agg
+
+
+def write_routed_rays_by_shard(
+    sharded: ShardedBVH,
+    rays: ObservationRays,
+    output_dir: str,
+    *,
+    batch_size: int = 65536,
+    packet_size: int = 64,
+    max_open_writers: int = 256,
+    max_shards_per_packet: Optional[int] = None,
+) -> tuple[int, QueryBVHTelemetry]:
+    """
+    Stream TLAS routing and append rays into per-shard Parquet files at output_dir.
+
+    Returns (total_rows_written, telemetry).
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    if len(rays) == 0:
+        return 0, QueryBVHTelemetry(
+            pairs_total=0,
+            pairs_within_guard=0,
+            truncation_occurred=False,
+            max_leaf_visits_observed=0,
+            rays_with_zero_candidates=0,
+            packets_traversed=0,
+        )
+
+    tlas_nodes = sharded.tlas_nodes
+    tlas_prims = sharded.tlas_prims
+
+    nodes_min_np, nodes_max_np = _tlas_minmax_arrays(tlas_nodes)
+    left_child_np = np.asarray(tlas_nodes.left_child, dtype=np.int32)
+    right_child_np = np.asarray(tlas_nodes.right_child, dtype=np.int32)
+    first_prim_np = np.asarray(tlas_nodes.first_prim, dtype=np.int32)
+    prim_count_np = np.asarray(tlas_nodes.prim_count, dtype=np.int32)
+
+    # Prepare packetized ray arrays
+    num_rays = len(rays)
+    ro = np.column_stack([
+        rays.observer.coordinates.x.to_numpy(),
+        rays.observer.coordinates.y.to_numpy(),
+        rays.observer.coordinates.z.to_numpy(),
+    ]).astype(np.float32, copy=False)
+    rd = np.column_stack([
+        rays.u_x.to_numpy(),
+        rays.u_y.to_numpy(),
+        rays.u_z.to_numpy(),
+    ]).astype(np.float32, copy=False)
+
+    # Setup Parquet writers (LRU)
+    from pyarrow import parquet as pq
+    import pyarrow as pa
+
+    schema = ObservationRays.empty().table.schema
+    class _Writer:
+        def __init__(self, path: str):
+            self.path = path
+            self.writer = pq.ParquetWriter(path, schema)
+            self.rows = 0
+        def write(self, tbl: pa.Table) -> None:
+            self.writer.write_table(tbl)
+            self.rows += tbl.num_rows
+        def close(self) -> None:
+            self.writer.close()
+
+    from collections import OrderedDict
+    class _LRUWriters:
+        def __init__(self, cap: int):
+            self.cap = cap
+            self.od: OrderedDict[str, _Writer] = OrderedDict()
+        def get(self, sid: str) -> Optional[_Writer]:
+            w = self.od.get(sid)
+            if w is not None:
+                self.od.move_to_end(sid)
+            return w
+        def put(self, sid: str, writer: _Writer) -> _Writer:
+            if sid in self.od:
+                self.od.move_to_end(sid)
+                return self.od[sid]
+            self.od[sid] = writer
+            if len(self.od) > self.cap:
+                old_sid, old_w = self.od.popitem(last=False)
+                try:
+                    old_w.close()
+                except Exception:
+                    pass
+            return writer
+        def close_all(self) -> None:
+            for _, w in list(self.od.items()):
+                try:
+                    w.close()
+                except Exception:
+                    pass
+            self.od.clear()
+
+    writers = _LRUWriters(max_open_writers)
+
+    num_rays_padded = ((num_rays + packet_size - 1) // packet_size) * packet_size
+    ro_pad = np.zeros((num_rays_padded, 3), dtype=np.float32)
+    rd_pad = np.zeros_like(ro_pad)
+    ro_pad[:num_rays] = ro
+    rd_pad[:num_rays] = rd
+
+    packets_traversed = 0
+    max_shards_observed = 0
+    rows_written = 0
+
+    for start in range(0, num_rays_padded, packet_size):
+        end = start + packet_size
+        P = min(packet_size, num_rays - start)
+        ro_pkt = ro_pad[start:end]
+        rd_pkt = rd_pad[start:end]
+
+        visited_tlas_nodes, visited_masks, num_vis = packet_traverse_bvh_numba(
+            nodes_min_np,
+            nodes_max_np,
+            left_child_np,
+            right_child_np,
+            ro_pkt,
+            rd_pkt,
+            int(max(16, int(np.ceil(np.log2(len(left_child_np) + 1))))),
+            1_000_000,
+        )
+        visited_tlas_nodes = visited_tlas_nodes[:num_vis]
+        visited_masks = visited_masks[:num_vis]
+
+        if int(num_vis) == 0:
+            continue
+        packets_traversed += 1
+
+        # Collect per-ray shard ids
+        per_ray_shards: List[List[str]] = [[] for _ in range(P)]
+        for i, node_idx in enumerate(visited_tlas_nodes):
+            mask = visited_masks[i][:P]
+            if not np.any(mask):
+                continue
+            first = int(first_prim_np[node_idx])
+            count = int(prim_count_np[node_idx])
+            if count <= 0 or first < 0:
+                continue
+            shard_slice = tlas_prims.shard_id.to_pylist()[first : first + count]
+            for r in np.nonzero(mask)[0]:
+                lst = per_ray_shards[r]
+                if max_shards_per_packet is not None and max_shards_per_packet > 0:
+                    if len(lst) < max_shards_per_packet:
+                        lst.extend(shard_slice)
+                else:
+                    lst.extend(shard_slice)
+
+        # Unique per-shard and batch write by shard
+        packet_tbl = rays[start : start + P].table
+        # Build per-shard row indices
+        shard_to_rows: dict[str, list[int]] = {}
+        for r, sid_list in enumerate(per_ray_shards):
+            if not sid_list:
+                continue
+            uniq = list(dict.fromkeys(sid_list))
+            max_shards_observed = max(max_shards_observed, len(uniq))
+            for sid in uniq:
+                shard_to_rows.setdefault(sid, []).append(r)
+        for sid, rows in shard_to_rows.items():
+            shard_dir = os.path.join(output_dir, sid)
+            os.makedirs(shard_dir, exist_ok=True)
+            path = os.path.join(shard_dir, "rays.parquet")
+            w = writers.get(sid)
+            if w is None:
+                w = writers.put(sid, _Writer(path))
+            idx_arr = pa.array(rows, type=pa.int64())
+            sub_tbl = packet_tbl.take(idx_arr)
+            w.write(sub_tbl)
+            rows_written += sub_tbl.num_rows
+
+    writers.close_all()
+
+    telemetry = QueryBVHTelemetry(
+        pairs_total=rows_written,
+        pairs_within_guard=0,
+        truncation_occurred=False,
+        max_leaf_visits_observed=max_shards_observed,
+        rays_with_zero_candidates=0,
+        packets_traversed=packets_traversed,
+    )
+    return rows_written, telemetry
+
+
+def query_bvh_sharded(
+    sharded: ShardedBVH,
+    rays: ObservationRays,
+    *,
+    guard_arcmin: float = 0.65,
+    resolver: FilesystemShardResolver,
+    batch_size: int = 65536,
+    window_size: int = 32768,
+    packet_size: int = 64,
+    max_shards_per_packet: Optional[int] = 8,
+    max_processes: int = 1,
+) -> tuple[OverlapHits, QueryBVHTelemetry]:
+    """
+    Single-node orchestration: TLAS-route rays, query only referenced shards, merge hits.
+    """
+    if max_processes is None or max_processes <= 1:
+        assignments, _ = route_rays_to_shards(
+            sharded,
+            rays,
+            batch_size=batch_size,
+            packet_size=packet_size,
+            max_shards_per_packet=max_shards_per_packet,
+        )
+    else:
+        assignments, _ = _route_rays_to_shards_parallel(
+            sharded,
+            rays,
+            batch_size=batch_size,
+            packet_size=packet_size,
+            max_shards_per_packet=max_shards_per_packet,
+            max_processes=max_processes,
+        )
+    if len(assignments) == 0:
+        return OverlapHits.empty(), QueryBVHTelemetry(
+            pairs_total=0,
+            pairs_within_guard=0,
+            truncation_occurred=False,
+            max_leaf_visits_observed=0,
+            rays_with_zero_candidates=len(rays),
+            packets_traversed=0,
+        )
+
+    # Group det_ids per shard
+    import pyarrow as pa
+    tbl = assignments.table
+    # Get unique shard ids
+    shard_ids = list(dict.fromkeys(assignments.shard_id.to_pylist()))
+    hits_out: list[OverlapHits] = []
+    telemetry_agg = QueryBVHTelemetry(
+        pairs_total=0,
+        pairs_within_guard=0,
+        truncation_occurred=False,
+        max_leaf_visits_observed=0,
+        rays_with_zero_candidates=0,
+        packets_traversed=0,
+    )
+    for sid in shard_ids:
+        logger.info(f"Querying shard {sid}")
+        mask = pa.compute.equal(tbl["shard_id"], pa.scalar(sid))
+        det_ids_sid = pa.compute.take(tbl["det_id"], pa.compute.indices_nonzero(mask))
+        # det_list = det_ids_sid.to_pylist()
+        # Filter rays for this shard
+        mask_det = pa.compute.is_in(rays.det_id, det_ids_sid)
+        rays_sid = rays.apply_mask(mask_det)
+        if len(rays_sid) == 0:
+            continue
+        index = resolver.resolve(sid)
+        hits_sid, telemetry = query_bvh(
+            index,
+            rays_sid,
+            guard_arcmin=0.65,
+            batch_size=batch_size,
+            window_size=window_size,
+            max_processes=max_processes,
+        )
+        hits_out.append(hits_sid)
+        telemetry_agg = QueryBVHTelemetry(
+            pairs_total=telemetry_agg.pairs_total + telemetry.pairs_total,
+            pairs_within_guard=telemetry_agg.pairs_within_guard + telemetry.pairs_within_guard,
+            truncation_occurred=telemetry_agg.truncation_occurred or telemetry.truncation_occurred,
+            max_leaf_visits_observed=max(telemetry_agg.max_leaf_visits_observed, telemetry.max_leaf_visits_observed),
+            rays_with_zero_candidates=telemetry_agg.rays_with_zero_candidates + telemetry.rays_with_zero_candidates,
+            packets_traversed=telemetry_agg.packets_traversed + telemetry.packets_traversed,
+        )
+
+    if not hits_out:
+        return OverlapHits.empty(), telemetry_agg
+    out = qv.concatenate(hits_out)
+    return out, telemetry_agg
 
 
 query_bvh_worker_remote = ray.remote(query_bvh_worker)
