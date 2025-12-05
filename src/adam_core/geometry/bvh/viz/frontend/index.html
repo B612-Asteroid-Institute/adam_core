@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ADAM Core Orbit Viewer</title>
+    <style>
+      html, body { height: 100%; margin: 0; padding: 0; background: #0b0f14; color: #cfd8e3; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+      #toolbar { position: fixed; top: 0; left: 0; right: 0; background: #121821; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid #1e2937; z-index: 10; }
+      #container { position: absolute; top: 48px; bottom: 0; left: 0; right: 0; }
+      .group { display: inline-flex; gap: 8px; align-items: center; padding-right: 12px; border-right: 1px solid #1e2937; }
+      .group:last-child { border-right: none; }
+      input[type="range"] { width: 160px; }
+      button, input, label, select { font-size: 13px; }
+      a { color: #7cc7ff; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <div class="group">
+        <label>Load JSON <input id="fileInput" type="file" accept="application/json" /></label>
+        <button id="resetViewBtn">Reset view</button>
+      </div>
+      <div class="group">
+        <label><input id="cbSegments" type="checkbox" checked /> Segments</label>
+        <label><input id="cbBoxes" type="checkbox" checked /> AABBs</label>
+        <label><input id="cbRays" type="checkbox" checked /> Rays</label>
+        <label><input id="cbHits" type="checkbox" checked /> Hits</label>
+        <label><input id="cbMisses" type="checkbox" checked /> Misses</label>
+      </div>
+      <div class="group">
+        <label>Max BVH depth <input id="depthSlider" type="range" min="0" max="0" value="0" /></label>
+        <span id="depthValue">0</span>
+      </div>
+      <div class="group">
+        <label>Ray length (AU) <input id="rayLen" type="number" min="0.1" max="40" step="0.1" value="3" /></label>
+        <span id="rayLenValue">3.0</span>
+      </div>
+      <div class="group">
+        <label>Color by station <input id="colorByStation" type="checkbox" /></label>
+      </div>
+      <div class="group">
+        <span>Tip: Export JSON via adam_core.geometry.viz.export.export_single_orbit_json</span>
+      </div>
+    </div>
+    <div id="container"></div>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./main.js"></script>
+  </body>
+  </html>
+
+

@@ -15,6 +15,9 @@ using a minimization function.
 
 Algorithm 2:
 
+
+
+
 1. Divide up the primary ellipse into a series of points
 2. For each point, run algorithm 1
 3. After finding the point with the lowest distance,
