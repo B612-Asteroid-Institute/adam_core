@@ -179,9 +179,11 @@ def test_propagate_different_origins():
 
 def test_light_time_distance_threshold():
     """
-    Test that _add_light_time raises a ValueError when an object gets too far from the observer.
+    Test that light-time computation remains stable (no overflow/NaNs)
+    even for extremely large relative motion between object and observer.
     """
-    # Create a single orbit with very high velocity
+    # Create a single orbit with very high velocity that will drive light-time
+    # computation into a pathological regime.
     orbit = Orbits.from_kwargs(
         orbit_id=["1"],
         object_id=["1"],
@@ -189,7 +191,7 @@ def test_light_time_distance_threshold():
             x=[1],  # Start at origin
             y=[1],
             z=[1],
-            vx=[1e9],  # Very high velocity (will quickly exceed our limits)
+            vx=[1e9],  # Extremely high velocity (unphysical)
             vy=[0],
             vz=[0],
             time=Timestamp.from_mjd([60000], scale="tdb"),
@@ -214,14 +216,26 @@ def test_light_time_distance_threshold():
         ),
     )
 
-    prop = MockPropagator()
+    class LightTimePropagator(Propagator, EphemerisMixin):
+        # Use the generic ephemeris implementation from EphemerisMixin;
+        # this minimal propagator just tiles the orbit to the requested times.
+        def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
+            all_times = []
+            for t in times:
+                repeated_time = qv.concatenate([t] * len(orbits))
+                orbits.coordinates.time = repeated_time
+                all_times.append(orbits)
+            return qv.concatenate(all_times)
 
-    # The object will have moved ~86400 * 1e6 AU in one day, which should trigger the threshold
+    prop = LightTimePropagator()
+
+    # With such an extreme configuration, light-time should be detected as invalid
+    # and a ValueError should be raised.
     with pytest.raises(
         ValueError,
-        match="Distance from observer is NaN or too large and propagation will break.",
+        match="Light travel time is NaN or too large and propagation will break.",
     ):
-        prop._add_light_time(orbit, observer)
+        prop.generate_ephemeris(orbit, observer, max_processes=1)
 
 
 @pytest.mark.parametrize("max_processes", [1, 4])
@@ -263,10 +277,11 @@ def test_generate_ephemeris_unordered_observers(max_processes, input_time_scale)
     # Basic ordering checks
     assert len(ephemeris) == 12  # 2 objects × 6 times
 
-    # Verify that coordinates.time - aberrated_coordinates.time is equal to light_time
-    time_difference_days, time_difference_nanos = ephemeris.coordinates.time.rescale(
-        "tdb"
-    ).difference(ephemeris.aberrated_coordinates.time)
+    # Verify that coordinates.time - aberrated_coordinates.time is equal to light_time.
+    # Rescale both to the same time scale before taking the difference.
+    coords_tdb = ephemeris.coordinates.time.rescale("tdb")
+    aberr_tdb = ephemeris.aberrated_coordinates.time.rescale("tdb")
+    time_difference_days, time_difference_nanos = coords_tdb.difference(aberr_tdb)
     fractional_days = pc.divide(time_difference_nanos, 86400 * 1e9)
     time_difference = pc.add(time_difference_days, fractional_days)
     np.testing.assert_allclose(
@@ -396,7 +411,7 @@ def test_generate_ephemeris_performance_benchmark():
         covariance=True,
         num_samples=100,
         max_processes=1,
-        chunk_size=1,
+        chunk_size=100,
         seed=42,
     )
     single_process_time = time.time() - start_time
@@ -409,7 +424,7 @@ def test_generate_ephemeris_performance_benchmark():
         covariance=True,
         num_samples=100,
         max_processes=4,
-        chunk_size=1,
+        chunk_size=100,
         seed=42,
     )
     multi_process_time = time.time() - start_time
