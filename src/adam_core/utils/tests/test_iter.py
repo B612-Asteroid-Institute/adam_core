@@ -1,11 +1,16 @@
 import numpy as np
 import quivr as qv
 
-from ..iter import _iterate_chunk_indices, _iterate_chunks
+from ..iter import ChunkedParquetWriter, _iterate_chunk_indices, _iterate_chunks, qv_table_iter
 
 
 class SampleTable(qv.Table):
     a = qv.Float64Column()
+
+
+class AttrTable(qv.Table):
+    a = qv.Int64Column()
+    foo = qv.StringAttribute(default="default")
 
 
 def test__iterate_chunks():
@@ -52,3 +57,35 @@ def test__iterate_chunk_indices():
             assert chunk == (i * 2, i * 2 + 2)
         else:
             assert chunk == (i * 2, i * 2 + 1)
+
+
+def test_qv_table_iter_preserves_attributes_from_parquet(tmp_path):
+    t = AttrTable.from_kwargs(a=np.arange(0, 5), foo="bar")
+    p = tmp_path / "attr_table.parquet"
+    t.to_parquet(p)
+
+    chunks = list(qv_table_iter(AttrTable, p, max_chunk_size=2))
+    assert len(chunks) == 3
+    assert all(isinstance(c, AttrTable) for c in chunks)
+    assert all(c.foo == "bar" for c in chunks)
+
+
+def test_qv_table_iter_preserves_attributes_for_in_memory_tables():
+    t = AttrTable.from_kwargs(a=np.arange(0, 5), foo="bar")
+    chunks = list(qv_table_iter(AttrTable, t, max_chunk_size=2))
+    assert len(chunks) == 3
+    assert all(isinstance(c, AttrTable) for c in chunks)
+    assert all(c.foo == "bar" for c in chunks)
+
+
+def test_chunked_parquet_writer_preserves_attributes(tmp_path):
+    t = AttrTable.from_kwargs(a=np.arange(0, 5), foo="bar")
+    out = tmp_path / "out.parquet"
+
+    w = ChunkedParquetWriter(out)
+    w.write(t[:2])
+    w.write(t[2:])
+    w.close()
+
+    reread = AttrTable.from_parquet(out)
+    assert reread.foo == "bar"

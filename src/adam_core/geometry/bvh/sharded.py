@@ -42,7 +42,7 @@ from .index import (
 )
 from ...orbits.orbits import Orbits
 from ...orbits.polyline import OrbitPolylineSegments, compute_segment_aabbs, PaddingMethod
-from ...utils.iter import _iterate_chunk_indices
+from ...utils.iter import ChunkedParquetWriter, _iterate_chunk_indices, qv_table_iter
 from ...ray_cluster import initialize_use_ray
 
 
@@ -627,7 +627,7 @@ def _build_tlas_from_shard_aabbs(
 
 @dataclass
 class _ShardWriter:
-    writer: pq.ParquetWriter
+    writer: ChunkedParquetWriter
     rows_written: int
 
 
@@ -646,7 +646,7 @@ class _LRUWriters:
             self._cache.move_to_end(key)
         return w
 
-    def put(self, key: str, writer: pq.ParquetWriter) -> None:
+    def put(self, key: str, writer: ChunkedParquetWriter) -> None:
         if key in self._cache:
             self._cache.move_to_end(key)
             return
@@ -682,18 +682,17 @@ def _iter_orbits_batches(
     `thor.orbit.TestOrbits`) without causing schema mismatches when materializing
     `Orbits` tables for sharding.
     """
-    if isinstance(orbits_source, Orbits):
-        for s, e in _iterate_chunk_indices(orbits_source, chunk_size_orbits):
-            yield orbits_source[s:e]
-        return
-
-    # Parquet path: request only the columns defined on Orbits so that
-    # extra columns in the file are ignored, matching Quivr's parquet loader.
-    orbit_columns = [field.name for field in Orbits.schema]
-    pf = pq.ParquetFile(orbits_source)
-    for rb in pf.iter_batches(batch_size=chunk_size_orbits, columns=orbit_columns):
-        tbl = pa.Table.from_batches([rb])
-        yield Orbits.from_pyarrow(tbl)
+    # Delegate to the canonical Quivr chunk iterator which:
+    # - handles in-memory tables and Parquet files/directories
+    # - ignores extra Parquet columns (by selecting only schema columns)
+    # - preserves schema metadata (Quivr attributes) via Arrow schema metadata
+    for chunk in qv_table_iter(
+        Orbits,
+        orbits_source,
+        max_chunk_size=int(chunk_size_orbits),
+    ):
+        # `qv_table_iter` is typed to qv.Table; narrow to Orbits.
+        yield chunk  # type: ignore[misc]
 
 
 def _compute_centroids(segments: OrbitPolylineSegments) -> npt.NDArray[np.float64]:
@@ -981,8 +980,9 @@ def _write_sharded_batch(
         seg_path = os.path.join(shard_dir, "segments.parquet")
         w = writers.get(shard_id)
         if w is None:
-            writer = pq.ParquetWriter(seg_path, empty_schema)
-            writers.put(shard_id, writer)
+            # Use a lazy schema derived from the first non-empty subtable so
+            # Arrow schema metadata (Quivr attributes) is preserved.
+            writers.put(shard_id, ChunkedParquetWriter(seg_path))
             w = writers.get(shard_id)
         assert w is not None
         w.writer.write_table(sub)

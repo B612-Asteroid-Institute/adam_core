@@ -451,6 +451,7 @@ def transform_covariances_jacobian(
     coords: np.ndarray,
     covariances: np.ndarray,
     _func: Callable,
+    chunk_size: Optional[int] = 200,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -473,9 +474,39 @@ def transform_covariances_jacobian(
     covariances_out : `~numpy.ndarray` (N, D, D)
         Transformed covariance matrices.
     """
-    jacobian = calc_jacobian(coords, _func, **kwargs)
-    covariances = jacobian @ covariances @ np.transpose(jacobian, axes=(0, 2, 1))
-    return covariances
+    n = int(coords.shape[0])
+    if n == 0:
+        return covariances
+
+    if chunk_size is None or chunk_size <= 0:
+        jacobian = calc_jacobian(coords, _func, **kwargs)
+        return jacobian @ covariances @ np.transpose(jacobian, axes=(0, 2, 1))
+
+    # NOTE: We intentionally avoid importing adam_core.utils here. The utils
+    # package's __init__ imports SPICE helpers that depend on coordinates,
+    # which can create circular imports during test collection.
+    def _iter_padded_chunks(arr: np.ndarray, size: int):
+        n0 = int(arr.shape[0])
+        for i in range(0, n0, size):
+            chunk = arr[i : i + size]
+            if int(chunk.shape[0]) < size:
+                pad0 = size - int(chunk.shape[0])
+                pad_width = [(0, pad0)] + [(0, 0)] * (chunk.ndim - 1)
+                chunk = np.pad(chunk, pad_width, constant_values=0)
+            yield chunk
+
+    cov_out_chunks: list[np.ndarray] = []
+    for coords_chunk, cov_chunk in zip(
+        _iter_padded_chunks(coords, chunk_size),
+        _iter_padded_chunks(covariances, chunk_size),
+    ):
+        jac_chunk = calc_jacobian(coords_chunk, _func, **kwargs)
+        cov_out_chunks.append(
+            jac_chunk @ cov_chunk @ np.transpose(jac_chunk, axes=(0, 2, 1))
+        )
+
+    cov_out = np.concatenate(cov_out_chunks, axis=0)
+    return cov_out[:n]
 
 
 def _upper_triangular_to_full(

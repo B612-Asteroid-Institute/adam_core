@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Callable, Hashable, Optional, Tuple
 
 import jax.numpy as jnp
@@ -7,6 +8,21 @@ from jax import config, jacfwd, vmap
 config.update("jax_enable_x64", True)
 
 __all__ = ["calc_jacobian"]
+
+
+@lru_cache(maxsize=256)
+def _get_vmapped_jacobian_func(
+    _func: Callable,
+    in_axes: Hashable,
+    out_axes: Optional[int],
+):
+    """
+    Cache the (jacfwd -> vmap) wrapper so repeated calls don't rebuild new Python
+    function objects, which can add avoidable tracing overhead and defeat some
+    internal compilation caching.
+    """
+    jacobian_func = jacfwd(_func, argnums=0)
+    return vmap(jacobian_func, in_axes=in_axes, out_axes=out_axes)
 
 
 def calc_jacobian(
@@ -48,16 +64,8 @@ def calc_jacobian(
     jacobian : `~numpy.ndarray` (N, D, D)
         Array containing function partial derivatives for each coordinate.
     """
-    # Calculate the jacobian function for the input function
-    # Do this only once!
-    jacobian_func = jacfwd(_func, argnums=0)
-
-    vmapped_jacobian_func = vmap(
-        jacobian_func,
-        in_axes=in_axes,
-        out_axes=out_axes,
-    )
-
+    # Build (and cache) the jacobian+vmap wrapper once per process.
+    vmapped_jacobian_func = _get_vmapped_jacobian_func(_func, in_axes, out_axes)
     jacobian = vmapped_jacobian_func(coords, *kwargs.values())
     # If the vmapped function returns more outputs, then only
     # return the first one. All relevant functions in adam_core return

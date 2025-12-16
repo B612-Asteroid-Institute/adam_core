@@ -29,10 +29,10 @@ dependencies = [
   "astroquery",
   "healpy",
   # jaxlib cpu is only available for macos x86_64 <=0.4.38
+  "jax>=0.8,<0.9; platform_system != 'Darwin' or platform_machine != 'x86_64'",
   "jax>=0.4.23,<=0.4.38; platform_system == 'Darwin' and platform_machine == 'x86_64'",
-  "jax; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+  "jaxlib>=0.8,<0.9; platform_system != 'Darwin' or platform_machine != 'x86_64'",
   "jaxlib>=0.4.23,<=0.4.38; platform_system == 'Darwin' and platform_machine == 'x86_64'",
-  "jaxlib; platform_system != 'Darwin' or platform_machine != 'x86_64'",
   "numba",
   "numpy>=2.0.0",
   "pdm",

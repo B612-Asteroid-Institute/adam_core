@@ -18,7 +18,7 @@ from numba import njit
 
 from ...ray_cluster import initialize_use_ray
 import os
-from ...utils.iter import _iterate_chunks
+from ...utils.iter import ChunkedParquetWriter, _iterate_chunks
 from ..rays import ObservationRays
 from .index import BVHIndex, get_leaf_primitives_numpy
 from .sharded import (
@@ -1357,19 +1357,19 @@ def write_routed_rays_by_shard(
         rays.u_z.to_numpy(),
     ]).astype(np.float32, copy=False)
 
-    # Setup Parquet writers (LRU)
-    from pyarrow import parquet as pq
-    import pyarrow as pa
-
-    schema = ObservationRays.empty().table.schema
+    # Setup Parquet writers (LRU). Use ChunkedParquetWriter so the schema is
+    # derived from the first non-empty chunk (preserving any Arrow schema
+    # metadata / Quivr attributes).
     class _Writer:
         def __init__(self, path: str):
             self.path = path
-            self.writer = pq.ParquetWriter(path, schema)
+            self.writer = ChunkedParquetWriter(path)
             self.rows = 0
+
         def write(self, tbl: pa.Table) -> None:
             self.writer.write_table(tbl)
-            self.rows += tbl.num_rows
+            self.rows += int(tbl.num_rows)
+
         def close(self) -> None:
             self.writer.close()
 
