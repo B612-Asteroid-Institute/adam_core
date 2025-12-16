@@ -112,3 +112,6 @@ pdm.lock
 # macOS files
 *.DS_Store
 *.benchmarks
+
+# Cursor files
+.cursor/
