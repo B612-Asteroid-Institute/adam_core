@@ -7,6 +7,8 @@ import pytest
 import quivr as qv
 from astropy import units as u
 
+from ...coordinates.covariances import CoordinateCovariances
+from ...coordinates.origin import OriginCodes
 from ...observers import Observers
 from ...time import Timestamp
 from ..ephemeris import generate_ephemeris_2body
@@ -183,3 +185,47 @@ def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
     stats_file = tmp_path / "ephemeris_profile.prof"
     profiler.dump_stats(stats_file)
     print(f"Run 'snakeviz {stats_file}' to view the profile results.")
+
+
+def test_generate_ephemeris_2body_propagates_covariance_smoke():
+    """
+    Regression test: covariance propagation path should not crash and should produce
+    a non-null covariance on ephemeris coordinates when orbit covariances are present.
+    """
+    # Minimal orbit + observer (values aren't important for this smoke test).
+    times = Timestamp.from_mjd([60000.0], scale="tdb")
+    observers = Observers.from_code("X05", times)
+
+    # Use the first fixture orbit state from existing test data by constructing a trivial
+    # propagated orbit in-place: propagate_2body is already covered by other tests; we just
+    # need an Orbits object with a covariance attached.
+    #
+    # Take a simple orbit from the propagated_orbits fixture-like pattern (cartesian in AU, AU/day).
+    from ...orbits import Orbits
+    from ...coordinates import CartesianCoordinates
+    from ...coordinates.origin import Origin
+
+    cov = CoordinateCovariances.from_matrix(np.eye(6)[None, :, :] * 1e-12)
+    orbit = Orbits.from_kwargs(
+        orbit_id=["test"],
+        object_id=["test"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            covariance=cov,
+            time=times.rescale("tdb"),
+            origin=Origin.from_OriginCodes(OriginCodes.SOLAR_SYSTEM_BARYCENTER),
+            frame="ecliptic",
+        ),
+    )
+
+    # The orbit is already "propagated" to the observer time; this test is specifically
+    # exercising ephemeris covariance propagation (and should work even for N < chunk_size).
+    eph = generate_ephemeris_2body(orbit, observers)
+
+    assert eph.coordinates.covariance is not None
+    assert not eph.coordinates.covariance.is_all_nan()

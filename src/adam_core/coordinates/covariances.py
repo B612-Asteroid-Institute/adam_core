@@ -482,28 +482,38 @@ def transform_covariances_jacobian(
         jacobian = calc_jacobian(coords, _func, **kwargs)
         return jacobian @ covariances @ np.transpose(jacobian, axes=(0, 2, 1))
 
-    # NOTE: We intentionally avoid importing adam_core.utils here. The utils
-    # package's __init__ imports SPICE helpers that depend on coordinates,
-    # which can create circular imports during test collection.
-    def _iter_padded_chunks(arr: np.ndarray, size: int):
-        n0 = int(arr.shape[0])
-        for i in range(0, n0, size):
-            chunk = arr[i : i + size]
-            if int(chunk.shape[0]) < size:
-                pad0 = size - int(chunk.shape[0])
-                pad_width = [(0, pad0)] + [(0, 0)] * (chunk.ndim - 1)
-                chunk = np.pad(chunk, pad_width, constant_values=0)
-            yield chunk
+    # Chunk+pad to a fixed size to reduce JAX recompilations, but ensure that any
+    # mapped kwargs (e.g. observation_time, observer_coordinates, mu) are chunked
+    # and padded consistently with coords/covariances.
+    def _pad0(arr: np.ndarray, size: int) -> np.ndarray:
+        if int(arr.shape[0]) >= size:
+            return arr
+        pad_n = size - int(arr.shape[0])
+        pad_width = [(0, pad_n)] + [(0, 0)] * (arr.ndim - 1)
+        return np.pad(arr, pad_width, constant_values=0)
 
     cov_out_chunks: list[np.ndarray] = []
-    for coords_chunk, cov_chunk in zip(
-        _iter_padded_chunks(coords, chunk_size),
-        _iter_padded_chunks(covariances, chunk_size),
-    ):
-        jac_chunk = calc_jacobian(coords_chunk, _func, **kwargs)
-        cov_out_chunks.append(
-            jac_chunk @ cov_chunk @ np.transpose(jac_chunk, axes=(0, 2, 1))
-        )
+    n0 = int(coords.shape[0])
+    size = int(chunk_size)
+    for i in range(0, n0, size):
+        coords_chunk = _pad0(coords[i : i + size], size)
+        cov_chunk = _pad0(covariances[i : i + size], size)
+
+        kwargs_chunk = {}
+        for k, v in kwargs.items():
+            # These control vmap behavior; they are not chunked.
+            if k in ("in_axes", "out_axes"):
+                kwargs_chunk[k] = v
+                continue
+
+            # If v is an array with leading dimension N, chunk+pad it alongside coords.
+            if isinstance(v, np.ndarray) and int(v.shape[0]) == n0:
+                kwargs_chunk[k] = _pad0(v[i : i + size], size)
+            else:
+                kwargs_chunk[k] = v
+
+        jac_chunk = calc_jacobian(coords_chunk, _func, **kwargs_chunk)
+        cov_out_chunks.append(jac_chunk @ cov_chunk @ np.transpose(jac_chunk, axes=(0, 2, 1)))
 
     cov_out = np.concatenate(cov_out_chunks, axis=0)
     return cov_out[:n]

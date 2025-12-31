@@ -206,6 +206,7 @@ def generate_ephemeris_2body(
     observer_codes = observers_barycentric.code.to_numpy(zero_copy_only=False)
     mu = observers_barycentric.coordinates.origin.mu()
     times = propagated_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    times_utc = propagated_orbits.coordinates.time.rescale("utc").mjd().to_numpy(zero_copy_only=False)
 
     # Define chunk size
     chunk_size = 200
@@ -248,7 +249,7 @@ def generate_ephemeris_2body(
             _generate_ephemeris_2body,
             in_axes=(0, 0, 0, 0, None, None, None, None),
             out_axes=(0, 0),
-            observation_times=times.utc.mjd,
+            observation_time=times_utc,
             observer_coordinates=observer_coordinates,
             mu=mu,
             lt_tol=lt_tol,
