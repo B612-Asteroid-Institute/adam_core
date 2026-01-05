@@ -28,7 +28,7 @@ from ..observations.source_catalog import SourceCatalog
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..ray_cluster import initialize_use_ray
-from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
+from ..utils.iter import _iterate_chunk_indices
 
 __all__ = [
     "ObservationRays",

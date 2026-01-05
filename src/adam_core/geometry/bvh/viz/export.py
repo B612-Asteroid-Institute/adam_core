@@ -11,13 +11,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
 from ...rays import ObservationRays
 from .. import BVHIndex, OverlapHits
-from ..viz import ViewData, prepare_view_data_single_orbit
+from .filters import prepare_view_data_single_orbit
+
+if TYPE_CHECKING:
+    from .filters import ViewData
 
 
 def save_view_data_npz(
