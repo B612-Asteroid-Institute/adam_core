@@ -110,3 +110,4 @@ pdm.lock
 
 # macOS files
 *.DS_Store
+*.benchmarks

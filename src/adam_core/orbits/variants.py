@@ -231,6 +231,7 @@ class VariantEphemeris(qv.Table):
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = SphericalCoordinates.as_column()
+    aberrated_coordinates = CartesianCoordinates.as_column(nullable=True)
 
     def link_to_ephemeris(
         self, ephemeris: Ephemeris
@@ -299,15 +300,33 @@ class VariantEphemeris(qv.Table):
             )
             variants = link.select_right(key)
 
-            samples = variants.coordinates.values
-            mean = ephemeris_i.coordinates.values[0]
-            covariance = weighted_covariance(
-                mean, samples, variants.weights_cov.to_numpy(zero_copy_only=False)
+            # Collapse topocentric spherical coordinate covariances
+            samples_spherical = variants.coordinates.values
+            mean_spherical = ephemeris_i.coordinates.values[0]
+            covariance_spherical = weighted_covariance(
+                mean_spherical,
+                samples_spherical,
+                variants.weights_cov.to_numpy(zero_copy_only=False),
             ).reshape(1, 6, 6)
 
             ephemeris_collapsed = ephemeris_i.set_column(
-                "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)
+                "coordinates.covariance",
+                CoordinateCovariances.from_matrix(covariance_spherical),
             )
+
+            # If aberrated coordinates were provided, also collapse their covariances
+            if not pc.all(pc.is_null(variants.aberrated_coordinates.x)).as_py():
+                samples_aberrated = variants.aberrated_coordinates.values
+                mean_aberrated = ephemeris_i.aberrated_coordinates.values[0]
+                covariance_aberrated = weighted_covariance(
+                    mean_aberrated,
+                    samples_aberrated,
+                    variants.weights_cov.to_numpy(zero_copy_only=False),
+                ).reshape(1, 6, 6)
+                ephemeris_collapsed = ephemeris_collapsed.set_column(
+                    "aberrated_coordinates.covariance",
+                    CoordinateCovariances.from_matrix(covariance_aberrated),
+                )
 
             ephemeris_list.append(ephemeris_collapsed)
 
