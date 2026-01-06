@@ -9,6 +9,7 @@ from ..simple_magnitude import (
     InstrumentFilters,
     StandardFilters,
     calculate_apparent_magnitude,
+    calculate_apparent_magnitude_jax,
     convert_magnitude,
 )
 
@@ -256,3 +257,64 @@ class TestSimpleMagnitude:
 
         with pytest.raises(ValueError, match="No conversion path"):
             convert_magnitude(15.0, "V", "NonExistentFilter")
+
+    def test_apparent_magnitude_jax_matches_numpy(self):
+        """JAX implementation should numerically match the NumPy implementation."""
+        rng = np.random.default_rng(42)
+        n = 64
+        time = Timestamp.from_mjd(np.full(n, 60000), scale="tdb")
+
+        # Keep geometry well-conditioned (avoid r ~ 0 or delta ~ 0)
+        obj_x = rng.uniform(1.2, 3.0, size=n)
+        obj_y = rng.uniform(0.1, 2.0, size=n)
+        obj_z = rng.uniform(-0.5, 0.5, size=n)
+
+        observer = Observers.from_kwargs(
+            code=["500"] * n,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=np.full(n, 1.0),
+                y=np.zeros(n),
+                z=np.zeros(n),
+                vx=np.zeros(n),
+                vy=np.zeros(n),
+                vz=np.zeros(n),
+                time=time,
+                frame="ecliptic",
+                origin=Origin.from_kwargs(code=["SUN"] * n),
+            ),
+        )
+        obj = CartesianCoordinates.from_kwargs(
+            x=obj_x,
+            y=obj_y,
+            z=obj_z,
+            vx=np.zeros(n),
+            vy=np.zeros(n),
+            vz=np.zeros(n),
+            time=time,
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"] * n),
+        )
+
+        H = rng.uniform(10.0, 25.0, size=n)
+        G = rng.uniform(0.0, 1.0, size=n)
+
+        mags_np = calculate_apparent_magnitude(H, obj, observer, G=G, output_filter="V")
+        mags_jax = calculate_apparent_magnitude_jax(H, obj, observer, G=G, output_filter="V")
+
+        # JAX may run in float32 depending on configuration; keep tolerance realistic.
+        assert np.allclose(np.asarray(mags_jax), mags_np, rtol=1e-6, atol=1e-8)
+
+    def test_apparent_magnitude_jax_output_filter(self, earth_observer):
+        """JAX implementation should support output_filter conversion."""
+        H = 15.0
+        obj = CartesianCoordinates.from_kwargs(
+            x=[2.0], y=[0.0], z=[0.0],
+            vx=[0.0], vy=[0.0], vz=[0.0],
+            time=Timestamp.from_mjd([60000], scale="tdb"),
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"]),
+        )
+
+        m_g_np = _as_scalar(calculate_apparent_magnitude(H, obj, earth_observer, output_filter="g"))
+        m_g_jax = _as_scalar(calculate_apparent_magnitude_jax(H, obj, earth_observer, output_filter="g"))
+        assert m_g_jax == pytest.approx(m_g_np, abs=1e-6)

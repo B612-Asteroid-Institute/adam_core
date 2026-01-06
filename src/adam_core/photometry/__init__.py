@@ -3,9 +3,12 @@ from .simple_magnitude import (
     InstrumentFilters,
     StandardFilters,
     calculate_apparent_magnitude,
+    calculate_apparent_magnitude_jax,
     convert_magnitude,
+    convert_magnitude_jax,
     find_conversion_path,
     predict_magnitudes,
+    predict_magnitudes_jax,
 )
 
 __all__ = [
@@ -13,7 +16,10 @@ __all__ = [
     "StandardFilters",
     "InstrumentFilters", 
     "calculate_apparent_magnitude",
+    "calculate_apparent_magnitude_jax",
     "convert_magnitude",
+    "convert_magnitude_jax",
     "find_conversion_path",
     "predict_magnitudes",
+    "predict_magnitudes_jax",
 ]
