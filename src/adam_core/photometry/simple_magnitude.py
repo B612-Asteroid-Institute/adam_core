@@ -68,6 +68,8 @@ class InstrumentFilters(Enum):
 # [2] Toptun et al. (2023) PASP 135, 104503 - Multi-survey transformations 
 # [3] Gaia DR3 Documentation (2022) - ESA official transformations 
 # [4] Lupton (2005) SDSS website transformations
+# [5] Bowell & Lumme (1979), in Gehrels (ed.) Asteroids (UArizona Press) - mean asteroid colors (Table VII)
+# [6] Erasmus et al. (2019) ApJS, DOI: 10.3847/1538-4365/ab1344 - V-R and V-I distributions (Table 1 + footnote b)
 # 
 # IMPORTANT NOTE ABOUT V <-> g TRANSFORMATIONS:
 # Lupton (2005) provides two-color transformations (e.g., V = g - 0.5784*(g-r) - 0.0038)
@@ -76,6 +78,35 @@ class InstrumentFilters(Enum):
 # round-trip accuracy, we use single-filter transformations from Jordi et al. and compute
 # the exact mathematical inverses rather than mixing different methodologies.
 # 
+
+# ---------------------------------------------------------------------------
+# V-centric Johnson/Cousins UBVRI conversions using a "typical asteroid" color
+# model (population-weighted average of C and S types).
+#
+# There is no unique single-filter V->(U,B,R,I) conversion without a color
+# assumption. These constants implement a simple, documented default.
+#
+# Defaults chosen here correspond to an equal-weight C/S mixture (50/50).
+# This is intended as a pragmatic "typical asteroid" default that is **closer
+# to NEO/NEA observed mixes** than to the full main-belt population (which is
+# generally C-rich, and also includes substantial X/M/etc fractions).
+# We can make this more sophisticated later (e.g., heliocentric-distance- or
+# size-dependent mixtures, or user-provided colors).
+# - Bowell & Lumme (1979) Table VII zero-phase colors:
+#     C: (B-V)=0.70, (U-B)=0.34
+#     S: (B-V)=0.84, (U-B)=0.42
+#   => mixture: (B-V)=0.77, (U-B)=0.38, (U-V)=1.15  [5]
+# - Erasmus et al. (2019) Table 1 provides solar-corrected (V-R) and (V-I),
+#   with solar colors V-R=0.41 and V-I=0.75 (their footnote b). Adding solar
+#   colors back and averaging by Tax yields mixture values:
+#     (V-R)=0.4311, (V-I)=0.7681  [6]
+# ---------------------------------------------------------------------------
+B_MINUS_V_DEFAULT = 0.77
+U_MINUS_B_DEFAULT = 0.38
+U_MINUS_V_DEFAULT = B_MINUS_V_DEFAULT + U_MINUS_B_DEFAULT  # 1.15
+V_MINUS_R_DEFAULT = 0.4311
+V_MINUS_I_DEFAULT = 0.7681
+
 FILTER_CONVERSIONS: Dict[tuple, tuple] = {
     # =================================================================
     # VERIFIED TRANSFORMATIONS
@@ -89,6 +120,21 @@ FILTER_CONVERSIONS: Dict[tuple, tuple] = {
     ("B", "g"): (0.9832, 0.1452),  # [1]
     ("R", "r"): (0.9984, -0.0284),  # [1]
     ("I_BAND", "i"): (0.9970, -0.0482),  # [1]
+
+    # Johnson/Cousins internal UBVRI conversions (ASSUMPTION-BASED DEFAULTS)
+    # These are constant-offset conversions using typical asteroid colors. [5,6]
+    # B = V + (B-V)
+    ("V", "B"): (1.0, B_MINUS_V_DEFAULT),  # [5]
+    ("B", "V"): (1.0, -B_MINUS_V_DEFAULT),  # [5]
+    # U = V + (U-V) where (U-V) = (B-V) + (U-B)
+    ("V", "U"): (1.0, U_MINUS_V_DEFAULT),  # [5]
+    ("U", "V"): (1.0, -U_MINUS_V_DEFAULT),  # [5]
+    # R = V - (V-R)
+    ("V", "R"): (1.0, -V_MINUS_R_DEFAULT),  # [6]
+    ("R", "V"): (1.0, V_MINUS_R_DEFAULT),  # [6]
+    # I = V - (V-I)  (Cousins I_C represented by I_BAND)
+    ("V", "I_BAND"): (1.0, -V_MINUS_I_DEFAULT),  # [6]
+    ("I_BAND", "V"): (1.0, V_MINUS_I_DEFAULT),  # [6]
     
     # SDSS to Johnson/Cousins (computed as mathematical inverses of Jordi et al.)
     # Note: Lupton (2005) gives two-color transformations, not single-filter ones
@@ -146,52 +192,27 @@ FILTER_CONVERSIONS: Dict[tuple, tuple] = {
     ("R", "LSST_r"): (0.9987, 0.0054),   # inverse of LSST_r -> R
     ("I_BAND", "LSST_i"): (1.0321, 0.1338),  # inverse of LSST_i -> I_BAND
 
-    # =================================================================
-    # UNVERIFIED TRANSFORMATIONS - USE WITH CAUTION
-    # =================================================================
-    
-    # Within-system conversions for SDSS (ugriz) - UNVERIFIED
-    # WARNING: These are synthetic transformations, not empirically verified!
-    # Based on typical stellar colors, may not be accurate for all objects
-    # ("u", "g"): (0.9134, 0.7710),  # UNVERIFIED - no literature source found
-    # ("g", "u"): (1.0948, -0.8439),  # UNVERIFIED - no literature source found
-    # ("g", "r"): (0.8783, 0.4089),  # UNVERIFIED - no literature source found
-    # ("r", "g"): (1.1385, -0.4656),  # UNVERIFIED - no literature source found
-    # ("r", "i"): (0.9759, 0.1326),  # UNVERIFIED - no literature source found
-    # ("i", "r"): (1.0247, -0.1358),  # UNVERIFIED - no literature source found
-    # ("i", "z"): (0.9574, 0.2583),  # UNVERIFIED - no literature source found
-    # ("z", "i"): (1.0445, -0.2697),  # UNVERIFIED - no literature source found
-    
-    # Within-system conversions for Johnson-Cousins (UBVRI) - UNVERIFIED
-    # WARNING: These are synthetic transformations, not empirically verified!
-    # ("B", "V"): (0.9820, 0.1654),  # UNVERIFIED - no literature source found
-    # ("V", "B"): (1.0183, -0.1685),  # UNVERIFIED - no literature source found
-    # ("V", "R"): (0.9845, 0.0724),  # UNVERIFIED - no literature source found
-    # ("R", "V"): (1.0157, -0.0735),  # UNVERIFIED - no literature source found
-    # ("R", "I_BAND"): (0.9892, 0.0318),  # UNVERIFIED - no literature source found
-    # ("I_BAND", "R"): (1.0109, -0.0322),  # UNVERIFIED - no literature source found
-
-
-    # =================================================================
-    # DERIVED TRANSFORMATIONS - TO BE TESTED
-    # These are computed by chaining verified transformations
-    # Accuracy depends on accumulated errors from multi-step conversions
-    # =================================================================
-    
-    # DECam u-band - UNVERIFIED (no verified DECam u transformations found)
-    # ("DECam_u", "u"): (0.9742, 0.0523),  # UNVERIFIED - no literature source
-    # ("u", "DECam_u"): (1.0265, -0.0537),  # UNVERIFIED - no literature source
-    
-
 }
 
 
+def _filter_name(filter_name: Union[str, StandardFilters, InstrumentFilters]) -> str:
+    """
+    Coerce a filter identifier into the string key used by FILTER_CONVERSIONS.
+
+    - If an Enum is provided, we use its `.name` (e.g., StandardFilters.I_BAND -> "I_BAND").
+    - If a string is provided, it is returned as-is.
+    """
+    if isinstance(filter_name, Enum):
+        return filter_name.name
+    return filter_name
+
+
 def calculate_apparent_magnitude(
-    H: Union[float, npt.NDArray[np.float64]],
+    H_v: Union[float, npt.NDArray[np.float64]],
     object_coords: CartesianCoordinates,
     observer: Observers,
     G: Union[float, npt.NDArray[np.float64]] = 0.15,
-    filter_name: str = "V",
+    output_filter: Union[str, StandardFilters, InstrumentFilters] = StandardFilters.V,
 ) -> Union[float, npt.NDArray[np.float64]]:
     """
     Calculate the apparent magnitude of an object given its absolute magnitude,
@@ -200,9 +221,11 @@ def calculate_apparent_magnitude(
     This implements the standard magnitude equation with the H-G system for
     phase function.
 
+    Absolute magnitude is assumed to be in the Johnson-Cousins V-band.
+
     Parameters
     ----------
-    H : float or ndarray
+    H_v : float or ndarray
         Absolute magnitude of the object(s)
     object_coords : CartesianCoordinates
         Cartesian coordinates of the object(s)
@@ -210,8 +233,8 @@ def calculate_apparent_magnitude(
         Observer position(s)
     G : float or ndarray, optional
         Slope parameter for the H-G system, defaults to 0.15
-    filter_name : str, optional
-        Name of the filter to calculate magnitude for, defaults to "V"
+    output_filter : Union[str, StandardFilters, InstrumentFilters], optional
+        Filter to calculate magnitude for, defaults to StandardFilters.V
 
     Returns
     -------
@@ -220,8 +243,8 @@ def calculate_apparent_magnitude(
     """
 
     # Ensure inputs have compatible shapes
-    if isinstance(H, np.ndarray):
-        n_objects = len(H)
+    if isinstance(H_v, np.ndarray):
+        n_objects = len(H_v)
         if isinstance(G, np.ndarray) and len(G) != n_objects:
             raise ValueError(
                 f"G array length ({len(G)}) must match H array length ({n_objects})"
@@ -265,17 +288,18 @@ def calculate_apparent_magnitude(
     phase_function = (1 - G) * phi1 + G * phi2
 
     # Calculate the apparent magnitude
-    apparent_mag = H + 5 * np.log10(r * delta) - 2.5 * np.log10(phase_function)
+    apparent_mag = H_v + 5 * np.log10(r * delta) - 2.5 * np.log10(phase_function)
 
     # If a filter other than V is requested, convert the magnitude
-    if filter_name != "V":
-        apparent_mag = convert_magnitude(apparent_mag, "V", filter_name)
+    output_filter_name = _filter_name(output_filter)
+    if output_filter_name != "V":
+        apparent_mag = convert_magnitude(apparent_mag, "V", output_filter_name)
 
     return apparent_mag
 
 
 def find_conversion_path(
-    source_filter: str, target_filter: str, max_steps: int = 3
+    source_filter: str, target_filter: str, max_steps: int = 6
 ) -> list:
     """
     Find the shortest conversion path between two filters.
@@ -287,7 +311,7 @@ def find_conversion_path(
     target_filter : str
         Target filter name
     max_steps : int, optional
-        Maximum number of conversion steps allowed, defaults to 3
+        Maximum number of conversion steps allowed, defaults to 6
 
     Returns
     -------
@@ -329,8 +353,8 @@ def find_conversion_path(
 
 def convert_magnitude(
     magnitude: Union[float, npt.NDArray[np.float64]],
-    source_filter: str,
-    target_filter: str,
+    source_filter: Union[str, StandardFilters, InstrumentFilters],
+    target_filter: Union[str, StandardFilters, InstrumentFilters],
 ) -> Union[float, npt.NDArray[np.float64]]:
     """
     Convert a magnitude from one filter to another using the optimal conversion path.
@@ -348,15 +372,20 @@ def convert_magnitude(
         Magnitude(s) in the target filter
     """
 
+    source_filter_name = _filter_name(source_filter)
+    target_filter_name = _filter_name(target_filter)
+
     # If source and target are the same, return the input magnitude
-    if source_filter == target_filter:
+    if source_filter_name == target_filter_name:
         return magnitude
 
     # Find the optimal conversion path
-    path = find_conversion_path(source_filter, target_filter)
+    path = find_conversion_path(source_filter_name, target_filter_name)
 
     if not path:
-        msg = f"No conversion path available from {source_filter} to {target_filter}"
+        msg = (
+            f"No conversion path available from {source_filter_name} to {target_filter_name}"
+        )
         raise ValueError(msg)
 
     # Apply conversions along the path
@@ -426,32 +455,35 @@ def predict_magnitudes(
     # Get observer positions at exposure midpoints
     observers = exposures.observers()
     
-    # Calculate apparent magnitudes in reference filter
-    apparent_mags = calculate_apparent_magnitude(
-        H=H,
+    # Convert H into V-band absolute magnitude for internal V-centric calculation.
+    H_v = H if reference_filter == "V" else convert_magnitude(H, reference_filter, "V")
+
+    # Calculate apparent magnitudes in V-band
+    apparent_mags_v = calculate_apparent_magnitude(
+        H_v=H_v,
         object_coords=object_coords,
         observer=observers,
         G=G,
-        filter_name=reference_filter,
+        output_filter="V",
     )
     
     # Convert to exposure filters if needed
     target_filters = exposures.filter.to_numpy(zero_copy_only=False)
     
     # Handle filter conversions
-    if isinstance(apparent_mags, np.ndarray):
-        converted_mags = np.empty_like(apparent_mags)
-        for i, (mag, target_filter) in enumerate(zip(apparent_mags, target_filters)):
-            if target_filter != reference_filter:
-                converted_mags[i] = convert_magnitude(mag, reference_filter, target_filter)
+    if isinstance(apparent_mags_v, np.ndarray):
+        converted_mags = np.empty_like(apparent_mags_v)
+        for i, (mag, target_filter) in enumerate(zip(apparent_mags_v, target_filters)):
+            if target_filter != "V":
+                converted_mags[i] = convert_magnitude(mag, "V", target_filter)
             else:
                 converted_mags[i] = mag
     else:
         # Single magnitude case
-        target_filter = target_filters[0] if len(target_filters) == 1 else reference_filter
-        if target_filter != reference_filter:
-            converted_mags = convert_magnitude(apparent_mags, reference_filter, target_filter)
+        target_filter = target_filters[0] if len(target_filters) == 1 else "V"
+        if target_filter != "V":
+            converted_mags = convert_magnitude(apparent_mags_v, "V", target_filter)
         else:
-            converted_mags = apparent_mags
+            converted_mags = apparent_mags_v
     
     return converted_mags
