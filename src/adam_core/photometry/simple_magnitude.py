@@ -10,6 +10,10 @@ from jax import jit
 from ..coordinates.cartesian import CartesianCoordinates
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
+from ..utils.chunking import process_in_chunks
+
+
+JAX_CHUNK_SIZE = 2048
 
 
 class StandardFilters(Enum):
@@ -393,21 +397,21 @@ def convert_magnitude_jax(
     return _apply_affine_jax(magnitude, a, b)
 
 
-def calculate_apparent_magnitude(
+def calculate_apparent_magnitude_v(
     H_v: Union[float, npt.NDArray[np.float64]],
     object_coords: CartesianCoordinates,
     observer: Observers,
     G: Union[float, npt.NDArray[np.float64]] = 0.15,
-    output_filter: Union[str, StandardFilters, InstrumentFilters] = StandardFilters.V,
 ) -> Union[float, npt.NDArray[np.float64]]:
     """
-    Calculate the apparent magnitude of an object given its absolute magnitude,
+    Calculate the apparent V-band magnitude of an object given its absolute magnitude,
     position, and the observer's position.
 
     This implements the standard magnitude equation with the H-G system for
     phase function.
 
-    Absolute magnitude is assumed to be in the Johnson-Cousins V-band.
+    Absolute magnitude is assumed to be in the Johnson-Cousins V-band and the returned
+    apparent magnitude is also in V-band.
 
     Parameters
     ----------
@@ -419,13 +423,10 @@ def calculate_apparent_magnitude(
         Observer position(s)
     G : float or ndarray, optional
         Slope parameter for the H-G system, defaults to 0.15
-    output_filter : Union[str, StandardFilters, InstrumentFilters], optional
-        Filter to calculate magnitude for, defaults to StandardFilters.V
-
     Returns
     -------
     float or ndarray
-        Apparent magnitude(s) of the object(s)
+        Apparent V-band magnitude(s) of the object(s)
     """
 
     # Ensure inputs have compatible shapes
@@ -476,15 +477,8 @@ def calculate_apparent_magnitude(
     phi2 = np.exp(-1.87 * tan_half**1.22)
     phase_function = (1 - G) * phi1 + G * phi2
 
-    # Calculate the apparent magnitude
-    apparent_mag = H_v + 5 * np.log10(r * delta) - 2.5 * np.log10(phase_function)
-
-    # If a filter other than V is requested, convert the magnitude
-    output_filter_name = _filter_name(output_filter)
-    if output_filter_name != "V":
-        apparent_mag = convert_magnitude(apparent_mag, "V", output_filter_name)
-
-    return apparent_mag
+    # Calculate the apparent V-band magnitude
+    return H_v + 5 * np.log10(r * delta) - 2.5 * np.log10(phase_function)
 
 
 @jit
@@ -500,7 +494,7 @@ def _calculate_apparent_magnitude_core_jax(
     Notes
     -----
     This function is intentionally "array-only" (no ADAM classes) to keep it
-    JIT-friendly. Use `calculate_apparent_magnitude_jax` for the public API.
+    JIT-friendly. Use `calculate_apparent_magnitude_v_jax` for the public API.
     """
     # Heliocentric distance r (AU)
     # (manual norm is typically a bit leaner than jnp.linalg.norm for small fixed dims)
@@ -527,52 +521,65 @@ def _calculate_apparent_magnitude_core_jax(
     return H_v + 5.0 * jnp.log10(r * delta) - 2.5 * jnp.log10(phase_function)
 
 
-def calculate_apparent_magnitude_jax(
+def calculate_apparent_magnitude_v_jax(
     H_v: Union[float, npt.NDArray[np.float64]],
     object_coords: CartesianCoordinates,
     observer: Observers,
     G: Union[float, npt.NDArray[np.float64]] = 0.15,
-    output_filter: Union[str, StandardFilters, InstrumentFilters] = StandardFilters.V,
 ) -> npt.NDArray[np.float64]:
     """
-    JAX version of `calculate_apparent_magnitude`.
+    JAX version of `calculate_apparent_magnitude_v`.
 
     This keeps the same input validation and overall behavior, but computes the
     V-band geometry + H-G phase function with a JIT-compiled JAX kernel.
     """
-    # Mirror numpy version's shape validation
-    if isinstance(H_v, np.ndarray):
-        n_objects = len(H_v)
-        if isinstance(G, np.ndarray) and len(G) != n_objects:
-            raise ValueError(
-                f"G array length ({len(G)}) must match H array length ({n_objects})"
-            )
-        if len(object_coords) != n_objects:
-            raise ValueError(
-                f"object_coords length ({len(object_coords)}) must match H array length ({n_objects})"
-            )
-        if len(observer) != n_objects:
-            raise ValueError(
-                f"observer length ({len(observer)}) must match H array length ({n_objects})"
-            )
+    # -------------------------------------------------------------------------
+    # Numpy sandwich input + validation
+    # -------------------------------------------------------------------------
+    n = len(object_coords)
+    if len(observer) != n:
+        raise ValueError(
+            f"observer length ({len(observer)}) must match object_coords length ({n})"
+        )
 
-    apparent_mag_v = _calculate_apparent_magnitude_core_jax(
-        # Pass NumPy arrays / Python scalars directly into the JIT'd kernel.
-        # JAX/XLA will handle conversion efficiently and this avoids redundant `jnp.asarray`
-        # calls in hot loops (e.g., benchmarks).
-        H_v=H_v,
-        object_pos=object_coords.r,
-        observer_pos=observer.coordinates.r,
-        G=G,
-    )
+    object_pos = np.asarray(object_coords.r, dtype=np.float64)
+    observer_pos = np.asarray(observer.coordinates.r, dtype=np.float64)
 
-    output_filter_name = _filter_name(output_filter)
-    if output_filter_name != "V":
-        apparent_mag_v = convert_magnitude_jax(apparent_mag_v, "V", output_filter_name)
+    H_v_arr = np.asarray(H_v, dtype=np.float64)
+    if H_v_arr.ndim == 0:
+        H_v_arr = np.full(n, float(H_v_arr), dtype=np.float64)
+    elif len(H_v_arr) != n:
+        raise ValueError(
+            f"H array length ({len(H_v_arr)}) must match object_coords length ({n})"
+        )
 
-    apparent_mag_v = np.asarray(apparent_mag_v)
+    G_arr = np.asarray(G, dtype=np.float64)
+    if G_arr.ndim == 0:
+        G_arr = np.full(n, float(G_arr), dtype=np.float64)
+    elif len(G_arr) != n:
+        raise ValueError(f"G array length ({len(G_arr)}) must match H array length ({n})")
 
-    return apparent_mag_v
+    # -------------------------------------------------------------------------
+    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
+    # -------------------------------------------------------------------------
+    chunk_size = JAX_CHUNK_SIZE
+    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
+    out = np.empty((padded_n,), dtype=np.float64)
+
+    offset = 0
+    for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
+        process_in_chunks(H_v_arr, chunk_size),
+        process_in_chunks(object_pos, chunk_size),
+        process_in_chunks(observer_pos, chunk_size),
+        process_in_chunks(G_arr, chunk_size),
+    ):
+        mags_v_chunk = _calculate_apparent_magnitude_core_jax(
+            H_v=H_chunk, object_pos=obj_chunk, observer_pos=obs_chunk, G=G_chunk
+        )
+        out[offset : offset + chunk_size] = np.asarray(mags_v_chunk)
+        offset += chunk_size
+
+    return out[:n]
 
 
 def predict_magnitudes(
@@ -625,12 +632,11 @@ def predict_magnitudes(
     H_v = H if reference_filter == "V" else convert_magnitude(H, reference_filter, "V")
 
     # Calculate apparent magnitudes in V-band
-    apparent_mags_v = calculate_apparent_magnitude(
+    apparent_mags_v = calculate_apparent_magnitude_v(
         H_v=H_v,
         object_coords=object_coords,
         observer=observers,
         G=G,
-        output_filter="V",
     )
     
     # Convert to exposure filters if needed
@@ -661,15 +667,16 @@ def predict_magnitudes_jax(
     exposures: Exposures,
     G: Union[float, npt.NDArray[np.float64]] = 0.15,
     reference_filter: str = "V",
-) -> jnp.ndarray:
+) -> npt.NDArray[np.float64]:
     """
     JAX version of `predict_magnitudes`.
 
     Notes
     -----
     This uses JAX for the geometry + phase calculation, and applies per-exposure
-    filter conversions via a vectorized affine transform so the hot-path math is
-    JAX-compiled (compilation keyed by array shapes/dtypes, not coefficient values).
+    filter conversions via an affine transform so the hot-path math is JAX-compiled.
+
+    Returns a NumPy array (numpy sandwich pattern).
     """
     if len(object_coords) != len(exposures):
         raise ValueError(
@@ -678,37 +685,53 @@ def predict_magnitudes_jax(
 
     observers = exposures.observers()
 
-    # Convert H into V-band absolute magnitude for internal V-centric calculation.
-    # Use the JAX conversion path so the whole pipeline remains JAX-friendly.
-    H_v = H if reference_filter == "V" else convert_magnitude_jax(H, reference_filter, "V")
+    n = len(object_coords)
+    object_pos = np.asarray(object_coords.r, dtype=np.float64)
+    observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
 
-    apparent_mags_v = calculate_apparent_magnitude_jax(
-        H_v=H_v,
-        object_coords=object_coords,
-        observer=observers,
-        G=G,
-        output_filter="V",
-    )
+    H_arr = np.asarray(H, dtype=np.float64)
+    if H_arr.ndim == 0:
+        H_arr = np.full(n, float(H_arr), dtype=np.float64)
+    elif len(H_arr) != n:
+        raise ValueError(f"H array length ({len(H_arr)}) must match object_coords length ({n})")
+
+    G_arr = np.asarray(G, dtype=np.float64)
+    if G_arr.ndim == 0:
+        G_arr = np.full(n, float(G_arr), dtype=np.float64)
+    elif len(G_arr) != n:
+        raise ValueError(f"G array length ({len(G_arr)}) must match object_coords length ({n})")
+
+    # Convert H into V-band absolute magnitude for internal V-centric calculation.
+    if reference_filter == "V":
+        H_v_arr = H_arr
+    else:
+        a_h, b_h = _composite_affine_coeffs(reference_filter, "V")
+        H_v_arr = a_h * H_arr + b_h
 
     target_filters = exposures.filter.to_numpy(zero_copy_only=False)
-
-    if apparent_mags_v.ndim == 0:
-        target_filter = target_filters[0] if len(target_filters) == 1 else "V"
-        return (
-            convert_magnitude_jax(apparent_mags_v, "V", target_filter)
-            if target_filter != "V"
-            else apparent_mags_v
-        )
-
-    # Vectorized conversion from V to per-exposure filters:
-    # each conversion is affine m_f = a_f * m_V + b_f.
-    #
-    # Best practice: avoid O(N) repeated graph lookups in Python when N is large.
-    # We compute coefficients once per *unique* filter, then index back.
     unique_filters, inv = np.unique(target_filters, return_inverse=True)
-    coeffs = np.array([_composite_affine_coeffs("V", tf) for tf in unique_filters], dtype=float)
-    a = coeffs[inv, 0]
-    b = coeffs[inv, 1]
+    coeffs = np.array([_composite_affine_coeffs("V", tf) for tf in unique_filters], dtype=np.float64)
+    a_out = coeffs[inv, 0]
+    b_out = coeffs[inv, 1]
 
-    # Pass NumPy arrays directly; JAX will convert inside the compiled kernel.
-    return _apply_affine_jax(apparent_mags_v, a, b)
+    chunk_size = JAX_CHUNK_SIZE
+    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
+    out = np.empty((padded_n,), dtype=np.float64)
+
+    offset = 0
+    for H_chunk, obj_chunk, obs_chunk, G_chunk, a_chunk, b_chunk in zip(
+        process_in_chunks(H_v_arr, chunk_size),
+        process_in_chunks(object_pos, chunk_size),
+        process_in_chunks(observer_pos, chunk_size),
+        process_in_chunks(G_arr, chunk_size),
+        process_in_chunks(a_out, chunk_size),
+        process_in_chunks(b_out, chunk_size),
+    ):
+        mags_v_chunk = _calculate_apparent_magnitude_core_jax(
+            H_v=H_chunk, object_pos=obj_chunk, observer_pos=obs_chunk, G=G_chunk
+        )
+        mags_out_chunk = _apply_affine_jax(mags_v_chunk, a_chunk, b_chunk)
+        out[offset : offset + chunk_size] = np.asarray(mags_out_chunk)
+        offset += chunk_size
+
+    return out[:n]

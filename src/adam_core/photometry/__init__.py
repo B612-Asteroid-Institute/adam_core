@@ -2,8 +2,8 @@
 from .simple_magnitude import (
     InstrumentFilters,
     StandardFilters,
-    calculate_apparent_magnitude,
-    calculate_apparent_magnitude_jax,
+    calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_jax,
     convert_magnitude,
     convert_magnitude_jax,
     find_conversion_path,
@@ -15,8 +15,8 @@ __all__ = [
     # Simple magnitude system
     "StandardFilters",
     "InstrumentFilters", 
-    "calculate_apparent_magnitude",
-    "calculate_apparent_magnitude_jax",
+    "calculate_apparent_magnitude_v",
+    "calculate_apparent_magnitude_v_jax",
     "convert_magnitude",
     "convert_magnitude_jax",
     "find_conversion_path",

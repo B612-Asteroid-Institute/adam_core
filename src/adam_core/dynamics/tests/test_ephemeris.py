@@ -129,15 +129,22 @@ def test_generate_ephemeris_2body(object_id, propagated_orbits, ephemeris):
     # Assert that the range is less than the tolerance
     np.testing.assert_array_less(range_diff, range_tolerance)
 
-    # Ephemeris 2-body does not propagate the covariance or provide the
-    # aberrated state so the aberrated coordinates should be empty
-    assert ephemeris_orbit_2body.aberrated_coordinates.frame == "unspecified"
-    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.x)).as_py()
-    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.y)).as_py()
-    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.z)).as_py()
-    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vx)).as_py()
-    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vy)).as_py()
-    assert pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.vz)).as_py()
+    # Ephemeris 2-body does not propagate covariance, but it *does* provide
+    # the aberrated (emission-time) barycentric state.
+    assert ephemeris_orbit_2body.aberrated_coordinates.frame == "ecliptic"
+    assert not pc.all(pc.is_null(ephemeris_orbit_2body.aberrated_coordinates.x)).as_py()
+
+    # Verify that coordinates.time - aberrated_coordinates.time is equal to light_time.
+    coords_tdb = ephemeris_orbit_2body.coordinates.time.rescale("tdb")
+    aberr_tdb = ephemeris_orbit_2body.aberrated_coordinates.time.rescale("tdb")
+    time_difference_days, time_difference_nanos = coords_tdb.difference(aberr_tdb)
+    fractional_days = pc.divide(time_difference_nanos, 86400 * 1e9)
+    time_difference = pc.add(time_difference_days, fractional_days)
+    np.testing.assert_allclose(
+        time_difference.to_numpy(zero_copy_only=False),
+        ephemeris_orbit_2body.light_time.to_numpy(zero_copy_only=False),
+        atol=1e-6,
+    )
 
 
 @pytest.mark.profile

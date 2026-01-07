@@ -13,8 +13,10 @@ from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin, OriginCodes
 from ...coordinates.transform import transform_coordinates
 from ...observers.observers import Observers
+from ...observations.exposures import Exposures
 from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
+from ...orbits.physical_parameters import PhysicalParameters
 from ...orbits.variants import VariantOrbits
 from ...time.time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
@@ -70,11 +72,26 @@ class MockPropagator(Propagator, EphemerisMixin):
                 frame="ecliptic",
             )
 
+            # For photometry, store a heliocentric (emission-time) state; for this mock
+            # ephemeris generator, assume zero light-time so emission == observation.
+            origin_code = orbit.coordinates.origin.code[0].as_py()
+            aberrated = CartesianCoordinates.from_kwargs(
+                x=np.full(len(coords), orbit.coordinates.x[0].as_py()),
+                y=np.full(len(coords), orbit.coordinates.y[0].as_py()),
+                z=np.full(len(coords), orbit.coordinates.z[0].as_py()),
+                vx=np.full(len(coords), orbit.coordinates.vx[0].as_py()),
+                vy=np.full(len(coords), orbit.coordinates.vy[0].as_py()),
+                vz=np.full(len(coords), orbit.coordinates.vz[0].as_py()),
+                time=observers.coordinates.time,
+                origin=Origin.from_kwargs(code=np.full(len(coords), origin_code)),
+                frame="ecliptic",
+            )
+
             ephemeris_i = Ephemeris.from_kwargs(
                 orbit_id=pa.array(np.full(len(coords), orbit.orbit_id[0].as_py())),
                 object_id=pa.array(np.full(len(coords), orbit.object_id[0].as_py())),
                 coordinates=coords.to_spherical(),
-                aberrated_coordinates=coords,
+                aberrated_coordinates=aberrated,
                 light_time=np.full(len(coords), 0.0),
             )
             ephemeris_list.append(ephemeris_i)
@@ -95,6 +112,86 @@ def test_propagator_single_worker():
     have = prop.generate_ephemeris(orbits, observers)
 
     assert len(have) == len(orbits) * len(times)
+
+
+def test_generate_ephemeris_predicted_magnitudes_default_on():
+    # Simple opposition geometry: object at 2 AU on +x, observer at 1 AU on +x.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0], G=[0.15]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris(orbits, observers, max_processes=1)
+
+    assert not pc.all(pc.is_null(eph.predicted_magnitude_v)).as_py()
+
+    expected = 15.0 + 5.0 * np.log10(2.0 * 1.0)
+    have = eph.predicted_magnitude_v.to_numpy(zero_copy_only=False)[0]
+    assert have == pytest.approx(expected, abs=1e-8)
+
+
+def test_generate_ephemeris_for_exposures_returns_v_magnitudes():
+    time = Timestamp.from_mjd([60000, 60001], scale="tdb")
+    exposures = Exposures.from_kwargs(
+        id=["e1", "e2"],
+        start_time=time,
+        duration=[30.0, 30.0],
+        filter=["g", "r"],
+        observatory_code=["500", "500"],
+        seeing=[None, None],
+        depth_5sigma=[None, None],
+    )
+
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0], G=[0.15]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=Timestamp.from_mjd([60000], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris_for_exposures(orbits, exposures, predict_magnitudes=True)
+    assert len(eph) == len(exposures)
+
+    assert not pc.all(pc.is_null(eph.predicted_magnitude_v)).as_py()
 
 
 RAY_INSTALLED = False

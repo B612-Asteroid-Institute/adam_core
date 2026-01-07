@@ -13,6 +13,7 @@ class Ephemeris(qv.Table):
     orbit_id = qv.LargeStringColumn()
     object_id = qv.LargeStringColumn(nullable=True)
     coordinates = SphericalCoordinates.as_column()
+    predicted_magnitude_v = qv.Float64Column(nullable=True)
 
     # The coordinates as observed by the observer will be the result of
     # light emitted or reflected from the object at the time of the observation.

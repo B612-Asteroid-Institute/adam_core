@@ -8,8 +8,8 @@ from ...time import Timestamp
 from ..simple_magnitude import (
     InstrumentFilters,
     StandardFilters,
-    calculate_apparent_magnitude,
-    calculate_apparent_magnitude_jax,
+    calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_jax,
     convert_magnitude,
 )
 
@@ -18,7 +18,7 @@ def _as_scalar(x) -> float:
     """
     Coerce a possibly-0d or 1-element numpy result into a Python float.
 
-    `calculate_apparent_magnitude` returns numpy arrays even for a single object.
+    `calculate_apparent_magnitude_v` returns numpy arrays even for a single object.
     """
     arr = np.asarray(x)
     if arr.shape == ():
@@ -76,9 +76,9 @@ class TestSimpleMagnitude:
             origin=Origin.from_kwargs(code=["SUN"]),
         )
 
-        mag_near = _as_scalar(calculate_apparent_magnitude(H, coords_near, earth_observer))
-        mag_far = _as_scalar(calculate_apparent_magnitude(H, coords_far, earth_observer))
-        mag_opp = _as_scalar(calculate_apparent_magnitude(H, coords_opposition, earth_observer))
+        mag_near = _as_scalar(calculate_apparent_magnitude_v(H, coords_near, earth_observer))
+        mag_far = _as_scalar(calculate_apparent_magnitude_v(H, coords_far, earth_observer))
+        mag_opp = _as_scalar(calculate_apparent_magnitude_v(H, coords_opposition, earth_observer))
 
         # Farther is fainter
         assert mag_far > mag_near
@@ -107,7 +107,7 @@ class TestSimpleMagnitude:
             ),
         )
 
-        array_result = calculate_apparent_magnitude(H_array, multi_coords, multi_observer)
+        array_result = calculate_apparent_magnitude_v(H_array, multi_coords, multi_observer)
 
         # Calculate individually
         individual_results = []
@@ -129,7 +129,7 @@ class TestSimpleMagnitude:
                     origin=Origin.from_kwargs(code=["SUN"]),
                 ),
             )
-            mag = calculate_apparent_magnitude(H_array[i], single_coords, single_observer)
+            mag = calculate_apparent_magnitude_v(H_array[i], single_coords, single_observer)
             individual_results.append(_as_scalar(mag))
 
         assert np.allclose(array_result, individual_results, rtol=1e-10)
@@ -163,13 +163,14 @@ class TestSimpleMagnitude:
 
         expected = H + 5.0 * np.log10(2.0 * 1.0)
         # Phase function = 1 regardless of G at phase=0
-        assert _as_scalar(calculate_apparent_magnitude(H, obj, observer, G=0.0)) == pytest.approx(expected, abs=1e-10)
-        assert _as_scalar(calculate_apparent_magnitude(H, obj, observer, G=1.0)) == pytest.approx(expected, abs=1e-10)
+        assert _as_scalar(calculate_apparent_magnitude_v(H, obj, observer, G=0.0)) == pytest.approx(expected, abs=1e-10)
+        assert _as_scalar(calculate_apparent_magnitude_v(H, obj, observer, G=1.0)) == pytest.approx(expected, abs=1e-10)
 
-    def test_apparent_mag_output_filter_matches_convert_magnitude(self):
+    def test_apparent_mag_convert_magnitude_matches_explicit_conversion(self):
         """
-        calculate_apparent_magnitude with output_filter should match
-        convert_magnitude(m_v, "V", target) for both string and Enum inputs.
+        With V-only magnitude functions, conversion should be done explicitly:
+
+            convert_magnitude(m_v, "V", target)
         """
         H = 15.0
         time = Timestamp.from_mjd([60000], scale="tdb")
@@ -192,13 +193,13 @@ class TestSimpleMagnitude:
             origin=Origin.from_kwargs(code=["SUN"]),
         )
 
-        m_v = _as_scalar(calculate_apparent_magnitude(H, obj, observer, output_filter="V"))
+        m_v = _as_scalar(calculate_apparent_magnitude_v(H, obj, observer))
 
         # Test a few representative filters (string and enum)
         for name, enum in [("g", StandardFilters.g), ("LSST_r", InstrumentFilters.LSST_r)]:
-            expected = convert_magnitude(m_v, "V", name)
-            assert _as_scalar(calculate_apparent_magnitude(H, obj, observer, output_filter=name)) == pytest.approx(expected, abs=1e-10)
-            assert _as_scalar(calculate_apparent_magnitude(H, obj, observer, output_filter=enum)) == pytest.approx(expected, abs=1e-10)
+            expected_str = convert_magnitude(m_v, "V", name)
+            expected_enum = convert_magnitude(m_v, "V", enum)
+            assert expected_str == pytest.approx(expected_enum, abs=1e-10)
 
     def test_apparent_mag_validates_array_lengths(self, earth_observer):
         """Mismatched array lengths should raise ValueError."""
@@ -214,7 +215,7 @@ class TestSimpleMagnitude:
         )
 
         with pytest.raises(ValueError, match="object_coords length"):
-            calculate_apparent_magnitude(H, coords_len1, earth_observer)
+            calculate_apparent_magnitude_v(H, coords_len1, earth_observer)
 
         coords_len2 = CartesianCoordinates.from_kwargs(
             x=[1.5, 1.5], y=[0.0, 0.0], z=[0.0, 0.0],
@@ -235,7 +236,7 @@ class TestSimpleMagnitude:
         )
 
         with pytest.raises(ValueError, match="G array length"):
-            calculate_apparent_magnitude(H, coords_len2, observer_len2, G=G)
+            calculate_apparent_magnitude_v(H, coords_len2, observer_len2, G=G)
 
     def test_convert_magnitude_invertibility(self):
         """Round-trip conversions should recover the original magnitude."""
@@ -298,14 +299,14 @@ class TestSimpleMagnitude:
         H = rng.uniform(10.0, 25.0, size=n)
         G = rng.uniform(0.0, 1.0, size=n)
 
-        mags_np = calculate_apparent_magnitude(H, obj, observer, G=G, output_filter="V")
-        mags_jax = calculate_apparent_magnitude_jax(H, obj, observer, G=G, output_filter="V")
+        mags_np = calculate_apparent_magnitude_v(H, obj, observer, G=G)
+        mags_jax = calculate_apparent_magnitude_v_jax(H, obj, observer, G=G)
 
         # JAX may run in float32 depending on configuration; keep tolerance realistic.
         assert np.allclose(np.asarray(mags_jax), mags_np, rtol=1e-6, atol=1e-8)
 
-    def test_apparent_magnitude_jax_output_filter(self, earth_observer):
-        """JAX implementation should support output_filter conversion."""
+    def test_apparent_magnitude_v_jax_matches_explicit_conversion(self, earth_observer):
+        """JAX V-band magnitude + explicit conversion should match NumPy explicit conversion."""
         H = 15.0
         obj = CartesianCoordinates.from_kwargs(
             x=[2.0], y=[0.0], z=[0.0],
@@ -315,6 +316,8 @@ class TestSimpleMagnitude:
             origin=Origin.from_kwargs(code=["SUN"]),
         )
 
-        m_g_np = _as_scalar(calculate_apparent_magnitude(H, obj, earth_observer, output_filter="g"))
-        m_g_jax = _as_scalar(calculate_apparent_magnitude_jax(H, obj, earth_observer, output_filter="g"))
+        m_v_np = _as_scalar(calculate_apparent_magnitude_v(H, obj, earth_observer))
+        m_v_jax = _as_scalar(calculate_apparent_magnitude_v_jax(H, obj, earth_observer))
+        m_g_np = _as_scalar(convert_magnitude(m_v_np, "V", "g"))
+        m_g_jax = _as_scalar(convert_magnitude(m_v_jax, "V", "g"))
         assert m_g_jax == pytest.approx(m_g_np, abs=1e-6)

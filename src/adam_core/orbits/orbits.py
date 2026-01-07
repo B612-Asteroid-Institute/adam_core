@@ -8,6 +8,7 @@ import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from .classification import calc_orbit_class
+from .physical_parameters import PhysicalParameters
 
 if TYPE_CHECKING:
     from ..propagator import Propagator
@@ -20,6 +21,7 @@ class Orbits(qv.Table):
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.LargeStringColumn(nullable=True)
     coordinates = CartesianCoordinates.as_column()
+    physical_parameters = PhysicalParameters.as_column(nullable=True)
 
     def group_by_orbit_id(self) -> Iterable[Tuple[str, "Orbits"]]:
         """

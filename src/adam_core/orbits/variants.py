@@ -11,6 +11,7 @@ from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
 from .ephemeris import Ephemeris
 from .orbits import Orbits
+from .physical_parameters import PhysicalParameters
 
 
 class VariantOrbits(qv.Table):
@@ -20,6 +21,7 @@ class VariantOrbits(qv.Table):
     weights = qv.Float64Column(nullable=True)
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = CartesianCoordinates.as_column()
+    physical_parameters = PhysicalParameters.as_column(nullable=True)
 
     @classmethod
     def create(
@@ -86,6 +88,7 @@ class VariantOrbits(qv.Table):
             weights=variant_coordinates.weight,
             weights_cov=variant_coordinates.weight_cov,
             coordinates=variant_coordinates.sample,
+            physical_parameters=orbits.physical_parameters.take(variant_coordinates.index),
         )
 
     def link_to_orbits(
@@ -232,6 +235,7 @@ class VariantEphemeris(qv.Table):
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = SphericalCoordinates.as_column()
     aberrated_coordinates = CartesianCoordinates.as_column(nullable=True)
+    predicted_magnitude_v = qv.Float64Column(nullable=True)
 
     def link_to_ephemeris(
         self, ephemeris: Ephemeris

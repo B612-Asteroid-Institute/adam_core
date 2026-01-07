@@ -5,7 +5,10 @@ from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...observers.observers import Observers
 from ...time import Timestamp
-from ..simple_magnitude import calculate_apparent_magnitude, calculate_apparent_magnitude_jax
+from ..simple_magnitude import (
+    calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_jax,
+)
 
 
 def _padded_size(n: int, pad_to: int) -> int:
@@ -53,7 +56,7 @@ def _make_benchmark_case(n: int = 2048):
 
 @pytest.mark.parametrize(
     "n",
-    [256, 2048, 16384, 32768],
+    [256,  16384,  65536,  262144,  1048576],
     ids=lambda x: f"n={x}",
 )
 @pytest.mark.benchmark(group="photometry_simple_magnitude_apparent")
@@ -63,7 +66,7 @@ def test_benchmark_calculate_apparent_magnitude_numpy(benchmark, n):
     H, obj, observer, G = _make_benchmark_case(n=n_padded)
 
     def run():
-        return calculate_apparent_magnitude(H, obj, observer, G=G, output_filter="V")
+        return calculate_apparent_magnitude_v(H, obj, observer, G=G)
 
     out = benchmark(run)
     out = out[:n]  # window back to requested n
@@ -72,7 +75,7 @@ def test_benchmark_calculate_apparent_magnitude_numpy(benchmark, n):
 
 @pytest.mark.parametrize(
     "n",
-    [256, 2048, 16384, 32768],
+    [256,  16384,  65536,  262144,  1048576],
     ids=lambda x: f"n={x}",
 )
 @pytest.mark.benchmark(group="photometry_simple_magnitude_apparent")
@@ -82,7 +85,7 @@ def test_benchmark_calculate_apparent_magnitude_jax(benchmark, n):
     H, obj, observer, G = _make_benchmark_case(n=n_padded)
 
     def run():
-        out = calculate_apparent_magnitude_jax(H, obj, observer, G=G, output_filter="V")
+        out = calculate_apparent_magnitude_v_jax(H, obj, observer, G=G)
         return out
 
     out = benchmark(run)
