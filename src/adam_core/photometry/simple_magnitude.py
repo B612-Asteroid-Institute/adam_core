@@ -466,11 +466,14 @@ def calculate_apparent_magnitude(
 
     # Ensure cos_phase is in valid range [-1, 1]
     cos_phase = np.clip(cos_phase, -1.0, 1.0)
-    phase_angle = np.arccos(cos_phase)
-
     # Calculate the phase function (H-G system)
-    phi1 = np.exp(-3.33 * np.tan(phase_angle / 2) ** 0.63)
-    phi2 = np.exp(-1.87 * np.tan(phase_angle / 2) ** 1.22)
+    #
+    # Best practice (perf): avoid arccos() + tan() since we only need tan(phase/2).
+    # Use identity: tan(phase/2) = sqrt((1 - cos_phase) / (1 + cos_phase)).
+    # This is mathematically equivalent and typically faster.
+    tan_half = np.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
+    phi1 = np.exp(-3.33 * tan_half**0.63)
+    phi2 = np.exp(-1.87 * tan_half**1.22)
     phase_function = (1 - G) * phi1 + G * phi2
 
     # Calculate the apparent magnitude
@@ -512,10 +515,11 @@ def _calculate_apparent_magnitude_core_jax(
     numer = r**2 + delta**2 - observer_sun_dist**2
     denom = 2.0 * r * delta
     cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
-    phase_angle = jnp.arccos(cos_phase)
-
     # H-G phase function
-    tan_half = jnp.tan(phase_angle / 2.0)
+    #
+    # Best practice (perf): avoid arccos() + tan() since we only need tan(phase/2).
+    # Use identity: tan(phase/2) = sqrt((1 - cos_phase) / (1 + cos_phase)).
+    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
     phi1 = jnp.exp(-3.33 * tan_half**0.63)
     phi2 = jnp.exp(-1.87 * tan_half**1.22)
     phase_function = (1.0 - G) * phi1 + G * phi2
