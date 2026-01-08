@@ -1,6 +1,6 @@
 from enum import Enum
 from functools import lru_cache
-from typing import Dict, Union
+from typing import Dict, TypeAlias, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -14,6 +14,8 @@ from ..utils.chunking import process_in_chunks
 
 
 JAX_CHUNK_SIZE = 2048
+CONVERT_MAGNITUDE_JAX_THRESHOLD = 65536
+CALCULATE_APPARENT_MAGNITUDE_JAX_THRESHOLD = 65536
 
 
 class StandardFilters(Enum):
@@ -200,8 +202,10 @@ FILTER_CONVERSIONS: Dict[tuple, tuple] = {
 
 }
 
+FilterType: TypeAlias = Union[str, StandardFilters, InstrumentFilters]
 
-def _filter_name(filter_name: Union[str, StandardFilters, InstrumentFilters]) -> str:
+
+def _filter_name(filter_name: FilterType) -> str:
     """
     Coerce a filter identifier into the string key used by FILTER_CONVERSIONS.
 
@@ -210,7 +214,7 @@ def _filter_name(filter_name: Union[str, StandardFilters, InstrumentFilters]) ->
     """
     if isinstance(filter_name, Enum):
         return filter_name.name
-    return filter_name
+    return filter_name  # type: ignore[return-value]
 
 
 def find_conversion_path(
@@ -267,61 +271,64 @@ def find_conversion_path(
 
 
 def convert_magnitude(
-    magnitude: Union[float, npt.NDArray[np.float64]],
-    source_filter: Union[str, StandardFilters, InstrumentFilters],
-    target_filter: Union[str, StandardFilters, InstrumentFilters],
-) -> Union[float, npt.NDArray[np.float64]]:
+    magnitude: npt.NDArray[np.float64],
+    source_filter: npt.NDArray[np.object_],
+    target_filter: npt.NDArray[np.object_],
+) -> npt.NDArray[np.float64]:
     """
     Convert a magnitude from one filter to another using the optimal conversion path.
 
     Parameters
     ----------
-    magnitude : float or ndarray
-        Magnitude(s) in the source filter
-    source_filter : str
-        Name of the source filter
-    target_filter : str
+    magnitude : ndarray
+        Magnitude(s) in the source filter.
+    source_filter : ndarray (dtype=object)
+        Per-element source filters (same length as magnitude). Elements may be strings or Enums.
+    target_filter : ndarray (dtype=object)
+        Per-element target filters (same length as magnitude). Elements may be strings or Enums.
     Returns
     -------
-    float or ndarray
+    ndarray
         Magnitude(s) in the target filter
     """
+    mags = np.asarray(magnitude, dtype=float)
+    if mags.ndim != 1:
+        raise ValueError("magnitude must be a 1D ndarray")
 
-    source_filter_name = _filter_name(source_filter)
-    target_filter_name = _filter_name(target_filter)
-
-    # If source and target are the same, return the input magnitude
-    if source_filter_name == target_filter_name:
-        return magnitude
-
-    # Find the optimal conversion path
-    path = find_conversion_path(source_filter_name, target_filter_name)
-
-    if not path:
-        msg = (
-            f"No conversion path available from {source_filter_name} to {target_filter_name}"
+    source_arr = np.asarray(source_filter, dtype=object)
+    target_arr = np.asarray(target_filter, dtype=object)
+    if source_arr.ndim != 1:
+        raise ValueError("source_filter must be a 1D ndarray")
+    if target_arr.ndim != 1:
+        raise ValueError("target_filter must be a 1D ndarray")
+    if len(source_arr) != len(mags):
+        raise ValueError(
+            f"source_filter length ({len(source_arr)}) must match magnitude length ({len(mags)})"
         )
-        raise ValueError(msg)
+    if len(target_arr) != len(mags):
+        raise ValueError(
+            f"target_filter length ({len(target_arr)}) must match magnitude length ({len(mags)})"
+        )
 
-    # Apply conversions along the path
-    result = magnitude
-    for i in range(len(path) - 1):
-        from_filter = path[i]
-        to_filter = path[i + 1]
+    source_names = np.asarray([_filter_name(x) for x in source_arr], dtype=object)
+    target_names = np.asarray([_filter_name(x) for x in target_arr], dtype=object)
 
-        # Direct conversion
-        if (from_filter, to_filter) in FILTER_CONVERSIONS:
-            slope, intercept = FILTER_CONVERSIONS[(from_filter, to_filter)]
-            result = slope * result + intercept
-        # Reverse conversion
-        elif (to_filter, from_filter) in FILTER_CONVERSIONS:
-            slope, intercept = FILTER_CONVERSIONS[(to_filter, from_filter)]
-            result = (result - intercept) / slope
-        else:
-            msg = f"Missing conversion between {from_filter} and {to_filter}"
-            raise ValueError(msg)
+    out = mags.copy()
+    needs = source_names != target_names
+    if not np.any(needs):
+        return out
 
-    return result
+    # Group by unique (source, target) pairs and apply one affine per group.
+    # NOTE: Avoid `np.unique(..., axis=0)` here; it is not supported for dtype=object
+    # in some NumPy versions.
+    pairs = list(zip(source_names[needs].tolist(), target_names[needs].tolist()))
+    unique_pairs = list(dict.fromkeys(pairs))  # stable, first-seen order
+    for src, tgt in unique_pairs:
+        mask = (source_names == src) & (target_names == tgt)
+        a, b = _composite_affine_coeffs(str(src), str(tgt))
+        out[mask] = a * out[mask] + b
+
+    return out
 
 
 @jit
@@ -370,31 +377,87 @@ def _composite_affine_coeffs(source_filter: str, target_filter: str) -> tuple[fl
 
 
 def convert_magnitude_jax(
-    magnitude: Union[float, npt.NDArray[np.float64], jnp.ndarray],
-    source_filter: Union[str, StandardFilters, InstrumentFilters],
-    target_filter: Union[str, StandardFilters, InstrumentFilters],
+    magnitude: Union[npt.NDArray[np.float64], jnp.ndarray],
+    source_filter: npt.NDArray[np.object_],
+    target_filter: npt.NDArray[np.object_],
 ) -> jnp.ndarray:
     """
     JAX-compatible version of `convert_magnitude`.
 
-    This uses a single stable JIT kernel (affine transform) plus cached Python-side
-    coefficients (via `_composite_affine_coeffs`). JAX compilation is driven by the
-    shape/dtype of `magnitude`, not the runtime values of the coefficients.
+    This mirrors the array-only API of `convert_magnitude`:
+    - `magnitude` is a 1D array
+    - `source_filter` and `target_filter` are 1D object arrays of the same length
+
+    Filter handling (strings/enums) happens on the Python/NumPy side; we compute
+    per-element affine coefficients (a, b) and then apply a single JAX-compiled
+    elementwise affine transform.
     """
-    source_filter_name = _filter_name(source_filter)
-    target_filter_name = _filter_name(target_filter)
+    # NOTE: Do not cast `magnitude` via `jnp.asarray` here; callers may pass either
+    # NumPy arrays or JAX arrays and JAX will handle NumPy inputs automatically.
+    mags = magnitude
+    if getattr(mags, "ndim", np.ndim(mags)) != 1:
+        raise ValueError("magnitude must be a 1D array")
 
-    if source_filter_name == target_filter_name:
-        # Identity conversion: keep this as a JAX-compiled operation, but avoid
-        # explicit `asarray` casts (JAX will convert inputs as needed).
-        return _apply_affine_jax(magnitude, 1.0, 0.0)
+    src_arr = np.asarray(source_filter, dtype=object)
+    tgt_arr = np.asarray(target_filter, dtype=object)
+    if src_arr.ndim != 1:
+        raise ValueError("source_filter must be a 1D ndarray")
+    if tgt_arr.ndim != 1:
+        raise ValueError("target_filter must be a 1D ndarray")
+    n = int(mags.shape[0])
+    if len(src_arr) != n:
+        raise ValueError(
+            f"source_filter length ({len(src_arr)}) must match magnitude length ({n})"
+        )
+    if len(tgt_arr) != n:
+        raise ValueError(
+            f"target_filter length ({len(tgt_arr)}) must match magnitude length ({n})"
+        )
 
-    # NOTE: JAX compilation caching is based on shapes/dtypes, not runtime values.
-    # We therefore pass (a, b) as dynamic scalar values; this will compile once per
-    # (magnitude shape/dtype) and reuse the compiled executable even as (a, b) change.
-    a, b = _composite_affine_coeffs(source_filter_name, target_filter_name)
-    # Allow numpy/scalars as input; JAX converts inside the compiled kernel.
-    return _apply_affine_jax(magnitude, a, b)
+    source_names = np.asarray([_filter_name(x) for x in src_arr], dtype=object)
+    target_names = np.asarray([_filter_name(x) for x in tgt_arr], dtype=object)
+
+    # Keep coefficient dtype aligned with magnitude dtype to avoid unintended upcasts.
+    mag_dtype = np.dtype(getattr(mags, "dtype", np.float64))
+    a = np.ones((n,), dtype=mag_dtype)
+    b = np.zeros((n,), dtype=mag_dtype)
+    needs = source_names != target_names
+    if np.any(needs):
+        # Avoid `np.unique(..., axis=0)` for dtype=object compatibility.
+        pairs = list(zip(source_names[needs].tolist(), target_names[needs].tolist()))
+        unique_pairs = list(dict.fromkeys(pairs))
+        for src, tgt in unique_pairs:
+            mask = (source_names == src) & (target_names == tgt)
+            a_i, b_i = _composite_affine_coeffs(str(src), str(tgt))
+            a[mask] = a_i
+            b[mask] = b_i
+
+    # Pass NumPy arrays; JAX will convert them inside the compiled kernel.
+    return _apply_affine_jax(mags, a, b)
+
+
+def convert_magnitude_auto(
+    magnitude: Union[npt.NDArray[np.float64], jnp.ndarray],
+    source_filter: npt.NDArray[np.object_],
+    target_filter: npt.NDArray[np.object_],
+    *,
+    use_jax: bool | None = None,
+    jax_threshold: int = CONVERT_MAGNITUDE_JAX_THRESHOLD,
+) -> npt.NDArray[np.float64]:
+    """
+    Select between NumPy and JAX implementations based on `use_jax` / array size.
+
+    Returns a NumPy array in all cases.
+    """
+    n = int(magnitude.shape[0])
+    if use_jax is None:
+        use_jax = n >= int(jax_threshold)
+
+    if not use_jax:
+        return convert_magnitude(magnitude, source_filter, target_filter)  # type: ignore[arg-type]
+
+    out = convert_magnitude_jax(magnitude, source_filter, target_filter)
+    return np.asarray(out, dtype=float)
 
 
 def calculate_apparent_magnitude_v(
@@ -582,6 +645,33 @@ def calculate_apparent_magnitude_v_jax(
     return out[:n]
 
 
+def calculate_apparent_magnitude_v_auto(
+    H_v: Union[float, npt.NDArray[np.float64]],
+    object_coords: CartesianCoordinates,
+    observer: Observers,
+    G: Union[float, npt.NDArray[np.float64]] = 0.15,
+    *,
+    use_jax: bool | None = None,
+    jax_threshold: int = CALCULATE_APPARENT_MAGNITUDE_JAX_THRESHOLD,
+) -> npt.NDArray[np.float64]:
+    """
+    Select between NumPy and JAX implementations based on `use_jax` / problem size.
+
+    Returns a NumPy array in all cases.
+    """
+    n = len(object_coords)
+    if use_jax is None:
+        use_jax = n >= int(jax_threshold)
+
+    if use_jax:
+        return calculate_apparent_magnitude_v_jax(H_v, object_coords, observer, G=G)
+
+    return np.asarray(
+        calculate_apparent_magnitude_v(H_v, object_coords, observer, G=G),
+        dtype=np.float64,
+    )
+
+
 def predict_magnitudes(
     H: Union[float, npt.NDArray[np.float64]],
     object_coords: CartesianCoordinates,
@@ -629,7 +719,16 @@ def predict_magnitudes(
     observers = exposures.observers()
     
     # Convert H into V-band absolute magnitude for internal V-centric calculation.
-    H_v = H if reference_filter == "V" else convert_magnitude(H, reference_filter, "V")
+    if reference_filter == "V":
+        H_v = H
+    else:
+        H_arr = np.atleast_1d(np.asarray(H, dtype=float))
+        H_v_arr = convert_magnitude(
+            H_arr,
+            np.full(len(H_arr), reference_filter, dtype=object),
+            np.full(len(H_arr), "V", dtype=object),
+        )
+        H_v = float(H_v_arr[0]) if np.asarray(H).ndim == 0 else H_v_arr
 
     # Calculate apparent magnitudes in V-band
     apparent_mags_v = calculate_apparent_magnitude_v(
@@ -641,24 +740,14 @@ def predict_magnitudes(
     
     # Convert to exposure filters if needed
     target_filters = exposures.filter.to_numpy(zero_copy_only=False)
-    
-    # Handle filter conversions
-    if isinstance(apparent_mags_v, np.ndarray):
-        converted_mags = np.empty_like(apparent_mags_v)
-        for i, (mag, target_filter) in enumerate(zip(apparent_mags_v, target_filters)):
-            if target_filter != "V":
-                converted_mags[i] = convert_magnitude(mag, "V", target_filter)
-            else:
-                converted_mags[i] = mag
-    else:
-        # Single magnitude case
-        target_filter = target_filters[0] if len(target_filters) == 1 else "V"
-        if target_filter != "V":
-            converted_mags = convert_magnitude(apparent_mags_v, "V", target_filter)
-        else:
-            converted_mags = apparent_mags_v
-    
-    return converted_mags
+
+    mags_v_arr = np.atleast_1d(np.asarray(apparent_mags_v, dtype=float))
+    converted = convert_magnitude(
+        mags_v_arr,
+        np.full(len(mags_v_arr), "V", dtype=object),
+        np.asarray(target_filters, dtype=object),
+    )
+    return converted
 
 
 def predict_magnitudes_jax(
