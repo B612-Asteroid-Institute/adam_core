@@ -11,8 +11,10 @@ from ..simple_magnitude import (
     calculate_apparent_magnitude_v,
     calculate_apparent_magnitude_v_auto,
     calculate_apparent_magnitude_v_jax,
+    encode_filters,
     convert_magnitude,
     convert_magnitude_auto,
+    convert_magnitude_jax_codes,
     convert_magnitude_jax,
 )
 
@@ -312,6 +314,12 @@ class TestSimpleMagnitude:
         )
         assert np.allclose(out, expected, rtol=0.0, atol=1e-12)
 
+    def test_encode_filters_accepts_strings_and_enums(self):
+        filters = np.array(["V", StandardFilters.g, InstrumentFilters.LSST_r], dtype=object)
+        codes = encode_filters(filters)
+        assert codes.shape == (3,)
+        assert codes.dtype == np.int32
+
     def test_convert_magnitude_validates_1d_inputs(self):
         mags2d = np.array([[15.0, 16.0]], dtype=float)
         src = np.array(["V", "V"], dtype=object)
@@ -330,6 +338,17 @@ class TestSimpleMagnitude:
 
         out_np = convert_magnitude(mags, src, tgt)
         out_jax = np.asarray(convert_magnitude_jax(mags, src, tgt))
+        assert np.allclose(out_jax, out_np, rtol=1e-7, atol=1e-12)
+
+    def test_convert_magnitude_jax_codes_matches_numpy(self):
+        mags = np.array([15.0, 16.0, 17.0], dtype=float)
+        src = np.array(["V", "V", "V"], dtype=object)
+        tgt = np.array(["g", "r", "V"], dtype=object)
+        src_codes = encode_filters(src)
+        tgt_codes = encode_filters(tgt)
+
+        out_np = convert_magnitude(mags, src, tgt)
+        out_jax = np.asarray(convert_magnitude_jax_codes(mags, src_codes, tgt_codes))
         assert np.allclose(out_jax, out_np, rtol=1e-7, atol=1e-12)
 
     def test_convert_magnitude_jax_length_mismatch_raises(self):

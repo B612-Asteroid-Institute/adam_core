@@ -217,6 +217,99 @@ def _filter_name(filter_name: FilterType) -> str:
     return filter_name  # type: ignore[return-value]
 
 
+def _all_known_filter_names() -> list[str]:
+    """
+    Build a stable list of filter names known to this module.
+
+    Includes:
+    - all StandardFilters / InstrumentFilters enum names
+    - all filter keys referenced in FILTER_CONVERSIONS
+    """
+    names: list[str] = []
+
+    # Enum-defined names (stable)
+    names.extend([f.name for f in StandardFilters])
+    names.extend([f.name for f in InstrumentFilters])
+
+    # Conversion-table referenced names
+    for src, tgt in FILTER_CONVERSIONS.keys():
+        names.append(str(src))
+        names.append(str(tgt))
+
+    # Deduplicate, keep first-seen order
+    return list(dict.fromkeys(names))
+
+
+# Integer encoding for filters to avoid dtype=object grouping costs.
+FILTER_NAMES: list[str] = _all_known_filter_names()
+FILTER_TO_CODE: dict[str, int] = {name: i for i, name in enumerate(FILTER_NAMES)}
+
+
+def encode_filters(filters: npt.NDArray[np.object_]) -> npt.NDArray[np.int32]:
+    """
+    Encode a 1D object array of filters (strings or Enums) into int codes.
+    """
+    arr = np.asarray(filters, dtype=object)
+    if arr.ndim != 1:
+        raise ValueError("filters must be a 1D ndarray")
+    try:
+        return np.asarray([FILTER_TO_CODE[_filter_name(x)] for x in arr], dtype=np.int32)
+    except KeyError as e:
+        raise ValueError(f"Unknown filter {e.args[0]!r}") from e
+
+
+@lru_cache(maxsize=1)
+def _affine_tables() -> tuple[
+    npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.bool_]
+]:
+    """
+    Lazily precompute affine coefficients for all (source, target) filter pairs.
+
+    For each pair:
+        mag_tgt = A[src, tgt] * mag_src + B[src, tgt]
+
+    This is cached after the first call to avoid repeated pathfinding, and it is
+    built lazily (not at import time) so module import doesn't depend on function
+    definition order.
+    """
+    n = len(FILTER_NAMES)
+    A = np.full((n, n), np.nan, dtype=np.float64)
+    B = np.full((n, n), np.nan, dtype=np.float64)
+    valid = np.zeros((n, n), dtype=bool)
+
+    for i, src in enumerate(FILTER_NAMES):
+        for j, tgt in enumerate(FILTER_NAMES):
+            try:
+                a, b = _composite_affine_coeffs(src, tgt)
+            except ValueError:
+                continue
+            A[i, j] = a
+            B[i, j] = b
+            valid[i, j] = True
+
+    return A, B, valid
+
+
+_AFFINE_A_JAX: jnp.ndarray | None = None
+_AFFINE_B_JAX: jnp.ndarray | None = None
+_AFFINE_VALID_JAX: jnp.ndarray | None = None
+
+
+def _ensure_affine_tables_jax() -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """
+    Ensure JAX copies of the affine lookup tables are initialized.
+
+    IMPORTANT: This must never be called from inside a `@jit`-compiled function.
+    """
+    global _AFFINE_A_JAX, _AFFINE_B_JAX, _AFFINE_VALID_JAX
+    if _AFFINE_A_JAX is None or _AFFINE_B_JAX is None or _AFFINE_VALID_JAX is None:
+        A, B, valid = _affine_tables()
+        _AFFINE_A_JAX = jnp.asarray(A)
+        _AFFINE_B_JAX = jnp.asarray(B)
+        _AFFINE_VALID_JAX = jnp.asarray(valid)
+    return _AFFINE_A_JAX, _AFFINE_B_JAX, _AFFINE_VALID_JAX
+
+
 def find_conversion_path(
     source_filter: str, target_filter: str, max_steps: int = 6
 ) -> list:
@@ -310,25 +403,20 @@ def convert_magnitude(
             f"target_filter length ({len(target_arr)}) must match magnitude length ({len(mags)})"
         )
 
-    source_names = np.asarray([_filter_name(x) for x in source_arr], dtype=object)
-    target_names = np.asarray([_filter_name(x) for x in target_arr], dtype=object)
+    src_codes = encode_filters(source_arr)
+    tgt_codes = encode_filters(target_arr)
 
-    out = mags.copy()
-    needs = source_names != target_names
-    if not np.any(needs):
-        return out
+    AFFINE_A, AFFINE_B, AFFINE_VALID = _affine_tables()
+    valid = AFFINE_VALID[src_codes, tgt_codes]
+    if not bool(np.all(valid)):
+        bad = int(np.flatnonzero(~valid)[0])
+        src = _filter_name(source_arr[bad])
+        tgt = _filter_name(target_arr[bad])
+        raise ValueError(f"No conversion path available from {src} to {tgt}")
 
-    # Group by unique (source, target) pairs and apply one affine per group.
-    # NOTE: Avoid `np.unique(..., axis=0)` here; it is not supported for dtype=object
-    # in some NumPy versions.
-    pairs = list(zip(source_names[needs].tolist(), target_names[needs].tolist()))
-    unique_pairs = list(dict.fromkeys(pairs))  # stable, first-seen order
-    for src, tgt in unique_pairs:
-        mask = (source_names == src) & (target_names == tgt)
-        a, b = _composite_affine_coeffs(str(src), str(tgt))
-        out[mask] = a * out[mask] + b
-
-    return out
+    a = AFFINE_A[src_codes, tgt_codes]
+    b = AFFINE_B[src_codes, tgt_codes]
+    return a * mags + b
 
 
 @jit
@@ -414,26 +502,47 @@ def convert_magnitude_jax(
             f"target_filter length ({len(tgt_arr)}) must match magnitude length ({n})"
         )
 
-    source_names = np.asarray([_filter_name(x) for x in src_arr], dtype=object)
-    target_names = np.asarray([_filter_name(x) for x in tgt_arr], dtype=object)
+    src_codes = encode_filters(src_arr)
+    tgt_codes = encode_filters(tgt_arr)
 
-    # Keep coefficient dtype aligned with magnitude dtype to avoid unintended upcasts.
-    mag_dtype = np.dtype(getattr(mags, "dtype", np.float64))
-    a = np.ones((n,), dtype=mag_dtype)
-    b = np.zeros((n,), dtype=mag_dtype)
-    needs = source_names != target_names
-    if np.any(needs):
-        # Avoid `np.unique(..., axis=0)` for dtype=object compatibility.
-        pairs = list(zip(source_names[needs].tolist(), target_names[needs].tolist()))
-        unique_pairs = list(dict.fromkeys(pairs))
-        for src, tgt in unique_pairs:
-            mask = (source_names == src) & (target_names == tgt)
-            a_i, b_i = _composite_affine_coeffs(str(src), str(tgt))
-            a[mask] = a_i
-            b[mask] = b_i
+    # Host-side validity check (raising inside JIT is awkward).
+    _, _, AFFINE_VALID = _affine_tables()
+    valid = AFFINE_VALID[src_codes, tgt_codes]
+    if not bool(np.all(valid)):
+        bad = int(np.flatnonzero(~valid)[0])
+        src = _filter_name(src_arr[bad])
+        tgt = _filter_name(tgt_arr[bad])
+        raise ValueError(f"No conversion path available from {src} to {tgt}")
 
-    # Pass NumPy arrays; JAX will convert them inside the compiled kernel.
-    return _apply_affine_jax(mags, a, b)
+    # Ensure JAX lookup tables are initialized before entering JIT.
+    _ensure_affine_tables_jax()
+    return convert_magnitude_jax_codes(mags, src_codes, tgt_codes)
+
+
+@jit
+def convert_magnitude_jax_codes(
+    magnitude: jnp.ndarray,
+    source_code: jnp.ndarray,
+    target_code: jnp.ndarray,
+) -> jnp.ndarray:
+    """
+    Fully-JAX conversion given integer filter codes.
+
+    Parameters
+    ----------
+    magnitude : jax.ndarray
+        1D magnitudes.
+    source_code : jax.ndarray
+        1D int codes (same length as magnitude).
+    target_code : jax.ndarray
+        1D int codes (same length as magnitude).
+    """
+    # IMPORTANT: do not call any Python helpers here (e.g., cached table builders).
+    # We index into module-level JAX arrays that are initialized outside JIT via
+    # `_ensure_affine_tables_jax()`.
+    a = _AFFINE_A_JAX[source_code, target_code]  # type: ignore[index]
+    b = _AFFINE_B_JAX[source_code, target_code]  # type: ignore[index]
+    return a * magnitude + b
 
 
 def convert_magnitude_auto(
@@ -791,35 +900,57 @@ def predict_magnitudes_jax(
         raise ValueError(f"G array length ({len(G_arr)}) must match object_coords length ({n})")
 
     # Convert H into V-band absolute magnitude for internal V-centric calculation.
+    AFFINE_A, AFFINE_B, AFFINE_VALID = _affine_tables()
+    _ensure_affine_tables_jax()
+    v_code = FILTER_TO_CODE["V"]
     if reference_filter == "V":
         H_v_arr = H_arr
     else:
-        a_h, b_h = _composite_affine_coeffs(reference_filter, "V")
+        ref_name = _filter_name(reference_filter)
+        if ref_name not in FILTER_TO_CODE:
+            raise ValueError(f"Unknown filter {ref_name!r}")
+        ref_code = FILTER_TO_CODE[ref_name]
+        if not bool(AFFINE_VALID[ref_code, v_code]):
+            raise ValueError(f"No conversion path available from {ref_name} to V")
+        a_h = AFFINE_A[ref_code, v_code]
+        b_h = AFFINE_B[ref_code, v_code]
         H_v_arr = a_h * H_arr + b_h
 
+    # Encode target filters once and do code-based JAX coefficient lookup inside the JIT.
     target_filters = exposures.filter.to_numpy(zero_copy_only=False)
-    unique_filters, inv = np.unique(target_filters, return_inverse=True)
-    coeffs = np.array([_composite_affine_coeffs("V", tf) for tf in unique_filters], dtype=np.float64)
-    a_out = coeffs[inv, 0]
-    b_out = coeffs[inv, 1]
+    tgt_codes_n = encode_filters(np.asarray(target_filters, dtype=object))
+    valid_tgt = AFFINE_VALID[v_code, tgt_codes_n]
+    if not bool(np.all(valid_tgt)):
+        bad = int(np.flatnonzero(~valid_tgt)[0])
+        raise ValueError(f"No conversion path available from V to {target_filters[bad]}")
+
+    src_codes = np.full((n,), v_code, dtype=np.int32)
 
     chunk_size = JAX_CHUNK_SIZE
     padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
     out = np.empty((padded_n,), dtype=np.float64)
 
+    # Pad filter codes explicitly with V so the padded tail is always a valid identity conversion.
+    if padded_n != n:
+        pad_len = padded_n - n
+        src_codes = np.pad(src_codes, (0, pad_len), constant_values=v_code)
+        tgt_codes = np.pad(tgt_codes_n, (0, pad_len), constant_values=v_code)
+    else:
+        tgt_codes = tgt_codes_n
+
     offset = 0
-    for H_chunk, obj_chunk, obs_chunk, G_chunk, a_chunk, b_chunk in zip(
+    for H_chunk, obj_chunk, obs_chunk, G_chunk, src_chunk, tgt_chunk in zip(
         process_in_chunks(H_v_arr, chunk_size),
         process_in_chunks(object_pos, chunk_size),
         process_in_chunks(observer_pos, chunk_size),
         process_in_chunks(G_arr, chunk_size),
-        process_in_chunks(a_out, chunk_size),
-        process_in_chunks(b_out, chunk_size),
+        process_in_chunks(src_codes, chunk_size),
+        process_in_chunks(tgt_codes, chunk_size),
     ):
         mags_v_chunk = _calculate_apparent_magnitude_core_jax(
             H_v=H_chunk, object_pos=obj_chunk, observer_pos=obs_chunk, G=G_chunk
         )
-        mags_out_chunk = _apply_affine_jax(mags_v_chunk, a_chunk, b_chunk)
+        mags_out_chunk = convert_magnitude_jax_codes(mags_v_chunk, src_chunk, tgt_chunk)
         out[offset : offset + chunk_size] = np.asarray(mags_out_chunk)
         offset += chunk_size
 
