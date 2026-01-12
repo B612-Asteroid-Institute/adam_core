@@ -530,8 +530,13 @@ class Timestamp(qv.Table):
         else:
             raise ValueError("Unknown scale: {}".format(new_scale))
 
-    def _tt_tdb_correction(self, positive: bool) -> np.ndarray:
+    def _tt_tdb_correction(
+        self, positive: bool, correction: np.ndarray | int
+    ) -> np.ndarray:
         """Compute correction from TT to TDB in nanoseconds.
+
+        Correction in nanoseconds is used to bring the self value to TT from wherever it is.
+        Otherwise we can get a few nanoseconds difference in roundtrip.
 
         If positive is False, add a minus sign to get TDB to TT correction.
         Math from
@@ -546,7 +551,7 @@ class Timestamp(qv.Table):
         # rounded before astype. As written, delta is truncated, which may produce
         # a 1ns difference.
         days = self.days.to_numpy() - 51_545
-        fracs = self.nanos.to_numpy() / _NANOS_IN_DAY + 0.5
+        fracs = (self.nanos.to_numpy() + correction) / _NANOS_IN_DAY + 0.5
         centuries = (days + fracs) / 36_525
         g = np.radians(35999.050 * centuries + 357.528)
         delta = np.sin(g + 0.0167 * np.sin(g)) * 1658000
@@ -554,16 +559,25 @@ class Timestamp(qv.Table):
             delta = -delta
         return delta.astype(np.int64)
 
-    def _erfa_call(
+    def _leap_seconds_correction(
         self, converter, correction: np.ndarray | int
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Call the given ERFA converter function with appropriately prepared arguments.
+    ) -> np.ndarray:
+        """Compute leap seconds correction, returned in nanoseconds.
 
-        Return a pair of JD components.
+        Correction in nanoseconds is used to bring self from wherever it is to TAI.
+        Converter is an ERFA method used to get the actual leap seconds. An alternative
+        would be to download and lookup the leap seconds tables ourselves, which is left
+        as an exercise for the future.
         """
-        days = self.days.to_numpy() + 2400000
-        frac = self.nanos.to_numpy() / _NANOS_IN_DAY + 0.5 + correction
-        return converter(days, frac)
+        # ERFA methods take and return a pair of ndarrays for the full days and fractions of JD
+        old_days = self.days.to_numpy() + 2400000
+        old_frac = (self.nanos.to_numpy() + correction) / _NANOS_IN_DAY + 0.5
+        new_days, new_frac = converter(old_days, old_frac)
+        delta = ((new_days - old_days) + (new_frac - old_frac)) * _NANOS_IN_DAY
+        # Want nice round seconds, but in nanoseconds. Without rounding we occasionally
+        # get a stray nanosecond, which messes up roundtrip conversions.
+        delta = np.round(delta * 1e-9).astype(np.int64) * 1_000_000_000
+        return delta
 
     def rescale(self, new_scale: str) -> Timestamp:
         if self.scale == new_scale:
@@ -577,48 +591,51 @@ class Timestamp(qv.Table):
 
         TAI_TT_CORRECTION = 32_184_000_000
 
-        def from_jd_pair(
-            days: np.ndarray, fracs: np.ndarray, correction: np.ndarray | int
-        ) -> Timestamp:
-            # This is effectively Timestamp.from_jd(), but with two doubles instead of
-            # one to minimize rounding errors.
-            days = days - 2400000
-            nanos = np.round((fracs - 0.5) * _NANOS_IN_DAY + correction).astype(
-                np.int64
-            )
-            return Timestamp.from_kwargs(days=days, nanos=nanos, scale=new_scale)
-
         # Delta in nanoseconds
         correction = None
         if self.scale == "tt":
-            if new_scale == "tai" or new_scale == "utc":
+            if new_scale == "tai":
                 correction = -TAI_TT_CORRECTION
+            elif new_scale == "utc":
+                correction = (
+                    self._leap_seconds_correction(erfa.taiutc, 0) - TAI_TT_CORRECTION
+                )
             elif new_scale == "tdb":
-                correction = self._tt_tdb_correction(True)
-        elif self.scale == "tai" or self.scale == "utc":
+                correction = self._tt_tdb_correction(True, 0)
+        elif self.scale == "utc":
+            correction = self._leap_seconds_correction(erfa.utctai, 0)
+            if new_scale == "tt":
+                correction += TAI_TT_CORRECTION
+            elif new_scale == "tdb":
+                # We are effectively going UTC->TAI->TT->TDB with corrections here
+                correction += (
+                    self._tt_tdb_correction(True, correction + TAI_TT_CORRECTION)
+                    + TAI_TT_CORRECTION
+                )
+        elif self.scale == "tai":
             if new_scale == "tt":
                 correction = TAI_TT_CORRECTION
             elif new_scale == "tdb":
-                correction = self._tt_tdb_correction(True) + TAI_TT_CORRECTION
-            elif new_scale == "tai" or new_scale == "utc":
+                correction = (
+                    self._tt_tdb_correction(True, TAI_TT_CORRECTION) + TAI_TT_CORRECTION
+                )
+            elif new_scale == "tai":
                 correction = 0
+            elif new_scale == "utc":
+                correction = self._leap_seconds_correction(erfa.taiutc, 0)
         elif self.scale == "tdb":
             if new_scale == "tt":
-                correction = self._tt_tdb_correction(False)
-            elif new_scale == "tai" or new_scale == "utc":
-                correction = self._tt_tdb_correction(False) - TAI_TT_CORRECTION
+                correction = self._tt_tdb_correction(False, 0)
+            elif new_scale == "tai":
+                correction = self._tt_tdb_correction(False, 0) - TAI_TT_CORRECTION
+            elif new_scale == "utc":
+                correction = self._tt_tdb_correction(False, 0) - TAI_TT_CORRECTION
+                correction += self._leap_seconds_correction(erfa.taiutc, correction)
         if correction is not None:
-            if self.scale == "utc":
-                jd1, jd2 = self._erfa_call(erfa.utctai, 0)
-                return from_jd_pair(jd1, jd2, correction)
-            if new_scale == "utc":
-                jd1, jd2 = self._erfa_call(erfa.taiutc, correction / _NANOS_IN_DAY)
-                return from_jd_pair(jd1, jd2, 0)
-            else:
-                tmp = self.add_nanos(correction, check_range=False)
-                return Timestamp.from_kwargs(
-                    days=tmp.days, nanos=tmp.nanos, scale=new_scale
-                )
+            tmp = self.add_nanos(correction, check_range=False)
+            return Timestamp.from_kwargs(
+                days=tmp.days, nanos=tmp.nanos, scale=new_scale
+            )
 
         raise ValueError(
             "Rescale from {} to {} is not supported".format(self.scale, new_scale)

@@ -808,15 +808,6 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
             return False
         return True
 
-    # Tolerance for round trip, nanoseconds. The conversion seems to pick up
-    # rounding errors, but it's still a small number of ns.
-    round_tolerance = 0
-    if (
-        "utc" in [scale1, scale2]
-        or "tdb" in [scale1, scale2]
-        and "tai" in [scale1, scale2]
-    ):
-        round_tolerance = 25
     # Tolerance for comparison to astropy. TDB in astropy is using a different, more involved
     # algorithm (location dependent), so the result can be off by tens of us.
     astropy_tolerance = 0
@@ -837,7 +828,7 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
         original,
         round_tripped,
         f"round trip match from {scale1} to {scale2}",
-        round_tolerance,
+        0,  # tolerance
     )
     assert check_delta(
         rescaled, baseline, f"match going from {scale1} to {scale2}", astropy_tolerance
