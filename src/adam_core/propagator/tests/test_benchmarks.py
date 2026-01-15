@@ -27,7 +27,14 @@ def test_assist_generate_ephemeris_single_process_benchmark(benchmark):
     num_times = 20
 
     orbits = make_real_orbits(num_orbits)
-    times = Timestamp.from_mjd(np.arange(60000, 60000 + num_times), scale="tdb")
+    # Anchor benchmark times near the input orbit epochs. Some sample orbits have epochs
+    # far from an arbitrary fixed time (e.g., MJD=60000). Long propagations can produce
+    # physically unrealistic states (e.g., close encounters/collisions in N-body integration)
+    # which then break light-time correction (NaN/inf). Using a per-sample epoch keeps the
+    # benchmark stable across integrator/library versions while exercising the same code path.
+    orbit_mjd = orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    base_mjd = int(round(float(np.median(orbit_mjd))))
+    times = Timestamp.from_mjd(np.arange(base_mjd, base_mjd + num_times), scale="tdb")
     observers = Observers.from_code("500", times)
 
     propagator = ASSISTPropagator()
@@ -59,7 +66,9 @@ def test_assist_generate_ephemeris_multi_process_benchmark(benchmark):
     num_times = 20
 
     orbits = make_real_orbits(num_orbits)
-    times = Timestamp.from_mjd(np.arange(60000, 60000 + num_times), scale="tdb")
+    orbit_mjd = orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    base_mjd = int(round(float(np.median(orbit_mjd))))
+    times = Timestamp.from_mjd(np.arange(base_mjd, base_mjd + num_times), scale="tdb")
     observers = Observers.from_code("500", times)
 
     propagator = ASSISTPropagator()

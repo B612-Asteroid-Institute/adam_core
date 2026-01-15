@@ -2,6 +2,7 @@ from typing import Tuple
 
 import jax.numpy as jnp
 import numpy as np
+import pyarrow as pa
 from jax import jit, lax, vmap
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -15,6 +16,7 @@ from ..coordinates.transform import _cartesian_to_spherical, transform_coordinat
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
+from ..photometry.magnitude import calculate_apparent_magnitude_v
 from ..utils.chunking import process_in_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
 
@@ -29,7 +31,7 @@ def _generate_ephemeris_2body(
     max_iter: int = 100,
     tol: float = 1e-15,
     stellar_aberration: bool = False,
-) -> Tuple[jnp.ndarray, jnp.float64]:
+) -> Tuple[jnp.ndarray, jnp.float64, jnp.ndarray]:
     """
     Given a propagated orbit, generate its on-sky ephemeris as viewed from the observer.
     This function calculates the light time delay between the propagated orbit and the observer,
@@ -78,6 +80,8 @@ def _generate_ephemeris_2body(
         Topocentric Spherical ephemeris.
     lt : float
         Light time correction (t0 - corrected_t0).
+    aberrated_orbit : `~jax.numpy.ndarray` (6)
+        Barycentric Cartesian orbit corrected for light time (emission time state).
     """
     # Add light time correction
     propagated_orbits_aberrated, light_time = _add_light_time(
@@ -109,7 +113,7 @@ def _generate_ephemeris_2body(
     # Convert to spherical coordinates
     ephemeris_spherical = _cartesian_to_spherical(topocentric_coordinates)
 
-    return ephemeris_spherical, light_time
+    return ephemeris_spherical, light_time, propagated_orbits_aberrated
 
 
 # Vectorization Map: _generate_ephemeris_2body
@@ -117,7 +121,7 @@ _generate_ephemeris_2body_vmap = jit(
     vmap(
         _generate_ephemeris_2body,
         in_axes=(0, 0, 0, 0, None, None, None, None),
-        out_axes=(0, 0),
+        out_axes=(0, 0, 0),
     )
 )
 
@@ -129,6 +133,7 @@ def generate_ephemeris_2body(
     max_iter: int = 1000,
     tol: float = 1e-15,
     stellar_aberration: bool = False,
+    predict_magnitudes: bool = True,
 ) -> Ephemeris:
     """
     Generate on-sky ephemerides for each propagated orbit as viewed by the observers.
@@ -213,6 +218,7 @@ def generate_ephemeris_2body(
     # Process in chunks
     ephemeris_spherical: np.ndarray = np.empty((0, 6))
     light_time: np.ndarray = np.empty((0,))
+    aberrated_orbits: np.ndarray = np.empty((0, 6))
 
     for orbits_chunk, times_chunk, observer_coords_chunk, mu_chunk in zip(
         process_in_chunks(propagated_orbits_barycentric.coordinates.values, chunk_size),
@@ -220,24 +226,48 @@ def generate_ephemeris_2body(
         process_in_chunks(observer_coordinates, chunk_size),
         process_in_chunks(mu, chunk_size),
     ):
-        ephemeris_chunk, light_time_chunk = _generate_ephemeris_2body_vmap(
-            orbits_chunk,
-            times_chunk,
-            observer_coords_chunk,
-            mu_chunk,
-            lt_tol,
-            max_iter,
-            tol,
-            stellar_aberration,
+        ephemeris_chunk, light_time_chunk, aberrated_chunk = (
+            _generate_ephemeris_2body_vmap(
+                orbits_chunk,
+                times_chunk,
+                observer_coords_chunk,
+                mu_chunk,
+                lt_tol,
+                max_iter,
+                tol,
+                stellar_aberration,
+            )
         )
         ephemeris_spherical = np.concatenate(
             (ephemeris_spherical, np.asarray(ephemeris_chunk))
         )
         light_time = np.concatenate((light_time, np.asarray(light_time_chunk)))
+        aberrated_orbits = np.concatenate(
+            (aberrated_orbits, np.asarray(aberrated_chunk))
+        )
 
     # Concatenate chunks and remove padding
     ephemeris_spherical = np.array(ephemeris_spherical)[:num_entries]
     light_time = np.array(light_time)[:num_entries]
+    aberrated_orbits = np.array(aberrated_orbits)[:num_entries]
+
+    # Compute emission times by subtracting light-time (in days) from the observation times.
+    emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
+        pa.array(-light_time)
+    )
+    aberrated_coordinates = CartesianCoordinates.from_kwargs(
+        x=aberrated_orbits[:, 0],
+        y=aberrated_orbits[:, 1],
+        z=aberrated_orbits[:, 2],
+        vx=aberrated_orbits[:, 3],
+        vy=aberrated_orbits[:, 4],
+        vz=aberrated_orbits[:, 5],
+        time=emission_times,
+        origin=Origin.from_kwargs(
+            code=np.full(num_entries, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name)
+        ),
+        frame="ecliptic",
+    )
 
     if not propagated_orbits.coordinates.covariance.is_all_nan():
 
@@ -247,7 +277,7 @@ def generate_ephemeris_2body(
             cartesian_covariances,
             _generate_ephemeris_2body,
             in_axes=(0, 0, 0, 0, None, None, None, None),
-            out_axes=(0, 0),
+            out_axes=(0, 0, 0),
             observation_times=times.utc.mjd,
             observer_coordinates=observer_coordinates,
             mu=mu,
@@ -282,9 +312,49 @@ def generate_ephemeris_2body(
         spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
     )
 
-    return Ephemeris.from_kwargs(
+    ephemeris = Ephemeris.from_kwargs(
         orbit_id=propagated_orbits_barycentric.orbit_id,
         object_id=propagated_orbits_barycentric.object_id,
         coordinates=spherical_coordinates,
         light_time=light_time,
+        aberrated_coordinates=aberrated_coordinates,
     )
+
+    if not predict_magnitudes:
+        return ephemeris
+
+    H_v = propagated_orbits.physical_parameters.H_v.to_numpy(zero_copy_only=False)
+    G = propagated_orbits.physical_parameters.G.to_numpy(zero_copy_only=False)
+    has_params = np.isfinite(H_v) & np.isfinite(G)
+    if not np.any(has_params):
+        return ephemeris
+
+    # Transform object and observer coordinates to heliocentric for photometry.
+    aberrated_heliocentric = transform_coordinates(
+        aberrated_coordinates,
+        CartesianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+    observers_heliocentric = observers.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SUN,
+        ),
+    )
+
+    mags = calculate_apparent_magnitude_v(
+        H_v=H_v,
+        object_coords=aberrated_heliocentric,
+        observer=observers_heliocentric,
+        G=G,
+    )
+    mags = np.asarray(mags, dtype=np.float64)
+    valid = has_params & np.isfinite(mags)
+    ephemeris = ephemeris.set_column(
+        "predicted_magnitude_v", pa.array(mags, mask=~valid, type=pa.float64())
+    )
+    return ephemeris

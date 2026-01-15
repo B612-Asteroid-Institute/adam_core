@@ -112,3 +112,6 @@ pdm.lock
 # macOS files
 *.DS_Store
 *.benchmarks
+
+# working scratch files
+.scratch*
