@@ -124,12 +124,6 @@ Similarly, if you just want to access the orbital elements you can do the follow
 orbits.coordinates.values
 ```
 
-### Photometry (V-centric magnitudes + filter conversions)
-
-`adam_core` includes a small photometry module that standardizes on **Johnson–Cousins V** internally (i.e., \(H_V\)) and provides documented filter-conversion paths to survey/instrument filters.
-
-See: `src/adam_core/photometry/README.md`
-
 To query orbits from JPL Horizons:
 ```python
 from adam_core.orbits.query import query_horizons

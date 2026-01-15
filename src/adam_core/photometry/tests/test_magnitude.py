@@ -95,6 +95,70 @@ def test_convert_magnitude_requires_canonical_filter_ids():
         )
 
 
+def test_calculate_apparent_magnitude_v_raises_on_zero_r():
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    observer = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"]),
+        ),
+    )
+    # Object at the Sun's position => r == 0 (invalid for this photometry model).
+    obj = CartesianCoordinates.from_kwargs(
+        x=[0.0],
+        y=[0.0],
+        z=[0.0],
+        vx=[0.0],
+        vy=[0.0],
+        vz=[0.0],
+        time=time,
+        frame="ecliptic",
+        origin=Origin.from_kwargs(code=["SUN"]),
+    )
+    with pytest.raises(ValueError, match="Invalid photometry geometry"):
+        calculate_apparent_magnitude_v(15.0, obj, observer)
+
+
+def test_calculate_apparent_magnitude_v_raises_on_zero_delta():
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    observer = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"]),
+        ),
+    )
+    # Object coincident with observer => delta == 0 (invalid).
+    obj = CartesianCoordinates.from_kwargs(
+        x=[1.0],
+        y=[0.0],
+        z=[0.0],
+        vx=[0.0],
+        vy=[0.0],
+        vz=[0.0],
+        time=time,
+        frame="ecliptic",
+        origin=Origin.from_kwargs(code=["SUN"]),
+    )
+    with pytest.raises(ValueError, match="Invalid photometry geometry"):
+        calculate_apparent_magnitude_v(15.0, obj, observer)
+
+
 def test_predict_magnitudes_requires_composition(monkeypatch):
     time = Timestamp.from_mjd([60000], scale="tdb")
     exposures = Exposures.from_kwargs(

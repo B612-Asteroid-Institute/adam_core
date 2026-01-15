@@ -188,9 +188,8 @@ def test_generate_ephemeris_for_exposures_returns_v_magnitudes():
     )
 
     prop = MockPropagator()
-    eph = prop.generate_ephemeris_for_exposures(
-        orbits, exposures, predict_magnitudes=True
-    )
+    observers = exposures.observers()
+    eph = prop.generate_ephemeris(orbits, observers, predict_magnitudes=True)
     assert len(eph) == len(exposures)
 
     assert not pc.all(pc.is_null(eph.predicted_magnitude_v)).as_py()

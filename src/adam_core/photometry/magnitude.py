@@ -30,6 +30,37 @@ from .magnitude_common import (
 from .magnitude_common import bandpass_filter_id_table as _bandpass_filter_id_table
 
 
+def _validate_hg_geometry(
+    *,
+    object_pos: npt.NDArray[np.float64],
+    observer_pos: npt.NDArray[np.float64],
+) -> None:
+    """
+    Validate geometry inputs for the H-G apparent magnitude model.
+
+    We treat non-finite or non-positive distances as invalid inputs and raise, since
+    they represent physically impossible (or mis-framed) states for solar system photometry.
+    """
+    obj = np.asarray(object_pos, dtype=np.float64)
+    obs = np.asarray(observer_pos, dtype=np.float64)
+    if obj.ndim != 2 or obj.shape[1] != 3:
+        raise ValueError("object_pos must have shape (N, 3)")
+    if obs.shape != obj.shape:
+        raise ValueError("observer_pos must have shape (N, 3) and match object_pos")
+
+    r = np.sqrt(np.sum(obj * obj, axis=1))
+    delta_vec = obj - obs
+    delta = np.sqrt(np.sum(delta_vec * delta_vec, axis=1))
+
+    invalid = (~np.isfinite(r)) | (~np.isfinite(delta)) | (r <= 0.0) | (delta <= 0.0)
+    if np.any(invalid):
+        n_bad = int(np.count_nonzero(invalid))
+        raise ValueError(
+            "Invalid photometry geometry for H-G model: "
+            f"{n_bad} rows have non-finite or non-positive distances (r<=0 or delta<=0)."
+        )
+
+
 def convert_magnitude(
     magnitude: npt.NDArray[np.float64],
     source_filter_id: npt.NDArray[np.object_],
@@ -224,6 +255,13 @@ def calculate_apparent_magnitude_v(
 
     object_pos = np.asarray(object_coords.r, dtype=np.float64)
     observer_pos = np.asarray(observer.coordinates.r, dtype=np.float64)
+    if n_obs == 1:
+        observer_pos_broadcast = np.broadcast_to(
+            np.asarray(observer_pos[0], dtype=np.float64), object_pos.shape
+        )
+    else:
+        observer_pos_broadcast = observer_pos
+    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos_broadcast)
 
     H_v_arr = np.asarray(H_v, dtype=np.float64)
     if H_v_arr.ndim == 0:
@@ -354,6 +392,7 @@ def predict_magnitudes(
     n = len(object_coords)
     object_pos = np.asarray(object_coords.r, dtype=np.float64)
     observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
+    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
 
     H_arr = np.asarray(H, dtype=np.float64)
     if H_arr.ndim == 0:
