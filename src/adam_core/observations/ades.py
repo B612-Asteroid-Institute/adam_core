@@ -153,8 +153,21 @@ class ADESObservations(qv.Table):
     obsSubID = qv.LargeStringColumn(nullable=True)
     obsTime = Timestamp.as_column()
     rmsTime = qv.Float64Column(nullable=True)
+    # Optional ADES time precision/uncertainty fields
+    uncTime = qv.LargeStringColumn(nullable=True)
+    precTime = qv.Int64Column(nullable=True)
     ra = qv.Float64Column()
     dec = qv.Float64Column()
+    # Optional ADES per-axis precision metadata
+    precRA = qv.LargeStringColumn(nullable=True)
+    precDec = qv.LargeStringColumn(nullable=True)
+    # Optional ADES reference star and offset/geometry fields (optical)
+    raStar = qv.Float64Column(nullable=True)
+    decStar = qv.Float64Column(nullable=True)
+    deltaRA = qv.Float64Column(nullable=True)
+    deltaDec = qv.Float64Column(nullable=True)
+    dist = qv.Float64Column(nullable=True)
+    pa = qv.Float64Column(nullable=True)
     # ADES uses arcseconds for rmsRA and rmsDec
     # rmsRA is also multiplied by cos(dec)
     rmsRACosDec = qv.Float64Column(
@@ -166,34 +179,99 @@ class ADESObservations(qv.Table):
         validator=qv.validators.and_(qv.validators.ge(10e-8), qv.validators.lt(1e2)),
     )
     rmsCorr = qv.Float64Column(nullable=True)
+    # Optional ADES scatter for geometry/photometry
+    rmsDist = qv.Float64Column(nullable=True)
+    rmsPA = qv.Float64Column(nullable=True)
     mag = qv.Float64Column(nullable=True)
     rmsMag = qv.Float64Column(nullable=True)
     band = qv.LargeStringColumn(nullable=True)
+    fltr = qv.LargeStringColumn(nullable=True)
     stn = qv.LargeStringColumn()
     mode = qv.LargeStringColumn()
     astCat = qv.LargeStringColumn()
     photCat = qv.LargeStringColumn(nullable=True)
+    photAp = qv.LargeStringColumn(nullable=True)
     logSNR = qv.Float64Column(nullable=True)
     seeing = qv.Float64Column(nullable=True)
     exp = qv.Float64Column(nullable=True)
+    rmsFit = qv.Float64Column(nullable=True)
+    nucMag = qv.Float64Column(nullable=True)
+    # Optional ADES generic position/velocity/covariance and coordinate type
+    ctr = qv.Int64Column(nullable=True)
+    pos1 = qv.Float64Column(nullable=True)
+    pos2 = qv.Float64Column(nullable=True)
+    pos3 = qv.Float64Column(nullable=True)
+    poscov11 = qv.Float64Column(nullable=True)
+    poscov12 = qv.Float64Column(nullable=True)
+    poscov13 = qv.Float64Column(nullable=True)
+    poscov22 = qv.Float64Column(nullable=True)
+    poscov23 = qv.Float64Column(nullable=True)
+    poscov33 = qv.Float64Column(nullable=True)
+    vel1 = qv.Float64Column(nullable=True)
+    vel2 = qv.Float64Column(nullable=True)
+    vel3 = qv.Float64Column(nullable=True)
+    # Optional ADES radar fields
+    delay = qv.Float64Column(nullable=True)
+    rmsDelay = qv.Float64Column(nullable=True)
+    doppler = qv.Float64Column(nullable=True)
+    rmsDoppler = qv.Float64Column(nullable=True)
+    frq = qv.Float64Column(nullable=True)
+    trx = qv.LargeStringColumn(nullable=True)
+    rcv = qv.LargeStringColumn(nullable=True)
+    sys = qv.LargeStringColumn(nullable=True)
+    # Optional ADES observatory context
+    obsCenter = qv.LargeStringColumn(nullable=True)
     remarks = qv.LargeStringColumn(nullable=True)
 
 
 def ADES_to_string(
     observations: ADESObservations,
-    obs_contexts: dict[str, ObsContext],
+    obs_contexts: dict[str, ObsContext] | None = None,
     seconds_precision: int = 3,
     columns_precision: dict[str, int] = {
+        # Astrometry
         "ra": 9,
         "dec": 9,
+        "raStar": 9,
+        "decStar": 9,
         "rmsRACosDec": 5,
         "rmsDec": 5,
         "rmsCorr": 8,
+        # Optical geometry/offsets
+        "deltaRA": 4,
+        "deltaDec": 4,
+        "dist": 4,
+        "pa": 2,
+        "rmsDist": 4,
+        "rmsPA": 4,
+        # Photometry
         "mag": 4,
         "rmsMag": 4,
+        "rmsFit": 4,
+        "nucMag": 1,
+        # Exposure and SNR/seeing
         "exp": 2,
         "logSNR": 2,
         "seeing": 2,
+        # Generic position/velocity and covariance
+        "pos1": 6,
+        "pos2": 6,
+        "pos3": 6,
+        "vel1": 6,
+        "vel2": 6,
+        "vel3": 6,
+        "poscov11": 6,
+        "poscov12": 6,
+        "poscov13": 6,
+        "poscov22": 6,
+        "poscov23": 6,
+        "poscov33": 6,
+        # Radar
+        "delay": 6,
+        "rmsDelay": 6,
+        "doppler": 5,
+        "rmsDoppler": 5,
+        "frq": 6,
     },
 ) -> str:
     """
@@ -203,9 +281,11 @@ def ADES_to_string(
     ----------
     observations : ADESObservations
         The observations to write to a string.
-    obs_contexts : dict[str, ObsContext]
+    obs_contexts : dict[str, ObsContext] or None, optional
         A dictionary of observatory codes and their corresponding ObsContexts to use
         as the context headers for the different observatory codes in the observations.
+        If None, the observatory context headers will be omitted from the output.
+        Default is None.
     seconds_precision : int, optional
         The precision to use for the seconds in the obsTime field, by default 3.
     columns_precision : dict[str, int], optional
@@ -232,7 +312,7 @@ def ADES_to_string(
     unique_observatories.sort()
 
     for obs in unique_observatories:
-        if obs not in obs_contexts:
+        if obs_contexts is not None and obs not in obs_contexts:
             raise ValueError(f"Observatory {obs} not found in obs_contexts")
 
         observations_obscode = observations.select("stn", obs)
@@ -261,9 +341,10 @@ def ADES_to_string(
             )
             raise ValueError(err)
 
-        # Write the observatory context block
-        obs_context = obs_contexts[obs]
-        ades_string += obs_context.to_string()
+        # Write the observatory context block (if provided)
+        if obs_contexts is not None and obs in obs_contexts:
+            obs_context = obs_contexts[obs]
+            ades_string += obs_context.to_string()
 
         # Write the observations block (we first convert
         # to a pandas dataframe)
@@ -291,15 +372,64 @@ def ADES_to_string(
         for col, prec_col in columns_precision.items():
             if col in ades.columns:
                 ades[col] = [
-                    f"{i:.{prec_col}f}" if i is not None or not np.isnan(i) else ""
+                    f"{i:.{prec_col}f}" if (i is not None and not np.isnan(i)) else ""
                     for i in ades[col]
                 ]
 
         # Rename the columns to match the ADES format
         ades.rename(columns={"rmsRACosDec": "rmsRA"}, inplace=True)
 
+        # Enforce specific ADES-required relative column ordering when present.
+        def _enforce_group_order(df, group):
+            present = [c for c in group if c in df.columns]
+            if len(present) <= 1:
+                return df
+            present_set = set(present)
+            new_cols = []
+            inserted = False
+            for col in df.columns:
+                if col in present_set:
+                    if not inserted:
+                        new_cols.extend(present)
+                        inserted = True
+                    # skip subsequent present columns
+                    continue
+                new_cols.append(col)
+            return df[new_cols]
+
+        # Groups based on ADES spec conventions
+        groups = [
+            ["obsTime", "rmsTime", "precTime", "uncTime"],
+            ["ra", "dec", "rmsRA", "rmsDec", "rmsCorr"],
+            ["raStar", "decStar"],
+            ["deltaRA", "deltaDec"],
+            ["dist", "pa", "rmsDist", "rmsPA"],
+            [
+                "sys",
+                "ctr",
+                "pos1",
+                "pos2",
+                "pos3",
+                "vel1",
+                "vel2",
+                "vel3",
+                "poscov11",
+                "poscov12",
+                "poscov13",
+                "poscov22",
+                "poscov23",
+                "poscov33",
+            ],
+            ["trx", "rcv", "frq", "delay", "rmsDelay", "doppler", "rmsDoppler"],
+            ["mag", "rmsMag", "band", "fltr", "photAp", "photCat", "nucMag", "rmsFit"],
+            ["logSNR", "seeing", "exp"],
+            ["stn", "mode", "astCat", "obsCenter"],
+        ]
+        for group in groups:
+            ades = _enforce_group_order(ades, group)
+
         ades_string += ades.to_csv(
-            sep="|", header=True, index=False, float_format="%.16f"
+            sep="|", header=True, index=False, float_format="%.16f", na_rep=""
         )
 
     return ades_string
@@ -323,17 +453,49 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
         data_dict[col] = [None if x == "" or x.isspace() else x for x in data_dict[col]]
 
     numeric_cols = [
+        # Astrometry and errors
         "ra",
         "dec",
         "rmsRA",
         "rmsDec",
-        "mag",
-        "rmsMag",
         "rmsCorr",
         "rmsTime",
+        # Optical geometry/offsets
+        "raStar",
+        "decStar",
+        "deltaRA",
+        "deltaDec",
+        "dist",
+        "pa",
+        "rmsDist",
+        "rmsPA",
+        # Photometry/exposure/SNR
+        "mag",
+        "rmsMag",
+        "rmsFit",
+        "nucMag",
         "logSNR",
         "seeing",
         "exp",
+        # Generic pos/vel/covariance
+        "pos1",
+        "pos2",
+        "pos3",
+        "vel1",
+        "vel2",
+        "vel3",
+        "poscov11",
+        "poscov12",
+        "poscov13",
+        "poscov22",
+        "poscov23",
+        "poscov33",
+        # Radar
+        "delay",
+        "rmsDelay",
+        "doppler",
+        "rmsDoppler",
+        "frq",
     ]
     # Do all the data conversions and then initialize the new table and concatenate
     for col in numeric_cols:
@@ -341,6 +503,24 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
             data_dict[col] = [
                 float(x) if x is not None else None for x in data_dict[col]
             ]
+
+    # Integer columns
+    int_cols = [
+        "precTime",
+        "ctr",
+    ]
+    for col in int_cols:
+        if col in data_dict:
+            data_dict[col] = [int(x) if x is not None else None for x in data_dict[col]]
+
+    # Integer columns
+    int_cols = [
+        "precTime",
+        "ctr",
+    ]
+    for col in int_cols:
+        if col in data_dict:
+            data_dict[col] = [int(x) if x is not None else None for x in data_dict[col]]
 
     # Some users are accustomed to having fixed-width columns, so we strip whitespace
     # from all the string columns with the exception of the 'remarks' column
@@ -354,6 +534,16 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
         "astCat",
         "photCat",
         "band",
+        # Additional ADES strings
+        "uncTime",
+        "precRA",
+        "precDec",
+        "photAp",
+        "fltr",
+        "trx",
+        "rcv",
+        "sys",
+        "obsCenter",
     ]
     for col in string_cols:
         if col in data_dict:
