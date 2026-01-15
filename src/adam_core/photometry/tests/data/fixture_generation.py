@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -9,7 +10,7 @@ import astropy.time
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
-from astroquery.jplsbdb import SBDB
+import requests
 from google.cloud import bigquery
 from mpcq.client import BigQueryMPCClient
 
@@ -48,6 +49,52 @@ def _extract_float(value) -> float | None:
     return None
 
 
+def _sbdb_query_json(
+    object_id: str,
+    *,
+    timeout_s: int = 60,
+    max_attempts: int = 5,
+) -> dict:
+    """
+    Query JPL SBDB via the public JSON API (ssd-api.jpl.nasa.gov) with retries.
+
+    We use direct requests here (instead of astroquery) so we can control timeout/retry
+    behavior and keep fixture generation resilient to transient network slowness.
+    """
+    obj = str(object_id).strip()
+    if not obj:
+        raise ValueError("object_id must be non-empty")
+    if max_attempts <= 0:
+        raise ValueError("max_attempts must be > 0")
+    if timeout_s <= 0:
+        raise ValueError("timeout_s must be > 0")
+
+    url = "https://ssd-api.jpl.nasa.gov/sbdb.api"
+    params = {
+        "sstr": obj,
+        # boolean parameters in this API are 'true'/'false' strings
+        "phys-par": "true",
+        "full-prec": "true",
+    }
+
+    last_err: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            resp = requests.get(url, params=params, timeout=timeout_s)
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as err:
+            last_err = err
+            # Exponential backoff with a small cap.
+            sleep_s = min(8.0, 0.5 * (2**attempt))
+            time.sleep(sleep_s)
+        except Exception:
+            # Non-retryable (HTTP 4xx, JSON decode, etc.)
+            raise
+
+    raise RuntimeError(f"SBDB query failed after {max_attempts} attempts: {last_err}")
+
+
 def query_jpl_hg(object_id: str) -> tuple[float, float]:
     """
     Fetch H and G from JPL SBDB for a small body.
@@ -57,21 +104,19 @@ def query_jpl_hg(object_id: str) -> tuple[float, float]:
     - SBDB's H is V-band absolute magnitude.
     - G may be missing; we default to 0.15.
     """
-    SBDB.clear_cache()
-    result = SBDB.query(
-        object_id,
-        id_type="search",
-        full_precision=True,
-        solution_epoch=False,
-        phys=True,
-    )
-    phys = result.get("phys_par") or {}
+    result = _sbdb_query_json(object_id, timeout_s=90, max_attempts=5)
+    phys_list = result.get("phys_par") or []
+    phys_by_name = {
+        str(d.get("name")): d
+        for d in phys_list
+        if isinstance(d, dict) and d.get("name") is not None
+    }
 
-    H = _extract_float(phys.get("H")) or _extract_float(phys.get("H_mag"))
+    H = _extract_float(phys_by_name.get("H")) or _extract_float(phys_by_name.get("H_mag"))
     if H is None:
         raise RuntimeError(f"JPL SBDB did not provide H for {object_id}")
 
-    G = _extract_float(phys.get("G"))
+    G = _extract_float(phys_by_name.get("G"))
     if G is None:
         G = 0.15
     return float(H), float(G)
@@ -86,20 +131,18 @@ def query_jpl_hg_and_kind(
     `kind` is SBDB's object type code (e.g. asteroids tend to be 'an'/'au';
     comets tend to start with 'c'). If missing, returns None.
     """
-    SBDB.clear_cache()
-    result = SBDB.query(
-        object_id,
-        id_type="search",
-        full_precision=True,
-        solution_epoch=False,
-        phys=True,
-    )
+    result = _sbdb_query_json(object_id, timeout_s=90, max_attempts=5)
     obj = result.get("object") or {}
     kind = obj.get("kind")
 
-    phys = result.get("phys_par") or {}
-    H = _extract_float(phys.get("H")) or _extract_float(phys.get("H_mag"))
-    G = _extract_float(phys.get("G"))
+    phys_list = result.get("phys_par") or []
+    phys_by_name = {
+        str(d.get("name")): d
+        for d in phys_list
+        if isinstance(d, dict) and d.get("name") is not None
+    }
+    H = _extract_float(phys_by_name.get("H")) or _extract_float(phys_by_name.get("H_mag"))
+    G = _extract_float(phys_by_name.get("G"))
     return H, G, kind
 
 
@@ -199,6 +242,49 @@ def _bq_string_literal(value: str) -> str:
     return "'" + v.replace("'", "''") + "'"
 
 
+def normalize_reported_band_for_station(station_code: str, band: str) -> str:
+    """
+    Normalize station-specific reported band values into the canonical "reported band"
+    strings expected by `ObservatoryBandMap` / `resolve_filter_ids`.
+
+    For LSST (X05), MPC/ADES band encodings can include: 'g', 'Lg', 'LSST_g', etc.
+    We normalize to 'u','g','r','i','z','y' (and accept 'Y' as 'y').
+    """
+    stn = str(station_code).strip()
+    b = str(band).strip()
+    if not b:
+        return b
+
+    if stn == "X05":
+        if len(b) == 2 and b[0] == "L":
+            b = b[1:]
+        if b.startswith("LSST_"):
+            b = b.split("_", 1)[1]
+        if b == "Y":
+            b = "y"
+        return b
+
+    return b
+
+
+def band_variants_for_station(station_code: str, reported_band: str) -> set[str]:
+    """
+    Expand a (station, band) into a set of variants that may appear in MPCQ observations.
+    This is used to widen BigQuery predicates without changing the downstream mapping.
+    """
+    stn = str(station_code).strip()
+    b = str(reported_band).strip()
+    if not stn or not b:
+        return set()
+
+    out = {b}
+    if stn == "X05" and b in {"u", "g", "r", "i", "z", "y"}:
+        out |= {f"L{b}", f"LSST_{b}"}
+        if b == "y":
+            out.add("LY")  # occasional uppercase variant
+    return out
+
+
 def target_filter_map_by_code(
     codes: Iterable[str],
 ) -> dict[str, dict[str, set[str]]]:
@@ -232,7 +318,10 @@ def target_filter_map_by_code(
         f = str(fid).strip()
         if not c or not b or not f:
             continue
-        out.setdefault(c, {}).setdefault(f, set()).add(b)
+        variants = band_variants_for_station(c, b)
+        if not variants:
+            continue
+        out.setdefault(c, {}).setdefault(f, set()).update(variants)
 
     missing = sorted(wanted - set(out.keys()))
     if missing:
@@ -623,9 +712,10 @@ def build_fixture_for_object(
             f"No observations found for {obj} at station {stn} in bands={sorted(relevant_bands)}"
         )
 
-    bands_all = [
+    bands_all_raw = [
         str(x).strip() for x in pc.utf8_trim_whitespace(raw.column("band")).to_pylist()
     ]
+    bands_all = [normalize_reported_band_for_station(stn, b) for b in bands_all_raw]
     canonical_all = resolve_filter_ids([stn] * len(bands_all), bands_all)
     canonical_all = np.asarray(canonical_all, dtype=object)
 
@@ -650,9 +740,10 @@ def build_fixture_for_object(
         keep_idx.append(i)
 
     raw = raw.take(pa.array(keep_idx, type=pa.int64()))
-    bands = [
+    bands_raw = [
         str(x).strip() for x in pc.utf8_trim_whitespace(raw.column("band")).to_pylist()
     ]
+    bands = [normalize_reported_band_for_station(stn, b) for b in bands_raw]
     canonical = resolve_filter_ids([stn] * len(bands), bands)
 
     # Require asteroid + H in both MPC and JPL (for A/B benchmarking).
@@ -682,14 +773,24 @@ def build_fixture_for_object(
     )
     times_utc = exposures.midpoint()
 
-    # Heliocentric geometry
-    orbits_at_times = query_horizons(
-        object_ids=[obj],
-        times=times_utc,
-        coordinate_type="cartesian",
-        location="@sun",
-        id_type="smallbody",
-    )
+    # Heliocentric geometry (network call): retry a few times for transient slowness.
+    last_err: Exception | None = None
+    for attempt in range(4):
+        try:
+            orbits_at_times = query_horizons(
+                object_ids=[obj],
+                times=times_utc,
+                coordinate_type="cartesian",
+                location="@sun",
+                id_type="smallbody",
+            )
+            last_err = None
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(min(8.0, 0.5 * (2**attempt)))
+    if last_err is not None:
+        raise RuntimeError(f"Horizons query failed after retries for {obj}: {last_err}")
     object_coords = orbits_at_times.coordinates
     observers = exposures.observers()
 

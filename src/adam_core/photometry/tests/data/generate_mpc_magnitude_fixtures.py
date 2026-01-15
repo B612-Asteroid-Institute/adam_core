@@ -25,6 +25,7 @@ from adam_core.photometry.tests.data.fixture_generation import (
 DEFAULT_CODES: tuple[str, ...] = (
     "I41",
     "Q55",
+    "X05",
     "T05",
     "T08",
     "M22",

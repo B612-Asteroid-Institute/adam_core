@@ -25,10 +25,7 @@ DATA_DIR = Path(__file__).parent / "data"
 MPC_FIXTURES: list[str] = sorted(
     p.name for p in DATA_DIR.glob("mpc_magnitude_fixture_*.npz")
 )
-LSST_FIXTURES: list[str] = sorted(
-    p.name for p in DATA_DIR.glob("lsst_magnitude_fixture_*.npz")
-)
-if not MPC_FIXTURES and not LSST_FIXTURES:
+if not MPC_FIXTURES:
     MPC_FIXTURES = ["__NO_FIXTURES__"]
 
 
@@ -64,24 +61,6 @@ def _canonicalize_exposure_filters(
     return exposures.set_column(
         "filter", pa.array(canonical.tolist(), type=pa.large_string())
     )
-
-
-def _normalize_x05_reported_band(raw_band: object) -> str:
-    """
-    Normalize MPC/ADES LSST bands to X05 reported band labels ('u','g','r','i','z','y').
-
-    Fixture band encodings can include: 'g', 'Lg', 'LSST_g', etc.
-    """
-    s = str(raw_band).strip()
-    if not s:
-        raise ValueError("empty band")
-    if len(s) == 2 and s[0] == "L":
-        s = s[1:]
-    if s.startswith("LSST_"):
-        s = s.split("_", 1)[1]
-    if s not in {"u", "g", "r", "i", "z", "y", "Y"}:
-        return str(raw_band).strip()
-    return "y" if s == "Y" else s
 
 
 def _sse(resid: np.ndarray) -> float:
@@ -298,97 +277,8 @@ def test_mpc_absolute_magnitude_from_fixture(
             )
 
 
-@pytest.mark.parametrize("fixture_name", LSST_FIXTURES)
-def test_lsst_absolute_magnitude_from_fixture(monkeypatch, fixture_name: str) -> None:
-    fixture_path = DATA_DIR / fixture_name
-    if not fixture_path.exists():
-        pytest.skip(f"Missing fixture {fixture_name}")
-
-    fx = np.load(fixture_path, allow_pickle=True)
-    H_v = float(fx["H_v"][0])
-    G = float(fx["G"][0])
-    time_iso = fx["time_iso"].astype(object).tolist()
-    filters = fx["filters"].astype(object).tolist()
-    obj_pos = np.asarray(fx["object_pos"], dtype=np.float64)
-    obs_pos = np.asarray(fx["observer_pos"], dtype=np.float64)
-    mag_obs = np.asarray(fx["mag_obs"], dtype=np.float64)
-
-    n = len(mag_obs)
-    assert obj_pos.shape == (n, 3)
-    assert obs_pos.shape == (n, 3)
-    assert len(filters) == n
-
-    times = Timestamp.from_iso8601(time_iso, scale="utc")
-
-    reported_bands = [_normalize_x05_reported_band(f) for f in filters]
-    uniq_bands = sorted({str(b).strip() for b in reported_bands})
-    exposure_ids = [f"e_{b}" for b in uniq_bands]
-    exposures = Exposures.from_kwargs(
-        id=exposure_ids,
-        start_time=Timestamp.from_iso8601(
-            [time_iso[0]] * len(exposure_ids), scale="utc"
-        ),
-        duration=np.zeros(len(exposure_ids), dtype=np.float64),
-        filter=uniq_bands,
-        observatory_code=["X05"] * len(exposure_ids),
-    )
-
-    def fake_observers(self, *args, **kwargs):  # noqa: ARG001
-        if len(self) != n:
-            raise AssertionError(f"Expected exposures length {n}, got {len(self)}")
-        return _observers_from_heliocentric_positions("X05", times, obs_pos)
-
-    monkeypatch.setattr(Exposures, "observers", fake_observers)
-
-    object_coords = CartesianCoordinates.from_kwargs(
-        x=obj_pos[:, 0],
-        y=obj_pos[:, 1],
-        z=obj_pos[:, 2],
-        vx=np.zeros(n),
-        vy=np.zeros(n),
-        vz=np.zeros(n),
-        time=times,
-        frame="ecliptic",
-        origin=Origin.from_kwargs(code=["SUN"] * n),
-    )
-
-    detections = PointSourceDetections.from_kwargs(
-        id=[f"d{i}" for i in range(n)],
-        exposure_id=[f"e_{str(b).strip()}" for b in reported_bands],
-        time=times,
-        ra=np.zeros(n),
-        dec=np.zeros(n),
-        mag=mag_obs,
-        mag_sigma=None,
-    )
-
-    pp_hat = estimate_absolute_magnitude_v_from_detections(
-        detections,
-        exposures,
-        object_coords,
-        composition="NEO",
-        G=G,
-        strict_band_mapping=False,
-        reference_filter="V",
-    )
-    H_hat = float(pp_hat.H_v[0].as_py())
-    assert np.isfinite(H_hat)
-
-    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
-    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(idx_np < 0):
-        raise AssertionError("fixture test exposure_id mapping failed unexpectedly")
-    exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
-    exposures_canon = _canonicalize_exposure_filters(exposures_aligned, strict=False)
-
-    m0 = predict_magnitudes(
-        H=0.0,
-        object_coords=object_coords,
-        exposures=exposures_canon,
-        G=G,
-        reference_filter="V",
-        composition="NEO",
-    )
-    resid_hat = (np.asarray(m0, dtype=np.float64) + H_hat) - mag_obs
-    resid_base = (np.asarray(m0, dtype=np.float64) + H_v) - mag_obs
-    assert _sse(resid_hat) <= _sse(resid_base) + 1e-10
+"""
+NOTE: X05/LSST is covered by the unified MPC-format fixtures (station='X05')
+generated via `generate_mpc_magnitude_fixtures.py`; we do not maintain a separate
+LSST-only fixture schema/test here.
+"""
