@@ -16,12 +16,12 @@ from .api import (
     bandpass_color_terms,
     bandpass_delta_mag,
     compute_mix_integrals,
-    map_to_canonical_filter_bands,
     get_integrals,
     load_asteroid_templates,
     load_bandpass_curves,
     load_observatory_band_map,
     load_template_integrals,
+    map_to_canonical_filter_bands,
     register_custom_template,
 )
 from .tables import (

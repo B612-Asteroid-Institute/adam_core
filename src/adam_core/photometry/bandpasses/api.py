@@ -285,7 +285,9 @@ def map_to_canonical_filter_bands(
     if np.any(need_map):
         need_map_arr = pa.array(need_map.tolist(), type=pa.bool_())
         b_need = pc.if_else(need_map_arr, b, b)
-        b_for_map = _normalize_reported_band_for_station(codes, b_need, only_if_code="X05")
+        b_for_map = _normalize_reported_band_for_station(
+            codes, b_need, only_if_code="X05"
+        )
 
         keys = _key_from_code_band(codes, b_for_map)
         idx = pc.fill_null(pc.index_in(keys, value_set=mapping.key), -1)

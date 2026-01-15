@@ -6,11 +6,11 @@ from adam_core.photometry.bandpasses import (
     bandpass_color_terms,
     bandpass_delta_mag,
     compute_mix_integrals,
-    map_to_canonical_filter_bands,
     get_integrals,
     load_asteroid_templates,
     load_bandpass_curves,
     load_observatory_band_map,
+    map_to_canonical_filter_bands,
 )
 
 
@@ -73,6 +73,7 @@ def test_x05_normalizes_mpc_l_band_encodings():
     )
     assert out.tolist() == ["LSST_g", "LSST_r", "LSST_i", "LSST_g", "LSST_y", "LSST_y"]
 
+
 def test_find_suggested_filter_bands_passes_through_canonical_ids():
     # If already canonical, observatory code should not matter.
     out = map_to_canonical_filter_bands(["XXX", "W84"], ["LSST_g", "DECam_r"])
@@ -97,7 +98,9 @@ def test_find_suggested_filter_bands_strict_disallows_fallback():
 
 def test_find_suggested_filter_bands_raises_for_unknown_band_even_non_strict():
     with pytest.raises(ValueError, match="Unable to suggest canonical filter_id"):
-        map_to_canonical_filter_bands(["XXX"], ["not_a_band"], allow_fallback_filters=True)
+        map_to_canonical_filter_bands(
+            ["XXX"], ["not_a_band"], allow_fallback_filters=True
+        )
 
 
 def test_bandpass_curves_are_sane():

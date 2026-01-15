@@ -20,8 +20,8 @@ from adam_core.observations.exposures import Exposures
 from adam_core.observers.observers import Observers
 from adam_core.orbits.query.horizons import query_horizons
 from adam_core.photometry.bandpasses import (
-    map_to_canonical_filter_bands,
     load_observatory_band_map,
+    map_to_canonical_filter_bands,
 )
 from adam_core.photometry.magnitude import predict_magnitudes
 from adam_core.time import Timestamp
@@ -83,7 +83,10 @@ def _sbdb_query_json(
             resp = requests.get(url, params=params, timeout=timeout_s)
             resp.raise_for_status()
             return resp.json()
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as err:
+        except (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+        ) as err:
             last_err = err
             # Exponential backoff with a small cap.
             sleep_s = min(8.0, 0.5 * (2**attempt))
@@ -112,7 +115,9 @@ def query_jpl_hg(object_id: str) -> tuple[float, float]:
         if isinstance(d, dict) and d.get("name") is not None
     }
 
-    H = _extract_float(phys_by_name.get("H")) or _extract_float(phys_by_name.get("H_mag"))
+    H = _extract_float(phys_by_name.get("H")) or _extract_float(
+        phys_by_name.get("H_mag")
+    )
     if H is None:
         raise RuntimeError(f"JPL SBDB did not provide H for {object_id}")
 
@@ -141,7 +146,9 @@ def query_jpl_hg_and_kind(
         for d in phys_list
         if isinstance(d, dict) and d.get("name") is not None
     }
-    H = _extract_float(phys_by_name.get("H")) or _extract_float(phys_by_name.get("H_mag"))
+    H = _extract_float(phys_by_name.get("H")) or _extract_float(
+        phys_by_name.get("H_mag")
+    )
     G = _extract_float(phys_by_name.get("G"))
     return H, G, kind
 
