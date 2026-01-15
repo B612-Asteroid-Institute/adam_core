@@ -57,7 +57,7 @@ import pytest
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin
 from adam_core.observations.exposures import Exposures
-from adam_core.photometry.bandpasses import resolve_filter_ids
+from adam_core.photometry.bandpasses import map_to_canonical_filter_bands
 from adam_core.photometry.magnitude import predict_magnitudes
 from adam_core.photometry.tests.data.fixture_generation import (
     observers_from_heliocentric_positions,
@@ -227,8 +227,10 @@ def test_mpc_magnitude_regression_fixture(
         observatory_code=[station] * n,
     )
 
-    canonical_filter_ids = resolve_filter_ids(
-        exposures.observatory_code, exposures.filter
+    canonical_filter_ids = map_to_canonical_filter_bands(
+        exposures.observatory_code,
+        exposures.filter,
+        allow_fallback_filters=False,
     )
     exposures = exposures.set_column(
         "filter", pa.array(canonical_filter_ids.tolist(), type=pa.large_string())

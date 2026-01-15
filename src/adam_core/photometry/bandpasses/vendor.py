@@ -445,7 +445,7 @@ def build_template_bandpass_integrals(out_dir: Path) -> TemplateBandpassIntegral
                 sun = solar_flux[mask]
                 t = _interp(filt_wl, filt_thr, wl)
                 r = _interp(tmpl_wl, tmpl_refl, wl)
-                val = float(np.trapz(sun * r * t * wl, wl))
+                val = float(np.trapezoid(sun * r * t * wl, wl))
 
             template_ids.append(str(tmpl_id))
             filter_ids.append(str(filt_id))

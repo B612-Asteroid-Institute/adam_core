@@ -176,38 +176,6 @@ def _calculate_apparent_magnitude_core_jax(
 
 
 @jit
-def _calculate_apparent_magnitude_core_broadcast_observer_jax(
-    H_v: jnp.ndarray,
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-    G: jnp.ndarray,
-) -> jnp.ndarray:
-    """
-    JAX core computation for apparent magnitude in V-band for a single observer position.
-
-    Parameters
-    ----------
-    observer_pos : jnp.ndarray (3,)
-        Single heliocentric observer position vector (AU).
-    """
-    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
-    delta_vec = object_pos - observer_pos
-    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
-
-    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos))
-    numer = r**2 + delta**2 - observer_sun_dist**2
-    denom = 2.0 * r * delta
-    cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
-
-    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = jnp.exp(-3.33 * tan_half**0.63)
-    phi2 = jnp.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-
-    return H_v + 5.0 * jnp.log10(r * delta) - 2.5 * jnp.log10(phase_function)
-
-
-@jit
 def _predict_magnitudes_bandpass_core_jax(
     H_v: jnp.ndarray,
     object_pos: jnp.ndarray,
@@ -248,20 +216,14 @@ def calculate_apparent_magnitude_v(
     # -------------------------------------------------------------------------
     n = len(object_coords)
     n_obs = len(observer)
-    if n_obs not in (1, n):
+    if n_obs != n:
         raise ValueError(
-            f"observer length ({n_obs}) must be 1 or match object_coords length ({n})"
+            f"observer length ({n_obs}) must match object_coords length ({n})"
         )
 
     object_pos = np.asarray(object_coords.r, dtype=np.float64)
     observer_pos = np.asarray(observer.coordinates.r, dtype=np.float64)
-    if n_obs == 1:
-        observer_pos_broadcast = np.broadcast_to(
-            np.asarray(observer_pos[0], dtype=np.float64), object_pos.shape
-        )
-    else:
-        observer_pos_broadcast = observer_pos
-    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos_broadcast)
+    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
 
     H_v_arr = np.asarray(H_v, dtype=np.float64)
     if H_v_arr.ndim == 0:
@@ -286,50 +248,27 @@ def calculate_apparent_magnitude_v(
     padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
     out = np.empty((padded_n,), dtype=np.float64)
 
-    if n_obs == 1:
-        observer_pos_single = np.asarray(observer_pos[0], dtype=np.float64)
-        chunks: list[jax.Array] = []
-        for H_chunk, obj_chunk, G_chunk in zip(
-            process_in_chunks(H_v_arr, chunk_size),
-            process_in_chunks(object_pos, chunk_size),
-            process_in_chunks(G_arr, chunk_size),
-        ):
-            chunks.append(
-                _calculate_apparent_magnitude_core_broadcast_observer_jax(
-                    H_v=H_chunk,
-                    object_pos=obj_chunk,
-                    observer_pos=observer_pos_single,
-                    G=G_chunk,
-                )
+    chunks: list[jax.Array] = []
+    for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
+        process_in_chunks(H_v_arr, chunk_size),
+        process_in_chunks(object_pos, chunk_size),
+        process_in_chunks(observer_pos, chunk_size),
+        process_in_chunks(G_arr, chunk_size),
+    ):
+        chunks.append(
+            _calculate_apparent_magnitude_core_jax(
+                H_v=H_chunk,
+                object_pos=obj_chunk,
+                observer_pos=obs_chunk,
+                G=G_chunk,
             )
+        )
 
-        host_chunks = jax.device_get(chunks)
-        offset = 0
-        for mags_v_chunk in host_chunks:
-            out[offset : offset + chunk_size] = mags_v_chunk
-            offset += chunk_size
-    else:
-        chunks: list[jax.Array] = []
-        for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
-            process_in_chunks(H_v_arr, chunk_size),
-            process_in_chunks(object_pos, chunk_size),
-            process_in_chunks(observer_pos, chunk_size),
-            process_in_chunks(G_arr, chunk_size),
-        ):
-            chunks.append(
-                _calculate_apparent_magnitude_core_jax(
-                    H_v=H_chunk,
-                    object_pos=obj_chunk,
-                    observer_pos=obs_chunk,
-                    G=G_chunk,
-                )
-            )
-
-        host_chunks = jax.device_get(chunks)
-        offset = 0
-        for mags_v_chunk in host_chunks:
-            out[offset : offset + chunk_size] = mags_v_chunk
-            offset += chunk_size
+    host_chunks = jax.device_get(chunks)
+    offset = 0
+    for mags_v_chunk in host_chunks:
+        out[offset : offset + chunk_size] = mags_v_chunk
+        offset += chunk_size
 
     return out[:n]
 

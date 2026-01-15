@@ -16,14 +16,13 @@ from .api import (
     bandpass_color_terms,
     bandpass_delta_mag,
     compute_mix_integrals,
-    find_suggested_filter_bands,
+    map_to_canonical_filter_bands,
     get_integrals,
     load_asteroid_templates,
     load_bandpass_curves,
     load_observatory_band_map,
     load_template_integrals,
     register_custom_template,
-    resolve_filter_ids,
 )
 from .tables import (
     AsteroidTemplates,
@@ -44,8 +43,7 @@ __all__ = [
     "load_asteroid_templates",
     "load_template_integrals",
     # Utilities
-    "resolve_filter_ids",
-    "find_suggested_filter_bands",
+    "map_to_canonical_filter_bands",
     "assert_filter_ids_have_curves",
     "get_integrals",
     "compute_mix_integrals",

@@ -12,34 +12,6 @@ from ..magnitude import (
 )
 
 
-def _calculate_apparent_magnitude_v_numpy_reference(
-    H_v: np.ndarray,
-    object_pos: np.ndarray,
-    observer_pos: np.ndarray,
-    G: np.ndarray,
-) -> np.ndarray:
-    """
-    Pure-NumPy reference implementation for benchmarking.
-
-    Note: production `calculate_apparent_magnitude_v` is now JAX-backed.
-    """
-    r = np.sqrt(np.sum(object_pos * object_pos, axis=1))
-    delta_vec = object_pos - observer_pos
-    delta = np.sqrt(np.sum(delta_vec * delta_vec, axis=1))
-
-    observer_sun_dist = np.sqrt(np.sum(observer_pos * observer_pos, axis=1))
-    numer = r**2 + delta**2 - observer_sun_dist**2
-    denom = 2.0 * r * delta
-    cos_phase = np.clip(numer / denom, -1.0, 1.0)
-
-    tan_half = np.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = np.exp(-3.33 * tan_half**0.63)
-    phi2 = np.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-
-    return H_v + 5.0 * np.log10(r * delta) - 2.5 * np.log10(phase_function)
-
-
 def _padded_size(n: int, pad_to: int) -> int:
     """Round n up to the next multiple of pad_to."""
     if pad_to <= 0:
@@ -95,29 +67,6 @@ def _make_convert_case(n: int = 262144):
     )
     target = rng.choice(targets, size=n).astype(object)
     return mags, source, target
-
-
-@pytest.mark.parametrize(
-    "n",
-    [256, 16384, 65536, 262144, 1048576],
-    ids=lambda x: f"n={x}",
-)
-@pytest.mark.benchmark(group="photometry_magnitude_apparent")
-def test_benchmark_calculate_apparent_magnitude_numpy(benchmark, n):
-    pad_to = JAX_CHUNK_SIZE
-    n_padded = _padded_size(n, pad_to)
-    H, obj, observer, G = _make_benchmark_case(n=n_padded)
-    object_pos = np.asarray(obj.r, dtype=np.float64)
-    observer_pos = np.asarray(observer.coordinates.r, dtype=np.float64)
-
-    def run():
-        return _calculate_apparent_magnitude_v_numpy_reference(
-            H, object_pos, observer_pos, G
-        )
-
-    out = benchmark(run)
-    out = out[:n]  # window back to requested n
-    assert len(out) == n
 
 
 @pytest.mark.parametrize(
@@ -186,32 +135,6 @@ def test_benchmark_convert_magnitude_bandpass_shape_sweep(benchmark):
     assert out is not None
 
 
-@pytest.mark.benchmark(group="photometry_magnitude_apparent_shape_sweep")
-def test_benchmark_calculate_apparent_magnitude_numpy_shape_sweep(benchmark):
-    pad_to = JAX_CHUNK_SIZE
-    sizes = [256, 12345, 65536, 99999, 262144]
-    cases = []
-    for n in sizes:
-        n_padded = _padded_size(n, pad_to)
-        H, obj, observer, G = _make_benchmark_case(n=n_padded)
-        cases.append((H, obj, observer, G))
-
-    def run():
-        out = None
-        for H, obj, observer, G in cases:
-            out = _calculate_apparent_magnitude_v_numpy_reference(
-                H,
-                np.asarray(obj.r, dtype=np.float64),
-                np.asarray(observer.coordinates.r, dtype=np.float64),
-                G,
-            )
-        return out
-
-    out = benchmark(run)
-    assert out is not None
-
-
-@pytest.mark.benchmark(group="photometry_magnitude_apparent_shape_sweep")
 def test_benchmark_calculate_apparent_magnitude_jax_shape_sweep(benchmark):
     pad_to = JAX_CHUNK_SIZE
     sizes = [256, 12345, 65536, 99999, 262144]

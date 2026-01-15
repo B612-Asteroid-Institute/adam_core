@@ -10,7 +10,7 @@ from ...observers.observers import Observers
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ..absolute_magnitude import estimate_absolute_magnitude_v_from_detections
-from ..bandpasses.api import find_suggested_filter_bands
+from ..bandpasses.api import map_to_canonical_filter_bands
 from ..magnitude import predict_magnitudes
 
 
@@ -77,7 +77,7 @@ def test_estimate_absolute_magnitude_missing_sigma(monkeypatch):
 
     # Generate synthetic observed magnitudes using the same forward model.
     exp_aligned = exp.take(pa.array([0, 1, 0], type=pa.int32()))
-    canonical = find_suggested_filter_bands(
+    canonical = map_to_canonical_filter_bands(
         exp_aligned.observatory_code, exp_aligned.filter
     )
     exp_canon = exp_aligned.set_column(

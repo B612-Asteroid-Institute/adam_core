@@ -9,7 +9,7 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..observations.detections import PointSourceDetections
 from ..observations.exposures import Exposures
 from ..orbits.physical_parameters import PhysicalParameters
-from .bandpasses.api import find_suggested_filter_bands
+from .bandpasses.api import map_to_canonical_filter_bands
 from .magnitude import predict_magnitudes
 from .magnitude_common import BandpassComposition
 
@@ -58,7 +58,7 @@ def estimate_absolute_magnitude_v_from_detections(
     G
         Fixed H-G slope parameter.
     strict_band_mapping
-        Passed through to `find_suggested_filter_bands`.
+        If True, disallow SDSS/PS1 fallback filters when mapping reported bands.
     reference_filter
         Must be 'V' for this function.
     """
@@ -94,10 +94,10 @@ def estimate_absolute_magnitude_v_from_detections(
     exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
 
     # Resolve (observatory_code, band/filter) -> canonical vendored filter_id.
-    canonical = find_suggested_filter_bands(
+    canonical = map_to_canonical_filter_bands(
         exposures_aligned.observatory_code,
         exposures_aligned.filter,
-        strict=strict_band_mapping,
+        allow_fallback_filters=not strict_band_mapping,
     )
     exposures_canon = exposures_aligned.set_column(
         "filter", pa.array(canonical.tolist(), type=pa.large_string())

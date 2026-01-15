@@ -14,7 +14,7 @@ from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integ
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
 from .bandpasses.api import load_bandpass_curves as _load_bandpass_curves
 
-JAX_CHUNK_SIZE = 2048
+JAX_CHUNK_SIZE = 8192
 
 BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 

@@ -6,12 +6,11 @@ from adam_core.photometry.bandpasses import (
     bandpass_color_terms,
     bandpass_delta_mag,
     compute_mix_integrals,
-    find_suggested_filter_bands,
+    map_to_canonical_filter_bands,
     get_integrals,
     load_asteroid_templates,
     load_bandpass_curves,
     load_observatory_band_map,
-    resolve_filter_ids,
 )
 
 
@@ -44,6 +43,11 @@ def test_observatory_band_map_covers_required_pairs():
         ("W84", "Y"),
         # Existing mappings we already rely on elsewhere.
         ("Q55", "v"),
+        ("X05", "u"),
+        ("X05", "g"),
+        ("X05", "r"),
+        ("X05", "i"),
+        ("X05", "z"),
         ("X05", "y"),
     ]
     for code, band in required:
@@ -51,36 +55,49 @@ def test_observatory_band_map_covers_required_pairs():
         assert bool(pc.any(pc.equal(mapping.key, key)).as_py())
 
 
-def test_resolve_filter_ids_happy_path():
-    resolved = resolve_filter_ids(["W84", "I41", "X05"], ["g", "r", "y"])
+def test_map_to_canonical_filter_bands_strict_happy_path():
+    resolved = map_to_canonical_filter_bands(
+        ["W84", "I41", "X05"],
+        ["g", "r", "y"],
+        allow_fallback_filters=False,
+    )
     assert resolved.tolist() == ["DECam_g", "ZTF_r", "LSST_y"]
 
 
+def test_x05_normalizes_mpc_l_band_encodings():
+    # MPC/ADES encodings for X05 can use 'L*' or 'LSST_*' variants.
+    out = map_to_canonical_filter_bands(
+        ["X05", "X05", "X05", "X05", "X05", "X05"],
+        ["Lg", "Lr", "Li", "LSST_g", "Y", "LY"],
+        allow_fallback_filters=False,
+    )
+    assert out.tolist() == ["LSST_g", "LSST_r", "LSST_i", "LSST_g", "LSST_y", "LSST_y"]
+
 def test_find_suggested_filter_bands_passes_through_canonical_ids():
     # If already canonical, observatory code should not matter.
-    out = find_suggested_filter_bands(["XXX", "W84"], ["LSST_g", "DECam_r"])
+    out = map_to_canonical_filter_bands(["XXX", "W84"], ["LSST_g", "DECam_r"])
     assert out.tolist() == ["LSST_g", "DECam_r"]
 
 
 def test_find_suggested_filter_bands_uses_mapping_table():
-    out = find_suggested_filter_bands(["W84", "T08", "V00"], ["VR", "c", "g"])
+    out = map_to_canonical_filter_bands(["W84", "T08", "V00"], ["VR", "c", "g"])
     assert out.tolist() == ["DECam_VR", "ATLAS_c", "BASS_g"]
 
 
 def test_find_suggested_filter_bands_fallback_default_is_non_strict():
     # Unknown observatory codes fall back for generic bands.
-    out = find_suggested_filter_bands(["XXX", "YYY", "ZZZ"], ["g", "z", "y"])
+    out = map_to_canonical_filter_bands(["XXX", "YYY", "ZZZ"], ["g", "z", "y"])
     assert out.tolist() == ["SDSS_g", "SDSS_z", "PS1_y"]
 
 
 def test_find_suggested_filter_bands_strict_disallows_fallback():
     with pytest.raises(ValueError, match="No non-fallback mapping found"):
-        find_suggested_filter_bands(["XXX"], ["g"], strict=True)
+        map_to_canonical_filter_bands(["XXX"], ["g"], allow_fallback_filters=False)
 
 
 def test_find_suggested_filter_bands_raises_for_unknown_band_even_non_strict():
     with pytest.raises(ValueError, match="Unable to suggest canonical filter_id"):
-        find_suggested_filter_bands(["XXX"], ["not_a_band"], strict=False)
+        map_to_canonical_filter_bands(["XXX"], ["not_a_band"], allow_fallback_filters=True)
 
 
 def test_bandpass_curves_are_sane():

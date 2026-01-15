@@ -16,7 +16,7 @@ from adam_core.observers.observers import Observers
 from adam_core.photometry.absolute_magnitude import (
     estimate_absolute_magnitude_v_from_detections,
 )
-from adam_core.photometry.bandpasses.api import find_suggested_filter_bands
+from adam_core.photometry.bandpasses.api import map_to_canonical_filter_bands
 from adam_core.photometry.magnitude import predict_magnitudes
 from adam_core.time import Timestamp
 
@@ -55,8 +55,10 @@ def _observers_from_heliocentric_positions(
 def _canonicalize_exposure_filters(
     exposures: Exposures, *, strict: bool = False
 ) -> Exposures:
-    canonical = find_suggested_filter_bands(
-        exposures.observatory_code, exposures.filter, strict=strict
+    canonical = map_to_canonical_filter_bands(
+        exposures.observatory_code,
+        exposures.filter,
+        allow_fallback_filters=not strict,
     )
     return exposures.set_column(
         "filter", pa.array(canonical.tolist(), type=pa.large_string())

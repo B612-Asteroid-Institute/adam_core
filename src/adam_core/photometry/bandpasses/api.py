@@ -52,6 +52,53 @@ def _key_from_code_band(
     return pc.binary_join_element_wise(code, band, sep)
 
 
+def _normalize_reported_band_for_station(
+    codes: pa.Array | pa.ChunkedArray,
+    bands: pa.Array | pa.ChunkedArray,
+    *,
+    only_if_code: str,
+) -> pa.Array | pa.ChunkedArray:
+    """
+    Normalize station-specific reported-band encodings to the "reported band" strings
+    expected by `ObservatoryBandMap`.
+
+    Currently this is only needed for LSST (X05), where MPC/ADES encodings can include
+    'Lg'/'Lr'/... and 'LSST_g'/... and sometimes 'Y' for y-band.
+
+    Notes
+    -----
+    - This must be applied *after* canonical `filter_id` pass-through checks.
+    - This should be lightweight and Arrow-native (no Python loops).
+    """
+    mask = pc.equal(codes, pa.scalar(str(only_if_code), type=pa.large_string()))
+    if not bool(pc.any(mask).as_py()):
+        return bands
+
+    b = pc.cast(bands, pa.large_string())
+    b = pc.utf8_trim_whitespace(b)
+
+    # Strip "LSST_" prefix: LSST_g -> g
+    has_lsst_prefix = pc.match_substring_regex(b, "^LSST_")
+    b_lsst = pc.utf8_slice_codeunits(b, 5)
+    b = pc.if_else(has_lsst_prefix, b_lsst, b)
+
+    # Strip leading 'L' for 2-character encodings: Lg -> g, Ly -> y, etc.
+    is_Lx = pc.match_substring_regex(b, "^L[ugrizy]$")
+    b_Lx = pc.utf8_slice_codeunits(b, 1)
+    b = pc.if_else(is_Lx, b_Lx, b)
+
+    # Accept uppercase variants too: LY -> y, etc.
+    is_LX = pc.match_substring_regex(b, "^L[UGRIZY]$")
+    b_LX = pc.utf8_lower(pc.utf8_slice_codeunits(b, 1))
+    b = pc.if_else(is_LX, b_LX, b)
+
+    # Normalize Y -> y (both as raw 'Y' and as 'LY' after stripping doesn't apply).
+    b = pc.if_else(pc.equal(b, "Y"), "y", b)
+
+    # Apply only for the targeted station code.
+    return pc.if_else(mask, b, bands)
+
+
 @lru_cache(maxsize=1)
 def load_bandpass_curves() -> BandpassCurves:
     path = _DATA_DIR.joinpath(_BANDPASS_CURVES_FILE)
@@ -135,7 +182,7 @@ def _compute_filter_solar_norm_photon(
         return float("nan")
 
     t = _interp_to_grid(wl, thr, grid)
-    return float(np.trapz(sun * t * grid, grid))
+    return float(np.trapezoid(sun * t * grid, grid))
 
 
 @lru_cache(maxsize=1)
@@ -173,51 +220,13 @@ def _solar_norm_for_filter_ids(
     return out
 
 
-def resolve_filter_ids(
-    observatory_codes: (
-        pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str]
-    ),
-    bands: pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str],
-) -> npt.NDArray[np.object_]:
-    """
-    Resolve (observatory_code, reported band) pairs to canonical `filter_id` strings.
-
-    This is designed to integrate with `Exposures` where:
-    - `Exposures.observatory_code` provides the MPC code (e.g. W84)
-    - `Exposures.filter` provides the band label (e.g. g)
-    """
-    codes = _to_string_array(observatory_codes)
-    b = _to_string_array(bands)
-    if len(codes) != len(b):
-        raise ValueError(
-            f"observatory_codes length ({len(codes)}) must match bands length ({len(b)})"
-        )
-
-    mapping = load_observatory_band_map()
-    keys = _key_from_code_band(codes, b)
-    idx = pc.index_in(keys, value_set=mapping.key)
-    idx = pc.fill_null(idx, -1)
-    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(idx_np < 0):
-        missing = np.unique(
-            np.asarray(keys.to_numpy(zero_copy_only=False), dtype=object)[idx_np < 0]
-        )
-        raise ValueError(
-            "Unknown (observatory_code, band) pairs: "
-            + ", ".join([str(x) for x in missing.tolist()])
-        )
-
-    out = mapping.filter_id.take(pa.array(idx_np, type=pa.int32()))
-    return np.asarray(out.to_numpy(zero_copy_only=False), dtype=object)
-
-
-def find_suggested_filter_bands(
+def map_to_canonical_filter_bands(
     observatory_codes: (
         pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str]
     ),
     bands: pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str],
     *,
-    strict: bool = False,
+    allow_fallback_filters: bool = True,
 ) -> npt.NDArray[np.object_]:
     """
     Suggest canonical (vendored) bandpass filter IDs for a set of observations.
@@ -239,9 +248,13 @@ def find_suggested_filter_bands(
         MPC observatory codes.
     bands : array-like
         Reported band labels OR canonical vendored filter IDs.
-    strict : bool, optional
-        If True, raise if any row cannot be resolved via pass-through or
-        `ObservatoryBandMap` (i.e., disallow the SDSS/PS1 fallback). Defaults to False.
+    allow_fallback_filters : bool, optional
+        If True, allow generic-band fallbacks when no (observatory_code, band) mapping is
+        available:
+          u/g/r/i/z -> SDSS_u/g/r/i/z
+          y         -> PS1_y
+        If False, raise if any row would require those fallbacks. Canonical `filter_id`
+        inputs are always passed through. Defaults to True.
 
     Returns
     -------
@@ -270,7 +283,11 @@ def find_suggested_filter_bands(
     need_map = ~is_known
     used_fallback = np.zeros(len(b), dtype=bool)
     if np.any(need_map):
-        keys = _key_from_code_band(codes, b)
+        need_map_arr = pa.array(need_map.tolist(), type=pa.bool_())
+        b_need = pc.if_else(need_map_arr, b, b)
+        b_for_map = _normalize_reported_band_for_station(codes, b_need, only_if_code="X05")
+
+        keys = _key_from_code_band(codes, b_for_map)
         idx = pc.fill_null(pc.index_in(keys, value_set=mapping.key), -1)
         idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
 
@@ -322,7 +339,7 @@ def find_suggested_filter_bands(
             "Unable to suggest canonical filter_id(s) for: " + ", ".join(unknown)
         )
 
-    if strict and np.any(used_fallback):
+    if (not allow_fallback_filters) and np.any(used_fallback):
         codes_np = np.asarray(
             codes.to_numpy(zero_copy_only=False), dtype=object
         ).astype(str)
@@ -333,7 +350,7 @@ def find_suggested_filter_bands(
         raise ValueError(
             "No non-fallback mapping found for: "
             + ", ".join(fallback_pairs)
-            + ". Set strict=False to allow SDSS/PS1 fallbacks."
+            + ". Set allow_fallback_filters=True to allow SDSS/PS1 fallbacks."
         )
 
     # Final guarantee: every output has a curve.
@@ -367,7 +384,7 @@ def assert_filter_ids_have_curves(
         raise ValueError(
             "Unknown filter_id(s) (no vendored bandpass curve): "
             + repr(missing)
-            + ". Run find_suggested_filter_bands() first to map observatory bands to canonical filter_ids."
+            + ". Run map_to_canonical_filter_bands() first to map observatory bands to canonical filter_ids."
         )
 
 
@@ -642,7 +659,7 @@ def _compute_integral_photon(
     t = _interp_to_grid(filter_wavelength_nm, filter_throughput, wl)
     r = _interp_to_grid(template_wavelength_nm, template_reflectance, wl)
     integrand = sun * r * t * wl
-    return float(np.trapz(integrand, wl))
+    return float(np.trapezoid(integrand, wl))
 
 
 def _clear_custom_cache() -> None:

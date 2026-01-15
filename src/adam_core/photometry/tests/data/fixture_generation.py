@@ -20,8 +20,8 @@ from adam_core.observations.exposures import Exposures
 from adam_core.observers.observers import Observers
 from adam_core.orbits.query.horizons import query_horizons
 from adam_core.photometry.bandpasses import (
+    map_to_canonical_filter_bands,
     load_observatory_band_map,
-    resolve_filter_ids,
 )
 from adam_core.photometry.magnitude import predict_magnitudes
 from adam_core.time import Timestamp
@@ -245,7 +245,7 @@ def _bq_string_literal(value: str) -> str:
 def normalize_reported_band_for_station(station_code: str, band: str) -> str:
     """
     Normalize station-specific reported band values into the canonical "reported band"
-    strings expected by `ObservatoryBandMap` / `resolve_filter_ids`.
+    strings expected by `ObservatoryBandMap` / bandpass filter resolution.
 
     For LSST (X05), MPC/ADES band encodings can include: 'g', 'Lg', 'LSST_g', etc.
     We normalize to 'u','g','r','i','z','y' (and accept 'Y' as 'y').
@@ -669,7 +669,7 @@ def build_fixture_for_object(
 
     The fixture stores:
     - observed mags (mag_obs) and geometry (object_pos, observer_pos)
-    - canonical filter_ids (via resolve_filter_ids)
+    - canonical filter_ids (via find_suggested_filter_bands)
     - per-filter residual ceilings for the current implementation (median abs + p95 abs)
     """
     obj = str(object_id).strip()
@@ -716,7 +716,11 @@ def build_fixture_for_object(
         str(x).strip() for x in pc.utf8_trim_whitespace(raw.column("band")).to_pylist()
     ]
     bands_all = [normalize_reported_band_for_station(stn, b) for b in bands_all_raw]
-    canonical_all = resolve_filter_ids([stn] * len(bands_all), bands_all)
+    canonical_all = map_to_canonical_filter_bands(
+        [stn] * len(bands_all),
+        bands_all,
+        allow_fallback_filters=False,
+    )
     canonical_all = np.asarray(canonical_all, dtype=object)
 
     # Validate minimum per required canonical filter_id (within fetched rows).
@@ -744,7 +748,11 @@ def build_fixture_for_object(
         str(x).strip() for x in pc.utf8_trim_whitespace(raw.column("band")).to_pylist()
     ]
     bands = [normalize_reported_band_for_station(stn, b) for b in bands_raw]
-    canonical = resolve_filter_ids([stn] * len(bands), bands)
+    canonical = map_to_canonical_filter_bands(
+        [stn] * len(bands),
+        bands,
+        allow_fallback_filters=False,
+    )
 
     # Require asteroid + H in both MPC and JPL (for A/B benchmarking).
     H_jpl, G_jpl, kind = query_jpl_hg_and_kind(obj)
