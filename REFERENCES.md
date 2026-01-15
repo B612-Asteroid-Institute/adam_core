@@ -14,3 +14,6 @@
     University Science Books. ISBN-13: 978-1891389856
 * Wan, E. A; Van Der Merwe, R. (2000). The unscented Kalman filter for nonlinear estimation.  
     Proceedings of the IEEE 2000 Adaptive Systems for Signal Processing, Communications, and Control Symposium, 153-158. https://doi.org/10.1109/ASSPCC.2000.882463
+* Rodrigo, C., Cruz, P., Aguilar, J.F., et al. 2024; https://ui.adsabs.harvard.edu/abs/2024A%26A...689A..93R/abstract
+* The SVO Filter Profile Service. Rodrigo, C., Solano, E., Bayo, A., 2012; https://ui.adsabs.harvard.edu/abs/2012ivoa.rept.1015R/abstract
+* The SVO Filter Profile Service. Rodrigo, C., Solano, E., 2020; https://ui.adsabs.harvard.edu/abs/2020sea..confE.182R/abstract

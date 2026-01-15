@@ -6,6 +6,7 @@ from typing import List, Literal, Optional, Type, Union
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
+import pyarrow.compute as pc
 import quivr as qv
 
 from ..constants import Constants as c
@@ -18,6 +19,7 @@ from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
+from ..photometry.magnitude import calculate_apparent_magnitude_v
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
@@ -37,6 +39,127 @@ try:
     RAY_INSTALLED = True
 except ImportError:
     pass
+
+
+def _alignment_indices_string_keys(
+    *,
+    obs_code: npt.NDArray[np.object_],
+    obs_days: npt.NDArray[np.int64],
+    obs_nanos: npt.NDArray[np.int64],
+    eph_code: npt.NDArray[np.object_],
+    eph_days: npt.NDArray[np.int64],
+    eph_nanos: npt.NDArray[np.int64],
+) -> npt.NDArray[np.int64]:
+    keys_obs = np.array(
+        [f"{c}|{d}|{n}" for c, d, n in zip(obs_code, obs_days, obs_nanos)],
+        dtype=object,
+    )
+    keys_eph = np.array(
+        [f"{c}|{d}|{n}" for c, d, n in zip(eph_code, eph_days, eph_nanos)],
+        dtype=object,
+    )
+    if len(np.unique(keys_obs)) != len(keys_obs):
+        raise ValueError(
+            "Observer keys are not unique; cannot map ephemeris rows unambiguously."
+        )
+
+    sorter = np.argsort(keys_obs)
+    pos = np.searchsorted(keys_obs[sorter], keys_eph)
+    idx = sorter[pos]
+    if np.any(keys_obs[idx] != keys_eph):
+        raise ValueError("Failed to align ephemeris rows to observers (key mismatch).")
+    return np.asarray(idx, dtype=np.int64)
+
+
+def _alignment_indices_struct_index_in(
+    *,
+    obs_code: pa.Array,
+    obs_days: pa.Array,
+    obs_nanos: pa.Array,
+    eph_code: pa.Array,
+    eph_days: pa.Array,
+    eph_nanos: pa.Array,
+) -> npt.NDArray[np.int64]:
+    # NOTE: Arrow compute `index_in` does not support struct kernels in our supported
+    # versions, so we build keys via vectorized Arrow string concatenation (no Python loops).
+    sep = pa.scalar("|", type=pa.large_string())
+    obs_code_s = pc.cast(obs_code, pa.large_string())
+    obs_days_s = pc.cast(obs_days, pa.large_string())
+    obs_nanos_s = pc.cast(obs_nanos, pa.large_string())
+    eph_code_s = pc.cast(eph_code, pa.large_string())
+    eph_days_s = pc.cast(eph_days, pa.large_string())
+    eph_nanos_s = pc.cast(eph_nanos, pa.large_string())
+
+    obs_key = pc.binary_join_element_wise(
+        pc.binary_join_element_wise(obs_code_s, obs_days_s, sep), obs_nanos_s, sep
+    )
+    eph_key = pc.binary_join_element_wise(
+        pc.binary_join_element_wise(eph_code_s, eph_days_s, sep), eph_nanos_s, sep
+    )
+
+    # Uniqueness check: keys must uniquely identify an observer row.
+    if int(pc.count_distinct(obs_key).as_py()) != len(obs_key):
+        raise ValueError(
+            "Observer keys are not unique; cannot map ephemeris rows unambiguously."
+        )
+
+    idx = pc.fill_null(pc.index_in(eph_key, value_set=obs_key), -1)
+    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int64)
+    if np.any(idx_np < 0):
+        raise ValueError("Failed to align ephemeris rows to observers (key mismatch).")
+    return idx_np
+
+
+def _hg_params_for_ephemeris_rows_arrow(
+    *,
+    orbit_id: pa.Array | pa.ChunkedArray,
+    H_v: pa.Array | pa.ChunkedArray,
+    G: pa.Array | pa.ChunkedArray,
+    ephemeris_orbit_id: pa.Array | pa.ChunkedArray,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Vectorized mapping from orbit_id -> (H_v, G) aligned to ephemeris rows.
+
+    This raises immediately if the input orbit table contains conflicting (H_v, G)
+    values for the same orbit_id.
+    """
+    oid = pc.cast(orbit_id, pa.large_string())
+    H = pc.cast(H_v, pa.float64())
+    g = pc.cast(G, pa.float64())
+
+    valid = pc.and_(pc.is_finite(H), pc.is_finite(g))
+    if not pc.any(valid).as_py():
+        n = len(ephemeris_orbit_id)
+        return np.full(n, np.nan, dtype=np.float64), np.full(
+            n, np.nan, dtype=np.float64
+        )
+
+    t = pa.table({"orbit_id": oid, "H_v": H, "G": g})
+    t = t.filter(valid)
+
+    gb = t.group_by("orbit_id").aggregate(
+        [("H_v", "min"), ("H_v", "max"), ("G", "min"), ("G", "max")]
+    )
+    # Any mismatch indicates conflicting params for an orbit_id.
+    conflict = pc.or_(
+        pc.not_equal(gb["H_v_min"], gb["H_v_max"]),
+        pc.not_equal(gb["G_min"], gb["G_max"]),
+    )
+    if pc.any(conflict).as_py():
+        bad = pc.filter(gb["orbit_id"], conflict)
+        bad_id = bad[0].as_py() if len(bad) > 0 else "<unknown>"
+        raise ValueError(f"Conflicting physical parameters for orbit_id={bad_id}")
+
+    # Map ephemeris orbit_id -> grouped index
+    eph_oid = pc.cast(ephemeris_orbit_id, pa.large_string())
+    idx = pc.index_in(eph_oid, value_set=gb["orbit_id"])
+    # pc.take propagates nulls for missing indices; those convert to NaN below.
+    H_out = pc.take(gb["H_v_min"], idx)
+    G_out = pc.take(gb["G_min"], idx)
+    return (
+        np.asarray(H_out.to_numpy(zero_copy_only=False), dtype=np.float64),
+        np.asarray(G_out.to_numpy(zero_copy_only=False), dtype=np.float64),
+    )
 
 
 def propagation_worker(
@@ -300,6 +423,7 @@ class EphemerisMixin:
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
+        predict_magnitudes: bool = True,
     ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -471,7 +595,7 @@ class EphemerisMixin:
             )
 
             # We were given VariantOrbits as an input, so return VariantEphemeris
-            return variant_ephemeris.sort_by(
+            variant_ephemeris = variant_ephemeris.sort_by(
                 [
                     "orbit_id",
                     "variant_id",
@@ -479,6 +603,12 @@ class EphemerisMixin:
                     "coordinates.time.nanos",
                     "coordinates.origin.code",
                 ]
+            )
+            return self._attach_predicted_magnitude_v(
+                variant_ephemeris,
+                orbits=orbits,
+                observers=observers,
+                predict_magnitudes=predict_magnitudes,
             )
 
         if covariance is True and len(variant_ephemeris) > 0:
@@ -498,7 +628,7 @@ class EphemerisMixin:
             ephemeris.coordinates.time.rescale("utc"),
         )
 
-        return ephemeris.sort_by(
+        ephemeris = ephemeris.sort_by(
             [
                 "orbit_id",
                 "coordinates.time.days",
@@ -506,6 +636,91 @@ class EphemerisMixin:
                 "coordinates.origin.code",
             ]
         )
+        return self._attach_predicted_magnitude_v(
+            ephemeris,
+            orbits=orbits,
+            observers=observers,
+            predict_magnitudes=predict_magnitudes,
+        )
+
+    def _attach_predicted_magnitude_v(
+        self,
+        ephemeris: EphemerisType,
+        orbits: OrbitType,
+        observers: ObserverType,
+        predict_magnitudes: bool,
+    ) -> EphemerisType:
+        if not predict_magnitudes or len(ephemeris) == 0:
+            return ephemeris
+
+        # Need emission-time cartesian state.
+        if pc.all(pc.is_null(ephemeris.aberrated_coordinates.x)).as_py():
+            return ephemeris
+
+        # Resolve ray ObjectRefs if needed.
+        orbits_value = orbits
+        observers_value = observers
+        if RAY_INSTALLED:
+            if isinstance(orbits, ObjectRef):  # type: ignore[name-defined]
+                orbits_value = ray.get(orbits)  # type: ignore[name-defined]
+            if isinstance(observers, ObjectRef):  # type: ignore[name-defined]
+                observers_value = ray.get(observers)  # type: ignore[name-defined]
+
+        H_v, G = _hg_params_for_ephemeris_rows_arrow(
+            orbit_id=orbits_value.orbit_id,
+            H_v=orbits_value.physical_parameters.H_v,
+            G=orbits_value.physical_parameters.G,
+            ephemeris_orbit_id=ephemeris.orbit_id,
+        )
+        has_params = np.isfinite(H_v) & np.isfinite(G)
+        if not np.any(has_params):
+            return ephemeris
+
+        # Align observers to ephemeris rows by (code, days, nanos).
+        if ephemeris.coordinates.time.scale != observers_value.coordinates.time.scale:
+            observers_value = observers_value.set_column(
+                "coordinates.time",
+                observers_value.coordinates.time.rescale(
+                    ephemeris.coordinates.time.scale
+                ),
+            )
+
+        idx_np = _alignment_indices_struct_index_in(
+            obs_code=observers_value.code,
+            obs_days=observers_value.coordinates.time.days,
+            obs_nanos=observers_value.coordinates.time.nanos,
+            eph_code=ephemeris.coordinates.origin.code,
+            eph_days=ephemeris.coordinates.time.days,
+            eph_nanos=ephemeris.coordinates.time.nanos,
+        )
+        observers_aligned = observers_value.take(pa.array(idx_np, type=pa.int64()))
+        # Photometry requires heliocentric coordinates
+        obj_helio = transform_coordinates(
+            ephemeris.aberrated_coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SUN,
+        )
+        obs_helio = observers_aligned.set_column(
+            "coordinates",
+            transform_coordinates(
+                observers_aligned.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SUN,
+            ),
+        )
+
+        mags = calculate_apparent_magnitude_v(
+            H_v=H_v,
+            object_coords=obj_helio,
+            observer=obs_helio,
+            G=G,
+        )
+        mags = np.asarray(mags, dtype=np.float64)
+        valid = has_params & np.isfinite(mags)
+        predicted = pa.array(mags, mask=~valid, type=pa.float64())
+        return ephemeris.set_column("predicted_magnitude_v", predicted)
 
 
 class Propagator(ABC, EphemerisMixin):
