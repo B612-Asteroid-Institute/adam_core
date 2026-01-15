@@ -130,7 +130,9 @@ def _hg_params_for_ephemeris_rows_arrow(
     valid = pc.and_(pc.is_finite(H), pc.is_finite(g))
     if not pc.any(valid).as_py():
         n = len(ephemeris_orbit_id)
-        return np.full(n, np.nan, dtype=np.float64), np.full(n, np.nan, dtype=np.float64)
+        return np.full(n, np.nan, dtype=np.float64), np.full(
+            n, np.nan, dtype=np.float64
+        )
 
     t = pa.table({"orbit_id": oid, "H_v": H, "G": g})
     t = t.filter(valid)

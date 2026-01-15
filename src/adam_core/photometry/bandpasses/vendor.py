@@ -5,6 +5,7 @@ Bandpass curves are sourced from the SVO Filter Profile Service. Please see
 `REFERENCES.md` for the required acknowledgement and citations when using this
 service.
 """
+
 # coverage: ignore-file
 
 from __future__ import annotations

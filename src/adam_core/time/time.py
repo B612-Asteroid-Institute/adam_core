@@ -60,7 +60,9 @@ _TAI_TT_NS_CORRECTION = 32_184_000_000  # TT = TAI + 32.184s
 
 # ERFA converters used by `_leap_seconds_correction`:
 # They accept full-day and fractional-day JD arrays and return the converted pair.
-_ErfaDayFracConverter = Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+_ErfaDayFracConverter = Callable[
+    [np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]
+]
 
 
 class Timestamp(qv.Table):
@@ -124,7 +126,9 @@ class Timestamp(qv.Table):
         days = pc.floor(mjd)
         fractional_days = pc.subtract(mjd, days)
         days = pc.cast(days, pa.int64())
-        nanos = pc.cast(pc.round(pc.multiply(fractional_days, _NANOS_IN_DAY)), pa.int64())
+        nanos = pc.cast(
+            pc.round(pc.multiply(fractional_days, _NANOS_IN_DAY)), pa.int64()
+        )
         return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
 
     @classmethod
@@ -657,7 +661,8 @@ class Timestamp(qv.Table):
                 correction = -_TAI_TT_NS_CORRECTION
             elif new_scale == "utc":
                 correction = (
-                    self._leap_seconds_correction(erfa.taiutc, 0) - _TAI_TT_NS_CORRECTION
+                    self._leap_seconds_correction(erfa.taiutc, 0)
+                    - _TAI_TT_NS_CORRECTION
                 )
             elif new_scale == "tdb":
                 correction = self._tt_tdb_correction(True, 0)
@@ -668,13 +673,17 @@ class Timestamp(qv.Table):
             elif new_scale == "tdb":
                 # We are effectively going UTC->TAI->TT->TDB with corrections here
                 correction += (
-                    self._tt_tdb_correction(True, correction + _TAI_TT_NS_CORRECTION) + _TAI_TT_NS_CORRECTION
+                    self._tt_tdb_correction(True, correction + _TAI_TT_NS_CORRECTION)
+                    + _TAI_TT_NS_CORRECTION
                 )
         elif self.scale == "tai":
             if new_scale == "tt":
                 correction = _TAI_TT_NS_CORRECTION
             elif new_scale == "tdb":
-                correction = self._tt_tdb_correction(True, _TAI_TT_NS_CORRECTION) + _TAI_TT_NS_CORRECTION
+                correction = (
+                    self._tt_tdb_correction(True, _TAI_TT_NS_CORRECTION)
+                    + _TAI_TT_NS_CORRECTION
+                )
             elif new_scale == "tai":
                 correction = 0
             elif new_scale == "utc":
