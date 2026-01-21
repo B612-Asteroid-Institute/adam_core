@@ -120,6 +120,11 @@ def propagate_2body(
     t0_ = np.repeat(t0, n_times)
     t1_ = np.tile(t1, n_orbits)
 
+    # Preserve physical parameters by repeating per-orbit rows across times.
+    # The propagated ordering is: [orbit0@t0..tM, orbit1@t0..tM, ...].
+    pp_idx = np.repeat(np.arange(n_orbits), n_times).tolist()
+    physical_parameters_ = orbits.physical_parameters.take(pp_idx)
+
     # Process in chunks
     orbits_propagated: np.ndarray = np.empty((0, 6))
     for orbits_chunk, t0_chunk, t1_chunk, mu_chunk in zip(
@@ -169,6 +174,7 @@ def propagate_2body(
     orbits_propagated = Orbits.from_kwargs(
         orbit_id=orbit_ids_,
         object_id=object_ids_,
+        physical_parameters=physical_parameters_,
         coordinates=CartesianCoordinates.from_kwargs(
             x=orbits_propagated[:, 0],
             y=orbits_propagated[:, 1],

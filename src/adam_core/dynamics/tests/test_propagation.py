@@ -10,6 +10,7 @@ from astropy import units as u
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...orbits import Orbits
+from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
@@ -464,6 +465,40 @@ def test_benchmark_propagate_2body_matrix(benchmark, propagated_orbits):
 
     benchmark(benchmark_function)
 
+
+def test_propagate_2body_preserves_physical_parameters():
+    t0 = Timestamp.from_mjd([60000.0, 60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1", "o2"],
+        object_id=["o1", "o2"],
+        physical_parameters=PhysicalParameters.from_kwargs(
+            H_v=[15.0, 17.5],
+            G=[0.15, 0.25],
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.2],
+            y=[0.0, 0.1],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.017, 0.015],
+            vz=[0.0, 0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    times = Timestamp.from_mjd([60000.0, 60001.0, 60002.0], scale="tdb")
+    propagated = propagate_2body(orbits, times)
+
+    expected_H = np.array([15.0, 15.0, 15.0, 17.5, 17.5, 17.5], dtype=np.float64)
+    expected_G = np.array([0.15, 0.15, 0.15, 0.25, 0.25, 0.25], dtype=np.float64)
+
+    have_H = propagated.physical_parameters.H_v.to_numpy(zero_copy_only=False)
+    have_G = propagated.physical_parameters.G.to_numpy(zero_copy_only=False)
+
+    np.testing.assert_allclose(have_H, expected_H)
+    np.testing.assert_allclose(have_G, expected_G)
 
 @pytest.mark.profile
 def test_profile_propagate_2body_matrix(propagated_orbits, tmp_path):
