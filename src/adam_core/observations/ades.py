@@ -1,6 +1,7 @@
 import logging
+import re
 from dataclasses import asdict, dataclass
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import pyarrow.compute as pc
@@ -13,6 +14,29 @@ STRING100 = 100
 STRING25 = 25
 
 logger = logging.getLogger(__name__)
+
+ADESValidationGoal = Literal["spec_compliance", "mpc_submission"]
+ADESValidationEnforcement = Literal["error", "warn", "autofix"]
+
+
+@dataclass(frozen=True)
+class ADESValidationProblem:
+    code: str
+    severity: Literal["error", "warning"]
+    message: str
+    line_number: int | None = None
+    line: str | None = None
+
+
+_IDENTIFICATION_GROUP_COLUMNS: tuple[str, ...] = (
+    "permID",
+    "provID",
+    "artSat",
+    "trkSub",
+)
+_KEYWORD_TOKEN_RE = re.compile(r"^[a-z]")
+_KEYWORD_TOKEN_CANDIDATE_RE = re.compile(r"^[A-Za-z]")
+_KEYWORD_REQUIRED_COLUMNS: tuple[str, ...] = ("obsTime",)
 
 
 @dataclass
@@ -149,8 +173,12 @@ class ADESObservations(qv.Table):
 
     permID = qv.LargeStringColumn(nullable=True)
     provID = qv.LargeStringColumn(nullable=True)
+    artSat = qv.LargeStringColumn(nullable=True)
     trkSub = qv.LargeStringColumn(nullable=True)
+    obsID = qv.LargeStringColumn(nullable=True)
     obsSubID = qv.LargeStringColumn(nullable=True)
+    trkID = qv.LargeStringColumn(nullable=True)
+    trkMPC = qv.LargeStringColumn(nullable=True)
     obsTime = Timestamp.as_column()
     rmsTime = qv.Float64Column(nullable=True)
     # Optional ADES time precision/uncertainty fields
@@ -216,12 +244,323 @@ class ADESObservations(qv.Table):
     doppler = qv.Float64Column(nullable=True)
     rmsDoppler = qv.Float64Column(nullable=True)
     frq = qv.Float64Column(nullable=True)
+    com = qv.Int64Column(nullable=True)
+    nStars = qv.Int64Column(nullable=True)
+    prog = qv.LargeStringColumn(nullable=True)
+    ref = qv.LargeStringColumn(nullable=True)
+    disc = qv.LargeStringColumn(nullable=True)
+    subFrm = qv.LargeStringColumn(nullable=True)
+    subFmt = qv.LargeStringColumn(nullable=True)
+    notes = qv.LargeStringColumn(nullable=True)
+    shapeOcc = qv.LargeStringColumn(nullable=True)
     trx = qv.LargeStringColumn(nullable=True)
     rcv = qv.LargeStringColumn(nullable=True)
     sys = qv.LargeStringColumn(nullable=True)
     # Optional ADES observatory context
     obsCenter = qv.LargeStringColumn(nullable=True)
     remarks = qv.LargeStringColumn(nullable=True)
+
+
+def _keyword_record_tokens(line: str) -> list[str] | None:
+    """
+    Return PSV Keyword Record tokens if the line matches the ADES PSV rule.
+
+    ADES_Description.pdf (Section 5, "ADES in PSV") defines a Keyword Record as a
+    pipe-separated listing of element names where, after stripping, every token
+    starts with a lower-case letter [a-z].
+
+    Additionally, we require a "minimum viable" Keyword Record for robust parsing:
+    - At least one Identification Group column is present
+    - obsTime is present
+    """
+    if line.startswith("#") or line.startswith("!"):
+        return None
+    if "|" not in line:
+        return None
+
+    tokens = [t.strip() for t in line.split("|")]
+    if not tokens:
+        return None
+    if any(t == "" for t in tokens):
+        return None
+    if not all(_KEYWORD_TOKEN_RE.match(t) for t in tokens):
+        return None
+    if not any(t in _IDENTIFICATION_GROUP_COLUMNS for t in tokens):
+        return None
+    if not all(req in tokens for req in _KEYWORD_REQUIRED_COLUMNS):
+        return None
+    return tokens
+
+
+def _candidate_keyword_record_tokens(line: str) -> list[str] | None:
+    """
+    Heuristic: return pipe-separated tokens that *look* like a Keyword Record.
+
+    This is intentionally looser than `_keyword_record_tokens()` so that we can
+    surface helpful diagnostics (e.g. token casing) instead of silently treating
+    a malformed header as data.
+    """
+    if line.startswith("#") or line.startswith("!"):
+        return None
+    if "|" not in line:
+        return None
+
+    tokens = [t.strip() for t in line.split("|")]
+    if not tokens:
+        return None
+    if any(t == "" for t in tokens):
+        return None
+    if not all(_KEYWORD_TOKEN_CANDIDATE_RE.match(t) for t in tokens):
+        return None
+    return tokens
+
+
+def find_ades_psv_problems(
+    ades_string: str,
+    *,
+    goal: ADESValidationGoal = "spec_compliance",
+) -> list[ADESValidationProblem]:
+    """
+    Find validation problems in an ADES PSV string without attempting to parse it.
+
+    This is intended as a user-facing diagnostic to identify issues such as
+    malformed Keyword Records (headers), unknown columns, and required ordering.
+    """
+    problems: list[ADESValidationProblem] = []
+    known_columns = set(ADESObservations.empty().table.column_names)
+
+    lines = [ln.rstrip("\n") for ln in ades_string.splitlines()]
+    current_header: list[str] | None = None
+
+    for line_number, raw in enumerate(lines, start=1):
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#") or line.startswith("!"):
+            continue
+
+        tokens = _keyword_record_tokens(line)
+        if tokens is not None:
+            current_header = tokens
+
+            # Spec: identification group elements must be first in the Keyword Record.
+            id_cols = set(_IDENTIFICATION_GROUP_COLUMNS)
+            seen_non_id = False
+            for t in tokens:
+                if t in id_cols:
+                    if seen_non_id:
+                        problems.append(
+                            ADESValidationProblem(
+                                code="keyword_record_identification_not_first",
+                                severity="error",
+                                message=(
+                                    "Identification Group elements must be the first "
+                                    "columns in a Keyword Record."
+                                ),
+                                line_number=line_number,
+                                line=raw,
+                            )
+                        )
+                        break
+                else:
+                    seen_non_id = True
+
+            if not any(t in id_cols for t in tokens):
+                problems.append(
+                    ADESValidationProblem(
+                        code="keyword_record_missing_identification",
+                        severity="error",
+                        message=(
+                            "Keyword Record is missing Identification Group elements "
+                            f"({', '.join(_IDENTIFICATION_GROUP_COLUMNS)})."
+                        ),
+                        line_number=line_number,
+                        line=raw,
+                    )
+                )
+
+            unknown = [t for t in tokens if t not in known_columns]
+            if unknown:
+                problems.append(
+                    ADESValidationProblem(
+                        code="keyword_record_unknown_columns",
+                        severity="warning",
+                        message=f"Unknown ADES columns will be ignored: {unknown}",
+                        line_number=line_number,
+                        line=raw,
+                    )
+                )
+            continue
+
+        candidate_tokens = _candidate_keyword_record_tokens(line)
+        if candidate_tokens is not None:
+            # Keyword Record tokens must start with a lowercase letter [a-z].
+            non_lower = [t for t in candidate_tokens if not _KEYWORD_TOKEN_RE.match(t)]
+            if non_lower:
+                canon_by_casefold = {c.casefold(): c for c in known_columns}
+                suggestions: list[str] = []
+                for t in non_lower:
+                    canon = canon_by_casefold.get(t.casefold())
+                    if canon is not None and canon != t:
+                        suggestions.append(f"{t} -> {canon}")
+
+                msg = (
+                    "Keyword Record tokens must start with a lowercase letter. "
+                    f"Non-conforming tokens: {non_lower}."
+                )
+                if suggestions:
+                    msg += f" Suggested fixes: {suggestions}."
+
+                problems.append(
+                    ADESValidationProblem(
+                        code="keyword_record_tokens_not_lowercase",
+                        severity="error",
+                        message=msg,
+                        line_number=line_number,
+                        line=raw,
+                    )
+                )
+
+            # Minimum viable requirements: ID + obsTime.
+            lower = [t.casefold() for t in candidate_tokens]
+            id_lower = {c.casefold() for c in _IDENTIFICATION_GROUP_COLUMNS}
+            if not any(t in id_lower for t in lower):
+                problems.append(
+                    ADESValidationProblem(
+                        code="keyword_record_missing_identification",
+                        severity="error",
+                        message=(
+                            "Keyword Record must include at least one Identification Group "
+                            f"column ({', '.join(_IDENTIFICATION_GROUP_COLUMNS)})."
+                        ),
+                        line_number=line_number,
+                        line=raw,
+                    )
+                )
+            if "obstime" not in lower:
+                problems.append(
+                    ADESValidationProblem(
+                        code="keyword_record_missing_obstime",
+                        severity="error",
+                        message="Keyword Record must include obsTime.",
+                        line_number=line_number,
+                        line=raw,
+                    )
+                )
+
+        # If we have no Keyword Record yet, we can't reliably interpret a data row.
+        if current_header is None:
+            problems.append(
+                ADESValidationProblem(
+                    code="data_record_before_keyword_record",
+                    severity="error",
+                    message="Found a data record before any Keyword Record.",
+                    line_number=line_number,
+                    line=raw,
+                )
+            )
+            continue
+
+        values = raw.split("|")
+        if len(values) != len(current_header):
+            problems.append(
+                ADESValidationProblem(
+                    code="data_record_wrong_field_count",
+                    severity="warning",
+                    message=(
+                        f"Data record has {len(values)} fields but Keyword Record has "
+                        f"{len(current_header)} columns."
+                    ),
+                    line_number=line_number,
+                    line=raw,
+                )
+            )
+
+    return problems
+
+
+def _policy_seconds_precision_max(goal: ADESValidationGoal) -> int:
+    # ADES_Description.pdf: obsTime may have no more than 6 digits after decimal.
+    return 6
+
+
+def _validate_writer_settings(
+    *,
+    goal: ADESValidationGoal,
+    enforcement: ADESValidationEnforcement,
+    seconds_precision: int,
+) -> tuple[int, list[ADESValidationProblem]]:
+    problems: list[ADESValidationProblem] = []
+    max_seconds_precision = _policy_seconds_precision_max(goal)
+
+    if seconds_precision > max_seconds_precision:
+        if enforcement == "autofix":
+            problems.append(
+                ADESValidationProblem(
+                    code="seconds_precision_clamped",
+                    severity="warning",
+                    message=(
+                        f"seconds_precision={seconds_precision} exceeds the {goal} cap "
+                        f"({max_seconds_precision}); clamping to {max_seconds_precision}."
+                    ),
+                )
+            )
+            seconds_precision = max_seconds_precision
+        else:
+            problems.append(
+                ADESValidationProblem(
+                    code="seconds_precision_exceeds_cap",
+                    severity="error" if enforcement == "error" else "warning",
+                    message=(
+                        f"seconds_precision={seconds_precision} exceeds the {goal} cap "
+                        f"({max_seconds_precision})."
+                    ),
+                )
+            )
+
+    return seconds_precision, problems
+
+
+def validate_ades_observations_values(
+    observations: ADESObservations,
+    *,
+    goal: ADESValidationGoal,
+    enforcement: ADESValidationEnforcement,
+) -> list[ADESValidationProblem]:
+    problems: list[ADESValidationProblem] = []
+
+    # Spec: mag restricted to [-5, +35].
+    mag = observations.mag
+    mag_is_value = pc.is_valid(mag)
+    mag_is_finite = pc.is_finite(mag)
+    mag_too_low = pc.less(mag, -5.0)
+    mag_too_high = pc.greater(mag, 35.0)
+    mag_bad = pc.and_(
+        pc.and_(mag_is_value, mag_is_finite),
+        pc.or_(mag_too_low, mag_too_high),
+    )
+    if pc.any(mag_bad).as_py():
+        problems.append(
+            ADESValidationProblem(
+                code="mag_out_of_range",
+                severity="error" if enforcement == "error" else "warning",
+                message="Found mag values outside [-5, +35].",
+            )
+        )
+
+    # Spec: presently only ctr=399 is allowed.
+    ctr = observations.ctr
+    ctr_bad = pc.and_(pc.is_valid(ctr), pc.not_equal(ctr, 399))
+    if pc.any(ctr_bad).as_py():
+        problems.append(
+            ADESValidationProblem(
+                code="ctr_not_399",
+                severity="error" if enforcement == "error" else "warning",
+                message="Found ctr values other than 399 (geocenter).",
+            )
+        )
+
+    return problems
 
 
 def ADES_to_string(
@@ -273,6 +612,9 @@ def ADES_to_string(
         "rmsDoppler": 5,
         "frq": 6,
     },
+    *,
+    goal: ADESValidationGoal = "spec_compliance",
+    enforcement: ADESValidationEnforcement = "warn",
 ) -> str:
     """
     Write ADES observations to a string.
@@ -306,6 +648,22 @@ def ADES_to_string(
     ades_string : str
         The ADES observations as a string.
     """
+    seconds_precision, setting_problems = _validate_writer_settings(
+        goal=goal, enforcement=enforcement, seconds_precision=seconds_precision
+    )
+    value_problems = validate_ades_observations_values(
+        observations, goal=goal, enforcement=enforcement
+    )
+    problems = setting_problems + value_problems
+    if problems:
+        errors = [p for p in problems if p.severity == "error"]
+        if errors and enforcement == "error":
+            msg = "\n".join(f"- {p.code}: {p.message}" for p in errors)
+            raise ValueError(f"ADES validation failed:\n{msg}")
+        for p in problems:
+            if p.severity == "warning" or enforcement != "error":
+                logger.warning("%s: %s", p.code, p.message)
+
     ades_string = "# version=2022\n"
 
     unique_observatories = observations.stn.unique().to_numpy(zero_copy_only=False)
@@ -318,6 +676,7 @@ def ADES_to_string(
         observations_obscode = observations.select("stn", obs)
         observations_obscode = observations_obscode.sort_by(
             [
+                ("artSat", "ascending"),
                 ("provID", "ascending"),
                 ("permID", "ascending"),
                 ("trkSub", "ascending"),
@@ -331,12 +690,14 @@ def ADES_to_string(
             id_present = True
         if not pc.all(pc.is_null(observations_obscode.provID)).as_py():
             id_present = True
+        if not pc.all(pc.is_null(observations_obscode.artSat)).as_py():
+            id_present = True
         if not pc.all(pc.is_null(observations_obscode.trkSub)).as_py():
             id_present = True
 
         if not id_present:
             err = (
-                "At least one of permID, provID, or trkSub should\n"
+                "At least one of permID, provID, artSat, or trkSub should\n"
                 "be present in observations."
             )
             raise ValueError(err)
@@ -358,8 +719,13 @@ def ADES_to_string(
             format="mjd",
             precision=seconds_precision,
         )
+        obs_time_idx = (
+            int(ades.columns.get_loc("obsTime.days"))
+            if "obsTime.days" in ades.columns
+            else len(ades.columns)
+        )
         ades.insert(
-            4,
+            obs_time_idx,
             "obsTime",
             np.array([i + "Z" for i in observation_times.utc.isot]),
         )
@@ -399,6 +765,7 @@ def ADES_to_string(
 
         # Groups based on ADES spec conventions
         groups = [
+            ["permID", "provID", "artSat", "trkSub"],
             ["obsTime", "rmsTime", "precTime", "uncTime"],
             ["ra", "dec", "rmsRA", "rmsDec", "rmsCorr"],
             ["raStar", "decStar"],
@@ -423,7 +790,10 @@ def ADES_to_string(
             ["trx", "rcv", "frq", "delay", "rmsDelay", "doppler", "rmsDoppler"],
             ["mag", "rmsMag", "band", "fltr", "photAp", "photCat", "nucMag", "rmsFit"],
             ["logSNR", "seeing", "exp"],
+            ["nStars", "com"],
+            ["prog", "ref", "disc", "subFrm", "subFmt"],
             ["stn", "mode", "astCat", "obsCenter"],
+            ["notes", "remarks"],
         ]
         for group in groups:
             ades = _enforce_group_order(ades, group)
@@ -508,15 +878,8 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
     int_cols = [
         "precTime",
         "ctr",
-    ]
-    for col in int_cols:
-        if col in data_dict:
-            data_dict[col] = [int(x) if x is not None else None for x in data_dict[col]]
-
-    # Integer columns
-    int_cols = [
-        "precTime",
-        "ctr",
+        "com",
+        "nStars",
     ]
     for col in int_cols:
         if col in data_dict:
@@ -527,8 +890,12 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
     string_cols = [
         "provID",
         "permID",
+        "artSat",
         "trkSub",
+        "obsID",
         "obsSubID",
+        "trkID",
+        "trkMPC",
         "stn",
         "mode",
         "astCat",
@@ -544,6 +911,13 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
         "rcv",
         "sys",
         "obsCenter",
+        "prog",
+        "ref",
+        "disc",
+        "subFrm",
+        "subFmt",
+        "notes",
+        "shapeOcc",
     ]
     for col in string_cols:
         if col in data_dict:
@@ -569,6 +943,9 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
 
 def ADES_string_to_tables(
     ades_string: str,
+    *,
+    goal: ADESValidationGoal = "spec_compliance",
+    enforcement: ADESValidationEnforcement = "warn",
 ) -> Tuple[dict[str, ObsContext], ADESObservations]:
     """
     Parse an ADES format string into ObsContext and ADESObservations objects.
@@ -585,6 +962,17 @@ def ADES_string_to_tables(
         - A dictionary mapping observatory codes to their ObsContext objects
         - An ADESObservations table containing the observations
     """
+    psv_problems = find_ades_psv_problems(ades_string, goal=goal)
+    if psv_problems:
+        errors = [p for p in psv_problems if p.severity == "error"]
+        if errors and enforcement == "error":
+            msg = "\n".join(
+                f"- line {p.line_number}: {p.code}: {p.message}" for p in errors
+            )
+            raise ValueError(f"ADES PSV validation failed:\n{msg}")
+        for p in psv_problems:
+            logger.warning("%s: %s", p.code, p.message)
+
     # Split the string into lines and remove empty lines
     lines = [line.strip() for line in ades_string.split("\n") if line.strip()]
 
@@ -596,22 +984,36 @@ def ADES_string_to_tables(
         if line.startswith("#") or line.startswith("!"):
             continue
 
-        # Detect if it's a header line by looking for permID, provID, or trkSub
-        if "permID" in line or "provID" in line or "trkSub" in line:
+        keyword_tokens = _keyword_record_tokens(line)
+        if keyword_tokens is not None:
             observations = qv.concatenate(
                 [observations, _data_dict_to_table(current_data)]
             )
-            new_headers = [header.strip() for header in line.split("|")]
+            new_headers = keyword_tokens
             current_data = {header: [] for header in new_headers}
             continue
 
         # Add the data line to the current data dictionary
+        if not current_data:
+            # No keyword record found yet. The diagnostic helper will report this.
+            continue
         data_line = line.split("|")
         for header, value in zip(current_data.keys(), data_line):
             current_data[header].append(value)
 
     # Add the last data dictionary to the observations table
     observations = qv.concatenate([observations, _data_dict_to_table(current_data)])
+
+    obs_problems = validate_ades_observations_values(
+        observations, goal=goal, enforcement=enforcement
+    )
+    if obs_problems:
+        errors = [p for p in obs_problems if p.severity == "error"]
+        if errors and enforcement == "error":
+            msg = "\n".join(f"- {p.code}: {p.message}" for p in errors)
+            raise ValueError(f"ADES validation failed:\n{msg}")
+        for p in obs_problems:
+            logger.warning("%s: %s", p.code, p.message)
 
     # Now we parse the metadata sections
     # Initialize variables

@@ -746,7 +746,7 @@ def test_ADES_roundtrip_optional_fields():
         rmsFit=[0.01],
         nucMag=[19.9],
         # Generic coordinates/covariance
-        ctr=[1],
+        ctr=[399],
         pos1=[1.0],
         pos2=[2.0],
         pos3=[3.0],
@@ -892,7 +892,7 @@ def test_ADES_writer_enforces_group_orders():
         rmsPA=[0.04],
         # Generic coords/covariance
         sys=["J2000"],
-        ctr=[2],
+        ctr=[399],
         pos1=[1.0],
         pos2=[2.0],
         pos3=[3.0],
@@ -1008,3 +1008,94 @@ def test_ADES_writer_nulls_emit_empty_cells_not_nan():
     assert (
         row2[mag_idx] == ""
     ), f"Expected empty cell for null mag, got {row2[mag_idx]!r}"
+
+
+def test_ADES_string_to_tables_artSat_keyword_record_detection():
+    """Ensure PSV parsing detects artSat-only Keyword Records (ADES Table 4 alternative C)."""
+    ades_string = """# version=2022
+# observatory
+! mpcCode 695
+# submitter
+! name Submitter
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! aperture 1.0
+! design Reflector
+! detector CCD
+artSat|obsTime|ra|dec|stn|mode|astCat
+1998-067A|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
+"""
+
+    _, observations = ADES_string_to_tables(ades_string)
+    assert len(observations) == 1
+    assert observations.artSat[0].as_py() == "1998-067A"
+
+
+def test_ADES_to_string_validation_seconds_precision_cap():
+    observations = ADESObservations.from_kwargs(
+        permID=["A"],
+        obsTime=Timestamp.from_mjd([60430.0], scale="utc"),
+        ra=[10.0],
+        dec=[-5.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+    )
+
+    with pytest.raises(ValueError):
+        ADES_to_string(
+            observations,
+            None,
+            seconds_precision=7,
+            goal="spec_compliance",
+            enforcement="error",
+        )
+
+    s = ADES_to_string(
+        observations,
+        None,
+        seconds_precision=7,
+        goal="spec_compliance",
+        enforcement="autofix",
+    )
+    lines = [ln for ln in s.split("\n") if ln and not ln.startswith("#")]
+    header = lines[0].split("|")
+    row = lines[1].split("|")
+    obs_time = row[header.index("obsTime")]
+    frac = obs_time.split(".")[1].rstrip("Z") if "." in obs_time else ""
+    assert len(frac) <= 6
+
+
+def test_ADES_to_string_validation_ctr_and_mag():
+    observations = ADESObservations.from_kwargs(
+        permID=["A"],
+        obsTime=Timestamp.from_mjd([60430.0], scale="utc"),
+        ra=[10.0],
+        dec=[-5.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+        ctr=[1],
+        mag=[40.0],
+        band=["r"],
+    )
+
+    with pytest.raises(ValueError):
+        ADES_to_string(observations, None, goal="spec_compliance", enforcement="error")
+
+
+def test_find_ades_psv_problems_detects_non_lowercase_keyword_tokens():
+    # "Band" appears in the PDF table, but PSV element names must be lower-case (band).
+    ades_string = """# version=2022
+permID|obsTime|ra|dec|stn|mode|astCat|Band
+1234|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|r
+"""
+    from ..ades import find_ades_psv_problems
+
+    problems = find_ades_psv_problems(ades_string)
+    codes = {p.code for p in problems}
+    assert "keyword_record_tokens_not_lowercase" in codes
