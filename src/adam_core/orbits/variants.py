@@ -210,6 +210,7 @@ class VariantOrbits(qv.Table):
             orbit = Orbits.from_kwargs(
                 orbit_id=[uuid.uuid4().hex],
                 object_id=[object_id],
+                physical_parameters=object_variants.physical_parameters.take([0]),
                 coordinates=CartesianCoordinates.from_kwargs(
                     x=[mean[0]],
                     y=[mean[1]],

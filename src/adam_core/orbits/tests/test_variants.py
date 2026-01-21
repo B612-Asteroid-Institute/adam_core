@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from ...coordinates import CartesianCoordinates, Origin
+from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..variants import VariantOrbits
@@ -47,6 +48,10 @@ def test_VariantOrbits_collapse_by_object_id():
         orbit_id=["obj1", "obj1", "obj1", "obj2", "obj2", "obj2"],
         object_id=["obj1", "obj1", "obj1", "obj2", "obj2", "obj2"],
         variant_id=["0", "1", "2", "0", "1", "2"],
+        physical_parameters=PhysicalParameters.from_kwargs(
+            H_v=[15.0, 15.0, 15.0, 17.5, 17.5, 17.5],
+            G=[0.15, 0.15, 0.15, 0.25, 0.25, 0.25],
+        ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
             y=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
@@ -84,6 +89,12 @@ def test_VariantOrbits_collapse_by_object_id():
         np.array([2.0, 2.0, 2.0, 0.2, 0.2, 0.2]),  # Expected mean for obj2
         rtol=1e-14,
     )
+
+    # Physical parameters should be preserved per object_id
+    assert obj1.physical_parameters.H_v[0].as_py() == 15.0
+    assert obj1.physical_parameters.G[0].as_py() == 0.15
+    assert obj2.physical_parameters.H_v[0].as_py() == 17.5
+    assert obj2.physical_parameters.G[0].as_py() == 0.25
 
     # Check that covariance matrices are computed correctly
     # For obj1, the variance should be approximately 0.00667 for each component
@@ -124,6 +135,7 @@ def test_VariantOrbits_collapse_by_object_id():
         orbit_id=["obj1", "obj1"],
         object_id=["obj1", "obj1"],
         variant_id=["0", "1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0, 15.0], G=[0.15, 0.15]),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1],
             y=[1.0, 1.1],
@@ -144,6 +156,7 @@ def test_VariantOrbits_collapse_by_object_id():
         orbit_id=["obj1", "obj1"],
         object_id=["obj1", "obj1"],
         variant_id=["0", "1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0, 15.0], G=[0.15, 0.15]),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1],
             y=[1.0, 1.1],
