@@ -278,7 +278,7 @@ def generate_ephemeris_2body(
             _generate_ephemeris_2body,
             in_axes=(0, 0, 0, 0, None, None, None, None),
             out_axes=(0, 0, 0),
-            observation_times=times.utc.mjd,
+            observation_times=times,
             observer_coordinates=observer_coordinates,
             mu=mu,
             lt_tol=lt_tol,

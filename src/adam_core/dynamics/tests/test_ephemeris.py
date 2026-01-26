@@ -7,7 +7,11 @@ import pytest
 import quivr as qv
 from astropy import units as u
 
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
+from ...coordinates.origin import Origin
 from ...observers import Observers
+from ...orbits import Orbits
 from ...time import Timestamp
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
@@ -190,3 +194,53 @@ def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
     stats_file = tmp_path / "ephemeris_profile.prof"
     profiler.dump_stats(stats_file)
     print(f"Run 'snakeviz {stats_file}' to view the profile results.")
+
+
+def test_generate_ephemeris_2body_covariance_branch_uses_input_times() -> None:
+    """
+    Regression test for a bug where the covariance branch treated `times` (already a numpy
+    array of MJD floats) as a Time object and tried to access `times.utc.mjd`.
+    """
+    time = Timestamp.from_mjd([60000.0], scale="tdb")
+
+    cartesian_cov = CoordinateCovariances.from_matrix(
+        np.eye(6, dtype=np.float64).reshape(1, 6, 6) * 1e-12
+    )
+
+    # Use SSB origin/frame so `generate_ephemeris_2body`'s internal transforms are no-ops.
+    origin_ssb = Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"])
+
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            covariance=cartesian_cov,
+            origin=origin_ssb,
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=origin_ssb,
+            frame="ecliptic",
+        ),
+    )
+
+    eph = generate_ephemeris_2body(orbits, observers, predict_magnitudes=False)
+    assert eph.coordinates.covariance is not None
+    assert eph.coordinates.covariance.to_matrix().shape == (1, 6, 6)
