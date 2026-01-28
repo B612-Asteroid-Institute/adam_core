@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from ...coordinates import CartesianCoordinates, Origin
+from ...coordinates import CartesianCoordinates, Origin, SphericalCoordinates
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
-from ..variants import VariantOrbits
+from ..variants import VariantEphemeris, VariantOrbits
 
 
 def test_VariantOrbits():
@@ -171,3 +171,170 @@ def test_VariantOrbits_collapse_by_object_id():
     )
     with pytest.raises(AssertionError):
         variant_orbits_diff_origins.collapse_by_object_id()
+
+
+def test_VariantEphemeris_collapse_by_object_id_single_epoch():
+    """Test that VariantEphemeris.collapse_by_object_id collapses by object_id for a single epoch."""
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=["obj1", "obj1", "obj1", "obj2", "obj2", "obj2"],
+        object_id=["obj1", "obj1", "obj1", "obj2", "obj2", "obj2"],
+        variant_id=["0", "1", "2", "0", "1", "2"],
+        predicted_magnitude_v=[20.0, 21.0, 19.0, 18.0, 18.5, 17.5],
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
+            lon=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
+            lat=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
+            vrho=[0.1, 0.11, 0.09, 0.2, 0.21, 0.19],
+            vlon=[0.1, 0.11, 0.09, 0.2, 0.21, 0.19],
+            vlat=[0.1, 0.11, 0.09, 0.2, 0.21, 0.19],
+            time=Timestamp.from_mjd([60000] * 6),
+            origin=Origin.from_kwargs(code=["500"] * 6),
+            frame="equatorial",
+        ),
+    )
+
+    collapsed = variant_ephemeris.collapse_by_object_id()
+
+    assert len(collapsed) == 2
+    assert set(collapsed.object_id.to_pylist()) == {"obj1", "obj2"}
+
+    obj1 = collapsed.select("object_id", "obj1")
+    obj2 = collapsed.select("object_id", "obj2")
+
+    np.testing.assert_allclose(
+        obj1.coordinates.values[0],
+        np.array([1.0, 1.0, 1.0, 0.1, 0.1, 0.1]),
+        rtol=1e-14,
+    )
+    np.testing.assert_allclose(
+        obj2.coordinates.values[0],
+        np.array([2.0, 2.0, 2.0, 0.2, 0.2, 0.2]),
+        rtol=1e-14,
+    )
+
+    # Mean magnitudes should be propagated.
+    assert obj1.predicted_magnitude_v[0].as_py() == pytest.approx(20.0)
+    assert obj2.predicted_magnitude_v[0].as_py() == pytest.approx(18.0)
+
+    # Check covariance diagonals (population variance with n=3).
+    obj1_cov = obj1.coordinates.covariance.to_matrix()[0]
+    expected_variance_pos = 0.02 / 3
+    expected_variance_vel = 0.0002 / 3
+    np.testing.assert_allclose(
+        np.diag(obj1_cov),
+        [expected_variance_pos] * 3 + [expected_variance_vel] * 3,
+        rtol=1e-6,
+    )
+
+    obj2_cov = obj2.coordinates.covariance.to_matrix()[0]
+    np.testing.assert_allclose(
+        np.diag(obj2_cov),
+        [expected_variance_pos] * 3 + [expected_variance_vel] * 3,
+        rtol=1e-6,
+    )
+
+    # Time, origin, and frame should be preserved.
+    assert all(t == 60000 for t in collapsed.coordinates.time.mjd().to_pylist())
+    assert all(o == "500" for o in collapsed.coordinates.origin.code.to_pylist())
+    assert collapsed.coordinates.frame == "equatorial"
+
+
+def test_VariantEphemeris_collapse_by_object_id_groups_by_time_and_origin():
+    """Collapse should be performed per (object_id, time, origin_code) group."""
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=["obj1"] * 6,
+        object_id=["obj1"] * 6,
+        variant_id=["0", "1", "0", "1", "0", "1"],
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=[1.0, 1.2, 10.0, 10.2, 100.0, 100.2],
+            lon=[1.0, 1.2, 10.0, 10.2, 100.0, 100.2],
+            lat=[1.0, 1.2, 10.0, 10.2, 100.0, 100.2],
+            vrho=[0.1, 0.12, 1.0, 1.02, 10.0, 10.02],
+            vlon=[0.1, 0.12, 1.0, 1.02, 10.0, 10.02],
+            vlat=[0.1, 0.12, 1.0, 1.02, 10.0, 10.02],
+            time=Timestamp.from_mjd([60000, 60000, 60001, 60001, 60000, 60000]),
+            origin=Origin.from_kwargs(code=["500", "500", "500", "500", "X05", "X05"]),
+            frame="equatorial",
+        ),
+    )
+
+    collapsed = variant_ephemeris.collapse_by_object_id()
+
+    # Keys: (60000, "500"), (60001, "500"), (60000, "X05")
+    assert len(collapsed) == 3
+    assert set(collapsed.coordinates.origin.code.to_pylist()) == {"500", "X05"}
+    assert set(collapsed.coordinates.time.mjd().to_pylist()) == {60000, 60001}
+
+    # Validate one group: mjd=60000, origin=500 -> mean of [1.0, 1.2] => 1.1 etc.
+    group = (
+        collapsed.select("coordinates.origin.code", "500")
+        .select("coordinates.time.days", 60000)
+        .select("coordinates.time.nanos", 0)
+    )
+    assert len(group) == 1
+    np.testing.assert_allclose(
+        group.coordinates.values[0],
+        np.array([1.1, 1.1, 1.1, 0.11, 0.11, 0.11]),
+        rtol=0,
+        atol=1e-12,
+    )
+
+
+def test_VariantEphemeris_collapse_by_object_id_wraps_longitude():
+    """Longitude is circular in degrees; mean should respect wrap-around near 0/360."""
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=["obj1", "obj1", "obj1"],
+        object_id=["obj1", "obj1", "obj1"],
+        variant_id=["0", "1", "2"],
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=[1.0, 1.0, 1.0],
+            lon=[359.0, 1.0, 0.0],
+            lat=[0.0, 0.0, 0.0],
+            vrho=[0.0, 0.0, 0.0],
+            vlon=[0.0, 0.0, 0.0],
+            vlat=[0.0, 0.0, 0.0],
+            time=Timestamp.from_mjd([60000] * 3),
+            origin=Origin.from_kwargs(code=["500"] * 3),
+            frame="equatorial",
+        ),
+    )
+
+    collapsed = variant_ephemeris.collapse_by_object_id()
+    assert len(collapsed) == 1
+    lon = collapsed.coordinates.values[0][1]
+    assert lon == pytest.approx(0.0, abs=1e-12)
+    assert 0.0 <= lon < 360.0
+
+
+def test_VariantEphemeris_collapse_by_object_id_partial_aberrated_raises():
+    """If aberrated coordinates are provided, they must be provided for all rows."""
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=["obj1", "obj1"],
+        object_id=["obj1", "obj1"],
+        variant_id=["0", "1"],
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=[1.0, 1.1],
+            lon=[1.0, 1.1],
+            lat=[1.0, 1.1],
+            vrho=[0.1, 0.11],
+            vlon=[0.1, 0.11],
+            vlat=[0.1, 0.11],
+            time=Timestamp.from_mjd([60000] * 2),
+            origin=Origin.from_kwargs(code=["500"] * 2),
+            frame="equatorial",
+        ),
+        aberrated_coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, None],
+            y=[1.0, None],
+            z=[1.0, None],
+            vx=[0.1, None],
+            vy=[0.1, None],
+            vz=[0.1, None],
+            time=Timestamp.from_mjd([60000] * 2),
+            origin=Origin.from_kwargs(code=["SUN"] * 2),
+            frame="ecliptic",
+        ),
+    )
+
+    with pytest.raises(AssertionError):
+        variant_ephemeris.collapse_by_object_id()

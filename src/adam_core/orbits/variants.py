@@ -2,13 +2,16 @@ import uuid
 from typing import Literal, Optional
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
+from ..coordinates.origin import Origin
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
+from ..time import Timestamp
 from .ephemeris import Ephemeris
 from .orbits import Orbits
 from .physical_parameters import PhysicalParameters
@@ -338,3 +341,169 @@ class VariantEphemeris(qv.Table):
             ephemeris_list.append(ephemeris_collapsed)
 
         return qv.concatenate(ephemeris_list)
+
+    def collapse_by_object_id(self) -> Ephemeris:
+        """
+        Collapse the variant ephemerides into mean ephemerides and covariance matrices
+        grouped by object_id, time, and observatory (origin code).
+
+        Returns
+        -------
+        collapsed_ephemeris : `~adam_core.orbits.ephemeris.Ephemeris`
+            The collapsed ephemeris.
+        """
+        if len(self) == 0:
+            return Ephemeris.empty()
+
+        variants = self.sort_by(
+            [
+                "object_id",
+                "coordinates.time.days",
+                "coordinates.time.nanos",
+                "coordinates.origin.code",
+            ]
+        )
+
+        object_ids = variants.object_id.to_numpy(zero_copy_only=False)
+        days = variants.coordinates.time.days.to_numpy(zero_copy_only=False)
+        nanos = variants.coordinates.time.nanos.to_numpy(zero_copy_only=False)
+        origin_codes = variants.coordinates.origin.code.to_numpy(zero_copy_only=False)
+
+        key_change = (
+            (object_ids[1:] != object_ids[:-1])
+            | (days[1:] != days[:-1])
+            | (nanos[1:] != nanos[:-1])
+            | (origin_codes[1:] != origin_codes[:-1])
+        )
+        bounds = np.concatenate(([0], np.nonzero(key_change)[0] + 1, [len(variants)]))
+        if len(bounds) <= 2:
+            starts = np.array([0], dtype=np.int64)
+        else:
+            starts = bounds[:-1]
+
+        n_groups = len(bounds) - 1
+        orbit_id = [uuid.uuid4().hex for _ in range(n_groups)]
+
+        object_id = pc.take(variants.object_id, starts.tolist())
+        out_time = Timestamp.from_kwargs(
+            days=pc.take(variants.coordinates.time.days, starts.tolist()),
+            nanos=pc.take(variants.coordinates.time.nanos, starts.tolist()),
+            scale=variants.coordinates.time.scale,
+        )
+        out_origin = Origin.from_kwargs(
+            code=pc.take(variants.coordinates.origin.code, starts.tolist())
+        )
+
+        mags = pc.fill_null(variants.predicted_magnitude_v, np.nan).to_numpy(
+            zero_copy_only=False
+        )
+
+        spherical_values = variants.coordinates.values
+        means_sph = np.empty((n_groups, 6), dtype=np.float64)
+        cov_sph = np.empty((n_groups, 6, 6), dtype=np.float64)
+        predicted_magnitude_v: list[float | None] = [None] * n_groups
+
+        aberrated_x = variants.aberrated_coordinates.x
+        has_aberrated = not pc.all(pc.is_null(aberrated_x)).as_py()
+        if has_aberrated:
+            assert not pc.any(
+                pc.is_null(aberrated_x)
+            ).as_py(), "aberrated_coordinates must be provided for all rows or none"
+            ab_values = variants.aberrated_coordinates.values
+            ab_days = variants.aberrated_coordinates.time.days.to_numpy(
+                zero_copy_only=False
+            )
+            ab_nanos = variants.aberrated_coordinates.time.nanos.to_numpy(
+                zero_copy_only=False
+            )
+            ab_origin_codes = variants.aberrated_coordinates.origin.code.to_numpy(
+                zero_copy_only=False
+            )
+            means_ab = np.empty((n_groups, 6), dtype=np.float64)
+            cov_ab = np.empty((n_groups, 6, 6), dtype=np.float64)
+
+        for i, (start, end) in enumerate(zip(bounds[:-1], bounds[1:])):
+            n = end - start
+            if n == 0:
+                continue
+
+            samples = spherical_values[start:end].copy()
+
+            # Circular mean in degrees for longitude, with wrap-aware covariance.
+            lon = samples[:, 1]
+            lon_mean = float(
+                (np.degrees(np.arctan2(np.mean(np.sin(np.deg2rad(lon))), np.mean(np.cos(np.deg2rad(lon))))) + 360.0)
+                % 360.0
+            )
+            samples[:, 1] = lon_mean + (((lon - lon_mean + 180.0) % 360.0) - 180.0)
+
+            mean = np.average(samples, axis=0)
+            mean[1] = lon_mean
+            means_sph[i] = mean
+            cov_sph[i] = weighted_covariance(
+                mean, samples, np.ones(n, dtype=np.float64) / n
+            ).reshape(6, 6)
+
+            mags_i = mags[start:end]
+            if not np.all(np.isnan(mags_i)):
+                predicted_magnitude_v[i] = float(np.nanmean(mags_i))
+
+            if has_aberrated:
+                assert np.all(ab_days[start:end] == ab_days[start])
+                assert np.all(ab_nanos[start:end] == ab_nanos[start])
+                assert np.all(ab_origin_codes[start:end] == ab_origin_codes[start])
+                ab_samples = ab_values[start:end]
+                ab_mean = np.average(ab_samples, axis=0)
+                means_ab[i] = ab_mean
+                cov_ab[i] = weighted_covariance(
+                    ab_mean, ab_samples, np.ones(n, dtype=np.float64) / n
+                ).reshape(6, 6)
+
+        collapsed_coordinates = SphericalCoordinates.from_kwargs(
+            rho=means_sph[:, 0],
+            lon=means_sph[:, 1],
+            lat=means_sph[:, 2],
+            vrho=means_sph[:, 3],
+            vlon=means_sph[:, 4],
+            vlat=means_sph[:, 5],
+            covariance=CoordinateCovariances.from_matrix(cov_sph),
+            time=out_time,
+            origin=out_origin,
+            frame=variants.coordinates.frame,
+        )
+
+        if not has_aberrated:
+            return Ephemeris.from_kwargs(
+                orbit_id=orbit_id,
+                object_id=object_id,
+                coordinates=collapsed_coordinates,
+                predicted_magnitude_v=predicted_magnitude_v,
+            )
+
+        ab_time = Timestamp.from_kwargs(
+            days=pc.take(variants.aberrated_coordinates.time.days, starts.tolist()),
+            nanos=pc.take(variants.aberrated_coordinates.time.nanos, starts.tolist()),
+            scale=variants.aberrated_coordinates.time.scale,
+        )
+        ab_origin = Origin.from_kwargs(
+            code=pc.take(variants.aberrated_coordinates.origin.code, starts.tolist())
+        )
+        collapsed_aberrated = CartesianCoordinates.from_kwargs(
+            x=means_ab[:, 0],
+            y=means_ab[:, 1],
+            z=means_ab[:, 2],
+            vx=means_ab[:, 3],
+            vy=means_ab[:, 4],
+            vz=means_ab[:, 5],
+            covariance=CoordinateCovariances.from_matrix(cov_ab),
+            time=ab_time,
+            origin=ab_origin,
+            frame=variants.aberrated_coordinates.frame,
+        )
+        return Ephemeris.from_kwargs(
+            orbit_id=orbit_id,
+            object_id=object_id,
+            coordinates=collapsed_coordinates,
+            predicted_magnitude_v=predicted_magnitude_v,
+            aberrated_coordinates=collapsed_aberrated,
+        )
