@@ -500,6 +500,7 @@ def test_propagate_2body_preserves_physical_parameters():
     np.testing.assert_allclose(have_H, expected_H)
     np.testing.assert_allclose(have_G, expected_G)
 
+
 @pytest.mark.profile
 def test_profile_propagate_2body_matrix(propagated_orbits, tmp_path):
     """Profile the propagate_2body function with different combinations of orbits and times.

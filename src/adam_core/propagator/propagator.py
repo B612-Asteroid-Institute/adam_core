@@ -842,7 +842,7 @@ class Propagator(ABC, EphemerisMixin):
         if max_processes > 1:
             propagated_list: List[Orbits] = []
             covariance_variants_list: List[VariantOrbits] = []
-            # When the input is VariantOrbits, do not treat them as covariance. 
+            # When the input is VariantOrbits, do not treat them as covariance.
             propagated_variants_input_list: List[VariantOrbits] = []
             input_is_variants: Optional[bool] = None
 
@@ -956,7 +956,11 @@ class Propagator(ABC, EphemerisMixin):
                     propagated_variants = qv.concatenate(covariance_variants_list)
                     # sort by variant_id and time
                     propagated_variants = propagated_variants.sort_by(
-                        ["variant_id", "coordinates.time.days", "coordinates.time.nanos"]
+                        [
+                            "variant_id",
+                            "coordinates.time.days",
+                            "coordinates.time.nanos",
+                        ]
                     )
                 else:
                     propagated_variants = None
