@@ -233,6 +233,22 @@ def test_propagator_multiple_workers_ray():
     assert len(have) == len(orbits) * len(times)
 
 
+@pytest.mark.skipif(not RAY_INSTALLED, reason="Ray not installed")
+def test_propagate_orbits_multiple_workers_ray_variant_orbits_input():
+    """
+    Regression test: VariantOrbits should be supported as an input to propagate_orbits
+    under the ray parallel dispatcher.
+    """
+    base = make_real_orbits(4)
+    variants = VariantOrbits.create(base, method="sigma-point")
+    times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
+
+    prop = MockPropagator()
+    have = prop.propagate_orbits(variants, times, max_processes=2)
+    assert isinstance(have, VariantOrbits)
+    assert len(have) == len(variants) * len(times)
+
+
 def test_propagate_different_origins():
     """
     Test that we are returning propagated orbits with their original origins

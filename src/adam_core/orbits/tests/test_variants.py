@@ -135,7 +135,9 @@ def test_VariantOrbits_collapse_by_object_id():
         orbit_id=["obj1", "obj1"],
         object_id=["obj1", "obj1"],
         variant_id=["0", "1"],
-        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0, 15.0], G=[0.15, 0.15]),
+        physical_parameters=PhysicalParameters.from_kwargs(
+            H_v=[15.0, 15.0], G=[0.15, 0.15]
+        ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1],
             y=[1.0, 1.1],
@@ -156,7 +158,9 @@ def test_VariantOrbits_collapse_by_object_id():
         orbit_id=["obj1", "obj1"],
         object_id=["obj1", "obj1"],
         variant_id=["0", "1"],
-        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0, 15.0], G=[0.15, 0.15]),
+        physical_parameters=PhysicalParameters.from_kwargs(
+            H_v=[15.0, 15.0], G=[0.15, 0.15]
+        ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1],
             y=[1.0, 1.1],
