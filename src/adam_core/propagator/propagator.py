@@ -798,7 +798,7 @@ class Propagator(ABC, EphemerisMixin):
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
-    ) -> Orbits:
+    ) -> Union[Orbits, VariantOrbits]:
         """
         Propagate each orbit in orbits to each time in times.
 
@@ -830,15 +830,27 @@ class Propagator(ABC, EphemerisMixin):
 
         Returns
         -------
-        propagated : `~adam_core.orbits.orbits.Orbits`
+        propagated : `~adam_core.orbits.orbits.Orbits` or `~adam_core.orbits.variants.VariantOrbits`
             Propagated orbits.
         """
+        # If sending in VariantOrbits, we make sure not to run covariance
+        # (matches the guard in generate_ephemeris).
+        if covariance is True and isinstance(orbits, VariantOrbits):
+            raise AssertionError("Covariance is not supported for VariantOrbits")
+
         if max_processes is None:
             max_processes = mp.cpu_count()
 
         if max_processes > 1:
             propagated_list: List[Orbits] = []
-            variants_list: List[VariantOrbits] = []
+            # When covariance=True (and input is Orbits), we also propagate variants internally.
+            # These are collected separately and later collapsed back into mean orbits.
+            covariance_variants_list: List[VariantOrbits] = []
+            # When the *input* itself is VariantOrbits, the primary propagation result is a
+            # VariantOrbits. In that case we must concatenate these results as the main output,
+            # not treat them as covariance variants.
+            propagated_variants_input_list: List[VariantOrbits] = []
+            input_is_variants: Optional[bool] = None
 
             if RAY_INSTALLED is False:
                 raise ImportError(
@@ -856,6 +868,7 @@ class Propagator(ABC, EphemerisMixin):
                 times = ray.get(times_ref)
 
             if not isinstance(orbits, ObjectRef):
+                input_is_variants = isinstance(orbits, VariantOrbits)
                 orbits_ref = ray.put(orbits)
             else:
                 orbits_ref = orbits
@@ -863,6 +876,10 @@ class Propagator(ABC, EphemerisMixin):
                 # check its length for chunking and determine
                 # if we need to propagate variants
                 orbits = ray.get(orbits_ref)
+                input_is_variants = isinstance(orbits, VariantOrbits)
+
+            if covariance is True and input_is_variants:
+                raise AssertionError("Covariance is not supported for VariantOrbits")
 
             # Create futures inputs
             futures_inputs = []
@@ -910,7 +927,10 @@ class Propagator(ABC, EphemerisMixin):
                     if isinstance(result, Orbits):
                         propagated_list.append(result)
                     elif isinstance(result, VariantOrbits):
-                        variants_list.append(result)
+                        if input_is_variants:
+                            propagated_variants_input_list.append(result)
+                        else:
+                            covariance_variants_list.append(result)
                     else:
                         raise ValueError(
                             f"Unexpected result type from propagation worker: {type(result)}"
@@ -923,22 +943,29 @@ class Propagator(ABC, EphemerisMixin):
                 if isinstance(result, Orbits):
                     propagated_list.append(result)
                 elif isinstance(result, VariantOrbits):
-                    variants_list.append(result)
+                    if input_is_variants:
+                        propagated_variants_input_list.append(result)
+                    else:
+                        covariance_variants_list.append(result)
                 else:
                     raise ValueError(
                         f"Unexpected result type from propagation worker: {type(result)}"
                     )
 
             # Concatenate propagated orbits
-            propagated = qv.concatenate(propagated_list)
-            if len(variants_list) > 0:
-                propagated_variants = qv.concatenate(variants_list)
-                # sort by variant_id and time
-                propagated_variants = propagated_variants.sort_by(
-                    ["variant_id", "coordinates.time.days", "coordinates.time.nanos"]
-                )
-            else:
+            if input_is_variants:
+                propagated = qv.concatenate(propagated_variants_input_list)
                 propagated_variants = None
+            else:
+                propagated = qv.concatenate(propagated_list)
+                if len(covariance_variants_list) > 0:
+                    propagated_variants = qv.concatenate(covariance_variants_list)
+                    # sort by variant_id and time
+                    propagated_variants = propagated_variants.sort_by(
+                        ["variant_id", "coordinates.time.days", "coordinates.time.nanos"]
+                    )
+                else:
+                    propagated_variants = None
 
         else:
             propagated = self._propagate_orbits(orbits, times)
