@@ -833,8 +833,6 @@ class Propagator(ABC, EphemerisMixin):
         propagated : `~adam_core.orbits.orbits.Orbits` or `~adam_core.orbits.variants.VariantOrbits`
             Propagated orbits.
         """
-        # If sending in VariantOrbits, we make sure not to run covariance
-        # (matches the guard in generate_ephemeris).
         if covariance is True and isinstance(orbits, VariantOrbits):
             raise AssertionError("Covariance is not supported for VariantOrbits")
 
@@ -843,12 +841,8 @@ class Propagator(ABC, EphemerisMixin):
 
         if max_processes > 1:
             propagated_list: List[Orbits] = []
-            # When covariance=True (and input is Orbits), we also propagate variants internally.
-            # These are collected separately and later collapsed back into mean orbits.
             covariance_variants_list: List[VariantOrbits] = []
-            # When the *input* itself is VariantOrbits, the primary propagation result is a
-            # VariantOrbits. In that case we must concatenate these results as the main output,
-            # not treat them as covariance variants.
+            # When the is VariantOrbits, do not treat them as covariance variants.
             propagated_variants_input_list: List[VariantOrbits] = []
             input_is_variants: Optional[bool] = None
 
