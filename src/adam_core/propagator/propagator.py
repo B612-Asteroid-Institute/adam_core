@@ -842,7 +842,7 @@ class Propagator(ABC, EphemerisMixin):
         if max_processes > 1:
             propagated_list: List[Orbits] = []
             covariance_variants_list: List[VariantOrbits] = []
-            # When the is VariantOrbits, do not treat them as covariance variants.
+            # When the input is VariantOrbits, do not treat them as covariance. 
             propagated_variants_input_list: List[VariantOrbits] = []
             input_is_variants: Optional[bool] = None
 
