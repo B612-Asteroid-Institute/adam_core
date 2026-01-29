@@ -2,16 +2,21 @@ import uuid
 from typing import Literal, Optional
 
 import numpy as np
-import numpy.typing as npt
+import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 
+from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
-from ..coordinates.origin import Origin
+from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
+from ..coordinates.transform import transform_coordinates
+from ..dynamics.aberrations import add_light_time
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
+from ..observers.observers import Observers
 from ..time import Timestamp
+from ..utils.chunking import process_in_chunks
 from .ephemeris import Ephemeris
 from .orbits import Orbits
 from .physical_parameters import PhysicalParameters
@@ -403,25 +408,6 @@ class VariantEphemeris(qv.Table):
         cov_sph = np.empty((n_groups, 6, 6), dtype=np.float64)
         predicted_magnitude_v: list[float | None] = [None] * n_groups
 
-        aberrated_x = variants.aberrated_coordinates.x
-        has_aberrated = not pc.all(pc.is_null(aberrated_x)).as_py()
-        if has_aberrated:
-            assert not pc.any(
-                pc.is_null(aberrated_x)
-            ).as_py(), "aberrated_coordinates must be provided for all rows or none"
-            ab_values = variants.aberrated_coordinates.values
-            ab_days = variants.aberrated_coordinates.time.days.to_numpy(
-                zero_copy_only=False
-            )
-            ab_nanos = variants.aberrated_coordinates.time.nanos.to_numpy(
-                zero_copy_only=False
-            )
-            ab_origin_codes = variants.aberrated_coordinates.origin.code.to_numpy(
-                zero_copy_only=False
-            )
-            means_ab = np.empty((n_groups, 6), dtype=np.float64)
-            cov_ab = np.empty((n_groups, 6, 6), dtype=np.float64)
-
         for i, (start, end) in enumerate(zip(bounds[:-1], bounds[1:])):
             n = end - start
             if n == 0:
@@ -448,17 +434,6 @@ class VariantEphemeris(qv.Table):
             if not np.all(np.isnan(mags_i)):
                 predicted_magnitude_v[i] = float(np.nanmean(mags_i))
 
-            if has_aberrated:
-                assert np.all(ab_days[start:end] == ab_days[start])
-                assert np.all(ab_nanos[start:end] == ab_nanos[start])
-                assert np.all(ab_origin_codes[start:end] == ab_origin_codes[start])
-                ab_samples = ab_values[start:end]
-                ab_mean = np.average(ab_samples, axis=0)
-                means_ab[i] = ab_mean
-                cov_ab[i] = weighted_covariance(
-                    ab_mean, ab_samples, np.ones(n, dtype=np.float64) / n
-                ).reshape(6, 6)
-
         collapsed_coordinates = SphericalCoordinates.from_kwargs(
             rho=means_sph[:, 0],
             lon=means_sph[:, 1],
@@ -472,38 +447,92 @@ class VariantEphemeris(qv.Table):
             frame=variants.coordinates.frame,
         )
 
-        if not has_aberrated:
-            return Ephemeris.from_kwargs(
-                orbit_id=orbit_id,
-                object_id=object_id,
-                coordinates=collapsed_coordinates,
-                predicted_magnitude_v=predicted_magnitude_v,
-            )
-
-        ab_time = Timestamp.from_kwargs(
-            days=pc.take(variants.aberrated_coordinates.time.days, starts.tolist()),
-            nanos=pc.take(variants.aberrated_coordinates.time.nanos, starts.tolist()),
-            scale=variants.aberrated_coordinates.time.scale,
-        )
-        ab_origin = Origin.from_kwargs(
-            code=pc.take(variants.aberrated_coordinates.origin.code, starts.tolist())
-        )
-        collapsed_aberrated = CartesianCoordinates.from_kwargs(
-            x=means_ab[:, 0],
-            y=means_ab[:, 1],
-            z=means_ab[:, 2],
-            vx=means_ab[:, 3],
-            vy=means_ab[:, 4],
-            vz=means_ab[:, 5],
-            covariance=CoordinateCovariances.from_matrix(cov_ab),
-            time=ab_time,
-            origin=ab_origin,
-            frame=variants.aberrated_coordinates.frame,
-        )
-        return Ephemeris.from_kwargs(
+        # Drop any existing aberrated coordinates and regenerate from the collapsed topocentric state.
+        ephemeris = Ephemeris.from_kwargs(
             orbit_id=orbit_id,
             object_id=object_id,
             coordinates=collapsed_coordinates,
             predicted_magnitude_v=predicted_magnitude_v,
-            aberrated_coordinates=collapsed_aberrated,
         )
+
+        observers = Observers.from_codes(
+            ephemeris.coordinates.origin.code, ephemeris.coordinates.time
+        )
+        observers_barycentric = observers.set_column(
+            "coordinates",
+            transform_coordinates(
+                observers.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            ),
+        )
+
+        topocentric = transform_coordinates(
+            ephemeris.coordinates, CartesianCoordinates, frame_out="ecliptic"
+        )
+        topo_vals = topocentric.values
+        obs_vals = observers_barycentric.coordinates.values
+        barycentric_vals = topo_vals + obs_vals
+
+        times_tdb_mjd = (
+            ephemeris.coordinates.time.rescale("tdb")
+            .mjd()
+            .to_numpy(zero_copy_only=False)
+        )
+        observer_positions = observers_barycentric.coordinates.r
+
+        # Use the same iterative light-time correction as ephemeris generation.
+        chunk_size = 200
+        aberrated_vals: np.ndarray = np.empty((0, 6), dtype=np.float64)
+        light_time: np.ndarray = np.empty((0,), dtype=np.float64)
+        for barycentric_chunk, times_chunk, observers_chunk in zip(
+            process_in_chunks(barycentric_vals, chunk_size),
+            process_in_chunks(times_tdb_mjd, chunk_size),
+            process_in_chunks(observer_positions, chunk_size),
+        ):
+            aberrated_chunk, light_time_chunk = add_light_time(
+                barycentric_chunk,
+                times_chunk,
+                observers_chunk,
+                lt_tol=1e-12,
+                mu=c.MU,
+                max_iter=100,
+                tol=1e-15,
+            )
+            aberrated_vals = np.concatenate(
+                (aberrated_vals, np.array(aberrated_chunk)), axis=0
+            )
+            light_time = np.concatenate((light_time, np.array(light_time_chunk)))
+
+        aberrated_vals = aberrated_vals[: len(ephemeris)]
+        light_time = light_time[: len(ephemeris)]
+
+        # add_light_time assumes a physically valid inertial state; if the collapsed
+        # topocentric state is not dynamically consistent, fall back to geometric
+        # light-time using topocentric range and keep the non-propagated barycentric state.
+        if not np.all(np.isfinite(light_time)):
+            light_time = np.linalg.norm(topo_vals[:, :3], axis=1) / c.C
+            aberrated_vals = barycentric_vals
+
+        emission_times = ephemeris.coordinates.time.rescale("tdb").add_fractional_days(
+            pa.array(-light_time, type=pa.float64())
+        )
+
+        aberrated_coordinates = CartesianCoordinates.from_kwargs(
+            x=aberrated_vals[:, 0],
+            y=aberrated_vals[:, 1],
+            z=aberrated_vals[:, 2],
+            vx=aberrated_vals[:, 3],
+            vy=aberrated_vals[:, 4],
+            vz=aberrated_vals[:, 5],
+            time=emission_times,
+            origin=Origin.from_kwargs(
+                code=np.full(len(ephemeris), OriginCodes.SOLAR_SYSTEM_BARYCENTER.name)
+            ),
+            frame="ecliptic",
+        )
+
+        return ephemeris.set_column(
+            "light_time", pa.array(light_time, type=pa.float64())
+        ).set_column("aberrated_coordinates", aberrated_coordinates)

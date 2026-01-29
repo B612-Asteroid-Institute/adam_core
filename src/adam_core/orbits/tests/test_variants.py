@@ -1,4 +1,5 @@
 import numpy as np
+import pyarrow.compute as pc
 import pytest
 
 from ...coordinates import CartesianCoordinates, Origin, SphericalCoordinates
@@ -311,7 +312,7 @@ def test_VariantEphemeris_collapse_by_object_id_wraps_longitude():
 
 
 def test_VariantEphemeris_collapse_by_object_id_partial_aberrated_raises():
-    """If aberrated coordinates are provided, they must be provided for all rows."""
+    """Aberrated coordinates are ignored/dropped and regenerated after collapse."""
     variant_ephemeris = VariantEphemeris.from_kwargs(
         orbit_id=["obj1", "obj1"],
         object_id=["obj1", "obj1"],
@@ -340,5 +341,38 @@ def test_VariantEphemeris_collapse_by_object_id_partial_aberrated_raises():
         ),
     )
 
-    with pytest.raises(AssertionError):
-        variant_ephemeris.collapse_by_object_id()
+    collapsed = variant_ephemeris.collapse_by_object_id()
+    assert len(collapsed) == 1
+    assert not pc.all(pc.is_null(collapsed.aberrated_coordinates.x)).as_py()
+    assert not pc.all(pc.is_null(collapsed.light_time)).as_py()
+
+
+def test_VariantEphemeris_collapse_by_object_id_aberrated_times_can_vary():
+    """Collapsed aberrated emission times should be consistent with light_time."""
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=["obj1", "obj1", "obj1"],
+        object_id=["obj1", "obj1", "obj1"],
+        variant_id=["0", "1", "2"],
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=[1.0, 1.1, 0.9],
+            lon=[1.0, 1.1, 0.9],
+            lat=[1.0, 1.1, 0.9],
+            vrho=[0.1, 0.11, 0.09],
+            vlon=[0.1, 0.11, 0.09],
+            vlat=[0.1, 0.11, 0.09],
+            time=Timestamp.from_mjd([60000.0] * 3, scale="utc"),
+            origin=Origin.from_kwargs(code=["500"] * 3),
+            frame="equatorial",
+        ),
+    )
+
+    collapsed = variant_ephemeris.collapse_by_object_id()
+    assert len(collapsed) == 1
+
+    coords_tdb = collapsed.coordinates.time.rescale("tdb")
+    aberr_tdb = collapsed.aberrated_coordinates.time.rescale("tdb")
+    delta_days, delta_nanos = coords_tdb.difference(aberr_tdb)
+    fractional_days = pc.divide(delta_nanos, 86400 * 1e9)
+    delta = pc.add(delta_days, fractional_days).to_numpy(zero_copy_only=False)
+    lt = collapsed.light_time.to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(delta, lt, atol=1e-6)
