@@ -18,12 +18,7 @@ def initialize_use_ray(
         #
         # - We don't need the dashboard in library usage (and it can bring in extra
         #   background services).
-        # - Disable metrics export endpoint to avoid Prometheus/metrics-agent setup work
-        #   and related timeouts in environments where metrics scraping is not used.
-        #   Empirically in our Ray version, `_metrics_export_port=-1` disables export
-        #   (whereas 0 selects an ephemeral port).
         kwargs.setdefault("include_dashboard", False)
-        kwargs.setdefault("_metrics_export_port", -1)
 
         # Initialize ray
         if not ray.is_initialized():
