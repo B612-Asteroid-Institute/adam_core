@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Tuple
 import jax.numpy as jnp
 import numpy as np
 import quivr as qv
+import ray
+from ray import ObjectRef
 from jax import config, jit, vmap
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -20,15 +22,6 @@ from ..utils.iter import _iterate_chunks
 from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
 
 config.update("jax_enable_x64", True)
-
-RAY_INSTALLED = False
-try:
-    import ray
-    from ray import ObjectRef
-
-    RAY_INSTALLED = True
-except ImportError:
-    pass
 
 
 @jit
@@ -183,20 +176,18 @@ def _propagate_2body_serial(
     )
 
 
-if RAY_INSTALLED:
-
-    @ray.remote
-    def propagate_2body_worker_ray(
-        start: int,
-        idx_chunk: np.ndarray,
-        orbits: Orbits,
-        times: Timestamp,
-        max_iter: int,
-        tol: float,
-    ) -> Tuple[int, Orbits]:
-        orbits_chunk = orbits.take(idx_chunk)
-        propagated = _propagate_2body_serial(orbits_chunk, times, max_iter=max_iter, tol=tol)
-        return start, propagated
+@ray.remote
+def propagate_2body_worker_ray(
+    start: int,
+    idx_chunk: np.ndarray,
+    orbits: Orbits,
+    times: Timestamp,
+    max_iter: int,
+    tol: float,
+) -> Tuple[int, Orbits]:
+    orbits_chunk = orbits.take(idx_chunk)
+    propagated = _propagate_2body_serial(orbits_chunk, times, max_iter=max_iter, tol=tol)
+    return start, propagated
 
 
 def propagate_2body(
@@ -235,9 +226,6 @@ def propagate_2body(
 
     if max_processes <= 1:
         return _propagate_2body_serial(orbits, times, max_iter=max_iter, tol=tol)
-
-    if RAY_INSTALLED is False:
-        raise ImportError("Ray must be installed to use the ray parallel backend")
 
     initialize_use_ray(num_cpus=max_processes)
 

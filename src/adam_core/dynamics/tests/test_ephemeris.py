@@ -17,13 +17,7 @@ from ...utils.helpers.orbits import make_real_orbits
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
 
-RAY_INSTALLED = False
-try:
-    import ray
-
-    RAY_INSTALLED = True
-except ImportError:
-    pass
+import ray
 
 OBJECT_IDS = [
     "594913 'Aylo'chaxnim (2020 AV2)",
@@ -277,7 +271,6 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
-@pytest.mark.skipif(not RAY_INSTALLED, reason="Ray not installed")
 def test_generate_ephemeris_2body_ray_matches_serial() -> None:
     if ray.is_initialized():  # type: ignore[name-defined]
         ray.shutdown()  # type: ignore[name-defined]

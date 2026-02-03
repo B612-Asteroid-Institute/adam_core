@@ -15,13 +15,7 @@ from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
-RAY_INSTALLED = False
-try:
-    import ray
-
-    RAY_INSTALLED = True
-except ImportError:
-    pass
+import ray
 
 
 def test__propagate_2body_against_spice_elliptical(orbital_elements):
@@ -529,7 +523,6 @@ def test_propagate_2body_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
-@pytest.mark.skipif(not RAY_INSTALLED, reason="Ray not installed")
 def test_propagate_2body_ray_matches_serial() -> None:
     # Ensure a clean local ray runtime for this test.
     if ray.is_initialized():  # type: ignore[name-defined]

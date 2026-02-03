@@ -5,6 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import pyarrow as pa
 import quivr as qv
+import ray
+from ray import ObjectRef
 from jax import jit, lax, vmap
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -23,15 +25,6 @@ from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
-
-RAY_INSTALLED = False
-try:
-    import ray
-    from ray import ObjectRef
-
-    RAY_INSTALLED = True
-except ImportError:
-    pass
 
 
 @jit
@@ -162,32 +155,30 @@ def _generate_ephemeris_2body_serial(
     )
 
 
-if RAY_INSTALLED:
-
-    @ray.remote
-    def ephemeris_2body_worker_ray(
-        start: int,
-        idx_chunk: np.ndarray,
-        propagated_orbits: Orbits,
-        observers: Observers,
-        lt_tol: float,
-        max_iter: int,
-        tol: float,
-        stellar_aberration: bool,
-        predict_magnitudes: bool,
-    ) -> Tuple[int, Ephemeris]:
-        prop_chunk = propagated_orbits.take(idx_chunk)
-        obs_chunk = observers.take(idx_chunk)
-        eph = _generate_ephemeris_2body_serial(
-            prop_chunk,
-            obs_chunk,
-            lt_tol=lt_tol,
-            max_iter=max_iter,
-            tol=tol,
-            stellar_aberration=stellar_aberration,
-            predict_magnitudes=predict_magnitudes,
-        )
-        return start, eph
+@ray.remote
+def ephemeris_2body_worker_ray(
+    start: int,
+    idx_chunk: np.ndarray,
+    propagated_orbits: Orbits,
+    observers: Observers,
+    lt_tol: float,
+    max_iter: int,
+    tol: float,
+    stellar_aberration: bool,
+    predict_magnitudes: bool,
+) -> Tuple[int, Ephemeris]:
+    prop_chunk = propagated_orbits.take(idx_chunk)
+    obs_chunk = observers.take(idx_chunk)
+    eph = _generate_ephemeris_2body_serial(
+        prop_chunk,
+        obs_chunk,
+        lt_tol=lt_tol,
+        max_iter=max_iter,
+        tol=tol,
+        stellar_aberration=stellar_aberration,
+        predict_magnitudes=predict_magnitudes,
+    )
+    return start, eph
 
 
 def generate_ephemeris_2body(
@@ -253,9 +244,6 @@ def generate_ephemeris_2body(
         max_processes = mp.cpu_count()
 
     if max_processes > 1:
-        if RAY_INSTALLED is False:
-            raise ImportError("Ray must be installed to use the ray parallel backend")
-
         initialize_use_ray(num_cpus=max_processes)
 
         num_entries = len(observers)
