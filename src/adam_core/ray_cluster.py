@@ -14,6 +14,15 @@ def initialize_use_ray(
     """
     use_ray = False
     if num_cpus is None or num_cpus > 1:
+        # Default Ray configuration for this codebase.
+        #
+        # - We don't need the dashboard in library usage (and it can bring in extra
+        #   background services).
+        # - Setting `_metrics_export_port=0` avoids binding to a fixed port. Note: in
+        #   Ray, port=0 means "choose an available port", not necessarily "disable".
+        kwargs.setdefault("include_dashboard", False)
+        kwargs.setdefault("_metrics_export_port", 0)
+
         # Initialize ray
         if not ray.is_initialized():
             logger.info("Ray is not initialized. Initializing...")
@@ -24,14 +33,13 @@ def initialize_use_ray(
             # Otherwise starting fresh.
             try:
                 logger.info("Attempting to connect to existing ray cluster...")
-                ray.init(address="auto")
+                ray.init(address="auto", **kwargs)
             except ConnectionError:
                 logger.info("Could not connect to existing ray cluster.")
                 logger.info(
                     f"Attempting ray with {num_cpus} cpus and {object_store_bytes} bytes."
                 )
                 ray.init(
-                    dashboard_host="0.0.0.0",
                     num_cpus=num_cpus,
                     object_store_memory=object_store_bytes,
                     **kwargs,
