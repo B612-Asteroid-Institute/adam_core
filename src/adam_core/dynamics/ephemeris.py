@@ -216,40 +216,36 @@ def generate_ephemeris_2body(
     chunk_size = 200
 
     # Process in chunks
-    ephemeris_spherical: np.ndarray = np.empty((0, 6))
-    light_time: np.ndarray = np.empty((0,))
-    aberrated_orbits: np.ndarray = np.empty((0, 6))
-
+    ephemeris_spherical = np.empty((num_entries, 6), dtype=np.float64)
+    light_time = np.empty((num_entries,), dtype=np.float64)
+    aberrated_orbits = np.empty((num_entries, 6), dtype=np.float64)
+    start = 0
     for orbits_chunk, times_chunk, observer_coords_chunk, mu_chunk in zip(
         process_in_chunks(propagated_orbits_barycentric.coordinates.values, chunk_size),
         process_in_chunks(times, chunk_size),
         process_in_chunks(observer_coordinates, chunk_size),
         process_in_chunks(mu, chunk_size),
     ):
-        ephemeris_chunk, light_time_chunk, aberrated_chunk = (
-            _generate_ephemeris_2body_vmap(
-                orbits_chunk,
-                times_chunk,
-                observer_coords_chunk,
-                mu_chunk,
-                lt_tol,
-                max_iter,
-                tol,
-                stellar_aberration,
-            )
+        valid = min(chunk_size, num_entries - start)
+        if valid <= 0:
+            break
+        ephemeris_chunk, light_time_chunk, aberrated_chunk = _generate_ephemeris_2body_vmap(
+            orbits_chunk,
+            times_chunk,
+            observer_coords_chunk,
+            mu_chunk,
+            lt_tol,
+            max_iter,
+            tol,
+            stellar_aberration,
         )
-        ephemeris_spherical = np.concatenate(
-            (ephemeris_spherical, np.asarray(ephemeris_chunk))
-        )
-        light_time = np.concatenate((light_time, np.asarray(light_time_chunk)))
-        aberrated_orbits = np.concatenate(
-            (aberrated_orbits, np.asarray(aberrated_chunk))
-        )
+        ephemeris_spherical[start : start + valid] = np.asarray(ephemeris_chunk)[:valid]
+        light_time[start : start + valid] = np.asarray(light_time_chunk)[:valid]
+        aberrated_orbits[start : start + valid] = np.asarray(aberrated_chunk)[:valid]
+        start += valid
 
-    # Concatenate chunks and remove padding
-    ephemeris_spherical = np.array(ephemeris_spherical)[:num_entries]
-    light_time = np.array(light_time)[:num_entries]
-    aberrated_orbits = np.array(aberrated_orbits)[:num_entries]
+    if start != num_entries:
+        raise RuntimeError(f"Internal error: expected {num_entries} ephemeris rows, got {start}")
 
     # Compute emission times by subtracting light-time (in days) from the observation times.
     emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(

@@ -13,6 +13,7 @@ from ...coordinates.origin import Origin
 from ...observers import Observers
 from ...orbits import Orbits
 from ...time import Timestamp
+from ...utils.helpers.orbits import make_real_orbits
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
 
@@ -244,3 +245,25 @@ def test_generate_ephemeris_2body_covariance_branch_uses_input_times() -> None:
     eph = generate_ephemeris_2body(orbits, observers, predict_magnitudes=False)
     assert eph.coordinates.covariance is not None
     assert eph.coordinates.covariance.to_matrix().shape == (1, 6, 6)
+
+
+def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
+    """
+    `process_in_chunks` pads the final chunk to a fixed size. Ensure ephemeris generation
+    only returns the true number of rows.
+    """
+    orbits = make_real_orbits(1)
+    orbit_mjd = orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    base_mjd = float(orbit_mjd[0])
+
+    n_times = 201  # not divisible by chunk_size=200
+    times = Timestamp.from_mjd(base_mjd + np.arange(n_times, dtype=np.float64), scale="tdb")
+    observers = Observers.from_code("500", times)
+
+    propagated = propagate_2body(orbits, times)
+    eph = generate_ephemeris_2body(propagated, observers, predict_magnitudes=False)
+
+    assert len(eph) == n_times
+    out_mjd = eph.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
+    in_mjd = times.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(out_mjd, in_mjd)

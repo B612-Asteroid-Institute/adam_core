@@ -126,22 +126,26 @@ def propagate_2body(
     physical_parameters_ = orbits.physical_parameters.take(pp_idx)
 
     # Process in chunks
-    orbits_propagated: np.ndarray = np.empty((0, 6))
+    num_entries = n_orbits * n_times
+    orbits_propagated = np.empty((num_entries, 6), dtype=np.float64)
+    start = 0
     for orbits_chunk, t0_chunk, t1_chunk, mu_chunk in zip(
         process_in_chunks(orbits_array_, chunk_size),
         process_in_chunks(t0_, chunk_size),
         process_in_chunks(t1_, chunk_size),
         process_in_chunks(mu, chunk_size),
     ):
+        valid = min(chunk_size, num_entries - start)
+        if valid <= 0:
+            break
         orbits_propagated_chunk = _propagate_2body_vmap(
             orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
         )
-        orbits_propagated = np.concatenate(
-            (orbits_propagated, np.asarray(orbits_propagated_chunk))
-        )
+        orbits_propagated[start : start + valid] = np.asarray(orbits_propagated_chunk)[:valid]
+        start += valid
 
-    # Remove padding
-    orbits_propagated = orbits_propagated[: n_orbits * n_times]
+    if start != num_entries:
+        raise RuntimeError(f"Internal error: expected {num_entries} propagated rows, got {start}")
 
     if not orbits.coordinates.covariance.is_all_nan():
         cartesian_covariances = orbits.coordinates.covariance.to_matrix()
