@@ -1,8 +1,10 @@
-from typing import Tuple
+import multiprocessing as mp
+from typing import Dict, List, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
 import pyarrow as pa
+import quivr as qv
 from jax import jit, lax, vmap
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -17,8 +19,19 @@ from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..photometry.magnitude import calculate_apparent_magnitude_v
+from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
+from ..utils.iter import _iterate_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
+
+RAY_INSTALLED = False
+try:
+    import ray
+    from ray import ObjectRef
+
+    RAY_INSTALLED = True
+except ImportError:
+    pass
 
 
 @jit
@@ -126,6 +139,57 @@ _generate_ephemeris_2body_vmap = jit(
 )
 
 
+def _generate_ephemeris_2body_serial(
+    propagated_orbits: Orbits,
+    observers: Observers,
+    *,
+    lt_tol: float,
+    max_iter: int,
+    tol: float,
+    stellar_aberration: bool,
+    predict_magnitudes: bool,
+) -> Ephemeris:
+    # Delegate to the public function's existing implementation, but without Ray.
+    return generate_ephemeris_2body(
+        propagated_orbits,
+        observers,
+        lt_tol=lt_tol,
+        max_iter=max_iter,
+        tol=tol,
+        stellar_aberration=stellar_aberration,
+        predict_magnitudes=predict_magnitudes,
+        max_processes=1,
+    )
+
+
+if RAY_INSTALLED:
+
+    @ray.remote
+    def ephemeris_2body_worker_ray(
+        start: int,
+        idx_chunk: np.ndarray,
+        propagated_orbits: Orbits,
+        observers: Observers,
+        lt_tol: float,
+        max_iter: int,
+        tol: float,
+        stellar_aberration: bool,
+        predict_magnitudes: bool,
+    ) -> Tuple[int, Ephemeris]:
+        prop_chunk = propagated_orbits.take(idx_chunk)
+        obs_chunk = observers.take(idx_chunk)
+        eph = _generate_ephemeris_2body_serial(
+            prop_chunk,
+            obs_chunk,
+            lt_tol=lt_tol,
+            max_iter=max_iter,
+            tol=tol,
+            stellar_aberration=stellar_aberration,
+            predict_magnitudes=predict_magnitudes,
+        )
+        return start, eph
+
+
 def generate_ephemeris_2body(
     propagated_orbits: Orbits,
     observers: Observers,
@@ -134,6 +198,9 @@ def generate_ephemeris_2body(
     tol: float = 1e-15,
     stellar_aberration: bool = False,
     predict_magnitudes: bool = True,
+    *,
+    max_processes: Optional[int] = 1,
+    chunk_size: int = 100,
 ) -> Ephemeris:
     """
     Generate on-sky ephemerides for each propagated orbit as viewed by the observers.
@@ -182,6 +249,54 @@ def generate_ephemeris_2body(
     ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (N)
         Topocentric ephemerides for each propagated orbit as observed by the given observers.
     """
+    if max_processes is None:
+        max_processes = mp.cpu_count()
+
+    if max_processes > 1:
+        if RAY_INSTALLED is False:
+            raise ImportError("Ray must be installed to use the ray parallel backend")
+
+        initialize_use_ray(num_cpus=max_processes)
+
+        num_entries = len(observers)
+        assert len(propagated_orbits) == num_entries
+
+        propagated_ref = ray.put(propagated_orbits)  # type: ignore[name-defined]
+        observers_ref = ray.put(observers)  # type: ignore[name-defined]
+
+        idx = np.arange(0, num_entries, dtype=np.int64)
+        pending: List["ObjectRef"] = []  # type: ignore[name-defined]
+        results: Dict[int, Ephemeris] = {}
+
+        for idx_chunk in _iterate_chunks(idx, chunk_size):
+            start = int(idx_chunk[0]) if len(idx_chunk) else 0
+            pending.append(
+                ephemeris_2body_worker_ray.remote(  # type: ignore[name-defined]
+                    start,
+                    idx_chunk,
+                    propagated_ref,
+                    observers_ref,
+                    lt_tol,
+                    max_iter,
+                    tol,
+                    stellar_aberration,
+                    predict_magnitudes,
+                )
+            )
+
+            if len(pending) >= max_processes * 1.5:
+                finished, pending = ray.wait(pending, num_returns=1)  # type: ignore[name-defined]
+                start_i, eph_i = ray.get(finished[0])  # type: ignore[name-defined]
+                results[int(start_i)] = eph_i
+
+        while pending:
+            finished, pending = ray.wait(pending, num_returns=1)  # type: ignore[name-defined]
+            start_i, eph_i = ray.get(finished[0])  # type: ignore[name-defined]
+            results[int(start_i)] = eph_i
+
+        chunks = [results[k] for k in sorted(results.keys())]
+        return qv.concatenate(chunks) if chunks else Ephemeris.empty()
+
     num_entries = len(observers)
     assert (
         len(propagated_orbits) == num_entries

@@ -17,6 +17,14 @@ from ...utils.helpers.orbits import make_real_orbits
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
 
+RAY_INSTALLED = False
+try:
+    import ray
+
+    RAY_INSTALLED = True
+except ImportError:
+    pass
+
 OBJECT_IDS = [
     "594913 'Aylo'chaxnim (2020 AV2)",
     "163693 Atira (2003 CP20)",
@@ -267,3 +275,42 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     out_mjd = eph.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
     in_mjd = times.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
     np.testing.assert_allclose(out_mjd, in_mjd)
+
+
+@pytest.mark.skipif(not RAY_INSTALLED, reason="Ray not installed")
+def test_generate_ephemeris_2body_ray_matches_serial() -> None:
+    if ray.is_initialized():  # type: ignore[name-defined]
+        ray.shutdown()  # type: ignore[name-defined]
+    ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
+
+    orbits = make_real_orbits(3)
+    base_mjd = float(np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)))
+    times = Timestamp.from_mjd(base_mjd + np.arange(30, dtype=np.float64), scale="tdb")
+
+    observers = Observers.from_code("500", times)
+    observers_tiled = qv.concatenate([observers] * len(orbits))
+
+    propagated = propagate_2body(orbits, times, max_processes=1)
+    serial = generate_ephemeris_2body(propagated, observers_tiled, predict_magnitudes=False, max_processes=1)
+    parallel = generate_ephemeris_2body(
+        propagated,
+        observers_tiled,
+        predict_magnitudes=False,
+        max_processes=2,
+        chunk_size=500,
+    )
+
+    assert len(serial) == len(parallel)
+    np.testing.assert_array_equal(
+        serial.orbit_id.to_numpy(zero_copy_only=False),
+        parallel.orbit_id.to_numpy(zero_copy_only=False),
+    )
+    np.testing.assert_allclose(serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0)
+    np.testing.assert_allclose(
+        serial.light_time.to_numpy(zero_copy_only=False),
+        parallel.light_time.to_numpy(zero_copy_only=False),
+        rtol=0,
+        atol=0,
+    )
+
+    ray.shutdown()  # type: ignore[name-defined]

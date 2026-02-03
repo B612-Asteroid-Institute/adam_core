@@ -15,6 +15,14 @@ from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
+RAY_INSTALLED = False
+try:
+    import ray
+
+    RAY_INSTALLED = True
+except ImportError:
+    pass
+
 
 def test__propagate_2body_against_spice_elliptical(orbital_elements):
     # Test propagation against SPICE for elliptical orbits.
@@ -519,6 +527,30 @@ def test_propagate_2body_does_not_include_padded_rows() -> None:
     out_mjd = propagated.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
     in_mjd = times.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
     np.testing.assert_allclose(out_mjd, in_mjd)
+
+
+@pytest.mark.skipif(not RAY_INSTALLED, reason="Ray not installed")
+def test_propagate_2body_ray_matches_serial() -> None:
+    # Ensure a clean local ray runtime for this test.
+    if ray.is_initialized():  # type: ignore[name-defined]
+        ray.shutdown()  # type: ignore[name-defined]
+    ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
+
+    orbits = make_real_orbits(5)
+    base_mjd = float(np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)))
+    times = Timestamp.from_mjd(base_mjd + np.arange(25, dtype=np.float64), scale="tdb")
+
+    serial = propagate_2body(orbits, times, max_processes=1)
+    parallel = propagate_2body(orbits, times, max_processes=2, chunk_size=2)
+
+    assert len(serial) == len(parallel)
+    np.testing.assert_array_equal(
+        serial.orbit_id.to_numpy(zero_copy_only=False),
+        parallel.orbit_id.to_numpy(zero_copy_only=False),
+    )
+    np.testing.assert_allclose(serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0)
+
+    ray.shutdown()  # type: ignore[name-defined]
 
 
 
