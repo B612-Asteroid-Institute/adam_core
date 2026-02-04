@@ -99,6 +99,28 @@ class MockPropagator(Propagator, EphemerisMixin):
         return qv.concatenate(ephemeris_list)
 
 
+class TimeMajorVariantPropagator(Propagator, EphemerisMixin):
+    """
+    Propagator that expands (variant_orbits, times) in time-major order:
+      [all variants @ t0, all variants @ t1, ...]
+
+    This intentionally exercises the ordering assumptions inside generic ephemeris generation.
+    """
+
+    def __getstate__(self):
+        return self.__dict__.copy()
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+    def _propagate_orbits(self, orbits: VariantOrbits, times: Timestamp) -> VariantOrbits:
+        out = []
+        for t in times:
+            repeated_time = qv.concatenate([t] * len(orbits))
+            out.append(orbits.set_column("coordinates.time", repeated_time))
+        return qv.concatenate(out)
+
+
 def test_propagator_single_worker():
     orbits = make_real_orbits(10)
     times = Timestamp.from_iso8601(["2020-01-01T00:00:00", "2020-01-01T00:00:01"])
@@ -112,6 +134,75 @@ def test_propagator_single_worker():
     have = prop.generate_ephemeris(orbits, observers)
 
     assert len(have) == len(orbits) * len(times)
+
+
+def test_generate_ephemeris_variant_orbits_pairs_observers_consistently():
+    # Two identical variants, three distinct observer states at distinct times.
+    # If variant propagation ordering and observer tiling are mismatched, the ephemeris
+    # at a single requested time will show an artificial spread across variants.
+    times = Timestamp.from_iso8601(
+        [
+            "2020-01-01T00:00:00Z",
+            "2020-01-01T00:00:01Z",
+            "2020-01-01T00:00:02Z",
+        ]
+    )
+    orbit_epoch = times[:1]
+    orbit_epoch_repeated = qv.concatenate([orbit_epoch] * 2)
+
+    variants = VariantOrbits.from_kwargs(
+        orbit_id=["o1", "o1"],
+        variant_id=["v0", "v1"],
+        object_id=["o1", "o1"],
+        weights=[0.5, 0.5],
+        weights_cov=[0.0, 0.0],
+        coordinates=CartesianCoordinates.from_kwargs(
+            # Identical variants: any spread at a fixed observer is a bug.
+            x=[2.0, 2.0],
+            y=[0.0, 0.0],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.0, 0.0],
+            vz=[0.0, 0.0],
+            time=orbit_epoch_repeated,
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    observers = Observers.from_kwargs(
+        code=["X05", "X05", "X05"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            # Deliberately distinct observer positions.
+            x=[1.0, 0.0, -1.0],
+            y=[0.0, 1.0, 0.0],
+            z=[0.0, 0.0, 0.0],
+            vx=[0.0, 0.0, 0.0],
+            vy=[0.0, 0.0, 0.0],
+            vz=[0.0, 0.0, 0.0],
+            time=times,
+            origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = TimeMajorVariantPropagator()
+    eph = prop.generate_ephemeris(variants, observers, max_processes=1, predict_magnitudes=False)
+
+    # Grab ephemeris rows at the first observer time (should be exactly 2 rows: v0, v1).
+    t0 = times[:1]
+    m = eph.coordinates.time.equals(t0, precision="ns")
+    i = np.nonzero(m.to_numpy(zero_copy_only=False))[0]
+    assert i.size == 2
+
+    lon = eph.coordinates.lon.to_numpy(zero_copy_only=False)[i]
+    lat = eph.coordinates.lat.to_numpy(zero_copy_only=False)[i]
+    rho = eph.coordinates.rho.to_numpy(zero_copy_only=False)[i]
+
+    # Identical variants at a fixed observer/time must produce identical ephemerides.
+    assert float(np.max(lon) - np.min(lon)) < 1e-10
+    assert float(np.max(lat) - np.min(lat)) < 1e-10
+    assert float(np.max(rho) - np.min(rho)) < 1e-12
 
 
 def test_generate_ephemeris_predicted_magnitudes_default_on():

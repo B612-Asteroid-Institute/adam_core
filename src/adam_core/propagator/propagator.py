@@ -995,6 +995,17 @@ class Propagator(ABC, EphemerisMixin):
         # by orbit id
         propagated = ensure_input_origin_and_frame(orbits, propagated)
 
-        return propagated.sort_by(
-            ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
-        )
+        # Deterministic ordering matters for downstream pairing (e.g. ephemeris generation).
+        # For VariantOrbits we must include variant_id; otherwise rows that share the same
+        # orbit_id + time can be arbitrarily ordered, which breaks 1:1 pairing assumptions.
+        if isinstance(propagated, VariantOrbits):
+            return propagated.sort_by(
+                [
+                    "orbit_id",
+                    "variant_id",
+                    "coordinates.time.days",
+                    "coordinates.time.nanos",
+                ]
+            )
+
+        return propagated.sort_by(["orbit_id", "coordinates.time.days", "coordinates.time.nanos"])
