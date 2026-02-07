@@ -2,6 +2,7 @@
 from .absolute_magnitude import estimate_absolute_magnitude_v_from_detections
 from .magnitude import (
     calculate_apparent_magnitude_v,
+    calculate_phase_angle,
     convert_magnitude,
     predict_magnitudes,
 )
@@ -9,6 +10,7 @@ from .magnitude import (
 __all__ = [
     # Simple magnitude system
     "calculate_apparent_magnitude_v",
+    "calculate_phase_angle",
     "convert_magnitude",
     "predict_magnitudes",
     # Inverse magnitude system
