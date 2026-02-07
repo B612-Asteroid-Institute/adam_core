@@ -203,7 +203,8 @@ def query_neocc(
         response.raise_for_status()
 
         data = _parse_oef(response.text)
-        if orbit_type == "ke":
+        # Depending on the query, the response may be empty and have no "time_system".
+        if orbit_type == "ke" and "time_system" in data:
 
             time_scale = data["time_system"]
             if time_scale == "TDT":
