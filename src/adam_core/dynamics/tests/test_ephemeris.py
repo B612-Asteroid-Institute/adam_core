@@ -12,6 +12,7 @@ from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...observers import Observers
 from ...orbits import Orbits
+from ...photometry import calculate_phase_angle
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..ephemeris import generate_ephemeris_2body
@@ -259,7 +260,9 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     base_mjd = float(orbit_mjd[0])
 
     n_times = 201  # not divisible by chunk_size=200
-    times = Timestamp.from_mjd(base_mjd + np.arange(n_times, dtype=np.float64), scale="tdb")
+    times = Timestamp.from_mjd(
+        base_mjd + np.arange(n_times, dtype=np.float64), scale="tdb"
+    )
     observers = Observers.from_code("500", times)
 
     propagated = propagate_2body(orbits, times)
@@ -271,20 +274,211 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
+def test_generate_ephemeris_2body_phase_angle_enabled() -> None:
+    # Simple opposition geometry in heliocentric coordinates: object at 2 AU on +x,
+    # observer at 1 AU on +x.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    eph = generate_ephemeris_2body(
+        orbits,
+        observers,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+        max_processes=1,
+    )
+    assert len(eph) == 1
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    have = eph.alpha.to_numpy(zero_copy_only=False)[0]
+    assert have == pytest.approx(0.0, abs=1e-6)
+
+
+def test_generate_ephemeris_2body_phase_angle_90deg() -> None:
+    # Quadrature: object at (1,0,0), observer at (1,1,0) -> phase angle 90°.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[1.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    eph = generate_ephemeris_2body(
+        orbits,
+        observers,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+        max_processes=1,
+    )
+    assert len(eph) == 1
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    have = eph.alpha.to_numpy(zero_copy_only=False)[0]
+    assert have == pytest.approx(90.0, abs=1e-6)
+
+
+def test_generate_ephemeris_2body_phase_angle_180deg() -> None:
+    # Conjunction: Sun -> object -> observer on same ray; phase angle 180°.
+    # Object at (2,0,0), observer at (3,0,0).
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[3.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    eph = generate_ephemeris_2body(
+        orbits,
+        observers,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+        max_processes=1,
+    )
+    assert len(eph) == 1
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    have = eph.alpha.to_numpy(zero_copy_only=False)[0]
+    assert have == pytest.approx(180.0, abs=1e-6)
+
+
+def test_generate_ephemeris_2body_phase_angle_matches_calculate_phase_angle() -> None:
+    # Cross-check: eph.alpha should match calculate_phase_angle for the same geometry.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    expected = calculate_phase_angle(orbits.coordinates, observers)
+    expected = np.asarray(expected, dtype=np.float64)
+
+    eph = generate_ephemeris_2body(
+        orbits,
+        observers,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+        max_processes=1,
+    )
+    have = eph.alpha.to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(have, expected, rtol=0.0, atol=1e-6)
+
+
 def test_generate_ephemeris_2body_ray_matches_serial() -> None:
     if ray.is_initialized():  # type: ignore[name-defined]
         ray.shutdown()  # type: ignore[name-defined]
     ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
 
     orbits = make_real_orbits(3)
-    base_mjd = float(np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)))
+    base_mjd = float(
+        np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False))
+    )
     times = Timestamp.from_mjd(base_mjd + np.arange(30, dtype=np.float64), scale="tdb")
 
     observers = Observers.from_code("500", times)
     observers_tiled = qv.concatenate([observers] * len(orbits))
 
     propagated = propagate_2body(orbits, times, max_processes=1)
-    serial = generate_ephemeris_2body(propagated, observers_tiled, predict_magnitudes=False, max_processes=1)
+    serial = generate_ephemeris_2body(
+        propagated, observers_tiled, predict_magnitudes=False, max_processes=1
+    )
     parallel = generate_ephemeris_2body(
         propagated,
         observers_tiled,
@@ -298,7 +492,9 @@ def test_generate_ephemeris_2body_ray_matches_serial() -> None:
         serial.orbit_id.to_numpy(zero_copy_only=False),
         parallel.orbit_id.to_numpy(zero_copy_only=False),
     )
-    np.testing.assert_allclose(serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0)
+    np.testing.assert_allclose(
+        serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0
+    )
     np.testing.assert_allclose(
         serial.light_time.to_numpy(zero_copy_only=False),
         parallel.light_time.to_numpy(zero_copy_only=False),

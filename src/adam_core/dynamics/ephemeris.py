@@ -20,7 +20,7 @@ from ..coordinates.transform import _cartesian_to_spherical, transform_coordinat
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
-from ..photometry.magnitude import calculate_apparent_magnitude_v
+from ..photometry.magnitude import calculate_apparent_magnitude_v, calculate_phase_angle
 from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
@@ -141,6 +141,7 @@ def _generate_ephemeris_2body_serial(
     tol: float,
     stellar_aberration: bool,
     predict_magnitudes: bool,
+    predict_phase_angle: bool,
 ) -> Ephemeris:
     # Delegate to the public function's existing implementation, but without Ray.
     return generate_ephemeris_2body(
@@ -151,6 +152,7 @@ def _generate_ephemeris_2body_serial(
         tol=tol,
         stellar_aberration=stellar_aberration,
         predict_magnitudes=predict_magnitudes,
+        predict_phase_angle=predict_phase_angle,
         max_processes=1,
     )
 
@@ -166,6 +168,7 @@ def ephemeris_2body_worker_ray(
     tol: float,
     stellar_aberration: bool,
     predict_magnitudes: bool,
+    predict_phase_angle: bool,
 ) -> Tuple[int, Ephemeris]:
     prop_chunk = propagated_orbits.take(idx_chunk)
     obs_chunk = observers.take(idx_chunk)
@@ -177,6 +180,7 @@ def ephemeris_2body_worker_ray(
         tol=tol,
         stellar_aberration=stellar_aberration,
         predict_magnitudes=predict_magnitudes,
+        predict_phase_angle=predict_phase_angle,
     )
     return start, eph
 
@@ -190,6 +194,7 @@ def generate_ephemeris_2body(
     stellar_aberration: bool = False,
     predict_magnitudes: bool = True,
     *,
+    predict_phase_angle: bool = False,
     max_processes: Optional[int] = 1,
     chunk_size: int = 100,
 ) -> Ephemeris:
@@ -269,6 +274,7 @@ def generate_ephemeris_2body(
                     tol,
                     stellar_aberration,
                     predict_magnitudes,
+                    predict_phase_angle,
                 )
             )
 
@@ -332,15 +338,17 @@ def generate_ephemeris_2body(
         valid = min(chunk_size, num_entries - start)
         if valid <= 0:
             break
-        ephemeris_chunk, light_time_chunk, aberrated_chunk = _generate_ephemeris_2body_vmap(
-            orbits_chunk,
-            times_chunk,
-            observer_coords_chunk,
-            mu_chunk,
-            lt_tol,
-            max_iter,
-            tol,
-            stellar_aberration,
+        ephemeris_chunk, light_time_chunk, aberrated_chunk = (
+            _generate_ephemeris_2body_vmap(
+                orbits_chunk,
+                times_chunk,
+                observer_coords_chunk,
+                mu_chunk,
+                lt_tol,
+                max_iter,
+                tol,
+                stellar_aberration,
+            )
         )
         ephemeris_spherical[start : start + valid] = np.asarray(ephemeris_chunk)[:valid]
         light_time[start : start + valid] = np.asarray(light_time_chunk)[:valid]
@@ -348,7 +356,9 @@ def generate_ephemeris_2body(
         start += valid
 
     if start != num_entries:
-        raise RuntimeError(f"Internal error: expected {num_entries} ephemeris rows, got {start}")
+        raise RuntimeError(
+            f"Internal error: expected {num_entries} ephemeris rows, got {start}"
+        )
 
     # Compute emission times by subtracting light-time (in days) from the observation times.
     emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
@@ -419,13 +429,24 @@ def generate_ephemeris_2body(
         aberrated_coordinates=aberrated_coordinates,
     )
 
-    if not predict_magnitudes:
+    want_alpha = bool(predict_phase_angle)
+    want_mags = bool(predict_magnitudes)
+
+    if not want_alpha and not want_mags:
         return ephemeris
 
-    H_v = propagated_orbits.physical_parameters.H_v.to_numpy(zero_copy_only=False)
-    G = propagated_orbits.physical_parameters.G.to_numpy(zero_copy_only=False)
-    has_params = np.isfinite(H_v) & np.isfinite(G)
-    if not np.any(has_params):
+    # Determine whether we can compute magnitudes (needs H and G).
+    has_params = None
+    H_v = None
+    G = None
+    if want_mags:
+        H_v = propagated_orbits.physical_parameters.H_v.to_numpy(zero_copy_only=False)
+        G = propagated_orbits.physical_parameters.G.to_numpy(zero_copy_only=False)
+        has_params = np.isfinite(H_v) & np.isfinite(G)
+        if not np.any(has_params):
+            want_mags = False
+
+    if not want_alpha and not want_mags:
         return ephemeris
 
     # Transform object and observer coordinates to heliocentric for photometry.
@@ -445,15 +466,30 @@ def generate_ephemeris_2body(
         ),
     )
 
-    mags = calculate_apparent_magnitude_v(
-        H_v=H_v,
-        object_coords=aberrated_heliocentric,
-        observer=observers_heliocentric,
-        G=G,
-    )
-    mags = np.asarray(mags, dtype=np.float64)
-    valid = has_params & np.isfinite(mags)
-    ephemeris = ephemeris.set_column(
-        "predicted_magnitude_v", pa.array(mags, mask=~valid, type=pa.float64())
-    )
+    if want_alpha:
+        alpha_deg = calculate_phase_angle(
+            aberrated_heliocentric, observers_heliocentric
+        )
+        alpha_deg = np.asarray(alpha_deg, dtype=np.float64)
+        ephemeris = ephemeris.set_column(
+            "alpha",
+            pa.array(alpha_deg, mask=~np.isfinite(alpha_deg), type=pa.float64()),
+        )
+
+    if want_mags:
+        assert H_v is not None
+        assert G is not None
+        assert has_params is not None
+
+        mags = calculate_apparent_magnitude_v(
+            H_v=H_v,
+            object_coords=aberrated_heliocentric,
+            observer=observers_heliocentric,
+            G=G,
+        )
+        mags = np.asarray(mags, dtype=np.float64)
+        valid = has_params & np.isfinite(mags)
+        ephemeris = ephemeris.set_column(
+            "predicted_magnitude_v", pa.array(mags, mask=~valid, type=pa.float64())
+        )
     return ephemeris

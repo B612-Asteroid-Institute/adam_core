@@ -19,7 +19,7 @@ from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
-from ..photometry.magnitude import calculate_apparent_magnitude_v
+from ..photometry.magnitude import calculate_apparent_magnitude_v, calculate_phase_angle
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
@@ -424,6 +424,7 @@ class EphemerisMixin:
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
         predict_magnitudes: bool = True,
+        predict_phase_angle: bool = False,
     ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -609,6 +610,7 @@ class EphemerisMixin:
                 orbits=orbits,
                 observers=observers,
                 predict_magnitudes=predict_magnitudes,
+                predict_phase_angle=predict_phase_angle,
             )
 
         if covariance is True and len(variant_ephemeris) > 0:
@@ -641,6 +643,7 @@ class EphemerisMixin:
             orbits=orbits,
             observers=observers,
             predict_magnitudes=predict_magnitudes,
+            predict_phase_angle=predict_phase_angle,
         )
 
     def _attach_predicted_magnitude_v(
@@ -649,8 +652,9 @@ class EphemerisMixin:
         orbits: OrbitType,
         observers: ObserverType,
         predict_magnitudes: bool,
+        predict_phase_angle: bool,
     ) -> EphemerisType:
-        if not predict_magnitudes or len(ephemeris) == 0:
+        if (not predict_magnitudes and not predict_phase_angle) or len(ephemeris) == 0:
             return ephemeris
 
         # Need emission-time cartesian state.
@@ -666,14 +670,24 @@ class EphemerisMixin:
             if isinstance(observers, ObjectRef):  # type: ignore[name-defined]
                 observers_value = ray.get(observers)  # type: ignore[name-defined]
 
-        H_v, G = _hg_params_for_ephemeris_rows_arrow(
-            orbit_id=orbits_value.orbit_id,
-            H_v=orbits_value.physical_parameters.H_v,
-            G=orbits_value.physical_parameters.G,
-            ephemeris_orbit_id=ephemeris.orbit_id,
-        )
-        has_params = np.isfinite(H_v) & np.isfinite(G)
-        if not np.any(has_params):
+        want_mags = bool(predict_magnitudes)
+        want_alpha = bool(predict_phase_angle)
+
+        H_v: npt.NDArray[np.float64] | None = None
+        G: npt.NDArray[np.float64] | None = None
+        has_params: npt.NDArray[np.bool_] | None = None
+        if want_mags:
+            H_v, G = _hg_params_for_ephemeris_rows_arrow(
+                orbit_id=orbits_value.orbit_id,
+                H_v=orbits_value.physical_parameters.H_v,
+                G=orbits_value.physical_parameters.G,
+                ephemeris_orbit_id=ephemeris.orbit_id,
+            )
+            has_params = np.isfinite(H_v) & np.isfinite(G)
+            if not np.any(has_params):
+                want_mags = False
+
+        if not want_alpha and not want_mags:
             return ephemeris
 
         # Align observers to ephemeris rows by (code, days, nanos).
@@ -711,16 +725,31 @@ class EphemerisMixin:
             ),
         )
 
-        mags = calculate_apparent_magnitude_v(
-            H_v=H_v,
-            object_coords=obj_helio,
-            observer=obs_helio,
-            G=G,
-        )
-        mags = np.asarray(mags, dtype=np.float64)
-        valid = has_params & np.isfinite(mags)
-        predicted = pa.array(mags, mask=~valid, type=pa.float64())
-        return ephemeris.set_column("predicted_magnitude_v", predicted)
+        if want_alpha:
+            alpha_deg = calculate_phase_angle(obj_helio, obs_helio)
+            alpha_deg = np.asarray(alpha_deg, dtype=np.float64)
+            ephemeris = ephemeris.set_column(
+                "alpha",
+                pa.array(alpha_deg, mask=~np.isfinite(alpha_deg), type=pa.float64()),
+            )
+
+        if want_mags:
+            assert H_v is not None
+            assert G is not None
+            assert has_params is not None
+
+            mags = calculate_apparent_magnitude_v(
+                H_v=H_v,
+                object_coords=obj_helio,
+                observer=obs_helio,
+                G=G,
+            )
+            mags = np.asarray(mags, dtype=np.float64)
+            valid = has_params & np.isfinite(mags)
+            predicted = pa.array(mags, mask=~valid, type=pa.float64())
+            ephemeris = ephemeris.set_column("predicted_magnitude_v", predicted)
+
+        return ephemeris
 
 
 class Propagator(ABC, EphemerisMixin):
@@ -1008,4 +1037,6 @@ class Propagator(ABC, EphemerisMixin):
                 ]
             )
 
-        return propagated.sort_by(["orbit_id", "coordinates.time.days", "coordinates.time.nanos"])
+        return propagated.sort_by(
+            ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
+        )

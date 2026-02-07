@@ -9,6 +9,7 @@ import pyarrow.compute as pc
 from jax import jit
 
 from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
 from ..utils.chunking import process_in_chunks
@@ -59,6 +60,113 @@ def _validate_hg_geometry(
             "Invalid photometry geometry for H-G model: "
             f"{n_bad} rows have non-finite or non-positive distances (r<=0 or delta<=0)."
         )
+
+
+def calculate_phase_angle(
+    object_coords: CartesianCoordinates,
+    observers: Observers,
+) -> npt.NDArray[np.float64]:
+    """
+    Calculate the solar phase angle (Sun–object–observer) in degrees.
+
+    "Phase angle" here is the angle at the object between the Sun direction and the
+    observer direction. It is commonly used for simple photometry/visibility metrics.
+
+    Notes
+    -----
+    This helper expects **heliocentric** coordinates (origin = `OriginCodes.SUN`) for both
+    the object and the observer. If you have barycentric coordinates, transform first.
+
+    Parameters
+    ----------
+    object_coords
+        Object Cartesian coordinates in AU (origin must be SUN).
+    observers
+        Observer states (origin must be SUN).
+
+    Returns
+    -------
+    phase_angle_deg
+        Phase angle in degrees for each paired row.
+
+    Examples
+    --------
+    Given an `Ephemeris` `eph` from a propagator and corresponding `Observers` `obs`:
+
+    - Use `eph.coordinates` for on-sky (RA/Dec, rho) values.
+    - Use `eph.aberrated_coordinates` for emission-time geometry, and transform to heliocentric:
+
+    ```python
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.origin import OriginCodes
+    from adam_core.coordinates.transform import transform_coordinates
+    from adam_core.photometry import calculate_phase_angle
+    from adam_core.observers import Observers
+
+    observers_eph = Observers.from_codes(eph.coordinates.origin.code, eph.coordinates.time)
+
+    obj_helio = transform_coordinates(
+        eph.aberrated_coordinates,
+        CartesianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+    obs_helio = observers_eph.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers_eph.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SUN,
+        ),
+    )
+    alpha_deg = calculate_phase_angle(obj_helio, obs_helio)
+    ```
+    """
+    n_obj = len(object_coords)
+    n_obs = len(observers)
+    if n_obs != n_obj:
+        raise ValueError(
+            f"observers length ({n_obs}) must match object_coords length ({n_obj})"
+        )
+
+    if not np.all(object_coords.origin == OriginCodes.SUN):
+        raise ValueError(
+            "object_coords must be heliocentric (origin=SUN). "
+            "Use transform_coordinates(..., origin_out=OriginCodes.SUN) first."
+        )
+    if not np.all(observers.coordinates.origin == OriginCodes.SUN):
+        raise ValueError(
+            "observers.coordinates must be heliocentric (origin=SUN). "
+            "Use transform_coordinates(..., origin_out=OriginCodes.SUN) first."
+        )
+    if object_coords.frame != observers.coordinates.frame:
+        raise ValueError(
+            "object_coords and observers must be expressed in the same frame "
+            f"(got {object_coords.frame!r} vs {observers.coordinates.frame!r})."
+        )
+
+    object_pos = np.asarray(object_coords.r, dtype=np.float64)
+    observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
+    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
+
+    # Distances (AU). We compute alpha via the law of cosines:
+    # cos(alpha) = (r^2 + delta^2 - R^2) / (2 r delta)
+    r = np.sqrt(np.sum(object_pos * object_pos, axis=1))
+    delta_vec = object_pos - observer_pos
+    delta = np.sqrt(np.sum(delta_vec * delta_vec, axis=1))
+    R = np.sqrt(np.sum(observer_pos * observer_pos, axis=1))
+
+    # Law of cosines in the Sun-object-observer triangle.
+    cos_alpha = (r * r + delta * delta - R * R) / (2.0 * r * delta)
+    cos_alpha = np.clip(cos_alpha, -1.0, 1.0)
+
+    # Stable conversion from cos(alpha) -> alpha without arccos().
+    # This is numerically well-behaved near 0 and 180 degrees.
+    y = np.sqrt(np.maximum(0.0, 1.0 - cos_alpha))
+    x = np.sqrt(np.maximum(0.0, 1.0 + cos_alpha))
+    alpha_rad = 2.0 * np.arctan2(y, x)
+    return np.degrees(alpha_rad)
 
 
 def convert_magnitude(

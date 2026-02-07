@@ -18,6 +18,7 @@ from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
 from ...orbits.physical_parameters import PhysicalParameters
 from ...orbits.variants import VariantOrbits
+from ...photometry import calculate_phase_angle
 from ...time.time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..propagator import EphemerisMixin, Propagator
@@ -113,7 +114,9 @@ class TimeMajorVariantPropagator(Propagator, EphemerisMixin):
     def __setstate__(self, state):
         self.__dict__.update(state)
 
-    def _propagate_orbits(self, orbits: VariantOrbits, times: Timestamp) -> VariantOrbits:
+    def _propagate_orbits(
+        self, orbits: VariantOrbits, times: Timestamp
+    ) -> VariantOrbits:
         out = []
         for t in times:
             repeated_time = qv.concatenate([t] * len(orbits))
@@ -187,7 +190,9 @@ def test_generate_ephemeris_variant_orbits_pairs_observers_consistently():
     )
 
     prop = TimeMajorVariantPropagator()
-    eph = prop.generate_ephemeris(variants, observers, max_processes=1, predict_magnitudes=False)
+    eph = prop.generate_ephemeris(
+        variants, observers, max_processes=1, predict_magnitudes=False
+    )
 
     # Grab ephemeris rows at the first observer time (should be exactly 2 rows: v0, v1).
     t0 = times[:1]
@@ -247,6 +252,287 @@ def test_generate_ephemeris_predicted_magnitudes_default_on():
     expected = 15.0 + 5.0 * np.log10(2.0 * 1.0)
     have = eph.predicted_magnitude_v.to_numpy(zero_copy_only=False)[0]
     assert have == pytest.approx(expected, abs=1e-8)
+
+
+def test_generate_ephemeris_phase_angle_default_off() -> None:
+    # Simple opposition geometry: object at 2 AU on +x, observer at 1 AU on +x.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0], G=[0.15]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris(orbits, observers, max_processes=1)
+
+    assert pc.all(pc.is_null(eph.alpha)).as_py()
+
+
+def test_generate_ephemeris_phase_angle_enabled() -> None:
+    # Simple opposition geometry: object at 2 AU on +x, observer at 1 AU on +x.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        # Phase angle should not depend on photometric parameters.
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[None], G=[None]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris(
+        orbits,
+        observers,
+        max_processes=1,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+    )
+
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    have = eph.alpha.to_numpy(zero_copy_only=False)[0]
+    assert have == pytest.approx(0.0, abs=1e-10)
+
+
+def test_generate_ephemeris_phase_angle_90deg() -> None:
+    # Quadrature: object at (1,0,0), observer at (1,1,0) -> phase angle 90°.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[None], G=[None]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[1.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris(
+        orbits,
+        observers,
+        max_processes=1,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+    )
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    have = eph.alpha.to_numpy(zero_copy_only=False)[0]
+    assert have == pytest.approx(90.0, abs=1e-10)
+
+
+def test_generate_ephemeris_phase_angle_180deg() -> None:
+    # Conjunction: Sun -> object -> observer on same ray; phase angle 180°.
+    # Object at (2,0,0), observer at (3,0,0).
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[None], G=[None]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[3.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris(
+        orbits,
+        observers,
+        max_processes=1,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+    )
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    have = eph.alpha.to_numpy(zero_copy_only=False)[0]
+    assert have == pytest.approx(180.0, abs=1e-10)
+
+
+def test_generate_ephemeris_phase_angle_matches_calculate_phase_angle() -> None:
+    # Cross-check: eph.alpha should match calculate_phase_angle for the same geometry.
+    # Single orbit and observer so ephemeris has one row and expected has one value.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[None], G=[None]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    expected = calculate_phase_angle(orbits.coordinates, observers)
+    expected = np.asarray(expected, dtype=np.float64)
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris(
+        orbits,
+        observers,
+        max_processes=1,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+    )
+    have = eph.alpha.to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(have, expected, rtol=0.0, atol=1e-10)
+
+
+def test_generate_ephemeris_phase_angle_and_magnitude_both_enabled() -> None:
+    # Both predict_magnitudes and predict_phase_angle True; both columns populated.
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        physical_parameters=PhysicalParameters.from_kwargs(H_v=[15.0], G=[0.15]),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    prop = MockPropagator()
+    eph = prop.generate_ephemeris(
+        orbits,
+        observers,
+        max_processes=1,
+        predict_magnitudes=True,
+        predict_phase_angle=True,
+    )
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    assert not pc.all(pc.is_null(eph.predicted_magnitude_v)).as_py()
+    assert eph.alpha.to_numpy(zero_copy_only=False)[0] == pytest.approx(0.0, abs=1e-10)
 
 
 def test_generate_ephemeris_for_exposures_returns_v_magnitudes():
