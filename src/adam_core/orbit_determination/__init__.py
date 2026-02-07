@@ -1,6 +1,10 @@
 # flake8: noqa: F401
 from .differential_correction import fit_least_squares
-from .evaluate import OrbitDeterminationObservations, evaluate_orbits
+from .evaluate import (
+    OrbitDeterminationObservations,
+    evaluate_orbits,
+    mpc_to_od_observations,
+)
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import gaussIOD
 from .gibbs import calcGibbs

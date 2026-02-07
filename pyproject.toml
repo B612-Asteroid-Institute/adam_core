@@ -43,6 +43,7 @@ dependencies = [
   "scipy",
   "spiceypy",
   "quivr>=0.8.1",
+  "mpcq",
   "mpc-obscodes",
   "naif-de440",
   "naif-leapseconds",
