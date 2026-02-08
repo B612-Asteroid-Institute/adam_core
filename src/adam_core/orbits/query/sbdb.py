@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 from typing import Any, List
 
 import numpy as np

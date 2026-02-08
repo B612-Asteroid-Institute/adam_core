@@ -5,6 +5,7 @@ import numpy as np
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
+import ray
 from astropy import units as u
 
 from ...coordinates.cartesian import CartesianCoordinates
@@ -17,8 +18,6 @@ from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
-
-import ray
 
 OBJECT_IDS = [
     "594913 'Aylo'chaxnim (2020 AV2)",

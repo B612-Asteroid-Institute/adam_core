@@ -6,8 +6,8 @@ import numpy as np
 import pyarrow as pa
 import quivr as qv
 import ray
-from ray import ObjectRef
 from jax import jit, lax, vmap
+from ray import ObjectRef
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import (

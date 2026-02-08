@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import quivr as qv
 import ray
-from ray import ObjectRef
 from jax import config, jit, vmap
+from ray import ObjectRef
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import (
@@ -129,11 +129,15 @@ def _propagate_2body_serial(
         orbits_propagated_chunk = _propagate_2body_vmap(
             orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
         )
-        orbits_propagated[start : start + valid] = np.asarray(orbits_propagated_chunk)[:valid]
+        orbits_propagated[start : start + valid] = np.asarray(orbits_propagated_chunk)[
+            :valid
+        ]
         start += valid
 
     if start != num_entries:
-        raise RuntimeError(f"Internal error: expected {num_entries} propagated rows, got {start}")
+        raise RuntimeError(
+            f"Internal error: expected {num_entries} propagated rows, got {start}"
+        )
 
     if not orbits.coordinates.covariance.is_all_nan():
         cartesian_covariances = orbits.coordinates.covariance.to_matrix()
@@ -155,7 +159,9 @@ def _propagate_2body_serial(
     else:
         cartesian_covariances = None
 
-    origin_code = np.repeat(orbits.coordinates.origin.code.to_numpy(zero_copy_only=False), n_times)
+    origin_code = np.repeat(
+        orbits.coordinates.origin.code.to_numpy(zero_copy_only=False), n_times
+    )
 
     return Orbits.from_kwargs(
         orbit_id=orbit_ids_,
@@ -186,7 +192,9 @@ def propagate_2body_worker_ray(
     tol: float,
 ) -> Tuple[int, Orbits]:
     orbits_chunk = orbits.take(idx_chunk)
-    propagated = _propagate_2body_serial(orbits_chunk, times, max_iter=max_iter, tol=tol)
+    propagated = _propagate_2body_serial(
+        orbits_chunk, times, max_iter=max_iter, tol=tol
+    )
     return start, propagated
 
 

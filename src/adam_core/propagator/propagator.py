@@ -380,35 +380,33 @@ class EphemerisMixin:
             )
         elif isinstance(orbits, VariantOrbits):
 
-            # Sort input orbits by orbit_id and time to match the sorted propagated orbits
-            # (we need this so we can properly tile weights and weights_cov)
+            # Propagated order is (orbit_id, variant_id, time) to match observer tiling
+            # [observers]*len(orbits). Sort input the same way and repeat each variant's
+            # weight for each time so row i gets the weight for the variant at that row.
             orbits_sorted = orbits.sort_by(
-                ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
+                [
+                    "orbit_id",
+                    "variant_id",
+                    "coordinates.time.days",
+                    "coordinates.time.nanos",
+                ]
             )
 
+            n_obs = len(observers)
+            weights_np = orbits_sorted.weights.to_numpy(zero_copy_only=False)
+            weights_cov_np = orbits_sorted.weights_cov.to_numpy(zero_copy_only=False)
             ephemeris = VariantEphemeris.from_kwargs(
                 orbit_id=propagated_orbits_barycentric.orbit_id,
                 object_id=propagated_orbits_barycentric.object_id,
+                variant_id=propagated_orbits_barycentric.variant_id,
                 coordinates=spherical_coordinates,
-                weights=np.tile(
-                    orbits_sorted.weights.to_numpy(zero_copy_only=False), len(observers)
-                ),
-                weights_cov=np.tile(
-                    orbits_sorted.weights_cov.to_numpy(zero_copy_only=False),
-                    len(observers),
-                ),
+                weights=np.repeat(weights_np, n_obs),
+                weights_cov=np.repeat(weights_cov_np, n_obs),
                 aberrated_coordinates=propagated_orbits_aberrated.coordinates,
             )
 
-        ephemeris = ephemeris.sort_by(
-            [
-                "orbit_id",
-                "coordinates.time.days",
-                "coordinates.time.nanos",
-                "coordinates.origin.code",
-            ]
-        )
-
+        # Return in same order as propagate_orbits: (orbit_id, variant_id, time) or
+        # (orbit_id, time). No sort here; callers use .sort_by() or .select()/.apply_mask().
         return ephemeris
 
     def generate_ephemeris(
@@ -457,9 +455,10 @@ class EphemerisMixin:
 
         Returns
         -------
-        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (M)
-            Predicted ephemerides for each orbit observed by each
-            observer.
+        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` or `~adam_core.orbits.variants.VariantEphemeris`
+            Predicted ephemerides. Row order matches :meth:`propagate_orbits`: (orbit_id, time)
+            or (orbit_id, variant_id, time) for variant ephemeris. Use .sort_by() or
+            .select()/.apply_mask() for other orderings or grouping.
         """
         # If sending in VariantOrbits, we make sure not to run covariance
         assert (covariance is False) or (
@@ -565,6 +564,27 @@ class EphemerisMixin:
                         f"Unexpected result type from ephemeris worker: {type(result)}"
                     )
 
+            # Concatenation was in completion order; sort to canonical order.
+            if len(ephemeris) > 0:
+                ephemeris = ephemeris.sort_by(
+                    [
+                        "orbit_id",
+                        "coordinates.time.days",
+                        "coordinates.time.nanos",
+                        "coordinates.origin.code",
+                    ]
+                )
+            if len(variant_ephemeris) > 0:
+                variant_ephemeris = variant_ephemeris.sort_by(
+                    [
+                        "orbit_id",
+                        "variant_id",
+                        "coordinates.time.days",
+                        "coordinates.time.nanos",
+                        "coordinates.origin.code",
+                    ]
+                )
+
         else:
             results = self._generate_ephemeris(orbits, observers)
             if isinstance(results, Ephemeris):
@@ -596,15 +616,6 @@ class EphemerisMixin:
             )
 
             # We were given VariantOrbits as an input, so return VariantEphemeris
-            variant_ephemeris = variant_ephemeris.sort_by(
-                [
-                    "orbit_id",
-                    "variant_id",
-                    "coordinates.time.days",
-                    "coordinates.time.nanos",
-                    "coordinates.origin.code",
-                ]
-            )
             return self._attach_predicted_magnitude_v(
                 variant_ephemeris,
                 orbits=orbits,
@@ -630,14 +641,6 @@ class EphemerisMixin:
             ephemeris.coordinates.time.rescale("utc"),
         )
 
-        ephemeris = ephemeris.sort_by(
-            [
-                "orbit_id",
-                "coordinates.time.days",
-                "coordinates.time.nanos",
-                "coordinates.origin.code",
-            ]
-        )
         return self._attach_predicted_magnitude_v(
             ephemeris,
             orbits=orbits,
@@ -839,7 +842,9 @@ class Propagator(ABC, EphemerisMixin):
         orbits : `~adam_core.orbits.orbits.Orbits` (N)
             Orbits to propagate.
         times : Timestamp (M)
-            Times to which to propagate orbits.
+            Times to which to propagate orbits. Sorted chronologically before
+            calling the backend so integrators (e.g. ASSIST, REBOUND) receive
+            time-ordered epochs for efficient stepping.
         covariance : bool, optional
             Propagate the covariance matrices of the orbits. This is done by sampling the
             orbits from their covariance matrices and propagating each sample. The covariance
@@ -860,13 +865,21 @@ class Propagator(ABC, EphemerisMixin):
         Returns
         -------
         propagated : `~adam_core.orbits.orbits.Orbits` or `~adam_core.orbits.variants.VariantOrbits`
-            Propagated orbits.
+            Propagated orbits. Rows are ordered (orbit_id, time) for Orbits and
+            (orbit_id, variant_id, time) for VariantOrbits. Use .sort_by() or
+            .select()/.apply_mask() for other orderings or grouping.
         """
         if covariance is True and isinstance(orbits, VariantOrbits):
             raise AssertionError("Covariance is not supported for VariantOrbits")
 
         if max_processes is None:
             max_processes = mp.cpu_count()
+
+        # Resolve times and sort chronologically so backends (ASSIST, REBOUND, etc.)
+        # receive time-ordered epochs for efficient integration.
+        if isinstance(times, ObjectRef):
+            times = ray.get(times)
+        times = times.sort_by(["days", "nanos"])
 
         if max_processes > 1:
             propagated_list: List[Orbits] = []
@@ -882,13 +895,7 @@ class Propagator(ABC, EphemerisMixin):
 
             initialize_use_ray(num_cpus=max_processes)
 
-            # Add orbits and times to object store if
-            # they haven't already been added
-            if not isinstance(times, ObjectRef):
-                times_ref = ray.put(times)
-            else:
-                times_ref = times
-                times = ray.get(times_ref)
+            times_ref = ray.put(times)
 
             if not isinstance(orbits, ObjectRef):
                 input_is_variants = isinstance(orbits, VariantOrbits)
@@ -983,9 +990,9 @@ class Propagator(ABC, EphemerisMixin):
                 propagated = qv.concatenate(propagated_list)
                 if len(covariance_variants_list) > 0:
                     propagated_variants = qv.concatenate(covariance_variants_list)
-                    # sort by variant_id and time
                     propagated_variants = propagated_variants.sort_by(
                         [
+                            "orbit_id",
                             "variant_id",
                             "coordinates.time.days",
                             "coordinates.time.nanos",
@@ -1006,9 +1013,13 @@ class Propagator(ABC, EphemerisMixin):
                 )
 
                 propagated_variants = self._propagate_orbits(variants, times)
-                # sort by variant_id and time
                 propagated_variants = propagated_variants.sort_by(
-                    ["variant_id", "coordinates.time.days", "coordinates.time.nanos"]
+                    [
+                        "orbit_id",
+                        "variant_id",
+                        "coordinates.time.days",
+                        "coordinates.time.nanos",
+                    ]
                 )
             else:
                 propagated_variants = None
@@ -1024,9 +1035,9 @@ class Propagator(ABC, EphemerisMixin):
         # by orbit id
         propagated = ensure_input_origin_and_frame(orbits, propagated)
 
-        # Deterministic ordering matters for downstream pairing (e.g. ephemeris generation).
-        # For VariantOrbits we must include variant_id; otherwise rows that share the same
-        # orbit_id + time can be arbitrarily ordered, which breaks 1:1 pairing assumptions.
+        # Internal order is (orbit_id, variant_id, time) so that observer tiling
+        # [observers]*len(orbits) in _generate_ephemeris matches row-for-row.
+        # Callers that need time-first or grouping should sort or use .select()/.apply_mask().
         if isinstance(propagated, VariantOrbits):
             return propagated.sort_by(
                 [

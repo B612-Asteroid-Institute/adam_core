@@ -33,9 +33,7 @@ def test_initialize_ray_existing_cluster(mocker):
     mock_ray.init.return_value = True
     initialize_use_ray()
 
-    mock_ray.init.assert_called_once_with(
-        address="auto", include_dashboard=False
-    )
+    mock_ray.init.assert_called_once_with(address="auto", include_dashboard=False)
     assert mock_ray.init.call_count == 1
 
 

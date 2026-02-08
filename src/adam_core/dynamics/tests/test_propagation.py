@@ -4,6 +4,7 @@ import itertools
 import jax
 import numpy as np
 import pytest
+import ray
 import spiceypy as sp
 from astropy import units as u
 
@@ -14,8 +15,6 @@ from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
-
-import ray
 
 
 def test__propagate_2body_against_spice_elliptical(orbital_elements):
@@ -514,11 +513,15 @@ def test_propagate_2body_does_not_include_padded_rows() -> None:
     base_mjd = float(orbit_mjd[0])
 
     n_times = 201  # not divisible by chunk_size=200
-    times = Timestamp.from_mjd(base_mjd + np.arange(n_times, dtype=np.float64), scale="tdb")
+    times = Timestamp.from_mjd(
+        base_mjd + np.arange(n_times, dtype=np.float64), scale="tdb"
+    )
     propagated = propagate_2body(orbits, times)
 
     assert len(propagated) == n_times
-    out_mjd = propagated.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
+    out_mjd = (
+        propagated.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
+    )
     in_mjd = times.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
     np.testing.assert_allclose(out_mjd, in_mjd)
 
@@ -530,7 +533,9 @@ def test_propagate_2body_ray_matches_serial() -> None:
     ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
 
     orbits = make_real_orbits(5)
-    base_mjd = float(np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)))
+    base_mjd = float(
+        np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False))
+    )
     times = Timestamp.from_mjd(base_mjd + np.arange(25, dtype=np.float64), scale="tdb")
 
     serial = propagate_2body(orbits, times, max_processes=1)
@@ -541,10 +546,11 @@ def test_propagate_2body_ray_matches_serial() -> None:
         serial.orbit_id.to_numpy(zero_copy_only=False),
         parallel.orbit_id.to_numpy(zero_copy_only=False),
     )
-    np.testing.assert_allclose(serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0)
+    np.testing.assert_allclose(
+        serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0
+    )
 
     ray.shutdown()  # type: ignore[name-defined]
-
 
 
 @pytest.mark.profile
