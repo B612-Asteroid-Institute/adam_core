@@ -169,7 +169,7 @@ def propagation_worker(
     return propagated
 
 
-def attach_predicted_magnitude_v(
+def attach_magnitude_or_phase(
     ephemeris: EphemerisType,
     orbits: OrbitType,
     observers: ObserverType,
@@ -318,7 +318,7 @@ def ephemeris_worker_ray(
         )
     else:
         ephemeris = propagator._generate_ephemeris(orbits_chunk, observers)
-        ephemeris = attach_predicted_magnitude_v(
+        ephemeris = attach_magnitude_or_phase(
             ephemeris,
             orbits=orbits_chunk,
             observers=observers,
@@ -532,7 +532,7 @@ class EphemerisMixin:
 
         # Return in same order as propagate_orbits: (orbit_id, variant_id, time) or
         # (orbit_id, time). No sort here; callers use .sort_by() or .select()/.apply_mask().
-        ephemeris = attach_predicted_magnitude_v(
+        ephemeris = attach_magnitude_or_phase(
             ephemeris,
             orbits=orbits,
             observers=observers,
@@ -764,7 +764,7 @@ class EphemerisMixin:
                 variant_ephemeris.coordinates.time.rescale("utc"),
             )
             if needs_attach:
-                variant_ephemeris = attach_predicted_magnitude_v(
+                variant_ephemeris = attach_magnitude_or_phase(
                     variant_ephemeris,
                     orbits=orbits,
                     observers=observers,
@@ -790,7 +790,7 @@ class EphemerisMixin:
             ephemeris.coordinates.time.rescale("utc"),
         )
         if needs_attach:
-            ephemeris = attach_predicted_magnitude_v(
+            ephemeris = attach_magnitude_or_phase(
                 ephemeris,
                 orbits=orbits,
                 observers=observers,
