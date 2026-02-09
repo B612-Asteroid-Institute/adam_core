@@ -112,6 +112,13 @@ exclude = ["build"]
 
 [tool.pdm.build]
 includes = ["src/adam_core/"]
+excludes = [
+  "**/__pycache__/**",
+  "**/*.py[cod]",
+  "**/*.nbc",
+  "**/*.nbi",
+  "**/.DS_Store",
+]
 
 [tool.pdm.version]
 source = "scm"
