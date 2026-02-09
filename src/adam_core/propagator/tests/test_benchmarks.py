@@ -1,7 +1,6 @@
 import numpy as np
 import pyarrow as pa
 import pytest
-import ray
 from adam_assist import ASSISTPropagator
 
 from adam_core.propagator import propagator as propagator_module
