@@ -630,7 +630,12 @@ def query_sbdb_new(
             )
         return orbits
 
-    return _orbits_from_sbdb_payloads(obj_ids, payloads)
+    orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
+    if orbit_id_from_input:
+        orbits = orbits.set_column(
+            "orbit_id", pa.array(obj_ids, type=pa.large_string())
+        )
+    return orbits
 
 
 class NotFoundError(Exception):

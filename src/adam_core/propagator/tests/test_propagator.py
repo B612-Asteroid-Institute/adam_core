@@ -799,6 +799,149 @@ def test_variant_ephemeris_weights_follow_variant_id_every_row():
         ), f"row {i}: weights_cov for {key} should be {exp_wc}, got {weights_cov[i]}"
 
 
+def test_generate_ephemeris_variant_ephemeris_light_time_populated() -> None:
+    """VariantEphemeris.light_time is populated (non-null, finite) when using EphemerisMixin."""
+    times = Timestamp.from_iso8601(
+        ["2020-01-01T00:00:00Z", "2020-01-01T00:00:01Z"],
+    )
+    orbit_epoch = times[:1]
+    variants = VariantOrbits.from_kwargs(
+        orbit_id=["o1", "o1"],
+        variant_id=["v0", "v1"],
+        object_id=["o1", "o1"],
+        weights=[0.5, 0.5],
+        weights_cov=[0.0, 0.0],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0, 2.0],
+            y=[0.0, 0.0],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.0, 0.0],
+            vz=[0.0, 0.0],
+            time=qv.concatenate([orbit_epoch] * 2),
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_code("500", times)
+    prop = VariantAwareMockPropagator()
+    eph = prop.generate_ephemeris(
+        variants, observers, max_processes=1, predict_magnitudes=False
+    )
+    assert isinstance(eph, VariantEphemeris)
+    assert not pc.all(pc.is_null(eph.light_time)).as_py()
+    lt = eph.light_time.to_numpy(zero_copy_only=False)
+    assert np.all(np.isfinite(lt))
+    assert np.all(lt >= 0.0)
+
+
+def test_generate_ephemeris_variant_ephemeris_phase_angle_populated() -> None:
+    """VariantEphemeris.alpha is populated when predict_phase_angle=True (opposition -> 0°)."""
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbit_epoch = time
+    variants = VariantOrbits.from_kwargs(
+        orbit_id=["o1", "o1"],
+        variant_id=["v0", "v1"],
+        object_id=["o1", "o1"],
+        weights=[0.5, 0.5],
+        weights_cov=[0.0, 0.0],
+        physical_parameters=PhysicalParameters.from_kwargs(
+            H_v=[None, None], G=[None, None]
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0, 2.0],
+            y=[0.0, 0.0],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.0, 0.0],
+            vz=[0.0, 0.0],
+            time=qv.concatenate([orbit_epoch] * 2),
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    prop = VariantAwareMockPropagator()
+    eph = prop.generate_ephemeris(
+        variants,
+        observers,
+        max_processes=1,
+        predict_magnitudes=False,
+        predict_phase_angle=True,
+    )
+    assert isinstance(eph, VariantEphemeris)
+    assert not pc.all(pc.is_null(eph.alpha)).as_py()
+    alpha = eph.alpha.to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(alpha, 0.0, atol=1e-6)
+
+
+def test_generate_ephemeris_variant_ephemeris_predicted_magnitude_populated() -> None:
+    """VariantEphemeris.predicted_magnitude_v is populated when predict_magnitudes=True and H,G set."""
+    time = Timestamp.from_mjd([60000], scale="tdb")
+    orbit_epoch = time
+    variants = VariantOrbits.from_kwargs(
+        orbit_id=["o1", "o1"],
+        variant_id=["v0", "v1"],
+        object_id=["o1", "o1"],
+        weights=[0.5, 0.5],
+        weights_cov=[0.0, 0.0],
+        physical_parameters=PhysicalParameters.from_kwargs(
+            H_v=[15.0, 15.0], G=[0.15, 0.15]
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0, 2.0],
+            y=[0.0, 0.0],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.0, 0.0],
+            vz=[0.0, 0.0],
+            time=qv.concatenate([orbit_epoch] * 2),
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    prop = VariantAwareMockPropagator()
+    eph = prop.generate_ephemeris(
+        variants,
+        observers,
+        max_processes=1,
+        predict_magnitudes=True,
+        predict_phase_angle=False,
+    )
+    assert isinstance(eph, VariantEphemeris)
+    assert not pc.all(pc.is_null(eph.predicted_magnitude_v)).as_py()
+    expected = 15.0 + 5.0 * np.log10(2.0 * 1.0)
+    mags = eph.predicted_magnitude_v.to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(mags, expected, atol=1e-8)
+
+
 def test_variant_ephemeris_ordering_multiple_orbits_two_times():
     """
     With 2 orbits × 2 variants × 2 times, rows must be (orbit_id, variant_id, time)

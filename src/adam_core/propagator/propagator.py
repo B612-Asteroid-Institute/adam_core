@@ -400,6 +400,7 @@ class EphemerisMixin:
                 object_id=propagated_orbits_barycentric.object_id,
                 variant_id=propagated_orbits_barycentric.variant_id,
                 coordinates=spherical_coordinates,
+                light_time=light_time,
                 weights=np.repeat(weights_np, n_obs),
                 weights_cov=np.repeat(weights_cov_np, n_obs),
                 aberrated_coordinates=propagated_orbits_aberrated.coordinates,
