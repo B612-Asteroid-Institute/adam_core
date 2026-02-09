@@ -8,6 +8,8 @@ from ...observers.observers import Observers
 from ...time import Timestamp
 from ..magnitude import (
     calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_and_phase_angle,
+    calculate_phase_angle,
     convert_magnitude,
     predict_magnitudes,
 )
@@ -83,6 +85,47 @@ def test_calculate_apparent_magnitude_v_geometry_sanity():
 
     assert mag_far > mag_near
     assert mag_opp < mag_far
+
+
+def test_calculate_apparent_magnitude_v_and_phase_angle_matches_individual() -> None:
+    time = Timestamp.from_mjd([60000, 60000, 60000], scale="tdb")
+    observer = Observers.from_kwargs(
+        code=["500", "500", "500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.0, 1.0],
+            y=[0.0, 0.0, 0.0],
+            z=[0.0, 0.0, 0.0],
+            vx=[0.0, 0.0, 0.0],
+            vy=[0.0, 0.0, 0.0],
+            vz=[0.0, 0.0, 0.0],
+            time=time,
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+        ),
+    )
+
+    obj = CartesianCoordinates.from_kwargs(
+        x=[2.0, 1.0, 2.0],
+        y=[0.0, 0.5, 1.0],
+        z=[0.0, 0.0, 0.0],
+        vx=[0.0, 0.0, 0.0],
+        vy=[0.0, 0.0, 0.0],
+        vz=[0.0, 0.0, 0.0],
+        time=time,
+        frame="ecliptic",
+        origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+    )
+
+    H = np.asarray([15.0, 16.0, 17.0], dtype=np.float64)
+    G = np.asarray([0.15, 0.10, 0.25], dtype=np.float64)
+
+    mags_ref = calculate_apparent_magnitude_v(H, obj, observer, G=G)
+    alpha_ref = calculate_phase_angle(obj, observer)
+
+    mags, alpha = calculate_apparent_magnitude_v_and_phase_angle(H, obj, observer, G=G)
+
+    np.testing.assert_allclose(mags, mags_ref, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(alpha, alpha_ref, rtol=0.0, atol=1e-12)
 
 
 def test_convert_magnitude_requires_canonical_filter_ids():

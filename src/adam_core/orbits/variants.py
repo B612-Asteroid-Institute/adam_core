@@ -12,8 +12,8 @@ from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from ..dynamics.aberrations import add_light_time
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
+from ..dynamics.aberrations import add_light_time
 from ..observers.observers import Observers
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
@@ -247,6 +247,8 @@ class VariantEphemeris(qv.Table):
     coordinates = SphericalCoordinates.as_column()
     aberrated_coordinates = CartesianCoordinates.as_column(nullable=True)
     predicted_magnitude_v = qv.Float64Column(nullable=True)
+    alpha = qv.Float64Column(nullable=True)
+    light_time = qv.Float64Column(nullable=True)
 
     def link_to_ephemeris(
         self, ephemeris: Ephemeris
@@ -418,7 +420,15 @@ class VariantEphemeris(qv.Table):
             # Circular mean in degrees for longitude, with wrap-aware covariance.
             lon = samples[:, 1]
             lon_mean = float(
-                (np.degrees(np.arctan2(np.mean(np.sin(np.deg2rad(lon))), np.mean(np.cos(np.deg2rad(lon))))) + 360.0)
+                (
+                    np.degrees(
+                        np.arctan2(
+                            np.mean(np.sin(np.deg2rad(lon))),
+                            np.mean(np.cos(np.deg2rad(lon))),
+                        )
+                    )
+                    + 360.0
+                )
                 % 360.0
             )
             samples[:, 1] = lon_mean + (((lon - lon_mean + 180.0) % 360.0) - 180.0)

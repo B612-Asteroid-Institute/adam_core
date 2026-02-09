@@ -213,7 +213,7 @@ class ImpactMixin:
             unfinished = futures
             while unfinished:
                 finished, unfinished = ray.wait(unfinished, num_returns=1)
-                (propagated, impacts) = ray.get(finished[0])
+                propagated, impacts = ray.get(finished[0])
                 propagated_list.append(propagated)
                 impact_list.append(impacts)
 

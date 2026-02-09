@@ -1,9 +1,13 @@
-from typing import Tuple
+import multiprocessing as mp
+from typing import Dict, List, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
 import pyarrow as pa
+import quivr as qv
+import ray
 from jax import jit, lax, vmap
+from ray import ObjectRef
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import (
@@ -16,8 +20,14 @@ from ..coordinates.transform import _cartesian_to_spherical, transform_coordinat
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
-from ..photometry.magnitude import calculate_apparent_magnitude_v
+from ..photometry.magnitude import (
+    calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_and_phase_angle,
+    calculate_phase_angle,
+)
+from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
+from ..utils.iter import _iterate_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
 
 
@@ -126,6 +136,59 @@ _generate_ephemeris_2body_vmap = jit(
 )
 
 
+def _generate_ephemeris_2body_serial(
+    propagated_orbits: Orbits,
+    observers: Observers,
+    *,
+    lt_tol: float,
+    max_iter: int,
+    tol: float,
+    stellar_aberration: bool,
+    predict_magnitudes: bool,
+    predict_phase_angle: bool,
+) -> Ephemeris:
+    # Delegate to the public function's existing implementation, but without Ray.
+    return generate_ephemeris_2body(
+        propagated_orbits,
+        observers,
+        lt_tol=lt_tol,
+        max_iter=max_iter,
+        tol=tol,
+        stellar_aberration=stellar_aberration,
+        predict_magnitudes=predict_magnitudes,
+        predict_phase_angle=predict_phase_angle,
+        max_processes=1,
+    )
+
+
+@ray.remote
+def ephemeris_2body_worker_ray(
+    start: int,
+    idx_chunk: np.ndarray,
+    propagated_orbits: Orbits,
+    observers: Observers,
+    lt_tol: float,
+    max_iter: int,
+    tol: float,
+    stellar_aberration: bool,
+    predict_magnitudes: bool,
+    predict_phase_angle: bool,
+) -> Tuple[int, Ephemeris]:
+    prop_chunk = propagated_orbits.take(idx_chunk)
+    obs_chunk = observers.take(idx_chunk)
+    eph = _generate_ephemeris_2body_serial(
+        prop_chunk,
+        obs_chunk,
+        lt_tol=lt_tol,
+        max_iter=max_iter,
+        tol=tol,
+        stellar_aberration=stellar_aberration,
+        predict_magnitudes=predict_magnitudes,
+        predict_phase_angle=predict_phase_angle,
+    )
+    return start, eph
+
+
 def generate_ephemeris_2body(
     propagated_orbits: Orbits,
     observers: Observers,
@@ -134,6 +197,10 @@ def generate_ephemeris_2body(
     tol: float = 1e-15,
     stellar_aberration: bool = False,
     predict_magnitudes: bool = True,
+    *,
+    predict_phase_angle: bool = False,
+    max_processes: Optional[int] = 1,
+    chunk_size: int = 100,
 ) -> Ephemeris:
     """
     Generate on-sky ephemerides for each propagated orbit as viewed by the observers.
@@ -182,6 +249,52 @@ def generate_ephemeris_2body(
     ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (N)
         Topocentric ephemerides for each propagated orbit as observed by the given observers.
     """
+    if max_processes is None:
+        max_processes = mp.cpu_count()
+
+    if max_processes > 1:
+        initialize_use_ray(num_cpus=max_processes)
+
+        num_entries = len(observers)
+        assert len(propagated_orbits) == num_entries
+
+        propagated_ref = ray.put(propagated_orbits)  # type: ignore[name-defined]
+        observers_ref = ray.put(observers)  # type: ignore[name-defined]
+
+        idx = np.arange(0, num_entries, dtype=np.int64)
+        pending: List["ObjectRef"] = []  # type: ignore[name-defined]
+        results: Dict[int, Ephemeris] = {}
+
+        for idx_chunk in _iterate_chunks(idx, chunk_size):
+            start = int(idx_chunk[0]) if len(idx_chunk) else 0
+            pending.append(
+                ephemeris_2body_worker_ray.remote(  # type: ignore[name-defined]
+                    start,
+                    idx_chunk,
+                    propagated_ref,
+                    observers_ref,
+                    lt_tol,
+                    max_iter,
+                    tol,
+                    stellar_aberration,
+                    predict_magnitudes,
+                    predict_phase_angle,
+                )
+            )
+
+            if len(pending) >= max_processes * 1.5:
+                finished, pending = ray.wait(pending, num_returns=1)  # type: ignore[name-defined]
+                start_i, eph_i = ray.get(finished[0])  # type: ignore[name-defined]
+                results[int(start_i)] = eph_i
+
+        while pending:
+            finished, pending = ray.wait(pending, num_returns=1)  # type: ignore[name-defined]
+            start_i, eph_i = ray.get(finished[0])  # type: ignore[name-defined]
+            results[int(start_i)] = eph_i
+
+        chunks = [results[k] for k in sorted(results.keys())]
+        return qv.concatenate(chunks) if chunks else Ephemeris.empty()
+
     num_entries = len(observers)
     assert (
         len(propagated_orbits) == num_entries
@@ -216,16 +329,17 @@ def generate_ephemeris_2body(
     chunk_size = 200
 
     # Process in chunks
-    ephemeris_spherical: np.ndarray = np.empty((0, 6))
-    light_time: np.ndarray = np.empty((0,))
-    aberrated_orbits: np.ndarray = np.empty((0, 6))
-
+    ephemeris_spherical = np.empty((num_entries, 6), dtype=np.float64)
+    light_time = np.empty((num_entries,), dtype=np.float64)
+    aberrated_orbits = np.empty((num_entries, 6), dtype=np.float64)
+    start = 0
     for orbits_chunk, times_chunk, observer_coords_chunk, mu_chunk in zip(
         process_in_chunks(propagated_orbits_barycentric.coordinates.values, chunk_size),
         process_in_chunks(times, chunk_size),
         process_in_chunks(observer_coordinates, chunk_size),
         process_in_chunks(mu, chunk_size),
     ):
+        valid = min(chunk_size, num_entries - start)
         ephemeris_chunk, light_time_chunk, aberrated_chunk = (
             _generate_ephemeris_2body_vmap(
                 orbits_chunk,
@@ -238,18 +352,15 @@ def generate_ephemeris_2body(
                 stellar_aberration,
             )
         )
-        ephemeris_spherical = np.concatenate(
-            (ephemeris_spherical, np.asarray(ephemeris_chunk))
-        )
-        light_time = np.concatenate((light_time, np.asarray(light_time_chunk)))
-        aberrated_orbits = np.concatenate(
-            (aberrated_orbits, np.asarray(aberrated_chunk))
-        )
+        ephemeris_spherical[start : start + valid] = np.asarray(ephemeris_chunk)[:valid]
+        light_time[start : start + valid] = np.asarray(light_time_chunk)[:valid]
+        aberrated_orbits[start : start + valid] = np.asarray(aberrated_chunk)[:valid]
+        start += valid
 
-    # Concatenate chunks and remove padding
-    ephemeris_spherical = np.array(ephemeris_spherical)[:num_entries]
-    light_time = np.array(light_time)[:num_entries]
-    aberrated_orbits = np.array(aberrated_orbits)[:num_entries]
+    if start != num_entries:
+        raise RuntimeError(
+            f"Internal error: expected {num_entries} ephemeris rows, got {start}"
+        )
 
     # Compute emission times by subtracting light-time (in days) from the observation times.
     emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
@@ -320,13 +431,24 @@ def generate_ephemeris_2body(
         aberrated_coordinates=aberrated_coordinates,
     )
 
-    if not predict_magnitudes:
+    want_alpha = bool(predict_phase_angle)
+    want_mags = bool(predict_magnitudes)
+
+    if not want_alpha and not want_mags:
         return ephemeris
 
-    H_v = propagated_orbits.physical_parameters.H_v.to_numpy(zero_copy_only=False)
-    G = propagated_orbits.physical_parameters.G.to_numpy(zero_copy_only=False)
-    has_params = np.isfinite(H_v) & np.isfinite(G)
-    if not np.any(has_params):
+    # Determine whether we can compute magnitudes (needs H and G).
+    has_params = None
+    H_v = None
+    G = None
+    if want_mags:
+        H_v = propagated_orbits.physical_parameters.H_v.to_numpy(zero_copy_only=False)
+        G = propagated_orbits.physical_parameters.G.to_numpy(zero_copy_only=False)
+        has_params = np.isfinite(H_v) & np.isfinite(G)
+        if not np.any(has_params):
+            want_mags = False
+
+    if not want_alpha and not want_mags:
         return ephemeris
 
     # Transform object and observer coordinates to heliocentric for photometry.
@@ -346,15 +468,41 @@ def generate_ephemeris_2body(
         ),
     )
 
-    mags = calculate_apparent_magnitude_v(
-        H_v=H_v,
-        object_coords=aberrated_heliocentric,
-        observer=observers_heliocentric,
-        G=G,
-    )
-    mags = np.asarray(mags, dtype=np.float64)
-    valid = has_params & np.isfinite(mags)
-    ephemeris = ephemeris.set_column(
-        "predicted_magnitude_v", pa.array(mags, mask=~valid, type=pa.float64())
-    )
+    alpha_deg = None
+    mags = None
+    if want_mags and want_alpha:
+        assert H_v is not None and G is not None and has_params is not None
+        mags, alpha_deg = calculate_apparent_magnitude_v_and_phase_angle(
+            H_v=H_v,
+            object_coords=aberrated_heliocentric,
+            observer=observers_heliocentric,
+            G=G,
+        )
+    elif want_alpha:
+        alpha_deg = calculate_phase_angle(
+            aberrated_heliocentric, observers_heliocentric
+        )
+    elif want_mags:
+        assert H_v is not None and G is not None and has_params is not None
+        mags = calculate_apparent_magnitude_v(
+            H_v=H_v,
+            object_coords=aberrated_heliocentric,
+            observer=observers_heliocentric,
+            G=G,
+        )
+
+    if alpha_deg is not None:
+        alpha_deg = np.asarray(alpha_deg, dtype=np.float64)
+        ephemeris = ephemeris.set_column(
+            "alpha",
+            pa.array(alpha_deg, mask=~np.isfinite(alpha_deg), type=pa.float64()),
+        )
+
+    if mags is not None:
+        assert has_params is not None
+        mags = np.asarray(mags, dtype=np.float64)
+        valid = has_params & np.isfinite(mags)
+        ephemeris = ephemeris.set_column(
+            "predicted_magnitude_v", pa.array(mags, mask=~valid, type=pa.float64())
+        )
     return ephemeris

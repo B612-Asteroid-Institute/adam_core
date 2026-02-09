@@ -9,6 +9,7 @@ import pyarrow.compute as pc
 from jax import jit
 
 from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
 from ..utils.chunking import process_in_chunks
@@ -59,6 +60,117 @@ def _validate_hg_geometry(
             "Invalid photometry geometry for H-G model: "
             f"{n_bad} rows have non-finite or non-positive distances (r<=0 or delta<=0)."
         )
+
+
+def calculate_phase_angle(
+    object_coords: CartesianCoordinates,
+    observers: Observers,
+) -> npt.NDArray[np.float64]:
+    """
+    Calculate the solar phase angle (Sun–object–observer) in degrees.
+
+    "Phase angle" here is the angle at the object between the Sun direction and the
+    observer direction. It is commonly used for simple photometry/visibility metrics.
+
+    Notes
+    -----
+    This helper expects **heliocentric** coordinates (origin = `OriginCodes.SUN`) for both
+    the object and the observer. If you have barycentric coordinates, transform first.
+
+    Parameters
+    ----------
+    object_coords
+        Object Cartesian coordinates in AU (origin must be SUN).
+    observers
+        Observer states (origin must be SUN).
+
+    Returns
+    -------
+    phase_angle_deg
+        Phase angle in degrees for each paired row.
+
+    Examples
+    --------
+    Given an `Ephemeris` `eph` from a propagator and corresponding `Observers` `obs`:
+
+    - Use `eph.coordinates` for on-sky (RA/Dec, rho) values.
+    - Use `eph.aberrated_coordinates` for emission-time geometry, and transform to heliocentric:
+
+    ```python
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.origin import OriginCodes
+    from adam_core.coordinates.transform import transform_coordinates
+    from adam_core.photometry import calculate_phase_angle
+    from adam_core.observers import Observers
+
+    observers_eph = Observers.from_codes(eph.coordinates.origin.code, eph.coordinates.time)
+
+    obj_helio = transform_coordinates(
+        eph.aberrated_coordinates,
+        CartesianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+    obs_helio = observers_eph.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers_eph.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SUN,
+        ),
+    )
+    alpha_deg = calculate_phase_angle(obj_helio, obs_helio)
+    ```
+    """
+    n_obj = len(object_coords)
+    n_obs = len(observers)
+    if n_obs != n_obj:
+        raise ValueError(
+            f"observers length ({n_obs}) must match object_coords length ({n_obj})"
+        )
+
+    if not np.all(object_coords.origin == OriginCodes.SUN):
+        raise ValueError(
+            "object_coords must be heliocentric (origin=SUN). "
+            "Use transform_coordinates(..., origin_out=OriginCodes.SUN) first."
+        )
+    if not np.all(observers.coordinates.origin == OriginCodes.SUN):
+        raise ValueError(
+            "observers.coordinates must be heliocentric (origin=SUN). "
+            "Use transform_coordinates(..., origin_out=OriginCodes.SUN) first."
+        )
+    if object_coords.frame != observers.coordinates.frame:
+        raise ValueError(
+            "object_coords and observers must be expressed in the same frame "
+            f"(got {object_coords.frame!r} vs {observers.coordinates.frame!r})."
+        )
+
+    object_pos = np.asarray(object_coords.r, dtype=np.float64)
+    observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
+    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
+
+    # -------------------------------------------------------------------------
+    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
+    # -------------------------------------------------------------------------
+    chunk_size = JAX_CHUNK_SIZE
+    padded_n = int(((n_obj + chunk_size - 1) // chunk_size) * chunk_size)
+    out = np.empty((padded_n,), dtype=np.float64)
+
+    chunks: list[jax.Array] = []
+    for obj_chunk, obs_chunk in zip(
+        process_in_chunks(object_pos, chunk_size),
+        process_in_chunks(observer_pos, chunk_size),
+    ):
+        chunks.append(_calculate_phase_angle_core_jax(obj_chunk, obs_chunk))
+
+    host_chunks = jax.device_get(chunks)
+    offset = 0
+    for alpha_chunk in host_chunks:
+        out[offset : offset + chunk_size] = alpha_chunk
+        offset += chunk_size
+
+    return out[:n_obj]
 
 
 def convert_magnitude(
@@ -176,6 +288,68 @@ def _calculate_apparent_magnitude_core_jax(
 
 
 @jit
+def _calculate_phase_angle_core_jax(
+    object_pos: jnp.ndarray,
+    observer_pos: jnp.ndarray,
+) -> jnp.ndarray:
+    """
+    JAX core computation for phase angle in degrees.
+
+    Notes
+    -----
+    This is intentionally array-only and expects paired rows (N, 3).
+    """
+    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
+    delta_vec = object_pos - observer_pos
+    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
+    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
+
+    numer = r * r + delta * delta - observer_sun_dist * observer_sun_dist
+    denom = 2.0 * r * delta
+    cos_alpha = jnp.clip(numer / denom, -1.0, 1.0)
+
+    # Stable conversion from cos(alpha) -> alpha without arccos().
+    y = jnp.sqrt(jnp.maximum(0.0, 1.0 - cos_alpha))
+    x = jnp.sqrt(jnp.maximum(0.0, 1.0 + cos_alpha))
+    alpha_rad = 2.0 * jnp.arctan2(y, x)
+    return alpha_rad * (180.0 / jnp.pi)
+
+
+@jit
+def _calculate_apparent_magnitude_and_phase_core_jax(
+    H_v: jnp.ndarray,
+    object_pos: jnp.ndarray,
+    observer_pos: jnp.ndarray,
+    G: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """
+    JAX core computation for (apparent V magnitude, phase angle in degrees).
+    """
+    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
+    delta_vec = object_pos - observer_pos
+    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
+    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
+
+    numer = r * r + delta * delta - observer_sun_dist * observer_sun_dist
+    denom = 2.0 * r * delta
+    cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
+
+    # Magnitude H-G phase function (uses tan(phase/2)).
+    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
+    phi1 = jnp.exp(-3.33 * tan_half**0.63)
+    phi2 = jnp.exp(-1.87 * tan_half**1.22)
+    phase_function = (1.0 - G) * phi1 + G * phi2
+    mags_v = H_v + 5.0 * jnp.log10(r * delta) - 2.5 * jnp.log10(phase_function)
+
+    # Phase angle in degrees.
+    y = jnp.sqrt(jnp.maximum(0.0, 1.0 - cos_phase))
+    x = jnp.sqrt(jnp.maximum(0.0, 1.0 + cos_phase))
+    alpha_rad = 2.0 * jnp.arctan2(y, x)
+    alpha_deg = alpha_rad * (180.0 / jnp.pi)
+    return mags_v, alpha_deg
+
+
+@jit
 def _predict_magnitudes_bandpass_core_jax(
     H_v: jnp.ndarray,
     object_pos: jnp.ndarray,
@@ -271,6 +445,76 @@ def calculate_apparent_magnitude_v(
         offset += chunk_size
 
     return out[:n]
+
+
+def calculate_apparent_magnitude_v_and_phase_angle(
+    H_v: Union[float, npt.NDArray[np.float64]],
+    object_coords: CartesianCoordinates,
+    observer: Observers,
+    G: Union[float, npt.NDArray[np.float64]] = 0.15,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Calculate apparent V-band magnitudes and phase angles (degrees) together.
+
+    Why: when both are needed, the H-G model already computes the phase geometry.
+    This combined function avoids redoing the same law-of-cosines computation twice.
+    """
+    n = len(object_coords)
+    n_obs = len(observer)
+    if n_obs != n:
+        raise ValueError(
+            f"observer length ({n_obs}) must match object_coords length ({n})"
+        )
+
+    object_pos = np.asarray(object_coords.r, dtype=np.float64)
+    observer_pos = np.asarray(observer.coordinates.r, dtype=np.float64)
+    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
+
+    H_v_arr = np.asarray(H_v, dtype=np.float64)
+    if H_v_arr.ndim == 0:
+        H_v_arr = np.full(n, float(H_v_arr), dtype=np.float64)
+    elif len(H_v_arr) != n:
+        raise ValueError(
+            f"H array length ({len(H_v_arr)}) must match object_coords length ({n})"
+        )
+
+    G_arr = np.asarray(G, dtype=np.float64)
+    if G_arr.ndim == 0:
+        G_arr = np.full(n, float(G_arr), dtype=np.float64)
+    elif len(G_arr) != n:
+        raise ValueError(
+            f"G array length ({len(G_arr)}) must match H array length ({n})"
+        )
+
+    chunk_size = JAX_CHUNK_SIZE
+    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
+    out_mag = np.empty((padded_n,), dtype=np.float64)
+    out_alpha = np.empty((padded_n,), dtype=np.float64)
+
+    chunks: list[tuple[jax.Array, jax.Array]] = []
+    for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
+        process_in_chunks(H_v_arr, chunk_size),
+        process_in_chunks(object_pos, chunk_size),
+        process_in_chunks(observer_pos, chunk_size),
+        process_in_chunks(G_arr, chunk_size),
+    ):
+        chunks.append(
+            _calculate_apparent_magnitude_and_phase_core_jax(
+                H_v=H_chunk,
+                object_pos=obj_chunk,
+                observer_pos=obs_chunk,
+                G=G_chunk,
+            )
+        )
+
+    host_chunks = jax.device_get(chunks)
+    offset = 0
+    for mags_v_chunk, alpha_chunk in host_chunks:
+        out_mag[offset : offset + chunk_size] = mags_v_chunk
+        out_alpha[offset : offset + chunk_size] = alpha_chunk
+        offset += chunk_size
+
+    return out_mag[:n], out_alpha[:n]
 
 
 def predict_magnitudes(
