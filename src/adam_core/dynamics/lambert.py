@@ -288,7 +288,7 @@ def _halley(p0, T0, ll, atol, rtol, maxiter):
         return (jnp.abs(p - p0) >= rtol * jnp.abs(p0) + atol) & (iter_count < maxiter)
 
     # Run the Halley iterations
-    (p, _) = lax.while_loop(cond_fun, body_fun, (p0, 0))
+    p, _ = lax.while_loop(cond_fun, body_fun, (p0, 0))
     return p
 
 
