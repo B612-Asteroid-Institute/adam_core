@@ -4,6 +4,7 @@ import itertools
 import jax
 import numpy as np
 import pytest
+import ray
 import spiceypy as sp
 from astropy import units as u
 
@@ -12,6 +13,7 @@ from ...coordinates.origin import Origin
 from ...orbits import Orbits
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
+from ...utils.helpers.orbits import make_real_orbits
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
 
@@ -499,6 +501,56 @@ def test_propagate_2body_preserves_physical_parameters():
 
     np.testing.assert_allclose(have_H, expected_H)
     np.testing.assert_allclose(have_G, expected_G)
+
+
+def test_propagate_2body_does_not_include_padded_rows() -> None:
+    """
+    `process_in_chunks` pads the final chunk to a fixed size. Ensure the propagation
+    output only contains the true (n_orbits * n_times) rows.
+    """
+    orbits = make_real_orbits(1)
+    orbit_mjd = orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    base_mjd = float(orbit_mjd[0])
+
+    n_times = 201  # not divisible by chunk_size=200
+    times = Timestamp.from_mjd(
+        base_mjd + np.arange(n_times, dtype=np.float64), scale="tdb"
+    )
+    propagated = propagate_2body(orbits, times)
+
+    assert len(propagated) == n_times
+    out_mjd = (
+        propagated.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
+    )
+    in_mjd = times.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(out_mjd, in_mjd)
+
+
+def test_propagate_2body_ray_matches_serial() -> None:
+    # Ensure a clean local ray runtime for this test.
+    if ray.is_initialized():  # type: ignore[name-defined]
+        ray.shutdown()  # type: ignore[name-defined]
+    ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
+
+    orbits = make_real_orbits(5)
+    base_mjd = float(
+        np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False))
+    )
+    times = Timestamp.from_mjd(base_mjd + np.arange(25, dtype=np.float64), scale="tdb")
+
+    serial = propagate_2body(orbits, times, max_processes=1)
+    parallel = propagate_2body(orbits, times, max_processes=2, chunk_size=2)
+
+    assert len(serial) == len(parallel)
+    np.testing.assert_array_equal(
+        serial.orbit_id.to_numpy(zero_copy_only=False),
+        parallel.orbit_id.to_numpy(zero_copy_only=False),
+    )
+    np.testing.assert_allclose(
+        serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0
+    )
+
+    ray.shutdown()  # type: ignore[name-defined]
 
 
 @pytest.mark.profile

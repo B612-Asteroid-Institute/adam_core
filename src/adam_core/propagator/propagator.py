@@ -8,6 +8,8 @@ import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
+import ray
+from ray import ObjectRef
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
@@ -15,11 +17,14 @@ from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
 from ..dynamics.aberrations import add_light_time
-from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
-from ..photometry.magnitude import calculate_apparent_magnitude_v
+from ..photometry.magnitude import (
+    calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_and_phase_angle,
+    calculate_phase_angle,
+)
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
@@ -30,15 +35,6 @@ from .utils import ensure_input_origin_and_frame, ensure_input_time_scale
 logger = logging.getLogger(__name__)
 
 C = c.C
-
-RAY_INSTALLED = False
-try:
-    import ray
-    from ray import ObjectRef
-
-    RAY_INSTALLED = True
-except ImportError:
-    pass
 
 
 def _alignment_indices_string_keys(
@@ -173,40 +169,163 @@ def propagation_worker(
     return propagated
 
 
-def ephemeris_worker(
-    orbits: Union[Orbits, VariantOrbits],
-    observers: Observers,
-    propagator: Type["Propagator"],
-    **kwargs,
-) -> Union[Ephemeris, VariantOrbits]:
-    prop = propagator(**kwargs)
-    ephemeris = prop._generate_ephemeris(orbits, observers)
+def attach_magnitude_or_phase(
+    ephemeris: EphemerisType,
+    orbits: OrbitType,
+    observers: ObserverType,
+    predict_magnitudes: bool,
+    predict_phase_angle: bool,
+) -> EphemerisType:
+    if (not predict_magnitudes and not predict_phase_angle) or len(ephemeris) == 0:
+        return ephemeris
+
+    if pc.all(pc.is_null(ephemeris.aberrated_coordinates.x)).as_py():
+        return ephemeris
+
+    orbits_value = ray.get(orbits) if isinstance(orbits, ObjectRef) else orbits
+    observers_value = (
+        ray.get(observers) if isinstance(observers, ObjectRef) else observers
+    )
+
+    want_mags = bool(predict_magnitudes)
+    want_alpha = bool(predict_phase_angle)
+
+    H_v: npt.NDArray[np.float64] | None = None
+    G: npt.NDArray[np.float64] | None = None
+    has_params: npt.NDArray[np.bool_] | None = None
+    if want_mags:
+        H_v, G = _hg_params_for_ephemeris_rows_arrow(
+            orbit_id=orbits_value.orbit_id,
+            H_v=orbits_value.physical_parameters.H_v,
+            G=orbits_value.physical_parameters.G,
+            ephemeris_orbit_id=ephemeris.orbit_id,
+        )
+        has_params = np.isfinite(H_v) & np.isfinite(G)
+        if not np.any(has_params):
+            want_mags = False
+
+    if not want_alpha and not want_mags:
+        return ephemeris
+
+    if ephemeris.coordinates.time.scale != observers_value.coordinates.time.scale:
+        observers_value = observers_value.set_column(
+            "coordinates.time",
+            observers_value.coordinates.time.rescale(ephemeris.coordinates.time.scale),
+        )
+
+    idx_np = _alignment_indices_struct_index_in(
+        obs_code=observers_value.code,
+        obs_days=observers_value.coordinates.time.days,
+        obs_nanos=observers_value.coordinates.time.nanos,
+        eph_code=ephemeris.coordinates.origin.code,
+        eph_days=ephemeris.coordinates.time.days,
+        eph_nanos=ephemeris.coordinates.time.nanos,
+    )
+    observers_aligned = observers_value.take(pa.array(idx_np, type=pa.int64()))
+    obj_helio = transform_coordinates(
+        ephemeris.aberrated_coordinates,
+        CartesianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SUN,
+    )
+    obs_helio = observers_aligned.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers_aligned.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SUN,
+        ),
+    )
+
+    alpha_deg = None
+    mags = None
+    if want_mags and want_alpha:
+        assert H_v is not None and G is not None and has_params is not None
+        mags, alpha_deg = calculate_apparent_magnitude_v_and_phase_angle(
+            H_v=H_v,
+            object_coords=obj_helio,
+            observer=obs_helio,
+            G=G,
+        )
+    elif want_alpha:
+        alpha_deg = calculate_phase_angle(obj_helio, obs_helio)
+    elif want_mags:
+        assert H_v is not None and G is not None and has_params is not None
+        mags = calculate_apparent_magnitude_v(
+            H_v=H_v,
+            object_coords=obj_helio,
+            observer=obs_helio,
+            G=G,
+        )
+
+    if alpha_deg is not None:
+        alpha_deg = np.asarray(alpha_deg, dtype=np.float64)
+        ephemeris = ephemeris.set_column(
+            "alpha",
+            pa.array(alpha_deg, mask=~np.isfinite(alpha_deg), type=pa.float64()),
+        )
+
+    if mags is not None:
+        assert has_params is not None
+        mags = np.asarray(mags, dtype=np.float64)
+        valid = has_params & np.isfinite(mags)
+        predicted = pa.array(mags, mask=~valid, type=pa.float64())
+        ephemeris = ephemeris.set_column("predicted_magnitude_v", predicted)
+
     return ephemeris
 
 
-if RAY_INSTALLED:
+def _uses_default_ephemeris_mixin(propagator: "Propagator") -> bool:
+    """
+    True iff `propagator._generate_ephemeris` is the EphemerisMixin implementation.
 
-    @ray.remote
-    def propagation_worker_ray(
-        idx: npt.NDArray[np.int64],
-        orbits: OrbitType,
-        times: OrbitType,
-        propagator: "Propagator",
-    ) -> OrbitType:
-        orbits_chunk = orbits.take(idx)
-        propagated = propagator._propagate_orbits(orbits_chunk, times)
-        return propagated
+    Why: subclasses may override `_generate_ephemeris` without accepting extra keyword
+    arguments. We only pass photometry flags into the default mixin implementation.
+    """
+    func = getattr(propagator._generate_ephemeris, "__func__", None)
+    return func is EphemerisMixin._generate_ephemeris
 
-    @ray.remote
-    def ephemeris_worker_ray(
-        idx: npt.NDArray[np.int64],
-        orbits: OrbitType,
-        observers: ObserverType,
-        propagator: "Propagator",
-    ) -> EphemerisType:
-        orbits_chunk = orbits.take(idx)
+
+@ray.remote
+def propagation_worker_ray(
+    idx: npt.NDArray[np.int64],
+    orbits: OrbitType,
+    times: OrbitType,
+    propagator: "Propagator",
+) -> OrbitType:
+    orbits_chunk = orbits.take(idx)
+    propagated = propagator._propagate_orbits(orbits_chunk, times)
+    return propagated
+
+
+@ray.remote
+def ephemeris_worker_ray(
+    idx: npt.NDArray[np.int64],
+    orbits: OrbitType,
+    observers: ObserverType,
+    propagator: "Propagator",
+    predict_magnitudes: bool,
+    predict_phase_angle: bool,
+) -> EphemerisType:
+    orbits_chunk = orbits.take(idx)
+    if _uses_default_ephemeris_mixin(propagator):
+        ephemeris = propagator._generate_ephemeris(
+            orbits_chunk,
+            observers,
+            predict_magnitudes=predict_magnitudes,
+            predict_phase_angle=predict_phase_angle,
+        )
+    else:
         ephemeris = propagator._generate_ephemeris(orbits_chunk, observers)
-        return ephemeris
+        ephemeris = attach_magnitude_or_phase(
+            ephemeris,
+            orbits=orbits_chunk,
+            observers=observers,
+            predict_magnitudes=predict_magnitudes,
+            predict_phase_angle=predict_phase_angle,
+        )
+    return ephemeris
 
 
 class EphemerisMixin:
@@ -216,7 +335,12 @@ class EphemerisMixin:
     """
 
     def _generate_ephemeris(
-        self, orbits: OrbitType, observers: ObserverType
+        self,
+        orbits: OrbitType,
+        observers: ObserverType,
+        *,
+        predict_magnitudes: bool = True,
+        predict_phase_angle: bool = False,
     ) -> EphemerisType:
         """
         A generic ephemeris implementation, which can be used or overridden by subclasses.
@@ -380,35 +504,41 @@ class EphemerisMixin:
             )
         elif isinstance(orbits, VariantOrbits):
 
-            # Sort input orbits by orbit_id and time to match the sorted propagated orbits
-            # (we need this so we can properly tile weights and weights_cov)
+            # Propagated order is (orbit_id, variant_id, time) to match observer tiling
+            # [observers]*len(orbits). Sort input the same way and repeat each variant's
+            # weight for each time so row i gets the weight for the variant at that row.
             orbits_sorted = orbits.sort_by(
-                ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
+                [
+                    "orbit_id",
+                    "variant_id",
+                    "coordinates.time.days",
+                    "coordinates.time.nanos",
+                ]
             )
 
+            n_obs = len(observers)
+            weights_np = orbits_sorted.weights.to_numpy(zero_copy_only=False)
+            weights_cov_np = orbits_sorted.weights_cov.to_numpy(zero_copy_only=False)
             ephemeris = VariantEphemeris.from_kwargs(
                 orbit_id=propagated_orbits_barycentric.orbit_id,
                 object_id=propagated_orbits_barycentric.object_id,
+                variant_id=propagated_orbits_barycentric.variant_id,
                 coordinates=spherical_coordinates,
-                weights=np.tile(
-                    orbits_sorted.weights.to_numpy(zero_copy_only=False), len(observers)
-                ),
-                weights_cov=np.tile(
-                    orbits_sorted.weights_cov.to_numpy(zero_copy_only=False),
-                    len(observers),
-                ),
+                light_time=light_time,
+                weights=np.repeat(weights_np, n_obs),
+                weights_cov=np.repeat(weights_cov_np, n_obs),
                 aberrated_coordinates=propagated_orbits_aberrated.coordinates,
             )
 
-        ephemeris = ephemeris.sort_by(
-            [
-                "orbit_id",
-                "coordinates.time.days",
-                "coordinates.time.nanos",
-                "coordinates.origin.code",
-            ]
+        # Return in same order as propagate_orbits: (orbit_id, variant_id, time) or
+        # (orbit_id, time). No sort here; callers use .sort_by() or .select()/.apply_mask().
+        ephemeris = attach_magnitude_or_phase(
+            ephemeris,
+            orbits=orbits,
+            observers=observers,
+            predict_magnitudes=predict_magnitudes,
+            predict_phase_angle=predict_phase_angle,
         )
-
         return ephemeris
 
     def generate_ephemeris(
@@ -424,6 +554,7 @@ class EphemerisMixin:
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
         predict_magnitudes: bool = True,
+        predict_phase_angle: bool = False,
     ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -456,9 +587,10 @@ class EphemerisMixin:
 
         Returns
         -------
-        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (M)
-            Predicted ephemerides for each orbit observed by each
-            observer.
+        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` or `~adam_core.orbits.variants.VariantEphemeris`
+            Predicted ephemerides. Row order matches :meth:`propagate_orbits`: (orbit_id, time)
+            or (orbit_id, variant_id, time) for variant ephemeris. Use .sort_by() or
+            .select()/.apply_mask() for other orderings or grouping.
         """
         # If sending in VariantOrbits, we make sure not to run covariance
         assert (covariance is False) or (
@@ -482,13 +614,10 @@ class EphemerisMixin:
         if max_processes is None:
             max_processes = mp.cpu_count()
 
+        uses_default_ephemeris = _uses_default_ephemeris_mixin(self)
+        needs_attach = max_processes <= 1 and not uses_default_ephemeris
+
         if max_processes > 1:
-
-            if RAY_INSTALLED is False:
-                raise ImportError(
-                    "Ray must be installed to use the ray parallel backend"
-                )
-
             initialize_use_ray(num_cpus=max_processes)
 
             # Add orbits and observers to object store if
@@ -517,6 +646,8 @@ class EphemerisMixin:
                         orbits_ref,
                         observers_ref,
                         self,
+                        predict_magnitudes,
+                        predict_phase_angle,
                     )
                 )
 
@@ -532,6 +663,8 @@ class EphemerisMixin:
                             variants_ref,
                             observers_ref,
                             self,
+                            predict_magnitudes,
+                            predict_phase_angle,
                         )
                     )
 
@@ -564,8 +697,37 @@ class EphemerisMixin:
                         f"Unexpected result type from ephemeris worker: {type(result)}"
                     )
 
+            # Concatenation was in completion order; sort to canonical order.
+            if len(ephemeris) > 0:
+                ephemeris = ephemeris.sort_by(
+                    [
+                        "orbit_id",
+                        "coordinates.time.days",
+                        "coordinates.time.nanos",
+                        "coordinates.origin.code",
+                    ]
+                )
+            if len(variant_ephemeris) > 0:
+                variant_ephemeris = variant_ephemeris.sort_by(
+                    [
+                        "orbit_id",
+                        "variant_id",
+                        "coordinates.time.days",
+                        "coordinates.time.nanos",
+                        "coordinates.origin.code",
+                    ]
+                )
+
         else:
-            results = self._generate_ephemeris(orbits, observers)
+            if uses_default_ephemeris:
+                results = self._generate_ephemeris(
+                    orbits,
+                    observers,
+                    predict_magnitudes=predict_magnitudes,
+                    predict_phase_angle=predict_phase_angle,
+                )
+            else:
+                results = self._generate_ephemeris(orbits, observers)
             if isinstance(results, Ephemeris):
                 ephemeris = results
             elif isinstance(results, VariantEphemeris):
@@ -575,7 +737,15 @@ class EphemerisMixin:
                     f"Unexpected result type from generate_ephemeris: {type(results)}"
                 )
             if covariance is True and len(variants) > 0:
-                variant_ephemeris = self._generate_ephemeris(variants, observers)
+                if uses_default_ephemeris:
+                    variant_ephemeris = self._generate_ephemeris(
+                        variants,
+                        observers,
+                        predict_magnitudes=predict_magnitudes,
+                        predict_phase_angle=predict_phase_angle,
+                    )
+                else:
+                    variant_ephemeris = self._generate_ephemeris(variants, observers)
 
         if covariance is False and len(variant_ephemeris) > 0:
             # If we decide that we do not need to guarantee that the time scale is in UTC
@@ -593,23 +763,15 @@ class EphemerisMixin:
                 "coordinates.time",
                 variant_ephemeris.coordinates.time.rescale("utc"),
             )
-
-            # We were given VariantOrbits as an input, so return VariantEphemeris
-            variant_ephemeris = variant_ephemeris.sort_by(
-                [
-                    "orbit_id",
-                    "variant_id",
-                    "coordinates.time.days",
-                    "coordinates.time.nanos",
-                    "coordinates.origin.code",
-                ]
-            )
-            return self._attach_predicted_magnitude_v(
-                variant_ephemeris,
-                orbits=orbits,
-                observers=observers,
-                predict_magnitudes=predict_magnitudes,
-            )
+            if needs_attach:
+                variant_ephemeris = attach_magnitude_or_phase(
+                    variant_ephemeris,
+                    orbits=orbits,
+                    observers=observers,
+                    predict_magnitudes=predict_magnitudes,
+                    predict_phase_angle=predict_phase_angle,
+                )
+            return variant_ephemeris
 
         if covariance is True and len(variant_ephemeris) > 0:
             ephemeris = variant_ephemeris.collapse(ephemeris)
@@ -627,100 +789,15 @@ class EphemerisMixin:
             "coordinates.time",
             ephemeris.coordinates.time.rescale("utc"),
         )
-
-        ephemeris = ephemeris.sort_by(
-            [
-                "orbit_id",
-                "coordinates.time.days",
-                "coordinates.time.nanos",
-                "coordinates.origin.code",
-            ]
-        )
-        return self._attach_predicted_magnitude_v(
-            ephemeris,
-            orbits=orbits,
-            observers=observers,
-            predict_magnitudes=predict_magnitudes,
-        )
-
-    def _attach_predicted_magnitude_v(
-        self,
-        ephemeris: EphemerisType,
-        orbits: OrbitType,
-        observers: ObserverType,
-        predict_magnitudes: bool,
-    ) -> EphemerisType:
-        if not predict_magnitudes or len(ephemeris) == 0:
-            return ephemeris
-
-        # Need emission-time cartesian state.
-        if pc.all(pc.is_null(ephemeris.aberrated_coordinates.x)).as_py():
-            return ephemeris
-
-        # Resolve ray ObjectRefs if needed.
-        orbits_value = orbits
-        observers_value = observers
-        if RAY_INSTALLED:
-            if isinstance(orbits, ObjectRef):  # type: ignore[name-defined]
-                orbits_value = ray.get(orbits)  # type: ignore[name-defined]
-            if isinstance(observers, ObjectRef):  # type: ignore[name-defined]
-                observers_value = ray.get(observers)  # type: ignore[name-defined]
-
-        H_v, G = _hg_params_for_ephemeris_rows_arrow(
-            orbit_id=orbits_value.orbit_id,
-            H_v=orbits_value.physical_parameters.H_v,
-            G=orbits_value.physical_parameters.G,
-            ephemeris_orbit_id=ephemeris.orbit_id,
-        )
-        has_params = np.isfinite(H_v) & np.isfinite(G)
-        if not np.any(has_params):
-            return ephemeris
-
-        # Align observers to ephemeris rows by (code, days, nanos).
-        if ephemeris.coordinates.time.scale != observers_value.coordinates.time.scale:
-            observers_value = observers_value.set_column(
-                "coordinates.time",
-                observers_value.coordinates.time.rescale(
-                    ephemeris.coordinates.time.scale
-                ),
+        if needs_attach:
+            ephemeris = attach_magnitude_or_phase(
+                ephemeris,
+                orbits=orbits,
+                observers=observers,
+                predict_magnitudes=predict_magnitudes,
+                predict_phase_angle=predict_phase_angle,
             )
-
-        idx_np = _alignment_indices_struct_index_in(
-            obs_code=observers_value.code,
-            obs_days=observers_value.coordinates.time.days,
-            obs_nanos=observers_value.coordinates.time.nanos,
-            eph_code=ephemeris.coordinates.origin.code,
-            eph_days=ephemeris.coordinates.time.days,
-            eph_nanos=ephemeris.coordinates.time.nanos,
-        )
-        observers_aligned = observers_value.take(pa.array(idx_np, type=pa.int64()))
-        # Photometry requires heliocentric coordinates
-        obj_helio = transform_coordinates(
-            ephemeris.aberrated_coordinates,
-            CartesianCoordinates,
-            frame_out="ecliptic",
-            origin_out=OriginCodes.SUN,
-        )
-        obs_helio = observers_aligned.set_column(
-            "coordinates",
-            transform_coordinates(
-                observers_aligned.coordinates,
-                CartesianCoordinates,
-                frame_out="ecliptic",
-                origin_out=OriginCodes.SUN,
-            ),
-        )
-
-        mags = calculate_apparent_magnitude_v(
-            H_v=H_v,
-            object_coords=obj_helio,
-            observer=obs_helio,
-            G=G,
-        )
-        mags = np.asarray(mags, dtype=np.float64)
-        valid = has_params & np.isfinite(mags)
-        predicted = pa.array(mags, mask=~valid, type=pa.float64())
-        return ephemeris.set_column("predicted_magnitude_v", predicted)
+        return ephemeris
 
 
 class Propagator(ABC, EphemerisMixin):
@@ -810,7 +887,9 @@ class Propagator(ABC, EphemerisMixin):
         orbits : `~adam_core.orbits.orbits.Orbits` (N)
             Orbits to propagate.
         times : Timestamp (M)
-            Times to which to propagate orbits.
+            Times to which to propagate orbits. Sorted chronologically before
+            calling the backend so integrators (e.g. ASSIST, REBOUND) receive
+            time-ordered epochs for efficient stepping.
         covariance : bool, optional
             Propagate the covariance matrices of the orbits. This is done by sampling the
             orbits from their covariance matrices and propagating each sample. The covariance
@@ -831,13 +910,21 @@ class Propagator(ABC, EphemerisMixin):
         Returns
         -------
         propagated : `~adam_core.orbits.orbits.Orbits` or `~adam_core.orbits.variants.VariantOrbits`
-            Propagated orbits.
+            Propagated orbits. Rows are ordered (orbit_id, time) for Orbits and
+            (orbit_id, variant_id, time) for VariantOrbits. Use .sort_by() or
+            .select()/.apply_mask() for other orderings or grouping.
         """
         if covariance is True and isinstance(orbits, VariantOrbits):
             raise AssertionError("Covariance is not supported for VariantOrbits")
 
         if max_processes is None:
             max_processes = mp.cpu_count()
+
+        # Resolve times and sort chronologically so backends (ASSIST, REBOUND, etc.)
+        # receive time-ordered epochs for efficient integration.
+        if isinstance(times, ObjectRef):
+            times = ray.get(times)
+        times = times.sort_by(["days", "nanos"])
 
         if max_processes > 1:
             propagated_list: List[Orbits] = []
@@ -846,20 +933,9 @@ class Propagator(ABC, EphemerisMixin):
             propagated_variants_input_list: List[VariantOrbits] = []
             input_is_variants: Optional[bool] = None
 
-            if RAY_INSTALLED is False:
-                raise ImportError(
-                    "Ray must be installed to use the ray parallel backend"
-                )
-
             initialize_use_ray(num_cpus=max_processes)
 
-            # Add orbits and times to object store if
-            # they haven't already been added
-            if not isinstance(times, ObjectRef):
-                times_ref = ray.put(times)
-            else:
-                times_ref = times
-                times = ray.get(times_ref)
+            times_ref = ray.put(times)
 
             if not isinstance(orbits, ObjectRef):
                 input_is_variants = isinstance(orbits, VariantOrbits)
@@ -954,9 +1030,9 @@ class Propagator(ABC, EphemerisMixin):
                 propagated = qv.concatenate(propagated_list)
                 if len(covariance_variants_list) > 0:
                     propagated_variants = qv.concatenate(covariance_variants_list)
-                    # sort by variant_id and time
                     propagated_variants = propagated_variants.sort_by(
                         [
+                            "orbit_id",
                             "variant_id",
                             "coordinates.time.days",
                             "coordinates.time.nanos",
@@ -977,9 +1053,13 @@ class Propagator(ABC, EphemerisMixin):
                 )
 
                 propagated_variants = self._propagate_orbits(variants, times)
-                # sort by variant_id and time
                 propagated_variants = propagated_variants.sort_by(
-                    ["variant_id", "coordinates.time.days", "coordinates.time.nanos"]
+                    [
+                        "orbit_id",
+                        "variant_id",
+                        "coordinates.time.days",
+                        "coordinates.time.nanos",
+                    ]
                 )
             else:
                 propagated_variants = None
@@ -994,6 +1074,19 @@ class Propagator(ABC, EphemerisMixin):
         # Preserve the original output origin for the input orbits
         # by orbit id
         propagated = ensure_input_origin_and_frame(orbits, propagated)
+
+        # Internal order is (orbit_id, variant_id, time) so that observer tiling
+        # [observers]*len(orbits) in _generate_ephemeris matches row-for-row.
+        # Callers that need time-first or grouping should sort or use .select()/.apply_mask().
+        if isinstance(propagated, VariantOrbits):
+            return propagated.sort_by(
+                [
+                    "orbit_id",
+                    "variant_id",
+                    "coordinates.time.days",
+                    "coordinates.time.nanos",
+                ]
+            )
 
         return propagated.sort_by(
             ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
