@@ -1,12 +1,10 @@
 import numpy as np
 import pyarrow as pa
 import pytest
+import ray
 from adam_assist import ASSISTPropagator
 
 from adam_core.propagator import propagator as propagator_module
-
-import ray
-
 from adam_core.ray_cluster import initialize_use_ray
 
 from ...observers.observers import Observers

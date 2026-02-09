@@ -516,6 +516,7 @@ def calculate_apparent_magnitude_v_and_phase_angle(
 
     return out_mag[:n], out_alpha[:n]
 
+
 def predict_magnitudes(
     H: Union[float, npt.NDArray[np.float64]],
     object_coords: CartesianCoordinates,

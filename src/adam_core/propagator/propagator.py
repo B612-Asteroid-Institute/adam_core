@@ -183,7 +183,9 @@ def attach_predicted_magnitude_v(
         return ephemeris
 
     orbits_value = ray.get(orbits) if isinstance(orbits, ObjectRef) else orbits
-    observers_value = ray.get(observers) if isinstance(observers, ObjectRef) else observers
+    observers_value = (
+        ray.get(observers) if isinstance(observers, ObjectRef) else observers
+    )
 
     want_mags = bool(predict_magnitudes)
     want_alpha = bool(predict_phase_angle)
