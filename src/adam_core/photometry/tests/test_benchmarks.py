@@ -8,6 +8,8 @@ from ...time import Timestamp
 from ..magnitude import (
     JAX_CHUNK_SIZE,
     calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_and_phase_angle,
+    calculate_phase_angle,
     convert_magnitude,
 )
 
@@ -90,6 +92,56 @@ def test_benchmark_calculate_apparent_magnitude_jax(benchmark, n):
     out = benchmark(run)
     out = out[:n]  # window back to requested n
     assert len(out) == n
+
+
+@pytest.mark.parametrize(
+    "n",
+    [256, 16384, 65536, 262144, 1048576],
+    ids=lambda x: f"n={x}",
+)
+@pytest.mark.benchmark(group="photometry_phase_angle")
+def test_benchmark_calculate_phase_angle_jax(benchmark, n):
+    pad_to = JAX_CHUNK_SIZE
+    n_padded = _padded_size(n, pad_to)
+    _, obj, observer, _ = _make_benchmark_case(n=n_padded)
+
+    # Warm-up to exclude JIT compilation from the benchmark measurement.
+    _ = calculate_phase_angle(obj, observer)
+
+    def run():
+        out = calculate_phase_angle(obj, observer)
+        return out
+
+    out = benchmark(run)
+    out = out[:n]
+    assert len(out) == n
+
+
+@pytest.mark.parametrize(
+    "n",
+    [256, 16384, 65536, 262144, 1048576],
+    ids=lambda x: f"n={x}",
+)
+@pytest.mark.benchmark(group="photometry_magnitude_apparent_and_phase_angle")
+def test_benchmark_calculate_apparent_magnitude_and_phase_jax(benchmark, n):
+    pad_to = JAX_CHUNK_SIZE
+    n_padded = _padded_size(n, pad_to)
+    H, obj, observer, G = _make_benchmark_case(n=n_padded)
+
+    # Warm-up to exclude JIT compilation from the benchmark measurement.
+    _ = calculate_apparent_magnitude_v_and_phase_angle(H, obj, observer, G=G)
+
+    def run():
+        mags, alpha = calculate_apparent_magnitude_v_and_phase_angle(
+            H, obj, observer, G=G
+        )
+        return mags, alpha
+
+    mags, alpha = benchmark(run)
+    mags = np.asarray(mags)[:n]
+    alpha = np.asarray(alpha)[:n]
+    assert len(mags) == n
+    assert len(alpha) == n
 
 
 @pytest.mark.parametrize(

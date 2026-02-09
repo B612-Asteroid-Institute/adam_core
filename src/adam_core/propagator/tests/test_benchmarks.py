@@ -5,18 +5,13 @@ from adam_assist import ASSISTPropagator
 
 from adam_core.propagator import propagator as propagator_module
 
+import ray
+
+from adam_core.ray_cluster import initialize_use_ray
+
 from ...observers.observers import Observers
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
-
-# Optional Ray-based multi-processing benchmark
-RAY_INSTALLED = False
-try:
-    import ray  # noqa: F401
-
-    RAY_INSTALLED = True
-except Exception:
-    pass
 
 
 @pytest.mark.benchmark(group="assist_ephemeris")
@@ -57,14 +52,11 @@ def test_assist_generate_ephemeris_single_process_benchmark(benchmark):
     assert len(ephemeris) == len(orbits) * len(observers)
 
 
-@pytest.mark.skipif(not RAY_INSTALLED, reason="Ray not installed")
 @pytest.mark.benchmark(group="assist_ephemeris")
 def test_assist_generate_ephemeris_multi_process_benchmark(benchmark):
     """
     Benchmark the ephemeris generation with multi-processing enabled (Ray).
     """
-    from adam_core.ray_cluster import initialize_use_ray
-
     num_orbits = 20
     num_times = 20
 

@@ -124,8 +124,6 @@ def _propagate_2body_serial(
         process_in_chunks(mu_, chunk_size),
     ):
         valid = min(chunk_size, num_entries - start)
-        if valid <= 0:
-            break
         orbits_propagated_chunk = _propagate_2body_vmap(
             orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
         )

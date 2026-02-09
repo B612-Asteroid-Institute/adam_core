@@ -20,7 +20,11 @@ from ..coordinates.transform import _cartesian_to_spherical, transform_coordinat
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
-from ..photometry.magnitude import calculate_apparent_magnitude_v, calculate_phase_angle
+from ..photometry.magnitude import (
+    calculate_apparent_magnitude_v,
+    calculate_apparent_magnitude_v_and_phase_angle,
+    calculate_phase_angle,
+)
 from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
@@ -336,8 +340,6 @@ def generate_ephemeris_2body(
         process_in_chunks(mu, chunk_size),
     ):
         valid = min(chunk_size, num_entries - start)
-        if valid <= 0:
-            break
         ephemeris_chunk, light_time_chunk, aberrated_chunk = (
             _generate_ephemeris_2body_vmap(
                 orbits_chunk,
@@ -466,27 +468,38 @@ def generate_ephemeris_2body(
         ),
     )
 
-    if want_alpha:
+    alpha_deg = None
+    mags = None
+    if want_mags and want_alpha:
+        assert H_v is not None and G is not None and has_params is not None
+        mags, alpha_deg = calculate_apparent_magnitude_v_and_phase_angle(
+            H_v=H_v,
+            object_coords=aberrated_heliocentric,
+            observer=observers_heliocentric,
+            G=G,
+        )
+    elif want_alpha:
         alpha_deg = calculate_phase_angle(
             aberrated_heliocentric, observers_heliocentric
         )
-        alpha_deg = np.asarray(alpha_deg, dtype=np.float64)
-        ephemeris = ephemeris.set_column(
-            "alpha",
-            pa.array(alpha_deg, mask=~np.isfinite(alpha_deg), type=pa.float64()),
-        )
-
-    if want_mags:
-        assert H_v is not None
-        assert G is not None
-        assert has_params is not None
-
+    elif want_mags:
+        assert H_v is not None and G is not None and has_params is not None
         mags = calculate_apparent_magnitude_v(
             H_v=H_v,
             object_coords=aberrated_heliocentric,
             observer=observers_heliocentric,
             G=G,
         )
+
+    if alpha_deg is not None:
+        alpha_deg = np.asarray(alpha_deg, dtype=np.float64)
+        ephemeris = ephemeris.set_column(
+            "alpha",
+            pa.array(alpha_deg, mask=~np.isfinite(alpha_deg), type=pa.float64()),
+        )
+
+    if mags is not None:
+        assert has_params is not None
         mags = np.asarray(mags, dtype=np.float64)
         valid = has_params & np.isfinite(mags)
         ephemeris = ephemeris.set_column(
