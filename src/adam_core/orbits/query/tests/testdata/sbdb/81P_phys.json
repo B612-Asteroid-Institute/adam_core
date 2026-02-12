@@ -1,0 +1,376 @@
+{
+  "orbit": {
+    "t_jup": "2.879",
+    "epoch": "2458808.5",
+    "soln_date": "2024-09-12 12:06:16",
+    "orbit_id": "K222/37",
+    "n_obs_used": 2795,
+    "model_pars": [
+      {
+        "value": "2.756872987168991E-9",
+        "name": "A1",
+        "title": "non-grav. radial accel.",
+        "desc": "non-gravitational radial acceleration parameter",
+        "sigma": "8.513E-11",
+        "n": 1,
+        "kind": "EST",
+        "units": "au/d^2"
+      },
+      {
+        "title": "non-grav. transverse accel.",
+        "value": "3.070332808959724E-10",
+        "name": "A2",
+        "desc": "non-gravitational transverse acceleration parameter",
+        "sigma": "2.485E-11",
+        "kind": "EST",
+        "n": 2,
+        "units": "au/d^2"
+      },
+      {
+        "n": 3,
+        "kind": "EST",
+        "units": "au/d^2",
+        "name": "A3",
+        "value": "-1.044902559601286E-9",
+        "title": "non-grav. normal accel.",
+        "sigma": "4.512E-11",
+        "desc": "non-gravitational normal acceleration parameter"
+      },
+      {
+        "title": "non-grav. perihelion offset",
+        "value": "-127.4855221524886",
+        "name": "DT",
+        "desc": "non-gravitational perihelion-maximum offset",
+        "sigma": "3.176",
+        "kind": "EST",
+        "n": 4,
+        "units": "d"
+      }
+    ],
+    "covariance": {
+      "labels": [
+        "e",
+        "q",
+        "tp",
+        "node",
+        "peri",
+        "i",
+        "A1",
+        "A2",
+        "A3",
+        "DT"
+      ],
+      "epoch": "2458808.5",
+      "data": [
+        [
+          "6.146094878622809E-15",
+          "-2.132795600414709E-14",
+          "-2.028871124846743E-12",
+          "1.420663192748003E-13",
+          "-3.415201109534469E-14",
+          "-4.262221427613461E-15",
+          "3.529084216606671E-18",
+          "5.223130073932748E-20",
+          "3.571209166102431E-20",
+          "9.681788130099617E-9"
+        ],
+        [
+          "-2.132795600414709E-14",
+          "7.524223296610677E-14",
+          "8.805181983251173E-12",
+          "-6.052296840365014E-13",
+          "2.717333221143742E-13",
+          "1.95751115571778E-14",
+          "-1.429178541081358E-17",
+          "1.772265968967383E-19",
+          "-1.875035155032437E-19",
+          "-5.392852584705331E-8"
+        ],
+        [
+          "-2.028871124846743E-12",
+          "8.805181983251173E-12",
+          "9.528871506762432E-9",
+          "1.029856897433677E-9",
+          "1.406630830509445E-12",
+          "-5.67170443374182E-11",
+          "-4.469797229799741E-15",
+          "6.812717645392956E-16",
+          "6.259707714714578E-16",
+          ".0001510685471042069"
+        ],
+        [
+          "1.420663192748003E-13",
+          "-6.052296840365014E-13",
+          "1.029856897433677E-9",
+          "3.087383999821263E-8",
+          "-3.073679978567314E-8",
+          "-1.10239943912224E-9",
+          "5.064730739796273E-16",
+          "-6.348106060377945E-17",
+          "3.972680685274918E-15",
+          "7.648591970959018E-5"
+        ],
+        [
+          "-3.415201109534469E-14",
+          "2.717333221143742E-13",
+          "1.406630830509445E-12",
+          "-3.073679978567314E-8",
+          "3.083875678274392E-8",
+          "1.096061750671835E-9",
+          "-7.768903100821134E-16",
+          "2.164078218810989E-16",
+          "-3.908296155771917E-15",
+          "-6.146273503040663E-5"
+        ],
+        [
+          "-4.262221427613461E-15",
+          "1.95751115571778E-14",
+          "-5.67170443374182E-11",
+          "-1.10239943912224E-9",
+          "1.096061750671835E-9",
+          "7.166364678377598E-11",
+          "-2.65105712296046E-17",
+          "5.912657577133336E-18",
+          "-1.989534601916504E-16",
+          "-3.83356737262987E-6"
+        ],
+        [
+          "3.529084216606671E-18",
+          "-1.429178541081358E-17",
+          "-4.469797229799741E-15",
+          "5.064730739796273E-16",
+          "-7.768903100821134E-16",
+          "-2.65105712296046E-17",
+          "7.247819628129883E-21",
+          "-1.430842486861232E-21",
+          "2.429635298444682E-22",
+          "7.880358227684748E-11"
+        ],
+        [
+          "5.223130073932748E-20",
+          "1.772265968967383E-19",
+          "6.812717645392956E-16",
+          "-6.348106060377945E-17",
+          "2.164078218810989E-16",
+          "5.912657577133336E-18",
+          "-1.430842486861232E-21",
+          "6.173503281056053E-22",
+          "-3.469245280267296E-23",
+          "-1.772034700753279E-11"
+        ],
+        [
+          "3.571209166102431E-20",
+          "-1.875035155032437E-19",
+          "6.259707714714578E-16",
+          "3.972680685274918E-15",
+          "-3.908296155771917E-15",
+          "-1.989534601916504E-16",
+          "2.429635298444682E-22",
+          "-3.469245280267296E-23",
+          "2.035604541347687E-21",
+          "4.18207468934479E-11"
+        ],
+        [
+          "9.681788130099617E-9",
+          "-5.392852584705331E-8",
+          ".0001510685471042069",
+          "7.648591970959018E-5",
+          "-6.146273503040663E-5",
+          "-3.83356737262987E-6",
+          "7.880358227684748E-11",
+          "-1.772034700753279E-11",
+          "4.18207468934479E-11",
+          "10.08437787048987"
+        ]
+      ]
+    },
+    "data_arc": "3613",
+    "rms": ".58722",
+    "moid_jup": ".012955",
+    "not_valid_after": null,
+    "producer": "Davide Farnocchia",
+    "last_obs": "2024-09-07",
+    "n_del_obs_used": null,
+    "not_valid_before": null,
+    "n_dop_obs_used": null,
+    "first_obs": "2014-10-17",
+    "pe_used": "DE441",
+    "source": "JPL",
+    "condition_code": "0",
+    "comment": null,
+    "two_body": null,
+    "equinox": "J2000",
+    "moid": ".601515",
+    "sb_used": "SB441-N16",
+    "elements": [
+      {
+        "sigma": "7.8397E-8",
+        "units": null,
+        "value": ".5373989073846863",
+        "name": "e",
+        "label": "e",
+        "title": "eccentricity"
+      },
+      {
+        "name": "a",
+        "value": "3.449745576963111",
+        "title": "semi-major axis",
+        "label": "a",
+        "sigma": "7.5915E-8",
+        "units": "au"
+      },
+      {
+        "label": "q",
+        "title": "perihelion distance",
+        "value": "1.595856073147981",
+        "name": "q",
+        "units": "au",
+        "sigma": "2.743E-7"
+      },
+      {
+        "sigma": "8.4654E-6",
+        "units": "deg",
+        "name": "i",
+        "value": "3.237004173608168",
+        "label": "i",
+        "title": "inclination; angle with respect to x-y ecliptic plane"
+      },
+      {
+        "sigma": ".00017571",
+        "units": "deg",
+        "value": "136.1102208500619",
+        "name": "om",
+        "label": "node",
+        "title": "longitude of the ascending node"
+      },
+      {
+        "units": "deg",
+        "sigma": ".00017561",
+        "title": "argument of perihelion",
+        "label": "peri",
+        "value": "41.72523085114398",
+        "name": "w"
+      },
+      {
+        "label": "M",
+        "title": "mean anomaly",
+        "name": "ma",
+        "value": "187.5966814232084",
+        "units": "deg",
+        "sigma": "1.2954E-5"
+      },
+      {
+        "value": "2459929.284579774298",
+        "name": "tp",
+        "title": "time of perihelion passage",
+        "label": "tp",
+        "sigma": "9.7616E-5",
+        "units": "TDB"
+      },
+      {
+        "label": "period",
+        "title": "sidereal orbital period",
+        "value": "2340.340383523585",
+        "name": "per",
+        "units": "d",
+        "sigma": "7.7252E-5"
+      },
+      {
+        "value": ".1538237781711004",
+        "name": "n",
+        "title": "mean motion",
+        "label": "n",
+        "sigma": "5.0776E-9",
+        "units": "deg/d"
+      },
+      {
+        "units": "au",
+        "sigma": "1.1671E-7",
+        "label": "Q",
+        "title": "aphelion distance",
+        "name": "ad",
+        "value": "5.303635080778242"
+      }
+    ]
+  },
+  "phys_par": [
+    {
+      "units": null,
+      "notes": "2 parameter fit from 1536 observations, autocmod 3.0f",
+      "desc": "absolute magnitude of comet and coma (i.e. total)",
+      "sigma": "0.8",
+      "title": "comet total magnitude",
+      "ref": "K222/37",
+      "name": "M1",
+      "value": "9.8"
+    },
+    {
+      "sigma": null,
+      "desc": "comet total magnitude slope parameter",
+      "title": "comet total magnitude slope",
+      "ref": "K222/37",
+      "name": "K1",
+      "value": "12.5",
+      "units": null,
+      "notes": "autocmod 3.0f"
+    },
+    {
+      "desc": "absolute magnitude of comet nucleus",
+      "sigma": "0.8",
+      "value": "12.9",
+      "name": "M2",
+      "ref": "K222/37",
+      "title": "comet nuclear magnitude",
+      "units": null,
+      "notes": "from 1063 observations, autocmod 3.0f"
+    },
+    {
+      "notes": "autocmod 3.0f",
+      "units": null,
+      "sigma": null,
+      "desc": "comet nuclear magnitude slope parameter",
+      "value": "5.",
+      "name": "K2",
+      "ref": "K222/37",
+      "title": "comet nuclear magnitude slope"
+    },
+    {
+      "notes": "autocmod 3.0f",
+      "units": null,
+      "ref": "K222/37",
+      "value": "0.03",
+      "name": "PC",
+      "title": "comet nuclear phase coefficient",
+      "sigma": null,
+      "desc": "comet nuclear magnitude law phase coefficient"
+    },
+    {
+      "desc": "effective body diameter",
+      "sigma": null,
+      "title": "diameter",
+      "name": "diameter",
+      "value": "4.0",
+      "ref": "Lamy,P.L.,Toth,I.,Fernandez,Y.R.,Weaver,H.A. (2004) Comets II, pp. 223-264",
+      "units": "km",
+      "notes": null
+    }
+  ],
+  "object": {
+    "orbit_class": {
+      "code": "JFc",
+      "name": "Jupiter-family Comet"
+    },
+    "fullname": "81P/Wild 2",
+    "spkid": "1000107",
+    "orbit_id": "K222/37",
+    "kind": "cn",
+    "neo": false,
+    "prefix": "P",
+    "des": "81P",
+    "pha": false
+  },
+  "signature": {
+    "source": "NASA/JPL Small-Body Database (SBDB) API",
+    "version": "1.3"
+  }
+}

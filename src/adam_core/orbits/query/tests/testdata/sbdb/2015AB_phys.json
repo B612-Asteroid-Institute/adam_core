@@ -1,0 +1,259 @@
+{
+  "object": {
+    "neo": true,
+    "prefix": null,
+    "des": "2015 AB",
+    "pha": false,
+    "orbit_class": {
+      "code": "AMO",
+      "name": "Amor"
+    },
+    "fullname": "(2015 AB)",
+    "spkid": "3703303",
+    "orbit_id": "19",
+    "kind": "au"
+  },
+  "signature": {
+    "source": "NASA/JPL Small-Body Database (SBDB) API",
+    "version": "1.3"
+  },
+  "orbit": {
+    "n_obs_used": 60,
+    "orbit_id": "19",
+    "soln_date": "2025-04-29 06:20:18",
+    "epoch": "2461000.5",
+    "t_jup": "3.993",
+    "moid_jup": "3.06843",
+    "rms": ".58702",
+    "covariance": {
+      "labels": [
+        "e",
+        "q",
+        "tp",
+        "node",
+        "peri",
+        "i"
+      ],
+      "epoch": "2457359.5",
+      "elements": [
+        {
+          "title": "eccentricity",
+          "label": "e",
+          "name": "e",
+          "value": ".2837017906205913",
+          "units": null,
+          "sigma": 9.87481985936111e-08
+        },
+        {
+          "title": "perihelion distance",
+          "label": "q",
+          "value": "1.290377080027097",
+          "name": "q",
+          "units": "au",
+          "sigma": 1.70852889144668e-07
+        },
+        {
+          "sigma": 5.58405253341078e-05,
+          "units": "TDB",
+          "name": "tp",
+          "value": "2456987.773604291736",
+          "label": "tp",
+          "title": "time of perihelion passage"
+        },
+        {
+          "name": "om",
+          "value": ".4610182175244733",
+          "title": "longitude of the ascending node",
+          "label": "node",
+          "sigma": 5.34003847190846e-05,
+          "units": "deg"
+        },
+        {
+          "label": "peri",
+          "title": "argument of perihelion",
+          "value": "71.29544744505145",
+          "name": "w",
+          "units": "deg",
+          "sigma": 5.68919139076119e-05
+        },
+        {
+          "label": "i",
+          "title": "inclination",
+          "name": "i",
+          "value": "11.61228625763524",
+          "units": "deg",
+          "sigma": 9.00611442096563e-06
+        }
+      ],
+      "data": [
+        [
+          "9.751206725483265E-15",
+          "-1.684566831010295E-14",
+          "4.314966153329762E-12",
+          "1.094085652511727E-12",
+          "1.400311529696935E-12",
+          "-5.148816232291207E-13"
+        ],
+        [
+          "-1.684566831010295E-14",
+          "2.919070972908018E-14",
+          "-7.350053619108327E-12",
+          "-1.889081627207893E-12",
+          "-2.345901889303865E-12",
+          "8.875567576269645E-13"
+        ],
+        [
+          "4.314966153329762E-12",
+          "-7.350053619108327E-12",
+          "3.118164269589132E-9",
+          "5.738124941845262E-10",
+          "1.318448000008832E-9",
+          "-2.725578663351056E-10"
+        ],
+        [
+          "1.094085652511727E-12",
+          "-1.889081627207893E-12",
+          "5.738124941845262E-10",
+          "2.851601088146241E-9",
+          "-2.457128552010953E-9",
+          "-2.9881514792212E-10"
+        ],
+        [
+          "1.400311529696935E-12",
+          "-2.345901889303865E-12",
+          "1.318448000008832E-9",
+          "-2.457128552010953E-9",
+          "3.236689868071125E-9",
+          "1.313803402417973E-10"
+        ],
+        [
+          "-5.148816232291207E-13",
+          "8.875567576269645E-13",
+          "-2.725578663351056E-10",
+          "-2.9881514792212E-10",
+          "1.313803402417973E-10",
+          "8.111009696352501E-11"
+        ]
+      ]
+    },
+    "data_arc": "5705",
+    "model_pars": [],
+    "not_valid_before": null,
+    "n_del_obs_used": null,
+    "n_dop_obs_used": null,
+    "first_obs": "2009-09-15",
+    "pe_used": "DE441",
+    "not_valid_after": null,
+    "producer": "Otto Matic",
+    "last_obs": "2025-04-29",
+    "moid": ".365556",
+    "equinox": "J2000",
+    "elements": [
+      {
+        "sigma": "9.881E-8",
+        "units": null,
+        "name": "e",
+        "value": ".2835889344504031",
+        "label": "e",
+        "title": "eccentricity"
+      },
+      {
+        "sigma": "1.6585E-8",
+        "units": "au",
+        "name": "a",
+        "value": "1.801717190437513",
+        "label": "a",
+        "title": "semi-major axis"
+      },
+      {
+        "name": "q",
+        "value": "1.290770132220365",
+        "label": "q",
+        "title": "perihelion distance",
+        "sigma": "1.7101E-7",
+        "units": "au"
+      },
+      {
+        "label": "i",
+        "title": "inclination; angle with respect to x-y ecliptic plane",
+        "value": "11.60710128502694",
+        "name": "i",
+        "units": "deg",
+        "sigma": "9.0056E-6"
+      },
+      {
+        "units": "deg",
+        "sigma": "5.3422E-5",
+        "label": "node",
+        "title": "longitude of the ascending node",
+        "value": ".3707468425535846",
+        "name": "om"
+      },
+      {
+        "name": "w",
+        "value": "71.42938973357546",
+        "title": "argument of perihelion",
+        "label": "peri",
+        "sigma": "5.6902E-5",
+        "units": "deg"
+      },
+      {
+        "title": "mean anomaly",
+        "label": "M",
+        "name": "ma",
+        "value": "195.4385577443932",
+        "units": "deg",
+        "sigma": "4.1071E-5"
+      },
+      {
+        "units": "TDB",
+        "sigma": ".00010585",
+        "title": "time of perihelion passage",
+        "label": "tp",
+        "name": "tp",
+        "value": "2461404.288498556359"
+      },
+      {
+        "label": "period",
+        "title": "sidereal orbital period",
+        "name": "per",
+        "value": "883.3409423727661",
+        "units": "d",
+        "sigma": "1.2197E-5"
+      },
+      {
+        "sigma": "5.6271E-9",
+        "units": "deg/d",
+        "value": ".407543659227426",
+        "name": "n",
+        "title": "mean motion",
+        "label": "n"
+      },
+      {
+        "units": "au",
+        "sigma": "2.1288E-8",
+        "title": "aphelion distance",
+        "label": "Q",
+        "name": "ad",
+        "value": "2.312664248654662"
+      }
+    ],
+    "sb_used": "SB441-N16",
+    "comment": null,
+    "two_body": null,
+    "source": "JPL",
+    "condition_code": "0"
+  },
+  "phys_par": [
+    {
+      "units": null,
+      "notes": null,
+      "desc": "absolute magnitude (magnitude at 1 au from Sun and observer)",
+      "sigma": null,
+      "title": "absolute magnitude",
+      "name": "H",
+      "value": "20.32",
+      "ref": "MPO918738"
+    }
+  ]
+}

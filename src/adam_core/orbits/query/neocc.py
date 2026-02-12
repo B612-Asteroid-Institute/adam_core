@@ -10,6 +10,7 @@ from adam_core.coordinates.covariances import _upper_triangular_to_full
 from ...coordinates import CoordinateCovariances, KeplerianCoordinates, Origin
 from ...orbits import Orbits
 from ...time import Timestamp
+from ..physical_parameters import PhysicalParameters
 
 
 def _parse_oef(data: str) -> Dict[str, Any]:
@@ -108,13 +109,14 @@ def _parse_oef(data: str) -> Dict[str, Any]:
             result["epoch"] = float(line.split()[1])
             result["time_system"] = line.split()[2]
 
-    # Parse magnitude
+    # Parse magnitude: OEF MAG line is (absolute magnitude H, slope parameter G), V-band.
+    # Ref: ESA NEOCC Automated Data Access, https://neo.ssa.esa.int/computer-access
     for line in lines:
         if line.strip().startswith("MAG"):
             mag_data = line.split()[1:]
             result["magnitude"] = {
-                "value": float(mag_data[0]),
-                "uncertainty": float(mag_data[1]),
+                "H": float(mag_data[0]),
+                "G": float(mag_data[1]),
             }
 
     # Parse derived parameters (marked with !)
@@ -154,6 +156,31 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         result["correlation"] = _upper_triangular_to_full(np.array(cor_matrix))
 
     return result
+
+
+def _physical_parameters_from_neocc(data: Dict[str, Any]) -> PhysicalParameters:
+    """
+    Build one-row PhysicalParameters from parsed NEOCC OEF data.
+
+    OEF MAG line is (H, G); no uncertainties in NEOCC OEF. V-band per ESA doc.
+    Ref: https://neo.ssa.esa.int/computer-access
+    """
+    mag = data.get("magnitude")
+    if mag is not None and "H" in mag:
+        h = float(mag["H"])
+        g = float(mag["G"]) if mag.get("G") is not None else np.nan
+        return PhysicalParameters.from_kwargs(
+            H_v=[h],
+            H_v_sigma=[np.nan],
+            G=[g],
+            G_sigma=[np.nan],
+        )
+    return PhysicalParameters.from_kwargs(
+        H_v=[np.nan],
+        H_v_sigma=[np.nan],
+        G=[np.nan],
+        G_sigma=[np.nan],
+    )
 
 
 def query_neocc(
@@ -216,6 +243,8 @@ def query_neocc(
                     f"Unsupported reference system: {data['header']['refsys']}"
                 )
 
+            phys = _physical_parameters_from_neocc(data)
+
             orbit = Orbits.from_kwargs(
                 orbit_id=[data["object_id"]],
                 object_id=[data["object_id"]],
@@ -237,6 +266,7 @@ def query_neocc(
                     frame="ecliptic",
                     origin=Origin.from_kwargs(code=["SUN"]),
                 ).to_cartesian(),
+                physical_parameters=phys,
             )
             orbits = qv.concatenate([orbits, orbit])
 

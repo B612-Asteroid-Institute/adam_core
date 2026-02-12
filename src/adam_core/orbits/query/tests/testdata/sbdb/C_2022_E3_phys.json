@@ -1,0 +1,274 @@
+{
+  "phys_par": [
+    {
+      "ref": "82",
+      "title": "comet total magnitude",
+      "units": null,
+      "sigma": "0.9",
+      "value": "10.8",
+      "name": "M1",
+      "notes": "2 parameter fit from 4259 observations, autocmod 3.0f",
+      "desc": "absolute magnitude of comet and coma (i.e. total)"
+    },
+    {
+      "notes": "autocmod 3.0f",
+      "desc": "comet total magnitude slope parameter",
+      "sigma": null,
+      "value": "4.5",
+      "name": "K1",
+      "ref": "82",
+      "title": "comet total magnitude slope",
+      "units": null
+    }
+  ],
+  "signature": {
+    "source": "NASA/JPL Small-Body Database (SBDB) API",
+    "version": "1.3"
+  },
+  "object": {
+    "orbit_class": {
+      "code": "HYP",
+      "name": "Hyperbolic Comet"
+    },
+    "kind": "cu",
+    "pha": false,
+    "spkid": "1003845",
+    "orbit_id": "82",
+    "prefix": "C",
+    "des": "2022 E3",
+    "neo": false,
+    "fullname": "C/2022 E3 (ZTF)"
+  },
+  "orbit": {
+    "elements": [
+      {
+        "title": "eccentricity",
+        "units": null,
+        "sigma": "6.0312E-7",
+        "label": "e",
+        "name": "e",
+        "value": "1.000301905819192"
+      },
+      {
+        "sigma": "7.3594",
+        "label": "a",
+        "name": "a",
+        "value": "-3684.077283445997",
+        "title": "semi-major axis",
+        "units": "au"
+      },
+      {
+        "units": "au",
+        "title": "perihelion distance",
+        "sigma": "1.5091E-7",
+        "label": "q",
+        "name": "q",
+        "value": "1.11224437022534"
+      },
+      {
+        "name": "i",
+        "value": "109.169480756749",
+        "label": "i",
+        "sigma": "6.6926E-6",
+        "title": "inclination; angle with respect to x-y ecliptic plane",
+        "units": "deg"
+      },
+      {
+        "sigma": "7.0453E-6",
+        "label": "node",
+        "value": "302.5550197168474",
+        "name": "om",
+        "title": "longitude of the ascending node",
+        "units": "deg"
+      },
+      {
+        "label": "peri",
+        "value": "145.81492879",
+        "name": "w",
+        "sigma": "1.6223E-5",
+        "units": "deg",
+        "title": "argument of perihelion"
+      },
+      {
+        "sigma": "1.1065E-6",
+        "value": "-.0003692991264304336",
+        "name": "ma",
+        "label": "M",
+        "units": "deg",
+        "title": "mean anomaly"
+      },
+      {
+        "value": "2459957.285198829711",
+        "name": "tp",
+        "label": "tp",
+        "sigma": "2.0142E-5",
+        "units": "TDB",
+        "title": "time of perihelion passage"
+      },
+      {
+        "sigma": null,
+        "name": "per",
+        "value": null,
+        "label": "period",
+        "units": "d",
+        "title": "sidereal orbital period"
+      },
+      {
+        "units": "deg/d",
+        "title": "mean motion",
+        "value": "4.407689324471432E-6",
+        "name": "n",
+        "label": "n",
+        "sigma": "1.3207E-8"
+      },
+      {
+        "title": "aphelion distance",
+        "units": "au",
+        "value": null,
+        "name": "ad",
+        "label": "Q",
+        "sigma": null
+      }
+    ],
+    "moid_jup": "1.74314",
+    "n_dop_obs_used": null,
+    "first_obs": "2021-10-25",
+    "orbit_id": "82",
+    "not_valid_before": null,
+    "two_body": null,
+    "pe_used": "DE441",
+    "epoch": "2459873.5",
+    "sb_used": "SB441-N16",
+    "last_obs": "2024-01-12",
+    "comment": null,
+    "n_del_obs_used": null,
+    "source": "JPL",
+    "rms": ".46387",
+    "t_jup": "-0.426",
+    "model_pars": [
+      {
+        "units": "au/d^2",
+        "kind": "EST",
+        "title": "non-grav. transverse accel.",
+        "sigma": "1.061E-10",
+        "value": "-5.872322924187339E-10",
+        "name": "A2",
+        "n": 1,
+        "desc": "non-gravitational transverse acceleration parameter"
+      },
+      {
+        "sigma": "6.401E-11",
+        "value": "-1.688049348767822E-9",
+        "name": "A3",
+        "units": "au/d^2",
+        "kind": "EST",
+        "title": "non-grav. normal accel.",
+        "desc": "non-gravitational normal acceleration parameter",
+        "n": 2
+      }
+    ],
+    "data_arc": "809",
+    "condition_code": null,
+    "covariance": {
+      "data": [
+        [
+          "3.637550706881274E-13",
+          "6.613258138303516E-14",
+          "-9.567280974885274E-12",
+          "1.078862646356386E-12",
+          "-7.987826895085477E-12",
+          "1.768609042416643E-13",
+          "-5.245796044138491E-17",
+          "-7.658679725645027E-18"
+        ],
+        [
+          "6.613258138303516E-14",
+          "2.277518195974589E-14",
+          "-2.741399858571659E-12",
+          "1.215132791601266E-13",
+          "-2.128539629200797E-12",
+          "-5.384522963507878E-14",
+          "-1.470481619323666E-17",
+          "-7.636947073295356E-19"
+        ],
+        [
+          "-9.567280974885274E-12",
+          "-2.741399858571659E-12",
+          "4.05702090008897E-10",
+          "-2.174507588638219E-11",
+          "3.173832666965571E-10",
+          "4.981722700193254E-12",
+          "2.015346024973196E-15",
+          "1.292594626835316E-16"
+        ],
+        [
+          "1.078862646356386E-12",
+          "1.215132791601266E-13",
+          "-2.174507588638219E-11",
+          "4.963601280566762E-11",
+          "-3.48444450453545E-12",
+          "2.335702253819554E-11",
+          "-1.276549511649092E-16",
+          "-3.793774630102279E-16"
+        ],
+        [
+          "-7.987826895085477E-12",
+          "-2.128539629200797E-12",
+          "3.173832666965571E-10",
+          "-3.48444450453545E-12",
+          "2.631939688163228E-10",
+          "1.071488585457583E-11",
+          "1.572965197437644E-15",
+          "2.814516841000472E-18"
+        ],
+        [
+          "1.768609042416643E-13",
+          "-5.384522963507878E-14",
+          "4.981722700193254E-12",
+          "2.335702253819554E-11",
+          "1.071488585457583E-11",
+          "4.479129709527753E-11",
+          "2.624449620846501E-17",
+          "-2.191862285794387E-16"
+        ],
+        [
+          "-5.245796044138491E-17",
+          "-1.470481619323666E-17",
+          "2.015346024973196E-15",
+          "-1.276549511649092E-16",
+          "1.572965197437644E-15",
+          "2.624449620846501E-17",
+          "1.124857632123923E-20",
+          "3.095544932545193E-22"
+        ],
+        [
+          "-7.658679725645027E-18",
+          "-7.636947073295356E-19",
+          "1.292594626835316E-16",
+          "-3.793774630102279E-16",
+          "2.814516841000472E-18",
+          "-2.191862285794387E-16",
+          "3.095544932545193E-22",
+          "4.097345026545959E-21"
+        ]
+      ],
+      "epoch": "2459873.5",
+      "labels": [
+        "e",
+        "q",
+        "tp",
+        "node",
+        "peri",
+        "i",
+        "A2",
+        "A3"
+      ]
+    },
+    "soln_date": "2025-07-31 12:12:23",
+    "equinox": "J2000",
+    "not_valid_after": null,
+    "moid": ".219806",
+    "n_obs_used": 5330,
+    "producer": "Otto Matic"
+  }
+}

@@ -1,0 +1,364 @@
+{
+  "phys_par": [
+    {
+      "sigma": null,
+      "name": "M1",
+      "value": "5.5",
+      "ref": "ICQ 2005 Handbook",
+      "units": null,
+      "title": "comet total magnitude",
+      "desc": "absolute magnitude of comet and coma (i.e. total)",
+      "notes": null
+    },
+    {
+      "name": "K1",
+      "value": "8.0",
+      "sigma": null,
+      "units": null,
+      "title": "comet total magnitude slope",
+      "ref": "ICQ 2005 Handbook",
+      "desc": "comet total magnitude slope parameter",
+      "notes": null
+    },
+    {
+      "ref": "ICQ 2005 Handbook",
+      "title": "comet nuclear magnitude",
+      "units": null,
+      "sigma": null,
+      "name": "M2",
+      "value": "13.6",
+      "notes": null,
+      "desc": "absolute magnitude of comet nucleus"
+    },
+    {
+      "desc": "comet nuclear magnitude slope parameter",
+      "notes": null,
+      "title": "comet nuclear magnitude slope",
+      "units": null,
+      "ref": "ICQ 2005 Handbook",
+      "value": "5.0",
+      "name": "K2",
+      "sigma": null
+    },
+    {
+      "ref": "ICQ 2005 Handbook",
+      "units": null,
+      "title": "comet nuclear phase coefficient",
+      "sigma": null,
+      "value": "0.03",
+      "name": "PC",
+      "desc": "comet nuclear magnitude law phase coefficient",
+      "notes": null
+    },
+    {
+      "desc": "effective body diameter",
+      "notes": null,
+      "units": "km",
+      "title": "diameter",
+      "ref": "Lamy,P.L.;Toth,I.;Fernandez,Y.R.;Weaver,H.A. (2004) Comets II, pp. 223-264",
+      "value": "11.0",
+      "name": "diameter",
+      "sigma": null
+    },
+    {
+      "notes": "measurements repeatable within 100 to 200 meters",
+      "desc": "tri(or bi)-axial body dimensions",
+      "ref": "Keller et al. (1987) Astron. Astrophys. 187:807-823",
+      "units": "km",
+      "title": "extent",
+      "sigma": null,
+      "name": "extent",
+      "value": "14.9x8.2"
+    },
+    {
+      "title": "geometric albedo",
+      "units": null,
+      "ref": "Earth, Moon, and Planets, v. 89, Issue 1, p. 117-134 (2002)",
+      "value": "0.04",
+      "name": "albedo",
+      "sigma": "0.01",
+      "notes": null,
+      "desc": "geometric albedo"
+    }
+  ],
+  "orbit": {
+    "comment": null,
+    "n_del_obs_used": null,
+    "sb_used": "SB441-N16",
+    "last_obs": "1994-01-11",
+    "rms": ".61032",
+    "source": "JPL",
+    "pe_used": "DE441",
+    "epoch": "2439875.5",
+    "two_body": null,
+    "not_valid_before": null,
+    "n_dop_obs_used": null,
+    "first_obs": "1835-08-21",
+    "orbit_id": "75",
+    "moid_jup": ".782553",
+    "elements": [
+      {
+        "sigma": "7.5527E-9",
+        "value": ".9679359956953211",
+        "name": "e",
+        "label": "e",
+        "units": null,
+        "title": "eccentricity"
+      },
+      {
+        "value": "17.92863504856923",
+        "name": "a",
+        "label": "a",
+        "sigma": "9.9587E-9",
+        "title": "semi-major axis",
+        "units": "au"
+      },
+      {
+        "units": "au",
+        "title": "perihelion distance",
+        "sigma": "1.3552E-7",
+        "name": "q",
+        "value": ".5748638313743413",
+        "label": "q"
+      },
+      {
+        "title": "inclination; angle with respect to x-y ecliptic plane",
+        "units": "deg",
+        "sigma": "1.5093E-5",
+        "name": "i",
+        "value": "162.1905300439129",
+        "label": "i"
+      },
+      {
+        "units": "deg",
+        "title": "longitude of the ascending node",
+        "sigma": "1.9861E-5",
+        "label": "node",
+        "value": "59.09894720612437",
+        "name": "om"
+      },
+      {
+        "sigma": "2.0534E-5",
+        "label": "peri",
+        "name": "w",
+        "value": "112.2414314637764",
+        "title": "argument of perihelion",
+        "units": "deg"
+      },
+      {
+        "label": "M",
+        "value": "274.3823371366792",
+        "name": "ma",
+        "sigma": "1.2457E-7",
+        "title": "mean anomaly",
+        "units": "deg"
+      },
+      {
+        "label": "tp",
+        "name": "tp",
+        "value": "2446469.973616146677",
+        "sigma": "1.2976E-5",
+        "units": "TDB",
+        "title": "time of perihelion passage"
+      },
+      {
+        "sigma": "2.3103E-5",
+        "value": "27728.04608790421",
+        "name": "per",
+        "label": "period",
+        "title": "sidereal orbital period",
+        "units": "d"
+      },
+      {
+        "units": "deg/d",
+        "title": "mean motion",
+        "sigma": "1.0818E-11",
+        "value": ".01298324443268444",
+        "name": "n",
+        "label": "n"
+      },
+      {
+        "sigma": "1.9598E-8",
+        "name": "ad",
+        "value": "35.28240626576412",
+        "label": "Q",
+        "title": "aphelion distance",
+        "units": "au"
+      }
+    ],
+    "moid": ".0745097",
+    "equinox": "J2000",
+    "not_valid_after": null,
+    "producer": "Davide Farnocchia",
+    "n_obs_used": 8518,
+    "condition_code": "0",
+    "model_pars": [
+      {
+        "sigma": "4.E-11",
+        "value": "4.887055280193953E-10",
+        "name": "A1",
+        "kind": "EST",
+        "title": "non-grav. radial accel.",
+        "units": "au/d^2",
+        "desc": "non-gravitational radial acceleration parameter",
+        "n": 1
+      },
+      {
+        "n": 2,
+        "desc": "non-gravitational transverse acceleration parameter",
+        "title": "non-grav. transverse accel.",
+        "kind": "EST",
+        "units": "au/d^2",
+        "sigma": "4.575E-15",
+        "name": "A2",
+        "value": "1.554720285182461E-10"
+      },
+      {
+        "name": "S0",
+        "value": "577.878759926215",
+        "sigma": "27.33",
+        "kind": "EST",
+        "title": "center-of-light/mass offset",
+        "units": "km",
+        "desc": "offset between the center-of-light and center-of-mass",
+        "n": 3
+      }
+    ],
+    "data_arc": "57852",
+    "soln_date": "2025-11-21 15:57:34",
+    "covariance": {
+      "labels": [
+        "e",
+        "q",
+        "tp",
+        "node",
+        "peri",
+        "i",
+        "A1",
+        "A2",
+        "S0"
+      ],
+      "epoch": "2439875.5",
+      "data": [
+        [
+          "5.704366859062081E-17",
+          "-1.023532576477991E-15",
+          "-4.442027647167516E-14",
+          "-3.682685075132187E-15",
+          "3.06139722716574E-14",
+          "-2.340094347939558E-15",
+          "2.465976124349209E-19",
+          "1.48629182553524E-23",
+          "-4.457290307778771E-8"
+        ],
+        [
+          "-1.023532576477991E-15",
+          "1.836529993643004E-14",
+          "7.994897895225189E-13",
+          "6.573746054472944E-14",
+          "-5.484355460687766E-13",
+          "4.217379683776063E-14",
+          "-4.425942777129659E-18",
+          "-2.663489895083338E-22",
+          "8.026489934319965E-7"
+        ],
+        [
+          "-4.442027647167516E-14",
+          "7.994897895225189E-13",
+          "1.683744688682528E-10",
+          "3.608865598596058E-12",
+          "2.482640588089104E-11",
+          "1.985169436338825E-11",
+          "-2.488060655515093E-16",
+          "-5.376528306099626E-21",
+          "3.69830868825724E-5"
+        ],
+        [
+          "-3.682685075132187E-15",
+          "6.573746054472944E-14",
+          "3.608865598596058E-12",
+          "3.944415854233901E-10",
+          "3.663030778054936E-10",
+          "1.28559817761333E-10",
+          "-1.501415684646356E-17",
+          "-4.286529668705104E-20",
+          "-1.477837208989652E-5"
+        ],
+        [
+          "3.06139722716574E-14",
+          "-5.484355460687766E-13",
+          "2.482640588089104E-11",
+          "3.663030778054936E-10",
+          "4.216653301702108E-10",
+          "1.279006336995455E-10",
+          "1.578465625609617E-16",
+          "-1.970171907572756E-20",
+          "-6.785641519091501E-5"
+        ],
+        [
+          "-2.340094347939558E-15",
+          "4.217379683776063E-14",
+          "1.985169436338825E-11",
+          "1.28559817761333E-10",
+          "1.279006336995455E-10",
+          "2.277853078170895E-10",
+          "-6.947855454777962E-18",
+          "-4.822305113063237E-20",
+          "8.327452555443556E-7"
+        ],
+        [
+          "2.465976124349209E-19",
+          "-4.425942777129659E-18",
+          "-2.488060655515093E-16",
+          "-1.501415684646356E-17",
+          "1.578465625609617E-16",
+          "-6.947855454777962E-18",
+          "1.600025101763613E-21",
+          "9.92541489117255E-26",
+          "-1.97831325122718E-10"
+        ],
+        [
+          "1.48629182553524E-23",
+          "-2.663489895083338E-22",
+          "-5.376528306099626E-21",
+          "-4.286529668705104E-20",
+          "-1.970171907572756E-20",
+          "-4.822305113063237E-20",
+          "9.92541489117255E-26",
+          "2.093243154321394E-29",
+          "-5.463164406694956E-16"
+        ],
+        [
+          "-4.457290307778771E-8",
+          "8.026489934319965E-7",
+          "3.69830868825724E-5",
+          "-1.477837208989652E-5",
+          "-6.785641519091501E-5",
+          "8.327452555443556E-7",
+          "-1.97831325122718E-10",
+          "-5.463164406694956E-16",
+          "747.129654910352"
+        ]
+      ]
+    },
+    "t_jup": "-0.598"
+  },
+  "signature": {
+    "source": "NASA/JPL Small-Body Database (SBDB) API",
+    "version": "1.3"
+  },
+  "object": {
+    "pha": false,
+    "spkid": "1000036",
+    "kind": "cn",
+    "orbit_id": "75",
+    "orbit_class": {
+      "code": "HTC",
+      "name": "Halley-type Comet*"
+    },
+    "neo": true,
+    "fullname": "1P/Halley",
+    "des": "1P",
+    "prefix": "P"
+  }
+}

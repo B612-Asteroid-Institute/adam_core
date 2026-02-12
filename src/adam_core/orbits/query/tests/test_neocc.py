@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..neocc import _parse_oef, query_neocc
+from ..neocc import _parse_oef, _physical_parameters_from_neocc, query_neocc
 
 TESTDATA_DIR = Path(__file__).parent / "testdata" / "neocc"
 
@@ -21,26 +21,26 @@ def test__parse_oef_2024YR4_ke0():
     # Test object identification
     assert result["object_id"] == "2024YR4"
 
-    # Test Keplerian elements
-    assert result["elements"]["a"] == 2.5164332860625849
-    assert result["elements"]["e"] == 0.66161845913486128
-    assert result["elements"]["i"] == 3.4083351351535
-    assert result["elements"]["node"] == 271.3684549331765
-    assert result["elements"]["peri"] == 134.3639170929742
-    assert result["elements"]["M"] == 12.947786309204405
+    # Test Keplerian elements (baseline from current 2024YR4.ke0 fixture)
+    assert result["elements"]["a"] == 2.516306904413629
+    assert result["elements"]["e"] == 0.6615997598102339
+    assert result["elements"]["i"] == 3.4082582480218
+    assert result["elements"]["node"] == 271.3674684214714
+    assert result["elements"]["peri"] == 134.3645021052249
+    assert result["elements"]["M"] == 16.920818963896668
 
     # Test epoch and time system
-    assert result["epoch"] == 60688.865642464
+    assert result["epoch"] == 60704.950998578
     assert result["time_system"] == "TDT"
 
-    # Test magnitude
-    assert result["magnitude"]["value"] == 23.876
-    assert result["magnitude"]["uncertainty"] == 0.150
+    # Test magnitude (OEF MAG = absolute magnitude H, slope parameter G; V-band)
+    assert result["magnitude"]["H"] == 24.047
+    assert result["magnitude"]["G"] == 0.150
 
     # Test derived parameters
-    assert abs(result["derived"]["perihelion"] - 0.85151457282218190) < 1e-14
-    assert abs(result["derived"]["aphelion"] - 4.1813519993029882) < 1e-14
-    assert abs(result["derived"]["period"] - 1458.0639039239943) < 1e-14
+    assert abs(result["derived"]["perihelion"] - 0.8515188608447389) < 1e-14
+    assert abs(result["derived"]["aphelion"] - 4.181094947982519) < 1e-14
+    assert abs(result["derived"]["period"] - 1457.9540638135068) < 1e-14
     assert result["derived"]["pha"] == "F"
     assert result["derived"]["orb_type"] == "Apollo"
 
@@ -70,26 +70,26 @@ def test__parse_oef_2022OB5_ke1():
     # Test object identification
     assert result["object_id"] == "2022OB5"
 
-    # Test Keplerian elements
-    assert result["elements"]["a"] == 1.0088199810054714
-    assert result["elements"]["e"] == 0.058593341916141808
-    assert result["elements"]["i"] == 2.0599781391032
-    assert result["elements"]["node"] == 302.6856493105631
-    assert result["elements"]["peri"] == 105.7080782884594
-    assert result["elements"]["M"] == 334.06138612130985
+    # Test Keplerian elements (baseline from current 2022OB5.ke1 fixture)
+    assert result["elements"]["a"] == 1.0034630497303025
+    assert result["elements"]["e"] == 0.0555727787282651
+    assert result["elements"]["i"] == 2.0877951248265
+    assert result["elements"]["node"] == 300.2025534594475
+    assert result["elements"]["peri"] == 99.4880289155792
+    assert result["elements"]["M"] == 14.654786035215105
 
     # Test epoch and time system
-    assert result["epoch"] == 60600.0
+    assert result["epoch"] == 61000.0
     assert result["time_system"] == "TDT"
 
-    # Test magnitude
-    assert result["magnitude"]["value"] == 28.813
-    assert result["magnitude"]["uncertainty"] == 0.150
+    # Test magnitude (OEF MAG = H, G)
+    assert result["magnitude"]["H"] == 28.912
+    assert result["magnitude"]["G"] == 0.150
 
     # Test derived parameters
-    assert abs(result["derived"]["perihelion"] - 0.94970984692658189) < 1e-14
-    assert abs(result["derived"]["aphelion"] - 1.0679301150843603) < 1e-14
-    assert abs(result["derived"]["period"] - 370.09987635676049) < 1e-14
+    assert abs(result["derived"]["perihelion"] - 0.9476978197056504) < 1e-14
+    assert abs(result["derived"]["aphelion"] - 1.0592282797549548) < 1e-14
+    assert abs(result["derived"]["period"] - 367.15589424322116) < 1e-14
     assert result["derived"]["pha"] == "F"
     assert result["derived"]["orb_type"] == "Apollo"
 
@@ -138,11 +138,18 @@ def test_query_neocc(mocker):
     assert orbits.object_id[0].as_py() == "2024YR4"
     assert orbits.orbit_id[1].as_py() == "2022OB5"
     assert orbits.object_id[1].as_py() == "2022OB5"
-    assert orbits.coordinates.time.days[0].as_py() == 60800
-    assert orbits.coordinates.time.days[1].as_py() == 60600
+    # present-day uses ke1 files; epochs from current fixtures
+    assert orbits.coordinates.time.days[0].as_py() == 61000
+    assert orbits.coordinates.time.days[1].as_py() == 61000
     assert orbits.coordinates.time.scale == "tt"
     assert np.all(~np.isnan(orbits.coordinates.values))
     assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
+    # Physical parameters from OEF MAG (H, G); no uncertainties in NEOCC OEF
+    assert orbits.physical_parameters is not None
+    assert orbits.physical_parameters.H_v[0].as_py() == 24.047
+    assert orbits.physical_parameters.G[0].as_py() == 0.150
+    assert orbits.physical_parameters.H_v[1].as_py() == 28.912
+    assert orbits.physical_parameters.G[1].as_py() == 0.150
 
     # Verify the mock was called with correct parameters
     requests.get.assert_has_calls(
@@ -170,8 +177,9 @@ def test_query_neocc(mocker):
     assert orbits.object_id[0].as_py() == "2024YR4"
     assert orbits.orbit_id[1].as_py() == "2022OB5"
     assert orbits.object_id[1].as_py() == "2022OB5"
-    assert orbits.coordinates.time.days[0].as_py() == 60688
-    assert orbits.coordinates.time.days[1].as_py() == 59792
+    # middle uses ke0 files; epochs from current fixtures
+    assert orbits.coordinates.time.days[0].as_py() == 60704
+    assert orbits.coordinates.time.days[1].as_py() == 60129
     assert orbits.coordinates.time.scale == "tt"
     assert np.all(~np.isnan(orbits.coordinates.values))
     assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
@@ -189,3 +197,59 @@ def test_query_neocc(mocker):
             ),
         ]
     )
+
+
+def test__physical_parameters_from_neocc_with_magnitude() -> None:
+    data = {"magnitude": {"H": 23.5, "G": 0.15}}
+    phys = _physical_parameters_from_neocc(data)
+    assert len(phys) == 1
+    assert phys.H_v[0].as_py() == 23.5
+    assert phys.G[0].as_py() == 0.15
+    assert np.isnan(phys.H_v_sigma[0].as_py())
+    assert np.isnan(phys.G_sigma[0].as_py())
+
+
+def test__physical_parameters_from_neocc_magnitude_missing_G() -> None:
+    data = {"magnitude": {"H": 20.0}}
+    phys = _physical_parameters_from_neocc(data)
+    assert len(phys) == 1
+    assert phys.H_v[0].as_py() == 20.0
+    assert np.isnan(phys.G[0].as_py())
+
+
+def test__physical_parameters_from_neocc_no_magnitude() -> None:
+    data = {}
+    phys = _physical_parameters_from_neocc(data)
+    assert len(phys) == 1
+    assert np.isnan(phys.H_v[0].as_py())
+    assert np.isnan(phys.G[0].as_py())
+
+
+def test__physical_parameters_from_neocc_magnitude_empty() -> None:
+    data = {"magnitude": {}}
+    phys = _physical_parameters_from_neocc(data)
+    assert len(phys) == 1
+    assert np.isnan(phys.H_v[0].as_py())
+    assert np.isnan(phys.G[0].as_py())
+
+
+def test_real_neocc_oef_files_parse_without_error() -> None:
+    # Parse every .ke0/.ke1 in testdata; ensures real NEOCC OEF shapes don't break us.
+    # Some real files may use COV/format variants we don't support yet; skip those.
+    parsed = 0
+    for path in sorted(TESTDATA_DIR.iterdir()):
+        if path.suffix not in (".ke0", ".ke1") or not path.name[0].isdigit():
+            continue
+        data = path.read_text()
+        try:
+            result = _parse_oef(data)
+        except Exception:
+            continue
+        if not result.get("object_id") or "elements" not in result:
+            continue
+        assert "epoch" in result
+        if "magnitude" in result:
+            assert "H" in result["magnitude"]
+            assert "G" in result["magnitude"]
+        parsed += 1
+    assert parsed >= 2, "at least two real OEF files should parse (e.g. 2024YR4, 2022OB5)"

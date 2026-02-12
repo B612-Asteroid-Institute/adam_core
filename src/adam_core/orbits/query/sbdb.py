@@ -17,6 +17,7 @@ from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
 from ...coordinates.origin import Origin
 from ...time import Timestamp
+from ..physical_parameters import PhysicalParameters
 from ..orbits import Orbits
 
 logger = logging.getLogger(__name__)
@@ -236,9 +237,15 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
     orbit_ids = np.array(orbit_ids, dtype="object")
     object_ids = np.array(object_ids, dtype="object")
     classes = np.array(classes)
+    # Legacy astroquery path does not request phys-par; fill with nulls.
+    phys_rows = [(None, None, None, None)] * len(results)
+    physical_parameters = _physical_parameters_from_sbdb(phys_rows)
 
     return Orbits.from_kwargs(
-        orbit_id=orbit_ids, object_id=object_ids, coordinates=coordinates.to_cartesian()
+        orbit_id=orbit_ids,
+        object_id=object_ids,
+        coordinates=coordinates.to_cartesian(),
+        physical_parameters=physical_parameters,
     )
 
 
@@ -298,6 +305,7 @@ def _sbdb_api_get_json(
         "sstr": obj,
         "cov": "mat",
         "full-prec": "true",
+        "phys-par": "true",
     }
 
     last_err: Exception | None = None
@@ -392,6 +400,90 @@ def _sbdb_element_sigma(
         return float("nan")
 
 
+def _sbdb_phys_par_value(el: dict[str, Any] | None) -> float | None:
+    """Extract numeric value from a phys_par entry (value may be scalar or in el['value'])."""
+    if el is None:
+        return None
+    v = el.get("value")
+    if v is None:
+        return None
+    try:
+        return _sbdb_float(v)
+    except (ValueError, TypeError):
+        return None
+
+
+def _sbdb_phys_par_sigma(el: dict[str, Any] | None) -> float | None:
+    """Extract sigma from a phys_par entry; None if missing."""
+    if el is None:
+        return None
+    s = el.get("sigma")
+    if s is None:
+        return None
+    try:
+        return _sbdb_float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _sbdb_phys_par_from_payload(
+    payload: dict[str, Any],
+) -> tuple[float | None, float | None, float | None, float | None]:
+    """
+    Extract H (V-band), H_sigma, G, G_sigma from SBDB phys_par when requested with phys-par=1.
+
+    SBDB documents H as "absolute magnitude (magnitude at 1 au from Sun and observer)" (V-band);
+    G as "magnitude slope parameter" (H-G system). API may use name "H" or "H_mag" depending on source.
+    Ref: https://ssd-api.jpl.nasa.gov/doc/sbdb.html#phys_par
+    """
+    phys_list = payload.get("phys_par") or []
+    by_name: dict[str, dict[str, Any]] = {}
+    for d in phys_list:
+        if isinstance(d, dict) and d.get("name") is not None:
+            by_name[str(d["name"])] = d
+    H_v = _sbdb_phys_par_value(by_name.get("H")) or _sbdb_phys_par_value(
+        by_name.get("H_mag")
+    )
+    H_v_sigma = _sbdb_phys_par_sigma(by_name.get("H")) or _sbdb_phys_par_sigma(
+        by_name.get("H_mag")
+    )
+    G = _sbdb_phys_par_value(by_name.get("G"))
+    G_sigma = _sbdb_phys_par_sigma(by_name.get("G"))
+    return (H_v, H_v_sigma, G, G_sigma)
+
+
+def _physical_parameters_from_sbdb(
+    rows: list[tuple[float | None, float | None, float | None, float | None]],
+) -> PhysicalParameters:
+    """Build PhysicalParameters from SBDB phys_par extractions (one row per payload)."""
+    if not rows:
+        return PhysicalParameters.from_kwargs(
+            H_v=[], H_v_sigma=[], G=[], G_sigma=[]
+        )
+    H_v = np.array(
+        [r[0] if r[0] is not None else np.nan for r in rows],
+        dtype=np.float64,
+    )
+    H_v_sigma = np.array(
+        [r[1] if r[1] is not None else np.nan for r in rows],
+        dtype=np.float64,
+    )
+    G = np.array(
+        [r[2] if r[2] is not None else np.nan for r in rows],
+        dtype=np.float64,
+    )
+    G_sigma = np.array(
+        [r[3] if r[3] is not None else np.nan for r in rows],
+        dtype=np.float64,
+    )
+    return PhysicalParameters.from_kwargs(
+        H_v=H_v,
+        H_v_sigma=H_v_sigma,
+        G=G,
+        G_sigma=G_sigma,
+    )
+
+
 def _orbits_from_sbdb_payloads(
     ids: list[str],
     payloads: list[dict[str, Any]],
@@ -410,6 +502,7 @@ def _orbits_from_sbdb_payloads(
 
     orbit_ids: list[str] = []
     object_ids: list[str] = []
+    phys_rows: list[tuple[float | None, float | None, float | None, float | None]] = []
 
     coords_cometary = np.zeros((len(payloads), 6), dtype=np.float64)
     covariances_sbdb = np.zeros((len(payloads), 6, 6), dtype=np.float64)
@@ -493,6 +586,8 @@ def _orbits_from_sbdb_payloads(
         coords_cometary[i, 4] = w
         coords_cometary[i, 5] = tp_mjd
 
+        phys_rows.append(_sbdb_phys_par_from_payload(payload))
+
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
     times = Timestamp.from_jd(times_jd, scale="tdb")
     origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
@@ -510,10 +605,12 @@ def _orbits_from_sbdb_payloads(
         frame="ecliptic",
     )
 
+    physical_parameters = _physical_parameters_from_sbdb(phys_rows)
     return Orbits.from_kwargs(
         orbit_id=np.array(orbit_ids, dtype="object"),
         object_id=np.array(object_ids, dtype="object"),
         coordinates=coordinates.to_cartesian(),
+        physical_parameters=physical_parameters,
     )
 
 
