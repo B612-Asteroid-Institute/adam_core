@@ -25,6 +25,7 @@ license = { file = "LICENSE.md" }
 keywords = ["astronomy", "orbital mechanics", "propagation"]
 
 dependencies = [
+  "adam_fo",
   "astropy",
   "astroquery",
   "healpy",
@@ -43,6 +44,7 @@ dependencies = [
   "scipy",
   "spiceypy",
   "quivr>=0.8.1",
+  "mpcq",
   "mpc-obscodes",
   "naif-de440",
   "naif-leapseconds",
