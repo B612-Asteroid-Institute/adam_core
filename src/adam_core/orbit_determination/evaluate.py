@@ -15,15 +15,22 @@ from ..propagator.propagator import Propagator
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 
+class OrbitDeterminationPhotometry(qv.Table):
+    mag = qv.Float64Column(nullable=True)
+    rmsmag = qv.Float64Column(nullable=True)
+    band = qv.LargeStringColumn(nullable=True)
+
+
 class OrbitDeterminationObservations(qv.Table):
 
     id = qv.LargeStringColumn()
     coordinates = SphericalCoordinates.as_column()
     observers = Observers.as_column()
+    photometry = OrbitDeterminationPhotometry.as_column()
 
 
 def mpc_to_od_observations(
-    obs_set: MPCObservations,
+    obs_set: MPCObservations, prevent_nans: bool = True
 ) -> OrbitDeterminationObservations | None:
     """Converts MPC observations into OD observations.
     Returns None if the input set is malformed, e.g. has NULLs in the set of STN codes.
@@ -59,12 +66,16 @@ def mpc_to_od_observations(
 
     cov = np.full((len(obs_set), 6, 6), np.nan, dtype=np.float64)
     # Prevent 'Covariance matrix has NaNs on the diagonal' and 'Singular matrix
-    cov[:, 1, 1] = np.nan_to_num(sigma_ra_deg**2, nan=1.0e-9)
-    cov[:, 2, 2] = np.nan_to_num(sigma_dec_deg**2, nan=1.0e-9)
+    cov[:, 1, 1] = sigma_ra_deg**2
+    cov[:, 2, 2] = sigma_dec_deg**2
+    if prevent_nans:
+        cov[:, 1, 1] = np.nan_to_num(cov[:, 1, 1], nan=1.0e-9)
+        cov[:, 2, 2] = np.nan_to_num(cov[:, 2, 2], nan=1.0e-9)
     cov[:, 1, 2] = corr * sigma_ra_deg * sigma_dec_deg
     cov[:, 2, 1] = cov[:, 1, 2]
     # Prevents 'UserWarning: Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).'
-    cov = np.nan_to_num(cov)
+    if prevent_nans:
+        cov = np.nan_to_num(cov)
 
     coords = SphericalCoordinates.from_kwargs(
         lon=obs_set.ra.to_numpy(zero_copy_only=False),
@@ -77,10 +88,17 @@ def mpc_to_od_observations(
 
     observers = Observers.from_codes(codes=codes, times=obs_time)
 
+    photometry = OrbitDeterminationPhotometry.from_kwargs(
+        mag=obs_set.mag,
+        rmsmag=obs_set.rmsmag,
+        band=obs_set.band,
+    )
+
     od_observations = OrbitDeterminationObservations.from_kwargs(
         id=obs_set.obsid.to_numpy(zero_copy_only=False),
         coordinates=coords,
         observers=observers,
+        photometry=photometry,
     )
     return od_observations
 
