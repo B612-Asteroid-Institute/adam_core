@@ -5,7 +5,6 @@ from typing import Tuple
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
-import quivr as qv
 from adam_fo import fo
 from mpc_obscodes import mpc_obscodes
 
