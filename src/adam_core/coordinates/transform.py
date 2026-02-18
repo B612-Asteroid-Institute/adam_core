@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+import os
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Literal, Optional, Union
 
 import jax.numpy as jnp
@@ -28,6 +31,61 @@ TRANSFORM_EQ2EC[3:6, 3:6] = c.TRANSFORM_EQ2EC
 TRANSFORM_EC2EQ = TRANSFORM_EQ2EC.T
 
 logger = logging.getLogger(__name__)
+
+@dataclass(frozen=True)
+class _TranslationCacheKey:
+    origin_in: str
+    origin_out: str
+    frame: str
+    n: int
+    first_key: int
+    last_key: int
+    sum_mod: int
+
+
+_TRANSLATION_CACHE_MAXSIZE = int(
+    os.environ.get("ADAM_CORE_TRANSLATION_CACHE_MAXSIZE", "2048")
+)
+_TRANSLATION_CACHE: "OrderedDict[_TranslationCacheKey, np.ndarray]" = OrderedDict()
+_TRANSLATION_CACHE_ENABLED = os.environ.get("ADAM_CORE_TRANSLATION_CACHE", "1").lower() not in {
+    "0",
+    "false",
+    "no",
+}
+_TRANSLATION_CACHE_ALLOWED = {
+    ("SUN", "SOLAR_SYSTEM_BARYCENTER"),
+    ("SOLAR_SYSTEM_BARYCENTER", "SUN"),
+}
+
+
+def _translation_cache_get(key: _TranslationCacheKey) -> np.ndarray | None:
+    if _TRANSLATION_CACHE_MAXSIZE <= 0:
+        return None
+    v = _TRANSLATION_CACHE.get(key)
+    if v is None:
+        return None
+    _TRANSLATION_CACHE.move_to_end(key)
+    return v
+
+
+def _translation_cache_put(key: _TranslationCacheKey, vectors: np.ndarray) -> None:
+    if _TRANSLATION_CACHE_MAXSIZE <= 0:
+        return
+    _TRANSLATION_CACHE[key] = vectors
+    _TRANSLATION_CACHE.move_to_end(key)
+    if len(_TRANSLATION_CACHE) <= _TRANSLATION_CACHE_MAXSIZE:
+        return
+    while len(_TRANSLATION_CACHE) > _TRANSLATION_CACHE_MAXSIZE:
+        _TRANSLATION_CACHE.popitem(last=False)
+
+
+def clear_translation_cache() -> None:
+    """
+    Clear the in-process translation cache used by `cartesian_to_origin`.
+
+    Primarily intended for testing and benchmarking.
+    """
+    _TRANSLATION_CACHE.clear()
 
 
 CoordinatesClasses = (
@@ -1512,13 +1570,41 @@ def cartesian_to_origin(
         origin_in_str = origin_in.as_py()
         # Could use try / except block here but this is more explicit
         if origin_in_str in OriginCodes.__members__:
-
-            vectors[mask] = get_perturber_state(
-                OriginCodes[origin_in_str],
-                times.apply_mask(mask),
-                frame=coords.frame,
-                origin=origin,
-            ).values
+            times_masked = times.apply_mask(mask)
+            origin_out_str = str(origin.name)
+            use_cache = bool(_TRANSLATION_CACHE_ENABLED) and (
+                (str(origin_in_str), origin_out_str) in _TRANSLATION_CACHE_ALLOWED
+            )
+            if use_cache:
+                n, first, last, sum_mod = times_masked.signature(scale="tdb")
+                cache_key = _TranslationCacheKey(
+                    origin_in=str(origin_in_str),
+                    origin_out=origin_out_str,
+                    frame=str(coords.frame),
+                    n=int(n),
+                    first_key=int(first),
+                    last_key=int(last),
+                    sum_mod=int(sum_mod),
+                )
+                cached = _translation_cache_get(cache_key)
+                if cached is None:
+                    v = get_perturber_state(
+                        OriginCodes[origin_in_str],
+                        times_masked,
+                        frame=coords.frame,
+                        origin=origin,
+                    ).values
+                    _translation_cache_put(cache_key, v)
+                    vectors[mask] = v
+                else:
+                    vectors[mask] = cached
+            else:
+                vectors[mask] = get_perturber_state(
+                    OriginCodes[origin_in_str],
+                    times_masked,
+                    frame=coords.frame,
+                    origin=origin,
+                ).values
 
         elif origin_in_str in OBSERVATORY_CODES:
 

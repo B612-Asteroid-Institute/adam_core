@@ -191,7 +191,10 @@ def propagate_2body_worker_ray(
 ) -> Tuple[int, Orbits]:
     orbits_chunk = orbits.take(idx_chunk)
     propagated = _propagate_2body_serial(
-        orbits_chunk, times, max_iter=max_iter, tol=tol
+        orbits_chunk,
+        times,
+        max_iter=max_iter,
+        tol=tol,
     )
     return start, propagated
 
@@ -231,7 +234,12 @@ def propagate_2body(
         max_processes = mp.cpu_count()
 
     if max_processes <= 1:
-        return _propagate_2body_serial(orbits, times, max_iter=max_iter, tol=tol)
+        return _propagate_2body_serial(
+            orbits,
+            times,
+            max_iter=max_iter,
+            tol=tol,
+        )
 
     initialize_use_ray(num_cpus=max_processes)
 

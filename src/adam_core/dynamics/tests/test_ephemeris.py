@@ -16,6 +16,7 @@ from ...orbits import Orbits
 from ...photometry import calculate_phase_angle
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
+from ...utils import spice as spice_mod
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
 
@@ -271,6 +272,85 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     out_mjd = eph.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
     in_mjd = times.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
     np.testing.assert_allclose(out_mjd, in_mjd)
+
+
+def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(monkeypatch) -> None:
+    """
+    When both orbits and observers are heliocentric and share an aligned time grid, the
+    barycentric translation vectors should be computed once and reused.
+    """
+    spice_mod.clear_spkez_cache()
+
+    calls = {"n": 0}
+    orig = spice_mod.get_perturber_state
+
+    def _counted(*args, **kwargs):
+        calls["n"] += 1
+        return orig(*args, **kwargs)
+
+    monkeypatch.setattr(spice_mod, "get_perturber_state", _counted)
+
+    t = Timestamp.from_mjd([60000.0, 60000.5, 60001.0], scale="tdb")
+    origin_sun = Origin.from_kwargs(code=["SUN"] * 3)
+    orbits_sun = Orbits.from_kwargs(
+        orbit_id=["o1"] * 3,
+        object_id=["o1"] * 3,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0, 2.0, 2.0],
+            y=[0.0, 0.0, 0.0],
+            z=[0.0, 0.0, 0.0],
+            vx=[0.0, 0.0, 0.0],
+            vy=[0.0, 0.0, 0.0],
+            vz=[0.0, 0.0, 0.0],
+            time=t,
+            origin=origin_sun,
+            frame="ecliptic",
+        ),
+    )
+    observers_sun = Observers.from_kwargs(
+        code=["500"] * 3,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.0, 1.0],
+            y=[0.0, 0.0, 0.0],
+            z=[0.0, 0.0, 0.0],
+            vx=[0.0, 0.0, 0.0],
+            vy=[0.0, 0.0, 0.0],
+            vz=[0.0, 0.0, 0.0],
+            time=t,
+            origin=origin_sun,
+            frame="ecliptic",
+        ),
+    )
+
+    eph_fast = generate_ephemeris_2body(orbits_sun, observers_sun, predict_magnitudes=False)
+    assert int(calls["n"]) == 1
+
+    # Reference: pre-transform inputs to SSB so the internal origin transform is a no-op.
+    from ...coordinates.transform import transform_coordinates
+    from ...coordinates.origin import OriginCodes
+
+    orbits_ssb = orbits_sun.set_column(
+        "coordinates",
+        transform_coordinates(
+            orbits_sun.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    observers_ssb = observers_sun.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers_sun.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    eph_ref = generate_ephemeris_2body(orbits_ssb, observers_ssb, predict_magnitudes=False)
+
+    np.testing.assert_allclose(eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(eph_fast.light_time.to_numpy(), eph_ref.light_time.to_numpy(), rtol=0.0, atol=0.0)
 
 
 def test_generate_ephemeris_2body_phase_angle_enabled() -> None:

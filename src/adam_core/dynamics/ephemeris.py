@@ -301,24 +301,68 @@ def generate_ephemeris_2body(
     ), "Orbits and observers must be paired and orbits must be propagated to observer times."
 
     # Transform both the orbits and observers to the barycenter if they are not already.
-    propagated_orbits_barycentric = propagated_orbits.set_column(
-        "coordinates",
-        transform_coordinates(
-            propagated_orbits.coordinates,
-            CartesianCoordinates,
-            frame_out="ecliptic",
-            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
-        ),
-    )
-    observers_barycentric = observers.set_column(
-        "coordinates",
-        transform_coordinates(
-            observers.coordinates,
-            CartesianCoordinates,
-            frame_out="ecliptic",
-            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
-        ),
-    )
+    #
+    # Fast path: common workload uses SUN/ecliptic for both, on an aligned time grid.
+    # In that case we can compute the SUN->SSB translation vectors once and apply them
+    # to both orbits and observers (strictly equivalent, but avoids duplicate work).
+    propagated_orbits_barycentric = None
+    observers_barycentric = None
+    try:
+        po = propagated_orbits.coordinates
+        obc = observers.coordinates
+        po_origin = po.origin.code.to_numpy(zero_copy_only=False)
+        ob_origin = obc.origin.code.to_numpy(zero_copy_only=False)
+        if (
+            str(po.frame) == "ecliptic"
+            and str(obc.frame) == "ecliptic"
+            and np.all(po_origin == OriginCodes.SUN.name)
+            and np.all(ob_origin == OriginCodes.SUN.name)
+        ):
+            t_po = po.time.rescale("tdb")
+            t_ob = obc.time.rescale("tdb")
+            same_time = np.array_equal(
+                t_po.days.to_numpy(zero_copy_only=False),
+                t_ob.days.to_numpy(zero_copy_only=False),
+            ) and np.array_equal(
+                t_po.nanos.to_numpy(zero_copy_only=False),
+                t_ob.nanos.to_numpy(zero_copy_only=False),
+            )
+            if same_time:
+                from ..utils.spice import get_perturber_state
+
+                sun_wrt_ssb = get_perturber_state(
+                    OriginCodes.SUN,
+                    t_po,
+                    frame="ecliptic",
+                    origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                ).values
+                coords_po = po.translate(sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name)
+                coords_ob = obc.translate(sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name)
+                propagated_orbits_barycentric = propagated_orbits.set_column("coordinates", coords_po)
+                observers_barycentric = observers.set_column("coordinates", coords_ob)
+    except Exception:
+        propagated_orbits_barycentric = None
+        observers_barycentric = None
+
+    if propagated_orbits_barycentric is None or observers_barycentric is None:
+        propagated_orbits_barycentric = propagated_orbits.set_column(
+            "coordinates",
+            transform_coordinates(
+                propagated_orbits.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            ),
+        )
+        observers_barycentric = observers.set_column(
+            "coordinates",
+            transform_coordinates(
+                observers.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            ),
+        )
 
     observer_coordinates = observers_barycentric.coordinates.values
     observer_codes = observers_barycentric.code.to_numpy(zero_copy_only=False)

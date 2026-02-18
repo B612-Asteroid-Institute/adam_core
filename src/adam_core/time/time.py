@@ -84,6 +84,37 @@ class Timestamp(qv.Table):
     def seconds(self) -> pa.Int64Array:
         return pc.divide(self.nanos, 1_000_000_000)
 
+    def key(self, *, scale: str | None = "tdb") -> np.ndarray:
+        """
+        Return an int64 key for each timestamp: (days * NANOS_IN_DAY + nanos).
+
+        This is useful for fast grouping/uniquing and as a stable cache key when paired
+        with a specific time scale.
+        """
+        if len(self) == 0:
+            return np.empty(0, dtype=np.int64)
+
+        t = self if scale is None else self.rescale(scale)
+        days = t.days.to_numpy(zero_copy_only=False).astype(np.int64)
+        nanos = t.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
+        return days * _NANOS_IN_DAY + nanos
+
+    def signature(self, *, scale: str | None = "tdb") -> tuple[int, int, int, int]:
+        """
+        Return a cheap signature for this Timestamp array.
+
+        The signature is (n, first_key, last_key, sum_mod) where keys are produced by `key()`.
+        """
+        n = int(len(self))
+        if n == 0:
+            return 0, 0, 0, 0
+
+        key = self.key(scale=scale)
+        first = int(key[0])
+        last = int(key[-1])
+        sum_mod = int(np.sum(key, dtype=np.int64) & np.int64(0x7FFF_FFFF_FFFF_FFFF))
+        return n, first, last, sum_mod
+
     def mjd(self) -> pa.lib.DoubleArray:
         return pc.add(self.days, self.fractional_days())
 

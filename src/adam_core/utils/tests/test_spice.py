@@ -9,12 +9,15 @@ from ...time import Timestamp
 from ..spice import (
     DEFAULT_KERNELS,
     _jd_tdb_to_et,
+    clear_spkez_cache,
     get_spice_body_state,
+    get_perturber_state,
     list_registered_kernels,
     register_spice_kernel,
     setup_SPICE,
     unregister_spice_kernel,
 )
+from ...coordinates.origin import OriginCodes
 
 # JWST SPICE kernel paths
 JWST_KERNEL_DIR = Path(__file__).parent / "data" / "spice"
@@ -166,3 +169,57 @@ def test__jd_tdb_to_et():
     et_expected = np.array([sp.str2et(f"JD {i:.16f} TDB") for i in jd_tdb])
 
     np.testing.assert_equal(et_actual, et_expected)
+
+
+def test_get_perturber_state_spkez_cache(monkeypatch):
+    clear_spkez_cache()
+    setup_SPICE(force=True)
+
+    # Use a time grid with duplicates to ensure both in-call uniquing and cross-call caching.
+    t = Timestamp.from_mjd(np.array([60000.0, 60000.0, 60000.5, 60001.0, 60001.0]), scale="tdb")
+
+    calls = {"n": 0}
+    spkez_orig = sp.spkez
+
+    def _spkez_counted(*args, **kwargs):
+        calls["n"] += 1
+        return spkez_orig(*args, **kwargs)
+
+    monkeypatch.setattr(sp, "spkez", _spkez_counted)
+
+    _ = get_perturber_state(OriginCodes.SUN, t, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER)
+    n_first = int(calls["n"])
+    assert n_first > 0
+
+    # Second call should be entirely served from cache.
+    _ = get_perturber_state(OriginCodes.SUN, t, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER)
+    assert int(calls["n"]) == n_first
+
+
+def test_get_perturber_state_reverse_pair_cache(monkeypatch):
+    clear_spkez_cache()
+    setup_SPICE(force=True)
+
+    t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
+
+    calls = {"n": 0}
+    spkez_orig = sp.spkez
+
+    def _spkez_counted(*args, **kwargs):
+        calls["n"] += 1
+        return spkez_orig(*args, **kwargs)
+
+    monkeypatch.setattr(sp, "spkez", _spkez_counted)
+
+    sun_wrt_ssb = get_perturber_state(
+        OriginCodes.SUN, t, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER
+    ).values
+    n_first = int(calls["n"])
+    assert n_first > 0
+
+    # Reverse query should not trigger additional SPICE calls and should be exact negation.
+    ssb_wrt_sun = get_perturber_state(
+        OriginCodes.SOLAR_SYSTEM_BARYCENTER, t, frame="ecliptic", origin=OriginCodes.SUN
+    ).values
+    assert int(calls["n"]) == n_first
+    np.testing.assert_allclose(ssb_wrt_sun, -sun_wrt_ssb, rtol=0.0, atol=0.0)

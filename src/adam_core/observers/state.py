@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import os
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Literal, Union
 
 import numpy as np
@@ -15,6 +20,51 @@ from .observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS
 R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
 OMEGA_EARTH = 2 * np.pi / 0.997269675925926
 Z_AXIS = np.array([0, 0, 1])
+
+
+@dataclass(frozen=True)
+class _ObserverStateCacheKey:
+    code: str
+    frame: str
+    origin: str
+    n: int
+    first_key: int
+    last_key: int
+    sum_mod: int
+
+
+_OBSERVER_STATE_CACHE_MAXSIZE = int(
+    os.environ.get("ADAM_CORE_OBSERVER_STATE_CACHE_MAXSIZE", "256")
+)
+_OBSERVER_STATE_CACHE: "OrderedDict[_ObserverStateCacheKey, CartesianCoordinates]" = OrderedDict()
+
+
+def _observer_cache_get(key: _ObserverStateCacheKey) -> CartesianCoordinates | None:
+    if _OBSERVER_STATE_CACHE_MAXSIZE <= 0:
+        return None
+    v = _OBSERVER_STATE_CACHE.get(key)
+    if v is None:
+        return None
+    _OBSERVER_STATE_CACHE.move_to_end(key)
+    return v
+
+
+def _observer_cache_put(key: _ObserverStateCacheKey, coords: CartesianCoordinates) -> None:
+    if _OBSERVER_STATE_CACHE_MAXSIZE <= 0:
+        return
+    _OBSERVER_STATE_CACHE[key] = coords
+    _OBSERVER_STATE_CACHE.move_to_end(key)
+    if len(_OBSERVER_STATE_CACHE) <= _OBSERVER_STATE_CACHE_MAXSIZE:
+        return
+    while len(_OBSERVER_STATE_CACHE) > _OBSERVER_STATE_CACHE_MAXSIZE:
+        _OBSERVER_STATE_CACHE.popitem(last=False)
+
+
+def clear_observer_state_cache() -> None:
+    """
+    Clear the in-process observer-state cache (primarily for tests/benchmarks).
+    """
+    _OBSERVER_STATE_CACHE.clear()
 
 
 def get_mpc_observer_state(
@@ -77,6 +127,20 @@ def get_mpc_observer_state(
     # Multiply pointing vector with Earth radius to get actual vector
     o_vec_ITRF93 = np.dot(R_EARTH_EQUATORIAL, o_hat_ITRF93)
 
+    n, first, last, sum_mod = times.signature(scale="tdb")
+    cache_key = _ObserverStateCacheKey(
+        code=str(code),
+        frame=str(frame),
+        origin=str(origin.name),
+        n=int(n),
+        first_key=int(first),
+        last_key=int(last),
+        sum_mod=int(sum_mod),
+    )
+    cached = _observer_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     # If ITRF93 frame is requested, we can directly use the ITRF93 values
     if frame == "itrf93":
         # For ITRF93, which is Earth-fixed, position is constant but velocity comes from Earth's rotation
@@ -111,6 +175,7 @@ def get_mpc_observer_state(
             ),
         )
 
+        _observer_cache_put(cache_key, observer_states)
         return observer_states
 
     # For other frames, continue with existing implementation
@@ -166,6 +231,7 @@ def get_mpc_observer_state(
         ),
     )
 
+    _observer_cache_put(cache_key, observer_states)
     return observer_states
 
 
