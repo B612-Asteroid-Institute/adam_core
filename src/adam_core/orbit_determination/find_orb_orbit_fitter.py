@@ -16,8 +16,8 @@ from ..observations.ades import (
     SubmitterObsContext,
     TelescopeObsContext,
 )
-from . import OrbitFitter
 from .evaluate import FittedOrbitMembers, FittedOrbits, OrbitDeterminationObservations
+from .orbit_fitter import OrbitFitter
 
 logger = logging.getLogger(__name__)
 
