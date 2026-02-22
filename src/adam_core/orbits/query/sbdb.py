@@ -5,7 +5,7 @@ import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, List
+from typing import Any, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -107,7 +107,7 @@ def _convert_SBDB_covariances(
     return covariances
 
 
-def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
+def _get_sbdb_elements(obj_ids: List[str]) -> Tuple[List[OrderedDict], List[str]]:
     """
     Get orbital elements and other object properties
     from JPL's Small Body Database Browser.
@@ -123,6 +123,7 @@ def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
         List of dictionaries containing orbital elements and other object properties.
     """
     results = []
+    found_ids = []
     SBDB.clear_cache()  # Yikes!
     for obj_id in obj_ids:
         result = SBDB.query(
@@ -132,9 +133,13 @@ def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
             full_precision=True,
             solution_epoch=False,
         )
-        results.append(result)
+        if "object" not in result:
+            logger.info(f"For {obj_id} got {result}")
+        else:
+            results.append(result)
+            found_ids.append(obj_id)
 
-    return results
+    return results, found_ids
 
 
 def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) -> Orbits:
@@ -163,7 +168,7 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
         orbit = result["orbit"]
         elements = orbit["elements"]
         epoch = orbit["epoch"]
-        if "covariance" in orbit:
+        if "covariance" in orbit and orbit["covariance"] is not None:
             labels = orbit["covariance"]["labels"]
             if len(labels) > 6:
                 logger.debug(
@@ -193,8 +198,8 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
                 epoch = orbit["covariance"]["epoch"]
 
         else:
-            sigmas = np.array(
-                [
+            try:
+                sigmas = np.array(
                     [
                         elements["e_sig"],
                         elements["q_sig"].value,
@@ -203,9 +208,11 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
                         elements["w_sig"].value,
                         elements["i_sig"].value,
                     ]
-                ]
-            )
-            covariances_sbdb[i, :, :] = sigmas_to_covariances(sigmas)[0]
+                )
+                covariances_sbdb[i, :, :] = sigmas_to_covariances(sigmas)
+            except AttributeError:
+                # Sometimes sigs are None in the output
+                covariances_sbdb[i, :, :] = np.full((6, 6), np.nan)
 
         times[i] = epoch.value
         coords_cometary[i, 0] = elements["q"].value
@@ -273,8 +280,8 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     ------
     NotFoundError: If any of the queries object IDs are not found.
     """
-    results = _get_sbdb_elements(ids)
-    return _orbits_from_sbdb_results(ids, results)
+    results, found_ids = _get_sbdb_elements(ids)
+    return _orbits_from_sbdb_results(found_ids, results)
 
 
 def _sbdb_api_get_json(
