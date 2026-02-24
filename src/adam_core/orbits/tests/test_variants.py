@@ -311,6 +311,161 @@ def test_VariantEphemeris_collapse_by_object_id_wraps_longitude():
     assert 0.0 <= lon < 360.0
 
 
+def test_VariantEphemeris_collapse_by_object_id_uses_weights_when_present():
+    """UT mean should use `weights` and covariance should use `weights_cov` when provided."""
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=["obj1", "obj1"],
+        object_id=["obj1", "obj1"],
+        variant_id=["0", "1"],
+        weights=[0.25, 0.75],
+        weights_cov=[0.1, 0.9],
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=[0.0, 10.0],
+            lon=[10.0, 20.0],
+            lat=[0.0, 0.0],
+            vrho=[0.0, 0.0],
+            vlon=[0.0, 0.0],
+            vlat=[0.0, 0.0],
+            time=Timestamp.from_mjd([60000.0, 60000.0]),
+            origin=Origin.from_kwargs(code=["500", "500"]),
+            frame="equatorial",
+        ),
+    )
+
+    collapsed = variant_ephemeris.collapse_by_object_id(aberration_mode="none")
+    assert len(collapsed) == 1
+    # Mean rho = 0*0.25 + 10*0.75 = 7.5
+    assert collapsed.coordinates.values[0][0] == pytest.approx(7.5, abs=1e-12)
+    # Longitude mean uses a circular weighted mean.
+    lon = np.deg2rad(np.array([10.0, 20.0]))
+    w = np.array([0.25, 0.75])
+    lon_mean = (np.degrees(np.arctan2(np.sum(w * np.sin(lon)), np.sum(w * np.cos(lon)))) + 360.0) % 360.0
+    assert collapsed.coordinates.values[0][1] == pytest.approx(lon_mean, abs=1e-12)
+
+    cov = collapsed.coordinates.covariance.to_matrix()[0]
+    # Only rho varies; expected var(rho) = sum(w_cov*(x-mean)^2)
+    # mean_rho = 7.5, residuals = [-7.5, 2.5]
+    expected = 0.1 * (-7.5) ** 2 + 0.9 * (2.5) ** 2
+    assert cov[0, 0] == pytest.approx(expected, abs=1e-12)
+
+
+def test_VariantEphemeris_collapse_sigma_points_orbit_major_matches_generic():
+    """Fast sigma-point collapse should match generic collapse (up to ordering)."""
+    rng = np.random.default_rng(0)
+    n_orbits = 3
+    n_variants = 13
+    n_times = 5
+
+    orbit_ids = np.array([f"obj{i}" for i in range(n_orbits)], dtype=object)
+    base_orbit_ids = np.repeat(orbit_ids, n_variants)  # (O*K,)
+
+    variant_id_base = np.tile(np.arange(n_variants, dtype=np.int64).astype(str), n_orbits).astype(
+        object
+    )  # (O*K,)
+
+    weights_base = rng.random((n_orbits, n_variants))
+    weights_base /= np.sum(weights_base, axis=1, keepdims=True)
+    weights_cov_base = rng.random((n_orbits, n_variants))
+    weights_cov_base /= np.sum(weights_cov_base, axis=1, keepdims=True)
+
+    # Shared time+origin grid for one base variant (length n_times), repeated for all base variants.
+    times = Timestamp.from_mjd(
+        np.linspace(60000.0, 60000.1, n_times, dtype=np.float64), scale="tdb"
+    )
+    origin_codes = np.array(["500", "X05", "500", "X05", "500"][:n_times], dtype=object)
+    time_rep_mjd = np.tile(times.mjd().to_numpy(zero_copy_only=False), n_orbits * n_variants)
+    origin_rep = np.tile(origin_codes, n_orbits * n_variants)
+
+    total = n_orbits * n_variants * n_times
+    orbit_id_rows = np.repeat(base_orbit_ids, n_times)
+    object_id_rows = orbit_id_rows
+    variant_id_rows = np.repeat(variant_id_base, n_times)
+    weights_rows = np.repeat(weights_base.reshape(-1), n_times)
+    weights_cov_rows = np.repeat(weights_cov_base.reshape(-1), n_times)
+
+    # Synthetic spherical values (deg for lon/lat); ensure wrap-around cases for longitude.
+    rho = rng.normal(loc=1.0, scale=0.1, size=total)
+    lon = rng.uniform(low=0.0, high=360.0, size=total)
+    lon[::7] = 359.5
+    lon[1::7] = 0.5
+    lat = rng.normal(loc=0.0, scale=1.0, size=total)
+    vrho = rng.normal(loc=0.0, scale=0.01, size=total)
+    vlon = rng.normal(loc=0.0, scale=0.01, size=total)
+    vlat = rng.normal(loc=0.0, scale=0.01, size=total)
+
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=orbit_id_rows,
+        object_id=object_id_rows,
+        variant_id=variant_id_rows,
+        weights=weights_rows,
+        weights_cov=weights_cov_rows,
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=rho,
+            lon=lon,
+            lat=lat,
+            vrho=vrho,
+            vlon=vlon,
+            vlat=vlat,
+            time=Timestamp.from_mjd(time_rep_mjd, scale="tdb"),
+            origin=Origin.from_kwargs(code=origin_rep),
+            frame="equatorial",
+        ),
+    )
+
+    fast = variant_ephemeris.collapse_sigma_points_orbit_major(
+        n_times=n_times, n_variants=n_variants
+    )
+    slow = variant_ephemeris.collapse_by_object_id(aberration_mode="none")
+
+    # Compare after sorting to common order.
+    sort_keys = [
+        "object_id",
+        "coordinates.time.days",
+        "coordinates.time.nanos",
+        "coordinates.origin.code",
+    ]
+    fast_s = fast.sort_by(sort_keys)
+    slow_s = slow.sort_by(sort_keys)
+
+    np.testing.assert_allclose(
+        np.asarray(fast_s.coordinates.values, dtype=np.float64),
+        np.asarray(slow_s.coordinates.values, dtype=np.float64),
+        rtol=0,
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        fast_s.coordinates.covariance.to_matrix().astype(np.float64, copy=False),
+        slow_s.coordinates.covariance.to_matrix().astype(np.float64, copy=False),
+        rtol=0,
+        atol=1e-12,
+    )
+
+
+def test_VariantEphemeris_collapse_by_object_id_aberration_mode_none_leaves_nulls():
+    variant_ephemeris = VariantEphemeris.from_kwargs(
+        orbit_id=["obj1", "obj1"],
+        object_id=["obj1", "obj1"],
+        variant_id=["0", "1"],
+        weights=[0.5, 0.5],
+        weights_cov=[0.5, 0.5],
+        coordinates=SphericalCoordinates.from_kwargs(
+            rho=[1.0, 1.1],
+            lon=[1.0, 1.1],
+            lat=[1.0, 1.1],
+            vrho=[0.1, 0.11],
+            vlon=[0.1, 0.11],
+            vlat=[0.1, 0.11],
+            time=Timestamp.from_mjd([60000] * 2),
+            origin=Origin.from_kwargs(code=["500"] * 2),
+            frame="equatorial",
+        ),
+    )
+    collapsed = variant_ephemeris.collapse_by_object_id(aberration_mode="none")
+    assert len(collapsed) == 1
+    assert pc.all(pc.is_null(collapsed.aberrated_coordinates.x)).as_py()
+    assert pc.all(pc.is_null(collapsed.light_time)).as_py()
+
+
 def test_VariantEphemeris_collapse_by_object_id_partial_aberrated_raises():
     """Aberrated coordinates are ignored/dropped and regenerated after collapse."""
     variant_ephemeris = VariantEphemeris.from_kwargs(

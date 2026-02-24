@@ -5,7 +5,7 @@ import pytest
 
 from ...constants import KM_P_AU, S_P_DAY
 from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.origin import OriginCodes
+from ...coordinates.origin import Origin, OriginCodes
 from ...coordinates.residuals import Residuals
 from ...observers import get_observer_state
 from ...time import Timestamp
@@ -93,3 +93,44 @@ def test_get_observer_state_raises():
             code,
             Timestamp.from_mjd([59000, 60000], scale="tdb"),
         )
+
+
+def test_get_observer_state_cache_key_is_order_sensitive(monkeypatch):
+    import adam_core.observers.state as state_mod
+
+    state_mod.clear_observer_state_cache()
+
+    calls = {"n": 0}
+
+    def _fake_get_perturber_state(perturber, times, frame="ecliptic", origin=OriginCodes.SUN):
+        del perturber
+        calls["n"] += 1
+        key = times.key(scale="tdb").astype(np.float64)
+        zeros = np.zeros(len(times), dtype=np.float64)
+        return CartesianCoordinates.from_kwargs(
+            x=key,
+            y=zeros,
+            z=zeros,
+            vx=zeros,
+            vy=zeros,
+            vz=zeros,
+            time=times,
+            frame=frame,
+            origin=Origin.from_kwargs(code=[origin.name] * len(times)),
+        )
+
+    monkeypatch.setattr(state_mod, "get_perturber_state", _fake_get_perturber_state)
+
+    t_a = Timestamp.from_mjd(np.array([60000.0, 60000.25, 60000.5, 60000.75]), scale="tdb")
+    t_b = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60000.25, 60000.75]), scale="tdb")
+    assert t_a.signature(scale="tdb") == t_b.signature(scale="tdb")
+
+    _ = get_observer_state("X05", t_a, frame="itrf93", origin=OriginCodes.SUN)
+    out_b = get_observer_state("X05", t_b, frame="itrf93", origin=OriginCodes.SUN)
+
+    # Distinct order should not alias in cache.
+    assert int(calls["n"]) == 2
+
+    key_b = t_b.key(scale="tdb").astype(np.float64)
+    x_b = out_b.x.to_numpy(zero_copy_only=False)
+    np.testing.assert_allclose(x_b - x_b[0], key_b - key_b[0])

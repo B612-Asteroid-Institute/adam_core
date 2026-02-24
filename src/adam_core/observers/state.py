@@ -15,6 +15,7 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
 from ..utils.spice import get_perturber_state, get_spice_body_state, setup_SPICE
+from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
 from .observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS
 
 R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
@@ -30,7 +31,7 @@ class _ObserverStateCacheKey:
     n: int
     first_key: int
     last_key: int
-    sum_mod: int
+    time_digest: int
 
 
 _OBSERVER_STATE_CACHE_MAXSIZE = int(
@@ -40,24 +41,11 @@ _OBSERVER_STATE_CACHE: "OrderedDict[_ObserverStateCacheKey, CartesianCoordinates
 
 
 def _observer_cache_get(key: _ObserverStateCacheKey) -> CartesianCoordinates | None:
-    if _OBSERVER_STATE_CACHE_MAXSIZE <= 0:
-        return None
-    v = _OBSERVER_STATE_CACHE.get(key)
-    if v is None:
-        return None
-    _OBSERVER_STATE_CACHE.move_to_end(key)
-    return v
+    return bounded_lru_get(_OBSERVER_STATE_CACHE, key, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE)
 
 
 def _observer_cache_put(key: _ObserverStateCacheKey, coords: CartesianCoordinates) -> None:
-    if _OBSERVER_STATE_CACHE_MAXSIZE <= 0:
-        return
-    _OBSERVER_STATE_CACHE[key] = coords
-    _OBSERVER_STATE_CACHE.move_to_end(key)
-    if len(_OBSERVER_STATE_CACHE) <= _OBSERVER_STATE_CACHE_MAXSIZE:
-        return
-    while len(_OBSERVER_STATE_CACHE) > _OBSERVER_STATE_CACHE_MAXSIZE:
-        _OBSERVER_STATE_CACHE.popitem(last=False)
+    bounded_lru_put(_OBSERVER_STATE_CACHE, key, coords, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE)
 
 
 def clear_observer_state_cache() -> None:
@@ -127,7 +115,7 @@ def get_mpc_observer_state(
     # Multiply pointing vector with Earth radius to get actual vector
     o_vec_ITRF93 = np.dot(R_EARTH_EQUATORIAL, o_hat_ITRF93)
 
-    n, first, last, sum_mod = times.signature(scale="tdb")
+    n, first, last, _ = times.signature(scale="tdb")
     cache_key = _ObserverStateCacheKey(
         code=str(code),
         frame=str(frame),
@@ -135,7 +123,7 @@ def get_mpc_observer_state(
         n=int(n),
         first_key=int(first),
         last_key=int(last),
-        sum_mod=int(sum_mod),
+        time_digest=int(times.cache_digest(scale="tdb")),
     )
     cached = _observer_cache_get(cache_key)
     if cached is not None:

@@ -17,6 +17,7 @@ from ..constants import KM_P_AU, S_P_DAY
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
+from .bounded_lru import bounded_lru_get, bounded_lru_put
 
 DEFAULT_KERNELS = [
     leapseconds,
@@ -47,25 +48,11 @@ _SPKEZ_CACHE: "OrderedDict[_SpkezCacheKey, np.ndarray]" = OrderedDict()
 
 
 def _spkez_cache_get(key: _SpkezCacheKey) -> np.ndarray | None:
-    if _SPKEZ_CACHE_MAXSIZE <= 0:
-        return None
-    v = _SPKEZ_CACHE.get(key)
-    if v is None:
-        return None
-    _SPKEZ_CACHE.move_to_end(key)
-    return v
+    return bounded_lru_get(_SPKEZ_CACHE, key, maxsize=_SPKEZ_CACHE_MAXSIZE)
 
 
 def _spkez_cache_put(key: _SpkezCacheKey, state_au_aud: np.ndarray) -> None:
-    if _SPKEZ_CACHE_MAXSIZE <= 0:
-        return
-    _SPKEZ_CACHE[key] = state_au_aud
-    _SPKEZ_CACHE.move_to_end(key)
-    if len(_SPKEZ_CACHE) <= _SPKEZ_CACHE_MAXSIZE:
-        return
-    # Evict oldest entries (LRU).
-    while len(_SPKEZ_CACHE) > _SPKEZ_CACHE_MAXSIZE:
-        _SPKEZ_CACHE.popitem(last=False)
+    bounded_lru_put(_SPKEZ_CACHE, key, state_au_aud, maxsize=_SPKEZ_CACHE_MAXSIZE)
 
 
 def clear_spkez_cache() -> None:

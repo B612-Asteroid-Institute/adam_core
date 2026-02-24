@@ -9,6 +9,7 @@ import ray
 from jax import jit, lax, vmap
 from ray import ObjectRef
 
+from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import (
     CoordinateCovariances,
@@ -29,6 +30,19 @@ from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
+
+
+_TRANSFORM_EC2EQ = jnp.asarray(c.TRANSFORM_EC2EQ, dtype=jnp.float64)
+
+
+@jit
+def _rotate_cartesian_state_ec2eq(state_ec: jnp.ndarray) -> jnp.ndarray:
+    """
+    Rotate a 6D Cartesian state from ecliptic J2000 to equatorial J2000.
+    """
+    pos_eq = _TRANSFORM_EC2EQ @ state_ec[0:3]
+    vel_eq = _TRANSFORM_EC2EQ @ state_ec[3:6]
+    return jnp.concatenate([pos_eq, vel_eq])
 
 
 @jit
@@ -120,8 +134,14 @@ def _generate_ephemeris_2body(
         topocentric_coordinates,
     )
 
-    # Convert to spherical coordinates
-    ephemeris_spherical = _cartesian_to_spherical(topocentric_coordinates)
+    # Convert to spherical coordinates in the equatorial frame.
+    #
+    # `topocentric_coordinates` is in the same (ecliptic) inertial frame as the inputs.
+    # Rotating the Cartesian state and then converting avoids an expensive
+    # spherical->cartesian->spherical round-trip later in the public wrapper.
+    ephemeris_spherical = _cartesian_to_spherical(
+        _rotate_cartesian_state_ec2eq(topocentric_coordinates)
+    )
 
     return ephemeris_spherical, light_time, propagated_orbits_aberrated
 
@@ -369,8 +389,11 @@ def generate_ephemeris_2body(
     mu = observers_barycentric.coordinates.origin.mu()
     times = propagated_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
-    # Define chunk size
-    chunk_size = 200
+    # Inner (JAX) batch size.
+    #
+    # This controls the shape of the vmapped JAX kernel inside each process/worker.
+    # Larger batches reduce Python loop overhead significantly for large workloads.
+    chunk_size = 2000
 
     # Process in chunks
     ephemeris_spherical = np.empty((num_entries, 6), dtype=np.float64)
@@ -384,17 +407,15 @@ def generate_ephemeris_2body(
         process_in_chunks(mu, chunk_size),
     ):
         valid = min(chunk_size, num_entries - start)
-        ephemeris_chunk, light_time_chunk, aberrated_chunk = (
-            _generate_ephemeris_2body_vmap(
-                orbits_chunk,
-                times_chunk,
-                observer_coords_chunk,
-                mu_chunk,
-                lt_tol,
-                max_iter,
-                tol,
-                stellar_aberration,
-            )
+        ephemeris_chunk, light_time_chunk, aberrated_chunk = _generate_ephemeris_2body_vmap(
+            orbits_chunk,
+            times_chunk,
+            observer_coords_chunk,
+            mu_chunk,
+            lt_tol,
+            max_iter,
+            tol,
+            stellar_aberration,
         )
         ephemeris_spherical[start : start + valid] = np.asarray(ephemeris_chunk)[:valid]
         light_time[start : start + valid] = np.asarray(light_time_chunk)[:valid]
@@ -458,13 +479,7 @@ def generate_ephemeris_2body(
         vlat=ephemeris_spherical[:, 5],
         covariance=covariances_spherical,
         origin=Origin.from_kwargs(code=observer_codes),
-        frame="ecliptic",
-    )
-
-    # Rotate the spherical coordinates from the ecliptic frame
-    # to the equatorial frame
-    spherical_coordinates = transform_coordinates(
-        spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
+        frame="equatorial",
     )
 
     ephemeris = Ephemeris.from_kwargs(
@@ -496,6 +511,10 @@ def generate_ephemeris_2body(
         return ephemeris
 
     # Transform object and observer coordinates to heliocentric for photometry.
+    if aberrated_coordinates is None:
+        raise RuntimeError(
+            "Internal error: aberrated coordinates are required for photometry but were not computed."
+        )
     aberrated_heliocentric = transform_coordinates(
         aberrated_coordinates,
         CartesianCoordinates,

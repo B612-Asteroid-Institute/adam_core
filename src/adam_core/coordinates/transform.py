@@ -15,6 +15,7 @@ from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
 from ..utils.chunking import process_in_chunks
+from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
@@ -40,7 +41,7 @@ class _TranslationCacheKey:
     n: int
     first_key: int
     last_key: int
-    sum_mod: int
+    time_digest: int
 
 
 _TRANSLATION_CACHE_MAXSIZE = int(
@@ -59,24 +60,11 @@ _TRANSLATION_CACHE_ALLOWED = {
 
 
 def _translation_cache_get(key: _TranslationCacheKey) -> np.ndarray | None:
-    if _TRANSLATION_CACHE_MAXSIZE <= 0:
-        return None
-    v = _TRANSLATION_CACHE.get(key)
-    if v is None:
-        return None
-    _TRANSLATION_CACHE.move_to_end(key)
-    return v
+    return bounded_lru_get(_TRANSLATION_CACHE, key, maxsize=_TRANSLATION_CACHE_MAXSIZE)
 
 
 def _translation_cache_put(key: _TranslationCacheKey, vectors: np.ndarray) -> None:
-    if _TRANSLATION_CACHE_MAXSIZE <= 0:
-        return
-    _TRANSLATION_CACHE[key] = vectors
-    _TRANSLATION_CACHE.move_to_end(key)
-    if len(_TRANSLATION_CACHE) <= _TRANSLATION_CACHE_MAXSIZE:
-        return
-    while len(_TRANSLATION_CACHE) > _TRANSLATION_CACHE_MAXSIZE:
-        _TRANSLATION_CACHE.popitem(last=False)
+    bounded_lru_put(_TRANSLATION_CACHE, key, vectors, maxsize=_TRANSLATION_CACHE_MAXSIZE)
 
 
 def clear_translation_cache() -> None:
@@ -1576,7 +1564,7 @@ def cartesian_to_origin(
                 (str(origin_in_str), origin_out_str) in _TRANSLATION_CACHE_ALLOWED
             )
             if use_cache:
-                n, first, last, sum_mod = times_masked.signature(scale="tdb")
+                n, first, last, _ = times_masked.signature(scale="tdb")
                 cache_key = _TranslationCacheKey(
                     origin_in=str(origin_in_str),
                     origin_out=origin_out_str,
@@ -1584,7 +1572,7 @@ def cartesian_to_origin(
                     n=int(n),
                     first_key=int(first),
                     last_key=int(last),
-                    sum_mod=int(sum_mod),
+                    time_digest=int(times_masked.cache_digest(scale="tdb")),
                 )
                 cached = _translation_cache_get(cache_key)
                 if cached is None:

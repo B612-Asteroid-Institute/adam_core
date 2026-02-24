@@ -17,6 +17,21 @@ class Wrapper(qv.Table):
     times = Timestamp.as_column(nullable=True)
 
 
+def test_timestamp_cache_digest_is_order_sensitive():
+    t1 = Timestamp.from_mjd(np.array([60000.0, 60000.25, 60000.5, 60000.75]), scale="tdb")
+    t2 = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60000.25, 60000.75]), scale="tdb")
+
+    # These collide under the coarse (n, first, last, sum_mod) signature.
+    assert t1.signature(scale="tdb") == t2.signature(scale="tdb")
+    assert t1.cache_digest(scale="tdb") != t2.cache_digest(scale="tdb")
+
+
+def test_timestamp_cache_digest_is_stable_for_identical_inputs():
+    t = Timestamp.from_mjd(np.array([59000.1, 59000.2, 59000.3]), scale="utc")
+    t_copy = Timestamp.from_mjd(np.array([59000.1, 59000.2, 59000.3]), scale="utc")
+    assert t.cache_digest(scale="tdb") == t_copy.cache_digest(scale="tdb")
+
+
 class TestTimeUnits:
 
     ts = Timestamp.from_kwargs(
