@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 
-from ..coordinates import OriginCodes
+from ..coordinates import CartesianCoordinates, OriginCodes
 from ..orbits import Orbits
 from ..propagator import Propagator
 from ..time import Timestamp
@@ -203,4 +203,49 @@ def plot_orbit(
         )
     )
 
+    return fig
+
+
+def ellipsoid(
+    center, radii, rotation, num_points=100
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Creates an ellipsoid shape as 3 arrays for x,y,z
+    """
+    u = np.linspace(0, 2 * np.pi, num_points)
+    v = np.linspace(0, np.pi, num_points)
+    x = radii[0] * np.outer(np.cos(u), np.sin(v))
+    y = radii[1] * np.outer(np.sin(u), np.sin(v))
+    z = radii[2] * np.outer(np.ones_like(u), np.cos(v))
+    for i in range(len(x)):
+        for j in range(len(x)):
+            [x[i, j], y[i, j], z[i, j]] = (
+                np.dot([x[i, j], y[i, j], z[i, j]], rotation) + center
+            )
+    return x, y, z
+
+
+def add_observation_plot(
+    fig: go.Figure, observed: CartesianCoordinates, radius_mult: float
+) -> None:
+    """
+    Adds RIC-aligned uncertainty ellipse to the figure.
+    Parameters:
+    -----------
+    fig: go.Figure
+        the figure to be modified
+    observed: CartesianCoordinates
+        coordinates to add ellipses for
+    radius_mult: float
+        multiplication factor for the ellipse radii to make it visible; for whole Solar System plots
+        this is often on the order of 1e6
+    """
+    centers = observed.r
+    rotations = observed.ric6_matrix
+    for i in range(len(observed)):
+        rotation6 = rotations[i]
+        rotated = observed[i].rotate(rotation6, observed.frame)
+        radii = rotated.covariance.sigmas[0][:3]
+        xe, ye, ze = ellipsoid(centers[i], radii * radius_mult, rotation6[:3, :3])
+        fig.add_trace(go.Surface(x=xe, y=ye, z=ze))
     return fig

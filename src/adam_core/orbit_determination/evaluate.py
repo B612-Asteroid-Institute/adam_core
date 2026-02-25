@@ -30,7 +30,7 @@ class OrbitDeterminationObservations(qv.Table):
 
 
 def mpc_to_od_observations(
-    obs_set: MPCObservations, prevent_nans: bool = True
+    obs_set: MPCObservations, prevent_nans: bool = True, diag_nan=1.0e-9
 ) -> OrbitDeterminationObservations | None:
     """Converts MPC observations into OD observations.
     Returns None if the input set is malformed, e.g. has NULLs in the set of STN codes.
@@ -69,8 +69,8 @@ def mpc_to_od_observations(
     cov[:, 1, 1] = sigma_ra_deg**2
     cov[:, 2, 2] = sigma_dec_deg**2
     if prevent_nans:
-        cov[:, 1, 1] = np.nan_to_num(cov[:, 1, 1], nan=1.0e-9)
-        cov[:, 2, 2] = np.nan_to_num(cov[:, 2, 2], nan=1.0e-9)
+        cov[:, 1, 1] = np.nan_to_num(cov[:, 1, 1], nan=diag_nan)
+        cov[:, 2, 2] = np.nan_to_num(cov[:, 2, 2], nan=diag_nan)
     cov[:, 1, 2] = corr * sigma_ra_deg * sigma_dec_deg
     cov[:, 2, 1] = cov[:, 1, 2]
     # Prevents 'UserWarning: Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).'
