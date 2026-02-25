@@ -648,7 +648,11 @@ class EphemerisMixin:
             # Create futures
             futures_inputs = []
             idx = np.arange(0, len(orbits))
-            for idx_chunk in _iterate_chunks(idx, chunk_size):
+            # Use at least max_processes chunks so all workers get work.
+            effective_chunk_size = chunk_size
+            if max_processes > 1 and len(orbits) > 0:
+                effective_chunk_size = min(chunk_size, max(1, len(orbits) // max_processes))
+            for idx_chunk in _iterate_chunks(idx, effective_chunk_size):
                 futures_inputs.append(
                     (
                         idx_chunk,
@@ -665,7 +669,8 @@ class EphemerisMixin:
                 variants_ref = ray.put(variants)
 
                 idx = np.arange(0, len(variants))
-                for variant_chunk_idx in _iterate_chunks(idx, chunk_size):
+                var_chunk_size = min(chunk_size, max(1, len(variants) // max_processes)) if max_processes > 1 else chunk_size
+                for variant_chunk_idx in _iterate_chunks(idx, var_chunk_size):
                     futures_inputs.append(
                         (
                             variant_chunk_idx,
