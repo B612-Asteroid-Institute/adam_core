@@ -9,7 +9,15 @@ import numpy.testing as npt
 import pytest
 from astroquery.jplsbdb import SBDB
 
-from ..sbdb import NotFoundError, _convert_SBDB_covariances, query_sbdb, query_sbdb_new
+from ..sbdb import (
+    NotFoundError,
+    _convert_SBDB_covariances,
+    _orbits_from_sbdb_payloads,
+    _physical_parameters_from_sbdb,
+    _sbdb_phys_par_from_payload,
+    query_sbdb,
+    query_sbdb_new,
+)
 
 
 def test__convert_SBDB_covariances():
@@ -251,6 +259,149 @@ def test_query_sbdb_new_fallback_covariance_handles_missing_sigma() -> None:
     cov = orbits.coordinates.covariance.to_matrix()
     assert cov.shape == (1, 6, 6)
     assert np.isnan(cov).any()
+
+
+def test__sbdb_phys_par_from_payload_empty() -> None:
+    out = _sbdb_phys_par_from_payload({})
+    assert out == (None, None, None, None)
+    out = _sbdb_phys_par_from_payload({"phys_par": []})
+    assert out == (None, None, None, None)
+
+
+def test__sbdb_phys_par_from_payload_H_only() -> None:
+    payload = {"phys_par": [{"name": "H", "value": "19.5"}]}
+    out = _sbdb_phys_par_from_payload(payload)
+    assert out[0] == 19.5
+    assert out[1] is None
+    assert out[2] is None
+    assert out[3] is None
+
+
+def test__sbdb_phys_par_from_payload_H_mag_fallback() -> None:
+    payload = {"phys_par": [{"name": "H_mag", "value": "20.0"}]}
+    out = _sbdb_phys_par_from_payload(payload)
+    assert out[0] == 20.0
+    assert out[2] is None
+
+
+def test__sbdb_phys_par_from_payload_H_G_with_sigmas() -> None:
+    payload = {
+        "phys_par": [
+            {"name": "H", "value": "18.2", "sigma": "0.3"},
+            {"name": "G", "value": "0.15", "sigma": "0.02"},
+        ]
+    }
+    out = _sbdb_phys_par_from_payload(payload)
+    assert out == (18.2, 0.3, 0.15, 0.02)
+
+
+def test__physical_parameters_from_sbdb_empty() -> None:
+    tbl = _physical_parameters_from_sbdb([])
+    assert len(tbl) == 0
+
+
+def test__physical_parameters_from_sbdb_one_row_all_none() -> None:
+    tbl = _physical_parameters_from_sbdb([(None, None, None, None)])
+    assert len(tbl) == 1
+    assert np.isnan(tbl.H_v[0].as_py())
+    assert np.isnan(tbl.H_v_sigma[0].as_py())
+    assert np.isnan(tbl.G[0].as_py())
+    assert np.isnan(tbl.G_sigma[0].as_py())
+
+
+def test__physical_parameters_from_sbdb_one_row_values() -> None:
+    tbl = _physical_parameters_from_sbdb([(10.5, 0.2, 0.15, None)])
+    assert len(tbl) == 1
+    assert tbl.H_v[0].as_py() == 10.5
+    assert tbl.H_v_sigma[0].as_py() == 0.2
+    assert tbl.G[0].as_py() == 0.15
+    assert np.isnan(tbl.G_sigma[0].as_py())
+
+
+def test__physical_parameters_from_sbdb_two_rows() -> None:
+    tbl = _physical_parameters_from_sbdb(
+        [(10.0, 0.1, 0.15, None), (20.0, None, 0.25, 0.05)]
+    )
+    assert len(tbl) == 2
+    assert tbl.H_v[0].as_py() == 10.0 and tbl.H_v[1].as_py() == 20.0
+    assert tbl.H_v_sigma[0].as_py() == 0.1 and np.isnan(tbl.H_v_sigma[1].as_py())
+    assert tbl.G[0].as_py() == 0.15 and tbl.G[1].as_py() == 0.25
+    assert np.isnan(tbl.G_sigma[0].as_py()) and tbl.G_sigma[1].as_py() == 0.05
+
+
+def test_query_sbdb_new_physical_parameters_from_phys_par() -> None:
+    # SBDB returns H, G (and optional sigmas) when phys-par=1; V-band per JPL/MPC convention.
+    payload = _load_sbdb_fixture_payload("2001VB.json")
+    payload["phys_par"] = [
+        {"name": "H", "value": "18.2", "sigma": "0.3"},
+        {"name": "G", "value": "0.15", "sigma": None},
+    ]
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["2001VB"], timeout_s=1.0, max_attempts=1)
+
+    assert len(orbits) == 1
+    assert orbits.physical_parameters is not None
+    assert orbits.physical_parameters.H_v[0].as_py() == 18.2
+    assert orbits.physical_parameters.H_v_sigma[0].as_py() == 0.3
+    assert orbits.physical_parameters.G[0].as_py() == 0.15
+    assert np.isnan(orbits.physical_parameters.G_sigma[0].as_py())
+
+
+def test_query_sbdb_new_physical_parameters_accepts_H_mag() -> None:
+    # Some SBDB sources use name "H_mag" instead of "H"; both are accepted.
+    payload = _load_sbdb_fixture_payload("2001VB.json")
+    payload["phys_par"] = [
+        {"name": "H_mag", "value": "20.5"},
+        {"name": "G", "value": "0.25"},
+    ]
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["2001VB"], timeout_s=1.0, max_attempts=1)
+
+    assert orbits.physical_parameters.H_v[0].as_py() == 20.5
+    assert orbits.physical_parameters.G[0].as_py() == 0.25
+
+
+def test_query_sbdb_new_physical_parameters_missing_phys_par_fills_nan() -> None:
+    # Payload without phys_par (or without H) yields NaN physical parameters.
+    payload = _load_sbdb_fixture_payload("2001VB.json")
+    assert "phys_par" not in payload
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["2001VB"], timeout_s=1.0, max_attempts=1)
+
+    assert orbits.physical_parameters is not None
+    assert np.isnan(orbits.physical_parameters.H_v[0].as_py())
+    assert np.isnan(orbits.physical_parameters.G[0].as_py())
+
+
+def test_real_sbdb_payloads_parse_without_error() -> None:
+    # Parse every *_phys.json in testdata; ensures real API response shapes don't break us.
+    sbdb_dir = os.path.join(os.path.dirname(__file__), "testdata", "sbdb")
+    for name in sorted(os.listdir(sbdb_dir)):
+        if not name.endswith("_phys.json"):
+            continue
+        payload = _load_sbdb_fixture_payload(name)
+        if "object" not in payload or "orbit" not in payload:
+            continue
+        obj_id = str(payload["object"].get("fullname", payload["object"].get("des", name)))
+        orbits = _orbits_from_sbdb_payloads([obj_id], [payload])
+        assert len(orbits) == 1
+        assert orbits.coordinates is not None
+        assert orbits.physical_parameters is not None
 
 
 @contextmanager

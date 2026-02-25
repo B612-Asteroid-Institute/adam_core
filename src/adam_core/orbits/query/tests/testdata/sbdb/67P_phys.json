@@ -1,0 +1,386 @@
+{
+  "phys_par": [
+    {
+      "sigma": "0.8",
+      "desc": "absolute magnitude of comet and coma (i.e. total)",
+      "name": "M1",
+      "value": "12.9",
+      "ref": "K213/6",
+      "title": "comet total magnitude",
+      "notes": "2 parameter fit from 3526 observations, autocmod 3.0f",
+      "units": null
+    },
+    {
+      "units": null,
+      "notes": "autocmod 3.0f",
+      "title": "comet total magnitude slope",
+      "ref": "K213/6",
+      "value": "7.5",
+      "name": "K1",
+      "desc": "comet total magnitude slope parameter",
+      "sigma": null
+    },
+    {
+      "sigma": "0.1",
+      "desc": "effective body diameter",
+      "ref": "Sierks et al., Science 347, aaa1044 (2015)",
+      "value": "3.4",
+      "name": "diameter",
+      "title": "diameter",
+      "units": "km",
+      "notes": null
+    },
+    {
+      "sigma": "0.2e-9",
+      "desc": "standard gravitational parameter: product of the mass (M) and gravitational constant (G)",
+      "title": "GM",
+      "ref": "Patzold et al., Nature 530, 63 (2016)",
+      "value": "662.2e-9",
+      "name": "GM",
+      "units": "km^3/s^2",
+      "notes": null
+    },
+    {
+      "notes": null,
+      "units": "g/cm^3",
+      "desc": "bulk density",
+      "sigma": "0.006",
+      "title": "bulk density",
+      "name": "density",
+      "value": "0.533",
+      "ref": "Patzold et al., Nature 530, 63 (2016)"
+    },
+    {
+      "units": "h",
+      "notes": "Pre-perihelion in 2015 value, post-perihelion period is 12.4043 +- 0.0007 h",
+      "sigma": "0.00005",
+      "desc": "body rotation period (synodic)",
+      "ref": "Mottola et al., Astronomy & Astrophysics 569, L2 (2014)",
+      "name": "rot_per",
+      "value": "12.76129",
+      "title": "rotation period"
+    },
+    {
+      "units": null,
+      "notes": null,
+      "title": "pole direction",
+      "value": "69.3/64.1",
+      "name": "pole",
+      "ref": "Sierks et al., Science 347, aaa1044 (2015)",
+      "desc": "spin-pole direction in R.A./Dec.",
+      "sigma": "0.1"
+    }
+  ],
+  "orbit": {
+    "model_pars": [
+      {
+        "desc": "non-gravitational radial acceleration parameter",
+        "sigma": "1.321E-11",
+        "name": "A1",
+        "value": "1.042451026100725E-9",
+        "title": "non-grav. radial accel.",
+        "units": "au/d^2",
+        "n": 1,
+        "kind": "EST"
+      },
+      {
+        "kind": "EST",
+        "n": 2,
+        "units": "au/d^2",
+        "title": "non-grav. transverse accel.",
+        "value": "-6.739627582388806E-11",
+        "name": "A2",
+        "desc": "non-gravitational transverse acceleration parameter",
+        "sigma": "2.918E-12"
+      },
+      {
+        "kind": "EST",
+        "n": 3,
+        "units": "au/d^2",
+        "title": "non-grav. normal accel.",
+        "value": "2.960945433454094E-10",
+        "name": "A3",
+        "sigma": "1.148E-11",
+        "desc": "non-gravitational normal acceleration parameter"
+      },
+      {
+        "n": 4,
+        "kind": "EST",
+        "units": "d",
+        "name": "DT",
+        "value": "45.68888251286532",
+        "title": "non-grav. perihelion offset",
+        "desc": "non-gravitational perihelion-maximum offset",
+        "sigma": "1.18"
+      }
+    ],
+    "covariance": {
+      "labels": [
+        "e",
+        "q",
+        "tp",
+        "node",
+        "peri",
+        "i",
+        "A1",
+        "A2",
+        "A3",
+        "DT"
+      ],
+      "epoch": "2457305.5",
+      "data": [
+        [
+          "7.543135323958626E-16",
+          "-2.269481744683752E-15",
+          "1.09975713071987E-13",
+          "1.740337083537906E-13",
+          "-2.200857601389599E-13",
+          "-1.107593943393471E-14",
+          "8.722667727664229E-20",
+          "6.208589975780215E-20",
+          "-2.773221412386557E-20",
+          "-2.131296534028089E-8"
+        ],
+        [
+          "-2.269481744683752E-15",
+          "9.766830857703113E-15",
+          "-3.812149145027028E-13",
+          "-5.623486805910294E-13",
+          "7.825583428627555E-13",
+          "5.664577070144681E-14",
+          "-9.082296573082551E-19",
+          "-1.856600861381215E-19",
+          "2.157268563020902E-19",
+          "9.42148831988136E-8"
+        ],
+        [
+          "1.09975713071987E-13",
+          "-3.812149145027028E-13",
+          "3.15248583949097E-10",
+          "6.543211342501969E-11",
+          "-2.3674374004913E-11",
+          "-9.275481294971166E-13",
+          "3.722158757635932E-18",
+          "2.113147986972491E-18",
+          "1.464659994374275E-17",
+          "-1.898919385395409E-6"
+        ],
+        [
+          "1.740337083537906E-13",
+          "-5.623486805910294E-13",
+          "6.543211342501969E-11",
+          "5.198177930910936E-10",
+          "-5.115640271464099E-10",
+          "-3.956062516030036E-12",
+          "4.630362985035247E-17",
+          "1.771866694531485E-17",
+          "-1.640379227088176E-16",
+          "-6.60468598345741E-6"
+        ],
+        [
+          "-2.200857601389599E-13",
+          "7.825583428627555E-13",
+          "-2.3674374004913E-11",
+          "-5.115640271464099E-10",
+          "5.302850901155014E-10",
+          "4.758821230055181E-12",
+          "-8.212154037856398E-17",
+          "-2.53346296007698E-17",
+          "1.757570771820821E-16",
+          "1.012767617425783E-5"
+        ],
+        [
+          "-1.107593943393471E-14",
+          "5.664577070144681E-14",
+          "-9.275481294971166E-13",
+          "-3.956062516030036E-12",
+          "4.758821230055181E-12",
+          "7.367408652480433E-12",
+          "-2.571812656309783E-18",
+          "1.157653532945218E-18",
+          "-2.891868600858281E-18",
+          "-2.425592990295079E-7"
+        ],
+        [
+          "8.722667727664229E-20",
+          "-9.082296573082551E-19",
+          "3.722158757635932E-18",
+          "4.630362985035247E-17",
+          "-8.212154037856398E-17",
+          "-2.571812656309783E-18",
+          "1.744373610415185E-22",
+          "1.526563666726546E-23",
+          "-3.651240046516128E-23",
+          "-1.222347911279935E-11"
+        ],
+        [
+          "6.208589975780215E-20",
+          "-1.856600861381215E-19",
+          "2.113147986972491E-18",
+          "1.771866694531485E-17",
+          "-2.53346296007698E-17",
+          "1.157653532945218E-18",
+          "1.526563666726546E-23",
+          "8.512245701491778E-24",
+          "-4.143864348104898E-24",
+          "-3.014157472032533E-12"
+        ],
+        [
+          "-2.773221412386557E-20",
+          "2.157268563020902E-19",
+          "1.464659994374275E-17",
+          "-1.640379227088176E-16",
+          "1.757570771820821E-16",
+          "-2.891868600858281E-18",
+          "-3.651240046516128E-23",
+          "-4.143864348104898E-24",
+          "1.316852560920121E-22",
+          "2.88631963395926E-12"
+        ],
+        [
+          "-2.131296534028089E-8",
+          "9.42148831988136E-8",
+          "-1.898919385395409E-6",
+          "-6.60468598345741E-6",
+          "1.012767617425783E-5",
+          "-2.425592990295079E-7",
+          "-1.222347911279935E-11",
+          "-3.014157472032533E-12",
+          "2.88631963395926E-12",
+          "1.391595086541208"
+        ]
+      ]
+    },
+    "data_arc": "5442",
+    "rms": ".55105",
+    "moid_jup": ".0837763",
+    "t_jup": "2.746",
+    "soln_date": "2024-02-01 08:49:50",
+    "epoch": "2457305.5",
+    "n_obs_used": 8608,
+    "orbit_id": "K213/6",
+    "condition_code": "0",
+    "source": "JPL",
+    "two_body": null,
+    "comment": null,
+    "sb_used": "SB441-N16",
+    "elements": [
+      {
+        "value": ".6409081306555051",
+        "name": "e",
+        "title": "eccentricity",
+        "label": "e",
+        "sigma": "2.7465E-8",
+        "units": null
+      },
+      {
+        "value": "3.462249489765068",
+        "name": "a",
+        "title": "semi-major axis",
+        "label": "a",
+        "sigma": "1.549E-7",
+        "units": "au"
+      },
+      {
+        "units": "au",
+        "sigma": "9.8827E-8",
+        "label": "q",
+        "title": "perihelion distance",
+        "value": "1.243265641416762",
+        "name": "q"
+      },
+      {
+        "sigma": "2.7143E-6",
+        "units": "deg",
+        "value": "7.040294906760007",
+        "name": "i",
+        "label": "i",
+        "title": "inclination; angle with respect to x-y ecliptic plane"
+      },
+      {
+        "sigma": "2.28E-5",
+        "units": "deg",
+        "name": "om",
+        "value": "50.13557380441372",
+        "label": "node",
+        "title": "longitude of the ascending node"
+      },
+      {
+        "sigma": "2.3028E-5",
+        "units": "deg",
+        "value": "12.79824973415729",
+        "name": "w",
+        "title": "argument of perihelion",
+        "label": "peri"
+      },
+      {
+        "sigma": "2.7804E-6",
+        "units": "deg",
+        "value": "8.859927418758764",
+        "name": "ma",
+        "title": "mean anomaly",
+        "label": "M"
+      },
+      {
+        "units": "TDB",
+        "sigma": "1.7755E-5",
+        "title": "time of perihelion passage",
+        "label": "tp",
+        "name": "tp",
+        "value": "2457247.588657863465"
+      },
+      {
+        "units": "d",
+        "sigma": ".00015791",
+        "title": "sidereal orbital period",
+        "label": "period",
+        "name": "per",
+        "value": "2353.076067532089"
+      },
+      {
+        "sigma": "1.0267E-8",
+        "units": "deg/d",
+        "name": "n",
+        "value": ".1529912292115438",
+        "title": "mean motion",
+        "label": "n"
+      },
+      {
+        "units": "au",
+        "sigma": "2.5417E-7",
+        "title": "aphelion distance",
+        "label": "Q",
+        "value": "5.681233338113374",
+        "name": "ad"
+      }
+    ],
+    "equinox": "J2000",
+    "moid": ".256932",
+    "last_obs": "2023-04-26",
+    "not_valid_after": null,
+    "producer": "Davide Farnocchia",
+    "pe_used": "DE441",
+    "n_del_obs_used": null,
+    "not_valid_before": null,
+    "n_dop_obs_used": null,
+    "first_obs": "2008-06-01"
+  },
+  "signature": {
+    "source": "NASA/JPL Small-Body Database (SBDB) API",
+    "version": "1.3"
+  },
+  "object": {
+    "neo": true,
+    "prefix": "P",
+    "des": "67P",
+    "pha": false,
+    "orbit_class": {
+      "name": "Jupiter-family Comet",
+      "code": "JFc"
+    },
+    "spkid": "1000012",
+    "fullname": "67P/Churyumov-Gerasimenko",
+    "orbit_id": "K213/6",
+    "kind": "cn"
+  }
+}
