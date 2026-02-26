@@ -172,6 +172,16 @@ class ADESObservations(qv.Table):
     stn = qv.LargeStringColumn()
     mode = qv.LargeStringColumn()
     astCat = qv.LargeStringColumn()
+    # ADES spacecraft/roving-observer metadata.
+    # For spacecraft (e.g., JWST) this carries observer state relative to <ctr>.
+    sys = qv.LargeStringColumn(nullable=True)
+    ctr = qv.LargeStringColumn(nullable=True)
+    pos1 = qv.Float64Column(nullable=True)
+    pos2 = qv.Float64Column(nullable=True)
+    pos3 = qv.Float64Column(nullable=True)
+    vel1 = qv.Float64Column(nullable=True)
+    vel2 = qv.Float64Column(nullable=True)
+    vel3 = qv.Float64Column(nullable=True)
     photCat = qv.LargeStringColumn(nullable=True)
     logSNR = qv.Float64Column(nullable=True)
     seeing = qv.Float64Column(nullable=True)
@@ -334,6 +344,12 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
         "logSNR",
         "seeing",
         "exp",
+        "pos1",
+        "pos2",
+        "pos3",
+        "vel1",
+        "vel2",
+        "vel3",
     ]
     # Do all the data conversions and then initialize the new table and concatenate
     for col in numeric_cols:
@@ -352,6 +368,8 @@ def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
         "stn",
         "mode",
         "astCat",
+        "sys",
+        "ctr",
         "photCat",
         "band",
     ]

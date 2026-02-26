@@ -675,6 +675,42 @@ permID|obsTime|ra|dec|raStar|decStar|stn|mode|astCat
     assert parsed_observations.dec[1].as_py() == 10.0
 
 
+def test_ADES_string_to_tables_spacecraft_position_columns():
+    """Test parsing ADES spacecraft observer position/velocity columns."""
+    ades_string = """# version=2022
+# observatory
+! mpcCode 274
+# submitter
+! name J. Moeyens
+# observers
+! name Observer1
+# measurers
+! name Measurer1
+# telescope
+! name Telescope1
+! aperture 1.0
+! design Reflector
+! detector CCD
+permID|obsTime|ra|dec|stn|mode|astCat|sys|ctr|pos1|pos2|pos3|vel1|vel2|vel3
+1234|2025-03-08T21:56:54.260Z|123.277771|13.691222|274|CMO|Gaia3|ICRF_KM|399|551363.13|-1190783.85|-650915.72|0.0123|-0.0045|0.0006
+"""
+
+    parsed_contexts, parsed_observations = ADES_string_to_tables(ades_string)
+
+    assert len(parsed_contexts) == 1
+    assert "274" in parsed_contexts
+    assert len(parsed_observations) == 1
+
+    assert parsed_observations.sys[0].as_py() == "ICRF_KM"
+    assert parsed_observations.ctr[0].as_py() == "399"
+    assert parsed_observations.pos1[0].as_py() == 551363.13
+    assert parsed_observations.pos2[0].as_py() == -1190783.85
+    assert parsed_observations.pos3[0].as_py() == -650915.72
+    assert parsed_observations.vel1[0].as_py() == 0.0123
+    assert parsed_observations.vel2[0].as_py() == -0.0045
+    assert parsed_observations.vel3[0].as_py() == 0.0006
+
+
 def test_ADES_string_to_tables_null_handling():
     """Test parsing an ADES string with null fields represented as empty or whitespace."""
     ades_string = """# version=2022
