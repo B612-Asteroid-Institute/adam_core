@@ -218,6 +218,28 @@ class CartesianCoordinates(qv.Table):
         """
         return au_per_day_to_km_per_s(self.v)
 
+    @property
+    def ric3_matrix(self) -> npt.NDArray[np.float]:
+        """
+        3x3 rotation matrix to RIC (radial, in-track, cross-track)
+        """
+        radial = self.r_hat
+        cross_track = self.h / self.h_mag[:, None]
+        # in_track should be in the direction of v
+        in_track = np.cross(cross_track, radial)
+        return np.stack((radial, in_track, cross_track), axis=1)
+
+    @property
+    def ric6_matrix(self) -> npt.NDArray[np.float]:
+        """
+        Nx6x6 rotation matrix to RIC (radial, in-track, cross-track)
+        """
+        rot3 = self.ric3_matrix
+        rotation = np.zeros((len(self), 6, 6))
+        rotation[:, :3, :3] = rot3
+        rotation[:, 3:6, 3:6] = rot3
+        return rotation
+
     def covariance_km(self) -> npt.NDArray[np.float64]:
         """
         Get covariance matrix in km and km/s units.

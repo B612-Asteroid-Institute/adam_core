@@ -482,14 +482,19 @@ def _upper_triangular_to_full(
     upper_triangular: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
     """
-    Convert an upper triangular matrix containing 21 elements to a full 6x6 matrix.
+    Convert an upper triangular matrix containing 21 or 28 elements to a full 6x6 matrix.
     """
     assert (
-        len(upper_triangular) == 21
-    ), "Upper triangular matrix must be a 21 element vector"
+        len(upper_triangular) == 21 or len(upper_triangular) == 28
+    ), f"Upper triangular matrix must be a 21 element vector, got {len(upper_triangular)}"
 
-    full = np.zeros((6, 6))
-    full[np.triu_indices(6)] = upper_triangular
+    if len(upper_triangular) == 21:
+        full = np.zeros((6, 6))
+        full[np.triu_indices(6)] = upper_triangular
+    else:
+        full = np.zeros((7, 7))
+        full[np.triu_indices(7)] = upper_triangular
+        full = full[:6, :6]  # just drop the last one
     full[np.tril_indices(6, -1)] = full.T[np.tril_indices(6, -1)]
     return full
 
