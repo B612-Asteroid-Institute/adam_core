@@ -33,6 +33,9 @@ class FindOrbOrbitFitter(OrbitFitter):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.fo_result_dir = fo_result_dir
+        self._load_obscodes()
+
+    def _load_obscodes(self):
         with open(mpc_obscodes) as mpc_file:
             self.obscodes = json.load(mpc_file)
 
@@ -42,9 +45,8 @@ class FindOrbOrbitFitter(OrbitFitter):
         return state
 
     def __setstate__(self, state):
-        saved_obscodes = self.obscodes
         self.__dict__.update(state)
-        self.obscodes = saved_obscodes
+        self._load_obscodes()
 
     def _short_observation_id(self, obs_id: str) -> str:
         """Convert obs_id from MPC observation to string matching `packed` field of total.json."""
