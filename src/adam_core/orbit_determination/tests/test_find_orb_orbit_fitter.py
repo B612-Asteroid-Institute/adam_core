@@ -4,6 +4,8 @@ import tempfile
 import numpy as np
 import pyarrow.compute as pc
 import pytest
+from adam_fo.build import main as build_fo
+from adam_fo.config import check_build_exists
 
 from ...coordinates import SphericalCoordinates
 from ...coordinates.origin import Origin
@@ -84,6 +86,13 @@ def real_data():
     return observations
 
 
+def force_adam_fo_install():
+    try:
+        check_build_exists()
+    except RuntimeError as e:
+        build_fo()
+
+
 def test_pickle():
     results_dir = "/some/path"
     fitter = FindOrbOrbitFitter(fo_result_dir=results_dir)
@@ -96,6 +105,7 @@ def test_pickle():
 
 
 def test_success(real_data):
+    force_adam_fo_install()
     observations = real_data
     out_dir = tempfile.TemporaryDirectory()
     fitter = FindOrbOrbitFitter(fo_result_dir=out_dir.name)
@@ -114,6 +124,7 @@ def test_success(real_data):
 
 
 def test_not_enough_data(real_data):
+    force_adam_fo_install()
     observations = real_data[:2]
     out_dir = tempfile.TemporaryDirectory()
     fitter = FindOrbOrbitFitter(fo_result_dir=out_dir.name)
