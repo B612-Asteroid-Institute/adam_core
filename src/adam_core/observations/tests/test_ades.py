@@ -135,9 +135,7 @@ def test_ObsContext_to_string(ades_obscontext):
     W84 = ades_obscontext["W84"]
     string = W84.to_string()
 
-    assert (
-        string
-        == """# observatory
+    assert string == """# observatory
 ! mpcCode W84
 ! name Cerro Tololo - Blanco + DECam
 # submitter
@@ -169,15 +167,12 @@ def test_ObsContext_to_string(ades_obscontext):
 ! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
-"""
-    )  # noqa: E501
+"""  # noqa: E501
 
     V00 = ades_obscontext["V00"]
     string = V00.to_string()
 
-    assert (
-        string
-        == """# observatory
+    assert string == """# observatory
 ! mpcCode V00
 ! name Kitt Peak National Observatory - Bok + 90Prime
 # submitter
@@ -209,8 +204,7 @@ def test_ObsContext_to_string(ades_obscontext):
 ! line THIS IS A TEST FILE CONTAINING FAKE OBSERVATIONS
 ! line Discovery candidates found by members of the Asteroid Institute, a program of B612 Foundation,
 ! line using the institute's ADAM::THOR discovery service running on Google Cloud.
-"""
-    )  # noqa: E501
+"""  # noqa: E501
 
 
 def test_ADES_to_string(ades_observations, ades_obscontext):
