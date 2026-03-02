@@ -89,7 +89,7 @@ def real_data():
 def force_adam_fo_install():
     try:
         check_build_exists()
-    except RuntimeError as e:
+    except RuntimeError:
         build_fo()
 
 
