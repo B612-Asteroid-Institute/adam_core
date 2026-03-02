@@ -19,6 +19,8 @@ from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
+from .chi import calc_chi_diagnostics
+from .exceptions import DynamicsNumericalError
 from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
 
 config.update("jax_enable_x64", True)
@@ -78,6 +80,56 @@ _propagate_2body_vmap = jit(
 )
 
 
+def _first_non_finite_row(values: np.ndarray) -> Optional[int]:
+    finite_mask = np.isfinite(values).all(axis=1)
+    bad = np.flatnonzero(~finite_mask)
+    return int(bad[0]) if bad.size > 0 else None
+
+
+def _raise_non_finite_propagation_error(
+    *,
+    stage: str,
+    reason: str,
+    absolute_idx: int,
+    orbit_id: str,
+    object_id: str,
+    orbit_row: np.ndarray,
+    t0: float,
+    t1: float,
+    mu: float,
+    max_iter: int,
+    tol: float,
+) -> None:
+    diag = calc_chi_diagnostics(
+        orbit_row[0:3],
+        orbit_row[3:6],
+        t1 - t0,
+        mu=mu,
+        max_iter=max_iter,
+        tol=tol,
+    )
+    raise DynamicsNumericalError(
+        stage=stage,
+        reason=reason,
+        context={
+            "row_index": absolute_idx,
+            "orbit_id": orbit_id,
+            "object_id": object_id,
+            "t0": float(t0),
+            "t1": float(t1),
+            "dt": float(t1 - t0),
+            "mu": float(mu),
+            "r_norm": diag.r_norm,
+            "v_norm": diag.v_norm,
+            "alpha": diag.alpha,
+            "chi": diag.chi,
+            "chi_finite": diag.finite,
+            "max_iter": int(max_iter),
+            "tol": float(tol),
+        },
+    )
+
+
 def _propagate_2body_serial(
     orbits: Orbits,
     times: Timestamp,
@@ -124,12 +176,43 @@ def _propagate_2body_serial(
         process_in_chunks(mu_, chunk_size),
     ):
         valid = min(chunk_size, num_entries - start)
+        bad_input = _first_non_finite_row(orbits_chunk[:valid])
+        if bad_input is not None:
+            abs_idx = start + bad_input
+            _raise_non_finite_propagation_error(
+                stage="propagation",
+                reason="non_finite_input_state",
+                absolute_idx=abs_idx,
+                orbit_id=str(orbit_ids_[abs_idx]),
+                object_id=str(object_ids_[abs_idx]),
+                orbit_row=np.asarray(orbits_chunk[bad_input], dtype=np.float64),
+                t0=float(t0_chunk[bad_input]),
+                t1=float(t1_chunk[bad_input]),
+                mu=float(mu_chunk[bad_input]),
+                max_iter=max_iter,
+                tol=tol,
+            )
         orbits_propagated_chunk = _propagate_2body_vmap(
             orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
         )
-        orbits_propagated[start : start + valid] = np.asarray(orbits_propagated_chunk)[
-            :valid
-        ]
+        chunk_np = np.asarray(orbits_propagated_chunk, dtype=np.float64)[:valid]
+        bad_output = _first_non_finite_row(chunk_np)
+        if bad_output is not None:
+            abs_idx = start + bad_output
+            _raise_non_finite_propagation_error(
+                stage="propagation",
+                reason="non_finite_output_state",
+                absolute_idx=abs_idx,
+                orbit_id=str(orbit_ids_[abs_idx]),
+                object_id=str(object_ids_[abs_idx]),
+                orbit_row=np.asarray(orbits_chunk[bad_output], dtype=np.float64),
+                t0=float(t0_chunk[bad_output]),
+                t1=float(t1_chunk[bad_output]),
+                mu=float(mu_chunk[bad_output]),
+                max_iter=max_iter,
+                tol=tol,
+            )
+        orbits_propagated[start : start + valid] = chunk_np
         start += valid
 
     if start != num_entries:

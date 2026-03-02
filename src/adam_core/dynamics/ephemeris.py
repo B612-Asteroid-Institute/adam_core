@@ -30,6 +30,7 @@ from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
+from .exceptions import DynamicsNumericalError
 
 
 _TRANSFORM_EC2EQ = jnp.asarray(c.TRANSFORM_EC2EQ, dtype=jnp.float64)
@@ -154,6 +155,39 @@ _generate_ephemeris_2body_vmap = jit(
         out_axes=(0, 0, 0),
     )
 )
+
+
+def _first_non_finite(values: np.ndarray) -> Optional[int]:
+    bad = np.flatnonzero(~np.isfinite(values))
+    return int(bad[0]) if bad.size > 0 else None
+
+
+def _raise_ephemeris_numerical_error(
+    *,
+    reason: str,
+    row_index: int,
+    orbit_id: str,
+    object_id: str,
+    observation_time: float,
+    light_time: Optional[float],
+    max_iter: int,
+    tol: float,
+    lt_tol: float,
+) -> None:
+    raise DynamicsNumericalError(
+        stage="ephemeris",
+        reason=reason,
+        context={
+            "row_index": row_index,
+            "orbit_id": orbit_id,
+            "object_id": object_id,
+            "observation_time_mjd_tdb": float(observation_time),
+            "light_time_days": None if light_time is None else float(light_time),
+            "max_iter": int(max_iter),
+            "tol": float(tol),
+            "lt_tol": float(lt_tol),
+        },
+    )
 
 
 def _generate_ephemeris_2body_serial(
@@ -417,9 +451,82 @@ def generate_ephemeris_2body(
             tol,
             stellar_aberration,
         )
-        ephemeris_spherical[start : start + valid] = np.asarray(ephemeris_chunk)[:valid]
-        light_time[start : start + valid] = np.asarray(light_time_chunk)[:valid]
-        aberrated_orbits[start : start + valid] = np.asarray(aberrated_chunk)[:valid]
+        eph_np = np.asarray(ephemeris_chunk, dtype=np.float64)[:valid]
+        lt_np = np.asarray(light_time_chunk, dtype=np.float64)[:valid]
+        aberrated_np = np.asarray(aberrated_chunk, dtype=np.float64)[:valid]
+
+        bad_lt = _first_non_finite(lt_np)
+        if bad_lt is not None:
+            abs_idx = start + bad_lt
+            _raise_ephemeris_numerical_error(
+                reason="non_finite_light_time",
+                row_index=abs_idx,
+                orbit_id=str(
+                    propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
+                        abs_idx
+                    ]
+                ),
+                object_id=str(
+                    propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
+                        abs_idx
+                    ]
+                ),
+                observation_time=float(times_chunk[bad_lt]),
+                light_time=float(lt_np[bad_lt]),
+                max_iter=max_iter,
+                tol=tol,
+                lt_tol=lt_tol,
+            )
+
+        bad_eph = _first_non_finite(eph_np)
+        if bad_eph is not None:
+            abs_idx = start + bad_eph
+            _raise_ephemeris_numerical_error(
+                reason="non_finite_ephemeris_state",
+                row_index=abs_idx,
+                orbit_id=str(
+                    propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
+                        abs_idx
+                    ]
+                ),
+                object_id=str(
+                    propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
+                        abs_idx
+                    ]
+                ),
+                observation_time=float(times_chunk[bad_eph]),
+                light_time=float(lt_np[bad_eph]),
+                max_iter=max_iter,
+                tol=tol,
+                lt_tol=lt_tol,
+            )
+
+        bad_aberrated = _first_non_finite(aberrated_np)
+        if bad_aberrated is not None:
+            abs_idx = start + bad_aberrated
+            _raise_ephemeris_numerical_error(
+                reason="non_finite_aberrated_state",
+                row_index=abs_idx,
+                orbit_id=str(
+                    propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
+                        abs_idx
+                    ]
+                ),
+                object_id=str(
+                    propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
+                        abs_idx
+                    ]
+                ),
+                observation_time=float(times_chunk[bad_aberrated]),
+                light_time=float(lt_np[bad_aberrated]),
+                max_iter=max_iter,
+                tol=tol,
+                lt_tol=lt_tol,
+            )
+
+        ephemeris_spherical[start : start + valid] = eph_np
+        light_time[start : start + valid] = lt_np
+        aberrated_orbits[start : start + valid] = aberrated_np
         start += valid
 
     if start != num_entries:
@@ -428,9 +535,28 @@ def generate_ephemeris_2body(
         )
 
     # Compute emission times by subtracting light-time (in days) from the observation times.
-    emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
-        pa.array(-light_time)
-    )
+    bad_light_time = _first_non_finite(light_time)
+    if bad_light_time is not None:
+        _raise_ephemeris_numerical_error(
+            reason="non_finite_light_time_before_emission_time",
+            row_index=bad_light_time,
+            orbit_id=str(
+                propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
+                    bad_light_time
+                ]
+            ),
+            object_id=str(
+                propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
+                    bad_light_time
+                ]
+            ),
+            observation_time=float(times[bad_light_time]),
+            light_time=float(light_time[bad_light_time]),
+            max_iter=max_iter,
+            tol=tol,
+            lt_tol=lt_tol,
+        )
+    emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(pa.array(-light_time))
     aberrated_coordinates = CartesianCoordinates.from_kwargs(
         x=aberrated_orbits[:, 0],
         y=aberrated_orbits[:, 1],

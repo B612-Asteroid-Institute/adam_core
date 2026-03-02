@@ -12,12 +12,14 @@ from astropy import units as u
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
+from ...dynamics.exceptions import DynamicsNumericalError
 from ...observers import Observers
 from ...orbits import Orbits
 from ...photometry import calculate_phase_angle
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ...utils import spice as spice_mod
+from .. import ephemeris as ephemeris_module
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
 
@@ -583,3 +585,61 @@ def test_generate_ephemeris_2body_ray_matches_serial() -> None:
     )
 
     ray.shutdown()  # type: ignore[name-defined]
+
+
+def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> None:
+    t = Timestamp.from_mjd([60000.0], scale="tdb")
+    origin_ssb = Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"])
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["obj1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=t,
+            origin=origin_ssb,
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=t,
+            origin=origin_ssb,
+            frame="ecliptic",
+        ),
+    )
+
+    def _bad_ephemeris_vmap(
+        propagated_chunk,
+        times_chunk,
+        observer_chunk,
+        mu_chunk,
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+    ):
+        n = len(times_chunk)
+        eph = np.zeros((n, 6), dtype=np.float64)
+        lt = np.zeros((n,), dtype=np.float64)
+        lt[0] = np.nan
+        aberrated = np.zeros((n, 6), dtype=np.float64)
+        return eph, lt, aberrated
+
+    monkeypatch.setattr(
+        ephemeris_module, "_generate_ephemeris_2body_vmap", _bad_ephemeris_vmap
+    )
+
+    with pytest.raises(DynamicsNumericalError, match="non_finite_light_time"):
+        generate_ephemeris_2body(orbits, observers, predict_magnitudes=False, max_processes=1)
