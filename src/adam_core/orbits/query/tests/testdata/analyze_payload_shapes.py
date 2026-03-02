@@ -75,8 +75,22 @@ def _analyze_sbdb() -> None:
     print("Top-level keys:", sorted(all_top_keys))
     print("Object kinds seen:", dict(sorted(kind_counts.items())))
     print("Orbit keys (union):", sorted(orbit_keys))
-    print("Elements count per payload:", min(element_counts) if element_counts else 0, "..", max(element_counts) if element_counts else 0)
-    print("phys_par: payloads with H:", has_H, "H_mag:", has_H_mag, "G:", has_G, "H but no G:", has_H_no_G)
+    print(
+        "Elements count per payload:",
+        min(element_counts) if element_counts else 0,
+        "..",
+        max(element_counts) if element_counts else 0,
+    )
+    print(
+        "phys_par: payloads with H:",
+        has_H,
+        "H_mag:",
+        has_H_mag,
+        "G:",
+        has_G,
+        "H but no G:",
+        has_H_no_G,
+    )
     all_phys_names: set[str] = set()
     for names in phys_par_names:
         all_phys_names.update(names)
@@ -92,8 +106,9 @@ def _analyze_sbdb() -> None:
         names = [p.get("name") for p in phys if isinstance(p, dict)]
         obj = data.get("object") or {}
         kind = obj.get("kind", "?")
-        full = obj.get("fullname", path.stem)
-        print(f"  {path.name}: kind={kind} phys_par names={names[:12]}{'...' if len(names) > 12 else ''}")
+        print(
+            f"  {path.name}: kind={kind} phys_par names={names[:12]}{'...' if len(names) > 12 else ''}"
+        )
     if len(files) > 20:
         print(f"  ... and {len(files) - 20} more files")
     print()
@@ -153,7 +168,10 @@ def _analyze_neocc() -> None:
     if cov_lens:
         print("Covariance sizes (element count):", min(cov_lens), "..", max(cov_lens))
     if fail_cov_count:
-        print("Failed files COV element count (parser expects 21):", dict(sorted(fail_cov_count.items())))
+        print(
+            "Failed files COV element count (parser expects 21):",
+            dict(sorted(fail_cov_count.items())),
+        )
     if errors:
         print("\nParse errors by file:")
         for name, err in sorted(errors.items()):
@@ -165,9 +183,13 @@ def main() -> None:
     _analyze_sbdb()
     _analyze_neocc()
     print("=== Summary ===")
-    print("SBDB: Use H or H_mag for absolute magnitude; G often missing for unnumbered NEOs.")
+    print(
+        "SBDB: Use H or H_mag for absolute magnitude; G often missing for unnumbered NEOs."
+    )
     print("SBDB: Comets (cn/cu) have M1/K1/M2/K2/PC, not H/G.")
-    print("NEOCC: Parser expects 21-element upper-triangular COV; some objects use 28+ (different format).")
+    print(
+        "NEOCC: Parser expects 21-element upper-triangular COV; some objects use 28+ (different format)."
+    )
 
 
 if __name__ == "__main__":
