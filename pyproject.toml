@@ -86,7 +86,6 @@ test = [
     "ruff",
     "black",
     "adam-assist>=0.3.5",
-    "adam_fo; python_version < '3.13'",
     "mpcq>=0.4.0; python_version < '3.13'",
     "google-cloud-bigquery",
     "google-cloud-bigquery-storage",
