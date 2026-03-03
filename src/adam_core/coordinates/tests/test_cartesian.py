@@ -201,10 +201,11 @@ def test_CartesianCoordinates_ric():
             assert (rot3 == np.eye(d)).all()
             continue
         # For all "normal" matrices, we should have a proper rotation matrix
-        assert np.allclose(rot3.T @ rot3, np.eye(d))
+        assert np.allclose(rot.T @ rot, np.eye(D))
+        rotated = coords[i].rotate(rot, "ric")
         # Rotated r_hat should be the new X axis
-        assert np.allclose(rot3 @ coords.r_hat[i], [1, 0, 0])
+        assert np.allclose(rotated.r_hat, [1, 0, 0])
         # Rotated h_hat should be the new Z axis
-        assert np.allclose(rot3 @ (coords.h[i] / coords.h_mag[i]), [0, 0, 1])
+        assert np.allclose(rotated.h / rotated.h_mag, [0, 0, 1])
         # In-track should be in the same direction as rotated V, but they may not perfectly align
-        assert np.dot(rot3 @ coords.v_hat[i], [0, 1, 0]) > 0
+        assert np.dot(rotated.v_hat, [0, 1, 0]) > 0
