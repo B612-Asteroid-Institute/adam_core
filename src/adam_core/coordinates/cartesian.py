@@ -20,6 +20,8 @@ from .units import (
 __all__ = ["CartesianCoordinates"]
 
 COVARIANCE_ROTATION_TOLERANCE = 1e-25
+# h_mag less than this means we can't determine orbital plane
+SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE = 1e-20
 logger = logging.getLogger(__name__)
 
 
@@ -217,6 +219,40 @@ class CartesianCoordinates(qv.Table):
         Velocity vector in km/s.
         """
         return au_per_day_to_km_per_s(self.v)
+
+    @property
+    def ric3_matrix(self) -> npt.NDArray[np.float]:
+        """
+        3x3 rotation matrix to RIC (radial, in-track, cross-track)
+        """
+        radial = self.r
+        r_mag = self.r_mag
+        cross_track = self.h
+        h_mag = self.h_mag
+
+        # If radius or velocity is 0, return identity by setting r to X and cross_track to Z
+        h_mask = h_mag < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE
+        radial[h_mask, :] = np.array([1, 0, 0])
+        r_mag[h_mask] = 1
+        radial /= r_mag[:, None]
+        cross_track[h_mask, :] = np.array([0, 0, 1])
+        h_mag[h_mask] = 1
+        cross_track /= h_mag[:, None]
+
+        # in_track should be in the direction of v
+        in_track = np.cross(cross_track, radial)
+        return np.stack((radial, in_track, cross_track), axis=1)
+
+    @property
+    def ric6_matrix(self) -> npt.NDArray[np.float]:
+        """
+        Nx6x6 rotation matrix to RIC (radial, in-track, cross-track)
+        """
+        rot3 = self.ric3_matrix
+        rotation = np.zeros((len(self), 6, 6))
+        rotation[:, :3, :3] = rot3
+        rotation[:, 3:6, 3:6] = rot3
+        return rotation
 
     def covariance_km(self) -> npt.NDArray[np.float64]:
         """

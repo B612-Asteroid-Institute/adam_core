@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..cartesian import CartesianCoordinates
+from ..cartesian import SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE, CartesianCoordinates
 from ..covariances import CoordinateCovariances
 from ..origin import Origin
 
@@ -163,3 +163,48 @@ def test_CartesianCoordinates_attributes():
 
     sigma_v_mag = np.linalg.norm(sigma_v, axis=1)
     np.testing.assert_equal(coords.sigma_v_mag, sigma_v_mag)
+
+
+def test_CartesianCoordinates_ric():
+    N, D, d = 500, 6, 3
+    values = np.random.random((N, D)) * 10 - 5
+    covariances = np.random.random((N, D, D))
+
+    # Make sure we have at least one 0,0,0 for r and v
+    values[0, :d] = 0
+    values[1, d:] = 0
+
+    coords = CartesianCoordinates.from_kwargs(
+        x=values[:, 0],
+        y=values[:, 1],
+        z=values[:, 2],
+        vx=values[:, 3],
+        vy=values[:, 4],
+        vz=values[:, 5],
+        covariance=CoordinateCovariances.from_matrix(covariances),
+        origin=Origin.from_kwargs(code=["origin"] * N),
+        frame="equatorial",
+    )
+    ric6 = coords.ric6_matrix
+
+    # Rotations are per line, so iterate
+    h_mag = coords.h_mag
+    for i in range(N):
+        rot = ric6[i]
+        rot3 = rot[d:, d:]
+        # Check the structure
+        assert (rot[:d, :d] == rot3).all()
+        assert (rot[:d, d:] == 0).all()
+        assert (rot[d:, :d] == 0).all()
+        # If orbital plane cannot be established, we should have identity
+        if h_mag[i] < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE:
+            assert (rot3 == np.eye(d)).all()
+            continue
+        # For all "normal" matrices, we should have a proper rotation matrix
+        assert np.allclose(rot3.T @ rot3, np.eye(d))
+        # Rotated r_hat should be the new X axis
+        assert np.allclose(rot3 @ coords.r_hat[i], [1, 0, 0])
+        # Rotated h_hat should be the new Z axis
+        assert np.allclose(rot3 @ (coords.h[i] / coords.h_mag[i]), [0, 0, 1])
+        # In-track should be in the same direction as rotated V, but they may not perfectly align
+        assert np.dot(rot3 @ coords.v_hat[i], [0, 1, 0]) > 0
