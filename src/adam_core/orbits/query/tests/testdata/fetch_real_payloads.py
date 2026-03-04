@@ -25,16 +25,50 @@ _NEOCC_URL = "https://neo.ssa.esa.int/PSDB-portlet/download"
 
 # SBDB: well-known and lesser-known; numbered/unnumbered; asteroids and comets.
 SBDB_IDS = [
-    "1", "2", "3", "4", "433", "243", "25143", "99942", "101955",  # numbered asteroids
-    "2001VB", "2015AB", "2022AP7", "2023DZ2", "2024YR4", "2022OB5",  # unnumbered NEOs
-    "1P", "67P", "73P", "81P", "C/2022 E3", "C/2014 UN271",  # comets
-    "Ceres", "Vesta", "Eros", "Bennu", "Apophis", "Halley",  # names
+    "1",
+    "2",
+    "3",
+    "4",
+    "433",
+    "243",
+    "25143",
+    "99942",
+    "101955",  # numbered asteroids
+    "2001VB",
+    "2015AB",
+    "2022AP7",
+    "2023DZ2",
+    "2024YR4",
+    "2022OB5",  # unnumbered NEOs
+    "1P",
+    "67P",
+    "73P",
+    "81P",
+    "C/2022 E3",
+    "C/2014 UN271",  # comets
+    "Ceres",
+    "Vesta",
+    "Eros",
+    "Bennu",
+    "Apophis",
+    "Halley",  # names
 ]
 # NEOCC: NEO-focused; use space-free designations. Not all may be in NEOCC.
 NEOCC_IDS = [
-    "433", "99942", "101955", "162173", "65803",  # numbered NEOs
-    "2024YR4", "2022OB5", "2023DZ2", "2015AB", "2001VB", "2022AP7",
-    "2024BX1", "2023BU", "2012DA14",
+    "433",
+    "99942",
+    "101955",
+    "162173",
+    "65803",  # numbered NEOs
+    "2024YR4",
+    "2022OB5",
+    "2023DZ2",
+    "2015AB",
+    "2001VB",
+    "2022AP7",
+    "2024BX1",
+    "2023BU",
+    "2012DA14",
 ]
 
 
