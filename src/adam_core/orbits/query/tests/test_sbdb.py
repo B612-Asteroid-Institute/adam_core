@@ -397,7 +397,9 @@ def test_real_sbdb_payloads_parse_without_error() -> None:
         payload = _load_sbdb_fixture_payload(name)
         if "object" not in payload or "orbit" not in payload:
             continue
-        obj_id = str(payload["object"].get("fullname", payload["object"].get("des", name)))
+        obj_id = str(
+            payload["object"].get("fullname", payload["object"].get("des", name))
+        )
         orbits = _orbits_from_sbdb_payloads([obj_id], [payload])
         assert len(orbits) == 1
         assert orbits.coordinates is not None

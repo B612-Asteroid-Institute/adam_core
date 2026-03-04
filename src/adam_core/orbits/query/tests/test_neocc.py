@@ -252,4 +252,6 @@ def test_real_neocc_oef_files_parse_without_error() -> None:
             assert "H" in result["magnitude"]
             assert "G" in result["magnitude"]
         parsed += 1
-    assert parsed >= 2, "at least two real OEF files should parse (e.g. 2024YR4, 2022OB5)"
+    assert (
+        parsed >= 2
+    ), "at least two real OEF files should parse (e.g. 2024YR4, 2022OB5)"

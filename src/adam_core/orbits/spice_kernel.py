@@ -118,9 +118,9 @@ def orbits_to_spk(
     cheby_degree = 15
 
     # Generate propagation times
-    num_steps = (
-        int((end_time.mjd().to_numpy() - start_time.mjd().to_numpy()) / step_days) + 1
-    )
+    start_mjd = start_time.mjd().to_numpy(zero_copy_only=False).item()
+    end_mjd = end_time.mjd().to_numpy(zero_copy_only=False).item()
+    num_steps = int((end_mjd - start_mjd) / step_days) + 1
     logger.debug(f"Generated {num_steps} time steps with step size {step_days} days")
 
     times = qv.concatenate(
