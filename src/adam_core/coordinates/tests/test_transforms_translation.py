@@ -73,7 +73,7 @@ def test_cartesian_to_origin(orbital_elements, orbital_elements_barycentric):
     )
 
     assert_coords_equal(
-        cartesian_coordinates_barycentric, cartesian_coordinates_barycentric
+        cartesian_coordinates_barycentric_actual, cartesian_coordinates_barycentric
     )
 
     # Convert barycentric cartesian coordinates to heliocentric cartesian coordinates
@@ -171,7 +171,7 @@ def test_transform_coordinates_origin(orbital_elements, orbital_elements_barycen
     )
 
     assert_coords_equal(
-        cartesian_coordinates_barycentric, cartesian_coordinates_barycentric
+        cartesian_coordinates_barycentric_actual, cartesian_coordinates_barycentric
     )
 
     # Convert barycentric cartesian coordinates to heliocentric cartesian coordinates
