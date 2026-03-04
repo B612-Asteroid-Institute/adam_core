@@ -13,11 +13,18 @@ from ..propagator.propagator import Propagator
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 
+class OrbitDeterminationPhotometry(qv.Table):
+    mag = qv.Float64Column(nullable=True)
+    rmsmag = qv.Float64Column(nullable=True)
+    band = qv.LargeStringColumn(nullable=True)
+
+
 class OrbitDeterminationObservations(qv.Table):
 
     id = qv.LargeStringColumn()
     coordinates = SphericalCoordinates.as_column()
     observers = Observers.as_column()
+    photometry = OrbitDeterminationPhotometry.as_column()
 
 
 def evaluate_orbits(
