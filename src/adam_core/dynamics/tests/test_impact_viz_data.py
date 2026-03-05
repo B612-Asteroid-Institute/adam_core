@@ -118,7 +118,10 @@ def test_generate_impact_visualization_data(time_step, time_range, max_processes
 
     assert "Non-Impacting" in propagated_variants
     for impact_body in impacts.collision_object.code.unique().to_pylist():
-        assert impact_body in propagated_variants
+        assert any(
+            key == impact_body or key.startswith(f"{impact_body} ")
+            for key in propagated_variants
+        )
 
     # Check that propagated orbits have the expected time points
     assert len(propagated_best_fit_orbit) == len(propagation_times) * len(orbit)
@@ -236,10 +239,10 @@ def test_plot_risk_corridor():
                 assert "Risk Corridor" in fig.layout.title.text
 
         except ValueError as e:
-            # If no Earth impacts in the test data, this is expected
-            if "No Earth impacts found" in str(e):
+            # If no Earth collision events in the test data, this is expected
+            if "No Earth collision events found" in str(e):
                 pytest.skip(
-                    "No Earth impacts in test data, skipping risk corridor test"
+                    "No Earth collision events in test data, skipping risk corridor test"
                 )
             else:
                 raise

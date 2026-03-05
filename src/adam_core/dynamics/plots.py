@@ -42,15 +42,16 @@ except ImportError:
 
 def prepare_propagated_variants(
     propagated_variants: Orbits, impacts: CollisionEvent
-) -> dict[Literal["Non-Impacting", "EARTH", "MOON"], Orbits]:
+) -> dict[str, Orbits]:
     """
-    Sets variants propagated after their impact time to their impact coordinates on the surface of the colliding body. If the colliding body is the Earth,
-    the variants are set to the impact coordinates on the surface of the Earth. If the colliding body is the Moon, the variants are set to the impact coordinates
-    in the lunarcentric frame (but not fixed to the surface of the Moon).
+    Sets variants propagated after their impact time to their impact coordinates on
+    the surface of the colliding body for stopping collision events. Non-stopping
+    close-approach events are preserved as propagated.
 
-    Note: Due to the nature of the impact detection code, some of the variants may already be inside the sphere of the Earth when the impact is detected.
-    In these cases, the variants' distance from the geocenter is set to the radius of the Earth. The results of this function should not be used
-    for high-fidelity impact predictions but instead for visualizations of the approximate impact corridor.
+    Note: Due to the nature of the collision detection code, some variants may already
+    be inside the sphere of the colliding body when a stopping event is detected.
+    In these cases, the variants' distance from the body center is set to the body
+    radius. Results are intended for visualization, not high-fidelity impact prediction.
 
     Parameters
     ----------
@@ -61,29 +62,39 @@ def prepare_propagated_variants(
 
     Returns
     -------
-    dict[Literal["Non-Impacting", "EARTH", "MOON"], Orbits]
+    dict[str, Orbits]
         A dictionary containing the prepared variants, with keys:
-          - "Non-Impacting": Variants that don't impact any body
-          - "EARTH": Variants that impact Earth (if any)
-          - "MOON": Variants that impact the Moon (if any)
-        Only bodies that appear in the impacts will be included as keys.
+          - "Non-Impacting": Variants with no collision events
+          - "{BODY} Impacting": Variants with stopping collisions for that body
+          - "{BODY} Close-Approaching": Variants with non-stopping collisions for that body
     """
     assert propagated_variants.coordinates.frame == "ecliptic"
+
+    if len(impacts) == 0:
+        return {"Non-Impacting": propagated_variants}
 
     colliding_bodies = impacts.collision_object.code.unique().to_pylist()
     prepared_variants = {}
 
-    # Remove the non-impacting variants
-    impacting_variants = propagated_variants.apply_mask(
-        pc.is_in(propagated_variants.orbit_id, impacts.variant_id)
+    impact_events = impacts.apply_mask(pc.equal(impacts.stopping_condition, True))
+    close_approach_events = impacts.apply_mask(
+        pc.equal(impacts.stopping_condition, False)
     )
+
+    impact_variant_ids = set(impact_events.variant_id.unique().to_pylist())
+    close_variant_ids = set(close_approach_events.variant_id.unique().to_pylist())
+    all_event_variant_ids = impact_variant_ids.union(close_variant_ids)
+
+    all_event_variant_ids_arrow = pa.array(
+        list(all_event_variant_ids), type=propagated_variants.orbit_id.type
+    )
+
     non_impacting_variants = propagated_variants.apply_mask(
-        pc.invert(pc.is_in(propagated_variants.orbit_id, impacts.variant_id))
+        pc.invert(pc.is_in(propagated_variants.orbit_id, all_event_variant_ids_arrow))
     )
     prepared_variants["Non-Impacting"] = non_impacting_variants
 
     for colliding_body in colliding_bodies:
-
         if colliding_body == "EARTH":
             radius = EARTH_RADIUS_KM
         elif colliding_body == "MOON":
@@ -93,74 +104,180 @@ def prepare_propagated_variants(
                 f"CollisionEvent visualizations are currently supported for the Earth and Moon. {colliding_body} is not supported."
             )
 
-        impacts_on_colliding_body = impacts.apply_mask(
-            pc.equal(impacts.collision_object.code, colliding_body)
-        )
-        impacting_variants_body = impacting_variants.apply_mask(
-            pc.is_in(impacting_variants.orbit_id, impacts_on_colliding_body.variant_id)
+        impacts_on_colliding_body = impact_events.apply_mask(
+            pc.equal(impact_events.collision_object.code, colliding_body)
         )
 
-        for impact in impacts_on_colliding_body:
-
-            post_impact_mask = pc.and_(
-                pc.is_in(impacting_variants_body.orbit_id, impact.variant_id),
-                pc.greater_equal(
-                    impacting_variants_body.coordinates.time.mjd(),
-                    impact.coordinates.time.rescale(
-                        impacting_variants_body.coordinates.time.scale
-                    ).mjd()[0],
-                ),
+        if len(impacts_on_colliding_body) > 0:
+            impacting_variants_body = propagated_variants.apply_mask(
+                pc.is_in(
+                    propagated_variants.orbit_id, impacts_on_colliding_body.variant_id
+                )
             )
 
-            impacting_variants_body_correct = impacting_variants_body.apply_mask(
-                pc.invert(post_impact_mask)
+            for impact in impacts_on_colliding_body:
+
+                post_impact_mask = pc.and_(
+                    pc.is_in(impacting_variants_body.orbit_id, impact.variant_id),
+                    pc.greater_equal(
+                        impacting_variants_body.coordinates.time.mjd(),
+                        impact.coordinates.time.rescale(
+                            impacting_variants_body.coordinates.time.scale
+                        ).mjd()[0],
+                    ),
+                )
+
+                impacting_variants_body_correct = impacting_variants_body.apply_mask(
+                    pc.invert(post_impact_mask)
+                )
+                impacting_variants_body_incorrect = impacting_variants_body.apply_mask(
+                    post_impact_mask
+                )
+
+                if len(impacting_variants_body_incorrect) > 0:
+                    collision_coordinates = impact.collision_coordinates
+                    collision_coordinates = qv.concatenate(
+                        [
+                            collision_coordinates
+                            for _ in range(len(impacting_variants_body_incorrect))
+                        ]
+                    )
+
+                    # The surface-clamp applies to stopping collisions only.
+                    collision_coordinates = collision_coordinates.set_column(
+                        "rho", pa.repeat(radius / KM_P_AU, len(collision_coordinates))
+                    )
+
+                    # Override impact coordinate times with propagated timestamps so
+                    # Earth-fixed points rotate correctly in geocentric ecliptic view.
+                    collision_coordinates = collision_coordinates.set_column(
+                        "time", impacting_variants_body_incorrect.coordinates.time
+                    )
+
+                    geocentric_coordinates = transform_coordinates(
+                        collision_coordinates,
+                        representation_out=CartesianCoordinates,
+                        frame_out="ecliptic",
+                        origin_out=OriginCodes.EARTH,
+                    )
+                    impacting_variants_body_incorrect = (
+                        impacting_variants_body_incorrect.set_column(
+                            "coordinates",
+                            geocentric_coordinates,
+                        )
+                    )
+
+                impacting_variants_body = qv.concatenate(
+                    [impacting_variants_body_correct, impacting_variants_body_incorrect]
+                )
+
+            prepared_variants[f"{colliding_body} Impacting"] = impacting_variants_body
+
+        close_approaches_on_colliding_body = close_approach_events.apply_mask(
+            pc.equal(close_approach_events.collision_object.code, colliding_body)
+        )
+        close_approach_variant_ids = set(
+            close_approaches_on_colliding_body.variant_id.unique().to_pylist()
+        )
+        impacting_variant_ids_for_body = set(
+            impacts_on_colliding_body.variant_id.unique().to_pylist()
+        )
+        close_approach_variant_ids.difference_update(impacting_variant_ids_for_body)
+
+        if close_approach_variant_ids:
+            close_approach_variant_ids_arrow = pa.array(
+                list(close_approach_variant_ids), type=propagated_variants.orbit_id.type
             )
-            impacting_variants_body_incorrect = impacting_variants_body.apply_mask(
-                post_impact_mask
-            )
-
-            if len(impacting_variants_body_incorrect) > 0:
-                collision_coordinates = impact.collision_coordinates
-                collision_coordinates = qv.concatenate(
-                    [
-                        collision_coordinates
-                        for _ in range(len(impacting_variants_body_incorrect))
-                    ]
-                )
-
-                # Hack: In some cases, due to the time step of the propagation, the variants may already
-                # be inside the sphere of the colliding body when the impact is detected. In these cases, the variants'
-                # distance from the bodycenter is set its radius.
-                collision_coordinates = collision_coordinates.set_column(
-                    "rho", pa.repeat(radius / KM_P_AU, len(collision_coordinates))
-                )
-
-                # Override the time of the impact coordinates to the time of the propagated variants beyond the impact time, we do
-                # this so we can then calculate position of these locations on the surface of the Earth as the Earth rotates.
-                collision_coordinates = collision_coordinates.set_column(
-                    "time", impacting_variants_body_incorrect.coordinates.time
-                )
-
-                geocentric_coordinates = transform_coordinates(
-                    collision_coordinates,
-                    representation_out=CartesianCoordinates,
-                    frame_out="ecliptic",
-                    origin_out=OriginCodes.EARTH,
-                )
-                impacting_variants_body_incorrect = (
-                    impacting_variants_body_incorrect.set_column(
-                        "coordinates",
-                        geocentric_coordinates,
+            prepared_variants[f"{colliding_body} Close-Approaching"] = (
+                propagated_variants.apply_mask(
+                    pc.is_in(
+                        propagated_variants.orbit_id, close_approach_variant_ids_arrow
                     )
                 )
-
-            impacting_variants_body = qv.concatenate(
-                [impacting_variants_body_correct, impacting_variants_body_incorrect]
             )
 
-        prepared_variants[colliding_body] = impacting_variants_body
-
     return prepared_variants
+
+
+def _closest_event_time_window(
+    impacts: CollisionEvent,
+    focus_body: Optional[Literal["EARTH", "MOON"]] = None,
+    window_percentiles: Tuple[float, float] = (10.0, 90.0),
+    window_padding: float = 10.0,
+) -> tuple[float, float]:
+    """
+    Compute a focused visualization window centered on closest events.
+    """
+    if len(impacts) == 0:
+        raise ValueError("No collision events available for visualization.")
+
+    body_codes = impacts.collision_object.code.to_numpy(zero_copy_only=False)
+    available_bodies = sorted(set(body_codes.tolist()))
+
+    if focus_body is None:
+        selected_body = "MOON" if "MOON" in available_bodies else available_bodies[0]
+    else:
+        if focus_body not in available_bodies:
+            raise ValueError(
+                f"Requested focus_body '{focus_body}' not found in collision events: {available_bodies}"
+            )
+        selected_body = focus_body
+
+    stopping_condition = impacts.stopping_condition.to_numpy(zero_copy_only=False)
+    rho = impacts.collision_coordinates.rho.to_numpy(zero_copy_only=False)
+    times_mjd = impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    variant_ids = impacts.variant_id.to_numpy(zero_copy_only=False)
+
+    body_mask = body_codes == selected_body
+    close_approach_mask = np.logical_and(body_mask, np.logical_not(stopping_condition))
+    candidate_mask = close_approach_mask
+
+    # If no non-stopping events are present for this body, fall back to all events.
+    if not np.any(candidate_mask):
+        candidate_mask = body_mask
+
+    candidate_indices = np.flatnonzero(candidate_mask)
+    if len(candidate_indices) == 0:
+        raise ValueError(
+            f"No collision events available for focus body '{selected_body}'."
+        )
+
+    # Keep one event per variant: the closest event for that variant.
+    closest_indices_by_variant: dict[str, int] = {}
+    closest_rho_by_variant: dict[str, float] = {}
+
+    for idx in candidate_indices:
+        variant_id = variant_ids[idx]
+        event_rho = rho[idx]
+        previous_rho = closest_rho_by_variant.get(variant_id)
+        if previous_rho is None or event_rho < previous_rho:
+            closest_rho_by_variant[variant_id] = event_rho
+            closest_indices_by_variant[variant_id] = idx
+
+    closest_indices = np.array(list(closest_indices_by_variant.values()), dtype=int)
+    closest_times_mjd = times_mjd[closest_indices]
+
+    percentile_low, percentile_high = window_percentiles
+    if not (0.0 <= percentile_low <= percentile_high <= 100.0):
+        raise ValueError(
+            "window_percentiles must satisfy 0 <= low <= high <= 100."
+        )
+
+    start_mjd = np.percentile(closest_times_mjd, percentile_low)
+    end_mjd = np.percentile(closest_times_mjd, percentile_high)
+    padding_days = window_padding / 60 / 24
+    start_mjd -= padding_days
+    end_mjd += padding_days
+
+    logger.info(
+        "Closest-approach window for %s: %.6f to %.6f MJD (%d variants).",
+        selected_body,
+        start_mjd,
+        end_mjd,
+        len(closest_indices_by_variant),
+    )
+
+    return start_mjd, end_mjd
 
 
 def generate_impact_visualization_data(
@@ -170,12 +287,17 @@ def generate_impact_visualization_data(
     propagator: Propagator,
     time_step: float = 5,
     time_range: float = 60,
+    window_mode: Literal["event_range", "closest_approach"] = "event_range",
+    focus_body: Optional[Literal["EARTH", "MOON"]] = None,
+    window_percentiles: Tuple[float, float] = (10.0, 90.0),
+    window_padding: float = 10.0,
+    target_frames: Optional[int] = 180,
+    min_time_step: float = 1.0,
     max_processes: Optional[int] = None,
 ) -> Tuple[Timestamp, Orbits, dict[str, Orbits]]:
     """
-    Generates the data for the impact visualization animation. The user should be careful
-    to only send in collision events that correspond to an impact with a planetary body or moon.
-    Non-impacting collisions such as close approaches have not been tested for this function.
+    Generates the data for collision-event visualization animation (impacts and/or
+    close-approaches) for supported planetary bodies.
 
     CollisionEvents visualizations are currently supported for the Earth and Moon.
 
@@ -193,6 +315,20 @@ def generate_impact_visualization_data(
         The time step to use for the propagation.
     time_range: float
         The time range to use for the propagation.
+    window_mode: Literal["event_range", "closest_approach"]
+        Time window selection mode. "event_range" uses full first/last event range
+        with time_range padding. "closest_approach" focuses on closest events.
+    focus_body: Optional[Literal["EARTH", "MOON"]]
+        Body used by closest_approach window mode. Defaults to MOON if present.
+    window_percentiles: Tuple[float, float]
+        Percentiles used to bracket closest-event times in closest_approach mode.
+    window_padding: float
+        Padding (minutes) added to both sides of closest_approach window.
+    target_frames: Optional[int]
+        Target frame count for closest_approach mode; time_step may be increased
+        to keep frame count near this value.
+    min_time_step: float
+        Minimum time step (minutes) allowed for closest_approach auto-scaling.
     max_processes: Optional[int]
         The maximum number of processes to use for the propagation.
 
@@ -213,18 +349,45 @@ def generate_impact_visualization_data(
             "CollisionEvents visualizations are currently supported for the Earth and Moon."
         )
 
-    # Calculate the range of impact times
-    impact_times = impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
-    first_impact_time = np.min(impact_times)
-    last_impact_time = np.max(impact_times)
+    if len(impacts) == 0:
+        raise ValueError(
+            "No collision events found. Provide impacts/close-approaches to visualize."
+        )
+
+    effective_time_step = time_step
+    if window_mode == "event_range":
+        event_times = impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+        first_impact_time = np.min(event_times)
+        last_impact_time = np.max(event_times)
+        start_mjd = first_impact_time - time_range / 60 / 24
+        end_mjd = last_impact_time + time_range / 60 / 24
+    elif window_mode == "closest_approach":
+        start_mjd, end_mjd = _closest_event_time_window(
+            impacts,
+            focus_body=focus_body,
+            window_percentiles=window_percentiles,
+            window_padding=window_padding,
+        )
+
+        if target_frames is not None and target_frames > 1:
+            window_minutes = (end_mjd - start_mjd) * 24 * 60
+            auto_time_step = max(min_time_step, window_minutes / (target_frames - 1))
+            effective_time_step = max(time_step, auto_time_step)
+    else:
+        raise ValueError(
+            f"Unknown window_mode '{window_mode}'. Expected 'event_range' or 'closest_approach'."
+        )
+
+    if end_mjd <= start_mjd:
+        end_mjd = start_mjd + max(effective_time_step, min_time_step) / 60 / 24
 
     # Create propagation times around the range of impact times
     mjds = np.arange(
-        first_impact_time - time_range / 60 / 24,
-        last_impact_time + time_range / 60 / 24 + time_step / 60 / 24,
-        time_step / 60 / 24,
+        start_mjd,
+        end_mjd + effective_time_step / 60 / 24,
+        effective_time_step / 60 / 24,
     )
-    mjds = mjds - np.mod(mjds, time_step / 60 / 24)
+    mjds = mjds - np.mod(mjds, effective_time_step / 60 / 24)
     propagation_times = Timestamp.from_mjd(mjds, scale=impacts.coordinates.time.scale)
 
     # Propagate the variants to the propagation times
@@ -447,6 +610,61 @@ def add_moon(
     )
 
 
+def _sample_variant_group(
+    variants: Orbits, sample_fraction: Optional[float], log_label: str
+) -> Orbits:
+    """
+    Sample orbit_id groups in an Orbits table by fraction.
+    """
+    if sample_fraction is None:
+        return variants
+
+    orbit_ids = variants.orbit_id.unique()
+    numpy_orbit_ids = orbit_ids.to_numpy(zero_copy_only=False)
+
+    if len(numpy_orbit_ids) == 0:
+        logger.info(f"No variants available to sample for '{log_label}'.")
+        orbit_ids_sample = numpy_orbit_ids
+    else:
+        sample_size = np.ceil(len(numpy_orbit_ids) * sample_fraction).astype(int)
+        sample_size = min(sample_size, len(numpy_orbit_ids))
+        orbit_ids_sample = np.random.choice(
+            numpy_orbit_ids,
+            sample_size,
+            replace=False,
+        )
+        logger.info(
+            f"Sampled {len(orbit_ids_sample)} variants for '{log_label}' out of {len(numpy_orbit_ids)}"
+        )
+
+    arrow_orbit_ids_sample = pa.array(orbit_ids_sample, type=variants.orbit_id.type)
+    return variants.__class__.from_pyarrow(
+        variants.apply_mask(
+            pc.is_in(variants.orbit_id, arrow_orbit_ids_sample)
+        ).table.combine_chunks()
+    )
+
+
+def _group_plot_config(group_name: str) -> tuple[str, str, str, int]:
+    """
+    Return group_type, body_name, marker_color, marker_size for a group key.
+    """
+    if group_name == "Non-Impacting":
+        return "non-impacting", "All", "#5685C3", 1
+
+    if group_name.endswith(" Close-Approaching"):
+        body_name = group_name.removesuffix(" Close-Approaching").capitalize()
+        return "close-approach", body_name, "#F2B134", 2
+
+    if group_name.endswith(" Impacting"):
+        body_name = group_name.removesuffix(" Impacting").capitalize()
+        return "impacting", body_name, "red", 2
+
+    # Backward compatibility for older keys like "EARTH"/"MOON".
+    body_name = group_name.capitalize()
+    return "impacting", body_name, "red", 2
+
+
 def plot_impact_simulation(
     propagation_times: Timestamp,
     propagated_best_fit_orbit: Orbits,
@@ -456,6 +674,7 @@ def plot_impact_simulation(
     title: str = None,
     logo: bool = True,
     show_impacting: bool = True,
+    show_close_approaching: bool = True,
     show_non_impacting: bool = True,
     show_best_fit: bool = True,
     show_earth: bool = True,
@@ -484,6 +703,8 @@ def plot_impact_simulation(
         Whether to add the Asteroid Institute logo to the plot.
     show_impacting: bool, optional
         Whether to show the impacting variants.
+    show_close_approaching: bool, optional
+        Whether to show variants with non-stopping close-approach events.
     show_non_impacting: bool, optional
         Whether to show the non-impacting variants.
     show_best_fit: bool, optional
@@ -508,93 +729,19 @@ def plot_impact_simulation(
     """
     propagation_times_isot = propagation_times.to_astropy().isot
 
-    num_variants = 0
-    impact_count = {}
+    all_variant_ids = set()
+    for variants_group in propagated_variants.values():
+        all_variant_ids.update(variants_group.orbit_id.unique().to_pylist())
+    num_variants = max(len(all_variant_ids), 1)
+
+    collision_bodies = sorted(set(impacts.collision_object.code.unique().to_pylist()))
     sampled_variants = {}
     for k, v in propagated_variants.items():
-        num_variants += len(v.orbit_id.unique())
-
-        if k == "Non-Impacting":
-            if sample_non_impactors is not None:
-                orbit_ids = v.orbit_id.unique()
-                numpy_orbit_ids = orbit_ids.to_numpy(
-                    zero_copy_only=False
-                )  # Convert to NumPy
-
-                if len(numpy_orbit_ids) == 0:
-                    orbit_ids_sample = numpy_orbit_ids  # Already an empty numpy array with correct dtype
-                    logger.info("No non-impacting variants available to sample.")
-                else:
-                    sample_size = np.ceil(
-                        len(numpy_orbit_ids) * sample_non_impactors
-                    ).astype(int)
-                    sample_size = min(
-                        sample_size, len(numpy_orbit_ids)
-                    )  # Ensure sample_size <= population
-                    orbit_ids_sample = np.random.choice(
-                        numpy_orbit_ids,
-                        sample_size,
-                        replace=False,
-                    )
-                    logger.info(
-                        f"Sampled {len(orbit_ids_sample)} non-impacting variants out of {len(numpy_orbit_ids)}"
-                    )
-
-                # Create Arrow array with explicit type
-                arrow_orbit_ids_sample = pa.array(
-                    orbit_ids_sample, type=v.orbit_id.type
-                )
-                sampled_variants[k] = v.__class__.from_pyarrow(
-                    v.apply_mask(
-                        pc.is_in(v.orbit_id, arrow_orbit_ids_sample)
-                    ).table.combine_chunks()
-                )
-            else:
-                sampled_variants[k] = v
-
-        if k != "Non-Impacting":
-            impact_count[k] = 0
-
-            if sample_impactors is not None:
-                orbit_ids = v.orbit_id.unique()
-                numpy_orbit_ids = orbit_ids.to_numpy(
-                    zero_copy_only=False
-                )  # Convert to NumPy
-
-                if len(numpy_orbit_ids) == 0:
-                    orbit_ids_sample = numpy_orbit_ids  # Empty array with correct dtype
-                    logger.info(f"No impacting variants for '{k}' available to sample.")
-                else:
-                    sample_size = np.ceil(
-                        len(numpy_orbit_ids) * sample_impactors
-                    ).astype(int)
-                    sample_size = min(
-                        sample_size, len(numpy_orbit_ids)
-                    )  # Ensure sample_size <= population
-                    orbit_ids_sample = np.random.choice(
-                        numpy_orbit_ids,
-                        sample_size,
-                        replace=False,
-                    )
-                    logger.info(
-                        f"Sampled {len(orbit_ids_sample)} impacting variants for '{k}' out of {len(numpy_orbit_ids)}"
-                    )
-
-                # Create Arrow array with explicit type
-                arrow_orbit_ids_sample = pa.array(
-                    orbit_ids_sample, type=v.orbit_id.type
-                )
-                sampled_variants[k] = v.__class__.from_pyarrow(
-                    v.apply_mask(
-                        pc.is_in(v.orbit_id, arrow_orbit_ids_sample)
-                    ).table.combine_chunks()
-                )
-            else:
-                sampled_variants[k] = v
-
-    all_potential_impactor_ids_from_impacts_table = set(
-        impacts.variant_id.unique().to_pylist()
-    )
+        group_type, _, _, _ = _group_plot_config(k)
+        if group_type == "non-impacting":
+            sampled_variants[k] = _sample_variant_group(v, sample_non_impactors, k)
+        else:
+            sampled_variants[k] = _sample_variant_group(v, sample_impactors, k)
 
     if title is None:
         prefix = ""
@@ -610,36 +757,46 @@ def plot_impact_simulation(
             pc.less_equal(impacts.coordinates.time.mjd(), time.mjd()[0])
         )
 
-        # 2. Get the set of unique variant IDs that have impacted *anything* up to current time
-        current_frame_total_unique_impacted_ids_set = set(
-            all_impacts_up_to_current_time.variant_id.unique().to_pylist()
-        )
+        body_event_counts = {}
+        for body_key in collision_bodies:
+            body_events_up_to_current_time = all_impacts_up_to_current_time.apply_mask(
+                pc.equal(all_impacts_up_to_current_time.collision_object.code, body_key)
+            )
 
-        # 3. Update impact_count for each body (for title text)
-        for (
-            body_key
-        ) in (
-            impact_count.keys()
-        ):  # These are "EARTH", "MOON", etc. as initialized earlier
-            impacts_on_this_body_up_to_current_time = (
-                all_impacts_up_to_current_time.apply_mask(
-                    pc.equal(
-                        all_impacts_up_to_current_time.collision_object.code, body_key
-                    )
+            impacting_ids = set(
+                body_events_up_to_current_time.apply_mask(
+                    pc.equal(body_events_up_to_current_time.stopping_condition, True)
                 )
+                .variant_id.unique()
+                .to_pylist()
             )
-            impact_count[body_key] = len(
-                impacts_on_this_body_up_to_current_time.variant_id.unique()
+            close_approach_ids = set(
+                body_events_up_to_current_time.apply_mask(
+                    pc.equal(body_events_up_to_current_time.stopping_condition, False)
+                )
+                .variant_id.unique()
+                .to_pylist()
             )
+            close_approach_ids.difference_update(impacting_ids)
+
+            body_event_counts[body_key] = {
+                "impacting": len(impacting_ids),
+                "close-approach": len(close_approach_ids),
+            }
 
         # Create the data for the frame
         data = []
         for k, v in sampled_variants.items():
 
-            if k == "Non-Impacting" and not show_non_impacting:
+            group_type, body_name, color, size = _group_plot_config(k)
+
+            if group_type == "non-impacting" and not show_non_impacting:
                 continue
 
-            if k == "Impacting" and not show_impacting:
+            if group_type == "impacting" and not show_impacting:
+                continue
+
+            if group_type == "close-approach" and not show_close_approaching:
                 continue
 
             v_at_time = v.apply_mask(
@@ -656,14 +813,12 @@ def plot_impact_simulation(
                 )
             )
 
-            if k == "Non-Impacting":
-                color = "#5685C3"
-                size = 1
-                name = k
+            if group_type == "non-impacting":
+                name = "Non-Impacting"
+            elif group_type == "close-approach":
+                name = f"{body_name} Close-Approaching"
             else:
-                color = "red"
-                size = 2
-                name = f"{k.lower().capitalize()} Impacting"
+                name = f"{body_name} Impacting"
 
             x = v_at_time.coordinates.x.to_numpy(zero_copy_only=False) * KM_P_AU
             y = v_at_time.coordinates.y.to_numpy(zero_copy_only=False) * KM_P_AU
@@ -714,8 +869,18 @@ def plot_impact_simulation(
         data.append(add_moon(time, show=show_moon))
 
         text = f"{prefix}Time: {propagation_times_isot[i]}"
-        for k in impact_count:
-            text += f"<br>{k.lower().capitalize()} Impacts: {impact_count[k]} of {num_variants} Variants<br>{k.lower().capitalize()} Impact Probability: {impact_count[k]/num_variants * 100:.3f}%"
+        for body_name, counts in body_event_counts.items():
+            impact_probability = counts["impacting"] / num_variants * 100
+            text += (
+                f"<br>{body_name.capitalize()} Impacts: {counts['impacting']} of {num_variants} Variants"
+                f"<br>{body_name.capitalize()} Impact Probability: {impact_probability:.3f}%"
+            )
+            if counts["close-approach"] > 0:
+                close_probability = counts["close-approach"] / num_variants * 100
+                text += (
+                    f"<br>{body_name.capitalize()} Close Approaches: {counts['close-approach']} of {num_variants} Variants"
+                    f"<br>{body_name.capitalize()} Close-Approach Probability: {close_probability:.3f}%"
+                )
 
         frame = go.Frame(
             data=data,
@@ -731,13 +896,6 @@ def plot_impact_simulation(
         )
 
         frames.append(frame)
-
-        # If all impacting variants (from the original impacts table) have impacted by this frame, stop.
-        if all_potential_impactor_ids_from_impacts_table:
-            if all_potential_impactor_ids_from_impacts_table.issubset(
-                current_frame_total_unique_impacted_ids_set
-            ):
-                break
 
     # Plot the figure
     fig = go.Figure(data=frames[0].data, frames=frames, layout=frames[0].layout)
@@ -896,11 +1054,11 @@ def plot_risk_corridor(
     go.Figure
         The risk corridor plot.
     """
-    # Filter to only include impacts on the Earth
+    # Filter to only include Earth collision events (impacts or close approaches)
     impacts = impacts.apply_mask(pc.equal(impacts.collision_object.code, "EARTH"))
     if len(impacts) == 0:
         raise ValueError(
-            "No Earth impacts found. Other collision objects are not supported yet."
+            "No Earth collision events found. Other collision objects are not supported yet."
         )
 
     # Transform impact coordinates to ITRF93 Geodetic Coordinates
