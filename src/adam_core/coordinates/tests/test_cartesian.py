@@ -191,14 +191,13 @@ def test_CartesianCoordinates_ric():
     h_mag = coords.h_mag
     for i in range(N):
         rot = ric6[i]
-        rot3 = rot[d:, d:]
         # Check the structure
-        assert (rot[:d, :d] == rot3).all()
+        assert (rot[:d, :d] == rot[d:, d:]).all()
         assert (rot[:d, d:] == 0).all()
         assert (rot[d:, :d] == 0).all()
         # If orbital plane cannot be established, we should have identity
         if h_mag[i] < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE:
-            assert (rot3 == np.eye(d)).all()
+            assert (rot == np.eye(D)).all()
             continue
         # For all "normal" matrices, we should have a proper rotation matrix
         assert np.allclose(rot.T @ rot, np.eye(D))

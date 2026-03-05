@@ -483,6 +483,9 @@ def _upper_triangular_to_full(
 ) -> npt.NDArray[np.float64]:
     """
     Convert an upper triangular matrix containing 21 or 28 elements to a full 6x6 matrix.
+
+    The 28 element version is occasionally seen in NEOCC data. The last element likely
+    corresponds to magnitude. For example, see "2018 CW2".
     """
     assert (
         len(upper_triangular) == 21 or len(upper_triangular) == 28
