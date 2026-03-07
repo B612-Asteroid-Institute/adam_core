@@ -1,9 +1,8 @@
 import logging
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from abc import ABC
+from typing import Any, Dict, Optional
 
 import numpy as np
-import pyarrow as pa
 
 from ..coordinates import (
     CartesianCoordinates,
@@ -13,7 +12,7 @@ from ..coordinates import (
 from ..coordinates.residuals import Residuals, calculate_reduced_chi2
 from ..orbits.orbits import Orbits
 from ..propagator import Propagator
-from .evaluate import FittedOrbitMembers, FittedOrbits, OrbitDeterminationObservations
+from .evaluate import FittedOrbits, OrbitDeterminationObservations
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +213,7 @@ class LeastSquares(ABC):
         assert W_all.shape == (num_obs, 2), f"W_all shape {W_all.shape}"
         assert not np.any(
             np.isnan(W_all)
-        ), f"Weights have NaNs, check sigmas of observations"
+        ), "Weights have NaNs, check sigmas of observations"
 
         perturbation_fraction = perturbation_initial_fraction
 
