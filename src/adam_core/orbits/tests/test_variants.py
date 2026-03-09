@@ -339,7 +339,9 @@ def test_VariantEphemeris_collapse_by_object_id_uses_weights_when_present():
     # Longitude mean uses a circular weighted mean.
     lon = np.deg2rad(np.array([10.0, 20.0]))
     w = np.array([0.25, 0.75])
-    lon_mean = (np.degrees(np.arctan2(np.sum(w * np.sin(lon)), np.sum(w * np.cos(lon)))) + 360.0) % 360.0
+    lon_mean = (
+        np.degrees(np.arctan2(np.sum(w * np.sin(lon)), np.sum(w * np.cos(lon)))) + 360.0
+    ) % 360.0
     assert collapsed.coordinates.values[0][1] == pytest.approx(lon_mean, abs=1e-12)
 
     cov = collapsed.coordinates.covariance.to_matrix()[0]
@@ -359,7 +361,9 @@ def test_VariantEphemeris_collapse_sigma_points_orbit_major_matches_generic():
     orbit_ids = np.array([f"obj{i}" for i in range(n_orbits)], dtype=object)
     base_orbit_ids = np.repeat(orbit_ids, n_variants)  # (O*K,)
 
-    variant_id_base = np.tile(np.arange(n_variants, dtype=np.int64).astype(str), n_orbits).astype(
+    variant_id_base = np.tile(
+        np.arange(n_variants, dtype=np.int64).astype(str), n_orbits
+    ).astype(
         object
     )  # (O*K,)
 
@@ -373,7 +377,9 @@ def test_VariantEphemeris_collapse_sigma_points_orbit_major_matches_generic():
         np.linspace(60000.0, 60000.1, n_times, dtype=np.float64), scale="tdb"
     )
     origin_codes = np.array(["500", "X05", "500", "X05", "500"][:n_times], dtype=object)
-    time_rep_mjd = np.tile(times.mjd().to_numpy(zero_copy_only=False), n_orbits * n_variants)
+    time_rep_mjd = np.tile(
+        times.mjd().to_numpy(zero_copy_only=False), n_orbits * n_variants
+    )
     origin_rep = np.tile(origin_codes, n_orbits * n_variants)
 
     total = n_orbits * n_variants * n_times

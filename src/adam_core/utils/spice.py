@@ -177,7 +177,9 @@ def get_perturber_state(
     nanos = times_tdb.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
     time_key = times_tdb.key(scale=None)
 
-    uniq_keys, rep_idx, inv = np.unique(time_key, return_index=True, return_inverse=True)
+    uniq_keys, rep_idx, inv = np.unique(
+        time_key, return_index=True, return_inverse=True
+    )
 
     epochs_et = times_tdb.et().to_numpy(zero_copy_only=False).astype(np.float64)
     uniq_states = np.empty((uniq_keys.shape[0], 6), dtype=np.float64)

@@ -17,8 +17,8 @@ from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
 from ...coordinates.origin import Origin
 from ...time import Timestamp
-from ..physical_parameters import PhysicalParameters
 from ..orbits import Orbits
+from ..physical_parameters import PhysicalParameters
 
 logger = logging.getLogger(__name__)
 
@@ -457,9 +457,7 @@ def _physical_parameters_from_sbdb(
 ) -> PhysicalParameters:
     """Build PhysicalParameters from SBDB phys_par extractions (one row per payload)."""
     if not rows:
-        return PhysicalParameters.from_kwargs(
-            H_v=[], H_v_sigma=[], G=[], G_sigma=[]
-        )
+        return PhysicalParameters.from_kwargs(H_v=[], H_v_sigma=[], G=[], G_sigma=[])
     H_v = np.array(
         [r[0] if r[0] is not None else np.nan for r in rows],
         dtype=np.float64,

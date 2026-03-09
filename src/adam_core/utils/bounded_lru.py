@@ -24,7 +24,9 @@ def bounded_lru_get(cache: "OrderedDict[K, V]", key: K, *, maxsize: int) -> V | 
     return v
 
 
-def bounded_lru_put(cache: "OrderedDict[K, V]", key: K, value: V, *, maxsize: int) -> None:
+def bounded_lru_put(
+    cache: "OrderedDict[K, V]", key: K, value: V, *, maxsize: int
+) -> None:
     """
     Put a value into a bounded LRU cache.
 
@@ -36,4 +38,3 @@ def bounded_lru_put(cache: "OrderedDict[K, V]", key: K, value: V, *, maxsize: in
     cache.move_to_end(key)
     while len(cache) > int(maxsize):
         cache.popitem(last=False)
-

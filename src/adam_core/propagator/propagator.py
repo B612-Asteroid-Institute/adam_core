@@ -432,9 +432,7 @@ class EphemerisMixin:
             k += int(chunk_size)
 
         # Remove padding
-        propagated_orbits_aberrated = propagated_orbits_aberrated[
-            :n
-        ]
+        propagated_orbits_aberrated = propagated_orbits_aberrated[:n]
         light_time = light_time[:n]
 
         # Guard against pathological light-time values before constructing timestamps.
@@ -651,7 +649,9 @@ class EphemerisMixin:
             # Use at least max_processes chunks so all workers get work.
             effective_chunk_size = chunk_size
             if max_processes > 1 and len(orbits) > 0:
-                effective_chunk_size = min(chunk_size, max(1, len(orbits) // max_processes))
+                effective_chunk_size = min(
+                    chunk_size, max(1, len(orbits) // max_processes)
+                )
             for idx_chunk in _iterate_chunks(idx, effective_chunk_size):
                 futures_inputs.append(
                     (
@@ -669,7 +669,11 @@ class EphemerisMixin:
                 variants_ref = ray.put(variants)
 
                 idx = np.arange(0, len(variants))
-                var_chunk_size = min(chunk_size, max(1, len(variants) // max_processes)) if max_processes > 1 else chunk_size
+                var_chunk_size = (
+                    min(chunk_size, max(1, len(variants) // max_processes))
+                    if max_processes > 1
+                    else chunk_size
+                )
                 for variant_chunk_idx in _iterate_chunks(idx, var_chunk_size):
                     futures_inputs.append(
                         (

@@ -14,8 +14,8 @@ import spiceypy as sp
 from jax import config, jit, lax, vmap
 
 from ..constants import Constants as c
-from ..utils.chunking import process_in_chunks
 from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
+from ..utils.chunking import process_in_chunks
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
@@ -33,6 +33,7 @@ TRANSFORM_EC2EQ = TRANSFORM_EQ2EC.T
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class _TranslationCacheKey:
     origin_in: str
@@ -48,7 +49,9 @@ _TRANSLATION_CACHE_MAXSIZE = int(
     os.environ.get("ADAM_CORE_TRANSLATION_CACHE_MAXSIZE", "2048")
 )
 _TRANSLATION_CACHE: "OrderedDict[_TranslationCacheKey, np.ndarray]" = OrderedDict()
-_TRANSLATION_CACHE_ENABLED = os.environ.get("ADAM_CORE_TRANSLATION_CACHE", "1").lower() not in {
+_TRANSLATION_CACHE_ENABLED = os.environ.get(
+    "ADAM_CORE_TRANSLATION_CACHE", "1"
+).lower() not in {
     "0",
     "false",
     "no",
@@ -64,7 +67,9 @@ def _translation_cache_get(key: _TranslationCacheKey) -> np.ndarray | None:
 
 
 def _translation_cache_put(key: _TranslationCacheKey, vectors: np.ndarray) -> None:
-    bounded_lru_put(_TRANSLATION_CACHE, key, vectors, maxsize=_TRANSLATION_CACHE_MAXSIZE)
+    bounded_lru_put(
+        _TRANSLATION_CACHE, key, vectors, maxsize=_TRANSLATION_CACHE_MAXSIZE
+    )
 
 
 def clear_translation_cache() -> None:

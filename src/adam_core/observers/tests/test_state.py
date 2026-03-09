@@ -102,7 +102,9 @@ def test_get_observer_state_cache_key_is_order_sensitive(monkeypatch):
 
     calls = {"n": 0}
 
-    def _fake_get_perturber_state(perturber, times, frame="ecliptic", origin=OriginCodes.SUN):
+    def _fake_get_perturber_state(
+        perturber, times, frame="ecliptic", origin=OriginCodes.SUN
+    ):
         del perturber
         calls["n"] += 1
         key = times.key(scale="tdb").astype(np.float64)
@@ -121,8 +123,12 @@ def test_get_observer_state_cache_key_is_order_sensitive(monkeypatch):
 
     monkeypatch.setattr(state_mod, "get_perturber_state", _fake_get_perturber_state)
 
-    t_a = Timestamp.from_mjd(np.array([60000.0, 60000.25, 60000.5, 60000.75]), scale="tdb")
-    t_b = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60000.25, 60000.75]), scale="tdb")
+    t_a = Timestamp.from_mjd(
+        np.array([60000.0, 60000.25, 60000.5, 60000.75]), scale="tdb"
+    )
+    t_b = Timestamp.from_mjd(
+        np.array([60000.0, 60000.5, 60000.25, 60000.75]), scale="tdb"
+    )
     assert t_a.signature(scale="tdb") == t_b.signature(scale="tdb")
 
     _ = get_observer_state("X05", t_a, frame="itrf93", origin=OriginCodes.SUN)

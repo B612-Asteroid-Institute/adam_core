@@ -426,8 +426,12 @@ class VariantEphemeris(qv.Table):
         predicted_magnitude_v: list[float | None] = [None] * n_groups
 
         # Weights (nullable). If present, use UT weights for mean and weights_cov for covariance.
-        w_mean_all = pc.fill_null(variants.weights, np.nan).to_numpy(zero_copy_only=False)
-        w_cov_all = pc.fill_null(variants.weights_cov, np.nan).to_numpy(zero_copy_only=False)
+        w_mean_all = pc.fill_null(variants.weights, np.nan).to_numpy(
+            zero_copy_only=False
+        )
+        w_cov_all = pc.fill_null(variants.weights_cov, np.nan).to_numpy(
+            zero_copy_only=False
+        )
 
         counts = np.diff(bounds).astype(np.int64, copy=False)
         uniform_group_size = bool(counts.size > 0 and np.all(counts == counts[0]))
@@ -448,7 +452,9 @@ class VariantEphemeris(qv.Table):
                 if n_g <= 0:
                     continue
 
-                samp = np.asarray(spherical_values[r0:r1], dtype=np.float64).reshape(n_g, K, 6)
+                samp = np.asarray(spherical_values[r0:r1], dtype=np.float64).reshape(
+                    n_g, K, 6
+                )
 
                 w_mean = np.asarray(w_mean_all[r0:r1], dtype=np.float64).reshape(n_g, K)
                 w_cov = np.asarray(w_cov_all[r0:r1], dtype=np.float64).reshape(n_g, K)
@@ -471,7 +477,9 @@ class VariantEphemeris(qv.Table):
                 lon_mean = (np.degrees(np.arctan2(s_sin, s_cos)) + 360.0) % 360.0
 
                 # Wrap longitude samples around the circular mean for covariance.
-                lon_wrapped = lon_mean[:, None] + (((lon - lon_mean[:, None] + 180.0) % 360.0) - 180.0)
+                lon_wrapped = lon_mean[:, None] + (
+                    ((lon - lon_mean[:, None] + 180.0) % 360.0) - 180.0
+                )
                 samp2 = samp.copy()
                 samp2[:, :, 1] = lon_wrapped
 
@@ -500,7 +508,9 @@ class VariantEphemeris(qv.Table):
                 n = int(end - start)
                 if n <= 0:
                     continue
-                samples = np.asarray(spherical_values[start:end], dtype=np.float64).copy()
+                samples = np.asarray(
+                    spherical_values[start:end], dtype=np.float64
+                ).copy()
 
                 w_mean = np.asarray(w_mean_all[start:end], dtype=np.float64)
                 w_cov = np.asarray(w_cov_all[start:end], dtype=np.float64)
@@ -508,7 +518,11 @@ class VariantEphemeris(qv.Table):
                     w_mean = np.full(n, 1.0 / float(n), dtype=np.float64)
                 else:
                     s = float(np.sum(w_mean))
-                    w_mean = w_mean / s if s != 0.0 else np.full(n, 1.0 / float(n), dtype=np.float64)
+                    w_mean = (
+                        w_mean / s
+                        if s != 0.0
+                        else np.full(n, 1.0 / float(n), dtype=np.float64)
+                    )
                 if not np.all(np.isfinite(w_cov)):
                     w_cov = w_mean
                 else:
@@ -518,7 +532,15 @@ class VariantEphemeris(qv.Table):
                 lon = samples[:, 1]
                 lon_rad = np.deg2rad(lon)
                 lon_mean = float(
-                    (np.degrees(np.arctan2(np.sum(w_mean * np.sin(lon_rad)), np.sum(w_mean * np.cos(lon_rad)))) + 360.0)
+                    (
+                        np.degrees(
+                            np.arctan2(
+                                np.sum(w_mean * np.sin(lon_rad)),
+                                np.sum(w_mean * np.cos(lon_rad)),
+                            )
+                        )
+                        + 360.0
+                    )
                     % 360.0
                 )
                 samples[:, 1] = lon_mean + (((lon - lon_mean + 180.0) % 360.0) - 180.0)
@@ -532,7 +554,11 @@ class VariantEphemeris(qv.Table):
                 if not np.all(np.isnan(mags_i)):
                     ok = np.isfinite(mags_i)
                     denom = float(np.sum(w_mean[ok]))
-                    predicted_magnitude_v[i] = None if denom <= 0 else float(np.sum(w_mean[ok] * mags_i[ok]) / denom)
+                    predicted_magnitude_v[i] = (
+                        None
+                        if denom <= 0
+                        else float(np.sum(w_mean[ok] * mags_i[ok]) / denom)
+                    )
 
         collapsed_coordinates = SphericalCoordinates.from_kwargs(
             rho=means_sph[:, 0],
@@ -562,14 +588,20 @@ class VariantEphemeris(qv.Table):
             # If the variants already contain aberrated coordinates + light_time, avoid any
             # regeneration and just collapse those too (weighted).
             try:
-                has_ab = not pc.all(pc.is_null(variants.aberrated_coordinates.x)).as_py()
+                has_ab = not pc.all(
+                    pc.is_null(variants.aberrated_coordinates.x)
+                ).as_py()
                 has_lt = not pc.all(pc.is_null(variants.light_time)).as_py()
             except Exception:
                 has_ab = False
                 has_lt = False
             if has_ab and has_lt and uniform_group_size and K > 0:
-                ab_vals = np.asarray(variants.aberrated_coordinates.values, dtype=np.float64)
-                lt_vals = pc.fill_null(variants.light_time, np.nan).to_numpy(zero_copy_only=False)
+                ab_vals = np.asarray(
+                    variants.aberrated_coordinates.values, dtype=np.float64
+                )
+                lt_vals = pc.fill_null(variants.light_time, np.nan).to_numpy(
+                    zero_copy_only=False
+                )
                 out_ab = np.empty((n_groups, 6), dtype=np.float64)
                 out_lt = np.empty((n_groups,), dtype=np.float64)
                 for g0 in range(0, int(n_groups), int(group_chunk_size)):
@@ -579,7 +611,9 @@ class VariantEphemeris(qv.Table):
                     n_g = int(g1 - g0)
                     if n_g <= 0:
                         continue
-                    w_mean = np.asarray(w_mean_all[r0:r1], dtype=np.float64).reshape(n_g, K)
+                    w_mean = np.asarray(w_mean_all[r0:r1], dtype=np.float64).reshape(
+                        n_g, K
+                    )
                     valid_mean = np.all(np.isfinite(w_mean), axis=1)
                     w_mean = np.where(valid_mean[:, None], w_mean, 1.0 / float(K))
                     w_mean = _normalize_rows(w_mean)
@@ -594,10 +628,14 @@ class VariantEphemeris(qv.Table):
                     out_lt[g0:g1] = np.where(denom > 0, num / denom, np.nan)
 
                 if np.all(np.isfinite(out_ab)) and np.any(np.isfinite(out_lt)):
-                    light_time = np.where(np.isfinite(out_lt), out_lt, np.linalg.norm(out_ab[:, :3], axis=1) / c.C)
-                    emission_times = ephemeris.coordinates.time.rescale("tdb").add_fractional_days(
-                        pa.array(-light_time, type=pa.float64())
+                    light_time = np.where(
+                        np.isfinite(out_lt),
+                        out_lt,
+                        np.linalg.norm(out_ab[:, :3], axis=1) / c.C,
                     )
+                    emission_times = ephemeris.coordinates.time.rescale(
+                        "tdb"
+                    ).add_fractional_days(pa.array(-light_time, type=pa.float64()))
                     aberrated_coordinates = CartesianCoordinates.from_kwargs(
                         x=out_ab[:, 0],
                         y=out_ab[:, 1],
@@ -607,7 +645,9 @@ class VariantEphemeris(qv.Table):
                         vz=out_ab[:, 5],
                         time=emission_times,
                         origin=Origin.from_kwargs(
-                            code=np.full(len(ephemeris), OriginCodes.SOLAR_SYSTEM_BARYCENTER.name)
+                            code=np.full(
+                                len(ephemeris), OriginCodes.SOLAR_SYSTEM_BARYCENTER.name
+                            )
                         ),
                         frame="ecliptic",
                     )
@@ -755,7 +795,10 @@ class VariantEphemeris(qv.Table):
         )
         orbit_id_base2 = orbit_id_base.reshape(n_orbits, n_variants)
         object_id_base2 = object_id_base.reshape(n_orbits, n_variants)
-        if not (np.all(orbit_id_base2 == orbit_id_base2[:, [0]]) and np.all(object_id_base2 == object_id_base2[:, [0]])):
+        if not (
+            np.all(orbit_id_base2 == orbit_id_base2[:, [0]])
+            and np.all(object_id_base2 == object_id_base2[:, [0]])
+        ):
             # Unknown layout; fall back to generic (sorted) implementation.
             return self.collapse_by_object_id(aberration_mode="none")
 
@@ -784,7 +827,10 @@ class VariantEphemeris(qv.Table):
             .astype(np.int64, copy=False)
         )
         origin0 = (
-            pc.take(pc.cast(self.coordinates.origin.code, pa.large_string()), list(range(n_times)))
+            pc.take(
+                pc.cast(self.coordinates.origin.code, pa.large_string()),
+                list(range(n_times)),
+            )
             .to_numpy(zero_copy_only=False)
             .astype(object)
         )
@@ -798,7 +844,9 @@ class VariantEphemeris(qv.Table):
             nanos=pa.array(out_nanos, type=pa.int64()),
             scale=self.coordinates.time.scale,
         )
-        out_origin_tbl = Origin.from_kwargs(code=pa.array(out_origin, type=pa.large_string()))
+        out_origin_tbl = Origin.from_kwargs(
+            code=pa.array(out_origin, type=pa.large_string())
+        )
 
         # UT weights per (orbit, variant) (constant across times).
         w_mean_base = (
@@ -854,7 +902,9 @@ class VariantEphemeris(qv.Table):
         mean[:, :, 1] = lon_mean
 
         resid = vals2 - mean[:, None, :, :]  # (O,K,N,6)
-        cov = np.einsum("ok,okni,oknj->onij", w_cov, resid, resid, optimize=True)  # (O,N,6,6)
+        cov = np.einsum(
+            "ok,okni,oknj->onij", w_cov, resid, resid, optimize=True
+        )  # (O,N,6,6)
 
         mean_flat = mean.reshape(n_orbits * n_times, 6)
         cov_flat = cov.reshape(n_orbits * n_times, 6, 6)
@@ -872,8 +922,12 @@ class VariantEphemeris(qv.Table):
             frame=self.coordinates.frame,
         )
 
-        out_orbit_id = pa.array(np.repeat(orbit_id_orbit, n_times), type=pa.large_string())
-        out_object_id = pa.array(np.repeat(object_id_orbit, n_times), type=pa.large_string())
+        out_orbit_id = pa.array(
+            np.repeat(orbit_id_orbit, n_times), type=pa.large_string()
+        )
+        out_object_id = pa.array(
+            np.repeat(object_id_orbit, n_times), type=pa.large_string()
+        )
 
         return Ephemeris.from_kwargs(
             orbit_id=out_orbit_id,

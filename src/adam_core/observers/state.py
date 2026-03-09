@@ -14,8 +14,8 @@ from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
-from ..utils.spice import get_perturber_state, get_spice_body_state, setup_SPICE
 from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
+from ..utils.spice import get_perturber_state, get_spice_body_state, setup_SPICE
 from .observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS
 
 R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
@@ -37,15 +37,23 @@ class _ObserverStateCacheKey:
 _OBSERVER_STATE_CACHE_MAXSIZE = int(
     os.environ.get("ADAM_CORE_OBSERVER_STATE_CACHE_MAXSIZE", "256")
 )
-_OBSERVER_STATE_CACHE: "OrderedDict[_ObserverStateCacheKey, CartesianCoordinates]" = OrderedDict()
+_OBSERVER_STATE_CACHE: "OrderedDict[_ObserverStateCacheKey, CartesianCoordinates]" = (
+    OrderedDict()
+)
 
 
 def _observer_cache_get(key: _ObserverStateCacheKey) -> CartesianCoordinates | None:
-    return bounded_lru_get(_OBSERVER_STATE_CACHE, key, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE)
+    return bounded_lru_get(
+        _OBSERVER_STATE_CACHE, key, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE
+    )
 
 
-def _observer_cache_put(key: _ObserverStateCacheKey, coords: CartesianCoordinates) -> None:
-    bounded_lru_put(_OBSERVER_STATE_CACHE, key, coords, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE)
+def _observer_cache_put(
+    key: _ObserverStateCacheKey, coords: CartesianCoordinates
+) -> None:
+    bounded_lru_put(
+        _OBSERVER_STATE_CACHE, key, coords, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE
+    )
 
 
 def clear_observer_state_cache() -> None:

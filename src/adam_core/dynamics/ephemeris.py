@@ -32,7 +32,6 @@ from ..utils.iter import _iterate_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
 from .exceptions import DynamicsNumericalError
 
-
 _TRANSFORM_EC2EQ = jnp.asarray(c.TRANSFORM_EC2EQ, dtype=jnp.float64)
 
 
@@ -390,9 +389,15 @@ def generate_ephemeris_2body(
                     frame="ecliptic",
                     origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
                 ).values
-                coords_po = po.translate(sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name)
-                coords_ob = obc.translate(sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name)
-                propagated_orbits_barycentric = propagated_orbits.set_column("coordinates", coords_po)
+                coords_po = po.translate(
+                    sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name
+                )
+                coords_ob = obc.translate(
+                    sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name
+                )
+                propagated_orbits_barycentric = propagated_orbits.set_column(
+                    "coordinates", coords_po
+                )
                 observers_barycentric = observers.set_column("coordinates", coords_ob)
     except Exception:
         propagated_orbits_barycentric = None
@@ -441,15 +446,17 @@ def generate_ephemeris_2body(
         process_in_chunks(mu, chunk_size),
     ):
         valid = min(chunk_size, num_entries - start)
-        ephemeris_chunk, light_time_chunk, aberrated_chunk = _generate_ephemeris_2body_vmap(
-            orbits_chunk,
-            times_chunk,
-            observer_coords_chunk,
-            mu_chunk,
-            lt_tol,
-            max_iter,
-            tol,
-            stellar_aberration,
+        ephemeris_chunk, light_time_chunk, aberrated_chunk = (
+            _generate_ephemeris_2body_vmap(
+                orbits_chunk,
+                times_chunk,
+                observer_coords_chunk,
+                mu_chunk,
+                lt_tol,
+                max_iter,
+                tol,
+                stellar_aberration,
+            )
         )
         eph_np = np.asarray(ephemeris_chunk, dtype=np.float64)[:valid]
         lt_np = np.asarray(light_time_chunk, dtype=np.float64)[:valid]
@@ -462,14 +469,14 @@ def generate_ephemeris_2body(
                 reason="non_finite_light_time",
                 row_index=abs_idx,
                 orbit_id=str(
-                    propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
-                        abs_idx
-                    ]
+                    propagated_orbits_barycentric.orbit_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
                 ),
                 object_id=str(
-                    propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
-                        abs_idx
-                    ]
+                    propagated_orbits_barycentric.object_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
                 ),
                 observation_time=float(times_chunk[bad_lt]),
                 light_time=float(lt_np[bad_lt]),
@@ -485,14 +492,14 @@ def generate_ephemeris_2body(
                 reason="non_finite_ephemeris_state",
                 row_index=abs_idx,
                 orbit_id=str(
-                    propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
-                        abs_idx
-                    ]
+                    propagated_orbits_barycentric.orbit_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
                 ),
                 object_id=str(
-                    propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
-                        abs_idx
-                    ]
+                    propagated_orbits_barycentric.object_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
                 ),
                 observation_time=float(times_chunk[bad_eph]),
                 light_time=float(lt_np[bad_eph]),
@@ -508,14 +515,14 @@ def generate_ephemeris_2body(
                 reason="non_finite_aberrated_state",
                 row_index=abs_idx,
                 orbit_id=str(
-                    propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
-                        abs_idx
-                    ]
+                    propagated_orbits_barycentric.orbit_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
                 ),
                 object_id=str(
-                    propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
-                        abs_idx
-                    ]
+                    propagated_orbits_barycentric.object_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
                 ),
                 observation_time=float(times_chunk[bad_aberrated]),
                 light_time=float(lt_np[bad_aberrated]),
@@ -556,7 +563,9 @@ def generate_ephemeris_2body(
             tol=tol,
             lt_tol=lt_tol,
         )
-    emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(pa.array(-light_time))
+    emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
+        pa.array(-light_time)
+    )
     aberrated_coordinates = CartesianCoordinates.from_kwargs(
         x=aberrated_orbits[:, 0],
         y=aberrated_orbits[:, 1],

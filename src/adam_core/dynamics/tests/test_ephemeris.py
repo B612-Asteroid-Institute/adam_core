@@ -2,7 +2,6 @@ import cProfile
 
 import jax
 import numpy as np
-import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
@@ -17,8 +16,8 @@ from ...observers import Observers
 from ...orbits import Orbits
 from ...photometry import calculate_phase_angle
 from ...time import Timestamp
-from ...utils.helpers.orbits import make_real_orbits
 from ...utils import spice as spice_mod
+from ...utils.helpers.orbits import make_real_orbits
 from .. import ephemeris as ephemeris_module
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
@@ -277,7 +276,9 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
-def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(monkeypatch) -> None:
+def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(
+    monkeypatch,
+) -> None:
     """
     When both orbits and observers are heliocentric and share an aligned time grid, the
     barycentric translation vectors should be computed once and reused.
@@ -325,12 +326,14 @@ def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(monkey
         ),
     )
 
-    eph_fast = generate_ephemeris_2body(orbits_sun, observers_sun, predict_magnitudes=False)
+    eph_fast = generate_ephemeris_2body(
+        orbits_sun, observers_sun, predict_magnitudes=False
+    )
     assert int(calls["n"]) == 1
 
     # Reference: pre-transform inputs to SSB so the internal origin transform is a no-op.
-    from ...coordinates.transform import transform_coordinates
     from ...coordinates.origin import OriginCodes
+    from ...coordinates.transform import transform_coordinates
 
     orbits_ssb = orbits_sun.set_column(
         "coordinates",
@@ -350,10 +353,19 @@ def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(monkey
             origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
         ),
     )
-    eph_ref = generate_ephemeris_2body(orbits_ssb, observers_ssb, predict_magnitudes=False)
+    eph_ref = generate_ephemeris_2body(
+        orbits_ssb, observers_ssb, predict_magnitudes=False
+    )
 
-    np.testing.assert_allclose(eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=0.0)
-    np.testing.assert_allclose(eph_fast.light_time.to_numpy(), eph_ref.light_time.to_numpy(), rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(
+        eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=0.0
+    )
+    np.testing.assert_allclose(
+        eph_fast.light_time.to_numpy(),
+        eph_ref.light_time.to_numpy(),
+        rtol=0.0,
+        atol=0.0,
+    )
 
 
 def test_generate_ephemeris_2body_phase_angle_enabled() -> None:
@@ -642,4 +654,6 @@ def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> 
     )
 
     with pytest.raises(DynamicsNumericalError, match="non_finite_light_time"):
-        generate_ephemeris_2body(orbits, observers, predict_magnitudes=False, max_processes=1)
+        generate_ephemeris_2body(
+            orbits, observers, predict_magnitudes=False, max_processes=1
+        )

@@ -1,11 +1,11 @@
 import numpy as np
 
+from ...observers.state import clear_observer_state_cache
 from ...time import Timestamp
+from ...utils import spice as spice_mod
 from ..cartesian import CartesianCoordinates
 from ..origin import Origin, OriginCodes
 from ..transform import clear_translation_cache, transform_coordinates
-from ...utils import spice as spice_mod
-from ...observers.state import clear_observer_state_cache
 
 
 def test_cartesian_to_origin_translation_cache_avoids_recompute(monkeypatch):
@@ -85,7 +85,9 @@ def test_cartesian_to_origin_translation_cache_key_is_order_sensitive(monkeypatc
 
     calls = {"n": 0}
 
-    def _fake_get_perturber_state(perturber, times, frame="ecliptic", origin=OriginCodes.SUN):
+    def _fake_get_perturber_state(
+        perturber, times, frame="ecliptic", origin=OriginCodes.SUN
+    ):
         del perturber
         calls["n"] += 1
         key = times.key(scale="tdb").astype(np.float64)
@@ -104,8 +106,12 @@ def test_cartesian_to_origin_translation_cache_key_is_order_sensitive(monkeypatc
 
     monkeypatch.setattr(spice_mod, "get_perturber_state", _fake_get_perturber_state)
 
-    t_a = Timestamp.from_mjd(np.array([60000.0, 60000.25, 60000.5, 60000.75]), scale="tdb")
-    t_b = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60000.25, 60000.75]), scale="tdb")
+    t_a = Timestamp.from_mjd(
+        np.array([60000.0, 60000.25, 60000.5, 60000.75]), scale="tdb"
+    )
+    t_b = Timestamp.from_mjd(
+        np.array([60000.0, 60000.5, 60000.25, 60000.75]), scale="tdb"
+    )
     assert t_a.signature(scale="tdb") == t_b.signature(scale="tdb")
 
     coords_a = CartesianCoordinates.from_kwargs(
@@ -132,9 +138,13 @@ def test_cartesian_to_origin_translation_cache_key_is_order_sensitive(monkeypatc
     )
 
     _ = transform_coordinates(coords_a, origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER)
-    out_b = transform_coordinates(coords_b, origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER)
+    out_b = transform_coordinates(
+        coords_b, origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER
+    )
 
     # A distinct order must miss the cache and recompute translations.
     assert int(calls["n"]) == 2
-    expected_x_b = np.array([10.0, 20.0, 30.0, 40.0]) + t_b.key(scale="tdb").astype(np.float64)
+    expected_x_b = np.array([10.0, 20.0, 30.0, 40.0]) + t_b.key(scale="tdb").astype(
+        np.float64
+    )
     np.testing.assert_allclose(out_b.x.to_numpy(zero_copy_only=False), expected_x_b)

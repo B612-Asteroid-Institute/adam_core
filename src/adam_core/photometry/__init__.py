@@ -1,8 +1,8 @@
 # flake8: noqa: F401
 from .absolute_magnitude import (
+    GroupedPhysicalParameters,
     estimate_absolute_magnitude_v_from_detections,
     estimate_absolute_magnitude_v_from_detections_grouped,
-    GroupedPhysicalParameters,
 )
 from .magnitude import (
     calculate_apparent_magnitude_v,

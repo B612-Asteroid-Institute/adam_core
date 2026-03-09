@@ -176,7 +176,9 @@ def test_estimate_absolute_magnitude_grouped_matches_single(monkeypatch):
     det = PointSourceDetections.from_kwargs(
         id=["d1", "d2", "d3", "d4", "d5", "d6"],
         exposure_id=["e1", "e2", "e3", "e1", "e3", "e4"],
-        time=Timestamp.from_mjd([60000, 60000, 60000, 60000, 60000, 60000], scale="tdb"),
+        time=Timestamp.from_mjd(
+            [60000, 60000, 60000, 60000, 60000, 60000], scale="tdb"
+        ),
         ra=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         dec=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         mag=[None, None, None, None, None, None],
