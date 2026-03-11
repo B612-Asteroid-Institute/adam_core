@@ -21,7 +21,7 @@ def _add_light_time(
     mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-15,
-    max_lt_iter: int = 100,
+    max_lt_iter: int = 10,
 ) -> Tuple[jnp.ndarray, jnp.float64]:
     """
     When generating ephemeris, orbits need to be backwards propagated to the time
@@ -131,7 +131,7 @@ def add_light_time(
     mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-15,
-    max_lt_iter: int = 100,
+    max_lt_iter: int = 10,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     When generating ephemeris, orbits need to be backwards propagated to the time

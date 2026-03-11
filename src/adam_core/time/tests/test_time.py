@@ -36,6 +36,23 @@ def test_timestamp_cache_digest_is_stable_for_identical_inputs():
     assert t.cache_digest(scale="tdb") == t_copy.cache_digest(scale="tdb")
 
 
+def test_timestamp_cache_digest_detects_1ns_differences():
+    # Keep coarse signature fields identical while changing two rows by +/- 1 ns.
+    t1 = Timestamp.from_kwargs(
+        days=[60000, 60000, 60000, 60000],
+        nanos=[0, 100, 200, 300],
+        scale="tdb",
+    )
+    t2 = Timestamp.from_kwargs(
+        days=[60000, 60000, 60000, 60000],
+        nanos=[0, 101, 199, 300],
+        scale="tdb",
+    )
+
+    assert t1.signature(scale="tdb") == t2.signature(scale="tdb")
+    assert t1.cache_digest(scale="tdb") != t2.cache_digest(scale="tdb")
+
+
 class TestTimeUnits:
 
     ts = Timestamp.from_kwargs(
