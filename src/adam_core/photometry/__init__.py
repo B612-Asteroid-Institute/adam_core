@@ -1,5 +1,9 @@
 # flake8: noqa: F401
-from .absolute_magnitude import estimate_absolute_magnitude_v_from_detections
+from .absolute_magnitude import (
+    GroupedPhysicalParameters,
+    estimate_absolute_magnitude_v_from_detections,
+    estimate_absolute_magnitude_v_from_detections_grouped,
+)
 from .magnitude import (
     calculate_apparent_magnitude_v,
     calculate_apparent_magnitude_v_and_phase_angle,
@@ -17,4 +21,6 @@ __all__ = [
     "predict_magnitudes",
     # Inverse magnitude system
     "estimate_absolute_magnitude_v_from_detections",
+    "estimate_absolute_magnitude_v_from_detections_grouped",
+    "GroupedPhysicalParameters",
 ]

@@ -10,10 +10,12 @@ from astropy import units as u
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
+from ...dynamics.exceptions import DynamicsNumericalError
 from ...orbits import Orbits
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
+from .. import propagation as propagation_module
 from ..propagation import _propagate_2body, _propagate_2body_vmap, propagate_2body
 
 
@@ -551,6 +553,59 @@ def test_propagate_2body_ray_matches_serial() -> None:
     )
 
     ray.shutdown()  # type: ignore[name-defined]
+
+
+def test_propagate_2body_failfast_nonfinite_input() -> None:
+    t0 = Timestamp.from_mjd([60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["bad_orbit"],
+        object_id=["bad_object"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[np.nan],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    times = Timestamp.from_mjd([60001.0], scale="tdb")
+
+    with pytest.raises(DynamicsNumericalError, match="non_finite_input_state"):
+        propagate_2body(orbits, times, max_processes=1)
+
+
+def test_propagate_2body_failfast_nonfinite_output(monkeypatch) -> None:
+    t0 = Timestamp.from_mjd([60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["bad_orbit"],
+        object_id=["bad_object"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+    times = Timestamp.from_mjd([60001.0], scale="tdb")
+
+    def _nan_vmap(orbits_arr, t0_arr, t1_arr, mu_arr, max_iter, tol):
+        out = np.asarray(orbits_arr, dtype=np.float64).copy()
+        out[:] = np.nan
+        return out
+
+    monkeypatch.setattr(propagation_module, "_propagate_2body_vmap", _nan_vmap)
+
+    with pytest.raises(DynamicsNumericalError, match="non_finite_output_state"):
+        propagate_2body(orbits, times, max_processes=1)
 
 
 @pytest.mark.profile

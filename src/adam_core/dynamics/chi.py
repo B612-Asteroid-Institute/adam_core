@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Tuple
 
 import jax.numpy as jnp
@@ -10,6 +11,17 @@ from .stumpff import calc_stumpff
 config.update("jax_enable_x64", True)
 
 MU = c.MU
+
+
+@dataclass(frozen=True)
+class ChiDiagnostics:
+    dt: float
+    mu: float
+    r_norm: float
+    v_norm: float
+    alpha: float
+    chi: float
+    finite: bool
 
 
 @jit
@@ -132,3 +144,37 @@ def calc_chi(
     c5 = p[6]
 
     return chi, c0, c1, c2, c3, c4, c5
+
+
+def calc_chi_diagnostics(
+    r: np.ndarray,
+    v: np.ndarray,
+    dt: float,
+    mu: float = MU,
+    max_iter: int = 100,
+    tol: float = 1e-16,
+) -> ChiDiagnostics:
+    """
+    Host-side chi diagnostics helper for fail-fast error reporting.
+    """
+    r_arr = np.asarray(r, dtype=np.float64)
+    v_arr = np.asarray(v, dtype=np.float64)
+    r_norm = float(np.linalg.norm(r_arr))
+    v_norm = float(np.linalg.norm(v_arr))
+    alpha = float(-(v_norm**2) / mu + 2.0 / r_norm) if r_norm > 0 else np.nan
+    chi = float(calc_chi(r_arr, v_arr, dt, mu=mu, max_iter=max_iter, tol=tol)[0])
+    finite = bool(
+        np.isfinite(r_norm)
+        and np.isfinite(v_norm)
+        and np.isfinite(alpha)
+        and np.isfinite(chi)
+    )
+    return ChiDiagnostics(
+        dt=float(dt),
+        mu=float(mu),
+        r_norm=r_norm,
+        v_norm=v_norm,
+        alpha=alpha,
+        chi=chi,
+        finite=finite,
+    )

@@ -382,8 +382,8 @@ class EphemerisMixin:
         )
 
         # Process in padded chunks
-        propagated_orbits_aberrated: np.ndarray = np.empty((0, 6))
-        light_time: np.ndarray = np.empty((0,))
+        propagated_orbits_aberrated: np.ndarray
+        light_time: np.ndarray
 
         propagated_orbits_barycentric_values = (
             propagated_orbits_barycentric.coordinates.values
@@ -396,6 +396,15 @@ class EphemerisMixin:
         observers_barycentric_tiled_values = observers_barycentric_tiled.coordinates.r
 
         chunk_size = 200
+        n = int(propagated_orbits_barycentric_values.shape[0])
+        # `process_in_chunks` pads each chunk to a fixed size for JAX; preallocate the padded
+        # output arrays and slice off padding after the loop. This avoids O(n^2) reallocation
+        # and memcpy from repeated np.concatenate calls.
+        n_padded = int(((n + int(chunk_size) - 1) // int(chunk_size)) * int(chunk_size))
+        propagated_orbits_aberrated = np.empty((n_padded, 6), dtype=np.float64)
+        light_time = np.empty((n_padded,), dtype=np.float64)
+
+        k = 0
         for (
             propagated_orbits_barycentric_chunk,
             propagated_orbits_barycentric_time_chunk,
@@ -414,19 +423,17 @@ class EphemerisMixin:
                 max_iter=100,
                 tol=1e-15,
             )
-            propagated_orbits_aberrated = np.concatenate(
-                (
-                    propagated_orbits_aberrated,
-                    np.array(propagated_orbits_aberrated_chunk),
-                )
+            propagated_orbits_aberrated[k : k + int(chunk_size), :] = np.asarray(
+                propagated_orbits_aberrated_chunk, dtype=np.float64
             )
-            light_time = np.concatenate((light_time, np.array(light_time_chunk)))
+            light_time[k : k + int(chunk_size)] = np.asarray(
+                light_time_chunk, dtype=np.float64
+            )
+            k += int(chunk_size)
 
         # Remove padding
-        propagated_orbits_aberrated = propagated_orbits_aberrated[
-            : len(propagated_orbits_barycentric)
-        ]
-        light_time = light_time[: len(propagated_orbits_barycentric)]
+        propagated_orbits_aberrated = propagated_orbits_aberrated[:n]
+        light_time = light_time[:n]
 
         # Guard against pathological light-time values before constructing timestamps.
         if not np.all(np.isfinite(light_time)):
@@ -639,7 +646,13 @@ class EphemerisMixin:
             # Create futures
             futures_inputs = []
             idx = np.arange(0, len(orbits))
-            for idx_chunk in _iterate_chunks(idx, chunk_size):
+            # Use at least max_processes chunks so all workers get work.
+            effective_chunk_size = chunk_size
+            if max_processes > 1 and len(orbits) > 0:
+                effective_chunk_size = min(
+                    chunk_size, max(1, len(orbits) // max_processes)
+                )
+            for idx_chunk in _iterate_chunks(idx, effective_chunk_size):
                 futures_inputs.append(
                     (
                         idx_chunk,
@@ -656,7 +669,12 @@ class EphemerisMixin:
                 variants_ref = ray.put(variants)
 
                 idx = np.arange(0, len(variants))
-                for variant_chunk_idx in _iterate_chunks(idx, chunk_size):
+                var_chunk_size = (
+                    min(chunk_size, max(1, len(variants) // max_processes))
+                    if max_processes > 1
+                    else chunk_size
+                )
+                for variant_chunk_idx in _iterate_chunks(idx, var_chunk_size):
                     futures_inputs.append(
                         (
                             variant_chunk_idx,

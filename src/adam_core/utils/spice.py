@@ -1,4 +1,6 @@
 import os
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import List, Literal, Optional, Set
 
 import numpy as np
@@ -15,6 +17,7 @@ from ..constants import KM_P_AU, S_P_DAY
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
+from .bounded_lru import bounded_lru_get, bounded_lru_put
 
 DEFAULT_KERNELS = [
     leapseconds,
@@ -29,6 +32,36 @@ DEFAULT_KERNELS = [
 _REGISTERED_KERNELS: Set[str] = set()
 
 J2000_TDB_JD = 2451545.0
+
+
+@dataclass(frozen=True)
+class _SpkezCacheKey:
+    target: int
+    observer: int
+    frame: str
+    days: int
+    nanos: int
+
+
+_SPKEZ_CACHE_MAXSIZE = int(os.environ.get("ADAM_CORE_SPKEZ_CACHE_MAXSIZE", "200000"))
+_SPKEZ_CACHE: "OrderedDict[_SpkezCacheKey, np.ndarray]" = OrderedDict()
+
+
+def _spkez_cache_get(key: _SpkezCacheKey) -> np.ndarray | None:
+    return bounded_lru_get(_SPKEZ_CACHE, key, maxsize=_SPKEZ_CACHE_MAXSIZE)
+
+
+def _spkez_cache_put(key: _SpkezCacheKey, state_au_aud: np.ndarray) -> None:
+    bounded_lru_put(_SPKEZ_CACHE, key, state_au_aud, maxsize=_SPKEZ_CACHE_MAXSIZE)
+
+
+def clear_spkez_cache() -> None:
+    """
+    Clear the in-process SPICE state cache.
+
+    This is primarily intended for testing and benchmarking.
+    """
+    _SPKEZ_CACHE.clear()
 
 
 def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
@@ -134,22 +167,67 @@ def get_perturber_state(
     # Make sure SPICE is ready to roll
     setup_SPICE()
 
-    # Convert epochs to ET in TDB
-    epochs_et = times.et()
-    unique_epochs_et = epochs_et.unique()
-    N = len(times)
-    states = np.empty((N, 6), dtype=np.float64)
+    N = int(len(times))
+    if N == 0:
+        return CartesianCoordinates.empty()
 
-    for i, epoch in enumerate(unique_epochs_et):
-        mask = pc.equal(epochs_et, epoch).to_numpy(False)
-        state, lt = sp.spkez(
-            perturber.value, epoch.as_py(), frame_spice, "NONE", origin.value
+    # Build stable time keys in TDB using integer (days,nanos).
+    times_tdb = times.rescale("tdb")
+    days = times_tdb.days.to_numpy(zero_copy_only=False).astype(np.int64)
+    nanos = times_tdb.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
+    time_key = times_tdb.key(scale=None)
+
+    uniq_keys, rep_idx, inv = np.unique(
+        time_key, return_index=True, return_inverse=True
+    )
+
+    epochs_et = times_tdb.et().to_numpy(zero_copy_only=False).astype(np.float64)
+    uniq_states = np.empty((uniq_keys.shape[0], 6), dtype=np.float64)
+
+    for i_u in range(int(uniq_keys.shape[0])):
+        i0 = int(rep_idx[i_u])
+        key = _SpkezCacheKey(
+            target=int(perturber.value),
+            observer=int(origin.value),
+            frame=str(frame_spice),
+            days=int(days[i0]),
+            nanos=int(nanos[i0]),
         )
-        states[mask, :] = state
+        cached = _spkez_cache_get(key)
+        if cached is not None:
+            uniq_states[i_u, :] = cached
+            continue
 
-    # Convert units (vectorized operations)
-    states = states / KM_P_AU
-    states[:, 3:] *= S_P_DAY
+        # Invert from cached reverse pair if present (exact negation).
+        rev_key = _SpkezCacheKey(
+            target=int(origin.value),
+            observer=int(perturber.value),
+            frame=str(frame_spice),
+            days=int(days[i0]),
+            nanos=int(nanos[i0]),
+        )
+        cached_rev = _spkez_cache_get(rev_key)
+        if cached_rev is not None:
+            s = -cached_rev
+            uniq_states[i_u, :] = s
+            _spkez_cache_put(key, s)
+            continue
+
+        state_km_kms, _lt = sp.spkez(
+            perturber.value,
+            float(epochs_et[i0]),
+            frame_spice,
+            "NONE",
+            origin.value,
+        )
+        s = np.asarray(state_km_kms, dtype=np.float64) / KM_P_AU
+        s[3:] *= S_P_DAY
+        uniq_states[i_u, :] = s
+        _spkez_cache_put(key, s)
+        # Also populate reverse pair to avoid redundant SPICE calls later.
+        _spkez_cache_put(rev_key, -s)
+
+    states = uniq_states[inv]
 
     return CartesianCoordinates.from_kwargs(
         time=times,
