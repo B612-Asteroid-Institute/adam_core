@@ -65,7 +65,8 @@ def real_data():
     return observers, orbit
 
 
-def test_least_squares_adjusts(real_data) -> None:
+@pytest.mark.parametrize("use_central_difference", [True, False])
+def test_least_squares_adjusts(real_data, use_central_difference) -> None:
     observers, orbit = real_data
 
     # Make observations that fit the orbit perfectly
@@ -79,7 +80,7 @@ def test_least_squares_adjusts(real_data) -> None:
         observers=observers,
     )
 
-    fitter = LeastSquares()
+    fitter = LeastSquares(use_central_difference)
 
     # If we feed perfect observations to perfect orbit, there should be no change
     debug_info = {}
@@ -132,7 +133,8 @@ def test_least_squares_adjusts(real_data) -> None:
     assert no_debug_orbit is not None
 
 
-def test_least_squares_zero_base(real_data) -> None:
+@pytest.mark.parametrize("use_central_difference", [True, False])
+def test_least_squares_zero_base(real_data, use_central_difference) -> None:
     observers, orbit = real_data
 
     # Set the last component of the orbit, which is already the smallest value, to 0.
@@ -150,7 +152,7 @@ def test_least_squares_zero_base(real_data) -> None:
         observers=observers,
     )
 
-    fitter = LeastSquares()
+    fitter = LeastSquares(use_central_difference)
     debug_info = {}
     improved_orbit = fitter.least_squares(
         zeroed_orbit, perfect_observations, propagator, debug_info=debug_info

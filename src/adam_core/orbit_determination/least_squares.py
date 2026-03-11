@@ -25,6 +25,15 @@ class LeastSquares(ABC):
     may work for other observation sets as well.
     """
 
+    def __init__(self, use_central_difference: bool):
+        """
+        Parameters:
+        -----------
+        use_central_difference: bool
+            if true, numerical differentiation uses central difference instead of one-sided
+        """
+        self._use_central_difference = use_central_difference
+
     def _update_orbit(
         self,
         base_coords: CartesianCoordinates,
@@ -97,6 +106,7 @@ class LeastSquares(ABC):
         base_orbit_coordinates: CartesianCoordinates,
         nominal_ephemeris_coordinates: SphericalCoordinates,
         prop: Propagator,
+        use_central_difference: bool,
     ) -> np.ndarray:
         """
         Compute the matrix of all partial derivatives for all observations.
@@ -115,12 +125,12 @@ class LeastSquares(ABC):
             coordinates for the unperturbed orbit, so that we don't have to recompute them
         prop: Propagator
             the propagator to use to compute perturbed ephemeris
+        use_central_difference: bool
+            if true, numerical differentiation uses central difference instead of one-sided
 
         Returns:
         --------
         (N, 2, 6) matrix of numerically computed partial derivatives
-
-        TODO: maybe add central difference as well?
         """
         num_obs = len(observations)
         num_param = base_orbit_coordinates.values.shape[1]  # should be 6
@@ -139,10 +149,22 @@ class LeastSquares(ABC):
             ephemeris_mod_p = prop.generate_ephemeris(
                 orbit_iter_p, observations.observers, chunk_size=1, max_processes=1
             )
-            col = self._residual_columns(
-                ephemeris_mod_p.coordinates, nominal_ephemeris_coordinates
-            )
-            A[:, :, i] = col / d[0, i]
+            if use_central_difference:
+                orbit_iter_m = self._update_orbit(base_orbit_coordinates[0], -d)
+                ephemeris_mod_m = prop.generate_ephemeris(
+                    orbit_iter_m, observations.observers, chunk_size=1, max_processes=1
+                )
+                col = self._residual_columns(
+                    ephemeris_mod_p.coordinates, ephemeris_mod_m.coordinates
+                ) / (2 * d[0, i])
+            else:
+                col = (
+                    self._residual_columns(
+                        ephemeris_mod_p.coordinates, nominal_ephemeris_coordinates
+                    )
+                    / d[0, i]
+                )
+            A[:, :, i] = col
         return A
 
     def _rms(self, residuals: np.ndarray, weights: np.ndarray) -> float:
@@ -258,6 +280,7 @@ class LeastSquares(ABC):
                 orbit_prev.coordinates,
                 ephemeris_nom.coordinates,
                 prop,
+                self._use_central_difference,
             )
 
             # Accumulators for the matrices, see Vallado
