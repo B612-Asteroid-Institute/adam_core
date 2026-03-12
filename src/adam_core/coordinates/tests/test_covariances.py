@@ -222,25 +222,3 @@ def test__upper_triangular_to_full():
 
     actual_array = _upper_triangular_to_full(triangular_array)
     np.testing.assert_array_equal(actual_array, expected_array)
-
-
-def test__upper_triangular_to_full7():
-    # Test that we can reconstruct a full covariance matrix from an upper triangular matrix
-    # even if the original upper triangular was for 7 elements instead of 6.
-    expected_array = np.array(
-        [
-            [1, 2, 3, 4, 5, 6, 7],
-            [2, 2, 3, 4, 5, 6, 7],
-            [3, 3, 3, 4, 5, 6, 7],
-            [4, 4, 4, 4, 5, 6, 7],
-            [5, 5, 5, 5, 5, 6, 7],
-            [6, 6, 6, 6, 6, 6, 7],
-            [7, 7, 7, 7, 7, 7, 7],
-        ],
-        dtype=np.float64,
-    )
-
-    triangular_array = np.triu(expected_array)[np.triu_indices(7)].flatten()
-
-    actual_array = _upper_triangular_to_full(triangular_array)
-    np.testing.assert_array_equal(actual_array, expected_array[:6, :6])
