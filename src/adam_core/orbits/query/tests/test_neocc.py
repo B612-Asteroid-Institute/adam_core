@@ -255,3 +255,64 @@ def test_real_neocc_oef_files_parse_without_error() -> None:
     assert (
         parsed >= 2
     ), "at least two real OEF files should parse (e.g. 2024YR4, 2022OB5)"
+
+
+def test_empty_response(mocker) -> None:
+    # Sometimes, e.g. "1416T-2", the response text is empty even though the
+    # HTTP code is 200. We should just skip those objects.
+
+    import requests
+
+    # Create mock response
+    def mock_get(url, params):
+        mock = mocker.MagicMock()
+        mock.status_code = 200
+        mock.text = ""
+        return mock
+
+    mocker.patch("requests.get", side_effect=mock_get)
+
+    object_ids = ["1416T-2"]
+    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
+
+    # Verify the results
+    assert orbits is not None
+    assert len(orbits) == 0
+    requests.get.assert_has_calls(
+        [
+            mocker.call(
+                "https://neo.ssa.esa.int/PSDB-portlet/download",
+                params={"file": "1416T-2.ke1"},
+            ),
+        ]
+    )
+
+
+def test_28element_matrix(mocker) -> None:
+    # Some objects have 28 elements upper triangular for covariance and correlation
+    import requests
+
+    # Create mock response
+    def mock_get(url, params):
+        mock = mocker.MagicMock()
+        mock.status_code = 200
+        with open(TESTDATA_DIR / "2018CW2.ke1", "r") as f:
+            mock.text = f.read()
+        return mock
+
+    mocker.patch("requests.get", side_effect=mock_get)
+
+    object_ids = ["2018 CW2"]
+    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
+
+    # Verify the results
+    assert orbits is not None
+    assert len(orbits) == 1
+    requests.get.assert_has_calls(
+        [
+            mocker.call(
+                "https://neo.ssa.esa.int/PSDB-portlet/download",
+                params={"file": "2018CW2.ke1"},
+            ),
+        ]
+    )

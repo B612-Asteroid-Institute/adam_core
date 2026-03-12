@@ -13,6 +13,29 @@ from ...time import Timestamp
 from ..physical_parameters import PhysicalParameters
 
 
+def _remove_last_column_of_upper_triangular(
+    matrix: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """
+    Drop the last column of the 28-element upper triangular matrix.
+
+    The dropped column likely corresponds to magnitude. For example, see "2018 CW2".
+
+    Parameters:
+    -----------
+    matrix: npt.NDArray[np.float64]
+        28-element upper triangular matrix
+    Returns:
+    --------
+    21-element upper triangular matrix.
+    """
+    assert len(matrix) == 28
+    full = np.zeros((7, 7))
+    full[np.triu_indices(7)] = matrix
+    full = full[:6, :6]  # just drop the last one
+    return full[np.triu_indices(6)]
+
+
 def _parse_oef(data: str) -> Dict[str, Any]:
     """
     Parse a OEF file and return the stored orbital elements.
@@ -145,6 +168,8 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         # (3,4)   (3,5)   (3,6)
         # (4,4)   (4,5)   (4,6)
         # (5,5)   (5,6)   (6,6)
+        if len(cov_matrix) == 28:
+            cov_matrix = _remove_last_column_of_upper_triangular(cov_matrix)
         result["covariance"] = _upper_triangular_to_full(np.array(cov_matrix))
 
     # Parse correlation matrix
@@ -153,6 +178,8 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         if line.strip().startswith("COR"):
             cor_matrix.extend([float(x) for x in line.split()[1:]])
     if cor_matrix:
+        if len(cor_matrix) == 28:
+            cor_matrix = _remove_last_column_of_upper_triangular(cor_matrix)
         result["correlation"] = _upper_triangular_to_full(np.array(cor_matrix))
 
     return result
@@ -230,8 +257,8 @@ def query_neocc(
         response.raise_for_status()
 
         data = _parse_oef(response.text)
-        if orbit_type == "ke":
 
+        if orbit_type == "ke" and "time_system" in data:
             time_scale = data["time_system"]
             if time_scale == "TDT":
                 time_scale = "tt"
