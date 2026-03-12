@@ -688,6 +688,8 @@ class EphemerisMixin:
 
             # Get results as they finish (we sort later)
             futures = []
+            ephemeris_parts: list[Ephemeris] = []
+            variant_ephemeris_parts: list[VariantEphemeris] = []
             for future_input in futures_inputs:
                 futures.append(ephemeris_worker_ray.remote(*future_input))
 
@@ -695,9 +697,9 @@ class EphemerisMixin:
                     finished, futures = ray.wait(futures, num_returns=1)
                     result = ray.get(finished[0])
                     if isinstance(result, Ephemeris):
-                        ephemeris = qv.concatenate([ephemeris, result])
+                        ephemeris_parts.append(result)
                     elif isinstance(result, VariantEphemeris):
-                        variant_ephemeris = qv.concatenate([variant_ephemeris, result])
+                        variant_ephemeris_parts.append(result)
                     else:
                         raise ValueError(
                             f"Unexpected result type from ephemeris worker: {type(result)}"
@@ -707,13 +709,26 @@ class EphemerisMixin:
                 finished, futures = ray.wait(futures, num_returns=1)
                 result = ray.get(finished[0])
                 if isinstance(result, Ephemeris):
-                    ephemeris = qv.concatenate([ephemeris, result])
+                    ephemeris_parts.append(result)
                 elif isinstance(result, VariantEphemeris):
-                    variant_ephemeris = qv.concatenate([variant_ephemeris, result])
+                    variant_ephemeris_parts.append(result)
                 else:
                     raise ValueError(
                         f"Unexpected result type from ephemeris worker: {type(result)}"
                     )
+
+            if ephemeris_parts:
+                ephemeris = (
+                    ephemeris_parts[0]
+                    if len(ephemeris_parts) == 1
+                    else qv.concatenate(ephemeris_parts)
+                )
+            if variant_ephemeris_parts:
+                variant_ephemeris = (
+                    variant_ephemeris_parts[0]
+                    if len(variant_ephemeris_parts) == 1
+                    else qv.concatenate(variant_ephemeris_parts)
+                )
 
             # Concatenation was in completion order; sort to canonical order.
             if len(ephemeris) > 0:
