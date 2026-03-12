@@ -316,4 +316,3 @@ def test_28element_matrix(mocker) -> None:
             ),
         ]
     )
-    assert False
