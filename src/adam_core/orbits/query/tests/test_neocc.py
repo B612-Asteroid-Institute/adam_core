@@ -296,7 +296,7 @@ def test_28element_matrix(mocker) -> None:
     def mock_get(url, params):
         mock = mocker.MagicMock()
         mock.status_code = 200
-        with open(TESTDATA_DIR / f"2018CW2.ke1", "r") as f:
+        with open(TESTDATA_DIR / "2018CW2.ke1", "r") as f:
             mock.text = f.read()
         return mock
 
