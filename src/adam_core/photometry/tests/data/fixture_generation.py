@@ -11,8 +11,12 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import requests
-from google.cloud import bigquery
-from mpcq.client import BigQueryMPCClient
+try:
+    from google.cloud import bigquery
+    from mpcq.client import BigQueryMPCClient
+except ImportError:
+    bigquery = None  # type: ignore[assignment]
+    BigQueryMPCClient = None  # type: ignore[assignment,misc]
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin
