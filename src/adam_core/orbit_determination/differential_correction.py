@@ -16,6 +16,7 @@ from ..propagator.propagator import Propagator
 from ..time.time import Timestamp
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .outliers import calculate_max_outliers, remove_lowest_probability_observation
 
 
 def residual_function(
@@ -204,3 +205,110 @@ def fit_least_squares(
     )
 
     return fitted_orbit, fitted_orbit_members
+
+
+def iterative_fit(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    rchi2_threshold: float = 10.0,
+    min_obs: int = 6,
+    min_arc_length: float = 1.0,
+    contamination_percentage: float = 20.0,
+    **kwargs,
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    Iteratively fit an orbit using least squares with outlier rejection.
+
+    Wraps `fit_least_squares` with an outlier rejection loop: after each fit,
+    if the reduced chi2 exceeds `rchi2_threshold`, the observation with the
+    worst residual is removed and the fit is repeated. This continues until
+    the fit converges, no more outliers are allowed, or arc length / minimum
+    observation constraints would be violated.
+
+    Parameters
+    ----------
+    orbit : `~adam_core.orbits.Orbits` (1)
+        Initial orbit to differentially correct.
+    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (N)
+        Observations to fit against.
+    propagator : `~adam_core.propagator.Propagator`
+        Propagator to use to generate ephemeris.
+    rchi2_threshold : float, optional
+        Reduced chi2 threshold below which the fit is considered converged.
+        Default is 10.0.
+    min_obs : int, optional
+        Minimum number of observations required to retain the fit.
+        Default is 6.
+    min_arc_length : float, optional
+        Minimum arc length in days required to retain the fit.
+        Default is 1.0.
+    contamination_percentage : float, optional
+        Maximum percentage of observations that may be rejected as outliers.
+        Range is [0, 100]. Default is 20.0.
+    **kwargs
+        Additional keyword arguments passed to `fit_least_squares` and
+        ultimately to `~scipy.optimize.least_squares`.
+
+    Returns
+    -------
+    fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)
+        Best fitted orbit found.
+    fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)
+        Fitted orbit members with residuals and outlier flags.
+    """
+    assert len(orbit) == 1, "Only one orbit can be iteratively fitted"
+
+    num_obs = len(observations)
+    max_outliers = calculate_max_outliers(num_obs, min_obs, contamination_percentage)
+
+    ignore: List[str] = []
+    best_fitted_orbit = None
+    best_fitted_orbit_members = None
+
+    for _ in range(max_outliers + 1):
+        fitted_orbit, fitted_orbit_members = fit_least_squares(
+            orbit,
+            observations,
+            propagator,
+            ignore=ignore if ignore else None,
+            **kwargs,
+        )
+
+        # Track the best fit seen so far (lowest reduced chi2 among successful fits)
+        if best_fitted_orbit is None or (
+            fitted_orbit.success[0].as_py()
+            and fitted_orbit.reduced_chi2[0].as_py()
+            < best_fitted_orbit.reduced_chi2[0].as_py()
+        ):
+            best_fitted_orbit = fitted_orbit
+            best_fitted_orbit_members = fitted_orbit_members
+
+        # Check convergence
+        rchi2 = fitted_orbit.reduced_chi2[0].as_py()
+        if rchi2 is not None and rchi2 <= rchi2_threshold:
+            break
+
+        # Stop if we've already used up all allowed outlier slots
+        if len(ignore) >= max_outliers:
+            break
+
+        # Identify the worst non-outlier observation among the current solution members
+        solution_members = fitted_orbit_members.apply_mask(
+            pc.equal(fitted_orbit_members.outlier, False)
+        )
+        if len(solution_members) == 0:
+            break
+
+        obs_id, remaining_observations = remove_lowest_probability_observation(
+            solution_members, observations
+        )
+
+        # Check that removing this observation still leaves enough arc length
+        arc_length = remaining_observations.coordinates.time.mjd().to_numpy()
+        if len(arc_length) < min_obs or (arc_length.max() - arc_length.min()) < min_arc_length:
+            break
+
+        ignore.append(obs_id)
+
+    return best_fitted_orbit, best_fitted_orbit_members

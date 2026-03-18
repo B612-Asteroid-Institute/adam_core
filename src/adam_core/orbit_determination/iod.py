@@ -134,13 +134,13 @@ def select_observations(
     times = observations.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
     if method == "first+middle+last":
-        selected_times = np.percentile(times, [0, 50, 100], interpolation="nearest")
+        selected_times = np.percentile(times, [0, 50, 100], method="nearest")
         selected_index = np.intersect1d(times, selected_times, return_indices=True)[1]
         selected_index = np.array([selected_index])
 
     elif method == "thirds":
         selected_times = np.percentile(
-            times, [1 / 6 * 100, 50, 5 / 6 * 100], interpolation="nearest"
+            times, [1 / 6 * 100, 50, 5 / 6 * 100], method="nearest"
         )
         selected_index = np.intersect1d(times, selected_times, return_indices=True)[1]
         selected_index = np.array([selected_index])
@@ -386,8 +386,6 @@ def iod(
     if len(observations) == 0:
         processable = False
 
-    obs_ids_all = observations.id.to_numpy(zero_copy_only=False)
-    coords_all = observations.coordinates
     observers = observations.observers
 
     observations = observations.sort_by(
@@ -401,6 +399,8 @@ def iod(
         ["coordinates.time.days", "coordinates.time.nanos", "coordinates.origin.code"]
     )
 
+    obs_ids_all = observations.id.to_numpy(zero_copy_only=False)
+    coords_all = observations.coordinates
     coords_obs_all = observers.coordinates.r
     times_all = coords_all.time.mjd().to_numpy(zero_copy_only=False)
 
