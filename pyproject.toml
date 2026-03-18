@@ -63,6 +63,18 @@ plots = [
 oem = [
     "oem>=0.4.5",
 ]
+# Orbit-determination backends (all optional)
+find_orb = [
+    "adam-fo",
+]
+orbfit = [
+    # TODO(od-module): pin a version once the orbfit package is published.
+    "orbfit",
+]
+layup = [
+    # TODO(od-module): pin a version once the layup OD API is stable.
+    "layup",
+]
 
 [build-system]
 requires = ["pdm-backend"]
