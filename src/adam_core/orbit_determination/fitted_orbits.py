@@ -137,6 +137,10 @@ class FittedOrbits(qv.Table):
     iterations = qv.Int64Column(nullable=True)
     success = qv.BooleanColumn(nullable=True)
     status_code = qv.Int64Column(nullable=True)
+    # Provenance: which backend produced this orbit and its detected version.
+    # Nullable so that orbits created outside fit_orbit() are unaffected.
+    backend = qv.LargeStringColumn(nullable=True)
+    backend_version = qv.LargeStringColumn(nullable=True)
 
     def to_orbits(self) -> Orbits:
         """
