@@ -1,6 +1,7 @@
 import logging
 import multiprocessing as mp
 import time
+import warnings
 from typing import Literal, Optional, Tuple, Type, Union
 
 import numpy as np
@@ -587,6 +588,11 @@ def differential_correction(
     """
     Differentially correct (via finite/central differencing).
 
+    .. deprecated::
+        `differential_correction` is deprecated and will be removed in a future release.
+        Use `adam_core.orbit_determination.iterative_fit` instead, which provides the same
+        outlier-rejection loop via `scipy.optimize.least_squares`.
+
     Parameters
     ----------
     chunk_size : int, optional
@@ -597,6 +603,12 @@ def differential_correction(
         Which parallelization backend to use {'ray', 'mp', 'cf'}. Defaults to using Python's concurrent.futures
         module ('cf').
     """
+    warnings.warn(
+        "differential_correction is deprecated and will be removed in a future release. "
+        "Use adam_core.orbit_determination.iterative_fit instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     time_start = time.perf_counter()
     logger.info("Running differential correction...")
     if isinstance(orbits, ray.ObjectRef):
