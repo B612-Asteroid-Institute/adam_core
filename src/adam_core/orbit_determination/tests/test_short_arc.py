@@ -6,9 +6,15 @@ try:
 except Exception:  # pragma: no cover
     ASSISTPropagator = None
 
-from ...coordinates import CartesianCoordinates, CoordinateCovariances, Origin, Residuals, SphericalCoordinates
-from ...observers import Observers
+from ...coordinates import (
+    CartesianCoordinates,
+    CoordinateCovariances,
+    Origin,
+    Residuals,
+    SphericalCoordinates,
+)
 from ...observations.ades import ADESObservations
+from ...observers import Observers
 from ...orbits import Orbits
 from ...time import Timestamp
 from ..short_arc import (
@@ -35,7 +41,9 @@ def _make_fake_observers(times: Timestamp) -> Observers:
         origin=Origin.from_kwargs(code=np.full(n, "SUN", dtype=object)),
         frame="ecliptic",
     )
-    return Observers.from_kwargs(code=np.full(n, "500", dtype=object), coordinates=coords)
+    return Observers.from_kwargs(
+        code=np.full(n, "500", dtype=object), coordinates=coords
+    )
 
 
 def _make_od_observations(
@@ -99,7 +107,9 @@ def test_ades_to_od_observations_covariance_conversion() -> None:
 
     od = ades_to_od_observations(ades)
     assert len(od) == 4
-    assert np.all(od.observers.code.to_numpy(zero_copy_only=False) == np.array(["W84"] * 4))
+    assert np.all(
+        od.observers.code.to_numpy(zero_copy_only=False) == np.array(["W84"] * 4)
+    )
 
     sig = od.coordinates.covariance.sigmas
     expected_ra0 = (0.6 / np.cos(np.radians(10.0))) / 3600.0
@@ -258,10 +268,14 @@ def test_short_arc_assist_integration_accuracy() -> None:
     od_all = ades_to_od_observations(ades_all)
     holdout = od_all[4:]
 
-    eph_holdout = prop.generate_ephemeris(best_orbit, holdout.observers, max_processes=1)
+    eph_holdout = prop.generate_ephemeris(
+        best_orbit, holdout.observers, max_processes=1
+    )
     residuals = Residuals.calculate(holdout.coordinates, eph_holdout.coordinates)
     residual_values = np.stack(residuals.values.to_numpy(zero_copy_only=False))
-    holdout_error = np.sqrt(residual_values[:, 1] ** 2 + residual_values[:, 2] ** 2) * 3600.0
+    holdout_error = (
+        np.sqrt(residual_values[:, 1] ** 2 + residual_values[:, 2] ** 2) * 3600.0
+    )
 
     assert np.max(holdout_error) < 120.0
 

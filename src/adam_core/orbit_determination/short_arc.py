@@ -160,7 +160,9 @@ def ades_to_od_observations(
     dec_rad = np.radians(dec_deg)
     cos_dec = np.cos(dec_rad)
 
-    rms_ra_cos = np.array(ades.rmsRACosDec.to_numpy(zero_copy_only=False), dtype=np.float64)
+    rms_ra_cos = np.array(
+        ades.rmsRACosDec.to_numpy(zero_copy_only=False), dtype=np.float64
+    )
     rms_dec = np.array(ades.rmsDec.to_numpy(zero_copy_only=False), dtype=np.float64)
     rms_corr = np.array(ades.rmsCorr.to_numpy(zero_copy_only=False), dtype=np.float64)
 
@@ -242,7 +244,9 @@ def _coerce_od_observations(
     )
 
 
-def _resolve_reference_index(num_obs: int, epoch: Literal["first", "middle", "last"]) -> int:
+def _resolve_reference_index(
+    num_obs: int, epoch: Literal["first", "middle", "last"]
+) -> int:
     if epoch == "first":
         return 0
     if epoch == "middle":
@@ -281,7 +285,9 @@ def _fit_attributable(
     default_rms_arcsec: float = DEFAULT_ASTROMETRIC_RMS_ARCSEC,
 ) -> _Attributable:
     if len(observations) < 3:
-        raise ValueError("At least 3 observations are required for attributable fitting.")
+        raise ValueError(
+            "At least 3 observations are required for attributable fitting."
+        )
 
     reference_index = _resolve_reference_index(len(observations), epoch)
     times_mjd = observations.coordinates.time.mjd().to_numpy(zero_copy_only=False)
@@ -293,7 +299,9 @@ def _fit_attributable(
         default_rms_arcsec=default_rms_arcsec,
     )
 
-    ra_rad = np.unwrap(np.radians(observations.coordinates.lon.to_numpy(zero_copy_only=False)))
+    ra_rad = np.unwrap(
+        np.radians(observations.coordinates.lon.to_numpy(zero_copy_only=False))
+    )
     dec_rad = np.radians(observations.coordinates.lat.to_numpy(zero_copy_only=False))
 
     effective_order = min(order, len(observations) - 1)
@@ -425,7 +433,9 @@ def _approximate_candidate_chi2(
     return float(chi2)
 
 
-def _set_members_solution_flags(orbit_members: FittedOrbitMembers) -> FittedOrbitMembers:
+def _set_members_solution_flags(
+    orbit_members: FittedOrbitMembers,
+) -> FittedOrbitMembers:
     if len(orbit_members) == 0:
         return orbit_members
 
@@ -446,7 +456,9 @@ def _merge_refined_candidates(
     refined_members_table = qv.concatenate(refined_members)
     replace_ids = refined_orbits_table.orbit_id
 
-    keep_seed_orbits = seed_orbits.apply_mask(pc.invert(pc.is_in(seed_orbits.orbit_id, replace_ids)))
+    keep_seed_orbits = seed_orbits.apply_mask(
+        pc.invert(pc.is_in(seed_orbits.orbit_id, replace_ids))
+    )
     keep_seed_members = seed_members.apply_mask(
         pc.invert(pc.is_in(seed_members.orbit_id, replace_ids))
     )
@@ -501,7 +513,9 @@ def systematic_ranging_short_arc(
     sigma_ra_deg, sigma_dec_deg = _extract_astrometric_sigmas_deg(od_obs)
 
     rho_values = np.geomspace(config.rho_min, config.rho_max, num=config.n_rho)
-    rho_dot_values = np.linspace(config.rho_dot_min, config.rho_dot_max, num=config.n_rho_dot)
+    rho_dot_values = np.linspace(
+        config.rho_dot_min, config.rho_dot_max, num=config.n_rho_dot
+    )
 
     num_grid = config.n_rho * config.n_rho_dot
     states = np.empty((num_grid, 6), dtype=np.float64)
@@ -549,15 +563,21 @@ def systematic_ranging_short_arc(
     refined_orbits: list[FittedOrbits] = []
     refined_members: list[FittedOrbitMembers] = []
     if refine_with_least_squares:
-        ranked = fitted_seed_orbits.sort_by([("reduced_chi2", "ascending"), ("chi2", "ascending")])
+        ranked = fitted_seed_orbits.sort_by(
+            [("reduced_chi2", "ascending"), ("chi2", "ascending")]
+        )
         n_refine = min(config.max_refine_candidates, len(ranked))
 
         for orbit_id in ranked.orbit_id[:n_refine]:
             orbit_id_str = orbit_id.as_py()
             seed_orbit = ranked.select("orbit_id", orbit_id_str).to_orbits()
-            seed_metric = ranked.select("orbit_id", orbit_id_str).reduced_chi2[0].as_py()
+            seed_metric = (
+                ranked.select("orbit_id", orbit_id_str).reduced_chi2[0].as_py()
+            )
             try:
-                refined_orbit, refined_member = fit_least_squares(seed_orbit, od_obs, prop)
+                refined_orbit, refined_member = fit_least_squares(
+                    seed_orbit, od_obs, prop
+                )
             except Exception:
                 continue
 
@@ -577,9 +597,13 @@ def systematic_ranging_short_arc(
     merged_orbits, merged_members = drop_duplicate_orbits(merged_orbits, merged_members)
     merged_members = _set_members_solution_flags(merged_members)
 
-    ranked_orbits = merged_orbits.sort_by([("reduced_chi2", "ascending"), ("chi2", "ascending")])
+    ranked_orbits = merged_orbits.sort_by(
+        [("reduced_chi2", "ascending"), ("chi2", "ascending")]
+    )
     top_orbits = ranked_orbits[:max_candidates]
-    top_members = merged_members.apply_mask(pc.is_in(merged_members.orbit_id, top_orbits.orbit_id))
+    top_members = merged_members.apply_mask(
+        pc.is_in(merged_members.orbit_id, top_orbits.orbit_id)
+    )
     top_members = _set_members_solution_flags(top_members)
     return top_orbits, top_members
 
@@ -598,7 +622,9 @@ def _gnomonic_forward(
 
     denom = sin_dec0 * sin_dec + cos_dec0 * cos_dec * np.cos(delta_ra)
     if np.any(np.abs(denom) < 1e-14):
-        raise ValueError("Projection singularity encountered in tangent-plane projection.")
+        raise ValueError(
+            "Projection singularity encountered in tangent-plane projection."
+        )
 
     xi = cos_dec * np.sin(delta_ra) / denom
     eta = (cos_dec0 * sin_dec - sin_dec0 * cos_dec * np.cos(delta_ra)) / denom
@@ -644,7 +670,9 @@ def propagate_sky_plane(
 
     od_obs = _coerce_od_observations(observations)
     if len(od_obs) < 3:
-        raise ValueError("At least 3 observations are required for sky-plane propagation.")
+        raise ValueError(
+            "At least 3 observations are required for sky-plane propagation."
+        )
     if len(target_times) == 0:
         return SkyPropagationResult(
             predictions=SkyPropagationPredictions.empty(),
