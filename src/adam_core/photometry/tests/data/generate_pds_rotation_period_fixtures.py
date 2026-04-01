@@ -53,6 +53,8 @@ class PDSRotationFixtureCase:
     tolerance_fraction: float
     source_title: str
     source_url: str
+    tier: str = "gold"
+    included_mdids: tuple[int, ...] | None = None
     frequency_grid_scale: float = 30.0
     max_frequency_cycles_per_day: float = 24.0
     min_rotations_in_span: float = 2.0
@@ -74,6 +76,8 @@ CASES: tuple[PDSRotationFixtureCase, ...] = (
         tolerance_fraction=0.01,
         source_title="LCDB v4.0 / 289 Nenetta",
         source_url=LCDB_SUMMARY_URL,
+        tier="gold",
+        included_mdids=(2808, 2809, 2810, 2811, 2812, 2813),
     ),
     PDSRotationFixtureCase(
         object_number=1011,
@@ -87,9 +91,119 @@ CASES: tuple[PDSRotationFixtureCase, ...] = (
             "https://sbnarchive.psi.edu/pds4/non_mission/"
             "gbo.ast.alcdef-database_V1_0/data/1000/alcdef_lcdata-1000-1999.csv"
         ),
-        tolerance_fraction=0.08,
+        tolerance_fraction=0.01,
         source_title="LCDB v4.0 / 1011 Laodamia",
         source_url=LCDB_SUMMARY_URL,
+        tier="gold",
+        included_mdids=(9027, 9028, 9029),
+    ),
+    PDSRotationFixtureCase(
+        object_number=886,
+        object_name="Washingtonia",
+        lcdb_name="Washingtonia",
+        metadata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/800/alcdef_metadata-800-899.csv"
+        ),
+        lcdata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/800/alcdef_lcdata-800-899.csv"
+        ),
+        tolerance_fraction=0.01,
+        source_title="LCDB v4.0 / 886 Washingtonia",
+        source_url=LCDB_SUMMARY_URL,
+        tier="gold",
+        included_mdids=(8177, 8178, 8179),
+    ),
+    PDSRotationFixtureCase(
+        object_number=1282,
+        object_name="Utopia",
+        lcdb_name="Utopia",
+        metadata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/1000/alcdef_metadata-1000-1999.csv"
+        ),
+        lcdata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/1000/alcdef_lcdata-1000-1999.csv"
+        ),
+        tolerance_fraction=0.01,
+        source_title="LCDB v4.0 / 1282 Utopia",
+        source_url=LCDB_SUMMARY_URL,
+        tier="gold",
+        included_mdids=(11414, 11415, 11416, 11417),
+    ),
+    PDSRotationFixtureCase(
+        object_number=1323,
+        object_name="Tugela",
+        lcdb_name="Tugela",
+        metadata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/1000/alcdef_metadata-1000-1999.csv"
+        ),
+        lcdata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/1000/alcdef_lcdata-1000-1999.csv"
+        ),
+        tolerance_fraction=0.02,
+        source_title="LCDB v4.0 / 1323 Tugela",
+        source_url=LCDB_SUMMARY_URL,
+        tier="gold",
+        included_mdids=(11675, 11676, 11677, 11678),
+    ),
+    PDSRotationFixtureCase(
+        object_number=1627,
+        object_name="Ivar",
+        lcdb_name="Ivar",
+        metadata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/1000/alcdef_metadata-1000-1999.csv"
+        ),
+        lcdata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/1000/alcdef_lcdata-1000-1999.csv"
+        ),
+        tolerance_fraction=0.01,
+        source_title="LCDB v4.0 / 1627 Ivar",
+        source_url=LCDB_SUMMARY_URL,
+        tier="gold",
+        included_mdids=(13838, 13839, 13840, 13841, 13842, 13843),
+    ),
+    PDSRotationFixtureCase(
+        object_number=511,
+        object_name="Davida",
+        lcdb_name="Davida",
+        metadata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/500/alcdef_metadata-500-599.csv"
+        ),
+        lcdata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/500/alcdef_lcdata-500-599.csv"
+        ),
+        tolerance_fraction=0.05,
+        source_title="LCDB v4.0 / 511 Davida",
+        source_url=LCDB_SUMMARY_URL,
+        tier="challenge",
+        included_mdids=(5065, 5066, 5067),
+    ),
+    PDSRotationFixtureCase(
+        object_number=702,
+        object_name="Alauda",
+        lcdb_name="Alauda",
+        metadata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/700/alcdef_metadata-700-799.csv"
+        ),
+        lcdata_url=(
+            "https://sbnarchive.psi.edu/pds4/non_mission/"
+            "gbo.ast.alcdef-database_V1_0/data/700/alcdef_lcdata-700-799.csv"
+        ),
+        tolerance_fraction=0.1,
+        source_title="LCDB v4.0 / 702 Alauda",
+        source_url=LCDB_SUMMARY_URL,
+        tier="challenge",
+        included_mdids=(6666, 6667, 6668, 6669, 6670, 6671, 6672, 6673),
     ),
 )
 
@@ -256,9 +370,6 @@ def _save_fixture(
     metadata_rows: list[dict[str, str]],
     lcdata_rows: list[dict[str, str]],
 ) -> None:
-    if out_path.exists():
-        raise RuntimeError(f"Fixture already exists: {out_path}")
-
     session_rows: dict[int, dict[str, str]] = {
         sid: row
         for sid, row in (
@@ -436,6 +547,7 @@ def _save_fixture(
         object_number=np.array([case.object_number], dtype=np.int64),
         object_name=np.array([case.object_name], dtype=object),
         lcdb_name=np.array([case.lcdb_name], dtype=object),
+        tier=np.array([case.tier], dtype=object),
         lcdb_period_hours=np.array([lcdb_period_hours], dtype=np.float64),
         lcdb_u=np.array([lcdb_u], dtype=np.int64),
         expected_period_hours=np.array([lcdb_period_hours], dtype=np.float64),
@@ -486,12 +598,33 @@ def _build_fixture(
     ]
     if not metadata_rows:
         raise RuntimeError(f"No ALCDEF metadata rows found for object {case.object_number}")
+    if case.included_mdids is not None:
+        included_mdids = set(case.included_mdids)
+        metadata_rows = [
+            row for row in metadata_rows if _parse_int(row.get("ID")) in included_mdids
+        ]
+        missing_mdids = sorted(included_mdids - {_parse_int(row.get("ID")) for row in metadata_rows})
+        if missing_mdids:
+            raise RuntimeError(
+                f"Metadata rows missing for object {case.object_number}: {missing_mdids}"
+            )
 
     lcdata_rows = [
         row for row in _csv_records(case.lcdata_url, "ObjectNumber,") if _parse_int(row.get("ObjectNumber")) == case.object_number
     ]
     if not lcdata_rows:
         raise RuntimeError(f"No ALCDEF lcdata rows found for object {case.object_number}")
+    if case.included_mdids is not None:
+        included_mdids = set(case.included_mdids)
+        lcdata_rows = [
+            row for row in lcdata_rows if _parse_int(row.get("MDID")) in included_mdids
+        ]
+        found_mdids = {_parse_int(row.get("MDID")) for row in lcdata_rows}
+        missing_mdids = sorted(included_mdids - found_mdids)
+        if missing_mdids:
+            raise RuntimeError(
+                f"Lcdata rows missing for object {case.object_number}: {missing_mdids}"
+            )
 
     out_path = out_dir / f"rotation_period_pds_fixture_{case.object_number}_{case.object_name}.npz"
     if out_path.exists() and not overwrite:

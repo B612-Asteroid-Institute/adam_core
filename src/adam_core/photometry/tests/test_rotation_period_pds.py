@@ -30,6 +30,19 @@ def _scalar(value) -> object:
     return arr.reshape(-1)[0].item()
 
 
+def test_rotation_period_pds_fixture_inventory() -> None:
+    assert "__NO_FIXTURES__" not in PDS_FIXTURES, "No PDS rotation-period fixtures found on disk."
+
+    tiers: list[str] = []
+    for fixture_name in PDS_FIXTURES:
+        fx = np.load(DATA_DIR / fixture_name, allow_pickle=True)
+        tiers.append(str(fx["tier"][0]))
+
+    assert len(PDS_FIXTURES) >= 8
+    assert tiers.count("gold") >= 6
+    assert tiers.count("challenge") >= 2
+
+
 @pytest.mark.parametrize("fixture_name", PDS_FIXTURES)
 def test_rotation_period_from_pds_fixture(
     fixture_name: str,
