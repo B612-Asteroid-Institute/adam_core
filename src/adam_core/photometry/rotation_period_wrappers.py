@@ -11,6 +11,7 @@ from ..coordinates.origin import OriginCodes
 from ..coordinates.transform import transform_coordinates
 from ..observations.detections import PointSourceDetections
 from ..observations.exposures import Exposures
+from ..observers.utils import calculate_observing_night
 from ..photometry.magnitude import calculate_phase_angle
 from ..photometry.rotation_period_types import (
     GroupedRotationPeriodResults,
@@ -66,7 +67,19 @@ def _extract_result_row(result: RotationPeriodResult) -> dict[str, object]:
         "n_fit_observations": result.n_fit_observations[0].as_py(),
         "n_clipped": result.n_clipped[0].as_py(),
         "n_filters": result.n_filters[0].as_py(),
+        "n_sessions": result.n_sessions[0].as_py(),
+        "used_session_offsets": result.used_session_offsets[0].as_py(),
         "is_period_doubled": result.is_period_doubled[0].as_py(),
+        "is_ambiguous": result.is_ambiguous[0].as_py(),
+        "confidence_label": result.confidence_label[0].as_py(),
+        "ambiguity_reason": result.ambiguity_reason[0].as_py(),
+        "n_harmonic_near_ties": result.n_harmonic_near_ties[0].as_py(),
+        "used_grid_fallback": result.used_grid_fallback[0].as_py(),
+        "harmonic_sigma_tolerance_mag": result.harmonic_sigma_tolerance_mag[0].as_py(),
+        "lsm_period_days": result.lsm_period_days[0].as_py(),
+        "lsm_period_hours": result.lsm_period_hours[0].as_py(),
+        "lsm_frequency_cycles_per_day": result.lsm_frequency_cycles_per_day[0].as_py(),
+        "lsm_harmonic_agreement": result.lsm_harmonic_agreement[0].as_py(),
     }
 
 
@@ -121,6 +134,20 @@ def build_rotation_period_observations_from_detections(
     if np.any(~np.isfinite(phase_angle_deg)):
         raise ValueError("invalid phase angle(s) for rotation-period analysis")
 
+    observing_night = calculate_observing_night(
+        exposures_aligned.observatory_code,
+        exposures_aligned.start_time.rescale("utc"),
+    )
+    observatory_code = np.asarray(
+        exposures_aligned.observatory_code.to_numpy(zero_copy_only=False),
+        dtype=object,
+    )
+    observing_night_np = np.asarray(observing_night.to_numpy(zero_copy_only=False), dtype=np.int64)
+    session_id = pa.array(
+        [f"{str(code)}:{int(night)}" for code, night in zip(observatory_code.tolist(), observing_night_np.tolist())],
+        type=pa.large_string(),
+    )
+
     return RotationPeriodObservations.from_kwargs(
         time=time,
         mag=pa.array(mag, type=pa.float64()),
@@ -130,7 +157,7 @@ def build_rotation_period_observations_from_detections(
             type=pa.float64(),
         ),
         filter=exposures_aligned.filter,
-        session_id=pa.nulls(n_det, type=pa.large_string()),
+        session_id=session_id,
         r_au=pa.array(r_au, type=pa.float64()),
         delta_au=pa.array(delta_au, type=pa.float64()),
         phase_angle_deg=pa.array(phase_angle_deg, type=pa.float64()),
@@ -141,6 +168,9 @@ def estimate_rotation_period_from_detections(
     detections: PointSourceDetections,
     exposures: Exposures,
     object_coords: CartesianCoordinates,
+    *,
+    max_processes: int | None = None,
+    parallel_chunk_size: int | None = None,
     **search_kwargs,
 ) -> RotationPeriodResult:
     observations = build_rotation_period_observations_from_detections(
@@ -152,7 +182,12 @@ def estimate_rotation_period_from_detections(
         estimate_rotation_period as _estimate_rotation_period,
     )
 
-    return _estimate_rotation_period(observations, **search_kwargs)
+    return _estimate_rotation_period(
+        observations,
+        max_processes=max_processes,
+        parallel_chunk_size=parallel_chunk_size,
+        **search_kwargs,
+    )
 
 
 def estimate_rotation_period_from_detections_grouped(
@@ -160,6 +195,9 @@ def estimate_rotation_period_from_detections_grouped(
     exposures: Exposures,
     object_coords: CartesianCoordinates,
     object_ids: pa.Array | pa.ChunkedArray | Sequence[str | None],
+    *,
+    max_processes: int | None = None,
+    parallel_chunk_size: int | None = None,
     **search_kwargs,
 ) -> GroupedRotationPeriodResults:
     n_det = len(detections)
@@ -209,7 +247,19 @@ def estimate_rotation_period_from_detections_grouped(
     out_n_fit_observations: list[int] = []
     out_n_clipped: list[int] = []
     out_n_filters: list[int] = []
+    out_n_sessions: list[int] = []
+    out_used_session_offsets: list[bool] = []
     out_is_period_doubled: list[bool] = []
+    out_is_ambiguous: list[bool] = []
+    out_confidence_label: list[str] = []
+    out_ambiguity_reason: list[str | None] = []
+    out_n_harmonic_near_ties: list[int] = []
+    out_used_grid_fallback: list[bool] = []
+    out_harmonic_sigma_tolerance_mag: list[float] = []
+    out_lsm_period_days: list[float | None] = []
+    out_lsm_period_hours: list[float | None] = []
+    out_lsm_frequency_cycles_per_day: list[float | None] = []
+    out_lsm_harmonic_agreement: list[bool | None] = []
 
     i0 = 0
     n = int(ids_sorted.size)
@@ -233,7 +283,12 @@ def estimate_rotation_period_from_detections_grouped(
                 estimate_rotation_period as _estimate_rotation_period,
             )
 
-            result_i = _estimate_rotation_period(observations_i, **search_kwargs)
+            result_i = _estimate_rotation_period(
+                observations_i,
+                max_processes=max_processes,
+                parallel_chunk_size=parallel_chunk_size,
+                **search_kwargs,
+            )
             row = _extract_result_row(result_i)
         except Exception:
             i0 = i1
@@ -251,7 +306,33 @@ def estimate_rotation_period_from_detections_grouped(
         out_n_fit_observations.append(int(row["n_fit_observations"]))
         out_n_clipped.append(int(row["n_clipped"]))
         out_n_filters.append(int(row["n_filters"]))
+        out_n_sessions.append(int(row["n_sessions"]))
+        out_used_session_offsets.append(bool(row["used_session_offsets"]))
         out_is_period_doubled.append(bool(row["is_period_doubled"]))
+        out_is_ambiguous.append(bool(row["is_ambiguous"]))
+        out_confidence_label.append(str(row["confidence_label"]))
+        out_ambiguity_reason.append(
+            None if row["ambiguity_reason"] is None else str(row["ambiguity_reason"])
+        )
+        out_n_harmonic_near_ties.append(int(row["n_harmonic_near_ties"]))
+        out_used_grid_fallback.append(bool(row["used_grid_fallback"]))
+        out_harmonic_sigma_tolerance_mag.append(float(row["harmonic_sigma_tolerance_mag"]))
+        out_lsm_period_days.append(
+            None if row["lsm_period_days"] is None else float(row["lsm_period_days"])
+        )
+        out_lsm_period_hours.append(
+            None if row["lsm_period_hours"] is None else float(row["lsm_period_hours"])
+        )
+        out_lsm_frequency_cycles_per_day.append(
+            None
+            if row["lsm_frequency_cycles_per_day"] is None
+            else float(row["lsm_frequency_cycles_per_day"])
+        )
+        out_lsm_harmonic_agreement.append(
+            None
+            if row["lsm_harmonic_agreement"] is None
+            else bool(row["lsm_harmonic_agreement"])
+        )
 
         i0 = i1
 
@@ -267,6 +348,18 @@ def estimate_rotation_period_from_detections_grouped(
         n_fit_observations=out_n_fit_observations,
         n_clipped=out_n_clipped,
         n_filters=out_n_filters,
+        n_sessions=out_n_sessions,
+        used_session_offsets=out_used_session_offsets,
         is_period_doubled=out_is_period_doubled,
+        is_ambiguous=out_is_ambiguous,
+        confidence_label=out_confidence_label,
+        ambiguity_reason=out_ambiguity_reason,
+        n_harmonic_near_ties=out_n_harmonic_near_ties,
+        used_grid_fallback=out_used_grid_fallback,
+        harmonic_sigma_tolerance_mag=out_harmonic_sigma_tolerance_mag,
+        lsm_period_days=out_lsm_period_days,
+        lsm_period_hours=out_lsm_period_hours,
+        lsm_frequency_cycles_per_day=out_lsm_frequency_cycles_per_day,
+        lsm_harmonic_agreement=out_lsm_harmonic_agreement,
     )
     return GroupedRotationPeriodResults.from_kwargs(object_id=out_object_id, result=result)

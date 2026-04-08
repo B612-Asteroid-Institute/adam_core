@@ -5,6 +5,7 @@ import pyarrow as pa
 import pytest
 
 import adam_core.photometry as photometry
+import adam_core.photometry.rotation_period_fourier as rotation_period_fourier
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...observations.detections import PointSourceDetections
@@ -297,7 +298,7 @@ def _make_detection_bundle(
         start_time=times,
         duration=np.zeros(total, dtype=np.float64),
         filter=det_filters,
-        observatory_code=["500"] * total,
+        observatory_code=["X05"] * total,
         seeing=[None] * total,
         depth_5sigma=[None] * total,
     )
@@ -337,6 +338,118 @@ def test_estimate_rotation_period_recovers_single_filter_period():
     assert int(_scalar(result.n_fit_observations[0])) >= len(observations) - 2
 
 
+@pytest.mark.parametrize("search_strategy", ["grid", "surrogate_refine", "coarse_to_fine"])
+def test_estimate_rotation_period_search_strategies_match_short_period(search_strategy: str):
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(period_days=3.25, filters=["LSST_r"] * 48)
+
+    result = estimate_rotation_period(
+        observations,
+        search_strategy=search_strategy,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert isinstance(result, RotationPeriodResult)
+    assert len(result) == 1
+    assert float(_scalar(result.period_days[0])) == pytest.approx(3.25, rel=0.03)
+    assert int(_scalar(result.fourier_order[0])) == 2
+
+
+def test_estimate_rotation_period_parallel_surrogate_matches_serial():
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(period_days=3.25, filters=["LSST_r"] * 48)
+
+    serial = estimate_rotation_period(
+        observations,
+        search_strategy="surrogate_refine",
+        max_processes=None,
+        **FAST_SEARCH_KWARGS,
+    )
+    parallel = estimate_rotation_period(
+        observations,
+        search_strategy="surrogate_refine",
+        max_processes=2,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert float(_scalar(parallel.period_days[0])) == pytest.approx(
+        float(_scalar(serial.period_days[0])),
+        rel=1.0e-9,
+    )
+    assert int(_scalar(parallel.fourier_order[0])) == int(_scalar(serial.fourier_order[0]))
+    assert bool(_scalar(parallel.used_session_offsets[0])) is bool(
+        _scalar(serial.used_session_offsets[0])
+    )
+
+
+def test_estimate_rotation_period_jax_backend_matches_numpy():
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(period_days=3.25, filters=["LSST_r"] * 48)
+
+    numpy_result = estimate_rotation_period(
+        observations,
+        search_strategy="surrogate_refine",
+        exact_evaluation_backend="numpy",
+        session_mode="ignore",
+        **FAST_SEARCH_KWARGS,
+    )
+    jax_result = estimate_rotation_period(
+        observations,
+        search_strategy="surrogate_refine",
+        exact_evaluation_backend="jax",
+        session_mode="ignore",
+        jax_frequency_batch_size=64,
+        jax_row_pad_multiple=32,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert float(_scalar(jax_result.period_days[0])) == pytest.approx(
+        float(_scalar(numpy_result.period_days[0])),
+        rel=1.0e-9,
+    )
+    assert int(_scalar(jax_result.fourier_order[0])) == int(_scalar(numpy_result.fourier_order[0]))
+    assert float(_scalar(jax_result.residual_sigma_mag[0])) == pytest.approx(
+        float(_scalar(numpy_result.residual_sigma_mag[0])),
+        rel=1.0e-8,
+    )
+
+
+def test_estimate_rotation_period_jax_backend_parallel_matches_serial():
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(period_days=3.25, filters=["LSST_r"] * 48)
+
+    serial = estimate_rotation_period(
+        observations,
+        search_strategy="surrogate_refine",
+        exact_evaluation_backend="jax",
+        session_mode="ignore",
+        max_processes=None,
+        jax_frequency_batch_size=64,
+        jax_row_pad_multiple=32,
+        **FAST_SEARCH_KWARGS,
+    )
+    parallel = estimate_rotation_period(
+        observations,
+        search_strategy="surrogate_refine",
+        exact_evaluation_backend="jax",
+        session_mode="ignore",
+        max_processes=2,
+        jax_frequency_batch_size=64,
+        jax_row_pad_multiple=32,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert float(_scalar(parallel.period_days[0])) == pytest.approx(
+        float(_scalar(serial.period_days[0])),
+        rel=1.0e-9,
+    )
+    assert int(_scalar(parallel.fourier_order[0])) == int(_scalar(serial.fourier_order[0]))
+    assert float(_scalar(parallel.residual_sigma_mag[0])) == pytest.approx(
+        float(_scalar(serial.residual_sigma_mag[0])),
+        rel=1.0e-8,
+    )
+
+
 def test_estimate_rotation_period_handles_multifilter_offsets():
     estimate_rotation_period = _api("estimate_rotation_period")
     filters = ["LSST_r", "LSST_i"] * 24
@@ -364,12 +477,62 @@ def test_estimate_rotation_period_handles_session_offsets():
         session_offsets={"s2": 0.18, "s3": -0.12},
     )
 
-    result = estimate_rotation_period(observations, **FAST_SEARCH_KWARGS)
+    result = estimate_rotation_period(
+        observations,
+        session_mode="use",
+        **FAST_SEARCH_KWARGS,
+    )
 
     assert isinstance(result, RotationPeriodResult)
     assert len(result) == 1
     assert float(_scalar(result.period_days[0])) == pytest.approx(2.7, rel=0.03)
     assert int(_scalar(result.n_filters[0])) == 1
+    assert int(_scalar(result.n_sessions[0])) == 3
+    assert bool(_scalar(result.used_session_offsets[0])) is True
+
+
+def test_estimate_rotation_period_auto_uses_dense_sessions_for_short_period():
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=0.25,
+        filters=["LSST_r"] * 48,
+        session_ids=(["s1"] * 8) + (["s2"] * 8) + (["s3"] * 8) + (["s4"] * 8) + (["s5"] * 8) + (["s6"] * 8),
+        session_offsets={"s2": 0.35, "s4": -0.28, "s6": 0.22},
+        noise_sigma=0.005,
+    )
+    baseline = estimate_rotation_period(
+        observations,
+        max_frequency_cycles_per_day=8.0,
+        frequency_grid_scale=40.0,
+        session_mode="ignore",
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        max_frequency_cycles_per_day=8.0,
+        frequency_grid_scale=40.0,
+        session_mode="auto",
+        auto_session_bic_improvement=0.0,
+    )
+
+    assert bool(_scalar(result.used_session_offsets[0])) is True
+    assert float(_scalar(result.residual_sigma_mag[0])) < float(_scalar(baseline.residual_sigma_mag[0]))
+
+
+def test_estimate_rotation_period_auto_ignores_sparse_sessions_for_long_period():
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=4.2,
+        filters=["LSST_r"] * 48,
+        session_ids=sum(([f"s{i}"] * 4 for i in range(12)), start=[]),
+        session_offsets={f"s{i}": (0.08 if i % 2 == 0 else -0.06) for i in range(12)},
+        noise_sigma=0.005,
+    )
+
+    result = estimate_rotation_period(observations, **FAST_SEARCH_KWARGS)
+
+    assert float(_scalar(result.period_days[0])) == pytest.approx(4.2, rel=0.04)
+    assert bool(_scalar(result.used_session_offsets[0])) is False
 
 
 def test_estimate_rotation_period_doubles_single_peaked_alias():
@@ -427,15 +590,228 @@ def test_estimate_rotation_period_prefers_minimum_sufficient_order():
     assert float(_scalar(result.period_days[0])) == pytest.approx(5.0, rel=0.03)
 
 
+def test_estimate_rotation_period_default_orders_cap_at_four():
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=3.8,
+        filters=["LSST_r"] * 64,
+        amplitude=0.35,
+        noise_sigma=0.01,
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        max_frequency_cycles_per_day=1.0,
+        frequency_grid_scale=60.0,
+    )
+
+    assert int(_scalar(result.fourier_order[0])) <= 4
+
+
+def test_estimate_rotation_period_sets_high_confidence_without_ambiguity():
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=3.4,
+        filters=["LSST_r"] * 48,
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        enable_harmonic_adjudication=False,
+        enable_lsm_crosscheck=False,
+        enable_global_near_tie_check=False,
+        enable_window_alias_check=False,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert bool(_scalar(result.is_ambiguous[0])) is False
+    assert str(_scalar(result.confidence_label[0])) == "high"
+    assert _scalar(result.ambiguity_reason[0]) is None
+
+
+def test_estimate_rotation_period_marks_ambiguous_when_lsm_disagrees(monkeypatch):
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=3.25,
+        filters=["LSST_r"] * 48,
+    )
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._estimate_lsm_frequency",
+        lambda **kwargs: 0.5,
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        enable_harmonic_adjudication=False,
+        enable_lsm_crosscheck=True,
+        harmonic_grid_fallback_on_near_tie=False,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert bool(_scalar(result.is_ambiguous[0])) is True
+    assert str(_scalar(result.confidence_label[0])) == "ambiguous"
+    assert "lsm_disagreement" in str(_scalar(result.ambiguity_reason[0]))
+    assert bool(_scalar(result.lsm_harmonic_agreement[0])) is False
+
+
+def test_estimate_rotation_period_marks_harmonic_ambiguous_for_harmonic_near_tie(monkeypatch):
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=3.25,
+        filters=["LSST_r"] * 48,
+    )
+
+    def fake_adjudication(*, chosen_fit, **kwargs):  # noqa: ARG001
+        return rotation_period_fourier._HarmonicAdjudication(
+            selected=rotation_period_fourier._fit_with_period(chosen_fit),
+            near_tie_candidates=2,
+            had_near_tie=True,
+        )
+
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._adjudicate_harmonic_aliases",
+        fake_adjudication,
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        enable_harmonic_adjudication=True,
+        harmonic_grid_fallback_on_near_tie=False,
+        enable_lsm_crosscheck=False,
+        enable_global_near_tie_check=False,
+        enable_window_alias_check=False,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert bool(_scalar(result.is_ambiguous[0])) is True
+    assert str(_scalar(result.confidence_label[0])) == "harmonic_ambiguous"
+    assert "harmonic_near_tie" in str(_scalar(result.ambiguity_reason[0]))
+    assert int(_scalar(result.n_harmonic_near_ties[0])) == 2
+
+
+def test_estimate_rotation_period_marks_ambiguous_for_global_near_tie(monkeypatch):
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=3.25,
+        filters=["LSST_r"] * 48,
+    )
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._count_nonharmonic_near_ties",
+        lambda **kwargs: 1,
+    )
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._count_window_alias_near_ties",
+        lambda **kwargs: 0,
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        enable_harmonic_adjudication=False,
+        enable_lsm_crosscheck=False,
+        enable_global_near_tie_check=True,
+        enable_window_alias_check=False,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert bool(_scalar(result.is_ambiguous[0])) is True
+    assert str(_scalar(result.confidence_label[0])) == "ambiguous"
+    assert "global_near_tie" in str(_scalar(result.ambiguity_reason[0]))
+
+
+def test_estimate_rotation_period_marks_ambiguous_for_window_alias_near_tie(monkeypatch):
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=3.25,
+        filters=["LSST_r"] * 48,
+    )
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._count_nonharmonic_near_ties",
+        lambda **kwargs: 0,
+    )
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._count_window_alias_near_ties",
+        lambda **kwargs: 1,
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        enable_harmonic_adjudication=False,
+        enable_lsm_crosscheck=False,
+        enable_global_near_tie_check=False,
+        enable_window_alias_check=True,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert bool(_scalar(result.is_ambiguous[0])) is True
+    assert str(_scalar(result.confidence_label[0])) == "ambiguous"
+    assert "window_alias_near_tie" in str(_scalar(result.ambiguity_reason[0]))
+
+
+def test_estimate_rotation_period_uses_grid_fallback_for_harmonic_near_tie(monkeypatch):
+    estimate_rotation_period = _api("estimate_rotation_period")
+    observations = _make_rotation_observations(
+        period_days=3.25,
+        filters=["LSST_r"] * 48,
+    )
+
+    adjudication_calls = {"count": 0}
+    grid_calls = {"count": 0}
+    original_targeted_grid = rotation_period_fourier._run_period_search_targeted_grid
+
+    def fake_adjudication(*, chosen_fit, **kwargs):  # noqa: ARG001
+        adjudication_calls["count"] += 1
+        selected = rotation_period_fourier._fit_with_period(chosen_fit)
+        had_near_tie = adjudication_calls["count"] == 1
+        return rotation_period_fourier._HarmonicAdjudication(
+            selected=selected,
+            near_tie_candidates=1 if had_near_tie else 0,
+            had_near_tie=had_near_tie,
+        )
+
+    def fake_targeted_grid(**kwargs):
+        grid_calls["count"] += 1
+        return original_targeted_grid(**kwargs)
+
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._adjudicate_harmonic_aliases",
+        fake_adjudication,
+    )
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier._run_period_search_targeted_grid",
+        fake_targeted_grid,
+    )
+
+    result = estimate_rotation_period(
+        observations,
+        search_strategy="surrogate_refine",
+        enable_lsm_crosscheck=False,
+        harmonic_grid_fallback_on_near_tie=True,
+        enable_global_near_tie_check=False,
+        enable_window_alias_check=False,
+        max_frequency_cycles_per_day=30.0,
+        frequency_grid_scale=20.0,
+    )
+
+    assert grid_calls["count"] == 1
+    assert adjudication_calls["count"] >= 2
+    assert bool(_scalar(result.used_grid_fallback[0])) is True
+
+
 def test_build_rotation_period_observations_from_detections(monkeypatch):
     build = _api("build_rotation_period_observations_from_detections")
-    times = _make_times(24, span_days=8.0)
     detections, exposures, object_coords, observer = _make_detection_bundle(
         object_ids=["A"],
         periods_by_object={"A": 3.0},
         filters=["LSST_r", "LSST_i", "LSST_r", "LSST_i"] * 6,
     )
     _patch_exposure_observers(monkeypatch, observer)
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_wrappers.calculate_observing_night",
+        lambda codes, times: pa.array(
+            [61000 + (idx // 4) for idx in range(len(times))],
+            type=pa.int64(),
+        ),
+    )
 
     observations = build(detections, exposures, object_coords)
 
@@ -444,6 +820,16 @@ def test_build_rotation_period_observations_from_detections(monkeypatch):
     assert np.all(np.isfinite(np.asarray(observations.r_au, dtype=np.float64)))
     assert np.all(np.isfinite(np.asarray(observations.delta_au, dtype=np.float64)))
     assert np.all(np.isfinite(np.asarray(observations.phase_angle_deg, dtype=np.float64)))
+    assert observations.session_id.to_pylist()[:8] == [
+        "X05:61000",
+        "X05:61000",
+        "X05:61000",
+        "X05:61000",
+        "X05:61001",
+        "X05:61001",
+        "X05:61001",
+        "X05:61001",
+    ]
 
 
 def test_estimate_rotation_period_from_detections(monkeypatch):
@@ -465,6 +851,69 @@ def test_estimate_rotation_period_from_detections(monkeypatch):
     assert isinstance(result, RotationPeriodResult)
     assert len(result) == 1
     assert float(_scalar(result.period_days[0])) == pytest.approx(3.4, rel=0.04)
+
+
+def test_estimate_rotation_period_from_detections_forwards_parallel_kwargs(monkeypatch):
+    estimate_from_detections = _api("estimate_rotation_period_from_detections")
+    detections, exposures, object_coords, observer = _make_detection_bundle(
+        object_ids=["A"],
+        periods_by_object={"A": 3.4},
+        filters=["LSST_r"] * 8,
+    )
+    _patch_exposure_observers(monkeypatch, observer)
+
+    seen: dict[str, object] = {}
+
+    def fake_estimate(observations, **kwargs):
+        seen["n_observations"] = len(observations)
+        seen["kwargs"] = kwargs
+        return RotationPeriodResult.from_kwargs(
+            period_days=[3.4],
+            period_hours=[81.6],
+            frequency_cycles_per_day=[1.0 / 3.4],
+            fourier_order=[2],
+            phase_c1=[0.0],
+            phase_c2=[0.0],
+            residual_sigma_mag=[0.1],
+            n_observations=[len(observations)],
+            n_fit_observations=[len(observations)],
+            n_clipped=[0],
+            n_filters=[1],
+            n_sessions=[1],
+            used_session_offsets=[False],
+            is_period_doubled=[False],
+            is_ambiguous=[False],
+            confidence_label=["high"],
+            ambiguity_reason=[None],
+            n_harmonic_near_ties=[0],
+            used_grid_fallback=[False],
+            harmonic_sigma_tolerance_mag=[0.02],
+            lsm_period_days=[3.4],
+            lsm_period_hours=[81.6],
+            lsm_frequency_cycles_per_day=[1.0 / 3.4],
+            lsm_harmonic_agreement=[True],
+        )
+
+    monkeypatch.setattr(
+        "adam_core.photometry.rotation_period_fourier.estimate_rotation_period",
+        fake_estimate,
+    )
+
+    result = estimate_from_detections(
+        detections,
+        exposures,
+        object_coords,
+        max_processes=3,
+        parallel_chunk_size=128,
+        **FAST_SEARCH_KWARGS,
+    )
+
+    assert isinstance(result, RotationPeriodResult)
+    assert seen["n_observations"] == len(detections)
+    assert seen["kwargs"]["max_processes"] == 3
+    assert seen["kwargs"]["parallel_chunk_size"] == 128
+    assert seen["kwargs"]["max_frequency_cycles_per_day"] == FAST_SEARCH_KWARGS["max_frequency_cycles_per_day"]
+    assert seen["kwargs"]["frequency_grid_scale"] == FAST_SEARCH_KWARGS["frequency_grid_scale"]
 
 
 def test_estimate_rotation_period_grouped_from_detections(monkeypatch):
@@ -529,6 +978,41 @@ def test_rotation_period_invalid_inputs_raise(monkeypatch):
     too_few = _make_rotation_observations(n=3, period_days=2.4, filters=["LSST_r"] * 3)
     with pytest.raises(ValueError):
         estimate_rotation_period(too_few, **FAST_SEARCH_KWARGS)
+
+    with pytest.raises(ValueError):
+        estimate_rotation_period(
+            _make_rotation_observations(period_days=2.4, filters=["LSST_r"] * 12),
+            session_mode="nope",
+            **FAST_SEARCH_KWARGS,
+        )
+
+    with pytest.raises(ValueError):
+        estimate_rotation_period(
+            _make_rotation_observations(period_days=2.4, filters=["LSST_r"] * 12),
+            search_strategy="teleport",
+            **FAST_SEARCH_KWARGS,
+        )
+
+    with pytest.raises(ValueError):
+        estimate_rotation_period(
+            _make_rotation_observations(period_days=2.4, filters=["LSST_r"] * 12),
+            exact_evaluation_backend="cuda_magic",
+            **FAST_SEARCH_KWARGS,
+        )
+
+    with pytest.raises(ValueError):
+        estimate_rotation_period(
+            _make_rotation_observations(period_days=2.4, filters=["LSST_r"] * 12),
+            max_processes=0,
+            **FAST_SEARCH_KWARGS,
+        )
+
+    with pytest.raises(ValueError):
+        estimate_rotation_period(
+            _make_rotation_observations(period_days=2.4, filters=["LSST_r"] * 12),
+            parallel_chunk_size=0,
+            **FAST_SEARCH_KWARGS,
+        )
 
 
 def test_rotation_period_uses_unit_weights_when_sigma_is_invalid():

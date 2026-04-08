@@ -26,7 +26,19 @@ class RotationPeriodResult(qv.Table):
     n_fit_observations = qv.Int64Column()
     n_clipped = qv.Int64Column()
     n_filters = qv.Int64Column()
+    n_sessions = qv.Int64Column()
+    used_session_offsets = qv.BooleanColumn()
     is_period_doubled = qv.BooleanColumn()
+    is_ambiguous = qv.BooleanColumn()
+    confidence_label = qv.LargeStringColumn()
+    ambiguity_reason = qv.LargeStringColumn(nullable=True)
+    n_harmonic_near_ties = qv.Int64Column()
+    used_grid_fallback = qv.BooleanColumn()
+    harmonic_sigma_tolerance_mag = qv.Float64Column()
+    lsm_period_days = qv.Float64Column(nullable=True)
+    lsm_period_hours = qv.Float64Column(nullable=True)
+    lsm_frequency_cycles_per_day = qv.Float64Column(nullable=True)
+    lsm_harmonic_agreement = qv.BooleanColumn(nullable=True)
 
 
 class GroupedRotationPeriodResults(qv.Table):
