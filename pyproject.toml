@@ -63,6 +63,18 @@ plots = [
 oem = [
     "oem>=0.4.5",
 ]
+docs = [
+    "sphinx>=8.2.0,<9.0.0",
+    "furo>=2024.8.6",
+    "myst-nb>=1.3.0",
+    "nbformat>=5.10.4",
+    "matplotlib>=3.10.1",
+    "plotly>=5.24.1",
+    "geopandas>=1.0.1",
+    "oem>=0.4.5",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-sitemap>=2.8.0",
+]
 
 [build-system]
 requires = ["pdm-backend"]
@@ -96,6 +108,18 @@ test = [
     "plotly>=5.24.1",
     "nbformat>=4.2.0",
     "oem>=0.4.5",
+]
+docs = [
+    "sphinx>=8.2.0,<9.0.0",
+    "furo>=2024.8.6",
+    "myst-nb>=1.3.0",
+    "nbformat>=5.10.4",
+    "matplotlib>=3.10.1",
+    "plotly>=5.24.1",
+    "geopandas>=1.0.1",
+    "oem>=0.4.5",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-sitemap>=2.8.0",
 ]
 
 [tool.black]
@@ -144,3 +168,5 @@ test = "pytest --benchmark-skip -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
+docs = { cmd = "sphinx-build -b html docs/source docs/build", env = { LC_ALL = "C", LANG = "C" } }
+docs-check = { cmd = "sphinx-build -E -b html -n -W --keep-going docs/source docs/build_ci", env = { LC_ALL = "C", LANG = "C" } }

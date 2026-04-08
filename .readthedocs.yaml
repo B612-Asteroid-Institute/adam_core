@@ -13,7 +13,8 @@ build:
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
-   configuration: docs/source/conf.py
+  configuration: docs/source/conf.py
+  builder: html
 
 # Optional but recommended, declare the Python requirements required
 # to build your documentation

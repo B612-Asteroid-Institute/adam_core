@@ -1,1 +1,4 @@
 build
+build_ci
+source/reference/generated
+jupyter_execute
