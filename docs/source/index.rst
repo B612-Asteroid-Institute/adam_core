@@ -12,6 +12,32 @@ different applications use the same physical assumptions and data contracts. We 
 because existing tools did not meet the precision, accuracy, or engineering performance required for
 large scale analysis or scientifically critical applications like impact risk assessment.
 
+Visual Tour
+-----------
+
+Representative outputs from real ``adam_core`` guides and examples:
+
+.. figure:: _static/using_orbits_preview.png
+   :alt: Orbit preview from the Using Orbits guide.
+   :width: 100%
+   :align: center
+
+   Orbit inspection preview generated from :doc:`cookbook/orbit_sources_and_state_tables`.
+
+.. figure:: _static/transfer_porkchop_preview.png
+   :alt: Earth to Mars transfer porkchop plot from the Lambert and transfer guide.
+   :width: 100%
+   :align: center
+
+   Transfer design surface from :doc:`cookbook/transfer_and_porkchop`.
+
+.. figure:: _static/impact_risk_corridor_preview.png
+   :alt: Impact risk corridor visualization from the impact probabilities guide.
+   :width: 100%
+   :align: center
+
+   Earth impact corridor visualization from :doc:`cookbook/impact_probabilities`.
+
 Engineering Standards
 ---------------------
 
