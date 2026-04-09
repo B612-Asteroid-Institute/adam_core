@@ -76,6 +76,20 @@ jobs:
       - name: Build docs preview artifact
         if: github.event_name == 'pull_request'
         run: pdm run docs
+      - name: Ensure GitHub Pages serves Sphinx underscore paths
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          mkdir -p .pages-root
+          touch .pages-root/.nojekyll
+      - name: Publish .nojekyll at gh-pages root
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: .pages-root
+          keep_files: true
+          enable_jekyll: false
       - name: Publish docs preview for pull request
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: rossjrw/pr-preview-action@v1.6.2
