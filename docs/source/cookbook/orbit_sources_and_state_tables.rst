@@ -134,14 +134,12 @@ the sourcing + inspection flow is in one place.
    # Render an interactive preview for one orbit.
    preview_orbits.take([0]).preview(propagator)
 
-For a notebook-form version of this exact flow:
-:doc:`../examples/preview_orbit`.
+.. figure:: ../_static/using_orbits_preview.png
+   :alt: Orbit preview generated from the Using Orbits example.
+   :width: 100%
+   :align: center
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   ../examples/preview_orbit
+   Example preview output from the ``preview_orbits.take([0]).preview(...)`` workflow.
 
 When to Use
 -----------

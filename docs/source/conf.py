@@ -47,6 +47,7 @@ exclude_patterns = [
     "build",
     "Thumbs.db",
     ".DS_Store",
+    "examples/preview_orbit.ipynb",
 ]
 
 autosectionlabel_prefix_document = True
