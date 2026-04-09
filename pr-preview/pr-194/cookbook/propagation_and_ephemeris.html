@@ -209,7 +209,6 @@
 <li class="toctree-l1 current has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/track_neo.html">Tracking NEOCP for Observatory Follow-Up</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../examples/preview_orbit.html">Preview Orbit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
@@ -218,7 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="time_and_windows.html">Working with Time</a></li>
-<li class="toctree-l2"><a class="reference internal" href="orbit_sources_and_state_tables.html">Orbit Sources and State Tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="orbit_sources_and_state_tables.html">Using Orbits</a></li>
 <li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Propagation and Ephemeris</a></li>
 <li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">OEM and SPK I/O</a></li>
@@ -307,28 +306,98 @@ implementation. In practice, use a production backend such as
 <h2>Simple Case (Production Propagator)<a class="headerlink" href="#simple-case-production-propagator" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="n">orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">&quot;Apophis&quot;</span><span class="p">,</span> <span class="s2">&quot;Bennu&quot;</span><span class="p">])</span>
-<span class="n">t0</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-<span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">t0</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">&quot;Apophis&quot;</span><span class="p">,</span> <span class="s2">&quot;Bennu&quot;</span><span class="p">])</span>
+<span class="n">t0</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">t0</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
 
 <span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
-<span class="n">propagated</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">propagated</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
-<span class="n">observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">&quot;I11&quot;</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-<span class="n">ephem</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">observers</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">&quot;I11&quot;</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
+<span class="n">ephem</span><span class="p">:</span> <span class="n">Ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">observers</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="advanced-options-two-body-fast-path">
-<h2>Advanced Options (Two-Body Fast Path)<a class="headerlink" href="#advanced-options-two-body-fast-path" title="Link to this heading">¶</a></h2>
+<section id="advanced-n-body-pattern-parallel-throughput-controls">
+<h2>Advanced N-Body Pattern: Parallel Throughput Controls<a class="headerlink" href="#advanced-n-body-pattern-parallel-throughput-controls" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Scale out orbit propagation work.</span>
+<span class="n">propagated_parallel</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span>
+    <span class="n">orbits</span><span class="p">,</span>
+    <span class="n">times</span><span class="p">,</span>
+    <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Generate ephemerides in parallel with brightness/phase prediction enabled.</span>
+<span class="n">ephem_parallel</span><span class="p">:</span> <span class="n">Ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
+    <span class="n">propagated_parallel</span><span class="p">,</span>
+    <span class="n">observers</span><span class="p">,</span>
+    <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+    <span class="n">predict_magnitudes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">predict_phase_angle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="advanced-n-body-pattern-covariance-aware-products">
+<h2>Advanced N-Body Pattern: Covariance-Aware Products<a class="headerlink" href="#advanced-n-body-pattern-covariance-aware-products" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Covariance propagation on state vectors (returns Orbits with propagated covariance).</span>
+<span class="n">propagated_cov</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span>
+    <span class="n">orbits</span><span class="p">,</span>
+    <span class="n">times</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">covariance_method</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Covariance-aware ephemeris generation (sample, propagate, collapse).</span>
+<span class="n">ephem_cov</span><span class="p">:</span> <span class="n">Ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
+    <span class="n">orbits</span><span class="p">,</span>
+    <span class="n">observers</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">covariance_method</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+    <span class="n">predict_magnitudes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">predict_phase_angle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="advanced-n-body-pattern-variant-ensembles">
+<h2>Advanced N-Body Pattern: Variant Ensembles<a class="headerlink" href="#advanced-n-body-pattern-variant-ensembles" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.variants</span><span class="w"> </span><span class="kn">import</span> <span class="n">VariantEphemeris</span><span class="p">,</span> <span class="n">VariantOrbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_scout</span>
+
+<span class="n">scout_variants</span><span class="p">:</span> <span class="n">VariantOrbits</span> <span class="o">=</span> <span class="n">query_scout</span><span class="p">([</span><span class="s2">&quot;P10vY9r&quot;</span><span class="p">])</span>
+<span class="n">variant_ephem</span><span class="p">:</span> <span class="n">VariantEphemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
+    <span class="n">scout_variants</span><span class="p">,</span>
+    <span class="n">observers</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Variants are already explicit samples.</span>
+    <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="basic-two-body-baseline-fast-screening">
+<h2>Basic Two-Body Baseline (Fast Screening)<a class="headerlink" href="#basic-two-body-baseline-fast-screening" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_ephemeris_2body</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.propagation</span><span class="w"> </span><span class="kn">import</span> <span class="n">propagate_2body</span>
 
-<span class="n">propagated_fast</span> <span class="o">=</span> <span class="n">propagate_2body</span><span class="p">(</span>
+<span class="n">propagated_2body</span> <span class="o">=</span> <span class="n">propagate_2body</span><span class="p">(</span>
     <span class="n">orbits</span><span class="p">,</span>
     <span class="n">times</span><span class="p">,</span>
     <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
@@ -337,8 +406,8 @@ implementation. In practice, use a production backend such as
     <span class="n">tol</span><span class="o">=</span><span class="mf">1e-14</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">ephem_fast</span> <span class="o">=</span> <span class="n">generate_ephemeris_2body</span><span class="p">(</span>
-    <span class="n">propagated_fast</span><span class="p">,</span>
+<span class="n">ephem_2body</span> <span class="o">=</span> <span class="n">generate_ephemeris_2body</span><span class="p">(</span>
+    <span class="n">propagated_2body</span><span class="p">,</span>
     <span class="n">observers</span><span class="p">,</span>
     <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
     <span class="n">chunk_size</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span>
@@ -352,9 +421,11 @@ implementation. In practice, use a production backend such as
 <section id="when-to-use">
 <h2>When to Use<a class="headerlink" href="#when-to-use" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>High-fidelity operational runs: <code class="docutils literal notranslate"><span class="pre">ASSISTPropagator</span></code> pattern.</p></li>
-<li><p>Large-scale prefiltering or candidate fan-out: two-body path first.</p></li>
-<li><p>Use propagate-then-ephemeris when observer requests are repeated.</p></li>
+<li><p>Default operational path: n-body propagator interface (for example <code class="docutils literal notranslate"><span class="pre">ASSISTPropagator</span></code>).</p></li>
+<li><p>Advanced production tuning: <code class="docutils literal notranslate"><span class="pre">max_processes</span></code> + <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> on n-body methods.</p></li>
+<li><p>Uncertainty-aware outputs: <code class="docutils literal notranslate"><span class="pre">covariance=True</span></code> on n-body methods.</p></li>
+<li><p>Variant workflows: pass <code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code> directly to n-body ephemeris generation.</p></li>
+<li><p>Fast pre-screening only: two-body baseline before high-fidelity reruns.</p></li>
 <li><p>For spacecraft observers from custom SPICE kernels (for example JWST), see
 <a class="reference internal" href="observations_and_observers.html"><span class="doc">Observations and Observers</span></a>.</p></li>
 </ul>
@@ -428,7 +499,10 @@ implementation. In practice, use a production backend such as
 <li><a class="reference internal" href="#">Propagation and Ephemeris</a><ul>
 <li><a class="reference internal" href="#propagator-requirement">Propagator Requirement</a></li>
 <li><a class="reference internal" href="#simple-case-production-propagator">Simple Case (Production Propagator)</a></li>
-<li><a class="reference internal" href="#advanced-options-two-body-fast-path">Advanced Options (Two-Body Fast Path)</a></li>
+<li><a class="reference internal" href="#advanced-n-body-pattern-parallel-throughput-controls">Advanced N-Body Pattern: Parallel Throughput Controls</a></li>
+<li><a class="reference internal" href="#advanced-n-body-pattern-covariance-aware-products">Advanced N-Body Pattern: Covariance-Aware Products</a></li>
+<li><a class="reference internal" href="#advanced-n-body-pattern-variant-ensembles">Advanced N-Body Pattern: Variant Ensembles</a></li>
+<li><a class="reference internal" href="#basic-two-body-baseline-fast-screening">Basic Two-Body Baseline (Fast Screening)</a></li>
 <li><a class="reference internal" href="#when-to-use">When to Use</a></li>
 <li><a class="reference internal" href="#related-reference">Related Reference</a></li>
 </ul>
@@ -442,7 +516,7 @@ implementation. In practice, use a production backend such as
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=7d134e6e"></script>
+</div><script src="../_static/documentation_options.js?v=6126bae8"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

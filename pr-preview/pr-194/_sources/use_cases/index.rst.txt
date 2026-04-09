@@ -20,10 +20,6 @@ Guide Index
      - Track NEOCP candidates and generate uncertainty-aware follow-up pointings.
      - ``adam_core``, ``adam-assist``
      - Network/API dependent; multiprocessing recommended for speed.
-   * - :doc:`../examples/preview_orbit`
-     - Quickly inspect and preview candidate orbits.
-     - ``adam_core``, ``adam-assist``
-     - Lightweight; depends on SBDB availability.
    * - :doc:`../examples/2024_yr4_impact_risk`
      - Simulate variants and summarize Earth/Moon impact probabilities.
      - ``adam_core[plots]``, ``adam-assist``
@@ -34,7 +30,6 @@ Guide Index
 
    real_world_use_cases
    ../examples/track_neo
-   ../examples/preview_orbit
    ../examples/2024_yr4_impact_risk
    source_multiplexing
    ephemeris_service

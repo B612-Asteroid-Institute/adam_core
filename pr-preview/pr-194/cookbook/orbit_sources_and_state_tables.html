@@ -7,7 +7,7 @@
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/cookbook/orbit_sources_and_state_tables.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>Orbit Sources and State Tables - adam_core documentation</title>
+        <title>Using Orbits - adam_core documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -209,7 +209,6 @@
 <li class="toctree-l1 current has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/track_neo.html">Tracking NEOCP for Observatory Follow-Up</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../examples/preview_orbit.html">Preview Orbit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
@@ -218,7 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="time_and_windows.html">Working with Time</a></li>
-<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Orbit Sources and State Tables</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Using Orbits</a></li>
 <li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
 <li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">OEM and SPK I/O</a></li>
@@ -295,20 +294,45 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="orbit-sources-and-state-tables">
-<h1>Orbit Sources and State Tables<a class="headerlink" href="#orbit-sources-and-state-tables" title="Link to this heading">¶</a></h1>
-<section id="simple-case">
-<h2>Simple Case<a class="headerlink" href="#simple-case" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
+          <section id="using-orbits">
+<h1>Using Orbits<a class="headerlink" href="#using-orbits" title="Link to this heading">¶</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">Orbits</span></code> is the core state table used across propagation, ephemeris generation,
+orbit determination handoff, photometry prediction, and export.</p>
+<section id="what-an-orbits-row-contains">
+<h2>What an <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> Row Contains<a class="headerlink" href="#what-an-orbits-row-contains" title="Link to this heading">¶</a></h2>
+<p>Each row carries:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">orbit_id</span></code>: stable row identity for joins and grouping.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">object_id</span></code>: optional external label/designation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">coordinates</span></code>: Cartesian state (position/velocity + time + origin + frame).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">physical_parameters</span></code>: optional H/G photometry parameters used for magnitude prediction.</p></li>
+</ul>
+</section>
+<section id="source-orbits-from-external-services">
+<h2>Source Orbits from External Services<a class="headerlink" href="#source-orbits-from-external-services" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_horizons</span><span class="p">,</span> <span class="n">query_neocc</span><span class="p">,</span> <span class="n">query_sbdb</span><span class="p">,</span> <span class="n">query_scout</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="c1"># Common bootstrap pattern for catalog-driven orbit ingest.</span>
-<span class="n">orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">&quot;Apophis&quot;</span><span class="p">,</span> <span class="s2">&quot;Eros&quot;</span><span class="p">])</span>
+<span class="n">sbdb_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">&quot;Apophis&quot;</span><span class="p">,</span> <span class="s2">&quot;Eros&quot;</span><span class="p">])</span>
+
+<span class="c1"># Horizons requires an explicit epoch grid.</span>
+<span class="n">t0</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">horizons_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_horizons</span><span class="p">([</span><span class="s2">&quot;Apophis&quot;</span><span class="p">],</span> <span class="n">t0</span><span class="p">)</span>
+
+<span class="n">neocc_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_neocc</span><span class="p">([</span><span class="s2">&quot;2024YR4&quot;</span><span class="p">])</span>
+
+<span class="c1"># Scout returns sampled variants; collapse to deterministic Orbits if needed.</span>
+<span class="n">scout_variants</span> <span class="o">=</span> <span class="n">query_scout</span><span class="p">([</span><span class="s2">&quot;P10vY9r&quot;</span><span class="p">])</span>
+<span class="n">scout_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">scout_variants</span><span class="o">.</span><span class="n">collapse_by_object_id</span><span class="p">()</span>
+
+<span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">sbdb_orbits</span>
 <span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span> <span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()[:</span><span class="mi">2</span><span class="p">])</span>
 </pre></div>
 </div>
 </section>
-<section id="advanced-source-multiplexing">
-<h2>Advanced Source Multiplexing<a class="headerlink" href="#advanced-source-multiplexing" title="Link to this heading">¶</a></h2>
+<section id="normalize-multiple-sources-behind-one-contract">
+<h2>Normalize Multiple Sources Behind One Contract<a class="headerlink" href="#normalize-multiple-sources-behind-one-contract" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_horizons</span><span class="p">,</span> <span class="n">query_neocc</span><span class="p">,</span> <span class="n">query_sbdb</span><span class="p">,</span> <span class="n">query_scout</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
@@ -326,8 +350,84 @@
     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported source: </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>This is the same operational pattern used in service-style APIs where clients
-can request multiple orbit sources behind one endpoint.</p>
+</section>
+<section id="construct-orbits-directly-from-state-vectors">
+<h2>Construct <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> Directly from State Vectors<a class="headerlink" href="#construct-orbits-directly-from-state-vectors" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.physical_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="n">PhysicalParameters</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+
+<span class="n">t</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">]),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">origin</span><span class="p">:</span> <span class="n">Origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SUN&quot;</span><span class="p">])</span>
+
+<span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="p">[</span><span class="mf">1.0</span><span class="p">],</span>
+    <span class="n">y</span><span class="o">=</span><span class="p">[</span><span class="mf">0.1</span><span class="p">],</span>
+    <span class="n">z</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">],</span>
+    <span class="n">vx</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">],</span>
+    <span class="n">vy</span><span class="o">=</span><span class="p">[</span><span class="mf">0.017</span><span class="p">],</span>
+    <span class="n">vz</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">],</span>
+    <span class="n">time</span><span class="o">=</span><span class="n">t</span><span class="p">,</span>
+    <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
+    <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">photometry</span><span class="p">:</span> <span class="n">PhysicalParameters</span> <span class="o">=</span> <span class="n">PhysicalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">H_v</span><span class="o">=</span><span class="p">[</span><span class="mf">21.5</span><span class="p">],</span>
+    <span class="n">H_v_sigma</span><span class="o">=</span><span class="p">[</span><span class="mf">0.3</span><span class="p">],</span>
+    <span class="n">G</span><span class="o">=</span><span class="p">[</span><span class="mf">0.15</span><span class="p">],</span>
+    <span class="n">G_sigma</span><span class="o">=</span><span class="p">[</span><span class="mf">0.05</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">constructed_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;custom-001&quot;</span><span class="p">],</span>
+    <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;demo-object&quot;</span><span class="p">],</span>
+    <span class="n">coordinates</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span>
+    <span class="n">physical_parameters</span><span class="o">=</span><span class="n">photometry</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="key-orbits-methods">
+<h2>Key <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> Methods<a class="headerlink" href="#key-orbits-methods" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Group by orbit_id for per-candidate processing.</span>
+<span class="k">for</span> <span class="n">orbit_id</span><span class="p">,</span> <span class="n">orbit_rows</span> <span class="ow">in</span> <span class="n">constructed_orbits</span><span class="o">.</span><span class="n">group_by_orbit_id</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">orbit_id</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit_rows</span><span class="p">))</span>
+
+<span class="c1"># Dynamical class labels from orbital elements.</span>
+<span class="n">classes</span> <span class="o">=</span> <span class="n">constructed_orbits</span><span class="o">.</span><span class="n">dynamical_class</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">classes</span><span class="p">)</span>
+
+<span class="c1"># `preview` is useful for quick single-orbit visual inspection.</span>
+<span class="c1"># constructed_orbits.take([0]).preview(propagator)</span>
+</pre></div>
+</div>
+</section>
+<section id="quick-orbit-preview">
+<h2>Quick Orbit Preview<a class="headerlink" href="#quick-orbit-preview" title="Link to this heading">¶</a></h2>
+<p>This is the same “preview orbit” pattern, now folded into <code class="docutils literal notranslate"><span class="pre">Using</span> <span class="pre">Orbits</span></code> so
+the sourcing + inspection flow is in one place.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
+
+<span class="n">preview_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">&quot;Apophis&quot;</span><span class="p">])</span>
+<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
+
+<span class="c1"># Render an interactive preview for one orbit.</span>
+<span class="n">preview_orbits</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">preview</span><span class="p">(</span><span class="n">propagator</span><span class="p">)</span>
+</pre></div>
+</div>
+<figure class="align-center" id="id1">
+<a class="reference internal image-reference" href="../_images/using_orbits_preview.png"><img alt="Orbit preview generated from the Using Orbits example." src="../_images/using_orbits_preview.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Example preview output from the <code class="docutils literal notranslate"><span class="pre">preview_orbits.take([0]).preview(...)</span></code> workflow.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
 </section>
 <section id="when-to-use">
 <h2>When to Use<a class="headerlink" href="#when-to-use" title="Link to this heading">¶</a></h2>
@@ -336,6 +436,7 @@ can request multiple orbit sources behind one endpoint.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">query_scout</span></code> for uncertain candidate ensembles, then collapse when needed.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">query_horizons</span></code> when specific epochs and Horizons consistency matter.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">query_neocc</span></code> for ESA NEOCC-based ingest.</p></li>
+<li><p>direct <code class="docutils literal notranslate"><span class="pre">Orbits.from_kwargs</span></code> construction when ingesting from custom pipelines.</p></li>
 </ul>
 </section>
 <section id="related-reference">
@@ -403,9 +504,13 @@ can request multiple orbit sources behind one endpoint.</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Orbit Sources and State Tables</a><ul>
-<li><a class="reference internal" href="#simple-case">Simple Case</a></li>
-<li><a class="reference internal" href="#advanced-source-multiplexing">Advanced Source Multiplexing</a></li>
+<li><a class="reference internal" href="#">Using Orbits</a><ul>
+<li><a class="reference internal" href="#what-an-orbits-row-contains">What an <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> Row Contains</a></li>
+<li><a class="reference internal" href="#source-orbits-from-external-services">Source Orbits from External Services</a></li>
+<li><a class="reference internal" href="#normalize-multiple-sources-behind-one-contract">Normalize Multiple Sources Behind One Contract</a></li>
+<li><a class="reference internal" href="#construct-orbits-directly-from-state-vectors">Construct <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> Directly from State Vectors</a></li>
+<li><a class="reference internal" href="#key-orbits-methods">Key <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> Methods</a></li>
+<li><a class="reference internal" href="#quick-orbit-preview">Quick Orbit Preview</a></li>
 <li><a class="reference internal" href="#when-to-use">When to Use</a></li>
 <li><a class="reference internal" href="#related-reference">Related Reference</a></li>
 </ul>
@@ -419,7 +524,7 @@ can request multiple orbit sources behind one endpoint.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=7d134e6e"></script>
+</div><script src="../_static/documentation_options.js?v=6126bae8"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
