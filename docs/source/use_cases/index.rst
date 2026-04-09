@@ -20,6 +20,10 @@ Guide Index
      - Track NEOCP candidates and generate uncertainty-aware follow-up pointings.
      - ``adam_core``, ``adam-assist``
      - Network/API dependent; multiprocessing recommended for speed.
+   * - :doc:`../cookbook/ades_module`
+     - Parse, build, and export ADES observation packets for ingestion and submission boundaries.
+     - ``adam_core``
+     - Text IO with validation; ideal for ingest/egress QA.
    * - :doc:`../examples/2024_yr4_impact_risk`
      - Simulate variants and summarize Earth/Moon impact probabilities.
      - ``adam_core[plots]``, ``adam-assist``
@@ -39,6 +43,7 @@ Guide Index
    ../cookbook/time_and_windows
    ../cookbook/orbit_sources_and_state_tables
    ../cookbook/observations_and_observers
+   ../cookbook/ades_module
    ../cookbook/propagation_and_ephemeris
    ../cookbook/oem_and_spk_io
    ../cookbook/openspace_visualization
