@@ -18,3 +18,4 @@ Related Guides
 --------------
 
 * :doc:`../use_cases/orbit_determination`
+* :doc:`../cookbook/ades_module`

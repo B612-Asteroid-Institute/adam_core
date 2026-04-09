@@ -171,6 +171,34 @@ h4 {
   color: var(--adam-muted);
 }
 
+table.visual-grid {
+  width: 100%;
+  margin: 0.75rem 0 1.25rem;
+}
+
+table.visual-grid td {
+  border: 0 !important;
+  vertical-align: top;
+  padding: 0.2rem 0.5rem 0.6rem;
+}
+
+table.visual-grid p {
+  margin: 0.36rem 0 0;
+  line-height: 1.35;
+  font-size: 0.9rem;
+  color: var(--adam-muted);
+}
+
+table.visual-grid td > p > strong {
+  color: var(--adam-ink);
+}
+
+table.visual-grid img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+}
+
 .metric-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -229,5 +257,17 @@ div.admonition {
 
   .hero-panel {
     padding: 1.1rem 1.1rem;
+  }
+
+  table.visual-grid,
+  table.visual-grid tbody,
+  table.visual-grid tr,
+  table.visual-grid td {
+    display: block;
+    width: 100%;
+  }
+
+  table.visual-grid td {
+    padding: 0.24rem 0 0.72rem;
   }
 }

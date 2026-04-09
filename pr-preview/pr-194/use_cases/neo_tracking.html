@@ -14,7 +14,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
-    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ea37aa21" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0404406e" />
     
     
 
@@ -209,7 +209,6 @@
 </li>
 <li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../examples/track_neo.html">Tracking NEOCP for Observatory Follow-Up</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
 <li class="toctree-l2"><a class="reference internal" href="source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ephemeris_service.html">Ephemeris Generation for Services</a></li>
@@ -220,6 +219,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../cookbook/time_and_windows.html">Working with Time</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cookbook/orbit_sources_and_state_tables.html">Using Orbits</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cookbook/observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cookbook/oem_and_spk_io.html">OEM and SPK I/O</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cookbook/openspace_visualization.html">OpenSpace Visualization Assets</a></li>
@@ -297,34 +297,36 @@
         <article role="main" id="furo-main-content">
           <section id="neo-tracking-for-follow-up">
 <h1>NEO Tracking for Follow-Up<a class="headerlink" href="#neo-tracking-for-follow-up" title="Link to this heading">¶</a></h1>
-<section id="problem">
-<h2>Problem<a class="headerlink" href="#problem" title="Link to this heading">¶</a></h2>
-<p>You need actionable pointings for newly discovered NEO candidates with uncertain
-orbits, often under tight operational timelines.</p>
+<section id="goal">
+<h2>Goal<a class="headerlink" href="#goal" title="Link to this heading">¶</a></h2>
+<p>Generate follow-up pointings for uncertain NEOCP candidates quickly and with
+explicit uncertainty handling.</p>
 </section>
-<section id="implementation-options-and-tradeoffs">
-<h2>Implementation Options and Tradeoffs<a class="headerlink" href="#implementation-options-and-tradeoffs" title="Link to this heading">¶</a></h2>
+<section id="operational-prerequisites">
+<h2>Operational Prerequisites<a class="headerlink" href="#operational-prerequisites" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Collapse variants to a single covariance orbit:
-Faster and easier to operationalize; can smooth multimodal uncertainty.</p></li>
-<li><p>Propagate full Scout variant ensembles:
-Better uncertainty fidelity; higher CPU and memory cost.</p></li>
+<li><p>Install a production propagator: <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> (recommended).</p></li>
+<li><p>Query access to CNEOS Scout for active NEOCP candidates.</p></li>
+<li><p>Observatory code(s) or explicit observer state vectors.</p></li>
 </ul>
 </section>
-<section id="runnable-example">
-<h2>Runnable Example<a class="headerlink" href="#runnable-example" title="Link to this heading">¶</a></h2>
+<section id="canonical-end-to-end-pattern">
+<h2>Canonical End-to-End Pattern<a class="headerlink" href="#canonical-end-to-end-pattern" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
-
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query.scout</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_scout_objects</span><span class="p">,</span> <span class="n">query_scout</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 
+<span class="c1"># 1) Select candidate(s) from Scout&#39;s current NEOCP list.</span>
 <span class="n">scout_objects</span> <span class="o">=</span> <span class="n">get_scout_objects</span><span class="p">()</span>
 <span class="n">object_of_interest</span> <span class="o">=</span> <span class="n">scout_objects</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span>
+
+<span class="c1"># 2) Fetch Scout posterior samples (usually ~1000 variants per object).</span>
 <span class="n">samples</span><span class="p">:</span> <span class="n">VariantOrbits</span> <span class="o">=</span> <span class="n">query_scout</span><span class="p">(</span><span class="n">object_of_interest</span><span class="o">.</span><span class="n">objectName</span><span class="p">)</span>
 
+<span class="c1"># 3) Define exposure times and observer geometry.</span>
 <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">(</span>
     <span class="p">[</span>
         <span class="s2">&quot;2025-02-23T00:00:00Z&quot;</span><span class="p">,</span>
@@ -333,45 +335,75 @@ Better uncertainty fidelity; higher CPU and memory cost.</p></li>
     <span class="p">],</span>
     <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;utc&quot;</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">&quot;T08&quot;</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-
+<span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">&quot;T08&quot;</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
 <span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 
-<span class="c1"># Option A: collapse sampled orbits into one uncertainty-aware orbit.</span>
-<span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">collapse_by_object_id</span><span class="p">()</span>
+<span class="c1"># 4A) Fast operational path: collapse variants and propagate covariance.</span>
+<span class="n">collapsed_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">collapse_by_object_id</span><span class="p">()</span>
 <span class="n">collapsed_ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
-    <span class="n">orbits</span><span class="p">,</span>
+    <span class="n">collapsed_orbits</span><span class="p">,</span>
     <span class="n">observers</span><span class="p">,</span>
     <span class="n">covariance</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">num_samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
     <span class="n">max_processes</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># Option B: propagate all samples and derive uncertainty envelopes directly.</span>
-<span class="n">sample_ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">observers</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="c1"># 4B) High-fidelity path: propagate each variant directly.</span>
+<span class="n">sample_ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
+    <span class="n">samples</span><span class="p">,</span>
+    <span class="n">observers</span><span class="p">,</span>
+    <span class="n">max_processes</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+<span class="p">)</span>
 
+<span class="c1"># 5) Derive per-time on-sky envelopes for pointing decisions.</span>
 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">sample_ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">unique</span><span class="p">():</span>
     <span class="n">at_t</span> <span class="o">=</span> <span class="n">sample_ephemeris</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">sample_ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">equals</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
     <span class="nb">print</span><span class="p">(</span>
         <span class="n">at_t</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="s2">&quot;RA range:&quot;</span><span class="p">,</span>
         <span class="n">pc</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">at_t</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">lon</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span>
         <span class="n">pc</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">at_t</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">lon</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span>
+        <span class="s2">&quot;Dec range:&quot;</span><span class="p">,</span>
+        <span class="n">pc</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">at_t</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">lat</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span>
+        <span class="n">pc</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">at_t</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">lat</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span>
     <span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="when-to-use-this-pattern">
-<h2>When to Use This Pattern<a class="headerlink" href="#when-to-use-this-pattern" title="Link to this heading">¶</a></h2>
-<p>Use this when your primary output is follow-up telescope pointing guidance and
-the input orbit uncertainty is still evolving.</p>
-</section>
-<section id="related-documentation">
-<h2>Related Documentation<a class="headerlink" href="#related-documentation" title="Link to this heading">¶</a></h2>
+<section id="implementation-choices">
+<h2>Implementation Choices<a class="headerlink" href="#implementation-choices" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../examples/track_neo.html"><span class="doc">Tracking NEOCP for Observatory Follow-Up</span></a></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">collapse_by_object_id()</span></code> + <code class="docutils literal notranslate"><span class="pre">covariance=True</span></code>:
+Lowest compute cost and easiest to deploy for routine scheduling.</p></li>
+<li><p>direct <code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code> propagation:
+Preserves multimodal structure and heavy tails in uncertainty.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max_processes</span></code>:
+Primary speed control for short-notice campaign planning.</p></li>
+</ul>
+</section>
+<section id="what-you-get-back">
+<h2>What You Get Back<a class="headerlink" href="#what-you-get-back" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">collapsed_ephemeris</span></code>:
+Central track with covariance-derived uncertainty columns.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sample_ephemeris</span></code>:
+Variant-wise tracks suitable for envelope/percentile summarization.</p></li>
+<li><p>Observer-aware sky coordinates at each requested time for immediate
+telescope planning.</p></li>
+</ul>
+</section>
+<section id="when-to-use">
+<h2>When To Use<a class="headerlink" href="#when-to-use" title="Link to this heading">¶</a></h2>
+<p>Use this path when you are planning near-term follow-up for newly discovered
+candidates and need a defensible uncertainty-aware pointing recommendation.</p>
+</section>
+<section id="related-reference">
+<h2>Related Reference<a class="headerlink" href="#related-reference" title="Link to this heading">¶</a></h2>
+<ul class="simple">
 <li><p><a class="reference internal" href="../reference/orbits.html"><span class="doc">Orbits</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/observers.html"><span class="doc">Observers</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/propagator.html"><span class="doc">Propagator</span></a></p></li>
+<li><p><a class="reference internal" href="../cookbook/variant_sampling_and_collapse.html"><span class="doc">Variant Sampling and Collapse</span></a></p></li>
 </ul>
 </section>
 </section>
@@ -433,11 +465,13 @@ the input orbit uncertainty is still evolving.</p>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">NEO Tracking for Follow-Up</a><ul>
-<li><a class="reference internal" href="#problem">Problem</a></li>
-<li><a class="reference internal" href="#implementation-options-and-tradeoffs">Implementation Options and Tradeoffs</a></li>
-<li><a class="reference internal" href="#runnable-example">Runnable Example</a></li>
-<li><a class="reference internal" href="#when-to-use-this-pattern">When to Use This Pattern</a></li>
-<li><a class="reference internal" href="#related-documentation">Related Documentation</a></li>
+<li><a class="reference internal" href="#goal">Goal</a></li>
+<li><a class="reference internal" href="#operational-prerequisites">Operational Prerequisites</a></li>
+<li><a class="reference internal" href="#canonical-end-to-end-pattern">Canonical End-to-End Pattern</a></li>
+<li><a class="reference internal" href="#implementation-choices">Implementation Choices</a></li>
+<li><a class="reference internal" href="#what-you-get-back">What You Get Back</a></li>
+<li><a class="reference internal" href="#when-to-use">When To Use</a></li>
+<li><a class="reference internal" href="#related-reference">Related Reference</a></li>
 </ul>
 </li>
 </ul>
@@ -449,7 +483,7 @@ the input orbit uncertainty is still evolving.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=6126bae8"></script>
+</div><script src="../_static/documentation_options.js?v=a0d07764"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

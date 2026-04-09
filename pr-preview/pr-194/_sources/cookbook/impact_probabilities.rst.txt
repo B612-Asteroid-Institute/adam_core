@@ -72,6 +72,22 @@ What the Output Represents
 * ``mean_impact_time`` / ``stddev_impact_time``
 * minimum and maximum impact times
 
+Risk Corridor Visualization
+---------------------------
+
+.. code-block:: python
+
+   import plotly.graph_objects as go
+   from adam_core.dynamics.plots import plot_risk_corridor
+
+   # Use carto-positron by default to avoid OSM tile-rate issues in shared browsers.
+   corridor_fig: go.Figure = plot_risk_corridor(
+       collisions,
+       title="Earth Risk Corridor",
+       map_style="carto-positron",
+   )
+   corridor_fig.show()
+
 Propagator Guidance
 -------------------
 
@@ -92,4 +108,3 @@ Related Reference
 * :doc:`../reference/dynamics`
 * :doc:`moid_analysis`
 * :doc:`../use_cases/impact_risk`
-

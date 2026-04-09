@@ -15,7 +15,7 @@
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
-    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=ea37aa21" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=0404406e" />
     
     
 
@@ -210,7 +210,6 @@
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="use_cases/real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples/track_neo.html">Tracking NEOCP for Observatory Follow-Up</a></li>
 <li class="toctree-l2"><a class="reference internal" href="examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
 <li class="toctree-l2"><a class="reference internal" href="use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
@@ -221,6 +220,7 @@
 <li class="toctree-l2"><a class="reference internal" href="cookbook/time_and_windows.html">Working with Time</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/orbit_sources_and_state_tables.html">Using Orbits</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook/ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/oem_and_spk_io.html">OEM and SPK I/O</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/openspace_visualization.html">OpenSpace Visualization Assets</a></li>
@@ -304,31 +304,42 @@ analysis, astrodynamics, and solar system astronomy. It centralizes core represe
 different applications use the same physical assumptions and data contracts. We built this library
 because existing tools did not meet the precision, accuracy, or engineering performance required for
 large scale analysis or scientifically critical applications like impact risk assessment.</p>
-<section id="visual-tour">
-<h2>Visual Tour<a class="headerlink" href="#visual-tour" title="Link to this heading">¶</a></h2>
-<p>Representative outputs from real <code class="docutils literal notranslate"><span class="pre">adam_core</span></code> guides and examples:</p>
-<figure class="align-center" id="id1">
-<a class="reference internal image-reference" href="_images/using_orbits_preview.png"><img alt="Orbit preview from the Using Orbits guide." src="_images/using_orbits_preview.png" style="width: 100%;" />
+<div class="table-wrapper colwidths-given visual-grid docutils container">
+<table class="visual-grid docutils align-default">
+<colgroup>
+<col style="width: 34.0%" />
+<col style="width: 33.0%" />
+<col style="width: 33.0%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><figure class="align-center" id="id1">
+<a class="reference external image-reference" href="cookbook/orbit_sources_and_state_tables.html"><img alt="Orbit preview from the Using Orbits guide." src="_images/using_orbits_preview.png" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Orbit inspection preview generated from <a class="reference internal" href="cookbook/orbit_sources_and_state_tables.html"><span class="doc">Using Orbits</span></a>.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
+<p><span class="caption-text"><strong>Orbit inspection</strong> Quick state checks and geometry inspection from <a class="reference internal" href="cookbook/orbit_sources_and_state_tables.html"><span class="doc">Using Orbits</span></a>.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<figure class="align-center" id="id2">
-<a class="reference internal image-reference" href="_images/transfer_porkchop_preview.png"><img alt="Earth to Mars transfer porkchop plot from the Lambert and transfer guide." src="_images/transfer_porkchop_preview.png" style="width: 100%;" />
+</td>
+<td><figure class="align-center" id="id2">
+<a class="reference external image-reference" href="cookbook/transfer_and_porkchop.html"><img alt="Mars to Apophis transfer porkchop from the transfer guide." src="_images/transfer_porkchop_preview.png" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Transfer design surface from <a class="reference internal" href="cookbook/transfer_and_porkchop.html"><span class="doc">Lambert Solutions, Transfers, and Porkchop Plots</span></a>.</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
+<p><span class="caption-text"><strong>Mars-Apophis transfer</strong> Lambert trade-space snapshot from <a class="reference internal" href="cookbook/transfer_and_porkchop.html"><span class="doc">Lambert Solutions, Transfers, and Porkchop Plots</span></a>.</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<figure class="align-center" id="id3">
-<a class="reference internal image-reference" href="_images/impact_risk_corridor_preview.png"><img alt="Impact risk corridor visualization from the impact probabilities guide." src="_images/impact_risk_corridor_preview.png" style="width: 100%;" />
+</td>
+<td><figure class="align-center" id="id3">
+<a class="reference external image-reference" href="cookbook/impact_probabilities.html"><img alt="Impact risk corridor visualization from the impact guide." src="_images/impact_risk_corridor_preview.png" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Earth impact corridor visualization from <a class="reference internal" href="cookbook/impact_probabilities.html"><span class="doc">Impact Probabilities</span></a>.</span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
+<p><span class="caption-text"><strong>Impact corridor</strong> Earth entry corridor visualization from <a class="reference internal" href="cookbook/impact_probabilities.html"><span class="doc">Impact Probabilities</span></a>.</span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-</section>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
 <section id="engineering-standards">
 <h2>Engineering Standards<a class="headerlink" href="#engineering-standards" title="Link to this heading">¶</a></h2>
 <ul class="simple">
@@ -440,7 +451,6 @@ large scale analysis or scientifically critical applications like impact risk as
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">adam_core</a><ul>
-<li><a class="reference internal" href="#visual-tour">Visual Tour</a></li>
 <li><a class="reference internal" href="#engineering-standards">Engineering Standards</a></li>
 <li><a class="reference internal" href="#development-philosophy">Development Philosophy</a></li>
 <li><a class="reference internal" href="#documentation-map">Documentation Map</a></li>
@@ -456,7 +466,7 @@ large scale analysis or scientifically critical applications like impact risk as
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=6126bae8"></script>
+</div><script src="_static/documentation_options.js?v=a0d07764"></script>
     <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>
