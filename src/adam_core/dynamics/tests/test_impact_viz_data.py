@@ -218,6 +218,7 @@ def test_plot_risk_corridor():
     test_cases = [
         {"title": "Test Risk Corridor", "logo": True, "height": 600, "width": 800},
         {"title": None, "logo": False},
+        {"title": "OSM Risk Corridor", "map_style": "open-street-map"},
         {"title": "Custom Risk Corridor"},
     ]
 

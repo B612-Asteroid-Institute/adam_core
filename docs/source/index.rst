@@ -12,31 +12,31 @@ different applications use the same physical assumptions and data contracts. We 
 because existing tools did not meet the precision, accuracy, or engineering performance required for
 large scale analysis or scientifically critical applications like impact risk assessment.
 
-Visual Tour
------------
+.. list-table::
+   :class: visual-grid
+   :widths: 34 33 33
 
-Representative outputs from real ``adam_core`` guides and examples:
+   * - .. figure:: _static/using_orbits_preview.png
+          :alt: Orbit preview from the Using Orbits guide.
+          :target: cookbook/orbit_sources_and_state_tables.html
+          :width: 100%
+          :align: center
 
-.. figure:: _static/using_orbits_preview.png
-   :alt: Orbit preview from the Using Orbits guide.
-   :width: 100%
-   :align: center
+          **Orbit inspection** Quick state checks and geometry inspection from :doc:`cookbook/orbit_sources_and_state_tables`.
+     - .. figure:: _static/transfer_porkchop_preview.png
+          :alt: Mars to Apophis transfer porkchop from the transfer guide.
+          :target: cookbook/transfer_and_porkchop.html
+          :width: 100%
+          :align: center
 
-   Orbit inspection preview generated from :doc:`cookbook/orbit_sources_and_state_tables`.
+          **Mars-Apophis transfer** Lambert trade-space snapshot from :doc:`cookbook/transfer_and_porkchop`.
+     - .. figure:: _static/impact_risk_corridor_preview.png
+          :alt: Impact risk corridor visualization from the impact guide.
+          :target: cookbook/impact_probabilities.html
+          :width: 100%
+          :align: center
 
-.. figure:: _static/transfer_porkchop_preview.png
-   :alt: Earth to Mars transfer porkchop plot from the Lambert and transfer guide.
-   :width: 100%
-   :align: center
-
-   Transfer design surface from :doc:`cookbook/transfer_and_porkchop`.
-
-.. figure:: _static/impact_risk_corridor_preview.png
-   :alt: Impact risk corridor visualization from the impact probabilities guide.
-   :width: 100%
-   :align: center
-
-   Earth impact corridor visualization from :doc:`cookbook/impact_probabilities`.
+          **Impact corridor** Earth entry corridor visualization from :doc:`cookbook/impact_probabilities`.
 
 Engineering Standards
 ---------------------
