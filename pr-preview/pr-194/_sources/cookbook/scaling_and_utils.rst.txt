@@ -46,11 +46,3 @@ Related Reference
 * :doc:`../reference/ray_cluster`
 * :doc:`../reference/utils`
 
-Input Types
------------
-.. code-block:: python
-
-   # initialize_use_ray(num_cpus: int | None = 1) -> bool
-   # setup_SPICE(kernels: list[str] | None = None, force: bool = False) -> None
-   # get_perturber_state(perturber: OriginCodes, times: Timestamp, frame: str = "ecliptic", origin: OriginCodes = OriginCodes.SUN) -> CartesianCoordinates
-   # _iterate_chunks(indices, chunk_size: int) -> iterator

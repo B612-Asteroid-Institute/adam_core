@@ -30,8 +30,7 @@ Documentation Map
 -----------------
 
 * ``Getting Started``: installation and environment setup.
-* ``Use Cases``: longer narrative guides and notebook-based demonstrations.
-* ``Cookbook``: atomic capability guides from basic usage to advanced options.
+* ``Use Cases``: all narrative and atomic capability guides in one place, from simple tasks to advanced analysis.
 * ``Reference``: module-by-module API coverage and inventory.
 
 .. toctree::
@@ -40,7 +39,6 @@ Documentation Map
 
    Getting Started <getting_started/index>
    Use Cases <use_cases/index>
-   Cookbook <cookbook/index>
    Reference <reference/index>
 
 Indices and tables

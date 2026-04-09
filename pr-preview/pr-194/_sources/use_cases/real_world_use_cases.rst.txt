@@ -10,7 +10,7 @@ How to Read This
 
 * Start with the first level you actually need.
 * Skip ahead only when your decisions require more uncertainty modeling.
-* Use :doc:`../cookbook/index` for atomic API details and type-level behavior.
+* Use :doc:`index` for atomic API details and longer narrative walkthroughs.
 
 1. Object Attribution and Candidate Confirmation
 ------------------------------------------------
@@ -124,7 +124,6 @@ Use when:
 See:
 
 * :doc:`orbit_determination`
-* :doc:`../cookbook/orbit_determination_pipeline`
 
 6. Observability and Brightness Ranking
 ---------------------------------------

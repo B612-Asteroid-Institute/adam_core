@@ -98,10 +98,3 @@ Related Reference
 * :doc:`../reference/orbits`
 * :doc:`oem_and_spk_io`
 
-Input Types
------------
-.. code-block:: python
-
-   # create_renderable_orbital_kepler(orbits: Orbits, out_dir: str, identifier: str, ...) -> None
-   # create_renderable_trail_orbit(orbits: Orbits, out_dir: str, identifier: str, translation_type: str = "Kepler", spice_kernel_path: str | None = None, spice_id_mappings: dict | None = None, ...) -> None
-   # orbits_to_spk(orbits: Orbits, output_file: str, start_time: Timestamp, end_time: Timestamp, ...) -> dict[str, int]

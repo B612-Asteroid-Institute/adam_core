@@ -3,11 +3,11 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="MOID Analysis" href="moid_analysis.html"><link rel="prev" title="Photometry, Phase Angle, and Light Curves" href="photometry_and_magnitude.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="MOID Analysis" href="moid_analysis.html"><link rel="prev" title="OpenSpace Visualization Assets" href="openspace_visualization.html">
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/cookbook/transfer_and_porkchop.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>Transfer Solutions and Porkchops - adam_core documentation</title>
+        <title>Lambert Solutions, Transfers, and Porkchop Plots - adam_core documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -206,43 +206,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html">Installation</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/track_neo.html">Tracking NEOCP for Observatory Follow-Up</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/preview_orbit.html">Preview Orbit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
-</ul>
-</li>
-<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Cookbook</a><input aria-label="Toggle navigation of Cookbook" checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="time_and_windows.html">Time and Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="time_and_windows.html">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="orbit_sources_and_state_tables.html">Orbit Sources and State Tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">OEM and SPK I/O</a></li>
+<li class="toctree-l2"><a class="reference internal" href="openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="impact_probabilities.html">Impact Probabilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinates_classes.html">Coordinate Classes Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinate_covariances.html">Coordinate Covariances</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinate_transforms.html">Coordinate Transforms</a></li>
 <li class="toctree-l2"><a class="reference internal" href="residuals.html">Residuals and Fit Quality</a></li>
 <li class="toctree-l2"><a class="reference internal" href="variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
-<li class="toctree-l2"><a class="reference internal" href="orbit_sources_and_state_tables.html">Orbit Sources and State Tables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
-<li class="toctree-l2"><a class="reference internal" href="photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
-<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Transfer Solutions and Porkchops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="moid_analysis.html">MOID Analysis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="impact_probabilities.html">Impact Probabilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="orbit_determination_pipeline.html">Orbit Determination Pipeline</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dynamics_and_impact_analysis.html">Dynamics and Impact Analysis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">OEM and SPK I/O</a></li>
-<li class="toctree-l2"><a class="reference internal" href="openspace_visualization.html">OpenSpace Visualization Assets</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mission_and_export.html">Mission and Export</a></li>
 <li class="toctree-l2"><a class="reference internal" href="scaling_and_utils.html">Scaling and Utilities</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../reference/functionality_inventory.html">Functionality Inventory</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/constants.html">Constants</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/coordinates.html">Coordinates</a></li>
@@ -301,8 +295,8 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="transfer-solutions-and-porkchops">
-<h1>Transfer Solutions and Porkchops<a class="headerlink" href="#transfer-solutions-and-porkchops" title="Link to this heading">¶</a></h1>
+          <section id="lambert-solutions-transfers-and-porkchop-plots">
+<h1>Lambert Solutions, Transfers, and Porkchop Plots<a class="headerlink" href="#lambert-solutions-transfers-and-porkchop-plots" title="Link to this heading">¶</a></h1>
 <p>This guide separates transfer analysis into three layers:</p>
 <ol class="arabic simple">
 <li><p>solve Lambert solutions</p></li>
@@ -317,14 +311,14 @@ time-of-flight values.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.lambert</span><span class="w"> </span><span class="kn">import</span> <span class="n">solve_lambert</span><span class="p">,</span> <span class="n">calculate_c3</span>
 
 <span class="c1"># Two transfer opportunities (AU, AU/day, days)</span>
-<span class="n">r1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.95</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
-<span class="n">r2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.4</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
-<span class="n">tof</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">180.0</span><span class="p">,</span> <span class="mf">230.0</span><span class="p">])</span>
+<span class="n">r1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.95</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
+<span class="n">r2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.4</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
+<span class="n">tof</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">180.0</span><span class="p">,</span> <span class="mf">230.0</span><span class="p">])</span>
 
 <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span> <span class="o">=</span> <span class="n">solve_lambert</span><span class="p">(</span><span class="n">r1</span><span class="p">,</span> <span class="n">r2</span><span class="p">,</span> <span class="n">tof</span><span class="p">,</span> <span class="n">prograde</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">max_iter</span><span class="o">=</span><span class="mi">35</span><span class="p">,</span> <span class="n">tol</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">)</span>
 
 <span class="c1"># If body velocity at departure is known, pass it here for C3.</span>
-<span class="n">body_v_departure</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">v1</span><span class="p">)</span>
+<span class="n">body_v_departure</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">v1</span><span class="p">)</span>
 <span class="n">c3</span> <span class="o">=</span> <span class="n">calculate_c3</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">body_v_departure</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -335,17 +329,19 @@ time-of-flight values.</p>
 <code class="docutils literal notranslate"><span class="pre">generate_porkchop_data</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">OriginCodes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.missions.porkchop</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LambertSolutions</span><span class="p">,</span>
     <span class="n">generate_porkchop_data</span><span class="p">,</span>
     <span class="n">prepare_and_propagate_orbits</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="n">departure_start</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-01-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-<span class="n">departure_end</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-12-31T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-<span class="n">arrival_start</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-06-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-<span class="n">arrival_end</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2030-01-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">departure_start</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-01-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">departure_end</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-12-31T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">arrival_start</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-06-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">arrival_end</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2030-01-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
 
-<span class="n">departure_orbits</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
+<span class="n">departure_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
     <span class="n">body</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">EARTH</span><span class="p">,</span>
     <span class="n">start_time</span><span class="o">=</span><span class="n">departure_start</span><span class="p">,</span>
     <span class="n">end_time</span><span class="o">=</span><span class="n">departure_end</span><span class="p">,</span>
@@ -353,7 +349,7 @@ time-of-flight values.</p>
     <span class="n">step_size</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">arrival_orbits</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
+<span class="n">arrival_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
     <span class="n">body</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">MARS_BARYCENTER</span><span class="p">,</span>
     <span class="n">start_time</span><span class="o">=</span><span class="n">arrival_start</span><span class="p">,</span>
     <span class="n">end_time</span><span class="o">=</span><span class="n">arrival_end</span><span class="p">,</span>
@@ -361,7 +357,7 @@ time-of-flight values.</p>
     <span class="n">step_size</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">lambert_solutions</span> <span class="o">=</span> <span class="n">generate_porkchop_data</span><span class="p">(</span>
+<span class="n">lambert_solutions</span><span class="p">:</span> <span class="n">LambertSolutions</span> <span class="o">=</span> <span class="n">generate_porkchop_data</span><span class="p">(</span>
     <span class="n">departure_orbits</span><span class="o">=</span><span class="n">departure_orbits</span><span class="p">,</span>
     <span class="n">arrival_orbits</span><span class="o">=</span><span class="n">arrival_orbits</span><span class="p">,</span>
     <span class="n">propagation_origin</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
@@ -377,9 +373,10 @@ time-of-flight values.</p>
 </section>
 <section id="creating-and-viewing-porkchops">
 <h2>Creating and Viewing Porkchops<a class="headerlink" href="#creating-and-viewing-porkchops" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.missions.porkchop</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_porkchop_plotly</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">plotly.graph_objects</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">go</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.missions.porkchop</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_porkchop_plotly</span>
 
-<span class="n">fig</span> <span class="o">=</span> <span class="n">plot_porkchop_plotly</span><span class="p">(</span>
+<span class="n">fig</span><span class="p">:</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span> <span class="o">=</span> <span class="n">plot_porkchop_plotly</span><span class="p">(</span>
     <span class="n">lambert_solutions</span><span class="p">,</span>
     <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Earth to Mars Porkchop&quot;</span><span class="p">,</span>
     <span class="n">c3_departure_min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
@@ -405,7 +402,7 @@ For production-quality trajectories, use a high-fidelity propagator such as
 <code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 
-<span class="n">propagated_custom</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
+<span class="n">propagated_custom</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
     <span class="n">body</span><span class="o">=</span><span class="n">custom_orbit</span><span class="p">,</span>
     <span class="n">start_time</span><span class="o">=</span><span class="n">departure_start</span><span class="p">,</span>
     <span class="n">end_time</span><span class="o">=</span><span class="n">departure_end</span><span class="p">,</span>
@@ -432,15 +429,6 @@ For production-quality trajectories, use a high-fidelity propagator such as
 <li><p><a class="reference internal" href="../reference/dynamics.html"><span class="doc">Dynamics</span></a></p></li>
 </ul>
 </section>
-<section id="input-types">
-<h2>Input Types<a class="headerlink" href="#input-types" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># solve_lambert(r1: np.ndarray, r2: np.ndarray, tof: np.ndarray | float, mu: float = MU, prograde: bool = True, max_iter: int = 35, tol: float = 1e-10) -&gt; tuple[np.ndarray, np.ndarray]</span>
-<span class="c1"># prepare_and_propagate_orbits(body: Orbits | OriginCodes, start_time: Timestamp, end_time: Timestamp, propagation_origin: OriginCodes = OriginCodes.SUN, step_size: float = 1.0, propagator_class: type[Propagator] | None = None, max_processes: int | None = 1) -&gt; Orbits</span>
-<span class="c1"># generate_porkchop_data(departure_orbits: Orbits, arrival_orbits: Orbits, propagation_origin: OriginCodes = OriginCodes.SUN, ...) -&gt; LambertSolutions</span>
-<span class="c1"># plot_porkchop_plotly(porkchop_data: LambertSolutions, ...) -&gt; plotly.graph_objects.Figure</span>
-</pre></div>
-</div>
-</section>
 </section>
 
         </article>
@@ -457,14 +445,14 @@ For production-quality trajectories, use a high-fidelity propagator such as
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="photometry_and_magnitude.html">
+          <a class="prev-page" href="openspace_visualization.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Photometry, Phase Angle, and Light Curves</div>
+                <div class="title">OpenSpace Visualization Assets</div>
                 
               </div>
             </a>
@@ -499,14 +487,13 @@ For production-quality trajectories, use a high-fidelity propagator such as
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Transfer Solutions and Porkchops</a><ul>
+<li><a class="reference internal" href="#">Lambert Solutions, Transfers, and Porkchop Plots</a><ul>
 <li><a class="reference internal" href="#lambert-solutions-atomic">Lambert Solutions (Atomic)</a></li>
 <li><a class="reference internal" href="#generate-porkchop-data">Generate Porkchop Data</a></li>
 <li><a class="reference internal" href="#creating-and-viewing-porkchops">Creating and Viewing Porkchops</a></li>
 <li><a class="reference internal" href="#propagator-guidance">Propagator Guidance</a></li>
 <li><a class="reference internal" href="#when-to-use">When to Use</a></li>
 <li><a class="reference internal" href="#related-reference">Related Reference</a></li>
-<li><a class="reference internal" href="#input-types">Input Types</a></li>
 </ul>
 </li>
 </ul>
@@ -518,7 +505,7 @@ For production-quality trajectories, use a high-fidelity propagator such as
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=a85ea90e"></script>
+</div><script src="../_static/documentation_options.js?v=7d134e6e"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -6,9 +6,10 @@ Simple Case
 
 .. code-block:: python
 
+   import quivr as qv
    from adam_core.observations import Exposures, PointSourceDetections
 
-   exposures = Exposures.from_kwargs(
+   exposures: Exposures = Exposures.from_kwargs(
        id=["exp-1"],
        start_time=start_times,
        duration=[30.0],
@@ -16,7 +17,7 @@ Simple Case
        observatory_code=["I11"],
    )
 
-   detections = PointSourceDetections.from_kwargs(
+   detections: PointSourceDetections = PointSourceDetections.from_kwargs(
        id=["det-1"],
        exposure_id=["exp-1"],
        time=start_times,
@@ -28,6 +29,13 @@ Simple Case
        mag_sigma=[0.1],
    )
 
+   # Returns qv.Linkage[PointSourceDetections, Exposures].
+   detection_exposure_link: qv.Linkage[PointSourceDetections, Exposures] = (
+       detections.link_to_exposures(exposures)
+   )
+   linked_dets, linked_exposures = detection_exposure_link.select("exp-1")
+   print(len(linked_dets), len(linked_exposures))
+
 Advanced Options
 ----------------
 
@@ -38,10 +46,10 @@ Advanced Options
 
    # Vectorized code+time mapping for mixed-observatory observation streams.
    codes = pa.array(["I11", "X05", "I11"])
-   observers = Observers.from_codes(codes, times)
+   observers: Observers = Observers.from_codes(codes, times)
 
    # Exposure midpoint observer states for ephemeris generation.
-   exposure_observers = exposures.observers(frame="equatorial")
+   exposure_observers: Observers = exposures.observers(frame="equatorial")
 
 Custom SPICE Kernels for Observer States (JWST or Custom Spacecraft)
 --------------------------------------------------------------------
@@ -52,7 +60,10 @@ codes.
 .. code-block:: python
 
    import numpy as np
+   import quivr as qv
    from adam_core.observers import Observers
+   from adam_core.observations import Associations
+   from adam_core.observations import PointSourceDetections
    from adam_core.time import Timestamp
    from adam_core.utils.spice import (
        get_spice_body_state,
@@ -60,14 +71,14 @@ codes.
        unregister_spice_kernel,
    )
 
-   times = Timestamp.from_mjd(np.array([60200.0, 60200.25]), scale="tdb")
+   times: Timestamp = Timestamp.from_mjd(np.array([60200.0, 60200.25]), scale="tdb")
 
    # 1) Load custom/SPICE mission kernel (example path).
    register_spice_kernel("/path/to/jwst_or_custom_spacecraft.bsp")
 
    # 2a) Name-based lookup via SPICE body name table (recommended when available).
    # If the kernel exposes this body name, Observers.from_code resolves it.
-   jwst_observers = Observers.from_code("JWST", times)
+   jwst_observers: Observers = Observers.from_code("JWST", times)
 
    # 2b) Explicit NAIF ID lookup (works even if name mapping is unavailable).
    custom_states = get_spice_body_state(
@@ -75,10 +86,32 @@ codes.
        times=times,
        frame="ecliptic",
    )
-   custom_observers = Observers.from_kwargs(
+   custom_observers: Observers = Observers.from_kwargs(
        code=["JWST"] * len(times),
        coordinates=custom_states,
    )
+
+   # Same Linkage pattern also applies for association tables.
+   associations = Associations.from_kwargs(
+       detection_id=["det-1"],
+       object_id=["candidate-001"],
+   )
+   one_detection = PointSourceDetections.from_kwargs(
+       id=["det-1"],
+       exposure_id=["exp-1"],
+       time=times.take([0]),
+       ra=[120.1],
+       dec=[-2.3],
+       ra_sigma=[0.15],
+       dec_sigma=[0.15],
+       mag=[20.3],
+       mag_sigma=[0.1],
+   )
+   association_link: qv.Linkage[Associations, PointSourceDetections] = (
+       associations.link_to_detections(one_detection)
+   )
+   assoc_rows, det_rows = association_link.select("det-1")
+   print(len(assoc_rows), len(det_rows))
 
    # 3) Use these observers directly in ephemeris generation.
    # ephem = propagator.generate_ephemeris(orbits, jwst_observers, ...)
@@ -97,15 +130,3 @@ Related Reference
 
 * :doc:`../reference/observations`
 * :doc:`../reference/observers`
-
-Input Types
------------
-.. code-block:: python
-
-   # Exposures.from_kwargs(id: list[str], start_time: Timestamp, duration: list[float], filter: list[str], observatory_code: list[str], ...) -> Exposures
-   # PointSourceDetections.from_kwargs(id: list[str], exposure_id: list[str], time: Timestamp, ra: list[float], dec: list[float], ...) -> PointSourceDetections
-   # Observers.from_codes(codes: pa.Array, times: Timestamp) -> Observers
-   # Observers.from_code(code: str | OriginCodes, times: Timestamp) -> Observers
-   # exposures.observers(frame: str = "equatorial") -> Observers
-   # register_spice_kernel(kernel_path: str) -> None
-   # get_spice_body_state(body_id: int, times: Timestamp, frame: str = "ecliptic", origin: OriginCodes = OriginCodes.SUN) -> CartesianCoordinates

@@ -3,11 +3,11 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Coordinates, Covariances, Transforms, and Residuals" href="coordinates_and_residuals.html"><link rel="prev" title="Cookbook" href="index.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Orbit Sources and State Tables" href="orbit_sources_and_state_tables.html"><link rel="prev" title="Impact Risk Analysis" href="../use_cases/impact_risk.html">
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/cookbook/time_and_windows.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>Time and Windows - adam_core documentation</title>
+        <title>Working with Time - adam_core documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -206,43 +206,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html">Installation</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/track_neo.html">Tracking NEOCP for Observatory Follow-Up</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/preview_orbit.html">Preview Orbit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
-</ul>
-</li>
-<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Cookbook</a><input aria-label="Toggle navigation of Cookbook" checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Time and Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="orbit_sources_and_state_tables.html">Orbit Sources and State Tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">OEM and SPK I/O</a></li>
+<li class="toctree-l2"><a class="reference internal" href="openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="impact_probabilities.html">Impact Probabilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinates_classes.html">Coordinate Classes Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinate_covariances.html">Coordinate Covariances</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinate_transforms.html">Coordinate Transforms</a></li>
 <li class="toctree-l2"><a class="reference internal" href="residuals.html">Residuals and Fit Quality</a></li>
 <li class="toctree-l2"><a class="reference internal" href="variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
-<li class="toctree-l2"><a class="reference internal" href="orbit_sources_and_state_tables.html">Orbit Sources and State Tables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
-<li class="toctree-l2"><a class="reference internal" href="photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
-<li class="toctree-l2"><a class="reference internal" href="transfer_and_porkchop.html">Transfer Solutions and Porkchops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="moid_analysis.html">MOID Analysis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="impact_probabilities.html">Impact Probabilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="orbit_determination_pipeline.html">Orbit Determination Pipeline</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dynamics_and_impact_analysis.html">Dynamics and Impact Analysis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">OEM and SPK I/O</a></li>
-<li class="toctree-l2"><a class="reference internal" href="openspace_visualization.html">OpenSpace Visualization Assets</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mission_and_export.html">Mission and Export</a></li>
 <li class="toctree-l2"><a class="reference internal" href="scaling_and_utils.html">Scaling and Utilities</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../reference/functionality_inventory.html">Functionality Inventory</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/constants.html">Constants</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../reference/coordinates.html">Coordinates</a></li>
@@ -301,36 +295,39 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="time-and-windows">
-<h1>Time and Windows<a class="headerlink" href="#time-and-windows" title="Link to this heading">¶</a></h1>
+          <section id="working-with-time">
+<h1>Working with Time<a class="headerlink" href="#working-with-time" title="Link to this heading">¶</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">Timestamp</span></code> is the core time primitive across <code class="docutils literal notranslate"><span class="pre">adam_core</span></code>. It stores integer
 MJD days + integer nanoseconds with an explicit scale, which keeps joins,
 windowing, and cache keys deterministic.</p>
 <section id="construction-patterns">
 <h2>Construction Patterns<a class="headerlink" href="#construction-patterns" title="Link to this heading">¶</a></h2>
 <p>Simple: operator-facing ISO input.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="n">t_utc</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+
+<span class="n">t_utc</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">(</span>
     <span class="p">[</span><span class="s2">&quot;2026-01-01T00:00:00&quot;</span><span class="p">,</span> <span class="s2">&quot;2026-01-02T12:30:00&quot;</span><span class="p">],</span>
     <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;utc&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p>Numeric: simulation and propagation pipelines.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="n">t_tdb</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">,</span> <span class="mf">60200.25</span><span class="p">,</span> <span class="mf">60201.0</span><span class="p">]),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-<span class="n">t_jd</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">([</span><span class="mf">2460200.5</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tt&quot;</span><span class="p">)</span>
+<span class="n">t_tdb</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">,</span> <span class="mf">60200.25</span><span class="p">,</span> <span class="mf">60201.0</span><span class="p">]),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span>
+<span class="p">)</span>
+<span class="n">t_jd</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">([</span><span class="mf">2460200.5</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tt&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Interoperability: Astropy and ET.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="n">t_et</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_et</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">86400.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">t_et</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_et</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">86400.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
 <span class="n">astropy_time</span> <span class="o">=</span> <span class="n">t_et</span><span class="o">.</span><span class="n">to_astropy</span><span class="p">()</span>
-<span class="n">round_trip</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_astropy</span><span class="p">(</span><span class="n">astropy_time</span><span class="p">)</span>
+<span class="n">round_trip</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_astropy</span><span class="p">(</span><span class="n">astropy_time</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -383,11 +380,18 @@ windowing, and cache keys deterministic.</p>
 </pre></div>
 </div>
 </section>
-<section id="linking-and-window-joins">
-<h2>Linking and Window Joins<a class="headerlink" href="#linking-and-window-joins" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">Timestamp.link</span></code> is useful when joining tables on time with controlled precision.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Match rows at millisecond precision.</span>
-<span class="n">link</span> <span class="o">=</span> <span class="n">t_utc</span><span class="o">.</span><span class="n">link</span><span class="p">(</span><span class="n">t_utc</span><span class="o">.</span><span class="n">rounded</span><span class="p">(</span><span class="s2">&quot;ms&quot;</span><span class="p">),</span> <span class="n">precision</span><span class="o">=</span><span class="s2">&quot;ms&quot;</span><span class="p">)</span>
+<section id="linking-time-arrays">
+<h2>Linking Time Arrays<a class="headerlink" href="#linking-time-arrays" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Timestamp.link</span></code> returns a <code class="docutils literal notranslate"><span class="pre">quivr.Linkage</span></code> object. The linkage preserves left/right
+table context and gives explicit selection methods for joins at controlled precision.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
+
+<span class="n">rounded_ms</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">t_utc</span><span class="o">.</span><span class="n">rounded</span><span class="p">(</span><span class="s2">&quot;ms&quot;</span><span class="p">)</span>
+<span class="n">time_link</span><span class="p">:</span> <span class="n">qv</span><span class="o">.</span><span class="n">Linkage</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">,</span> <span class="n">Timestamp</span><span class="p">]</span> <span class="o">=</span> <span class="n">t_utc</span><span class="o">.</span><span class="n">link</span><span class="p">(</span><span class="n">rounded_ms</span><span class="p">,</span> <span class="n">precision</span><span class="o">=</span><span class="s2">&quot;ms&quot;</span><span class="p">)</span>
+
+<span class="c1"># Use linkage methods for explicit join behavior.</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">time_link</span><span class="o">.</span><span class="n">left_table</span><span class="p">),</span> <span class="nb">type</span><span class="p">(</span><span class="n">time_link</span><span class="o">.</span><span class="n">right_table</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">time_link</span><span class="p">))</span>
 </pre></div>
 </div>
 </section>
@@ -417,15 +421,6 @@ for stable cache keys and quick identity checks.</p>
 <li><p><a class="reference internal" href="../reference/functionality_inventory.html"><span class="doc">Functionality Inventory</span></a></p></li>
 </ul>
 </section>
-<section id="input-types">
-<h2>Input Types<a class="headerlink" href="#input-types" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Timestamp.from_iso8601(times: list[str], scale: str) -&gt; Timestamp</span>
-<span class="c1"># Timestamp.from_mjd(mjd: np.ndarray | list[float], scale: str) -&gt; Timestamp</span>
-<span class="c1"># Timestamp.rescale(scale: str) -&gt; Timestamp</span>
-<span class="c1"># Timestamp.difference(other: Timestamp) -&gt; tuple[pyarrow.Array, pyarrow.Array]</span>
-</pre></div>
-</div>
-</section>
 </section>
 
         </article>
@@ -433,23 +428,23 @@ for stable cache keys and quick identity checks.</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="coordinates_and_residuals.html">
+          <a class="next-page" href="orbit_sources_and_state_tables.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Coordinates, Covariances, Transforms, and Residuals</div>
+                <div class="title">Orbit Sources and State Tables</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="index.html">
+          <a class="prev-page" href="../use_cases/impact_risk.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Cookbook</div>
+                <div class="title">Impact Risk Analysis</div>
                 
               </div>
             </a>
@@ -484,15 +479,14 @@ for stable cache keys and quick identity checks.</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Time and Windows</a><ul>
+<li><a class="reference internal" href="#">Working with Time</a><ul>
 <li><a class="reference internal" href="#construction-patterns">Construction Patterns</a></li>
 <li><a class="reference internal" href="#atomic-operations">Atomic Operations</a></li>
 <li><a class="reference internal" href="#scale-management">Scale Management</a></li>
-<li><a class="reference internal" href="#linking-and-window-joins">Linking and Window Joins</a></li>
+<li><a class="reference internal" href="#linking-time-arrays">Linking Time Arrays</a></li>
 <li><a class="reference internal" href="#cache-and-grouping-keys">Cache and Grouping Keys</a></li>
 <li><a class="reference internal" href="#when-to-use-which-constructor">When to Use Which Constructor</a></li>
 <li><a class="reference internal" href="#related-reference">Related Reference</a></li>
-<li><a class="reference internal" href="#input-types">Input Types</a></li>
 </ul>
 </li>
 </ul>
@@ -504,7 +498,7 @@ for stable cache keys and quick identity checks.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=a85ea90e"></script>
+</div><script src="../_static/documentation_options.js?v=7d134e6e"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

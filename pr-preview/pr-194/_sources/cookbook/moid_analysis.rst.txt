@@ -60,10 +60,3 @@ Related Reference
 * :doc:`../reference/dynamics`
 * :doc:`impact_probabilities`
 
-Input Types
------------
-.. code-block:: python
-
-   # get_perturber_state(perturber: OriginCodes, times: Timestamp, frame: str = "ecliptic", origin: OriginCodes = OriginCodes.SUN) -> CartesianCoordinates
-   # calculate_moid(primary_ellipse: Orbits, secondary_ellipse: Orbits) -> tuple[float, Timestamp]
-   # calculate_perturber_moids(orbits: Orbits, perturber: OriginCodes | list[OriginCodes], chunk_size: int = 100, max_processes: int | None = 1) -> PerturberMOIDs

@@ -25,21 +25,24 @@ Runnable Example
 
    from adam_core.coordinates import Origin
    from adam_core.dynamics.impacts import (
+       CollisionEvent,
        CollisionConditions,
+       ImpactProbabilities,
        calculate_impacts,
        calculate_impact_probabilities,
    )
+   from adam_core.orbits import Orbits, VariantOrbits
    from adam_core.orbits.query import query_sbdb
    from adam_core.time import Timestamp
    from adam_assist import ASSISTPropagator
 
-   orbit = query_sbdb(["2024 YR4"])
+   orbit: Orbits = query_sbdb(["2024 YR4"])
 
-   approx_impact_date = Timestamp.from_iso8601(["2032-12-22"], scale="tdb")
-   thirty_days_after = approx_impact_date.add_days(30)
+   approx_impact_date: Timestamp = Timestamp.from_iso8601(["2032-12-22"], scale="tdb")
+   thirty_days_after: Timestamp = approx_impact_date.add_days(30)
    days_to_run, _ = thirty_days_after.difference(orbit.coordinates.time)
 
-   conditions = CollisionConditions.from_kwargs(
+   conditions: CollisionConditions = CollisionConditions.from_kwargs(
        condition_id=["Earth", "Moon"],
        collision_object=Origin.from_kwargs(code=["EARTH", "MOON"]),
        collision_distance=[6420, 1740],
@@ -48,6 +51,8 @@ Runnable Example
 
    propagator = ASSISTPropagator()
 
+   variants: VariantOrbits
+   impacts: CollisionEvent
    variants, impacts = calculate_impacts(
        orbit,
        days_to_run[0].as_py(),
@@ -57,7 +62,7 @@ Runnable Example
        conditions=conditions,
    )
 
-   impact_probabilities = calculate_impact_probabilities(
+   impact_probabilities: ImpactProbabilities = calculate_impact_probabilities(
        variants,
        impacts,
        conditions=conditions,
@@ -76,11 +81,3 @@ Related Documentation
 * :doc:`../examples/2024_yr4_impact_risk`
 * :doc:`../reference/dynamics`
 * :doc:`../reference/orbits`
-
-Input Types
------------
-.. code-block:: python
-
-   # CollisionConditions.from_kwargs(...) -> CollisionConditions
-   # calculate_impacts(orbits: Orbits, num_days: int, propagator: Propagator, ...) -> tuple[VariantOrbits, CollisionEvent]
-   # calculate_impact_probabilities(variants: VariantOrbits, collision_events: CollisionEvent, conditions: CollisionConditions | None = None) -> ImpactProbabilities

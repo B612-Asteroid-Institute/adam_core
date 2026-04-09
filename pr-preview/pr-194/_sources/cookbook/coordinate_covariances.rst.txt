@@ -134,11 +134,3 @@ Related Reference
 * :doc:`../reference/coordinates`
 * :doc:`../reference/orbit_determination`
 
-Input Types
------------
-.. code-block:: python
-
-   # CoordinateCovariances.from_sigmas(sigmas: np.ndarray) -> CoordinateCovariances
-   # CoordinateCovariances.from_matrix(covariances: np.ndarray) -> CoordinateCovariances
-   # sample_covariance_random(mean: np.ndarray, cov: np.ndarray, num_samples: int, seed: int | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]
-   # transform_covariances_jacobian(coords: np.ndarray, covariances: np.ndarray, transform: callable) -> np.ndarray

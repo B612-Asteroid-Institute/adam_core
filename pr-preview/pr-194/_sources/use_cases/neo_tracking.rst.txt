@@ -26,15 +26,16 @@ Runnable Example
    import pyarrow.compute as pc
 
    from adam_core.observers import Observers
+   from adam_core.orbits import Orbits, VariantOrbits
    from adam_core.orbits.query.scout import get_scout_objects, query_scout
    from adam_core.time import Timestamp
    from adam_assist import ASSISTPropagator
 
    scout_objects = get_scout_objects()
    object_of_interest = scout_objects[10]
-   samples = query_scout(object_of_interest.objectName)
+   samples: VariantOrbits = query_scout(object_of_interest.objectName)
 
-   times = Timestamp.from_iso8601(
+   times: Timestamp = Timestamp.from_iso8601(
        [
            "2025-02-23T00:00:00Z",
            "2025-02-23T00:05:00Z",
@@ -47,7 +48,7 @@ Runnable Example
    propagator = ASSISTPropagator()
 
    # Option A: collapse sampled orbits into one uncertainty-aware orbit.
-   orbits = samples.collapse_by_object_id()
+   orbits: Orbits = samples.collapse_by_object_id()
    collapsed_ephemeris = propagator.generate_ephemeris(
        orbits,
        observers,
@@ -80,12 +81,3 @@ Related Documentation
 * :doc:`../reference/orbits`
 * :doc:`../reference/observers`
 * :doc:`../reference/propagator`
-
-Input Types
------------
-.. code-block:: python
-
-   # get_scout_objects() -> table-like scout object collection
-   # query_scout(object_name: str) -> VariantOrbits
-   # VariantOrbits.collapse_by_object_id() -> Orbits
-   # ASSISTPropagator.generate_ephemeris(orbits: Orbits | VariantOrbits, observers: Observers, ...) -> Ephemeris | VariantEphemeris
