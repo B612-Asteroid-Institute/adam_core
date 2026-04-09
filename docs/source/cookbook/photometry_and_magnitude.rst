@@ -273,11 +273,3 @@ Related Documentation
 * :doc:`../reference/propagator`
 * :doc:`../reference/orbits`
 
-Input Types
------------
-.. code-block:: python
-
-   # calculate_phase_angle(object_coords: CartesianCoordinates, observers: Observers) -> np.ndarray
-   # calculate_apparent_magnitude_v(H_v: float | np.ndarray, object_coords: CartesianCoordinates, observer: Observers, G: float | np.ndarray = 0.15) -> np.ndarray
-   # predict_magnitudes(H: float | np.ndarray, object_coords: CartesianCoordinates, exposures: Exposures, G: float | np.ndarray = 0.15, reference_filter: str = "V", composition: str | tuple[float, float]) -> np.ndarray
-   # estimate_absolute_magnitude_v_from_detections_grouped(detections: PointSourceDetections, exposures: Exposures, object_coords: CartesianCoordinates, object_ids, composition: str | tuple[float, float], G: float = 0.15) -> GroupedPhysicalParameters

@@ -1,38 +1,10 @@
-Dynamics and Impact Analysis
-============================
+:orphan:
 
-This section breaks impact and screening analysis into dedicated guides.
+Dynamics and Impact Analysis (Moved)
+====================================
 
-Dedicated Guides
-----------------
+This page was consolidated into focused guides:
 
-* :doc:`impact_probabilities` for Monte Carlo collision probability analysis.
+* :doc:`impact_probabilities` for Monte Carlo collision analysis.
 * :doc:`moid_analysis` for geometric screening and perturber-wise MOID tables.
-
-Additional Dynamics Metric
---------------------------
-
-.. code-block:: python
-
-   from adam_core.dynamics.tisserand import calc_tisserand_parameter
-
-   tj = calc_tisserand_parameter(a=2.5, e=0.2, i=8.0, third_body="jupiter")
-   print(tj)
-
-When to Use
------------
-
-* Use MOID first for fast triage.
-* Use impact-probability analysis for decision-grade risk quantification.
-* Use Tisserand-style diagnostics for dynamical classification context.
-
-Related Reference
------------------
-
-* :doc:`../reference/dynamics`
-
-Input Types
------------
-.. code-block:: python
-
-   # calc_tisserand_parameter(a: float, e: float, i: float, third_body: str) -> float
+* :doc:`../use_cases/impact_risk` for end-to-end operational impact-risk workflows.

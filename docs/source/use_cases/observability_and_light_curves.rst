@@ -31,15 +31,16 @@ Runnable Example
    import pyarrow as pa
    import pyarrow.compute as pc
    from adam_assist import ASSISTPropagator
+   from adam_core.orbits import Orbits
    from adam_core.observers import Observers
    from adam_core.orbits.query import query_sbdb
    from adam_core.photometry import convert_magnitude
    from adam_core.photometry.bandpasses import map_to_canonical_filter_bands
    from adam_core.time import Timestamp
 
-   orbits = query_sbdb(["Apophis"])
-   times = Timestamp.from_mjd(np.arange(60200.0, 60240.0, 1.0), scale="utc")
-   observers = Observers.from_code("I41", times)
+   orbits: Orbits = query_sbdb(["Apophis"])
+   times: Timestamp = Timestamp.from_mjd(np.arange(60200.0, 60240.0, 1.0), scale="utc")
+   observers: Observers = Observers.from_code("I41", times)
 
    propagator = ASSISTPropagator()
    ephem = propagator.generate_ephemeris(
@@ -83,11 +84,3 @@ Related Documentation
 * :doc:`../cookbook/photometry_and_magnitude`
 * :doc:`../reference/photometry`
 * :doc:`../reference/propagator`
-
-Input Types
------------
-.. code-block:: python
-
-   # map_to_canonical_filter_bands(observatory_codes, bands, allow_fallback_filters: bool = True) -> np.ndarray
-   # ASSISTPropagator.generate_ephemeris(orbits: Orbits, observers: Observers, predict_magnitudes: bool = True, predict_phase_angle: bool = True, ...) -> Ephemeris
-   # convert_magnitude(magnitude: np.ndarray, source_filter_id: np.ndarray, target_filter_id: np.ndarray, composition: str | tuple[float, float]) -> np.ndarray

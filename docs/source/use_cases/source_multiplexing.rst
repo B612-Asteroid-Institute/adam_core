@@ -51,12 +51,3 @@ Related Documentation
 
 * :doc:`../cookbook/orbit_sources_and_state_tables`
 * :doc:`../reference/orbits`
-
-Input Types
------------
-.. code-block:: python
-
-   # load_orbits(source: str, object_ids: list[str]) -> Orbits
-   # query_sbdb(object_ids: list[str]) -> Orbits
-   # query_scout(object_ids: list[str] | str) -> VariantOrbits
-   # query_horizons(object_ids: list[str], epoch: Timestamp) -> Orbits

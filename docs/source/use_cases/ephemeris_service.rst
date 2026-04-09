@@ -25,17 +25,20 @@ Runnable Example
 
    import numpy as np
 
+   from adam_core.orbits import Orbits
    from adam_core.observers import Observers
    from adam_core.orbits.query import query_horizons
    from adam_core.time import Timestamp
    from adam_assist import ASSISTPropagator
 
-   request_object_ids = ["Apophis", "Bennu", "Eros"]
-   t0 = Timestamp.from_mjd([60000.0], scale="tdb")
-   request_times = Timestamp.from_mjd(t0.mjd().to_numpy() + np.arange(0, 20), scale="tdb")
+   request_object_ids: list[str] = ["Apophis", "Bennu", "Eros"]
+   t0: Timestamp = Timestamp.from_mjd([60000.0], scale="tdb")
+   request_times: Timestamp = Timestamp.from_mjd(
+       t0.mjd().to_numpy() + np.arange(0, 20), scale="tdb"
+   )
 
-   orbits = query_horizons(request_object_ids, t0)
-   observers = Observers.from_code("I11", request_times)
+   orbits: Orbits = query_horizons(request_object_ids, t0)
+   observers: Observers = Observers.from_code("I11", request_times)
 
    propagator = ASSISTPropagator()
 
@@ -75,12 +78,3 @@ Related Documentation
 * :doc:`../reference/propagator`
 * :doc:`../reference/photometry`
 * :doc:`../reference/time`
-
-Input Types
------------
-.. code-block:: python
-
-   # query_horizons(object_ids: list[str], epoch: Timestamp) -> Orbits
-   # Observers.from_code(code: str, times: Timestamp) -> Observers
-   # ASSISTPropagator.propagate_orbits(orbits: Orbits, times: Timestamp, ...) -> Orbits
-   # ASSISTPropagator.generate_ephemeris(orbits: Orbits, observers: Observers, ...) -> Ephemeris

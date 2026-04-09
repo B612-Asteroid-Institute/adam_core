@@ -1,5 +1,5 @@
-Transfer Solutions and Porkchops
-================================
+Lambert Solutions, Transfers, and Porkchop Plots
+=================================================
 
 This guide separates transfer analysis into three layers:
 
@@ -19,14 +19,14 @@ time-of-flight values.
    from adam_core.dynamics.lambert import solve_lambert, calculate_c3
 
    # Two transfer opportunities (AU, AU/day, days)
-   r1 = np.array([[1.0, 0.0, 0.0], [0.95, 0.1, 0.0]])
-   r2 = np.array([[1.5, 0.2, 0.0], [1.4, 0.35, 0.0]])
-   tof = np.array([180.0, 230.0])
+   r1: np.ndarray = np.array([[1.0, 0.0, 0.0], [0.95, 0.1, 0.0]])
+   r2: np.ndarray = np.array([[1.5, 0.2, 0.0], [1.4, 0.35, 0.0]])
+   tof: np.ndarray = np.array([180.0, 230.0])
 
    v1, v2 = solve_lambert(r1, r2, tof, prograde=True, max_iter=35, tol=1e-10)
 
    # If body velocity at departure is known, pass it here for C3.
-   body_v_departure = np.zeros_like(v1)
+   body_v_departure: np.ndarray = np.zeros_like(v1)
    c3 = calculate_c3(v1, body_v_departure)
 
 Generate Porkchop Data
@@ -39,17 +39,19 @@ For planetary transfers, first generate departure/arrival orbit grids, then call
 
    from adam_core.coordinates.origin import OriginCodes
    from adam_core.missions.porkchop import (
+       LambertSolutions,
        generate_porkchop_data,
        prepare_and_propagate_orbits,
    )
+   from adam_core.orbits import Orbits
    from adam_core.time import Timestamp
 
-   departure_start = Timestamp.from_iso8601(["2028-01-01T00:00:00"], scale="tdb")
-   departure_end = Timestamp.from_iso8601(["2028-12-31T00:00:00"], scale="tdb")
-   arrival_start = Timestamp.from_iso8601(["2028-06-01T00:00:00"], scale="tdb")
-   arrival_end = Timestamp.from_iso8601(["2030-01-01T00:00:00"], scale="tdb")
+   departure_start: Timestamp = Timestamp.from_iso8601(["2028-01-01T00:00:00"], scale="tdb")
+   departure_end: Timestamp = Timestamp.from_iso8601(["2028-12-31T00:00:00"], scale="tdb")
+   arrival_start: Timestamp = Timestamp.from_iso8601(["2028-06-01T00:00:00"], scale="tdb")
+   arrival_end: Timestamp = Timestamp.from_iso8601(["2030-01-01T00:00:00"], scale="tdb")
 
-   departure_orbits = prepare_and_propagate_orbits(
+   departure_orbits: Orbits = prepare_and_propagate_orbits(
        body=OriginCodes.EARTH,
        start_time=departure_start,
        end_time=departure_end,
@@ -57,7 +59,7 @@ For planetary transfers, first generate departure/arrival orbit grids, then call
        step_size=2.0,
    )
 
-   arrival_orbits = prepare_and_propagate_orbits(
+   arrival_orbits: Orbits = prepare_and_propagate_orbits(
        body=OriginCodes.MARS_BARYCENTER,
        start_time=arrival_start,
        end_time=arrival_end,
@@ -65,7 +67,7 @@ For planetary transfers, first generate departure/arrival orbit grids, then call
        step_size=2.0,
    )
 
-   lambert_solutions = generate_porkchop_data(
+   lambert_solutions: LambertSolutions = generate_porkchop_data(
        departure_orbits=departure_orbits,
        arrival_orbits=arrival_orbits,
        propagation_origin=OriginCodes.SUN,
@@ -82,9 +84,10 @@ Creating and Viewing Porkchops
 
 .. code-block:: python
 
+   import plotly.graph_objects as go
    from adam_core.missions.porkchop import plot_porkchop_plotly
 
-   fig = plot_porkchop_plotly(
+   fig: go.Figure = plot_porkchop_plotly(
        lambert_solutions,
        title="Earth to Mars Porkchop",
        c3_departure_min=0.0,
@@ -112,7 +115,7 @@ For production-quality trajectories, use a high-fidelity propagator such as
 
    from adam_assist import ASSISTPropagator
 
-   propagated_custom = prepare_and_propagate_orbits(
+   propagated_custom: Orbits = prepare_and_propagate_orbits(
        body=custom_orbit,
        start_time=departure_start,
        end_time=departure_end,
@@ -134,12 +137,3 @@ Related Reference
 
 * :doc:`../reference/missions`
 * :doc:`../reference/dynamics`
-
-Input Types
------------
-.. code-block:: python
-
-   # solve_lambert(r1: np.ndarray, r2: np.ndarray, tof: np.ndarray | float, mu: float = MU, prograde: bool = True, max_iter: int = 35, tol: float = 1e-10) -> tuple[np.ndarray, np.ndarray]
-   # prepare_and_propagate_orbits(body: Orbits | OriginCodes, start_time: Timestamp, end_time: Timestamp, propagation_origin: OriginCodes = OriginCodes.SUN, step_size: float = 1.0, propagator_class: type[Propagator] | None = None, max_processes: int | None = 1) -> Orbits
-   # generate_porkchop_data(departure_orbits: Orbits, arrival_orbits: Orbits, propagation_origin: OriginCodes = OriginCodes.SUN, ...) -> LambertSolutions
-   # plot_porkchop_plotly(porkchop_data: LambertSolutions, ...) -> plotly.graph_objects.Figure

@@ -179,11 +179,3 @@ Related Reference
 * :doc:`../reference/coordinates`
 * :doc:`../reference/orbits`
 
-Input Types
------------
-.. code-block:: python
-
-   # CartesianCoordinates.from_kwargs(..., time: Timestamp, covariance: CoordinateCovariances, origin: Origin, frame: str) -> CartesianCoordinates
-   # CartesianCoordinates.to_spherical() -> SphericalCoordinates
-   # CartesianCoordinates.to_keplerian() -> KeplerianCoordinates
-   # CartesianCoordinates.to_cometary() -> CometaryCoordinates

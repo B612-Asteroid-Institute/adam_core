@@ -1,35 +1,12 @@
 Use Cases
 =========
 
-Long-form guides for production asteroid/orbital analysis and service design.
-The section is ordered from simpler operational tasks to more complex risk and
-decision analysis.
+All narrative and atomic guides live here in one flat list. Start with the
+goal closest to your task, then move deeper into uncertainty, scaling, and
+mission-analysis details.
 
-Start Here
-----------
-
-* :doc:`real_world_use_cases` for the full simple-to-advanced progression map.
-* :doc:`../cookbook/index` when you need atomic APIs and type-level behavior.
-
-Narrative Guides
-----------------
-
-.. toctree::
-   :maxdepth: 2
-
-   real_world_use_cases
-   source_multiplexing
-   ephemeris_service
-   neo_tracking
-   observability_and_light_curves
-   orbit_determination
-   impact_risk
-
-Notebook Demonstrations
------------------------
-
-Rendered notebooks are grouped with the same use-case material and include
-runtime/dependency notes.
+Guide Index
+-----------
 
 .. list-table::
    :header-rows: 1
@@ -55,6 +32,30 @@ runtime/dependency notes.
 .. toctree::
    :maxdepth: 1
 
+   real_world_use_cases
    ../examples/track_neo
    ../examples/preview_orbit
    ../examples/2024_yr4_impact_risk
+   source_multiplexing
+   ephemeris_service
+   neo_tracking
+   orbit_determination
+   observability_and_light_curves
+   impact_risk
+   ../cookbook/time_and_windows
+   ../cookbook/orbit_sources_and_state_tables
+   ../cookbook/observations_and_observers
+   ../cookbook/propagation_and_ephemeris
+   ../cookbook/oem_and_spk_io
+   ../cookbook/openspace_visualization
+   ../cookbook/transfer_and_porkchop
+   ../cookbook/moid_analysis
+   ../cookbook/impact_probabilities
+   ../cookbook/photometry_and_magnitude
+   ../cookbook/coordinates_and_residuals
+   ../cookbook/coordinates_classes
+   ../cookbook/coordinate_covariances
+   ../cookbook/coordinate_transforms
+   ../cookbook/residuals
+   ../cookbook/variant_sampling_and_collapse
+   ../cookbook/scaling_and_utils

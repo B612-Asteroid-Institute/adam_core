@@ -72,11 +72,3 @@ Related Reference
 * :doc:`../reference/dynamics`
 * :doc:`../reference/observers`
 
-Input Types
------------
-.. code-block:: python
-
-   # Propagator.propagate_orbits(orbits: Orbits | VariantOrbits, times: Timestamp, ...) -> Orbits | VariantOrbits
-   # Propagator.generate_ephemeris(orbits: Orbits | VariantOrbits, observers: Observers, predict_magnitudes: bool = True, predict_phase_angle: bool = False, ...) -> Ephemeris | VariantEphemeris
-   # propagate_2body(orbits: Orbits | VariantOrbits, times: Timestamp, ...) -> Orbits | VariantOrbits
-   # generate_ephemeris_2body(orbits: Orbits | VariantOrbits, observers: Observers, ...) -> Ephemeris | VariantEphemeris

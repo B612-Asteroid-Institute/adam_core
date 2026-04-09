@@ -14,4 +14,5 @@ Related Guides
 --------------
 
 * :doc:`../cookbook/transfer_and_porkchop`
-* :doc:`../cookbook/mission_and_export`
+* :doc:`../cookbook/oem_and_spk_io`
+* :doc:`../cookbook/openspace_visualization`

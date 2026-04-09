@@ -50,11 +50,3 @@ Related Reference
 * :doc:`../reference/orbits`
 * :doc:`../reference/functionality_inventory`
 
-Input Types
------------
-.. code-block:: python
-
-   # query_sbdb(object_ids: list[str]) -> Orbits
-   # query_horizons(object_ids: list[str], epoch: Timestamp) -> Orbits
-   # query_neocc(object_ids: list[str]) -> Orbits
-   # query_scout(object_ids: list[str] | str) -> VariantOrbits

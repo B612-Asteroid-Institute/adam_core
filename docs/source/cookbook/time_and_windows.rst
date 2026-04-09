@@ -1,5 +1,5 @@
-Time and Windows
-================
+Working with Time
+=================
 
 ``Timestamp`` is the core time primitive across ``adam_core``. It stores integer
 MJD days + integer nanoseconds with an explicit scale, which keeps joins,
@@ -12,9 +12,11 @@ Simple: operator-facing ISO input.
 
 .. code-block:: python
 
+   import numpy as np
+
    from adam_core.time import Timestamp
 
-   t_utc = Timestamp.from_iso8601(
+   t_utc: Timestamp = Timestamp.from_iso8601(
        ["2026-01-01T00:00:00", "2026-01-02T12:30:00"],
        scale="utc",
    )
@@ -23,11 +25,12 @@ Numeric: simulation and propagation pipelines.
 
 .. code-block:: python
 
-   import numpy as np
    from adam_core.time import Timestamp
 
-   t_tdb = Timestamp.from_mjd(np.array([60200.0, 60200.25, 60201.0]), scale="tdb")
-   t_jd = Timestamp.from_jd([2460200.5], scale="tt")
+   t_tdb: Timestamp = Timestamp.from_mjd(
+       np.array([60200.0, 60200.25, 60201.0]), scale="tdb"
+   )
+   t_jd: Timestamp = Timestamp.from_jd([2460200.5], scale="tt")
 
 Interoperability: Astropy and ET.
 
@@ -35,9 +38,9 @@ Interoperability: Astropy and ET.
 
    from adam_core.time import Timestamp
 
-   t_et = Timestamp.from_et([0.0, 86400.0], scale="tdb")
+   t_et: Timestamp = Timestamp.from_et([0.0, 86400.0], scale="tdb")
    astropy_time = t_et.to_astropy()
-   round_trip = Timestamp.from_astropy(astropy_time)
+   round_trip: Timestamp = Timestamp.from_astropy(astropy_time)
 
 Atomic Operations
 -----------------
@@ -100,15 +103,22 @@ If you need the astropy implementation for a specific validation path:
 
    tdb_astropy = t_utc.rescale_astropy("tdb")
 
-Linking and Window Joins
-------------------------
+Linking Time Arrays
+-------------------
 
-``Timestamp.link`` is useful when joining tables on time with controlled precision.
+``Timestamp.link`` returns a ``quivr.Linkage`` object. The linkage preserves left/right
+table context and gives explicit selection methods for joins at controlled precision.
 
 .. code-block:: python
 
-   # Match rows at millisecond precision.
-   link = t_utc.link(t_utc.rounded("ms"), precision="ms")
+   import quivr as qv
+
+   rounded_ms: Timestamp = t_utc.rounded("ms")
+   time_link: qv.Linkage[Timestamp, Timestamp] = t_utc.link(rounded_ms, precision="ms")
+
+   # Use linkage methods for explicit join behavior.
+   print(type(time_link.left_table), type(time_link.right_table))
+   print(len(time_link))
 
 Cache and Grouping Keys
 -----------------------
@@ -135,12 +145,3 @@ Related Reference
 
 * :doc:`../reference/time`
 * :doc:`../reference/functionality_inventory`
-
-Input Types
------------
-.. code-block:: python
-
-   # Timestamp.from_iso8601(times: list[str], scale: str) -> Timestamp
-   # Timestamp.from_mjd(mjd: np.ndarray | list[float], scale: str) -> Timestamp
-   # Timestamp.rescale(scale: str) -> Timestamp
-   # Timestamp.difference(other: Timestamp) -> tuple[pyarrow.Array, pyarrow.Array]

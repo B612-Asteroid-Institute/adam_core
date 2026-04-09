@@ -34,11 +34,3 @@ Related Reference
 * :doc:`../reference/orbits`
 * :doc:`../reference/orbit_determination`
 
-Input Types
------------
-.. code-block:: python
-
-   # Core table types used across this stack.
-   # CartesianCoordinates.from_kwargs(..., time: Timestamp, covariance: CoordinateCovariances, origin: Origin, frame: str) -> CartesianCoordinates
-   # transform_coordinates(coords: CoordinateType, representation_out: type[CoordinateType], frame_out: str | None = None, origin_out: OriginCodes | None = None) -> CoordinateType
-   # Residuals.calculate(observed: CoordinateType, predicted: CoordinateType, use_predicted_covariance: bool = True) -> Residuals

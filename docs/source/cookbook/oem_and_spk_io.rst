@@ -123,11 +123,3 @@ Related Reference
 * :doc:`../reference/orbits`
 * :doc:`../reference/propagator`
 
-Input Types
------------
-.. code-block:: python
-
-   # orbit_to_oem(orbits: Orbits, output_file: str, originator: str = "ADAM CORE USER") -> str
-   # orbit_to_oem_propagated(orbits: Orbits, output_file: str, times: Timestamp, propagator_klass: type[Propagator], originator: str = "ADAM CORE USER") -> str
-   # orbit_from_oem(input_file: str) -> Orbits
-   # get_spice_body_state(body_id: int, times: Timestamp, frame: str = "ecliptic", origin: OriginCodes = OriginCodes.SUN) -> CartesianCoordinates

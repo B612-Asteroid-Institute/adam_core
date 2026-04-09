@@ -93,10 +93,3 @@ Related Reference
 * :doc:`moid_analysis`
 * :doc:`../use_cases/impact_risk`
 
-Input Types
------------
-.. code-block:: python
-
-   # calculate_impacts(orbits: Orbits, num_days: int, propagator: Propagator, num_samples: int = 1000, processes: int | None = None, seed: int | None = None, conditions: CollisionConditions | None = None) -> tuple[VariantOrbits, CollisionEvent]
-   # calculate_impact_probabilities(variants: VariantOrbits, collision_events: CollisionEvent, conditions: CollisionConditions | None = None) -> ImpactProbabilities
-   # CollisionConditions.from_kwargs(...) -> CollisionConditions

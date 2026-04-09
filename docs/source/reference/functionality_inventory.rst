@@ -30,12 +30,12 @@ Coverage Map
      - :doc:`../cookbook/propagation_and_ephemeris`,
        :doc:`../cookbook/transfer_and_porkchop`,
        :doc:`../cookbook/moid_analysis`,
-       :doc:`../cookbook/impact_probabilities`,
-       :doc:`../cookbook/dynamics_and_impact_analysis`
+       :doc:`../cookbook/impact_probabilities`
      - :doc:`dynamics`
    * - ``adam_core.missions``
      - :doc:`../cookbook/transfer_and_porkchop`,
-       :doc:`../cookbook/mission_and_export`
+       :doc:`../cookbook/oem_and_spk_io`,
+       :doc:`../cookbook/openspace_visualization`
      - :doc:`missions`
    * - ``adam_core.observations``
      - :doc:`../cookbook/observations_and_observers`
@@ -44,7 +44,7 @@ Coverage Map
      - :doc:`../cookbook/observations_and_observers`
      - :doc:`observers`
    * - ``adam_core.orbit_determination``
-     - :doc:`../cookbook/orbit_determination_pipeline`
+     - :doc:`../use_cases/orbit_determination`
      - :doc:`orbit_determination`
    * - ``adam_core.orbits``
      - :doc:`../cookbook/orbit_sources_and_state_tables`,

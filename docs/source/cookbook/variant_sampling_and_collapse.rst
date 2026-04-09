@@ -90,11 +90,3 @@ Related Reference
 * :doc:`../reference/dynamics`
 * :doc:`../reference/propagator`
 
-Input Types
------------
-.. code-block:: python
-
-   # VariantOrbits.create(orbits: Orbits, method: str = "auto", num_samples: int = 10000, seed: int | None = None, alpha: float = 1.0, beta: float = 0.0, kappa: float = 0.0) -> VariantOrbits
-   # propagate_2body(orbits: VariantOrbits, times: Timestamp, ...) -> VariantOrbits
-   # VariantOrbits.collapse_by_object_id() -> Orbits
-   # VariantEphemeris.collapse_by_object_id(aberration_mode: str = "recompute") -> Ephemeris

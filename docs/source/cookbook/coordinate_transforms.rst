@@ -130,11 +130,3 @@ Related Reference
 * :doc:`../reference/coordinates`
 * :doc:`../reference/propagator`
 
-Input Types
------------
-.. code-block:: python
-
-   # transform_coordinates(coords: CoordinateType, representation_out: type[CoordinateType], frame_out: str | None = None, origin_out: OriginCodes | None = None) -> CoordinateType
-   # cartesian_to_origin(coords: CartesianCoordinates, origin_out: OriginCodes) -> CartesianCoordinates
-   # cartesian_to_frame(coords: CartesianCoordinates, frame_out: str) -> CartesianCoordinates
-   # apply_time_varying_rotation(coords: CartesianCoordinates, frame_out: str) -> CartesianCoordinates

@@ -109,11 +109,3 @@ Related Reference
 * :doc:`../reference/coordinates`
 * :doc:`../reference/orbit_determination`
 
-Input Types
------------
-.. code-block:: python
-
-   # Residuals.calculate(observed: CoordinateType, predicted: CoordinateType, use_predicted_covariance: bool = True) -> Residuals
-   # calculate_chi2(residuals: np.ndarray, covariance: np.ndarray) -> np.ndarray
-   # calculate_reduced_chi2(residuals: Residuals, parameters: int) -> np.ndarray
-   # apply_cosine_latitude_correction(latitudes_deg: np.ndarray, residuals: np.ndarray, covariance: np.ndarray) -> tuple[np.ndarray, np.ndarray]

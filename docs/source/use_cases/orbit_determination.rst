@@ -10,6 +10,20 @@ Problem
 You have linked detections and need fitted orbits with quantitative quality
 metrics and outlier-aware membership outputs.
 
+What You Get Back
+-----------------
+
+The orbit-determination APIs return two synchronized tables:
+
+* ``FittedOrbits``: one row per solved candidate with quality metrics
+  (``orbit_id``, ``arc_length``, ``num_obs``, ``chi2``, ``reduced_chi2``,
+  convergence/status fields, and best-fit Cartesian state).
+* ``FittedOrbitMembers``: one row per observation assignment with
+  ``orbit_id`` + ``obs_id`` plus per-observation residuals and outlier flags.
+
+You use them together to rank candidates, inspect residual structure, remove
+poor fits, and feed validated solutions downstream.
+
 Implementation Options and Tradeoffs
 ------------------------------------
 
@@ -23,19 +37,25 @@ Runnable Example
 
 .. code-block:: python
 
+   import pyarrow.compute as pc
    from adam_assist import ASSISTPropagator
    from adam_core.orbit_determination import (
+       FittedOrbitMembers,
+       FittedOrbits,
+       OrbitDeterminationObservations,
        evaluate_orbits,
        fit_least_squares,
        initial_orbit_determination,
    )
 
-   # observations: OrbitDeterminationObservations
-   # linkage_members: FittedOrbitMembers with cluster/linkage assignments
+   observations: OrbitDeterminationObservations
+   linkage_members: FittedOrbitMembers
    # These are typically produced by your detection association pipeline.
 
-   propagator_cls = ASSISTPropagator
+   propagator_cls: type[ASSISTPropagator] = ASSISTPropagator
 
+   iod_orbits: FittedOrbits
+   iod_members: FittedOrbitMembers
    iod_orbits, iod_members = initial_orbit_determination(
        observations=observations,
        linkage_members=linkage_members,
@@ -48,9 +68,13 @@ Runnable Example
 
    propagator = ASSISTPropagator()
 
+   # Inspect top candidates by quality metric.
+   ranked_orbits = iod_orbits.sort_by([("reduced_chi2", "ascending")])
+
    # Refine one candidate orbit with differential correction.
+   # (Converts one fitted row to Orbits for the least-squares fitter.)
    fitted_orbit, fitted_members = fit_least_squares(
-       orbit=iod_orbits.take([0]).to_orbits(),
+       orbit=ranked_orbits.take([0]).to_orbits(),
        observations=observations,
        propagator=propagator,
    )
@@ -61,6 +85,10 @@ Runnable Example
        observations=observations,
        propagator=propagator,
    )
+
+   # Example: count non-outlier members by orbit_id.
+   non_outlier = evaluated_members.apply_mask(pc.invert(evaluated_members.outlier))
+   print(non_outlier.group_by("orbit_id").aggregate([("obs_id", "count")]))
 
 When to Use This Pattern
 ------------------------
@@ -74,11 +102,3 @@ Related Documentation
 * :doc:`../reference/orbit_determination`
 * :doc:`../reference/observations`
 * :doc:`../reference/propagator`
-
-Input Types
------------
-.. code-block:: python
-
-   # initial_orbit_determination(observations: OrbitDeterminationObservations, linkage_members: FittedOrbitMembers, propagator: type[Propagator], ...) -> tuple[FittedOrbits, FittedOrbitMembers]
-   # fit_least_squares(orbit: Orbits, observations: OrbitDeterminationObservations, propagator: Propagator, ...) -> tuple[FittedOrbits, FittedOrbitMembers]
-   # evaluate_orbits(orbits: Orbits, observations: OrbitDeterminationObservations, propagator: Propagator, ...) -> tuple[FittedOrbits, FittedOrbitMembers]
