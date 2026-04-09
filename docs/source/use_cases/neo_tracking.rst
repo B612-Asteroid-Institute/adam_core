@@ -4,37 +4,39 @@
 NEO Tracking for Follow-Up
 ==========================
 
-Problem
--------
+Goal
+----
 
-You need actionable pointings for newly discovered NEO candidates with uncertain
-orbits, often under tight operational timelines.
+Generate follow-up pointings for uncertain NEOCP candidates quickly and with
+explicit uncertainty handling.
 
-Implementation Options and Tradeoffs
-------------------------------------
+Operational Prerequisites
+-------------------------
 
-* Collapse variants to a single covariance orbit:
-  Faster and easier to operationalize; can smooth multimodal uncertainty.
-* Propagate full Scout variant ensembles:
-  Better uncertainty fidelity; higher CPU and memory cost.
+* Install a production propagator: ``adam-assist`` (recommended).
+* Query access to CNEOS Scout for active NEOCP candidates.
+* Observatory code(s) or explicit observer state vectors.
 
-Runnable Example
-----------------
+Canonical End-to-End Pattern
+----------------------------
 
 .. code-block:: python
 
    import pyarrow.compute as pc
-
+   from adam_assist import ASSISTPropagator
    from adam_core.observers import Observers
    from adam_core.orbits import Orbits, VariantOrbits
    from adam_core.orbits.query.scout import get_scout_objects, query_scout
    from adam_core.time import Timestamp
-   from adam_assist import ASSISTPropagator
 
+   # 1) Select candidate(s) from Scout's current NEOCP list.
    scout_objects = get_scout_objects()
    object_of_interest = scout_objects[10]
+
+   # 2) Fetch Scout posterior samples (usually ~1000 variants per object).
    samples: VariantOrbits = query_scout(object_of_interest.objectName)
 
+   # 3) Define exposure times and observer geometry.
    times: Timestamp = Timestamp.from_iso8601(
        [
            "2025-02-23T00:00:00Z",
@@ -43,41 +45,69 @@ Runnable Example
        ],
        scale="utc",
    )
-   observers = Observers.from_code("T08", times)
-
+   observers: Observers = Observers.from_code("T08", times)
    propagator = ASSISTPropagator()
 
-   # Option A: collapse sampled orbits into one uncertainty-aware orbit.
-   orbits: Orbits = samples.collapse_by_object_id()
+   # 4A) Fast operational path: collapse variants and propagate covariance.
+   collapsed_orbits: Orbits = samples.collapse_by_object_id()
    collapsed_ephemeris = propagator.generate_ephemeris(
-       orbits,
+       collapsed_orbits,
        observers,
        covariance=True,
        num_samples=1000,
        max_processes=10,
    )
 
-   # Option B: propagate all samples and derive uncertainty envelopes directly.
-   sample_ephemeris = propagator.generate_ephemeris(samples, observers, max_processes=10)
+   # 4B) High-fidelity path: propagate each variant directly.
+   sample_ephemeris = propagator.generate_ephemeris(
+       samples,
+       observers,
+       max_processes=10,
+   )
 
+   # 5) Derive per-time on-sky envelopes for pointing decisions.
    for t in sample_ephemeris.coordinates.time.unique():
        at_t = sample_ephemeris.apply_mask(sample_ephemeris.coordinates.time.equals(t))
        print(
            at_t.coordinates.time.to_iso8601()[0],
+           "RA range:",
            pc.min(at_t.coordinates.lon).as_py(),
            pc.max(at_t.coordinates.lon).as_py(),
+           "Dec range:",
+           pc.min(at_t.coordinates.lat).as_py(),
+           pc.max(at_t.coordinates.lat).as_py(),
        )
 
-When to Use This Pattern
-------------------------
+Implementation Choices
+----------------------
 
-Use this when your primary output is follow-up telescope pointing guidance and
-the input orbit uncertainty is still evolving.
+* ``collapse_by_object_id()`` + ``covariance=True``:
+  Lowest compute cost and easiest to deploy for routine scheduling.
+* direct ``VariantOrbits`` propagation:
+  Preserves multimodal structure and heavy tails in uncertainty.
+* ``max_processes``:
+  Primary speed control for short-notice campaign planning.
 
-Related Documentation
----------------------
+What You Get Back
+-----------------
 
-* :doc:`../examples/track_neo`
+* ``collapsed_ephemeris``:
+  Central track with covariance-derived uncertainty columns.
+* ``sample_ephemeris``:
+  Variant-wise tracks suitable for envelope/percentile summarization.
+* Observer-aware sky coordinates at each requested time for immediate
+  telescope planning.
+
+When To Use
+-----------
+
+Use this path when you are planning near-term follow-up for newly discovered
+candidates and need a defensible uncertainty-aware pointing recommendation.
+
+Related Reference
+-----------------
+
 * :doc:`../reference/orbits`
 * :doc:`../reference/observers`
 * :doc:`../reference/propagator`
+* :doc:`../cookbook/variant_sampling_and_collapse`

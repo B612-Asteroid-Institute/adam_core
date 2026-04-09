@@ -12,11 +12,11 @@ Guide Index
    :header-rows: 1
    :widths: 22 30 28 20
 
-   * - Notebook
+   * - Featured Page
      - Purpose
      - Dependencies
      - Runtime / Constraints
-   * - :doc:`../examples/track_neo`
+   * - :doc:`neo_tracking`
      - Track NEOCP candidates and generate uncertainty-aware follow-up pointings.
      - ``adam_core``, ``adam-assist``
      - Network/API dependent; multiprocessing recommended for speed.
@@ -29,7 +29,6 @@ Guide Index
    :maxdepth: 1
 
    real_world_use_cases
-   ../examples/track_neo
    ../examples/2024_yr4_impact_risk
    source_multiplexing
    ephemeris_service
