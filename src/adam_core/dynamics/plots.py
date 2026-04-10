@@ -872,11 +872,11 @@ def plot_risk_corridor(
     impacts: CollisionEvent,
     title: Optional[str] = None,
     logo: bool = True,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
     map_style: Literal[
         "carto-positron", "open-street-map", "white-bg"
     ] = "carto-positron",
-    height: Optional[int] = None,
-    width: Optional[int] = None,
 ) -> go.Figure:
     """
     Plot the risk corridor with toggleable globe/map views.
@@ -889,13 +889,13 @@ def plot_risk_corridor(
         Plot title
     logo : bool, optional
         Whether to add the Asteroid Institute logo to the plot.
-    map_style : {"carto-positron", "open-street-map", "white-bg"}, optional
-        Basemap style used by Plotly map tiles. Defaults to ``"carto-positron"``
-        to avoid OpenStreetMap tile-rate errors in shared/public viewing contexts.
     height : int, optional
         The height of the plot.
     width : int, optional
         The width of the plot.
+    map_style : {"carto-positron", "open-street-map", "white-bg"}, optional
+        Basemap style used by Plotly map tiles. Defaults to ``"carto-positron"``
+        to avoid OpenStreetMap tile-rate errors in shared/public viewing contexts.
 
     Returns
     -------
