@@ -85,7 +85,7 @@ intersphinx_mapping = {
 html_theme = "furo"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
-html_title = "adam_core documentation"
+html_title = "adam_core"
 html_baseurl = os.environ.get(
     "READTHEDOCS_CANONICAL_URL",
     "https://adam-core.readthedocs.io/en/latest/",
