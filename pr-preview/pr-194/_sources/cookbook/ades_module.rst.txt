@@ -10,6 +10,14 @@ directions:
 Use this when ADES is your system boundary for ingest, QA, submission, or
 handoff to orbit-determination pipelines.
 
+Current Format Support
+----------------------
+
+``adam_core`` currently supports **ADES PSV** (pipe-separated values) only:
+
+* supported: ADES PSV parse/serialize via ``ADES_string_to_tables`` and ``ADES_to_string``
+* not currently implemented: ADES XML parse/serialize
+
 Parse ADES Text into Tables
 ---------------------------
 

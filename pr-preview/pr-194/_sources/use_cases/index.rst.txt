@@ -21,11 +21,11 @@ Guide Index
      - ``adam_core``, ``adam-assist``
      - Network/API dependent; multiprocessing recommended for speed.
    * - :doc:`../cookbook/ades_module`
-     - Parse, build, and export ADES observation packets for ingestion and submission boundaries.
+     - Parse, build, and export ADES PSV observation packets for ingestion and submission boundaries.
      - ``adam_core``
      - Text IO with validation; ideal for ingest/egress QA.
-   * - :doc:`../examples/2024_yr4_impact_risk`
-     - Simulate variants and summarize Earth/Moon impact probabilities.
+   * - :doc:`impact_risk`
+     - Run end-to-end impact-risk analysis with explicit collision conditions and stopping semantics.
      - ``adam_core[plots]``, ``adam-assist``
      - CPU intensive at high sample counts; includes optional visualization outputs.
 
@@ -33,7 +33,6 @@ Guide Index
    :maxdepth: 1
 
    real_world_use_cases
-   ../examples/2024_yr4_impact_risk
    source_multiplexing
    ephemeris_service
    neo_tracking

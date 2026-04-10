@@ -208,7 +208,6 @@
 </li>
 <li class="toctree-l1 current has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
@@ -220,7 +219,7 @@
 <li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">ADES Module: Parse, Build, and Exchange</a></li>
 <li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
-<li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">OEM and SPK I/O</a></li>
+<li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="openspace_visualization.html">OpenSpace Visualization Assets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="moid_analysis.html">MOID Analysis</a></li>
@@ -304,6 +303,14 @@ directions:</p>
 </ul>
 <p>Use this when ADES is your system boundary for ingest, QA, submission, or
 handoff to orbit-determination pipelines.</p>
+<section id="current-format-support">
+<h2>Current Format Support<a class="headerlink" href="#current-format-support" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">adam_core</span></code> currently supports <strong>ADES PSV</strong> (pipe-separated values) only:</p>
+<ul class="simple">
+<li><p>supported: ADES PSV parse/serialize via <code class="docutils literal notranslate"><span class="pre">ADES_string_to_tables</span></code> and <code class="docutils literal notranslate"><span class="pre">ADES_to_string</span></code></p></li>
+<li><p>not currently implemented: ADES XML parse/serialize</p></li>
+</ul>
+</section>
 <section id="parse-ades-text-into-tables">
 <h2>Parse ADES Text into Tables<a class="headerlink" href="#parse-ades-text-into-tables" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations.ades</span><span class="w"> </span><span class="kn">import</span> <span class="n">ADESObservations</span><span class="p">,</span> <span class="n">ADES_string_to_tables</span><span class="p">,</span> <span class="n">ObsContext</span>
@@ -482,7 +489,7 @@ serialization.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-04-09</div>
+              Last updated on 2026-04-10</div>
           </div>
           <div class="right-details">
             
@@ -504,6 +511,7 @@ serialization.</p></li>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">ADES Module: Parse, Build, and Exchange</a><ul>
+<li><a class="reference internal" href="#current-format-support">Current Format Support</a></li>
 <li><a class="reference internal" href="#parse-ades-text-into-tables">Parse ADES Text into Tables</a></li>
 <li><a class="reference internal" href="#build-ades-tables-and-contexts-in-python">Build ADES Tables and Contexts in Python</a></li>
 <li><a class="reference internal" href="#serialize-ades-for-submission-or-handoff">Serialize ADES for Submission or Handoff</a></li>
@@ -522,7 +530,7 @@ serialization.</p></li>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=a0d07764"></script>
+</div><script src="../_static/documentation_options.js?v=4279671a"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

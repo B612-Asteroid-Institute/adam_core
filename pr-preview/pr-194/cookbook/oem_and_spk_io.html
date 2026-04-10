@@ -7,7 +7,7 @@
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/cookbook/oem_and_spk_io.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>OEM and SPK I/O - adam_core documentation</title>
+        <title>Trajectory Interchange: OEM and SPK Workflows - adam_core documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -208,7 +208,6 @@
 </li>
 <li class="toctree-l1 current has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/real_world_use_cases.html">Use-Case Progression (Simple to Advanced)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../examples/2024_yr4_impact_risk.html">So you Want to Calculate an Impact Risk</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
@@ -220,7 +219,7 @@
 <li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
 <li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
-<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">OEM and SPK I/O</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Trajectory Interchange: OEM and SPK Workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="openspace_visualization.html">OpenSpace Visualization Assets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="moid_analysis.html">MOID Analysis</a></li>
@@ -294,37 +293,62 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="oem-and-spk-i-o">
-<h1>OEM and SPK I/O<a class="headerlink" href="#oem-and-spk-i-o" title="Link to this heading">¶</a></h1>
-<p>This guide covers standards-based ephemeris export/import:</p>
+          <section id="trajectory-interchange-oem-and-spk-workflows">
+<h1>Trajectory Interchange: OEM and SPK Workflows<a class="headerlink" href="#trajectory-interchange-oem-and-spk-workflows" title="Link to this heading">¶</a></h1>
+<p>This page explains why OEM and SPK exist, when to use each format, and how to
+generate them from <code class="docutils literal notranslate"><span class="pre">adam_core</span></code> state histories.</p>
+<section id="format-background">
+<h2>Format Background<a class="headerlink" href="#format-background" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>OEM (read/write)</p></li>
-<li><p>SPK creation for SPICE-native consumers</p></li>
+<li><p>OEM (CCSDS Orbit Ephemeris Message):
+human-readable interchange format for timestamped Cartesian state vectors
+(and optional covariance), useful for auditability and cross-tool exchange.</p></li>
+<li><p>SPK (NAIF/SPICE kernel):
+binary ephemeris format optimized for SPICE ecosystems and operational
+mission tooling.</p></li>
 </ul>
-<section id="oem-write-pre-propagated-states">
-<h2>OEM: Write Pre-Propagated States<a class="headerlink" href="#oem-write-pre-propagated-states" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_to_oem</span>
+<p>In <code class="docutils literal notranslate"><span class="pre">adam_core</span></code>, both formats are generated from Cartesian state histories
+represented as <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> rows over time.</p>
+</section>
+<section id="input-model-orbit-seed-vs-ephemeris-state-history">
+<h2>Input Model: Orbit Seed vs Ephemeris State History<a class="headerlink" href="#input-model-orbit-seed-vs-ephemeris-state-history" title="Link to this heading">¶</a></h2>
+<p>You can start from:</p>
+<ul class="simple">
+<li><p>a seed orbit + propagation window, or</p></li>
+<li><p>an already propagated state history (often called an ephemeris trajectory).</p></li>
+</ul>
+<p>If your “ephemeris set” is already Cartesian states through time, convert that
+table into <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> and export directly.</p>
+</section>
+<section id="generate-oem-from-a-pre-propagated-state-history">
+<h2>Generate OEM from a Pre-Propagated State History<a class="headerlink" href="#generate-oem-from-a-pre-propagated-state-history" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_to_oem</span>
 
-<span class="n">output_path</span> <span class="o">=</span> <span class="n">orbit_to_oem</span><span class="p">(</span>
+<span class="c1"># `propagated_orbits` must represent one object_id with multiple epochs.</span>
+<span class="n">propagated_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span><span class="s2">&quot;coordinates.time&quot;</span><span class="p">)</span>
+
+<span class="n">oem_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">orbit_to_oem</span><span class="p">(</span>
     <span class="n">orbits</span><span class="o">=</span><span class="n">propagated_orbits</span><span class="p">,</span>
     <span class="n">output_file</span><span class="o">=</span><span class="s2">&quot;apophis.oem&quot;</span><span class="p">,</span>
     <span class="n">originator</span><span class="o">=</span><span class="s2">&quot;ADAM CORE USER&quot;</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">oem_path</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="oem-write-with-propagation-included">
-<h2>OEM: Write with Propagation Included<a class="headerlink" href="#oem-write-with-propagation-included" title="Link to this heading">¶</a></h2>
-<p>Use <code class="docutils literal notranslate"><span class="pre">orbit_to_oem_propagated</span></code> when you have an initial orbit state and want
-OEM generation to include propagation.</p>
+<section id="generate-oem-from-a-seed-orbit-propagation-included">
+<h2>Generate OEM from a Seed Orbit (Propagation Included)<a class="headerlink" href="#generate-oem-from-a-seed-orbit-propagation-included" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_to_oem_propagated</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">60200.0</span><span class="p">,</span> <span class="mf">60210.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">seed_orbit</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">seed_orbit</span>
+<span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">60200.0</span><span class="p">,</span> <span class="mf">60210.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
 
-<span class="n">output_path</span> <span class="o">=</span> <span class="n">orbit_to_oem_propagated</span><span class="p">(</span>
+<span class="n">oem_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">orbit_to_oem_propagated</span><span class="p">(</span>
     <span class="n">orbits</span><span class="o">=</span><span class="n">seed_orbit</span><span class="p">,</span>
     <span class="n">output_file</span><span class="o">=</span><span class="s2">&quot;apophis_propagated.oem&quot;</span><span class="p">,</span>
     <span class="n">times</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
@@ -334,23 +358,31 @@ OEM generation to include propagation.</p>
 </pre></div>
 </div>
 </section>
-<section id="oem-read-back-into-orbits">
-<h2>OEM: Read Back Into Orbits<a class="headerlink" href="#oem-read-back-into-orbits" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_from_oem</span>
+<section id="read-oem-back-into-orbits">
+<h2>Read OEM Back into <code class="docutils literal notranslate"><span class="pre">Orbits</span></code><a class="headerlink" href="#read-oem-back-into-orbits" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_from_oem</span>
 
-<span class="n">loaded_orbits</span> <span class="o">=</span> <span class="n">orbit_from_oem</span><span class="p">(</span><span class="s2">&quot;apophis_propagated.oem&quot;</span><span class="p">)</span>
+<span class="n">loaded_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">orbit_from_oem</span><span class="p">(</span><span class="s2">&quot;apophis_propagated.oem&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">loaded_orbits</span><span class="p">))</span>
 </pre></div>
 </div>
 </section>
-<section id="spk-create-kernel">
-<h2>SPK: Create Kernel<a class="headerlink" href="#spk-create-kernel" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">orbits_to_spk</span></code> can propagate internally if you provide a propagator instance.
-For realistic mission products, use a high-fidelity propagator (for example,
-<code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>).</p>
+<section id="generate-spk-from-orbits">
+<h2>Generate SPK from <code class="docutils literal notranslate"><span class="pre">Orbits</span></code><a class="headerlink" href="#generate-spk-from-orbits" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">orbits_to_spk</span></code> can propagate internally if you pass <code class="docutils literal notranslate"><span class="pre">propagator=...</span></code>.
+For production products, use a high-fidelity propagator such as
+<code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.spice_kernel</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_spk</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="n">target_id_map</span> <span class="o">=</span> <span class="n">orbits_to_spk</span><span class="p">(</span>
+<span class="n">seed_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">seed_orbits</span>
+<span class="n">start_time</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-01-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+<span class="n">end_time</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2028-06-01T00:00:00&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+
+<span class="n">target_id_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">orbits_to_spk</span><span class="p">(</span>
     <span class="n">orbits</span><span class="o">=</span><span class="n">seed_orbits</span><span class="p">,</span>
     <span class="n">output_file</span><span class="o">=</span><span class="s2">&quot;objects.bsp&quot;</span><span class="p">,</span>
     <span class="n">start_time</span><span class="o">=</span><span class="n">start_time</span><span class="p">,</span>
@@ -361,49 +393,66 @@ For realistic mission products, use a high-fidelity propagator (for example,
     <span class="n">kernel_type</span><span class="o">=</span><span class="s2">&quot;w03&quot;</span><span class="p">,</span>
     <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
 <span class="p">)</span>
-
 <span class="nb">print</span><span class="p">(</span><span class="n">target_id_map</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="spk-read-validate-via-spice">
-<h2>SPK: Read/Validate via SPICE<a class="headerlink" href="#spk-read-validate-via-spice" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">adam_core</span></code> includes SPICE helper functions for loading kernels and querying
-state vectors. Use raw <code class="docutils literal notranslate"><span class="pre">spiceypy</span></code> for lower-level or specialized SPICE calls.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">get_spice_body_state</span><span class="p">,</span>
-    <span class="n">register_spice_kernel</span><span class="p">,</span>
-    <span class="n">unregister_spice_kernel</span><span class="p">,</span>
+<section id="from-ephemeris-like-state-tables-to-oem-spk">
+<h2>From Ephemeris-Like State Tables to OEM/SPK<a class="headerlink" href="#from-ephemeris-like-state-tables-to-oem-spk" title="Link to this heading">¶</a></h2>
+<p>If you already have Cartesian state rows (for example from an internal
+trajectory service), build <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> and export.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+
+<span class="n">state_history</span><span class="p">:</span> <span class="n">CartesianCoordinates</span> <span class="o">=</span> <span class="n">state_history</span>
+<span class="n">export_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;traj-001&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_history</span><span class="p">),</span>
+    <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Apophis&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_history</span><span class="p">),</span>
+    <span class="n">coordinates</span><span class="o">=</span><span class="n">state_history</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="c1"># Then reuse orbit_to_oem(...) or orbits_to_spk(...).</span>
+</pre></div>
+</div>
+</section>
+<section id="load-custom-spks-for-observer-ephemeris-workflows">
+<h2>Load Custom SPKs for Observer/Ephemeris Workflows<a class="headerlink" href="#load-custom-spks-for-observer-ephemeris-workflows" title="Link to this heading">¶</a></h2>
+<p>Custom kernels (for example JWST or self-generated <code class="docutils literal notranslate"><span class="pre">.bsp</span></code> files) can be
+registered and then used by observer/ephemeris workflows.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_spice_kernel</span><span class="p">,</span> <span class="n">unregister_spice_kernel</span>
+
+<span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">,</span> <span class="mf">60200.25</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
 
 <span class="n">register_spice_kernel</span><span class="p">(</span><span class="s2">&quot;objects.bsp&quot;</span><span class="p">)</span>
-
-<span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-<span class="n">apophis_state</span> <span class="o">=</span> <span class="n">get_spice_body_state</span><span class="p">(</span>
-    <span class="n">body_id</span><span class="o">=</span><span class="n">target_id_map</span><span class="p">[</span><span class="s2">&quot;Apophis&quot;</span><span class="p">],</span>
-    <span class="n">times</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
-    <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;equatorial&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-
+<span class="c1"># If a SPICE body name is present (e.g. &quot;JWST&quot;), observer lookup can use it directly.</span>
+<span class="n">custom_observers</span><span class="p">:</span> <span class="n">Observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">&quot;JWST&quot;</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
+<span class="c1"># Ephemeris generation can now use these observers.</span>
+<span class="c1"># ephemeris = propagator.generate_ephemeris(orbits, custom_observers, ...)</span>
 <span class="n">unregister_spice_kernel</span><span class="p">(</span><span class="s2">&quot;objects.bsp&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="propagator-guidance">
-<h2>Propagator Guidance<a class="headerlink" href="#propagator-guidance" title="Link to this heading">¶</a></h2>
+<section id="how-these-products-are-used">
+<h2>How These Products Are Used<a class="headerlink" href="#how-these-products-are-used" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>OEM pre-propagated: any source of valid state history.</p></li>
-<li><p>OEM propagated and SPK creation: prefer <code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code> or
-another robust <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> implementation.</p></li>
-<li><p>If propagation quality matters, avoid relying on sparse single-epoch inputs.</p></li>
+<li><p>OEM:
+reviewable trajectory exchange, validation artifacts, and handoff between
+teams/tools that prefer text standards.</p></li>
+<li><p>SPK:
+mission operations, SPICE-native analysis, OpenSpace pipelines, and
+external tools that consume NAIF kernels directly.</p></li>
 </ul>
 </section>
-<section id="when-to-use">
-<h2>When to Use<a class="headerlink" href="#when-to-use" title="Link to this heading">¶</a></h2>
+<section id="practical-notes">
+<h2>Practical Notes<a class="headerlink" href="#practical-notes" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>OEM for CCSDS-style interchange and interoperability.</p></li>
-<li><p>SPK for SPICE ecosystems, OpenSpace SpiceTranslation, and mission operations tooling.</p></li>
+<li><p>OEM export requires one <code class="docutils literal notranslate"><span class="pre">object_id</span></code> per file call and benefits from
+multi-epoch state history.</p></li>
+<li><p>SPK export uses NAIF target IDs mapped per orbit via <code class="docutils literal notranslate"><span class="pre">target_id_map</span></code>.</p></li>
+<li><p>For decision-grade trajectories, propagation quality is dominated by the
+propagator backend and force model choices.</p></li>
 </ul>
 </section>
 <section id="related-reference">
@@ -411,6 +460,7 @@ another robust <code class="docutils literal notranslate"><span class="pre">Prop
 <ul class="simple">
 <li><p><a class="reference internal" href="../reference/orbits.html"><span class="doc">Orbits</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/propagator.html"><span class="doc">Propagator</span></a></p></li>
+<li><p><a class="reference internal" href="observations_and_observers.html"><span class="doc">Observations and Observers</span></a></p></li>
 </ul>
 </section>
 </section>
@@ -450,7 +500,7 @@ another robust <code class="docutils literal notranslate"><span class="pre">Prop
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-04-09</div>
+              Last updated on 2026-04-10</div>
           </div>
           <div class="right-details">
             
@@ -471,14 +521,17 @@ another robust <code class="docutils literal notranslate"><span class="pre">Prop
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">OEM and SPK I/O</a><ul>
-<li><a class="reference internal" href="#oem-write-pre-propagated-states">OEM: Write Pre-Propagated States</a></li>
-<li><a class="reference internal" href="#oem-write-with-propagation-included">OEM: Write with Propagation Included</a></li>
-<li><a class="reference internal" href="#oem-read-back-into-orbits">OEM: Read Back Into Orbits</a></li>
-<li><a class="reference internal" href="#spk-create-kernel">SPK: Create Kernel</a></li>
-<li><a class="reference internal" href="#spk-read-validate-via-spice">SPK: Read/Validate via SPICE</a></li>
-<li><a class="reference internal" href="#propagator-guidance">Propagator Guidance</a></li>
-<li><a class="reference internal" href="#when-to-use">When to Use</a></li>
+<li><a class="reference internal" href="#">Trajectory Interchange: OEM and SPK Workflows</a><ul>
+<li><a class="reference internal" href="#format-background">Format Background</a></li>
+<li><a class="reference internal" href="#input-model-orbit-seed-vs-ephemeris-state-history">Input Model: Orbit Seed vs Ephemeris State History</a></li>
+<li><a class="reference internal" href="#generate-oem-from-a-pre-propagated-state-history">Generate OEM from a Pre-Propagated State History</a></li>
+<li><a class="reference internal" href="#generate-oem-from-a-seed-orbit-propagation-included">Generate OEM from a Seed Orbit (Propagation Included)</a></li>
+<li><a class="reference internal" href="#read-oem-back-into-orbits">Read OEM Back into <code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a></li>
+<li><a class="reference internal" href="#generate-spk-from-orbits">Generate SPK from <code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a></li>
+<li><a class="reference internal" href="#from-ephemeris-like-state-tables-to-oem-spk">From Ephemeris-Like State Tables to OEM/SPK</a></li>
+<li><a class="reference internal" href="#load-custom-spks-for-observer-ephemeris-workflows">Load Custom SPKs for Observer/Ephemeris Workflows</a></li>
+<li><a class="reference internal" href="#how-these-products-are-used">How These Products Are Used</a></li>
+<li><a class="reference internal" href="#practical-notes">Practical Notes</a></li>
 <li><a class="reference internal" href="#related-reference">Related Reference</a></li>
 </ul>
 </li>
@@ -491,7 +544,7 @@ another robust <code class="docutils literal notranslate"><span class="pre">Prop
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=a0d07764"></script>
+</div><script src="../_static/documentation_options.js?v=4279671a"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
