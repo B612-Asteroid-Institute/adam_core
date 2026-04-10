@@ -75,18 +75,95 @@ What the Output Represents
 Risk Corridor Visualization
 ---------------------------
 
+Use ``plot_risk_corridor`` to visualize Earth impact geography over time.
+Prefer ``map_style="carto-positron"`` for docs/CI/browser stability (avoid
+OpenStreetMap tile policy blocks).
+
 .. code-block:: python
 
    import plotly.graph_objects as go
+   from adam_core.dynamics.impacts import CollisionEvent
    from adam_core.dynamics.plots import plot_risk_corridor
 
-   # Use carto-positron by default to avoid OSM tile-rate issues in shared browsers.
+   collisions: CollisionEvent
    corridor_fig: go.Figure = plot_risk_corridor(
        collisions,
        title="Earth Risk Corridor",
        map_style="carto-positron",
    )
    corridor_fig.show()
+
+For a deterministic static preview image (for docs pages/PR assets), snapshot a
+late animation frame before exporting:
+
+.. code-block:: python
+
+   if corridor_fig.frames:
+       corridor_fig.update(data=corridor_fig.frames[-1].data)
+   corridor_fig.write_image(
+       "impact_risk_corridor_preview.png",
+       width=1400,
+       height=900,
+       scale=1,
+   )
+
+.. figure:: ../_static/impact_risk_corridor_preview.png
+   :alt: Impact risk corridor preview generated from collision events using carto-positron basemap.
+
+   Corridor preview with impacts colored by relative impact time.
+
+Impact Simulation Plot
+----------------------
+
+Use ``generate_impact_visualization_data`` + ``plot_impact_simulation`` to
+build an animated Earth/Moon approach and impact sequence.
+
+.. code-block:: python
+
+   import plotly.graph_objects as go
+   from adam_core.dynamics.impacts import CollisionEvent
+   from adam_core.dynamics.plots import (
+       generate_impact_visualization_data,
+       plot_impact_simulation,
+   )
+   from adam_core.orbits import Orbits, VariantOrbits
+   from adam_core.propagator import Propagator
+   from adam_core.time import Timestamp
+
+   orbit: Orbits
+   variants: VariantOrbits
+   collisions: CollisionEvent
+   propagator: Propagator
+
+   propagation_times: Timestamp
+   propagated_best_fit_orbit: Orbits
+   propagated_variants: dict[str, Orbits]
+   propagation_times, propagated_best_fit_orbit, propagated_variants = (
+       generate_impact_visualization_data(
+           orbit,
+           variants,
+           collisions,
+           propagator,
+           time_step=5.0,
+           time_range=60.0,
+           max_processes=8,
+       )
+   )
+
+   simulation_fig: go.Figure = plot_impact_simulation(
+       propagation_times,
+       propagated_best_fit_orbit,
+       propagated_variants,
+       collisions,
+       title="Impact Simulation",
+       sample_impactors=None,
+       sample_non_impactors=0.1,
+       logo=False,
+   )
+   simulation_fig.show()
+
+   # Shareable artifact for reviewers.
+   simulation_fig.write_html("impact_simulation.html")
 
 Propagator Guidance
 -------------------
