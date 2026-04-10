@@ -13,12 +13,14 @@ from ...coordinates import (
     Residuals,
     SphericalCoordinates,
 )
+from ...constants import Constants as c
 from ...observations.ades import ADESObservations
 from ...observers import Observers
 from ...orbits import Orbits
 from ...time import Timestamp
 from ..short_arc import (
     ShortArcRangingConfig,
+    _approximate_candidate_chi2,
     _construct_heliocentric_state,
     _fit_attributable,
     _gnomonic_inverse,
@@ -157,6 +159,33 @@ def test_construct_heliocentric_state() -> None:
 
     expected = np.array([3.0, 2.0, 3.0, 0.6, 2.2, 0.3])
     np.testing.assert_allclose(state, expected)
+
+
+def test_approximate_candidate_chi2_rotates_ecliptic_to_equatorial() -> None:
+    state = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    dt_days = np.array([0.0], dtype=np.float64)
+    observer_positions = np.array([[0.0, 0.0, 0.0]], dtype=np.float64)
+
+    topocentric_equatorial = c.TRANSFORM_EC2EQ @ state[:3]
+    distance = np.linalg.norm(topocentric_equatorial)
+    ux, uy, uz = topocentric_equatorial / distance
+
+    observed_ra_deg = np.array([np.degrees(np.arctan2(uy, ux)) % 360.0], dtype=np.float64)
+    observed_dec_deg = np.array(
+        [np.degrees(np.arcsin(np.clip(uz, -1.0, 1.0)))], dtype=np.float64
+    )
+
+    chi2 = _approximate_candidate_chi2(
+        state,
+        dt_days,
+        observer_positions,
+        observed_ra_deg,
+        observed_dec_deg,
+        sigma_ra_deg=np.array([1e-4], dtype=np.float64),
+        sigma_dec_deg=np.array([1e-4], dtype=np.float64),
+    )
+
+    assert chi2 < 1e-10
 
 
 def test_propagate_sky_plane_order2_beats_order1() -> None:

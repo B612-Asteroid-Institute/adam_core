@@ -157,8 +157,14 @@ _generate_ephemeris_2body_vmap = jit(
 
 
 def _first_non_finite(values: np.ndarray) -> Optional[int]:
-    bad = np.flatnonzero(~np.isfinite(values))
-    return int(bad[0]) if bad.size > 0 else None
+    values = np.asarray(values)
+    if values.ndim <= 1:
+        bad = np.flatnonzero(~np.isfinite(values))
+        return int(bad[0]) if bad.size > 0 else None
+
+    row_has_bad = np.any(~np.isfinite(values), axis=tuple(range(1, values.ndim)))
+    bad_rows = np.flatnonzero(row_has_bad)
+    return int(bad_rows[0]) if bad_rows.size > 0 else None
 
 
 def _raise_ephemeris_numerical_error(

@@ -8,6 +8,7 @@ import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
 
+from ..constants import Constants as c
 from ..coordinates import (
     CartesianCoordinates,
     CoordinateCovariances,
@@ -26,6 +27,7 @@ from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 
 DEFAULT_ASTROMETRIC_RMS_ARCSEC = 1.0
+_TRANSFORM_EC2EQ = np.asarray(c.TRANSFORM_EC2EQ, dtype=np.float64)
 
 
 @dataclass(frozen=True)
@@ -420,7 +422,8 @@ def _approximate_candidate_chi2(
         if not np.isfinite(distance) or distance <= 0:
             return np.inf
 
-        ux, uy, uz = topocentric / distance
+        topocentric_equatorial = _TRANSFORM_EC2EQ @ topocentric
+        ux, uy, uz = topocentric_equatorial / distance
         ra_pred = np.degrees(np.arctan2(uy, ux)) % 360.0
         dec_pred = np.degrees(np.arcsin(np.clip(uz, -1.0, 1.0)))
 
