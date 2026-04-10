@@ -73,8 +73,8 @@ about perturbing-body states (for example Earth, Moon, planets), use
 Related Documentation
 ---------------------
 
-* :doc:`../reference/orbits`
-* :doc:`../reference/observers`
-* :doc:`../reference/propagator`
-* :doc:`../reference/photometry`
-* :doc:`../reference/time`
+* :doc:`../reference/api/adam_core.orbits`
+* :doc:`../reference/api/adam_core.observers`
+* :doc:`../reference/api/adam_core.propagator`
+* :doc:`../reference/api/adam_core.photometry`
+* :doc:`../reference/api/adam_core.time`

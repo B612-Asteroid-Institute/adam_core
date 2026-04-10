@@ -43,6 +43,6 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/ray_cluster`
-* :doc:`../reference/utils`
+* :doc:`../reference/api/adam_core.ray_cluster`
+* :doc:`../reference/api/adam_core.utils`
 

@@ -156,6 +156,6 @@ When To Use
 Related Reference
 -----------------
 
-* :doc:`../reference/observations`
+* :doc:`../reference/api/adam_core.observations`
 * :doc:`observations_and_observers`
 * :doc:`../use_cases/orbit_determination`

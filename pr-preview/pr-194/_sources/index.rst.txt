@@ -67,8 +67,6 @@ Use Cases (Complete List)
 
    * - Guide
      - Focus
-   * - :doc:`use_cases/real_world_use_cases`
-     - Scientist-facing overview of representative astronomy and astrodynamics analysis patterns.
    * - :doc:`use_cases/source_multiplexing`
      - Source selection patterns across SBDB/NEOCC/JPL-facing ingestion routes.
    * - :doc:`use_cases/ephemeris_service`

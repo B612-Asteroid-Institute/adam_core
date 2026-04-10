@@ -95,6 +95,6 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/orbits`
+* :doc:`../reference/api/adam_core.orbits`
 * :doc:`oem_and_spk_io`
 

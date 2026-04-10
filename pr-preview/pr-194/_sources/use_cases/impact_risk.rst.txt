@@ -240,7 +240,7 @@ Performance and Reproducibility
 Related Reference
 -----------------
 
-* :doc:`../reference/dynamics`
-* :doc:`../reference/orbits`
+* :doc:`../reference/api/adam_core.dynamics`
+* :doc:`../reference/api/adam_core.orbits`
 * :doc:`../cookbook/impact_probabilities`
 * :doc:`../cookbook/moid_analysis`

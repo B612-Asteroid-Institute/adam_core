@@ -1,0 +1,31 @@
+adam\_core.orbits package
+=========================
+
+.. automodule:: adam_core.orbits
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbits.openspace
+   adam_core.orbits.query
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbits.classification
+   adam_core.orbits.ephemeris
+   adam_core.orbits.oem_io
+   adam_core.orbits.orbits
+   adam_core.orbits.physical_parameters
+   adam_core.orbits.plots
+   adam_core.orbits.spice_kernel
+   adam_core.orbits.variants

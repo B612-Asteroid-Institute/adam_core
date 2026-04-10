@@ -1,0 +1,955 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/_modules/adam_core/utils/mpc.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>adam_core.utils.mpc - adam_core</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=0404406e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0f766e;
+  --color-brand-content: #0369a1;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">adam_core</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">adam_core</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Documentation</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/time_and_windows.html">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/orbit_sources_and_state_tables.html">Using Orbits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/impact_probabilities.html">Impact Probabilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_classes.html">Coordinate Classes Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_covariances.html">Coordinate Covariances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_transforms.html">Coordinate Transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/residuals.html">Residuals and Fit Quality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/scaling_and_utils.html">Scaling and Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../reference/api/modules.html">adam_core</a><input aria-label="Toggle navigation of adam_core" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../reference/api/adam_core.html">adam_core package</a><input aria-label="Toggle navigation of adam_core package" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.html">adam_core.coordinates package</a><input aria-label="Toggle navigation of adam_core.coordinates package" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.cartesian.html">adam_core.coordinates.cartesian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.cometary.html">adam_core.coordinates.cometary module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.jacobian.html">adam_core.coordinates.jacobian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.transform.html">adam_core.coordinates.transform module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.types.html">adam_core.coordinates.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.units.html">adam_core.coordinates.units module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.variants.html">adam_core.coordinates.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.html">adam_core.dynamics package</a><input aria-label="Toggle navigation of adam_core.dynamics package" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.aberrations.html">adam_core.dynamics.aberrations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.barker.html">adam_core.dynamics.barker module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.chi.html">adam_core.dynamics.chi module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.ephemeris.html">adam_core.dynamics.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.exceptions.html">adam_core.dynamics.exceptions module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.impacts.html">adam_core.dynamics.impacts module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.kepler.html">adam_core.dynamics.kepler module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.lagrange.html">adam_core.dynamics.lagrange module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.lambert.html">adam_core.dynamics.lambert module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.moid.html">adam_core.dynamics.moid module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.plots.html">adam_core.dynamics.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.propagation.html">adam_core.dynamics.propagation module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.stumpff.html">adam_core.dynamics.stumpff module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.tisserand.html">adam_core.dynamics.tisserand module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.missions.html">adam_core.missions package</a><input aria-label="Toggle navigation of adam_core.missions package" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.missions.porkchop.html">adam_core.missions.porkchop module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observers.html">adam_core.observers package</a><input aria-label="Toggle navigation of adam_core.observers package" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.observers.html">adam_core.observers.observers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.state.html">adam_core.observers.state module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.utils.html">adam_core.observers.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.gauss.html">adam_core.orbit_determination.gauss module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.gibbs.html">adam_core.orbit_determination.gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.herrick_gibbs.html">adam_core.orbit_determination.herrick_gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.iod.html">adam_core.orbit_determination.iod module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.least_squares.html">adam_core.orbit_determination.least_squares module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od.html">adam_core.orbit_determination.od module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><input aria-label="Toggle navigation of adam_core.orbits.openspace package" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.assets.html">adam_core.orbits.openspace.assets module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.lua.html">adam_core.orbits.openspace.lua module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.renderable.html">adam_core.orbits.openspace.renderable module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.translation.html">adam_core.orbits.openspace.translation module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.html">adam_core.orbits.query package</a><input aria-label="Toggle navigation of adam_core.orbits.query package" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.horizons.html">adam_core.orbits.query.horizons module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.neocc.html">adam_core.orbits.query.neocc module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.sbdb.html">adam_core.orbits.query.sbdb module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.html">adam_core.photometry.bandpasses package</a><input aria-label="Toggle navigation of adam_core.photometry.bandpasses package" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.api.html">adam_core.photometry.bandpasses.api module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.constants.html">adam_core.photometry.bandpasses.constants module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.tables.html">adam_core.photometry.bandpasses.tables module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
+</ul>
+</li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.observations.html">adam_core.utils.helpers.observations module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for adam_core.utils.mpc</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Time</span>
+
+<span class="n">BASE62</span> <span class="o">=</span> <span class="s2">&quot;0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz&quot;</span>
+<span class="n">BASE62_MAP</span> <span class="o">=</span> <span class="p">{</span><span class="n">BASE62</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">BASE62</span><span class="p">))}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_unpack_mpc_date</span><span class="p">(</span><span class="n">epoch_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Time</span><span class="p">:</span>
+    <span class="c1"># Taken from Lynne Jones&#39; SSO TOOLS.</span>
+    <span class="c1"># See https://minorplanetcenter.net/iau/info/PackedDates.html</span>
+    <span class="c1"># for MPC documentation on packed dates.</span>
+    <span class="c1"># Examples:</span>
+    <span class="c1">#    1998 Jan. 18.73     = J981I73</span>
+    <span class="c1">#    2001 Oct. 22.138303 = K01AM138303</span>
+    <span class="n">epoch_pf</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">epoch_pf</span><span class="p">)</span>
+    <span class="n">year</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">epoch_pf</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">base</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">epoch_pf</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">])</span>
+    <span class="n">month</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">epoch_pf</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">base</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+    <span class="n">day</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">epoch_pf</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">base</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+    <span class="n">isot_string</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{:d}</span><span class="s2">-</span><span class="si">{:02d}</span><span class="s2">-</span><span class="si">{:02d}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">epoch_pf</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span><span class="p">:</span>
+        <span class="n">fractional_day</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">epoch_pf</span><span class="p">[</span><span class="mi">5</span><span class="p">:])</span>
+        <span class="n">hours</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="mi">24</span> <span class="o">*</span> <span class="n">fractional_day</span><span class="p">))</span>
+        <span class="n">minutes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">60</span> <span class="o">*</span> <span class="p">((</span><span class="mi">24</span> <span class="o">*</span> <span class="n">fractional_day</span><span class="p">)</span> <span class="o">-</span> <span class="n">hours</span><span class="p">))</span>
+        <span class="n">seconds</span> <span class="o">=</span> <span class="mi">3600</span> <span class="o">*</span> <span class="p">(</span><span class="mi">24</span> <span class="o">*</span> <span class="n">fractional_day</span> <span class="o">-</span> <span class="n">hours</span> <span class="o">-</span> <span class="n">minutes</span> <span class="o">/</span> <span class="mi">60</span><span class="p">)</span>
+        <span class="n">isot_string</span> <span class="o">+=</span> <span class="s2">&quot;T</span><span class="si">{:02d}</span><span class="s2">:</span><span class="si">{:02d}</span><span class="s2">:</span><span class="si">{:09.6f}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">hours</span><span class="p">,</span> <span class="n">minutes</span><span class="p">,</span> <span class="n">seconds</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Time</span><span class="p">(</span><span class="n">isot_string</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;isot&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tt&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="convert_mpc_packed_dates">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.convert_mpc_packed_dates">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_mpc_packed_dates</span><span class="p">(</span><span class="n">pf_tt</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Time</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convert MPC packed form dates (in the TT time scale) to</span>
+<span class="sd">    MJDs in TT. See: https://minorplanetcenter.net/iau/info/PackedDates.html</span>
+<span class="sd">    for details on the packed date format.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    pf_tt : `~numpy.ndarray` (N)</span>
+<span class="sd">        MPC-style packed form epochs in the TT time scale.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    mjd_tt : `~astropy.time.core.Time` (N)</span>
+<span class="sd">        Epochs in TT MJDs.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">isot_tt</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">pf_tt</span><span class="p">:</span>
+        <span class="n">isot_tt</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_unpack_mpc_date</span><span class="p">(</span><span class="n">epoch</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">Time</span><span class="p">(</span><span class="n">isot_tt</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="pack_numbered_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_numbered_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_numbered_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Pack a numbered MPC designation.</span>
+
+<span class="sd">    Examples of numbered designations:</span>
+<span class="sd">        Numbered      Packed</span>
+<span class="sd">        3202          03202</span>
+<span class="sd">        50000         50000</span>
+<span class="sd">        100345        A0345</span>
+<span class="sd">        360017        a0017</span>
+<span class="sd">        203289        K3289</span>
+<span class="sd">        620000        ~0000</span>
+<span class="sd">        620061        ~000z</span>
+<span class="sd">        3140113       ~AZaz</span>
+<span class="sd">        15396335      ~zzzz</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC numbered designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed numbered designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If the numbered designation cannot be packed.</span>
+<span class="sd">        If the numbered designation is larger than 15396335.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">number</span> <span class="o">&gt;</span> <span class="mi">15396335</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Numbered designation is too large. Maximum supported is 15396335.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">number</span> <span class="o">&lt;=</span> <span class="mi">99999</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;</span><span class="si">{:05}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="p">(</span><span class="n">number</span> <span class="o">&gt;=</span> <span class="mi">100000</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">number</span> <span class="o">&lt;=</span> <span class="mi">619999</span><span class="p">):</span>
+        <span class="n">bigpart</span><span class="p">,</span> <span class="n">remainder</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">BASE62</span><span class="p">[</span><span class="n">bigpart</span><span class="p">]</span><span class="si">}{</span><span class="n">remainder</span><span class="si">:</span><span class="s2">04</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">number</span> <span class="o">-</span> <span class="mi">620000</span>
+        <span class="n">number_pf</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">while</span> <span class="n">x</span><span class="p">:</span>
+            <span class="n">number_pf</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">BASE62</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">x</span> <span class="o">%</span> <span class="mi">62</span><span class="p">)])</span>
+            <span class="n">x</span> <span class="o">//=</span> <span class="mi">62</span>
+
+        <span class="n">number_pf</span><span class="o">.</span><span class="n">reverse</span><span class="p">()</span>
+        <span class="k">return</span> <span class="s2">&quot;~</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">number_pf</span><span class="p">)</span><span class="o">.</span><span class="n">zfill</span><span class="p">(</span><span class="mi">4</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="pack_provisional_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_provisional_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Pack a provisional MPC designation.</span>
+
+<span class="sd">    Examples of provisional designations:</span>
+<span class="sd">        Provisional   Packed</span>
+<span class="sd">        1995 XA       J95X00A</span>
+<span class="sd">        1995 XL1      J95X01L</span>
+<span class="sd">        1995 FB13     J95F13B</span>
+<span class="sd">        1998 SQ108    J98SA8Q</span>
+<span class="sd">        1998 SV127    J98SC7V</span>
+<span class="sd">        1998 SS162    J98SG2S</span>
+<span class="sd">        2099 AZ193    K99AJ3Z</span>
+<span class="sd">        2008 AA360    K08Aa0A</span>
+<span class="sd">        2007 TA418    K07Tf8A</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC provisional designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed provisional designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If the provisional designation cannot be packed.</span>
+<span class="sd">        The provisional designations is not at least 6 characters long.</span>
+<span class="sd">        The first 4 characters of the provisional designation are not a year.</span>
+<span class="sd">        The 5th character of the provisional designation is not a space.</span>
+<span class="sd">        The provisional designation contains a hyphen.</span>
+<span class="sd">        The half-month letter is I or Z.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Provisional designations should be at least 6 characters long.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">designation</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Expected the first 4 characters of the provisional designation to be a year.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">designation</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot; &quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Expected the 5th character of the provisional designation to be a space.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;-&quot;</span> <span class="ow">in</span> <span class="n">designation</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Provisional designations cannot contain a hyphen.&quot;</span><span class="p">)</span>
+
+    <span class="n">year</span> <span class="o">=</span> <span class="n">BASE62</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">designation</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">])]</span> <span class="o">+</span> <span class="n">designation</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+    <span class="n">letter1</span> <span class="o">=</span> <span class="n">designation</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>
+    <span class="n">letter2</span> <span class="o">=</span> <span class="n">designation</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>
+    <span class="n">cycle</span> <span class="o">=</span> <span class="n">designation</span><span class="p">[</span><span class="mi">7</span><span class="p">:]</span>
+
+    <span class="k">if</span> <span class="n">letter1</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;I&quot;</span><span class="p">,</span> <span class="s2">&quot;Z&quot;</span><span class="p">}:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Half-month letters cannot be I or Z.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">letter1</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">()</span> <span class="ow">or</span> <span class="n">letter2</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid provisional designation.&quot;</span><span class="p">)</span>
+
+    <span class="n">cycle_pf</span> <span class="o">=</span> <span class="s2">&quot;00&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cycle</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">cycle_int</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cycle</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cycle_int</span> <span class="o">&lt;=</span> <span class="mi">99</span><span class="p">:</span>
+            <span class="n">cycle_pf</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cycle_int</span><span class="p">)</span><span class="o">.</span><span class="n">zfill</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">cycle_pf</span> <span class="o">=</span> <span class="n">BASE62</span><span class="p">[</span><span class="n">cycle_int</span> <span class="o">//</span> <span class="mi">10</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">cycle_int</span> <span class="o">%</span> <span class="mi">10</span><span class="p">)</span>
+
+    <span class="n">designation_pf</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}{}{}{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">year</span><span class="p">,</span> <span class="n">letter1</span><span class="p">,</span> <span class="n">cycle_pf</span><span class="p">,</span> <span class="n">letter2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">designation_pf</span></div>
+
+
+
+<div class="viewcode-block" id="pack_survey_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_survey_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_survey_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Pack a survey MPC designation.</span>
+
+<span class="sd">    Examples of survey designations:</span>
+<span class="sd">        Survey       Packed</span>
+<span class="sd">        2040 P-L     PLS2040</span>
+<span class="sd">        3138 T-1     T1S3138</span>
+<span class="sd">        1010 T-2     T2S1010</span>
+<span class="sd">        4101 T-3     T3S4101</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC survey designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed survey designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If the survey designation cannot be packed.</span>
+<span class="sd">        The survey designation does not start with P-L, T-1, T-2, or T-3.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="n">designation</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+    <span class="n">survey</span> <span class="o">=</span> <span class="n">designation</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span>
+
+    <span class="k">if</span> <span class="n">survey</span> <span class="o">==</span> <span class="s2">&quot;P-L&quot;</span><span class="p">:</span>
+        <span class="n">survey_pf</span> <span class="o">=</span> <span class="s2">&quot;PLS&quot;</span>
+
+    <span class="k">elif</span> <span class="n">survey</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;T-&quot;</span> <span class="ow">and</span> <span class="n">survey</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;1&quot;</span><span class="p">,</span> <span class="s2">&quot;2&quot;</span><span class="p">,</span> <span class="s2">&quot;3&quot;</span><span class="p">}:</span>
+        <span class="n">survey_pf</span> <span class="o">=</span> <span class="s2">&quot;T</span><span class="si">{}</span><span class="s2">S&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">survey</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Survey designations must start with P-L, T-1, T-2, T-3.&quot;</span><span class="p">)</span>
+
+    <span class="n">designation_pf</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">survey_pf</span><span class="p">,</span> <span class="n">number</span><span class="o">.</span><span class="n">zfill</span><span class="p">(</span><span class="mi">4</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">designation_pf</span></div>
+
+
+
+<div class="viewcode-block" id="pack_mpc_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_mpc_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_mpc_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Pack a unpacked MPC designation. For example, provisional</span>
+<span class="sd">    designation 1998 SS162 will be packed to J98SG2S. Permanent</span>
+<span class="sd">    designation 323 will be packed to 00323.</span>
+
+<span class="sd">    TODO: add support for comet and natural satellite designations</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC unpacked designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed form designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If designation cannot be packed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Lets see if its a numbered object</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pack_numbered_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># If its not numbered, maybe its a provisional designation</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pack_provisional_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># If its a survey designation, deal with it</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pack_survey_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="n">err</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;Unpacked designation &#39;</span><span class="si">{}</span><span class="s2">&#39; could not be packed.</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot;It could not be recognized as any of the following:</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot; - a numbered object (e.g. &#39;3202&#39;, &#39;203289&#39;, &#39;3140113&#39;)</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot; - a provisional designation (e.g. &#39;1998 SV127&#39;, &#39;2008 AA360&#39;)</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot; - a survey designation (e.g. &#39;2040 P-L&#39;, &#39;3138 T-1&#39;)&quot;</span>
+    <span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">designation</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_numbered_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_numbered_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_numbered_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Unpack a numbered MPC designation.</span>
+
+<span class="sd">    Examples of numbered designations:</span>
+<span class="sd">        Numbered      Unpacked</span>
+<span class="sd">        03202         3202</span>
+<span class="sd">        50000         50000</span>
+<span class="sd">        A0345         100345</span>
+<span class="sd">        a0017         360017</span>
+<span class="sd">        K3289         203289</span>
+<span class="sd">        ~0000         620000</span>
+<span class="sd">        ~000z         620061</span>
+<span class="sd">        ~AZaz         3140113</span>
+<span class="sd">        ~zzzz         15396335</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed numbered designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC unpacked numbered designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If the numbered designation cannot be unpacked.</span>
+<span class="sd">        The packed numbered designation is not at least 4 characters long.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Numbered objects (1 - 99999)</span>
+    <span class="k">if</span> <span class="n">designation_pf</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">():</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span>
+
+    <span class="c1"># Numbered objects (620000+)</span>
+    <span class="k">elif</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;~&quot;</span><span class="p">:</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="mi">620000</span>
+        <span class="n">number_pf</span> <span class="o">=</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">number_pf</span><span class="p">):</span>
+            <span class="n">power</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">number_pf</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">number</span> <span class="o">+=</span> <span class="n">BASE62_MAP</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="mi">62</span><span class="o">**</span><span class="n">power</span><span class="p">)</span>
+
+    <span class="c1"># Numbered objects (100000 - 619999)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="n">BASE62_MAP</span><span class="p">[</span><span class="n">designation_pf</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">*</span> <span class="mi">10000</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+    <span class="k">if</span> <span class="n">number</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Packed numbered designation could not be unpacked.&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">designation</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">designation</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_provisional_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_provisional_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Unpack a provisional MPC designation.</span>
+
+<span class="sd">    Examples of provisional designations:</span>
+<span class="sd">        Provisional   Unpacked</span>
+<span class="sd">        J95X00A       1995 XA</span>
+<span class="sd">        J95X01L       1995 XL1</span>
+<span class="sd">        J95F13B       1995 FB13</span>
+<span class="sd">        J98SA8Q       1998 SQ108</span>
+<span class="sd">        J98SC7V       1998 SV127</span>
+<span class="sd">        J98SG2S       1998 SS162</span>
+<span class="sd">        K99AJ3Z       2099 AZ193</span>
+<span class="sd">        K08Aa0A       2008 AA360</span>
+<span class="sd">        K07Tf8A       2007 TA418</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed provisional designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC unpacked provisional designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If the provisional designation cannot be unpacked.</span>
+<span class="sd">        The packed provisional designation is not 7 characters long.</span>
+<span class="sd">        The packed provisional designation does not have a year.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">7</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Provisional designation must be 7 characters long.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">()</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Provisional designation must have a year.&quot;</span><span class="p">)</span>
+    <span class="n">year</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">BASE62_MAP</span><span class="p">[</span><span class="n">designation_pf</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">]))</span>
+    <span class="n">letter1</span> <span class="o">=</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">letter2</span> <span class="o">=</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">letter1</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">()</span> <span class="ow">or</span> <span class="n">letter2</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">()</span>
+    <span class="n">cycle1</span> <span class="o">=</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+    <span class="n">cycle2</span> <span class="o">=</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>
+
+    <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">BASE62_MAP</span><span class="p">[</span><span class="n">cycle1</span><span class="p">])</span> <span class="o">*</span> <span class="mi">10</span> <span class="o">+</span> <span class="n">BASE62_MAP</span><span class="p">[</span><span class="n">cycle2</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">number</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">number_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">number_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+
+    <span class="n">designation</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> </span><span class="si">{}{}{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">year</span><span class="p">,</span> <span class="n">letter1</span><span class="p">,</span> <span class="n">letter2</span><span class="p">,</span> <span class="n">number_str</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">designation</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_survey_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_survey_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_survey_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Unpack a survey MPC designation.</span>
+
+<span class="sd">    Examples of survey designations:</span>
+<span class="sd">        Survey       Packed</span>
+<span class="sd">        PLS2040      2040 P-L</span>
+<span class="sd">        T1S3138      3138 T-1</span>
+<span class="sd">        T2S1010      1010 T-2</span>
+<span class="sd">        T3S4101      4101 T-3</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed survey designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC unpacked survey designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If the survey designation cannot be unpacked.</span>
+<span class="sd">        The packed survey designation does not start with PLS, T1S, T2S, or T3S.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">8</span><span class="p">])</span>
+    <span class="n">survey_pf</span> <span class="o">=</span> <span class="n">designation_pf</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">survey_pf</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;PLS&quot;</span><span class="p">,</span> <span class="s2">&quot;T1S&quot;</span><span class="p">,</span> <span class="s2">&quot;T2S&quot;</span><span class="p">,</span> <span class="s2">&quot;T3S&quot;</span><span class="p">}:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Packed survey designation must start with PLS, T1S, T2S, or T3S.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">survey_pf</span> <span class="o">==</span> <span class="s2">&quot;PLS&quot;</span><span class="p">:</span>
+        <span class="n">survey</span> <span class="o">=</span> <span class="s2">&quot;P-L&quot;</span>
+
+    <span class="k">if</span> <span class="n">survey_pf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span> <span class="ow">and</span> <span class="n">survey_pf</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;S&quot;</span><span class="p">:</span>
+        <span class="n">survey</span> <span class="o">=</span> <span class="s2">&quot;T-</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">survey_pf</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+    <span class="n">designation</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="n">survey</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">designation</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_mpc_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_mpc_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_mpc_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Unpack a packed MPC designation. For example, provisional</span>
+<span class="sd">    designation J98SG2S will be unpacked to 1998 SS162. Permanent</span>
+<span class="sd">    designation 00323 will be unpacked to 323.</span>
+
+<span class="sd">    TODO: add support for comet and natural satellite designations</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    designation_pf : str</span>
+<span class="sd">        MPC packed form designation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    designation : str</span>
+<span class="sd">        MPC unpacked designation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError : If designation_pf cannot be unpacked.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Lets see if its a numbered object</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">unpack_numbered_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># Lets see if its a provisional designation</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">unpack_provisional_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># Lets see if its a survey designation</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">unpack_survey_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># At this point we haven&#39;t had any success so lets raise an error</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;Packed form designation &#39;</span><span class="si">{}</span><span class="s2">&#39; could not be unpacked.</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot;It could not be recognized as any of the following:</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot; - a numbered object (e.g. &#39;03202&#39;, &#39;K3289&#39;, &#39;~AZaz&#39;)</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot; - a provisional designation (e.g. &#39;J98SC7V&#39;, &#39;K08Aa0A&#39;)</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="s2">&quot; - a survey designation (e.g. &#39;PLS2040&#39;, &#39;T1S3138&#39;)&quot;</span>
+    <span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">))</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023-2026, B612 Asteroid Institute
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            <div class="last-updated">
+              Last updated on 2026-04-10</div>
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=105aaf87"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

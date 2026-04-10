@@ -1,0 +1,20 @@
+adam\_core.observations package
+===============================
+
+.. automodule:: adam_core.observations
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.observations.ades
+   adam_core.observations.associations
+   adam_core.observations.detections
+   adam_core.observations.exposures
+   adam_core.observations.photometry
+   adam_core.observations.source_catalog

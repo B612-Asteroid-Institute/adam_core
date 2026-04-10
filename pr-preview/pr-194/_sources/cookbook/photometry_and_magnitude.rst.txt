@@ -269,7 +269,7 @@ Related Documentation
 ---------------------
 
 * :doc:`../use_cases/observability_and_light_curves`
-* :doc:`../reference/photometry`
-* :doc:`../reference/propagator`
-* :doc:`../reference/orbits`
+* :doc:`../reference/api/adam_core.photometry`
+* :doc:`../reference/api/adam_core.propagator`
+* :doc:`../reference/api/adam_core.orbits`
 

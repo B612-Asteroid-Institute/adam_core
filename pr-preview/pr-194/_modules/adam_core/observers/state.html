@@ -1,0 +1,760 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/_modules/adam_core/observers/state.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>adam_core.observers.state - adam_core</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=0404406e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0f766e;
+  --color-brand-content: #0369a1;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">adam_core</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">adam_core</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Documentation</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/time_and_windows.html">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/orbit_sources_and_state_tables.html">Using Orbits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/impact_probabilities.html">Impact Probabilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_classes.html">Coordinate Classes Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_covariances.html">Coordinate Covariances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_transforms.html">Coordinate Transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/residuals.html">Residuals and Fit Quality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/scaling_and_utils.html">Scaling and Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../reference/api/modules.html">adam_core</a><input aria-label="Toggle navigation of adam_core" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../reference/api/adam_core.html">adam_core package</a><input aria-label="Toggle navigation of adam_core package" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.html">adam_core.coordinates package</a><input aria-label="Toggle navigation of adam_core.coordinates package" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.cartesian.html">adam_core.coordinates.cartesian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.cometary.html">adam_core.coordinates.cometary module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.jacobian.html">adam_core.coordinates.jacobian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.transform.html">adam_core.coordinates.transform module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.types.html">adam_core.coordinates.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.units.html">adam_core.coordinates.units module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.variants.html">adam_core.coordinates.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.html">adam_core.dynamics package</a><input aria-label="Toggle navigation of adam_core.dynamics package" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.aberrations.html">adam_core.dynamics.aberrations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.barker.html">adam_core.dynamics.barker module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.chi.html">adam_core.dynamics.chi module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.ephemeris.html">adam_core.dynamics.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.exceptions.html">adam_core.dynamics.exceptions module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.impacts.html">adam_core.dynamics.impacts module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.kepler.html">adam_core.dynamics.kepler module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.lagrange.html">adam_core.dynamics.lagrange module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.lambert.html">adam_core.dynamics.lambert module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.moid.html">adam_core.dynamics.moid module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.plots.html">adam_core.dynamics.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.propagation.html">adam_core.dynamics.propagation module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.stumpff.html">adam_core.dynamics.stumpff module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.tisserand.html">adam_core.dynamics.tisserand module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.missions.html">adam_core.missions package</a><input aria-label="Toggle navigation of adam_core.missions package" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.missions.porkchop.html">adam_core.missions.porkchop module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observers.html">adam_core.observers package</a><input aria-label="Toggle navigation of adam_core.observers package" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.observers.html">adam_core.observers.observers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.state.html">adam_core.observers.state module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.utils.html">adam_core.observers.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.gauss.html">adam_core.orbit_determination.gauss module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.gibbs.html">adam_core.orbit_determination.gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.herrick_gibbs.html">adam_core.orbit_determination.herrick_gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.iod.html">adam_core.orbit_determination.iod module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.least_squares.html">adam_core.orbit_determination.least_squares module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od.html">adam_core.orbit_determination.od module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><input aria-label="Toggle navigation of adam_core.orbits.openspace package" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.assets.html">adam_core.orbits.openspace.assets module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.lua.html">adam_core.orbits.openspace.lua module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.renderable.html">adam_core.orbits.openspace.renderable module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.translation.html">adam_core.orbits.openspace.translation module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.html">adam_core.orbits.query package</a><input aria-label="Toggle navigation of adam_core.orbits.query package" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.horizons.html">adam_core.orbits.query.horizons module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.neocc.html">adam_core.orbits.query.neocc module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.sbdb.html">adam_core.orbits.query.sbdb module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.html">adam_core.photometry.bandpasses package</a><input aria-label="Toggle navigation of adam_core.photometry.bandpasses package" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.api.html">adam_core.photometry.bandpasses.api module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.constants.html">adam_core.photometry.bandpasses.constants module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.tables.html">adam_core.photometry.bandpasses.tables module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
+</ul>
+</li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.observations.html">adam_core.utils.helpers.observations module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for adam_core.observers.state</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">spiceypy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">Constants</span> <span class="k">as</span> <span class="n">c</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.bounded_lru</span><span class="w"> </span><span class="kn">import</span> <span class="n">bounded_lru_get</span><span class="p">,</span> <span class="n">bounded_lru_put</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_perturber_state</span><span class="p">,</span> <span class="n">get_spice_body_state</span><span class="p">,</span> <span class="n">setup_SPICE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">OBSERVATORY_CODES</span><span class="p">,</span> <span class="n">OBSERVATORY_PARALLAX_COEFFICIENTS</span>
+
+<span class="n">R_EARTH_EQUATORIAL</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">R_EARTH_EQUATORIAL</span>
+<span class="n">OMEGA_EARTH</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mf">0.997269675925926</span>
+<span class="n">Z_AXIS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_ObserverStateCacheKey</span><span class="p">:</span>
+    <span class="n">code</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">n</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">first_key</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">last_key</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">time_digest</span><span class="p">:</span> <span class="nb">int</span>
+
+
+<span class="n">_OBSERVER_STATE_CACHE_MAXSIZE</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ADAM_CORE_OBSERVER_STATE_CACHE_MAXSIZE&quot;</span><span class="p">,</span> <span class="s2">&quot;256&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">_OBSERVER_STATE_CACHE</span><span class="p">:</span> <span class="s2">&quot;OrderedDict[_ObserverStateCacheKey, CartesianCoordinates]&quot;</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">OrderedDict</span><span class="p">()</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_observer_cache_get</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">_ObserverStateCacheKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CartesianCoordinates</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">bounded_lru_get</span><span class="p">(</span>
+        <span class="n">_OBSERVER_STATE_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_OBSERVER_STATE_CACHE_MAXSIZE</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_observer_cache_put</span><span class="p">(</span>
+    <span class="n">key</span><span class="p">:</span> <span class="n">_ObserverStateCacheKey</span><span class="p">,</span> <span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">bounded_lru_put</span><span class="p">(</span>
+        <span class="n">_OBSERVER_STATE_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_OBSERVER_STATE_CACHE_MAXSIZE</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="clear_observer_state_cache">
+<a class="viewcode-back" href="../../../reference/api/adam_core.observers.state.html#adam_core.observers.clear_observer_state_cache">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">clear_observer_state_cache</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Clear the in-process observer-state cache (primarily for tests/benchmarks).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_OBSERVER_STATE_CACHE</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="get_mpc_observer_state">
+<a class="viewcode-back" href="../../../reference/api/adam_core.observers.state.html#adam_core.observers.get_mpc_observer_state">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_mpc_observer_state</span><span class="p">(</span>
+    <span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">=</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the state of an MPC observatory on Earth.</span>
+
+<span class="sd">    Combines Earth SPICE state and rotation with MPC observatory parallax coefficients.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    code : str</span>
+<span class="sd">        The MPC observatory code of the observer.</span>
+<span class="sd">    times : Timestamp</span>
+<span class="sd">        The times at which to get the observer state.</span>
+<span class="sd">    frame : {&#39;ecliptic&#39;, &#39;equatorial&#39;, &#39;itrf93&#39;}</span>
+<span class="sd">        The frame in which to return the observer state.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
+    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span>
+    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ITRF93&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="s2">&quot;frame should be one of {&#39;equatorial&#39;, &#39;ecliptic&#39;, &#39;itrf93&#39;}&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+
+    <span class="c1"># Observatory codes use the geodedics from the MPC observatory code table</span>
+    <span class="c1"># Get observatory geodetic information</span>
+    <span class="n">parallax_coeffs</span> <span class="o">=</span> <span class="n">OBSERVATORY_PARALLAX_COEFFICIENTS</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;code&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parallax_coeffs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Observatory code &#39;</span><span class="si">{</span><span class="n">code</span><span class="si">}</span><span class="s2">&#39; not found in the observatory parallax coefficients table.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">parallax_coeffs</span> <span class="o">=</span> <span class="n">parallax_coeffs</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Unpack geodetic information</span>
+    <span class="n">longitude</span> <span class="o">=</span> <span class="n">parallax_coeffs</span><span class="p">[</span><span class="s2">&quot;longitude&quot;</span><span class="p">]</span>
+    <span class="n">cos_phi</span> <span class="o">=</span> <span class="n">parallax_coeffs</span><span class="p">[</span><span class="s2">&quot;cos_phi&quot;</span><span class="p">]</span>
+    <span class="n">sin_phi</span> <span class="o">=</span> <span class="n">parallax_coeffs</span><span class="p">[</span><span class="s2">&quot;sin_phi&quot;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">([</span><span class="n">longitude</span><span class="p">,</span> <span class="n">cos_phi</span><span class="p">,</span> <span class="n">sin_phi</span><span class="p">])):</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">code</span><span class="si">}</span><span class="s2"> is missing information on Earth-based geodetic coordinates. The MPC Obs Code</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="s2">&quot;file may be missing this information or the observer is a space-based observatory.</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="s2">&quot;Space observatories are currently not supported.</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+
+    <span class="c1"># Calculate pointing vector from geocenter to observatory</span>
+    <span class="n">sin_longitude</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">longitude</span><span class="p">))</span>
+    <span class="n">cos_longitude</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">longitude</span><span class="p">))</span>
+    <span class="n">o_hat_ITRF93</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">cos_longitude</span> <span class="o">*</span> <span class="n">cos_phi</span><span class="p">,</span> <span class="n">sin_longitude</span> <span class="o">*</span> <span class="n">cos_phi</span><span class="p">,</span> <span class="n">sin_phi</span><span class="p">])</span>
+
+    <span class="c1"># Multiply pointing vector with Earth radius to get actual vector</span>
+    <span class="n">o_vec_ITRF93</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">R_EARTH_EQUATORIAL</span><span class="p">,</span> <span class="n">o_hat_ITRF93</span><span class="p">)</span>
+
+    <span class="n">n</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+    <span class="n">cache_key</span> <span class="o">=</span> <span class="n">_ObserverStateCacheKey</span><span class="p">(</span>
+        <span class="n">code</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">code</span><span class="p">),</span>
+        <span class="n">frame</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">frame</span><span class="p">),</span>
+        <span class="n">origin</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">),</span>
+        <span class="n">n</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">),</span>
+        <span class="n">first_key</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">first</span><span class="p">),</span>
+        <span class="n">last_key</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">last</span><span class="p">),</span>
+        <span class="n">time_digest</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">times</span><span class="o">.</span><span class="n">cache_digest</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)),</span>
+    <span class="p">)</span>
+    <span class="n">cached</span> <span class="o">=</span> <span class="n">_observer_cache_get</span><span class="p">(</span><span class="n">cache_key</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cached</span>
+
+    <span class="c1"># If ITRF93 frame is requested, we can directly use the ITRF93 values</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
+        <span class="c1"># For ITRF93, which is Earth-fixed, position is constant but velocity comes from Earth&#39;s rotation</span>
+        <span class="n">N</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
+        <span class="n">r_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">o_vec_ITRF93</span><span class="p">,</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+        <span class="c1"># Calculate velocity due to Earth&#39;s rotation</span>
+        <span class="n">rotation_direction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">o_hat_ITRF93</span><span class="p">,</span> <span class="n">Z_AXIS</span><span class="p">)</span>
+        <span class="n">v_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="o">-</span><span class="n">OMEGA_EARTH</span> <span class="o">*</span> <span class="n">R_EARTH_EQUATORIAL</span> <span class="o">*</span> <span class="n">rotation_direction</span><span class="p">,</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+        <span class="c1"># For ITRF93, we still need Earth&#39;s state relative to the requested origin</span>
+        <span class="k">if</span> <span class="n">origin</span> <span class="o">!=</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">EARTH</span><span class="p">:</span>
+            <span class="n">earth_state</span> <span class="o">=</span> <span class="n">get_perturber_state</span><span class="p">(</span>
+                <span class="n">OriginCodes</span><span class="o">.</span><span class="n">EARTH</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;itrf93&quot;</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="n">origin</span>
+            <span class="p">)</span>
+            <span class="n">r_obs</span> <span class="o">+=</span> <span class="n">earth_state</span><span class="o">.</span><span class="n">r</span>
+            <span class="n">v_obs</span> <span class="o">+=</span> <span class="n">earth_state</span><span class="o">.</span><span class="n">v</span>
+
+        <span class="n">observer_states</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">r_obs</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">r_obs</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">r_obs</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">v_obs</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">v_obs</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">v_obs</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+                <span class="n">code</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                    <span class="n">pa</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">()</span>
+                <span class="p">)</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">_observer_cache_put</span><span class="p">(</span><span class="n">cache_key</span><span class="p">,</span> <span class="n">observer_states</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">observer_states</span>
+
+    <span class="c1"># For other frames, continue with existing implementation</span>
+    <span class="c1"># Grab Earth state vector (this function handles duplicate times)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">get_perturber_state</span><span class="p">(</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">EARTH</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">)</span>
+
+    <span class="c1"># If the code is 500 (geocenter), we can just return the Earth state vector</span>
+    <span class="k">if</span> <span class="n">code</span> <span class="o">==</span> <span class="s2">&quot;500&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="c1"># If not then we need to add a topocentric correction</span>
+    <span class="c1"># Warning! Converting times to ET will incur a loss of precision.</span>
+    <span class="n">epochs_et</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">et</span><span class="p">()</span>
+    <span class="n">unique_epochs_et_tdb</span> <span class="o">=</span> <span class="n">epochs_et</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+
+    <span class="n">N</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">epochs_et</span><span class="p">)</span>
+    <span class="n">r_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">N</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">v_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">N</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">r_geo</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">r</span>
+    <span class="n">v_geo</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">v</span>
+    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">unique_epochs_et_tdb</span><span class="p">:</span>
+        <span class="c1"># Grab rotation matrices from ITRF93 to ecliptic J2000</span>
+        <span class="c1"># The ITRF93 high accuracy Earth rotation model takes into account:</span>
+        <span class="c1"># Precession:  1976 IAU model from Lieske.</span>
+        <span class="c1"># Nutation:  1980 IAU model, with IERS corrections due to Herring et al.</span>
+        <span class="c1"># True sidereal time using accurate values of TAI-UT1</span>
+        <span class="c1"># Polar motion</span>
+        <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">pxform</span><span class="p">(</span><span class="s2">&quot;ITRF93&quot;</span><span class="p">,</span> <span class="n">frame_spice</span><span class="p">,</span> <span class="n">epoch</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
+
+        <span class="c1"># Find indices of epochs that match the current unique epoch</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">epochs_et</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># Add o_vec + r_geo to get r_obs (thank you numpy broadcasting)</span>
+        <span class="n">r_obs</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">r_geo</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">+</span> <span class="n">rotation_matrix</span> <span class="o">@</span> <span class="n">o_vec_ITRF93</span>
+
+        <span class="c1"># Calculate the velocity (thank you numpy broadcasting)</span>
+        <span class="n">rotation_direction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">o_hat_ITRF93</span><span class="p">,</span> <span class="n">Z_AXIS</span><span class="p">)</span>
+        <span class="n">v_obs</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">v_geo</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">+</span> <span class="n">rotation_matrix</span> <span class="o">@</span> <span class="p">(</span>
+            <span class="o">-</span><span class="n">OMEGA_EARTH</span> <span class="o">*</span> <span class="n">R_EARTH_EQUATORIAL</span> <span class="o">*</span> <span class="n">rotation_direction</span>
+        <span class="p">)</span>
+
+    <span class="n">observer_states</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">time</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
+        <span class="n">x</span><span class="o">=</span><span class="n">r_obs</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+        <span class="n">y</span><span class="o">=</span><span class="n">r_obs</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+        <span class="n">z</span><span class="o">=</span><span class="n">r_obs</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+        <span class="n">vx</span><span class="o">=</span><span class="n">v_obs</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+        <span class="n">vy</span><span class="o">=</span><span class="n">v_obs</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+        <span class="n">vz</span><span class="o">=</span><span class="n">v_obs</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+        <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
+        <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">code</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="n">_observer_cache_put</span><span class="p">(</span><span class="n">cache_key</span><span class="p">,</span> <span class="n">observer_states</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">observer_states</span></div>
+
+
+
+<div class="viewcode-block" id="get_observer_state">
+<a class="viewcode-back" href="../../../reference/api/adam_core.observers.state.html#adam_core.observers.get_observer_state">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_observer_state</span><span class="p">(</span>
+    <span class="n">code</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="p">],</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">=</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Find state vectors for an observer at a given time in the given frame and measured from the given origin.</span>
+
+<span class="sd">    For NAIF Origin Codes this function uses the SPICE kernels to find the state vectors.</span>
+<span class="sd">    See `~adam_core.utils.spice.get_perturber_state` for more information.</span>
+
+<span class="sd">    For MPC observatory codes this function currently only supports ground-based observers on Earth.</span>
+<span class="sd">    In this case, the Earth body-fixed frame used for calculations is the standard ITRF93,</span>
+<span class="sd">    which takes into account:</span>
+
+<span class="sd">      - precession (IAU-1976)</span>
+<span class="sd">      - nutation (IAU-1980 with IERS corrections)</span>
+<span class="sd">      - polar motion</span>
+
+<span class="sd">    This frame is retrieved through SPICE.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    code : Union[str, OriginCodes]</span>
+<span class="sd">        MPC observatory code as string, custom SPICE kernel NAIF code as string,</span>
+<span class="sd">        or NAIF origin code for which to find the states.</span>
+<span class="sd">    times : Timestamp (N)</span>
+<span class="sd">        Epochs for which to find the observatory locations.</span>
+<span class="sd">    frame : {&#39;equatorial&#39;, &#39;ecliptic&#39;}</span>
+<span class="sd">        Return observer state in the equatorial or ecliptic J2000 frames.</span>
+<span class="sd">    origin : OriginCodes</span>
+<span class="sd">        The NAIF ID of the origin.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    observer_states : `~adam_core.coordinates.cartesian.CartesianCoordinates`</span>
+<span class="sd">        The state vectors of the observer in the desired frame</span>
+<span class="sd">        and measured from the desired origin.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="p">)),</span> <span class="s2">&quot;code must be a string or OriginCodes&quot;</span>
+
+    <span class="c1"># Make sure SPICE is ready to go</span>
+    <span class="n">setup_SPICE</span><span class="p">()</span>
+
+    <span class="c1"># If the code is an OriginCode, we can just use the get_perturber_state function</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">get_perturber_state</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">)</span>
+
+    <span class="c1"># Prioritize MPC observatory codes over custom SPICE kernel NAIF codes</span>
+    <span class="k">if</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">OBSERVATORY_CODES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">get_mpc_observer_state</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">)</span>
+
+    <span class="c1"># Try to retrieve the body ID from SPICE, could be a custom SPICE kernel NAIF code</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">body_id</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">bodn2c</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">sp</span><span class="o">.</span><span class="n">SpiceyError</span><span class="p">:</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">code</span><span class="si">}</span><span class="s2"> is not a valid MPC observatory code and was not found in SPICE kernels.&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">get_spice_body_state</span><span class="p">(</span>
+            <span class="n">body_id</span><span class="o">=</span><span class="n">body_id</span><span class="p">,</span> <span class="n">times</span><span class="o">=</span><span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="n">origin</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023-2026, B612 Asteroid Institute
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            <div class="last-updated">
+              Last updated on 2026-04-10</div>
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=105aaf87"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

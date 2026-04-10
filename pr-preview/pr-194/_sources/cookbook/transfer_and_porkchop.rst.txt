@@ -135,5 +135,5 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/missions`
-* :doc:`../reference/dynamics`
+* :doc:`../reference/api/adam_core.missions`
+* :doc:`../reference/api/adam_core.dynamics`

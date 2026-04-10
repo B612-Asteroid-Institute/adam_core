@@ -176,6 +176,6 @@ When to Use This Pattern
 Related Reference
 -----------------
 
-* :doc:`../reference/coordinates`
-* :doc:`../reference/orbits`
+* :doc:`../reference/api/adam_core.coordinates`
+* :doc:`../reference/api/adam_core.orbits`
 

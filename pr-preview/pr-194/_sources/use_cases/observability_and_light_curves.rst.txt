@@ -82,5 +82,5 @@ Related Documentation
 ---------------------
 
 * :doc:`../cookbook/photometry_and_magnitude`
-* :doc:`../reference/photometry`
-* :doc:`../reference/propagator`
+* :doc:`../reference/api/adam_core.photometry`
+* :doc:`../reference/api/adam_core.propagator`

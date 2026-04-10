@@ -99,6 +99,6 @@ cleanup of observation-to-orbit assignments.
 Related Documentation
 ---------------------
 
-* :doc:`../reference/orbit_determination`
-* :doc:`../reference/observations`
-* :doc:`../reference/propagator`
+* :doc:`../reference/api/adam_core.orbit_determination`
+* :doc:`../reference/api/adam_core.observations`
+* :doc:`../reference/api/adam_core.propagator`

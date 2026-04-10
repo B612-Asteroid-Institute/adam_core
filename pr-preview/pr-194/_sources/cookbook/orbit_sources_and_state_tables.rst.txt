@@ -153,5 +153,5 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/orbits`
-* :doc:`../reference/functionality_inventory`
+* :doc:`../reference/api/adam_core.orbits`
+* :doc:`../reference/api/modules`

@@ -8,7 +8,6 @@ mission-analysis details.
 .. toctree::
    :maxdepth: 1
 
-   real_world_use_cases
    source_multiplexing
    ephemeris_service
    neo_tracking

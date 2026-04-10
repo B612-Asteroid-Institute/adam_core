@@ -143,5 +143,5 @@ When to Use Which Constructor
 Related Reference
 -----------------
 
-* :doc:`../reference/time`
-* :doc:`../reference/functionality_inventory`
+* :doc:`../reference/api/adam_core.time`
+* :doc:`../reference/api/modules`

@@ -127,6 +127,6 @@ Recommended Usage Pattern
 Related Reference
 -----------------
 
-* :doc:`../reference/coordinates`
-* :doc:`../reference/propagator`
+* :doc:`../reference/api/adam_core.coordinates`
+* :doc:`../reference/api/adam_core.propagator`
 

@@ -1,26 +1,13 @@
 .. meta::
-   :description: API reference for adam_core modules covering public interfaces and selected advanced internals.
+   :description: Programmatically generated API reference for adam_core, built directly from src/adam_core during docs builds.
 
 Reference
 =========
 
-API and module reference for ``adam_core``. This section covers public top-level
-modules and selected advanced internals used in production systems.
+This section is generated from the actual ``src/adam_core`` code during each
+Sphinx build using ``sphinx-apidoc``. It is the canonical API reference.
 
 .. toctree::
    :maxdepth: 2
 
-   functionality_inventory
-   constants
-   coordinates
-   observations
-   observers
-   orbits
-   propagator
-   time
-   dynamics
-   orbit_determination
-   photometry
-   utils
-   missions
-   ray_cluster
+   api/modules
