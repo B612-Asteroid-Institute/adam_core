@@ -143,6 +143,6 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/propagator`
-* :doc:`../reference/dynamics`
-* :doc:`../reference/observers`
+* :doc:`../reference/api/adam_core.propagator`
+* :doc:`../reference/api/adam_core.dynamics`
+* :doc:`../reference/api/adam_core.observers`

@@ -173,6 +173,6 @@ Practical Notes
 Related Reference
 -----------------
 
-* :doc:`../reference/orbits`
-* :doc:`../reference/propagator`
+* :doc:`../reference/api/adam_core.orbits`
+* :doc:`../reference/api/adam_core.propagator`
 * :doc:`observations_and_observers`

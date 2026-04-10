@@ -11,21 +11,3 @@ Sphinx build using ``sphinx-apidoc``. It is the canonical API reference.
    :maxdepth: 2
 
    api/modules
-   functionality_inventory
-
-.. toctree::
-   :hidden:
-
-   constants
-   coordinates
-   observations
-   observers
-   orbits
-   propagator
-   time
-   dynamics
-   orbit_determination
-   photometry
-   utils
-   missions
-   ray_cluster

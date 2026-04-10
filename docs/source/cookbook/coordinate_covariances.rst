@@ -131,6 +131,6 @@ Choosing a Method
 Related Reference
 -----------------
 
-* :doc:`../reference/coordinates`
-* :doc:`../reference/orbit_determination`
+* :doc:`../reference/api/adam_core.coordinates`
+* :doc:`../reference/api/adam_core.orbit_determination`
 

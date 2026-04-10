@@ -182,6 +182,6 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/dynamics`
+* :doc:`../reference/api/adam_core.dynamics`
 * :doc:`moid_analysis`
 * :doc:`../use_cases/impact_risk`

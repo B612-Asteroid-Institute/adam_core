@@ -128,5 +128,5 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/observations`
-* :doc:`../reference/observers`
+* :doc:`../reference/api/adam_core.observations`
+* :doc:`../reference/api/adam_core.observers`

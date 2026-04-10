@@ -50,4 +50,4 @@ Related Documentation
 ---------------------
 
 * :doc:`../cookbook/orbit_sources_and_state_tables`
-* :doc:`../reference/orbits`
+* :doc:`../reference/api/adam_core.orbits`

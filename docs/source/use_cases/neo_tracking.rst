@@ -107,7 +107,7 @@ candidates and need a defensible uncertainty-aware pointing recommendation.
 Related Reference
 -----------------
 
-* :doc:`../reference/orbits`
-* :doc:`../reference/observers`
-* :doc:`../reference/propagator`
+* :doc:`../reference/api/adam_core.orbits`
+* :doc:`../reference/api/adam_core.observers`
+* :doc:`../reference/api/adam_core.propagator`
 * :doc:`../cookbook/variant_sampling_and_collapse`

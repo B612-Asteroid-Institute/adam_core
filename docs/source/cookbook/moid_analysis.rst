@@ -57,6 +57,6 @@ When to Use
 Related Reference
 -----------------
 
-* :doc:`../reference/dynamics`
+* :doc:`../reference/api/adam_core.dynamics`
 * :doc:`impact_probabilities`
 
