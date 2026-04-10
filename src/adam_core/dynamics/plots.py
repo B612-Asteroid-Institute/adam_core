@@ -872,7 +872,9 @@ def plot_risk_corridor(
     impacts: CollisionEvent,
     title: Optional[str] = None,
     logo: bool = True,
-    map_style: Literal["carto-positron", "open-street-map", "white-bg"] = "carto-positron",
+    map_style: Literal[
+        "carto-positron", "open-street-map", "white-bg"
+    ] = "carto-positron",
     height: Optional[int] = None,
     width: Optional[int] = None,
 ) -> go.Figure:
