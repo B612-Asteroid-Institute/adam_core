@@ -5,30 +5,6 @@ All narrative and atomic guides live here in one flat list. Start with the
 goal closest to your task, then move deeper into uncertainty, scaling, and
 mission-analysis details.
 
-Guide Index
------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 30 28 20
-
-   * - Featured Page
-     - Purpose
-     - Dependencies
-     - Runtime / Constraints
-   * - :doc:`neo_tracking`
-     - Track NEOCP candidates and generate uncertainty-aware follow-up pointings.
-     - ``adam_core``, ``adam-assist``
-     - Network/API dependent; multiprocessing recommended for speed.
-   * - :doc:`../cookbook/ades_module`
-     - Parse, build, and export ADES PSV observation packets for ingestion and submission boundaries.
-     - ``adam_core``
-     - Text IO with validation; ideal for ingest/egress QA.
-   * - :doc:`impact_risk`
-     - Run end-to-end impact-risk analysis with explicit collision conditions and stopping semantics.
-     - ``adam_core[plots]``, ``adam-assist``
-     - CPU intensive at high sample counts; includes optional visualization outputs.
-
 .. toctree::
    :maxdepth: 1
 
