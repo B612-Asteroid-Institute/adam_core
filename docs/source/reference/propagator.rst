@@ -3,15 +3,10 @@ Propagator
 
 General propagation interfaces and ephemeris-generation mixins.
 
-.. automodule:: adam_core.propagator
+Programmatic API
+----------------
 
-Key Interfaces
---------------
-
-* ``Propagator``
-* ``EphemerisMixin``
-* ``OrbitType``
-* ``EphemerisType``
+* Full generated reference: :doc:`api/adam_core.propagator`
 
 Related Guides
 --------------

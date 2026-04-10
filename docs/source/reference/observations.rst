@@ -6,16 +6,10 @@ Observation-domain tables and ADES-oriented IO helpers.
 At this time, ADES support in ``adam_core`` is focused on the PSV representation
 (not an ADES XML implementation).
 
-.. automodule:: adam_core.observations
+Programmatic API
+----------------
 
-Key Interfaces
---------------
-
-* ``Exposures``
-* ``PointSourceDetections``
-* ``Photometry``
-* ``SourceCatalog``
-* ``ADESObservations``
+* Full generated reference: :doc:`api/adam_core.observations`
 
 Related Guides
 --------------

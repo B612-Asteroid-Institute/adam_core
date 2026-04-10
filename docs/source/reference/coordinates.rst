@@ -3,19 +3,10 @@ Coordinates
 
 Coordinate containers, covariance handling, transforms, and residual scoring.
 
-.. automodule:: adam_core.coordinates
+Programmatic API
+----------------
 
-Key Interfaces
---------------
-
-* ``CartesianCoordinates``
-* ``CometaryCoordinates``
-* ``KeplerianCoordinates``
-* ``SphericalCoordinates``
-* ``GeodeticCoordinates``
-* ``CoordinateCovariances``
-* ``Residuals``
-* ``transform_coordinates``
+* Full generated reference: :doc:`api/adam_core.coordinates`
 
 Related Guides
 --------------

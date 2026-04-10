@@ -3,14 +3,10 @@ Observers
 
 Observer geometry and observatory-state helpers.
 
-.. automodule:: adam_core.observers
+Programmatic API
+----------------
 
-Key Interfaces
---------------
-
-* ``Observers``
-* ``get_observer_state``
-* ``calculate_observing_night``
+* Full generated reference: :doc:`api/adam_core.observers`
 
 Related Guides
 --------------

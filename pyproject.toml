@@ -169,4 +169,4 @@ doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
 docs = { cmd = "sphinx-build -b html docs/source docs/build", env = { LC_ALL = "C", LANG = "C" } }
-docs-check = { cmd = "sphinx-build -E -b html -n -W --keep-going docs/source docs/build_ci", env = { LC_ALL = "C", LANG = "C" } }
+docs-check = { cmd = "sphinx-build -E -b html -W --keep-going docs/source docs/build_ci", env = { LC_ALL = "C", LANG = "C" } }

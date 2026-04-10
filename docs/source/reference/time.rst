@@ -3,12 +3,10 @@ Time
 
 High-precision timestamp handling and timescale conversions.
 
-.. automodule:: adam_core.time
+Programmatic API
+----------------
 
-Key Interfaces
---------------
-
-* ``Timestamp``
+* Full generated reference: :doc:`api/adam_core.time`
 
 Related Guides
 --------------

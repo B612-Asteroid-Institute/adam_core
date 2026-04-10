@@ -3,12 +3,10 @@ Missions
 
 Mission-specific planning helpers.
 
-.. automodule:: adam_core.missions
-
-Selected Modules
+Programmatic API
 ----------------
 
-* ``missions.porkchop``
+* Full generated reference: :doc:`api/adam_core.missions`
 
 Related Guides
 --------------

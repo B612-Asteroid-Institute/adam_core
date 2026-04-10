@@ -1,21 +1,13 @@
 Orbit Determination
 ===================
 
-Selected advanced internals for initial orbit determination and differential
-correction pipelines.
+Advanced internals for initial orbit determination and differential-correction
+pipelines.
 
-.. automodule:: adam_core.orbit_determination
+Programmatic API
+----------------
 
-Advanced Interfaces
--------------------
-
-* ``initial_orbit_determination``
-* ``iod``
-* ``fit_least_squares``
-* ``evaluate_orbits``
-* ``OrbitDeterminationObservations``
-* ``FittedOrbits``
-* ``FittedOrbitMembers``
+* Full generated reference: :doc:`api/adam_core.orbit_determination`
 
 Related Guides
 --------------

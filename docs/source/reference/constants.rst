@@ -3,12 +3,10 @@ Constants
 
 Physical and astronomical constants used throughout ``adam_core``.
 
-.. automodule:: adam_core.constants
+Programmatic API
+----------------
 
-Key Interfaces
---------------
-
-* ``adam_core.constants`` module-level constants.
+* Full generated reference: :doc:`api/adam_core.constants`
 
 Related Guides
 --------------

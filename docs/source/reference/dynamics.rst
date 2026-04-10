@@ -1,22 +1,13 @@
 Dynamics
 ========
 
-Selected advanced internals for two-body dynamics, ephemeris generation,
-Lambert transfer solving, MOID screening, and impact analysis.
+Advanced internals for two-body dynamics, ephemeris generation, Lambert transfer
+solving, MOID screening, and impact analysis.
 
-.. automodule:: adam_core.dynamics
+Programmatic API
+----------------
 
-Advanced Interfaces
--------------------
-
-* ``propagate_2body``
-* ``generate_ephemeris_2body``
-* ``lambert.solve_lambert``
-* ``moid.calculate_moid``
-* ``moid.calculate_perturber_moids``
-* ``impacts.calculate_impacts``
-* ``impacts.calculate_impact_probabilities``
-* ``impacts.CollisionConditions``
+* Full generated reference: :doc:`api/adam_core.dynamics`
 
 Related Guides
 --------------

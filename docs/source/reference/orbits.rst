@@ -3,24 +3,10 @@ Orbits
 
 Orbit containers, ephemerides, orbit variants, OpenSpace assets, and exchange formats.
 
-.. automodule:: adam_core.orbits
+Programmatic API
+----------------
 
-Key Interfaces
---------------
-
-* ``Orbits``
-* ``Ephemeris``
-* ``VariantOrbits``
-* ``VariantEphemeris``
-* ``query.query_sbdb``
-* ``query.query_horizons``
-* ``query.query_neocc``
-* ``query.query_scout``
-* ``oem_io.orbit_to_oem``
-* ``oem_io.orbit_from_oem``
-* ``spice_kernel.orbits_to_spk``
-* ``openspace.create_renderable_orbital_kepler``
-* ``openspace.create_renderable_trail_orbit``
+* Full generated reference: :doc:`api/adam_core.orbits`
 
 Related Guides
 --------------
