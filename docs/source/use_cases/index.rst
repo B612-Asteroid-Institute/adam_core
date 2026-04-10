@@ -21,7 +21,7 @@ Guide Index
      - ``adam_core``, ``adam-assist``
      - Network/API dependent; multiprocessing recommended for speed.
    * - :doc:`../cookbook/ades_module`
-     - Parse, build, and export ADES observation packets for ingestion and submission boundaries.
+     - Parse, build, and export ADES PSV observation packets for ingestion and submission boundaries.
      - ``adam_core``
      - Text IO with validation; ideal for ingest/egress QA.
    * - :doc:`../examples/2024_yr4_impact_risk`
