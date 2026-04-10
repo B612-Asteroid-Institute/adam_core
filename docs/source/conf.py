@@ -49,6 +49,7 @@ exclude_patterns = [
     ".DS_Store",
     "examples/preview_orbit.ipynb",
     "examples/track_neo.ipynb",
+    "examples/2024_yr4_impact_risk.ipynb",
 ]
 
 autosectionlabel_prefix_document = True
