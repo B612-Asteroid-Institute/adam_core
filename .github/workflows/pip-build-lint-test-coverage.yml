@@ -44,6 +44,62 @@ jobs:
       # - name: Typecheck
       #   run: pdm run typecheck
 
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get git tags
+        run: git fetch --prune --unshallow --tags
+      - name: Set up PDM (cached)
+        if: ${{ hashFiles('**/pdm.lock') != '' }}
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.12'
+          cache: true
+          cache-dependency-path: '**/pdm.lock'
+      - name: Set up PDM (no cache)
+        if: ${{ hashFiles('**/pdm.lock') == '' }}
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.12'
+      - name: Install test and docs dependencies
+        run: pdm install -G test -G docs
+      - name: Build docs with warnings as errors
+        run: pdm run docs-check
+      - name: Build docs preview artifact
+        if: github.event_name == 'pull_request'
+        run: pdm run docs
+      - name: Ensure GitHub Pages serves Sphinx underscore paths
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          mkdir -p .pages-root
+          touch .pages-root/.nojekyll
+      - name: Publish .nojekyll at gh-pages root
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: .pages-root
+          keep_files: true
+          enable_jekyll: false
+      - name: Publish docs preview for pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: rossjrw/pr-preview-action@v1.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          source-dir: docs/build/
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+
   test:
     runs-on: ubuntu-latest
     strategy:
