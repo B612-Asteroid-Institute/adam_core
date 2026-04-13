@@ -30,5 +30,4 @@ mission-analysis details.
    ephemeris_service
    observability_and_light_curves
    impact_risk
-   ../cookbook/impact_probabilities
    ../cookbook/scaling_and_utils

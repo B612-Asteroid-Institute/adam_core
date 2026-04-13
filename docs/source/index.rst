@@ -37,11 +37,11 @@ file/service boundaries.
           **Mars-Apophis transfer** Lambert trade-space snapshot from :doc:`cookbook/transfer_and_porkchop`.
      - .. figure:: _static/impact_risk_corridor_preview.png
           :alt: Impact risk corridor visualization from the impact guide.
-          :target: cookbook/impact_probabilities.html
+          :target: use_cases/impact_risk.html
           :width: 100%
           :align: center
 
-          **Impact corridor** Earth entry corridor visualization from :doc:`cookbook/impact_probabilities`.
+          **Impact corridor** Earth entry corridor visualization from :doc:`use_cases/impact_risk`.
 
 Engineering Standards
 ---------------------
@@ -116,8 +116,6 @@ Use Cases (Complete List)
      - Observability constraints, phase-angle analysis, and light-curve tooling.
    * - :doc:`use_cases/impact_risk`
      - Impact-risk analysis with collision conditions, stopping behavior, and visual products.
-   * - :doc:`cookbook/impact_probabilities`
-     - Variant-based impact probability estimation and simulation/corridor plotting.
    * - :doc:`cookbook/scaling_and_utils`
      - Scaling/runtime controls and utility patterns for high-throughput analysis.
 

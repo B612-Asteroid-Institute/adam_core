@@ -58,5 +58,4 @@ Related Reference
 -----------------
 
 * :doc:`../reference/api/adam_core.dynamics`
-* :doc:`impact_probabilities`
-
+* :doc:`../use_cases/impact_risk`
