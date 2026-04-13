@@ -141,9 +141,10 @@ jobs:
           path: coverage.xml
       - name: Coverage report to coveralls
         if: matrix.python-version == '3.12'
-        uses: coverallsapp/github-action@v2.0.0
+        uses: coverallsapp/github-action@v2.3.6
         with:
           path-to-lcov: coverage.xml
+          fail-on-error: false
 
   benchmark:
     runs-on: ubuntu-latest
