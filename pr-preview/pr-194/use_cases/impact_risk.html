@@ -3,8 +3,8 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta content="Impact risk analysis in adam_core using sampled variants, collision conditions, and impact probability summaries." name="description" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Impact Probabilities" href="../cookbook/impact_probabilities.html"><link rel="prev" title="Observability and Light Curves" href="observability_and_light_curves.html">
+<meta content="Impact risk analysis in adam_core using sampled variants, collision conditions, stopping behavior, impact probability summaries, and visualization products." name="description" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Scaling and Utilities" href="../cookbook/scaling_and_utils.html"><link rel="prev" title="Observability and Light Curves" href="observability_and_light_curves.html">
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/use_cases/impact_risk.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
@@ -230,7 +230,6 @@
 <li class="toctree-l2"><a class="reference internal" href="ephemeris_service.html">Ephemeris Generation for Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="observability_and_light_curves.html">Observability and Light Curves</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Impact Risk Analysis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../cookbook/impact_probabilities.html">Impact Probabilities</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cookbook/scaling_and_utils.html">Scaling and Utilities</a></li>
 </ul>
 </li>
@@ -427,24 +426,42 @@
 <h1>Impact Risk Analysis<a class="headerlink" href="#impact-risk-analysis" title="Link to this heading">¶</a></h1>
 <section id="goal">
 <h2>Goal<a class="headerlink" href="#goal" title="Link to this heading">¶</a></h2>
-<p>Estimate impact likelihood from uncertain orbits, then inspect event timing and
-impact geography for operational decision-making.</p>
+<p>Estimate impact likelihood from uncertain orbits, then inspect event timing,
+collision-condition behavior, and impact geography for operational
+decision-making.</p>
+</section>
+<section id="when-to-use-this-guide">
+<h2>When to Use This Guide<a class="headerlink" href="#when-to-use-this-guide" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Probabilistic impact-risk assessment from uncertain orbit solutions.</p></li>
+<li><p>Fast triage followed by higher-fidelity reruns for decision support.</p></li>
+<li><p>Scenario studies with custom collision conditions and stopping logic.</p></li>
+</ul>
 </section>
 <section id="backend-requirement">
 <h2>Backend Requirement<a class="headerlink" href="#backend-requirement" title="Link to this heading">¶</a></h2>
 <p>Impact analysis requires a propagator that implements <code class="docutils literal notranslate"><span class="pre">ImpactMixin</span></code> collision
 detection. For production use, prefer <code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p>
 </section>
+<section id="core-pattern">
+<h2>Core Pattern<a class="headerlink" href="#core-pattern" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>sample variants from orbit covariance</p></li>
+<li><p>propagate variants while monitoring collision conditions</p></li>
+<li><p>aggregate collision outcomes into cumulative probabilities</p></li>
+</ol>
+</section>
 <section id="core-objects-and-their-roles">
 <h2>Core Objects and Their Roles<a class="headerlink" href="#core-objects-and-their-roles" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">CollisionConditions</span></code>:
-defines what event surfaces to watch during propagation.</p></li>
+defines monitored event surfaces and termination behavior.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">CollisionEvent</span></code>:
-event rows returned by detection (which condition was hit, when, where,
-whether that condition is terminal).</p></li>
+event rows returned by detection (what was hit, when, and whether that
+condition is terminal).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">ImpactProbabilities</span></code>:
-per-orbit summary table with counts and cumulative probabilities.</p></li>
+per-orbit, per-condition summary table with counts, probabilities, and timing
+statistics.</p></li>
 </ul>
 </section>
 <section id="collision-conditions-what-they-are">
@@ -481,7 +498,7 @@ that boundary is crossed:</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">True</span></code>:
 treat this condition as terminal for a variant.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">False</span></code>:
-keep propagating after crossing this boundary, so later events can still be
+keep propagating after crossing this boundary so later events can still be
 recorded.</p></li>
 <li><p>mixed configurations:
 common for “terminal Earth impact, non-terminal Moon/other event tracking.”</p></li>
@@ -496,18 +513,53 @@ common for “terminal Earth impact, non-terminal Moon/other event tracking.”<
 </pre></div>
 </div>
 </section>
+<section id="quick-triage-example">
+<h2>Quick Triage Example<a class="headerlink" href="#quick-triage-example" title="Link to this heading">¶</a></h2>
+<p>Use this for a first-pass estimate before a larger rerun.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.impacts</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CollisionEvent</span><span class="p">,</span>
+    <span class="n">ImpactProbabilities</span><span class="p">,</span>
+    <span class="n">calculate_impact_probabilities</span><span class="p">,</span>
+    <span class="n">calculate_impacts</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
+
+<span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">&quot;2024 YR4&quot;</span><span class="p">])</span>
+<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
+
+<span class="n">variants</span><span class="p">:</span> <span class="n">VariantOrbits</span>
+<span class="n">collisions</span><span class="p">:</span> <span class="n">CollisionEvent</span>
+<span class="n">variants</span><span class="p">,</span> <span class="n">collisions</span> <span class="o">=</span> <span class="n">calculate_impacts</span><span class="p">(</span>
+    <span class="n">orbits</span><span class="o">=</span><span class="n">orbit</span><span class="p">,</span>
+    <span class="n">num_days</span><span class="o">=</span><span class="mi">365</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>
+    <span class="n">processes</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">impact_probabilities</span><span class="p">:</span> <span class="n">ImpactProbabilities</span> <span class="o">=</span> <span class="n">calculate_impact_probabilities</span><span class="p">(</span>
+    <span class="n">variants</span><span class="p">,</span>
+    <span class="n">collisions</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">impact_probabilities</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
 <section id="yr4-style-end-to-end-workflow-expanded">
 <h2>YR4-Style End-to-End Workflow (Expanded)<a class="headerlink" href="#yr4-style-end-to-end-workflow-expanded" title="Link to this heading">¶</a></h2>
-<p>This is the consolidated operational path that combines the previous notebook
-flow and narrative page into one guide.</p>
+<p>This is the full operational path with explicit analysis window and explicit
+collision conditions.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.impacts</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CollisionConditions</span><span class="p">,</span>
     <span class="n">CollisionEvent</span><span class="p">,</span>
     <span class="n">ImpactProbabilities</span><span class="p">,</span>
-    <span class="n">calculate_impacts</span><span class="p">,</span>
     <span class="n">calculate_impact_probabilities</span><span class="p">,</span>
+    <span class="n">calculate_impacts</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
@@ -515,7 +567,7 @@ flow and narrative page into one guide.</p>
 
 <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">&quot;2024 YR4&quot;</span><span class="p">])</span>
 
-<span class="c1"># Size propagation window from an operationally relevant date.</span>
+<span class="c1"># Size the propagation window from an operationally relevant date.</span>
 <span class="n">approx_impact_date</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">([</span><span class="s2">&quot;2032-12-22&quot;</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
 <span class="n">analysis_end</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">approx_impact_date</span><span class="o">.</span><span class="n">add_days</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
 <span class="n">days_to_run</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">analysis_end</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
@@ -551,15 +603,22 @@ flow and narrative page into one guide.</p>
 </pre></div>
 </div>
 </section>
-<section id="inspect-what-you-got-back">
-<h2>Inspect What You Got Back<a class="headerlink" href="#inspect-what-you-got-back" title="Link to this heading">¶</a></h2>
-<p>Before summarizing, inspect raw event rows to understand condition behavior.</p>
+<section id="inspect-event-rows-and-probability-outputs">
+<h2>Inspect Event Rows and Probability Outputs<a class="headerlink" href="#inspect-event-rows-and-probability-outputs" title="Link to this heading">¶</a></h2>
+<p>Inspect raw events before summarizing so condition behavior is clear.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">impact_df</span> <span class="o">=</span> <span class="n">impacts</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">impact_df</span><span class="p">[[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="s2">&quot;variant_id&quot;</span><span class="p">,</span> <span class="s2">&quot;condition_id&quot;</span><span class="p">,</span> <span class="s2">&quot;stopping_condition&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;event counts by condition:&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">impact_df</span><span class="p">[</span><span class="s2">&quot;condition_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">())</span>
 </pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">ImpactProbabilities</span></code> includes per-orbit, per-condition summaries such as:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">impacts</span></code> and <code class="docutils literal notranslate"><span class="pre">variants</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cumulative_probability</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mean_impact_time</span></code> / <code class="docutils literal notranslate"><span class="pre">stddev_impact_time</span></code></p></li>
+<li><p>minimum and maximum impact times</p></li>
+</ul>
 </section>
 <section id="alternative-usage-patterns">
 <h2>Alternative Usage Patterns<a class="headerlink" href="#alternative-usage-patterns" title="Link to this heading">¶</a></h2>
@@ -597,12 +656,12 @@ generate variants explicitly with <code class="docutils literal notranslate"><sp
 </section>
 <section id="visualization-workflow">
 <h2>Visualization Workflow<a class="headerlink" href="#visualization-workflow" title="Link to this heading">¶</a></h2>
+<section id="risk-corridor-map">
+<h3>Risk corridor map<a class="headerlink" href="#risk-corridor-map" title="Link to this heading">¶</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">plot_risk_corridor</span></code> to visualize impact geography over time. Prefer
+<code class="docutils literal notranslate"><span class="pre">map_style=&quot;carto-positron&quot;</span></code> for docs/CI/browser stability.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">plotly.graph_objects</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">go</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.plots</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">generate_impact_visualization_data</span><span class="p">,</span>
-    <span class="n">plot_impact_simulation</span><span class="p">,</span>
-    <span class="n">plot_risk_corridor</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.plots</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_risk_corridor</span>
 
 <span class="n">corridor_fig</span><span class="p">:</span> <span class="n">go</span><span class="o">.</span><span class="n">Figure</span> <span class="o">=</span> <span class="n">plot_risk_corridor</span><span class="p">(</span>
     <span class="n">impacts</span><span class="p">,</span>
@@ -610,8 +669,42 @@ generate variants explicitly with <code class="docutils literal notranslate"><sp
     <span class="n">map_style</span><span class="o">=</span><span class="s2">&quot;carto-positron&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">corridor_fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>For a deterministic static preview (docs/PR assets), snapshot a late frame
+before exporting:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">corridor_fig</span><span class="o">.</span><span class="n">frames</span><span class="p">:</span>
+    <span class="n">corridor_fig</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">corridor_fig</span><span class="o">.</span><span class="n">frames</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+<span class="n">corridor_fig</span><span class="o">.</span><span class="n">write_image</span><span class="p">(</span>
+    <span class="s2">&quot;impact_risk_corridor_preview.png&quot;</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">1400</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">900</span><span class="p">,</span>
+    <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<figure class="align-default" id="id1">
+<img alt="Impact risk corridor preview generated from collision events." src="../_images/impact_risk_corridor_preview.png" />
+<figcaption>
+<p><span class="caption-text">Corridor preview with impacts colored by relative impact time.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="impact-simulation-animation">
+<h3>Impact simulation animation<a class="headerlink" href="#impact-simulation-animation" title="Link to this heading">¶</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">generate_impact_visualization_data</span></code> + <code class="docutils literal notranslate"><span class="pre">plot_impact_simulation</span></code> to
+build an Earth/Moon approach and impact sequence.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">plotly.graph_objects</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">go</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.plots</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">generate_impact_visualization_data</span><span class="p">,</span>
+    <span class="n">plot_impact_simulation</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
-<span class="c1"># Earth/Moon impact simulation visualization.</span>
+<span class="n">propagation_times</span><span class="p">:</span> <span class="n">Timestamp</span>
+<span class="n">propagated_best_fit_orbit</span><span class="p">:</span> <span class="n">Orbits</span>
+<span class="n">propagated_variants</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">]</span>
 <span class="n">propagation_times</span><span class="p">,</span> <span class="n">propagated_best_fit_orbit</span><span class="p">,</span> <span class="n">propagated_variants</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">generate_impact_visualization_data</span><span class="p">(</span>
         <span class="n">orbit</span><span class="p">,</span>
@@ -630,11 +723,17 @@ generate variants explicitly with <code class="docutils literal notranslate"><sp
     <span class="n">propagated_variants</span><span class="p">,</span>
     <span class="n">impacts</span><span class="p">,</span>
     <span class="n">title</span><span class="o">=</span><span class="s2">&quot;2024 YR4 Impact Simulation&quot;</span><span class="p">,</span>
+    <span class="n">sample_impactors</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">sample_non_impactors</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
     <span class="n">logo</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">sim_fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="c1"># Shareable artifact for review workflows.</span>
+<span class="n">sim_fig</span><span class="o">.</span><span class="n">write_html</span><span class="p">(</span><span class="s2">&quot;impact_simulation.html&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
+</section>
 </section>
 <section id="performance-and-reproducibility">
 <h2>Performance and Reproducibility<a class="headerlink" href="#performance-and-reproducibility" title="Link to this heading">¶</a></h2>
@@ -654,7 +753,6 @@ run a fast triage pass first, then rerun higher-fidelity for final products.</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="../reference/api/adam_core.dynamics.html"><span class="doc">adam_core.dynamics package</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/api/adam_core.orbits.html"><span class="doc">adam_core.orbits package</span></a></p></li>
-<li><p><a class="reference internal" href="../cookbook/impact_probabilities.html"><span class="doc">Impact Probabilities</span></a></p></li>
 <li><p><a class="reference internal" href="../cookbook/moid_analysis.html"><span class="doc">MOID Analysis</span></a></p></li>
 </ul>
 </section>
@@ -665,12 +763,12 @@ run a fast triage pass first, then rerun higher-fidelity for final products.</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../cookbook/impact_probabilities.html">
+          <a class="next-page" href="../cookbook/scaling_and_utils.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Impact Probabilities</div>
+                <div class="title">Scaling and Utilities</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -718,14 +816,21 @@ run a fast triage pass first, then rerun higher-fidelity for final products.</p>
             <ul>
 <li><a class="reference internal" href="#">Impact Risk Analysis</a><ul>
 <li><a class="reference internal" href="#goal">Goal</a></li>
+<li><a class="reference internal" href="#when-to-use-this-guide">When to Use This Guide</a></li>
 <li><a class="reference internal" href="#backend-requirement">Backend Requirement</a></li>
+<li><a class="reference internal" href="#core-pattern">Core Pattern</a></li>
 <li><a class="reference internal" href="#core-objects-and-their-roles">Core Objects and Their Roles</a></li>
 <li><a class="reference internal" href="#collision-conditions-what-they-are">Collision Conditions: What They Are</a></li>
 <li><a class="reference internal" href="#stopping-conditions-how-to-use-them">Stopping Conditions: How To Use Them</a></li>
+<li><a class="reference internal" href="#quick-triage-example">Quick Triage Example</a></li>
 <li><a class="reference internal" href="#yr4-style-end-to-end-workflow-expanded">YR4-Style End-to-End Workflow (Expanded)</a></li>
-<li><a class="reference internal" href="#inspect-what-you-got-back">Inspect What You Got Back</a></li>
+<li><a class="reference internal" href="#inspect-event-rows-and-probability-outputs">Inspect Event Rows and Probability Outputs</a></li>
 <li><a class="reference internal" href="#alternative-usage-patterns">Alternative Usage Patterns</a></li>
-<li><a class="reference internal" href="#visualization-workflow">Visualization Workflow</a></li>
+<li><a class="reference internal" href="#visualization-workflow">Visualization Workflow</a><ul>
+<li><a class="reference internal" href="#risk-corridor-map">Risk corridor map</a></li>
+<li><a class="reference internal" href="#impact-simulation-animation">Impact simulation animation</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#performance-and-reproducibility">Performance and Reproducibility</a></li>
 <li><a class="reference internal" href="#related-reference">Related Reference</a></li>
 </ul>
@@ -739,7 +844,7 @@ run a fast triage pass first, then rerun higher-fidelity for final products.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=f92c9f3c"></script>
+</div><script src="../_static/documentation_options.js?v=dc8eccfb"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
