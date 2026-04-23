@@ -115,3 +115,8 @@ pdm.lock
 
 # working scratch files
 .scratch*
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
