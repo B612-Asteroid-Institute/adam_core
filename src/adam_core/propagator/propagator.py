@@ -16,7 +16,7 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from ..dynamics.aberrations import add_light_time
+from .._rust.api import add_light_time_numpy
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
@@ -27,7 +27,6 @@ from ..photometry.magnitude import (
 )
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
-from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
 from .types import EphemerisType, ObserverType, OrbitType, TimestampType
 from .utils import ensure_input_origin_and_frame, ensure_input_time_scale
@@ -395,45 +394,18 @@ class EphemerisMixin:
         )
         observers_barycentric_tiled_values = observers_barycentric_tiled.coordinates.r
 
-        chunk_size = 200
         n = int(propagated_orbits_barycentric_values.shape[0])
-        # `process_in_chunks` pads each chunk to a fixed size for JAX; preallocate the padded
-        # output arrays and slice off padding after the loop. This avoids O(n^2) reallocation
-        # and memcpy from repeated np.concatenate calls.
-        n_padded = int(((n + int(chunk_size) - 1) // int(chunk_size)) * int(chunk_size))
-        propagated_orbits_aberrated = np.empty((n_padded, 6), dtype=np.float64)
-        light_time = np.empty((n_padded,), dtype=np.float64)
-
-        k = 0
-        for (
-            propagated_orbits_barycentric_chunk,
-            propagated_orbits_barycentric_time_chunk,
-            observers_barycentric_tiled_chunk,
-        ) in zip(
-            process_in_chunks(propagated_orbits_barycentric_values, chunk_size),
-            process_in_chunks(propagated_orbits_barycentric_time, chunk_size),
-            process_in_chunks(observers_barycentric_tiled_values, chunk_size),
-        ):
-            propagated_orbits_aberrated_chunk, light_time_chunk = add_light_time(
-                propagated_orbits_barycentric_chunk,
-                propagated_orbits_barycentric_time_chunk,
-                observers_barycentric_tiled_chunk,
-                lt_tol=1e-12,
-                mu=c.MU,
-                max_iter=100,
-                tol=1e-15,
-            )
-            propagated_orbits_aberrated[k : k + int(chunk_size), :] = np.asarray(
-                propagated_orbits_aberrated_chunk, dtype=np.float64
-            )
-            light_time[k : k + int(chunk_size)] = np.asarray(
-                light_time_chunk, dtype=np.float64
-            )
-            k += int(chunk_size)
-
-        # Remove padding
-        propagated_orbits_aberrated = propagated_orbits_aberrated[:n]
-        light_time = light_time[:n]
+        rust_out = add_light_time_numpy(
+            propagated_orbits_barycentric_values,
+            observers_barycentric_tiled_values,
+            np.full(n, c.MU, dtype=np.float64),
+            lt_tol=1e-12,
+            max_iter=100,
+            tol=1e-15,
+            max_lt_iter=10,
+        )
+        assert rust_out is not None
+        propagated_orbits_aberrated, light_time = rust_out
 
         # Guard against pathological light-time values before constructing timestamps.
         if not np.all(np.isfinite(light_time)):

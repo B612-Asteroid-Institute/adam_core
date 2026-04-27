@@ -202,18 +202,31 @@ def iod_worker(
     propagator_kwargs: dict = {},
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
 
-    iod_orbits = FittedOrbits.empty()
-    iod_orbit_members = FittedOrbitMembers.empty()
+    # Pre-compute linkage_id -> linkage_member rows and obs_id -> observation row
+    # so each per-linkage lookup is O(1) rather than O(N_members)/O(N_observations).
+    lm_linkage_ids = linkage_members.column(linkage_id_col).to_numpy(
+        zero_copy_only=False
+    )
+    lm_obs_ids = linkage_members.obs_id.to_numpy(zero_copy_only=False)
+    lm_rows_by_linkage: dict = {}
+    for i, lid in enumerate(lm_linkage_ids):
+        lm_rows_by_linkage.setdefault(lid, []).append(i)
+
+    observations_id_arr = observations.id.to_numpy(zero_copy_only=False)
+    obs_idx_by_id = {oid: i for i, oid in enumerate(observations_id_arr)}
+
+    iod_orbits_list: list[FittedOrbits] = []
+    iod_orbit_members_list: list[FittedOrbitMembers] = []
     for linkage_id in linkage_ids:
         time_start = time.time()
         logger.debug(f"Finding initial orbit for linkage {linkage_id}...")
 
-        obs_ids = linkage_members.apply_mask(
-            pc.equal(linkage_members.column(linkage_id_col), linkage_id)
-        ).obs_id
-        observations_linkage = observations.apply_mask(
-            pc.is_in(observations.id, obs_ids)
+        lm_rows = lm_rows_by_linkage.get(linkage_id, [])
+        obs_row_idx = np.fromiter(
+            (obs_idx_by_id[o] for o in lm_obs_ids[lm_rows] if o in obs_idx_by_id),
+            dtype=np.int64,
         )
+        observations_linkage = observations.take(obs_row_idx)
 
         # Sort observations by time
         observations_linkage = observations_linkage.sort_by(
@@ -247,14 +260,17 @@ def iod_worker(
         duration = time_end - time_start
         logger.debug(f"IOD for linkage {linkage_id} completed in {duration:.3f}s.")
 
-        iod_orbits = qv.concatenate([iod_orbits, iod_orbit])
-        if iod_orbits.fragmented():
-            iod_orbits = qv.defragment(iod_orbits)
+        iod_orbits_list.append(iod_orbit)
+        iod_orbit_members_list.append(iod_orbit_orbit_members)
 
-        iod_orbit_members = qv.concatenate([iod_orbit_members, iod_orbit_orbit_members])
-        if iod_orbit_members.fragmented():
-            iod_orbit_members = qv.defragment(iod_orbit_members)
-
+    iod_orbits = (
+        qv.concatenate(iod_orbits_list) if iod_orbits_list else FittedOrbits.empty()
+    )
+    iod_orbit_members = (
+        qv.concatenate(iod_orbit_members_list)
+        if iod_orbit_members_list
+        else FittedOrbitMembers.empty()
+    )
     return iod_orbits, iod_orbit_members
 
 
@@ -610,8 +626,8 @@ def initial_orbit_determination(
     else:
         observations_ref = None
 
-    iod_orbits = FittedOrbits.empty()
-    iod_orbit_members = FittedOrbitMembers.empty()
+    iod_orbits_chunks: list[FittedOrbits] = []
+    iod_orbit_members_chunks: list[FittedOrbitMembers] = []
     if len(observations) > 0 and len(linkage_members) > 0:
         # Extract linkage IDs
         linkage_ids = linkage_members.column(linkage_id_col).unique()
@@ -662,29 +678,15 @@ def initial_orbit_determination(
 
                 if len(futures) >= max_processes * 1.5:
                     finished, futures = ray.wait(futures, num_returns=1)
-                    result = ray.get(finished[0])
-                    iod_orbits_chunk, iod_orbit_members_chunk = result
-                    iod_orbits = qv.concatenate([iod_orbits, iod_orbits_chunk])
-                    iod_orbit_members = qv.concatenate(
-                        [iod_orbit_members, iod_orbit_members_chunk]
-                    )
-                    if iod_orbits.fragmented():
-                        iod_orbits = qv.defragment(iod_orbits)
-                    if iod_orbit_members.fragmented():
-                        iod_orbit_members = qv.defragment(iod_orbit_members)
+                    iod_orbits_chunk, iod_orbit_members_chunk = ray.get(finished[0])
+                    iod_orbits_chunks.append(iod_orbits_chunk)
+                    iod_orbit_members_chunks.append(iod_orbit_members_chunk)
 
             while futures:
                 finished, futures = ray.wait(futures, num_returns=1)
-                result = ray.get(finished[0])
-                iod_orbits_chunk, iod_orbit_members_chunk = result
-                iod_orbits = qv.concatenate([iod_orbits, iod_orbits_chunk])
-                iod_orbit_members = qv.concatenate(
-                    [iod_orbit_members, iod_orbit_members_chunk]
-                )
-                if iod_orbits.fragmented():
-                    iod_orbits = qv.defragment(iod_orbits)
-                if iod_orbit_members.fragmented():
-                    iod_orbit_members = qv.defragment(iod_orbit_members)
+                iod_orbits_chunk, iod_orbit_members_chunk = ray.get(finished[0])
+                iod_orbits_chunks.append(iod_orbits_chunk)
+                iod_orbit_members_chunks.append(iod_orbit_members_chunk)
 
             if len(refs_to_free) > 0:
                 ray.internal.free(refs_to_free)
@@ -709,14 +711,19 @@ def initial_orbit_determination(
                     propagator=propagator,
                     propagator_kwargs=propagator_kwargs,
                 )
-                iod_orbits = qv.concatenate([iod_orbits, iod_orbits_chunk])
-                iod_orbit_members = qv.concatenate(
-                    [iod_orbit_members, iod_orbit_members_chunk]
-                )
-                if iod_orbits.fragmented():
-                    iod_orbits = qv.defragment(iod_orbits)
-                if iod_orbit_members.fragmented():
-                    iod_orbit_members = qv.defragment(iod_orbit_members)
+                iod_orbits_chunks.append(iod_orbits_chunk)
+                iod_orbit_members_chunks.append(iod_orbit_members_chunk)
+
+        iod_orbits = (
+            qv.concatenate(iod_orbits_chunks)
+            if iod_orbits_chunks
+            else FittedOrbits.empty()
+        )
+        iod_orbit_members = (
+            qv.concatenate(iod_orbit_members_chunks)
+            if iod_orbit_members_chunks
+            else FittedOrbitMembers.empty()
+        )
 
         time_start_drop = time.time()
         logger.info("Removing duplicate initial orbits...")

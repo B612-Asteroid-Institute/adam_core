@@ -1,0 +1,21 @@
+{
+  "grid_state": "100 orbits x 100000 observers = 10,000,000 rows",
+  "grid_cov": "100 orbits x 10000 observers = 1,000,000 rows",
+  "repeats": 5,
+  "generate_ephemeris_2body": {
+    "legacy_p50_s": 50.54361808300018,
+    "legacy_p95_s": 51.0041243669577,
+    "rust_p50_s": 0.7292045829817653,
+    "rust_p95_s": 2.096244733873754,
+    "speedup_p50": 69.3133576812203,
+    "speedup_p95": 24.3311878344971
+  },
+  "generate_ephemeris_2body_with_covariance": {
+    "legacy_p50_s": 129.12071383418515,
+    "legacy_p95_s": 135.76313405865804,
+    "rust_p50_s": 0.13475145818665624,
+    "rust_p95_s": 0.14313062494620682,
+    "speedup_p50": 958.2138521672141,
+    "speedup_p95": 948.5261041072257
+  }
+}

@@ -4,27 +4,34 @@ import logging
 import os
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Literal, Optional, Union
+from typing import Literal, Optional
 
-import jax.numpy as jnp
 import numpy as np
 import pyarrow.compute as pc
-import quivr as qv
-import spiceypy as sp
-from jax import config, jit, lax, vmap
 
+from .._rust import (
+    cartesian_to_cometary_numpy,
+    cartesian_to_geodetic_numpy,
+    cartesian_to_keplerian_numpy,
+    cartesian_to_spherical_numpy,
+    cometary_to_cartesian_numpy,
+    keplerian_to_cartesian_numpy,
+    rotate_cartesian_time_varying_numpy,
+    spherical_to_cartesian_numpy,
+    transform_coordinates_numpy,
+    transform_coordinates_with_covariance_numpy,
+)
 from ..constants import Constants as c
 from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
-from ..utils.chunking import process_in_chunks
 from . import types
-from .cartesian import CartesianCoordinates
+from .cartesian import COVARIANCE_ROTATION_TOLERANCE, CartesianCoordinates
 from .cometary import CometaryCoordinates
-from .geodetics import GeodeticCoordinates
+from .covariances import CoordinateCovariances
+from .geodetics import GeodeticCoordinates, WGS84
 from .keplerian import KeplerianCoordinates
-from .origin import OriginCodes
+from .origin import Origin, OriginCodes
 from .spherical import SphericalCoordinates
 
-config.update("jax_enable_x64", True)
 
 TRANSFORM_EQ2EC = np.zeros((6, 6))
 TRANSFORM_EQ2EC[0:3, 0:3] = c.TRANSFORM_EQ2EC
@@ -90,158 +97,358 @@ CoordinatesClasses = (
 )
 
 
-Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 FLOAT_TOLERANCE = 1e-15
 
-
-@jit
-def _cartesian_to_geodetic(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
-    a: float,
-    f: float,
-    max_iter: int = 100,
-    tol: float = 1e-15,
-) -> jnp.ndarray:
-    """
-    Convert a single Cartesian coordinate to a geodetic coordinate. This only makes sense to
-    do if the Cartesian coordinates are in a Earth-centered frame (such as ECEF or ITRF).
-
-    Uses Bowring's method [1] to compute the geodetic coordinates.
-
-    Parameters
-    ----------
-    coords_cartesian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of distance.
-        y : y-position in units of distance.
-        z : z-position in units of distance.
-        vx : x-velocity in the same units of x per arbitrary unit of time.
-        vy : y-velocity in the same units of y per arbitrary unit of time.
-        vz : z-velocity in the same units of z per arbitrary unit of time.
-    a : float (1)
-        Semi-major axis of the Earth in units of distance.
-    f : float (1)
-        Flattening of the Earth.
-    max_iter : int (1)
-        Maximum number of iterations to perform.
-    tol : float (1)
-        Tolerance for the iteration.
-
-    Returns
-    -------
-    coords_geodetic : `~jax.numpy.ndarray` (6)
-        3D geodetic coordinate including time derivatives.
-        alt : Altitude in units of distance.
-        lon : Longitude in degrees.
-        lat : Latitude in degrees.
-        vup : Up velocity in the same units of x per arbitrary unit of time.
-        veast : East velocity in degrees per arbitrary unit of time.
-        vnorth : North velocity in degrees per arbitrary unit of time.
-
-    References
-    ----------
-    [1] Bowring, B. R. (1976). The accuracy of geodetic latitude and height
-        equations. Survey Review, 28(218), 202-206.
-    """
-    coords_geodetic = jnp.zeros(6, dtype=jnp.float64)
-    x = coords_cartesian[0]
-    y = coords_cartesian[1]
-    z = coords_cartesian[2]
-    vx = coords_cartesian[3]
-    vy = coords_cartesian[4]
-    vz = coords_cartesian[5]
-
-    # Semi-minor axis
-    b = a * (1 - f)
-
-    # Eccentricity squared
-    e2 = (a**2 - b**2) / a**2
-
-    # Distance from z-axis
-    xy = jnp.sqrt(x**2 + y**2)
-
-    # Initial guess for latitude
-    lat = jnp.arctan2(z, xy * (1 - e2))
-
-    diff = 1e15
-    iterations = 0
-    lat_i = lat
-    p_init = [lat_i, diff, iterations]
-
-    @jit
-    def _iterate(p):
-        lat_i = p[0]
-        iterations = p[2]
-
-        sin_lat = jnp.sin(lat)
-        cos_lat = jnp.cos(lat)
-
-        # Radius of curvature in prime vertical
-        N = a / jnp.sqrt(1.0 - e2 * sin_lat**2)
-
-        # Altitude
-        alt = xy / cos_lat - N
-
-        # Updated latitude
-        lat_i = jnp.arctan2(z, xy * (1.0 - e2 * N / (N + alt)))
-
-        diff = lat_i - lat
-        iterations += 1
-
-        p[0] = lat_i
-        p[1] = diff
-        p[2] = iterations
-
-        return p
-
-    def _while_condition(p):
-        diff = p[1]
-        iterations = p[2]
-        return (jnp.abs(diff) > tol) & (iterations <= max_iter)
-
-    lat = lax.while_loop(_while_condition, _iterate, p_init)[0]
-    lon = jnp.arctan2(y, x)
-    lon = jnp.where(lon < 0.0, 2 * jnp.pi + lon, lon)
-
-    sin_lat = jnp.sin(lat)
-    cos_lat = jnp.cos(lat)
-    sin_lon = jnp.sin(lon)
-    cos_lon = jnp.cos(lon)
-
-    N = a / jnp.sqrt(1.0 - e2 * sin_lat**2)
-    alt = xy / cos_lat - N
-
-    # Compute East-North-Up velocities
-    v_east = -sin_lon * vx + cos_lon * vy
-    v_north = -sin_lat * cos_lon * vx - sin_lat * sin_lon * vy + cos_lat * vz
-    v_up = cos_lat * cos_lon * vx + cos_lat * sin_lon * vy + sin_lat * vz
-
-    coords_geodetic = coords_geodetic.at[0].set(alt)
-    coords_geodetic = coords_geodetic.at[1].set(jnp.degrees(lon))
-    coords_geodetic = coords_geodetic.at[2].set(jnp.degrees(lat))
-    coords_geodetic = coords_geodetic.at[3].set(jnp.degrees(v_east))
-    coords_geodetic = coords_geodetic.at[4].set(jnp.degrees(v_north))
-    coords_geodetic = coords_geodetic.at[5].set(v_up)
-
-    return coords_geodetic
+_RUST_TRANSFORM_REPRESENTATIONS = {
+    CartesianCoordinates: "cartesian",
+    SphericalCoordinates: "spherical",
+    GeodeticCoordinates: "geodetic",
+    KeplerianCoordinates: "keplerian",
+    CometaryCoordinates: "cometary",
+}
 
 
-# Vectorization Map: _cartesian_to_geodetic
-_cartesian_to_geodetic_vmap = jit(
-    vmap(
-        _cartesian_to_geodetic,
-        in_axes=(0, None, None, None, None),
-    )
+def _coordinates_from_rust_values(
+    values: np.ndarray,
+    coords_in: types.CoordinateType,
+    representation_out: type[types.CoordinateType],
+    frame_out: Literal["ecliptic", "equatorial", "itrf93"],
+    covariance: CoordinateCovariances | None = None,
+) -> types.CoordinateType:
+    cov = coords_in.covariance if covariance is None else covariance
+    if representation_out is CartesianCoordinates:
+        return CartesianCoordinates.from_kwargs(
+            x=values[:, 0],
+            y=values[:, 1],
+            z=values[:, 2],
+            vx=values[:, 3],
+            vy=values[:, 4],
+            vz=values[:, 5],
+            time=coords_in.time,
+            covariance=cov,
+            origin=coords_in.origin,
+            frame=frame_out,
+        )
+    if representation_out is SphericalCoordinates:
+        return SphericalCoordinates.from_kwargs(
+            rho=values[:, 0],
+            lon=values[:, 1],
+            lat=values[:, 2],
+            vrho=values[:, 3],
+            vlon=values[:, 4],
+            vlat=values[:, 5],
+            time=coords_in.time,
+            covariance=cov,
+            origin=coords_in.origin,
+            frame=frame_out,
+        )
+    if representation_out is GeodeticCoordinates:
+        return GeodeticCoordinates.from_kwargs(
+            alt=values[:, 0],
+            lon=values[:, 1],
+            lat=values[:, 2],
+            vup=values[:, 3],
+            veast=values[:, 4],
+            vnorth=values[:, 5],
+            time=coords_in.time,
+            covariance=cov,
+            origin=coords_in.origin,
+            frame=frame_out,
+        )
+    if representation_out is KeplerianCoordinates:
+        # The non-covariance path (cartesian_to_keplerian_flat6) returns 13 columns
+        # (a, Q, q, e, i, raan, ap, M, nu, E, P, T, tp) for legacy compat; the
+        # covariance path evaluates the 6-column generic kernel to keep the Jacobian
+        # square. Dispatch on column count.
+        if values.shape[1] == 13:
+            kep_cols = (0, 4, 5, 6, 7, 8)
+        else:
+            kep_cols = (0, 1, 2, 3, 4, 5)
+        a_col, e_col, i_col, raan_col, ap_col, m_col = kep_cols
+        return KeplerianCoordinates.from_kwargs(
+            a=values[:, a_col],
+            e=values[:, e_col],
+            i=values[:, i_col],
+            raan=values[:, raan_col],
+            ap=values[:, ap_col],
+            M=values[:, m_col],
+            time=coords_in.time,
+            covariance=cov,
+            origin=coords_in.origin,
+            frame=frame_out,
+        )
+    if representation_out is CometaryCoordinates:
+        return CometaryCoordinates.from_kwargs(
+            q=values[:, 0],
+            e=values[:, 1],
+            i=values[:, 2],
+            raan=values[:, 3],
+            ap=values[:, 4],
+            tp=values[:, 5],
+            time=coords_in.time,
+            covariance=cov,
+            origin=coords_in.origin,
+            frame=frame_out,
+        )
+    raise ValueError(f"Unsupported representation_out: {representation_out}")
+
+
+_RUST_TRANSFORM_INPUT_TYPES = (
+    CartesianCoordinates,
+    SphericalCoordinates,
+    KeplerianCoordinates,
+    CometaryCoordinates,
 )
 
 
+def _rust_transform_supports(
+    coords: types.CoordinateType,
+    representation_out: type[types.CoordinateType],
+    frame_out: Literal["ecliptic", "equatorial", "itrf93"],
+    origin_out: OriginCodes | np.ndarray,
+) -> bool:
+    """
+    Return True if the Rust single-crossing path covers this exact input combination.
+
+    The supported set is explicit: input representation in
+    (Cartesian, Spherical, Keplerian, Cometary), output representation in
+    (Cartesian, Spherical, Keplerian, Cometary, Geodetic), same origin in/out
+    (EARTH only for Geodetic output), covariance allowed (propagated via
+    forward-mode autodiff in Rust; NaN covariance passes through), and frame
+    transitions limited to identity or equatorial<->ecliptic (plus itrf93 for
+    Geodetic output). Anything outside this set must fall back to legacy.
+    """
+    if type(coords) not in _RUST_TRANSFORM_INPUT_TYPES:
+        return False
+    if representation_out not in _RUST_TRANSFORM_REPRESENTATIONS:
+        return False
+    if frame_out != coords.frame:
+        if {coords.frame, frame_out} == {"ecliptic", "equatorial"}:
+            pass  # single-crossing Rust kernel rotates inline
+        elif "itrf93" in (coords.frame, frame_out):
+            # Time-varying ITRF93 rotation needs Cartesian states (no
+            # physically meaningful ITRF93 Keplerian/Cometary/Spherical
+            # representation to rotate from). Dispatcher routes through
+            # rotate_cartesian_time_varying + identity-frame conversion.
+            if type(coords) is not CartesianCoordinates:
+                return False
+        else:
+            return False
+    if representation_out is GeodeticCoordinates and frame_out != "itrf93":
+        return False
+    origin_differs = bool(np.any(coords.origin != origin_out))
+    if origin_differs:
+        # The dispatcher handles origin changes by routing through a
+        # SPICE-backed Cartesian translation (covariance-invariant).
+        # This needs a single target origin (`OriginCodes`); mixed-origin
+        # arrays aren't a supported target.
+        if not isinstance(origin_out, OriginCodes):
+            return False
+        # Geodetic output must be EARTH-centered ITRF93; if we're asking
+        # for a different origin-out, we can't satisfy it.
+        if representation_out is GeodeticCoordinates:
+            if origin_out is not OriginCodes.EARTH:
+                return False
+    if representation_out is GeodeticCoordinates:
+        origin_codes = coords.origin.code.to_numpy(zero_copy_only=False)
+        if np.any(origin_codes != "EARTH") and not origin_differs:
+            return False
+    # Pure Cartesian frame-only change is faster on the legacy path (a single
+    # 6x6 rotation) than through the Rust dispatcher's Python marshaling; keep
+    # it on legacy so the promotion gate holds for all covered workloads.
+    if (
+        type(coords) is CartesianCoordinates
+        and representation_out is CartesianCoordinates
+    ):
+        return False
+    # Cartesian output with origin change: the dispatcher would just do
+    # to_cartesian+translate+rotate, which is exactly what the legacy
+    # fallthrough does (all three hops are already Rust after lever 1).
+    # Going through the dispatcher adds Python marshaling overhead with no
+    # fusion win, so keep this on legacy.
+    if representation_out is CartesianCoordinates and origin_differs:
+        return False
+    return True
+
+
+def _try_transform_coordinates_rust(
+    coords: types.CoordinateType,
+    representation_out: type[types.CoordinateType],
+    frame_out: Literal["ecliptic", "equatorial", "itrf93"],
+    origin_out: OriginCodes | np.ndarray,
+) -> types.CoordinateType | None:
+    """
+    Attempt the Rust single-crossing transform path.
+
+    Returns the transformed coordinates when the input combination is in the
+    supported set (see `_rust_transform_supports`), otherwise returns None so
+    the caller falls back to the legacy JAX path. Callers must treat a None
+    return as an explicit "not supported by Rust yet" signal, not an error.
+    """
+    if not _rust_transform_supports(coords, representation_out, frame_out, origin_out):
+        return None
+
+    # Origin change: resolve the per-row SPICE translation vector in the
+    # input frame, then pass it to the Rust dispatcher so the add fuses
+    # with rep-in -> cart -> frame rotate -> rep-out -> covariance AD in a
+    # single Python/Rust crossing. Translation is a constant offset
+    # (identity Jacobian wrt state), so covariance propagation is
+    # unaffected mathematically; the kernel just skips adding anything to
+    # the Jacobian accumulation.
+    origin_differs = bool(np.any(coords.origin != origin_out))
+    translation_vectors: np.ndarray | None = None
+    if origin_differs:
+        assert isinstance(origin_out, OriginCodes)
+        if type(coords) is CartesianCoordinates:
+            translation_vectors = _resolve_origin_translation_vectors(coords, origin_out)
+        else:
+            # SPICE resolves translation vectors in Cartesian space, so we
+            # need the rep-in-as-Cartesian (same frame, same origin) to
+            # resolve them. That's a pure origin-query operation against
+            # the *input* origin metadata — it doesn't depend on the
+            # actual Cartesian values — so we build a synthetic Cartesian
+            # view carrying just the time/origin/frame.
+            synthetic = CartesianCoordinates.from_kwargs(
+                x=np.zeros(len(coords)),
+                y=np.zeros(len(coords)),
+                z=np.zeros(len(coords)),
+                vx=np.zeros(len(coords)),
+                vy=np.zeros(len(coords)),
+                vz=np.zeros(len(coords)),
+                time=coords.time,
+                origin=coords.origin,
+                frame=coords.frame,
+            )
+            translation_vectors = _resolve_origin_translation_vectors(synthetic, origin_out)
+
+    # ITRF93 frame changes: do the time-varying rotation in Rust first, then
+    # re-dispatch as an identity-frame representation conversion so the
+    # covariance transform runs through Rust forward-mode autodiff instead
+    # of the JAX `from_cartesian` Jacobian path.
+    if frame_out != coords.frame and "itrf93" in (coords.frame, frame_out):
+        # ITRF93 path cannot combine with origin_differs (gated out in
+        # _rust_transform_supports for non-EARTH targets, and ITRF93 with
+        # EARTH target would still require the time-varying rotate path
+        # first, then translate — handle via fallthrough here).
+        if origin_differs:
+            translated = cartesian_to_origin(coords, origin_out)
+            rotated = apply_time_varying_rotation(translated, frame_out)
+        else:
+            rotated = apply_time_varying_rotation(coords, frame_out)
+        if representation_out is CartesianCoordinates:
+            return rotated
+        return _try_transform_coordinates_rust(
+            rotated, representation_out, frame_out, origin_out
+        )
+
+    representation_in_name = _RUST_TRANSFORM_REPRESENTATIONS[type(coords)]
+    representation_out_name = _RUST_TRANSFORM_REPRESENTATIONS[representation_out]
+
+    t0 = None
+    mu = None
+    a = None
+    f = None
+    if type(coords) is KeplerianCoordinates:
+        mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
+    if type(coords) is CometaryCoordinates:
+        t0 = np.ascontiguousarray(coords.time.to_numpy(), dtype=np.float64)
+        mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
+    if representation_out is GeodeticCoordinates:
+        a = float(WGS84.a)
+        f = float(WGS84.f)
+    if representation_out is KeplerianCoordinates:
+        if t0 is None:
+            t0 = np.ascontiguousarray(coords.time.to_numpy(), dtype=np.float64)
+        if mu is None:
+            mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
+    if representation_out is CometaryCoordinates:
+        if t0 is None:
+            t0 = np.ascontiguousarray(coords.time.to_numpy(), dtype=np.float64)
+        if mu is None:
+            mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
+
+    translation_kwarg = (
+        np.ascontiguousarray(translation_vectors, dtype=np.float64)
+        if translation_vectors is not None
+        else None
+    )
+
+    if coords.covariance.is_all_nan():
+        rust_coords = transform_coordinates_numpy(
+            coords.values,
+            representation_in_name,
+            representation_out_name,
+            t0=t0,
+            mu=mu,
+            a=a,
+            f=f,
+            max_iter=100,
+            tol=1e-15,
+            frame_in=coords.frame,
+            frame_out=frame_out,
+            translation_vectors=translation_kwarg,
+        )
+        if rust_coords is None:
+            return None
+        result = _coordinates_from_rust_values(
+            np.asarray(rust_coords, dtype=np.float64),
+            coords,
+            representation_out,
+            frame_out,
+        )
+        if origin_differs:
+            result = result.set_column(
+                "origin", Origin.from_kwargs(code=[origin_out.name] * len(result))
+            )
+        return result
+
+    covariance_matrices = coords.covariance.to_matrix()
+    n = covariance_matrices.shape[0]
+    covariance_flat = np.ascontiguousarray(
+        covariance_matrices.reshape(n, 36), dtype=np.float64
+    )
+    result = transform_coordinates_with_covariance_numpy(
+        coords.values,
+        covariance_flat,
+        representation_in_name,
+        representation_out_name,
+        t0=t0,
+        mu=mu,
+        a=a,
+        f=f,
+        max_iter=100,
+        tol=1e-15,
+        frame_in=coords.frame,
+        frame_out=frame_out,
+        translation_vectors=translation_kwarg,
+    )
+    if result is None:
+        return None
+    rust_coords, rust_cov_flat = result
+    cov_out = CoordinateCovariances.from_matrix(
+        np.asarray(rust_cov_flat, dtype=np.float64).reshape(n, 6, 6)
+    )
+    out = _coordinates_from_rust_values(
+        np.asarray(rust_coords, dtype=np.float64),
+        coords,
+        representation_out,
+        frame_out,
+        covariance=cov_out,
+    )
+    if origin_differs:
+        out = out.set_column(
+            "origin", Origin.from_kwargs(code=[origin_out.name] * len(out))
+        )
+    return out
+
+
 def cartesian_to_geodetic(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
+    coords_cartesian: np.ndarray,
     a: float,
     f: float,
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> jnp.ndarray:
+) -> np.ndarray:
     """
     Convert Cartesian coordinates to a geodetic coordinate.
 
@@ -275,114 +482,15 @@ def cartesian_to_geodetic(
         veast : East velocity in degrees per arbitrary unit of time.
         vnorth : North velocity in degrees per arbitrary unit of time.
     """
-    # Define chunk size
-    chunk_size = 200
-
-    # Process in chunks
-    coords_geodetic: np.ndarray = np.empty((0, 6))
-    for cartesian_chunk in process_in_chunks(coords_cartesian, chunk_size):
-        coords_geodetic_chunk = _cartesian_to_geodetic_vmap(
-            cartesian_chunk, a, f, max_iter, tol
-        )
-        coords_geodetic = np.concatenate(
-            (coords_geodetic, np.asarray(coords_geodetic_chunk))
-        )
-
-    # Concatenate chunks and remove padding
-    coords_geodetic = coords_geodetic[: len(coords_cartesian)]
-
-    return coords_geodetic
-
-
-@jit
-def _cartesian_to_spherical(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
-) -> jnp.ndarray:
-    """
-    Convert a single Cartesian coordinate to a spherical coordinate.
-
-    Parameters
-    ----------
-    coords_cartesian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of distance.
-        y : y-position in units of distance.
-        z : z-position in units of distance.
-        vx : x-velocity in the same units of x per arbitrary unit of time.
-        vy : y-velocity in the same units of y per arbitrary unit of time.
-        vz : z-velocity in the same units of z per arbitrary unit of time.
-
-    Returns
-    -------
-    coords_spherical : `~jax.numpy.ndarray` (6)
-        3D Spherical coordinate including time derivatives.
-        rho : Radial distance in the same units of x, y, and z.
-        lon : Longitude ranging from 0.0 to 360.0 degrees.
-        lat : Latitude ranging from -90.0 to 90.0 degrees with 0 at the equator.
-        vrho : Radial velocity in the same units as rho per arbitrary unit of time
-            (same unit of time as the x, y, and z velocities).
-        vlon : Longitudinal velocity in degrees per arbitrary unit of time
-            (same unit of time as the x, y, and z velocities).
-        vlat : Latitudinal velocity in degrees per arbitrary unit of time.
-            (same unit of time as the x, y, and z velocities).
-    """
-    coords_spherical = jnp.zeros(6, dtype=jnp.float64)
-    x = coords_cartesian[0]
-    y = coords_cartesian[1]
-    z = coords_cartesian[2]
-    vx = coords_cartesian[3]
-    vy = coords_cartesian[4]
-    vz = coords_cartesian[5]
-
-    rho = jnp.sqrt(x**2 + y**2 + z**2)
-    lon = jnp.arctan2(y, x)
-    lon = jnp.where(lon < 0.0, 2 * jnp.pi + lon, lon)
-    lat = lax.cond(
-        rho == 0.0,
-        lambda _: 0.0,
-        lambda _: jnp.arcsin(z / rho),
-        None,
+    coords_cartesian_np = np.ascontiguousarray(
+        np.asarray(coords_cartesian, dtype=np.float64)
     )
-    lat = jnp.where(
-        (lat >= 3 * jnp.pi / 2) & (lat <= 2 * jnp.pi), lat - 2 * jnp.pi, lat
-    )
+    if coords_cartesian_np.ndim != 2 or coords_cartesian_np.shape[1] != 6:
+        raise ValueError("coords_cartesian must have shape (N, 6)")
 
-    vrho = lax.cond(
-        rho == 0.0,
-        lambda _: 0.0,
-        lambda _: (x * vx + y * vy + z * vz) / rho,
-        None,
-    )
-    vlon = lax.cond(
-        (x == 0.0) & (y == 0.0),
-        lambda _: 0.0,
-        lambda _: (vy * x - vx * y) / (x**2 + y**2),
-        None,
-    )
-    vlat = lax.cond(
-        ((x == 0.0) & (y == 0.0)) | (rho == 0.0),
-        lambda _: 0.0,
-        lambda _: (vz - vrho * z / rho) / jnp.sqrt(x**2 + y**2),
-        None,
-    )
-
-    coords_spherical = coords_spherical.at[0].set(rho)
-    coords_spherical = coords_spherical.at[1].set(jnp.degrees(lon))
-    coords_spherical = coords_spherical.at[2].set(jnp.degrees(lat))
-    coords_spherical = coords_spherical.at[3].set(vrho)
-    coords_spherical = coords_spherical.at[4].set(jnp.degrees(vlon))
-    coords_spherical = coords_spherical.at[5].set(jnp.degrees(vlat))
-
-    return coords_spherical
-
-
-# Vectorization Map: _cartesian_to_spherical
-_cartesian_to_spherical_vmap = jit(
-    vmap(
-        _cartesian_to_spherical,
-        in_axes=(0,),
-    )
-)
+    rust_coords = cartesian_to_geodetic_numpy(coords_cartesian_np, a, f, max_iter, tol)
+    assert rust_coords is not None
+    return rust_coords
 
 
 def cartesian_to_spherical(coords_cartesian: np.ndarray) -> np.ndarray:
@@ -414,106 +522,20 @@ def cartesian_to_spherical(coords_cartesian: np.ndarray) -> np.ndarray:
         vlat : Latitudinal velocity in degrees per arbitrary unit of time.
             (same unit of time as the x, y, and z velocities).
     """
-    # Define chunk size
-    chunk_size = 200
-
-    # Process in chunk
-    coords_spherical: np.ndarray = np.empty((0, 6))
-    for cartesian_chunk in process_in_chunks(coords_cartesian, chunk_size):
-        coords_spherical_chunk = _cartesian_to_spherical_vmap(cartesian_chunk)
-        coords_spherical = np.concatenate(
-            (coords_spherical, np.asarray(coords_spherical_chunk))
-        )
-
-    # Concatenate chunks and remove padding
-    coords_spherical = coords_spherical[: len(coords_cartesian)]
-
-    return coords_spherical
-
-
-@jit
-def _spherical_to_cartesian(
-    coords_spherical: Union[np.ndarray, jnp.ndarray],
-) -> jnp.ndarray:
-    """
-    Convert a single spherical coordinate to a Cartesian coordinate.
-
-    Parameters
-    ----------
-    coords_spherical : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        3D Spherical coordinate including time derivatives.
-        rho : Radial distance in the same units of x, y, and z.
-        lon : Longitude ranging from 0.0 to 360.0 degrees.
-        lat : Latitude ranging from -90.0 to 90.0 degrees with 0 at the equator.
-        vrho : Radial velocity in the same units as rho per arbitrary unit of time
-            (same unit of time as the x, y, and z velocities).
-        vlon : Longitudinal velocity in degrees per arbitrary unit of time
-            (same unit of time as the x, y, and z velocities).
-        vlat : Latitudinal velocity in degrees per arbitrary unit of time.
-            (same unit of time as the x, y, and z velocities).
-
-    Returns
-    -------
-    coords_cartesian : `~jax.numpy.ndarray` (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of distance.
-        y : y-position in units of distance.
-        z : z-position in units of distance.
-        vx : x-velocity in the same units of x per arbitrary unit of time.
-        vy : y-velocity in the same units of y per arbitrary unit of time.
-        vz : z-velocity in the same units of z per arbitrary unit of time.
-    """
-    coords_cartesian = jnp.zeros(6, dtype=jnp.float64)
-    rho = coords_spherical[0]
-    lon = jnp.radians(coords_spherical[1])
-    lat = jnp.radians(coords_spherical[2])
-    vrho = coords_spherical[3]
-    vlon = jnp.radians(coords_spherical[4])
-    vlat = jnp.radians(coords_spherical[5])
-
-    cos_lat = jnp.cos(lat)
-    sin_lat = jnp.sin(lat)
-    cos_lon = jnp.cos(lon)
-    sin_lon = jnp.sin(lon)
-
-    x = rho * cos_lat * cos_lon
-    y = rho * cos_lat * sin_lon
-    z = rho * sin_lat
-
-    vx = (
-        cos_lat * cos_lon * vrho
-        - rho * cos_lat * sin_lon * vlon
-        - rho * sin_lat * cos_lon * vlat
+    coords_cartesian_np = np.ascontiguousarray(
+        np.asarray(coords_cartesian, dtype=np.float64)
     )
-    vy = (
-        cos_lat * sin_lon * vrho
-        + rho * cos_lat * cos_lon * vlon
-        - rho * sin_lat * sin_lon * vlat
-    )
-    vz = sin_lat * vrho + rho * cos_lat * vlat
+    if coords_cartesian_np.ndim != 2 or coords_cartesian_np.shape[1] != 6:
+        raise ValueError("coords_cartesian must have shape (N, 6)")
 
-    coords_cartesian = coords_cartesian.at[0].set(x)
-    coords_cartesian = coords_cartesian.at[1].set(y)
-    coords_cartesian = coords_cartesian.at[2].set(z)
-    coords_cartesian = coords_cartesian.at[3].set(vx)
-    coords_cartesian = coords_cartesian.at[4].set(vy)
-    coords_cartesian = coords_cartesian.at[5].set(vz)
-
-    return coords_cartesian
-
-
-# Vectorization Map: _spherical_to_cartesian
-_spherical_to_cartesian_vmap = jit(
-    vmap(
-        _spherical_to_cartesian,
-        in_axes=(0,),
-    )
-)
+    rust_coords = cartesian_to_spherical_numpy(coords_cartesian_np)
+    assert rust_coords is not None
+    return rust_coords
 
 
 def spherical_to_cartesian(
-    coords_spherical: Union[np.ndarray, jnp.ndarray],
-) -> jnp.ndarray:
+    coords_spherical: np.ndarray,
+) -> np.ndarray:
     """
     Convert spherical coordinates to Cartesian coordinates.
 
@@ -542,265 +564,22 @@ def spherical_to_cartesian(
         vy : y-velocity in the same units of y per arbitrary unit of time.
         vz : z-velocity in the same units of z per arbitrary unit of time.
     """
-    # Define chunk size
-    chunk_size = 200
-
-    # Process in chunks
-    coords_cartesian: np.ndarray = np.empty((0, 6))
-    for spherical_chunk in process_in_chunks(coords_spherical, chunk_size):
-        coords_cartesian_chunk = _spherical_to_cartesian_vmap(spherical_chunk)
-        coords_cartesian = np.concatenate(
-            (coords_cartesian, np.asarray(coords_cartesian_chunk))
-        )
-
-    # Remove padding
-    coords_cartesian = coords_cartesian[: len(coords_spherical)]
-
-    return coords_cartesian
-
-
-@jit
-def _cartesian_to_keplerian(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
-    t0: float,
-    mu: float,
-) -> jnp.ndarray:
-    """
-    Convert a single Cartesian coordinate to a Keplerian coordinate.
-
-    If the orbit is found to be circular (e = 0 +- 1e-15) then
-    the argument of periapsis is set to 0. The anomalies are then accordingly
-    defined with this assumption.
-
-    If the orbit's inclination is zero or 180 degrees (i = 0 +- 1e-15 or i = 180 +- 1e-15),
-    then the longitude of the ascending node is set to 0 (located in the direction of
-    the reference axis).
-
-    Parameters
-    ----------
-    coords_cartesian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
-    t0 : float (1)
-        Epoch at which cometary elements are defined in MJD TDB.
-    mu : float (1)
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-
-    Returns
-    -------
-    coords_keplerian : `~jax.numpy.ndarray` (13)
-        13D Keplerian coordinate.
-        a : semi-major axis in au.
-        p : semi-latus rectum in au.
-        q : periapsis distance in au.
-        Q : apoapsis distance in au.
-        e : eccentricity.
-        i : inclination in degrees.
-        raan : Right ascension (longitude) of the ascending node in degrees.
-        ap : argument of periapsis in degrees.
-        M : mean anomaly in degrees.
-        nu : true anomaly in degrees.
-        n : mean motion in degrees per day.
-        P : period in days.
-        tp : time of periapsis passage in days.
-
-    References
-    ----------
-    [1] Bate, R. R; Mueller, D. D; White, J. E. (1971). Fundamentals of Astrodynamics. 1st ed.,
-        Dover Publications, Inc. ISBN-13: 978-0486600611
-    """
-    from ..dynamics.kepler import (
-        calc_mean_anomaly,
-        calc_mean_motion,
-        calc_periapsis_distance,
+    coords_spherical_np = np.ascontiguousarray(
+        np.asarray(coords_spherical, dtype=np.float64)
     )
+    if coords_spherical_np.ndim != 2 or coords_spherical_np.shape[1] != 6:
+        raise ValueError("coords_spherical must have shape (N, 6)")
 
-    coords_keplerian = jnp.zeros(13, dtype=jnp.float64)
-    r = coords_cartesian[0:3]
-    v = coords_cartesian[3:6]
-
-    r_mag = jnp.linalg.norm(r)
-    v_mag = jnp.linalg.norm(v)
-
-    sme = v_mag**2 / 2 - mu / r_mag
-
-    # Calculate the angular momentum vector
-    # Equation 2.4-1 in Bate, Mueller, & White [1]
-    h = jnp.cross(r, v)
-    h_mag = jnp.linalg.norm(h)
-
-    # Calculate the vector which is perpendicular to the
-    # momentum vector and the Z-axis and points towards
-    # the direction of the ascending node.
-    # Equation 2.4-3 in Bate, Mueller, & White [1]
-    n = jnp.cross(Z_AXIS, h)
-    n_mag = jnp.linalg.norm(n)
-
-    # Calculate the eccentricity vector which lies in the orbital plane
-    # and points toward periapse.
-    # Equation 2.4-5 in Bate, Mueller, & White [1]
-    e_vec = ((v_mag**2 - mu / r_mag) * r - (jnp.dot(r, v)) * v) / mu
-    e = jnp.linalg.norm(e_vec)
-
-    # Calculate the semi-latus rectum
-    p = h_mag**2 / mu
-
-    # Calculate the inclination
-    # Equation 2.4-7 in Bate, Mueller, & White [1]
-    i = jnp.arccos(h[2] / h_mag)
-
-    # Calculate the longitude of the ascending node
-    # Equation 2.4-8 in Bate, Mueller, & White [1]
-    raan = jnp.arccos(n[0] / n_mag)
-    raan = jnp.where(n[1] < 0, 2 * jnp.pi - raan, raan)
-    # In certain conventions when the orbit is zero inclined or 180 inclined
-    # the ascending node is set to 0 as opposed to being undefined. This is what
-    # SPICE does so we will do the same.
-    raan = jnp.where(
-        (i < FLOAT_TOLERANCE) | (jnp.abs(i - 2 * jnp.pi) < FLOAT_TOLERANCE), 0.0, raan
-    )
-
-    # Calculate the argument of periapsis
-    # Equation 2.4-9 in Bate, Mueller, & White [1]
-    ap = jnp.arccos(jnp.dot(n, e_vec) / (n_mag * e))
-    # Adopt convention that if the orbit is circular the argument of
-    # periapsis is set to 0
-    ap = jnp.where(e_vec[2] < 0, 2 * jnp.pi - ap, ap)
-    ap = jnp.where(jnp.abs(e) < FLOAT_TOLERANCE, 0.0, ap)
-
-    # Calculate true anomaly (undefined for
-    # circular orbits)
-    # Equation 2.4-10 in Bate, Mueller, & White [1]
-    nu = jnp.arccos(jnp.dot(e_vec, r) / (e * r_mag))
-    nu = jnp.where(jnp.dot(r, v) < 0, 2 * jnp.pi - nu, nu)
-    # nu = jnp.where(jnp.abs(e) < FLOAT_TOLERANCE, jnp.nan, nu)
-
-    # Calculate the semi-major axis (undefined for parabolic
-    # orbits)
-    a = jnp.where(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        jnp.nan,
-        mu / (-2 * sme),
-    )
-
-    # Calculate the periapsis distance
-    q = jnp.where(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        p / 2,
-        calc_periapsis_distance(a, e),
-    )
-
-    # Calculate the apoapsis distance (infinite for
-    # parabolic and hyperbolic orbits)
-    Q = jnp.where(e < 1.0, a * (1 + e), jnp.inf)
-
-    # Calculate the mean anomaly
-    M = calc_mean_anomaly(nu, e)
-
-    # Calculate the mean motion
-    n = lax.cond(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        lambda a, q: jnp.sqrt(mu / (2 * q**3)),
-        lambda a, q: calc_mean_motion(a, mu),
-        a,
-        q,
-    )
-
-    # Calculate the orbital period which for parabolic and hyperbolic
-    # orbits is infinite while for all closed orbits
-    # is well defined.
-    P = lax.cond(
-        e < (1.0 - FLOAT_TOLERANCE), lambda n: 2 * jnp.pi / n, lambda n: jnp.inf, n
-    )
-
-    # In the case of closed orbits, if the mean anomaly is
-    # greater than 180 degrees then the orbit is
-    # approaching periapsis passage in which case
-    # the periapsis will occur in the future
-    # in less than half a period. If the mean anomaly is less
-    # than 180 degrees, then the orbit is ascending from periapsis
-    # passage and the most recent periapsis was in the past.
-    dtp = M / n
-    dtp = jnp.where((M > jnp.pi) & (e < (1.0 - FLOAT_TOLERANCE)), P - M / n, -M / n)
-    tp = t0 + dtp
-
-    coords_keplerian = coords_keplerian.at[0].set(a)
-    coords_keplerian = coords_keplerian.at[1].set(p)
-    coords_keplerian = coords_keplerian.at[2].set(q)
-    coords_keplerian = coords_keplerian.at[3].set(Q)
-    coords_keplerian = coords_keplerian.at[4].set(e)
-    coords_keplerian = coords_keplerian.at[5].set(jnp.degrees(i))
-    coords_keplerian = coords_keplerian.at[6].set(jnp.degrees(raan))
-    coords_keplerian = coords_keplerian.at[7].set(jnp.degrees(ap))
-    coords_keplerian = coords_keplerian.at[8].set(jnp.degrees(M))
-    coords_keplerian = coords_keplerian.at[9].set(jnp.degrees(nu))
-    coords_keplerian = coords_keplerian.at[10].set(jnp.degrees(n))
-    coords_keplerian = coords_keplerian.at[11].set(P)
-    coords_keplerian = coords_keplerian.at[12].set(tp)
-
-    return coords_keplerian
-
-
-# Vectorization Map: _cartesian_to_keplerian
-_cartesian_to_keplerian_vmap = jit(
-    vmap(
-        _cartesian_to_keplerian,
-        in_axes=(0, 0, 0),
-    )
-)
-
-
-@jit
-def _cartesian_to_keplerian6(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
-    t0: float,
-    mu: float,
-) -> jnp.ndarray:
-    """
-    Limit conversion of Cartesian coordinates to Keplerian 6 fundamental coordinates.
-
-    Parameters
-    ----------
-    coords_cartesian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
-    t0 : float (1)
-        Epoch at which cometary elements are defined in MJD TDB.
-    mu : float (1)
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-
-    Returns
-    -------
-    coords_keplerian : `~jax.numpy.ndarray` (6)
-        6D Keplerian coordinate.
-        a : semi-major axis in au.
-        e : eccentricity.
-        i : inclination in degrees.
-        raan : Right ascension (longitude) of the ascending node in degrees.
-        ap : argument of periapsis in degrees.
-        M : mean anomaly in degrees.
-    """
-    coords_keplerian = _cartesian_to_keplerian(coords_cartesian, t0, mu)
-    return coords_keplerian[jnp.array([0, 4, 5, 6, 7, 8])]
+    rust_coords = spherical_to_cartesian_numpy(coords_spherical_np)
+    assert rust_coords is not None
+    return rust_coords
 
 
 def cartesian_to_keplerian(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
-    t0: Union[np.ndarray, jnp.ndarray],
-    mu: Union[np.ndarray, jnp.ndarray],
-) -> jnp.ndarray:
+    coords_cartesian: np.ndarray,
+    t0: np.ndarray,
+    mu: np.ndarray,
+) -> np.ndarray:
     """
     Convert Cartesian coordinates to Keplerian coordinates.
 
@@ -838,336 +617,34 @@ def cartesian_to_keplerian(
         P : period in days.
         tp : time of periapsis passage in days.
     """
-    # Define chunk size
-    chunk_size = 200
-
-    # Process in chunks
-    coords_keplerian_chunks = []
-    for cartesian_chunk, t0_chunk, mu_chunk in zip(
-        process_in_chunks(coords_cartesian, chunk_size),
-        process_in_chunks(t0, chunk_size),
-        process_in_chunks(mu, chunk_size),
+    coords_cartesian_np = np.ascontiguousarray(
+        np.asarray(coords_cartesian, dtype=np.float64)
+    )
+    t0_np = np.ascontiguousarray(np.asarray(t0, dtype=np.float64))
+    mu_np = np.ascontiguousarray(np.asarray(mu, dtype=np.float64))
+    if coords_cartesian_np.ndim != 2 or coords_cartesian_np.shape[1] != 6:
+        raise ValueError("coords_cartesian must have shape (N, 6)")
+    if t0_np.ndim != 1 or mu_np.ndim != 1:
+        raise ValueError("t0 and mu must be one-dimensional")
+    if (
+        t0_np.shape[0] != coords_cartesian_np.shape[0]
+        or mu_np.shape[0] != coords_cartesian_np.shape[0]
     ):
-        coords_keplerian_chunk = _cartesian_to_keplerian_vmap(
-            cartesian_chunk, t0_chunk, mu_chunk
+        raise ValueError(
+            "t0 and mu must each have length N for coords_cartesian shape (N, 6)"
         )
-        coords_keplerian_chunks.append(coords_keplerian_chunk)
 
-    # Concatenate chunks and remove padding
-    coords_keplerian = jnp.concatenate(coords_keplerian_chunks, axis=0)
-    coords_keplerian = coords_keplerian[: len(coords_cartesian)]
-
-    return coords_keplerian
-
-
-@jit
-def _keplerian_to_cartesian_p(
-    coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: float,
-    max_iter: int = 1000,
-    tol: float = 1e-15,
-) -> jnp.ndarray:
-    """
-    Convert a single Keplerian coordinate to a Cartesian coordinate.
-
-    Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
-    to Cartesian orbits since their semi-major axes are by definition undefined.
-    Please consider representing the orbits with Cometary elements
-    and using those to convert to Cartesian. See `~adam_core.coordinates.cometary._cometary_to_cartesian`.
-
-    Parameters
-    ----------
-    coords_keplerian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        6D Keplerian coordinate.
-        p : semi-latus rectum in au.
-        e : eccentricity.
-        i : inclination in degrees.
-        raan : Right ascension (longitude) of the ascending node in degrees.
-        ap : argument of periapsis in degrees.
-        M : mean anomaly in degrees.
-    mu : float
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    max_iter : int, optional
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will use the value of the relevant anomaly at the last iteration.
-    tol : float, optional
-        Numerical tolerance to which to compute anomalies using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    coords_cartesian : `~jax.numpy.ndarray` (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
-    """
-    from ..dynamics.barker import solve_barker
-    from ..dynamics.kepler import solve_kepler
-
-    coords_cartesian = jnp.zeros(6, dtype=jnp.float64)
-
-    p = coords_keplerian[0]
-    e = coords_keplerian[1]
-    i = jnp.radians(coords_keplerian[2])
-    raan = jnp.radians(coords_keplerian[3])
-    ap = jnp.radians(coords_keplerian[4])
-    M = jnp.radians(coords_keplerian[5])
-
-    # Calculate the true anomaly
-    nu = lax.cond(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        lambda e_i, M_i: solve_barker(M_i),
-        lambda e_i, M_i: solve_kepler(e_i, M_i, max_iter=max_iter, tol=tol),
-        e,
-        M,
-    )
-
-    # Calculate the perifocal rotation matrices
-    r_PQW = jnp.array(
-        [
-            p * jnp.cos(nu) / (1 + e * jnp.cos(nu)),
-            p * jnp.sin(nu) / (1 + e * jnp.cos(nu)),
-            0,
-        ]
-    )
-    v_PQW = jnp.array(
-        [-jnp.sqrt(mu / p) * jnp.sin(nu), jnp.sqrt(mu / p) * (e + jnp.cos(nu)), 0]
-    )
-
-    cos_raan = jnp.cos(raan)
-    sin_raan = jnp.sin(raan)
-    cos_ap = jnp.cos(ap)
-    sin_ap = jnp.sin(ap)
-    cos_i = jnp.cos(i)
-    sin_i = jnp.sin(i)
-
-    P1 = jnp.array(
-        [
-            [cos_ap, -sin_ap, 0.0],
-            [sin_ap, cos_ap, 0.0],
-            [0.0, 0.0, 1.0],
-        ],
-        dtype=jnp.float64,
-    )
-
-    P2 = jnp.array(
-        [
-            [1.0, 0.0, 0.0],
-            [0.0, cos_i, -sin_i],
-            [0.0, sin_i, cos_i],
-        ],
-        dtype=jnp.float64,
-    )
-
-    P3 = jnp.array(
-        [
-            [cos_raan, -sin_raan, 0.0],
-            [sin_raan, cos_raan, 0.0],
-            [0.0, 0.0, 1.0],
-        ],
-        dtype=jnp.float64,
-    )
-
-    rotation_matrix = P3 @ P2 @ P1
-    r = rotation_matrix @ r_PQW
-    v = rotation_matrix @ v_PQW
-
-    coords_cartesian = coords_cartesian.at[0].set(r[0])
-    coords_cartesian = coords_cartesian.at[1].set(r[1])
-    coords_cartesian = coords_cartesian.at[2].set(r[2])
-    coords_cartesian = coords_cartesian.at[3].set(v[0])
-    coords_cartesian = coords_cartesian.at[4].set(v[1])
-    coords_cartesian = coords_cartesian.at[5].set(v[2])
-
-    return coords_cartesian
-
-
-# Vectorization Map: _keplerian_to_cartesian_p
-_keplerian_to_cartesian_p_vmap = jit(
-    vmap(
-        _keplerian_to_cartesian_p,
-        in_axes=(0, 0, None, None),
-    )
-)
-
-
-@jit
-def _keplerian_to_cartesian_a(
-    coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: float,
-    max_iter: int = 1000,
-    tol: float = 1e-15,
-) -> jnp.ndarray:
-    """
-    Convert a single Keplerian coordinate to a Cartesian coordinate.
-
-    Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
-    to Cartesian orbits since their semi-major axes are by definition undefined.
-    Please consider representing the orbits with Cometary elements
-    and using those to convert to Cartesian. See `~adam_core.coordinates.cometary._cometary_to_cartesian`.
-
-    Parameters
-    ----------
-    coords_keplerian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        6D Keplerian coordinate.
-        a : semi-major axis in au.
-        e : eccentricity.
-        i : inclination in degrees.
-        raan : Right ascension (longitude) of the ascending node in degrees.
-        ap : argument of periapsis in degrees.
-        M : mean anomaly in degrees.
-    mu : float (1)
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    max_iter : int, optional
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will use the value of the relevant anomaly at the last iteration.
-    tol : float, optional
-        Numerical tolerance to which to compute anomalies using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    coords_cartesian : `~jax.numpy.ndarray` (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
-    """
-    coords_keplerian_p = jnp.zeros(6, dtype=jnp.float64)
-    coords_keplerian_p = coords_keplerian_p.at[1].set(coords_keplerian[1])
-    coords_keplerian_p = coords_keplerian_p.at[2].set(coords_keplerian[2])
-    coords_keplerian_p = coords_keplerian_p.at[3].set(coords_keplerian[3])
-    coords_keplerian_p = coords_keplerian_p.at[4].set(coords_keplerian[4])
-    coords_keplerian_p = coords_keplerian_p.at[5].set(coords_keplerian[5])
-
-    # Calculate the semi-latus rectum
-    a = coords_keplerian[0]
-    e = coords_keplerian[1]
-    p = lax.cond(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        lambda a, e: jnp.nan,  # 2 * q (not enough information present)
-        lambda a, e: a * (1 - e**2),
-        a,
-        e,
-    )
-    coords_keplerian_p = coords_keplerian_p.at[0].set(p)
-
-    coords_cartesian = _keplerian_to_cartesian_p(
-        coords_keplerian_p,
-        mu=mu,
-        max_iter=max_iter,
-        tol=tol,
-    )
-    return coords_cartesian
-
-
-# Vectorization Map: _keplerian_to_cartesian_a
-_keplerian_to_cartesian_a_vmap = jit(
-    vmap(
-        _keplerian_to_cartesian_a,
-        in_axes=(0, 0, None, None),
-    )
-)
-
-
-@jit
-def _keplerian_to_cartesian_q(
-    coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: float,
-    max_iter: int = 1000,
-    tol: float = 1e-15,
-) -> jnp.ndarray:
-    """
-    Convert a single Keplerian coordinate to a Cartesian coordinate.
-
-    Parabolic orbits (e = 1.0 +- 1e-15) with elements (a, e, i, raan, ap, M) cannot be converted
-    to Cartesian orbits since their semi-major axes are by definition undefined.
-    Please consider representing the orbits with Cometary elements
-    and using those to convert to Cartesian. See `~adam_core.coordinates.cometary._cometary_to_cartesian`.
-
-    Parameters
-    ----------
-    coords_keplerian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        6D Keplerian coordinate.
-        q : periapsis distance in au.
-        e : eccentricity.
-        i : inclination in degrees.
-        raan : Right ascension (longitude) of the ascending node in degrees.
-        ap : argument of periapsis in degrees.
-        M : mean anomaly in degrees.
-    mu : float (1)
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    max_iter : int, optional
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will use the value of the relevant anomaly at the last iteration.
-    tol : float, optional
-        Numerical tolerance to which to compute anomalies using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    coords_cartesian : `~jax.numpy.ndarray` (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
-    """
-    coords_keplerian_p = jnp.zeros(6, dtype=jnp.float64)
-    coords_keplerian_p = coords_keplerian_p.at[1].set(coords_keplerian[1])
-    coords_keplerian_p = coords_keplerian_p.at[2].set(coords_keplerian[2])
-    coords_keplerian_p = coords_keplerian_p.at[3].set(coords_keplerian[3])
-    coords_keplerian_p = coords_keplerian_p.at[4].set(coords_keplerian[4])
-    coords_keplerian_p = coords_keplerian_p.at[5].set(coords_keplerian[5])
-
-    # Calculate the semi-latus rectum
-    q = coords_keplerian[0]
-    e = coords_keplerian[1]
-    p = lax.cond(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        lambda e, q: 2 * q,
-        lambda e, q: q / (1 - e) * (1 - e**2),  # a = q / (1 - e), p = a / (1 - e**2)
-        e,
-        q,
-    )
-    coords_keplerian_p = coords_keplerian_p.at[0].set(p)
-
-    coords_cartesian = _keplerian_to_cartesian_p(
-        coords_keplerian_p,
-        mu=mu,
-        max_iter=max_iter,
-        tol=tol,
-    )
-    return coords_cartesian
-
-
-# Vectorization Map: _keplerian_to_cartesian_q
-_keplerian_to_cartesian_q_vmap = jit(
-    vmap(
-        _keplerian_to_cartesian_q,
-        in_axes=(0, 0, None, None),
-    )
-)
+    rust_coords = cartesian_to_keplerian_numpy(coords_cartesian_np, t0_np, mu_np)
+    assert rust_coords is not None
+    return rust_coords
 
 
 def keplerian_to_cartesian(
-    coords_keplerian: Union[np.ndarray, jnp.ndarray],
-    mu: Union[np.ndarray, jnp.ndarray],
+    coords_keplerian: np.ndarray,
+    mu: np.ndarray,
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> jnp.ndarray:
+) -> np.ndarray:
     """
     Convert Keplerian coordinates to Cartesian coordinates.
 
@@ -1212,8 +689,19 @@ def keplerian_to_cartesian(
     ValueError: When semi-major axis is less than 0 for elliptical orbits or when
         semi-major axis is greater than 0 for hyperbolic orbits.
     """
-    a = coords_keplerian[:, 0]
-    e = coords_keplerian[:, 1]
+    coords_keplerian_np = np.ascontiguousarray(
+        np.asarray(coords_keplerian, dtype=np.float64)
+    )
+    mu_np = np.ascontiguousarray(np.asarray(mu, dtype=np.float64))
+    if coords_keplerian_np.ndim != 2 or coords_keplerian_np.shape[1] != 6:
+        raise ValueError("coords_keplerian must have shape (N, 6)")
+    if mu_np.ndim != 1:
+        raise ValueError("mu must be one-dimensional")
+    if mu_np.shape[0] != coords_keplerian_np.shape[0]:
+        raise ValueError("mu must have length N for coords_keplerian shape (N, 6)")
+
+    a = coords_keplerian_np[:, 0]
+    e = coords_keplerian_np[:, 1]
 
     parabolic = np.where((e < (1.0 + FLOAT_TOLERANCE)) & (e > (1.0 - FLOAT_TOLERANCE)))[
         0
@@ -1242,81 +730,18 @@ def keplerian_to_cartesian(
         )
         raise ValueError(err)
 
-    # Define chunk size
-    chunk_size = 200
-
-    # Process in chunks
-    coords_cartesian_chunks = []
-    for keplerian_chunk, mu_chunk in zip(
-        process_in_chunks(coords_keplerian, chunk_size),
-        process_in_chunks(mu, chunk_size),
-    ):
-        coords_cartesian_chunk = _keplerian_to_cartesian_a_vmap(
-            keplerian_chunk, mu_chunk, max_iter, tol
-        )
-        coords_cartesian_chunks.append(coords_cartesian_chunk)
-
-    # Concatenate chunks and remove padding
-    coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
-    coords_cartesian = coords_cartesian[: len(coords_keplerian)]
-
-    return coords_cartesian
-
-
-@jit
-def _cartesian_to_cometary(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
-    t0: float,
-    mu: float,
-) -> jnp.ndarray:
-    """
-    Convert Cartesian coordinates to Cometary coordinates.
-
-    Parameters
-    ----------
-    coords_cartesian : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
-    t0 : float (1)
-        Epoch at which cometary elements are defined in MJD TDB.
-    mu : float (1)
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-
-    Returns
-    -------
-    coords_cometary : `~jax.numpy.ndarray` (6)
-        6D Cometary coordinate.
-        q : periapsis distance in au.
-        e : eccentricity.
-        i : inclination in degrees.
-        raan : Right ascension (longitude) of the ascending node in degrees.
-        ap : argument of periapsis in degrees.
-        tp : time of periapse passage in days.
-    """
-    coords_cometary = _cartesian_to_keplerian(coords_cartesian, t0, mu=mu)
-    return coords_cometary[jnp.array([2, 4, 5, 6, 7, 12])]
-
-
-# Vectorization Map: _cartesian_to_cometary
-_cartesian_to_cometary_vmap = jit(
-    vmap(
-        _cartesian_to_cometary,
-        in_axes=(0, 0, 0),
+    rust_coords = keplerian_to_cartesian_numpy(
+        coords_keplerian_np, mu_np, max_iter=max_iter, tol=tol
     )
-)
+    assert rust_coords is not None
+    return rust_coords
 
 
 def cartesian_to_cometary(
-    coords_cartesian: Union[np.ndarray, jnp.ndarray],
-    t0: Union[np.ndarray, jnp.ndarray],
-    mu: Union[np.ndarray, jnp.ndarray],
-) -> jnp.ndarray:
+    coords_cartesian: np.ndarray,
+    t0: np.ndarray,
+    mu: np.ndarray,
+) -> np.ndarray:
     """
     Convert Cartesian coordinates to Keplerian coordinates.
 
@@ -1338,7 +763,7 @@ def cartesian_to_cometary(
 
     Returns
     -------
-    coords_cometary : `~jax.numpy.ndarray` (N, 6)
+    coords_cometary : `~numpy.ndarray` (N, 6)
         6D Cometary coordinates.
         q : periapsis distance in au.
         e : eccentricity.
@@ -1347,123 +772,23 @@ def cartesian_to_cometary(
         ap : argument of periapsis in degrees.
         tp : time of periapse passage in days.
     """
-    coords_cometary = _cartesian_to_cometary_vmap(coords_cartesian, t0, mu)
-    return coords_cometary
-
-
-@jit
-def _cometary_to_cartesian(
-    coords_cometary: Union[np.ndarray, jnp.ndarray],
-    t0: float,
-    mu: float,
-    max_iter: int = 100,
-    tol: float = 1e-15,
-) -> jnp.ndarray:
-    """
-    Convert a single Cometary coordinate to a Cartesian coordinate.
-
-    Parameters
-    ----------
-    coords_cometary : {`~numpy.ndarray`, `~jax.numpy.ndarray`} (6)
-        6D Cometary coordinate.
-        q : periapsis distance in au.
-        e : eccentricity.
-        i : inclination in degrees.
-        raan : Right ascension (longitude) of the ascending node in degrees.
-        ap : argument of periapsis in degrees.
-        tp : time of periapse passage in days.
-    t0 : float (1)
-        Epoch at which cometary elements are defined in MJD TDB.
-    mu : float
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    max_iter : int, optional
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will use the value of the relevant anomaly at the last iteration.
-    tol : float, optional
-        Numerical tolerance to which to compute anomalies using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    coords_cartesian : `~jax.numpy.ndarray` (6)
-        3D Cartesian coordinate including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
-    """
-    coords_keplerian = jnp.zeros(6, dtype=jnp.float64)
-
-    q = coords_cometary[0]
-    e = coords_cometary[1]
-    i = coords_cometary[2]
-    raan = coords_cometary[3]
-    ap = coords_cometary[4]
-    tp = coords_cometary[5]
-
-    # Calculate the semi-major axis from the periapsis distance
-    # The semi-major axis for parabolic orbits is undefined
-    a = lax.cond(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        lambda e, q: jnp.nan,
-        lambda e, q: q / (1 - e),
-        e,
-        q,
+    coords_cartesian_np = np.ascontiguousarray(
+        np.asarray(coords_cartesian, dtype=np.float64)
     )
-
-    # Calculate the mean motion
-    n = lax.cond(
-        (e > (1.0 - FLOAT_TOLERANCE)) & (e < (1.0 + FLOAT_TOLERANCE)),
-        lambda a, q: jnp.sqrt(mu / (2 * q**3)),
-        lambda a, q: jnp.sqrt(mu / jnp.abs(a) ** 3),
-        a,
-        q,
-    )
-
-    # Calculate the orbital period which for parabolic and hyperbolic
-    # orbits is infinite while for all closed orbits
-    # is well defined.
-    # P = lax.cond(
-    #    e < (1.0 - FLOAT_TOLERANCE), lambda n: 2 * jnp.pi / n, lambda n: jnp.inf, n
-    # )
-
-    # Calculate the mean anomaly
-    dtp = tp - t0
-    M = jnp.where(dtp > 0, 2 * jnp.pi - dtp * n, -dtp * n)
-
-    coords_keplerian = coords_keplerian.at[0].set(q)
-    coords_keplerian = coords_keplerian.at[1].set(e)
-    coords_keplerian = coords_keplerian.at[2].set(i)
-    coords_keplerian = coords_keplerian.at[3].set(raan)
-    coords_keplerian = coords_keplerian.at[4].set(ap)
-    coords_keplerian = coords_keplerian.at[5].set(jnp.degrees(M))
-
-    coords_cartesian = _keplerian_to_cartesian_q(
-        coords_keplerian, mu=mu, max_iter=max_iter, tol=tol
-    )
-
-    return coords_cartesian
-
-
-# Vectorization Map: _cometary_to_cartesian
-_cometary_to_cartesian_vmap = jit(
-    vmap(
-        _cometary_to_cartesian,
-        in_axes=(0, 0, 0, None, None),
-    )
-)
+    t0_np = np.ascontiguousarray(np.asarray(t0, dtype=np.float64))
+    mu_np = np.ascontiguousarray(np.asarray(mu, dtype=np.float64))
+    rust_coords = cartesian_to_cometary_numpy(coords_cartesian_np, t0_np, mu_np)
+    assert rust_coords is not None
+    return rust_coords
 
 
 def cometary_to_cartesian(
-    coords_cometary: Union[np.ndarray, jnp.ndarray],
-    t0: Union[np.ndarray, jnp.ndarray],
-    mu: Union[np.ndarray, jnp.ndarray],
+    coords_cometary: np.ndarray,
+    t0: np.ndarray,
+    mu: np.ndarray,
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> jnp.ndarray:
+) -> np.ndarray:
     """
     Convert Cometary coordinates to Cartesian coordinates.
 
@@ -1491,63 +816,36 @@ def cometary_to_cartesian(
 
     Returns
     -------
-    coords_cartesian : `~jax.numpy.ndarray` (N, 6)
+    coords_cartesian : `~numpy.ndarray` (N, 6)
         3D Cartesian coordinates including time derivatives.
-        x : x-position in units of au.
-        y : y-position in units of au.
-        z : z-position in units of au.
-        vx : x-velocity in units of au per day.
-        vy : y-velocity in units of au per day.
-        vz : z-velocity in units of au per day.
     """
-    # Define chunk size
-    chunk_size = 200
-
-    # Process in chunks
-    coords_cartesian_chunks = []
-    for cometary_chunk, t0_chunk, mu_chunk in zip(
-        process_in_chunks(coords_cometary, chunk_size),
-        process_in_chunks(t0, chunk_size),
-        process_in_chunks(mu, chunk_size),
-    ):
-        coords_cartesian_chunk = _cometary_to_cartesian_vmap(
-            cometary_chunk, t0_chunk, mu_chunk, max_iter, tol
-        )
-        coords_cartesian_chunks.append(coords_cartesian_chunk)
-
-    # Concatenate chunks and remove padding
-    coords_cartesian = jnp.concatenate(coords_cartesian_chunks, axis=0)
-    coords_cartesian = coords_cartesian[: len(coords_cometary)]
-
-    return coords_cartesian
+    coords_cometary_np = np.ascontiguousarray(
+        np.asarray(coords_cometary, dtype=np.float64)
+    )
+    t0_np = np.ascontiguousarray(np.asarray(t0, dtype=np.float64))
+    mu_np = np.ascontiguousarray(np.asarray(mu, dtype=np.float64))
+    rust_coords = cometary_to_cartesian_numpy(
+        coords_cometary_np, t0_np, mu_np, max_iter=max_iter, tol=tol
+    )
+    assert rust_coords is not None
+    return rust_coords
 
 
-def cartesian_to_origin(
+def _resolve_origin_translation_vectors(
     coords: CartesianCoordinates, origin: OriginCodes
-) -> "CartesianCoordinates":
+) -> np.ndarray:
     """
-    Translate coordinates to a different origin.
+    Resolve per-row SPICE translation vectors taking `coords` from its current
+    origin(s) to `origin`, expressed in `coords.frame`.
 
-    Parameters
-    ----------
-    coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
-        Cartesian coordinates and optionally their covariances.
-    origin : `~adam_core.coordinates.origin.OriginCodes`
-        Desired origin. Input origins may be either `~adam_core.coordinates.origin.OriginCodes`
-        or a str of an observatory code, but the output origin (this kwarg) should always be an
-        `~adam_core.coordinates.origin.OriginCodes`. If you are looking to generate ephemerides
-        for an observatory, please use a `~adam_core.propagator.propagator.Propagator` instead.
+    Returns an `(N, 6)` `float64` ndarray `v` such that
+    `coords.values + v == coords_with_new_origin.values`. Uses the translation
+    cache when the (origin_in, origin_out) pair is eligible.
 
-    Returns
-    -------
-    CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
-        Translated Cartesian coordinates and their covariances.
-
-    Raises
-    ------
-    ValueError
-        If origin is not a `~adam_core.coordinates.origin.OriginCodes` object or
-        a str of an observatory code.
+    Callers wanting the final translated `CartesianCoordinates` should use
+    `cartesian_to_origin` instead. This helper is for callers that will pass
+    the translation vectors into the Rust dispatcher so the add can fuse with
+    the rest of the transform chain in a single Python/Rust crossing.
     """
     from ..observers.state import OBSERVATORY_CODES, get_observer_state
     from ..utils.spice import get_perturber_state
@@ -1557,11 +855,8 @@ def cartesian_to_origin(
     times = coords.time
 
     for origin_in in unique_origins:
-
         mask = pc.equal(coords.origin.code, origin_in).to_numpy(zero_copy_only=False)
-
         origin_in_str = origin_in.as_py()
-        # Could use try / except block here but this is more explicit
         if origin_in_str in OriginCodes.__members__:
             times_masked = times.apply_mask(mask)
             origin_out_str = str(origin.name)
@@ -1598,19 +893,46 @@ def cartesian_to_origin(
                     frame=coords.frame,
                     origin=origin,
                 ).values
-
         elif origin_in_str in OBSERVATORY_CODES:
-
             vectors[mask] = get_observer_state(
                 origin_in_str,
                 times.apply_mask(mask),
                 frame=coords.frame,
                 origin=origin,
             ).values
-
         else:
             raise ValueError("Unsupported origin: {}".format(origin_in_str))
+    return vectors
 
+
+def cartesian_to_origin(
+    coords: CartesianCoordinates, origin: OriginCodes
+) -> "CartesianCoordinates":
+    """
+    Translate coordinates to a different origin.
+
+    Parameters
+    ----------
+    coords : `~adam_core.coordinates.cartesian.CartesianCoordinates`
+        Cartesian coordinates and optionally their covariances.
+    origin : `~adam_core.coordinates.origin.OriginCodes`
+        Desired origin. Input origins may be either `~adam_core.coordinates.origin.OriginCodes`
+        or a str of an observatory code, but the output origin (this kwarg) should always be an
+        `~adam_core.coordinates.origin.OriginCodes`. If you are looking to generate ephemerides
+        for an observatory, please use a `~adam_core.propagator.propagator.Propagator` instead.
+
+    Returns
+    -------
+    CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
+        Translated Cartesian coordinates and their covariances.
+
+    Raises
+    ------
+    ValueError
+        If origin is not a `~adam_core.coordinates.origin.OriginCodes` object or
+        a str of an observatory code.
+    """
+    vectors = _resolve_origin_translation_vectors(coords, origin)
     return coords.translate(vectors, origin.name)
 
 
@@ -1669,54 +991,79 @@ def apply_time_varying_rotation(
         raise ValueError("Unsupported frame: {}".format(frame_in))
 
     from ..constants import KM_P_AU, S_P_DAY
+    from ..utils.spice import _query_sxform_itrf93_batch
 
-    # Loop over unique times and then rotate each coordinate
-    coords_rotated = CartesianCoordinates.empty()
-    indices = []
-    for time in coords.time.unique():
+    # Dedup epochs then query sxforms in one batched call. Fewer unique
+    # epochs than rows is the common case (e.g. many objects at a few
+    # shared times), so paying O(U) sxform computations over an O(N)
+    # per-row apply is the right trade.
+    unique_times = coords.time.unique()
+    unique_ets = (
+        unique_times.et().to_numpy(zero_copy_only=False).astype(np.float64)
+    )
+    batched_kms = _query_sxform_itrf93_batch(frame_spice_in, frame_spice_out, unique_ets)
 
-        # Filter to coordinates defined at the same time
-        time_mask = pc.and_(
-            pc.equal(coords.time.days, time.days[0]),
-            pc.equal(coords.time.nanos, time.nanos[0]),
+    # Unit conversion: sxform is km / km-s, our states are AU / AU-d.
+    # Fold the scaling into the matrix table once so the Rust apply
+    # kernel stays a pure (matrix @ state, matrix @ cov @ matrix^T).
+    rotation_unit_conversion = np.zeros((6, 6))
+    rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
+    rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
+    inv_unit_conversion = np.linalg.inv(rotation_unit_conversion)
+    matrices_aud = np.einsum(
+        "ij,ujk,kl->uil", inv_unit_conversion, batched_kms, rotation_unit_conversion
+    )
+
+    # Build per-row time index into unique_times by matching on the
+    # (days, nanos) pair packed into a single int64 key.
+    def _time_keys(time_like) -> np.ndarray:
+        days = time_like.days.to_numpy(zero_copy_only=False).astype(np.int64)
+        nanos = time_like.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
+        return days * 86_400_000_000_000 + nanos
+
+    keys_all = _time_keys(coords.time)
+    keys_u = _time_keys(unique_times)
+    order = np.argsort(keys_u)
+    positions = np.searchsorted(keys_u[order], keys_all)
+    time_index = order[positions]
+
+    # Single Rust crossing does per-row M @ state and M @ Σ @ M^T
+    # across all N rows in parallel. Covariance NaN handling matches
+    # CartesianCoordinates.rotate exactly (NaN cells pass through).
+    states = coords.values
+    cov_matrix = coords.covariance.to_matrix()
+    cov_flat = cov_matrix.reshape(cov_matrix.shape[0], 36)
+    rotated_states, rotated_cov_flat = rotate_cartesian_time_varying_numpy(
+        states,
+        time_index,
+        matrices_aud,
+        cov_flat,
+    )
+    rotated_cov = rotated_cov_flat.reshape(cov_matrix.shape)
+
+    # Preserve the existing near-zero cleanup so downstream covariance
+    # consumers see the same small-element behaviour as the legacy path.
+    near_zero_mask = np.abs(rotated_cov) < COVARIANCE_ROTATION_TOLERANCE
+    if near_zero_mask.any():
+        logger.debug(
+            f"{int(near_zero_mask.sum())} covariance elements are within "
+            f"{COVARIANCE_ROTATION_TOLERANCE:.0e} of zero after rotation, "
+            "setting these elements to 0."
         )
+        rotated_cov = np.where(near_zero_mask, 0.0, rotated_cov)
 
-        # Compute the indices of the coordinates that match the time
-        indices_time = pc.indices_nonzero(time_mask)
-
-        # Store the indices so we can use to sort the coordinates later
-        indices.extend(indices_time.to_pylist())
-
-        # The units of the transformation matrix are km and km/s and while
-        # our states are in au and au/d. So we need to convert the transformation
-        # matrix to the correct units.
-        rotation_matrix_6x6_kms = sp.sxform(
-            frame_spice_in, frame_spice_out, time.et().to_numpy(zero_copy_only=False)[0]
-        )
-
-        # Compute unit conversion matrix to convert from km to au and km/s to au/d
-        rotation_unit_conversion = np.zeros((6, 6))
-        rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
-        rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
-
-        rotation_matrix_6x6_aud = (
-            np.linalg.inv(rotation_unit_conversion)
-            @ rotation_matrix_6x6_kms
-            @ rotation_unit_conversion
-        )
-
-        # Rotate the coordinates
-        coords_time = coords.apply_mask(time_mask)
-        coords_rotated_time = coords_time.rotate(rotation_matrix_6x6_aud, frame_out)
-
-        # Add the rotated coordinates to the total coordinates
-        coords_rotated = qv.concatenate([coords_rotated, coords_rotated_time])
-
-    # Compute the indices that would sort the new coordinates
-    # to match the original coordinates
-    sorted_indices = np.argsort(indices)
-    coords_rotated = coords_rotated.take(sorted_indices)
-    return coords_rotated
+    return CartesianCoordinates.from_kwargs(
+        x=rotated_states[:, 0],
+        y=rotated_states[:, 1],
+        z=rotated_states[:, 2],
+        vx=rotated_states[:, 3],
+        vy=rotated_states[:, 4],
+        vz=rotated_states[:, 5],
+        time=coords.time,
+        covariance=CoordinateCovariances.from_matrix(rotated_cov),
+        origin=coords.origin,
+        frame=frame_out,
+    )
 
 
 def cartesian_to_frame(
@@ -1836,6 +1183,12 @@ def transform_coordinates(
     if type(coords) is representation_out_:
         if coord_frame == frame_out and np.all(coord_origin == origin_out):
             return coords
+
+    rust_coords = _try_transform_coordinates_rust(
+        coords, representation_out_, frame_out, origin_out
+    )
+    if rust_coords is not None:
+        return rust_coords
 
     if not isinstance(coords, CartesianCoordinates):
         cartesian = coords.to_cartesian()

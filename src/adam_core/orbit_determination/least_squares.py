@@ -4,12 +4,14 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
+from ..coordinates.origin import Origin
+from ..time import Timestamp
 from ..coordinates import (
     CartesianCoordinates,
     CoordinateCovariances,
     SphericalCoordinates,
 )
-from ..coordinates.residuals import Residuals, calculate_reduced_chi2
+from ..coordinates.residuals import Residuals, calculate_reduced_chi2, compute_residuals_ndarray
 from ..orbits.orbits import Orbits
 from ..propagator import Propagator
 from .evaluate import FittedOrbits, OrbitDeterminationObservations
@@ -94,9 +96,7 @@ class LeastSquares(ABC):
         --------
         (N, 2) array of residuals for RA and DEC.
         """
-        residuals = Residuals.calculate(coord1, coord2)
-        residuals = np.stack(residuals.values.to_numpy(zero_copy_only=False))
-        # Pull ra and dec columns for all observations, so Nx2
+        residuals = compute_residuals_ndarray(coord1, coord2)
         return residuals[:, 1:3]
 
     def _compute_partials(
@@ -135,34 +135,79 @@ class LeastSquares(ABC):
         num_obs = len(observations)
         num_param = base_orbit_coordinates.values.shape[1]  # should be 6
 
+        # Build the full set of perturbed orbits in one shot (6 or 12 rows),
+        # propagate all of them through the propagator in a single batched
+        # call, then split back by orbit_id to assemble the Jacobian.
+        base_values = base_orbit_coordinates.values  # (1, 6)
+        deltas = np.zeros((num_param, num_param), dtype=np.float64)
+        for i in range(num_param):
+            di = base_values[0, i] * delta
+            if abs(di) < 1e-20:
+                di = (1 if i < 3 else 0.01) * delta
+            deltas[i, i] = di
+
+        d_per_param = np.diag(deltas).copy()  # (num_param,)
+
+        num_pert = num_param * (2 if use_central_difference else 1)
+        pert_values = np.empty((num_pert, num_param), dtype=np.float64)
+        pert_values[:num_param] = base_values + deltas
+        if use_central_difference:
+            pert_values[num_param:] = base_values - deltas
+
+        pert_ids = np.array(
+            [f"_ls_p_{i}" for i in range(num_param)]
+            + (
+                [f"_ls_m_{i}" for i in range(num_param)]
+                if use_central_difference
+                else []
+            ),
+            dtype=object,
+        )
+
+        batched_orbits = Orbits.from_kwargs(
+            orbit_id=pert_ids,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=pert_values[:, 0],
+                y=pert_values[:, 1],
+                z=pert_values[:, 2],
+                vx=pert_values[:, 3],
+                vy=pert_values[:, 4],
+                vz=pert_values[:, 5],
+                time=Timestamp.from_kwargs(
+                    days=np.repeat(base_orbit_coordinates.time.days[0], num_pert),
+                    nanos=np.repeat(base_orbit_coordinates.time.nanos[0], num_pert),
+                    scale=base_orbit_coordinates.time.scale,
+                ),
+                origin=Origin.from_kwargs(
+                    code=np.repeat(
+                        base_orbit_coordinates.origin.code[0].as_py(), num_pert
+                    )
+                ),
+                frame=base_orbit_coordinates.frame,
+            ),
+        )
+
+        ephemeris_all = prop.generate_ephemeris(
+            batched_orbits,
+            observations.observers,
+            chunk_size=num_pert,
+            max_processes=1,
+        )
+
         A = np.zeros((num_obs, 2, num_param))
         for i in range(num_param):
-            # Perturb the orbit in one coordinate
-            d = np.zeros((1, num_param))
-            d[0, i] = base_orbit_coordinates.values[0, i] * delta
-            # Avoid dividing by zero. Just to get somewhere, assume r is on the order of 1 and
-            # v is on the order of 0.01.
-            if abs(d[0, i]) < 1e-20:
-                d[0, i] = (1 if i < 3 else 0.01) * delta
-            orbit_iter_p = self._update_orbit(base_orbit_coordinates[0], d)
-            # Calculate the modified ephemerides
-            ephemeris_mod_p = prop.generate_ephemeris(
-                orbit_iter_p, observations.observers, chunk_size=1, max_processes=1
-            )
+            eph_p = ephemeris_all.select("orbit_id", f"_ls_p_{i}")
             if use_central_difference:
-                orbit_iter_m = self._update_orbit(base_orbit_coordinates[0], -d)
-                ephemeris_mod_m = prop.generate_ephemeris(
-                    orbit_iter_m, observations.observers, chunk_size=1, max_processes=1
-                )
+                eph_m = ephemeris_all.select("orbit_id", f"_ls_m_{i}")
                 col = self._residual_columns(
-                    ephemeris_mod_p.coordinates, ephemeris_mod_m.coordinates
-                ) / (2 * d[0, i])
+                    eph_p.coordinates, eph_m.coordinates
+                ) / (2 * d_per_param[i])
             else:
                 col = (
                     self._residual_columns(
-                        ephemeris_mod_p.coordinates, nominal_ephemeris_coordinates
+                        eph_p.coordinates, nominal_ephemeris_coordinates
                     )
-                    / d[0, i]
+                    / d_per_param[i]
                 )
             A[:, :, i] = col
         return A

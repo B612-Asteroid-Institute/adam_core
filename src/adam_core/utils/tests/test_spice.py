@@ -2,8 +2,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import spiceypy as sp
-from naif_leapseconds import leapseconds
 
 from ...coordinates.origin import OriginCodes
 from ...time import Timestamp
@@ -18,6 +16,7 @@ from ..spice import (
     setup_SPICE,
     unregister_spice_kernel,
 )
+from ..spice_backend import get_backend
 
 # JWST SPICE kernel paths
 JWST_KERNEL_DIR = Path(__file__).parent / "data" / "spice"
@@ -83,8 +82,8 @@ def test_unregister_nonexistent_kernel():
 
 def test_jwst_kernel_loading(jwst_kernel):
     """Test loading and using the JWST SPICE kernel."""
-    # Verify JWST is available in SPICE
-    jwst_id = sp.bodn2c("JWST")
+    # Verify JWST is available in the backend
+    jwst_id = get_backend().bodn2c("JWST")
     assert jwst_id == -170
 
     # Create test times within the kernel range
@@ -105,7 +104,7 @@ def test_jwst_kernel_loading(jwst_kernel):
 
 def test_jwst_kernel_time_range(jwst_kernel):
     """Test JWST kernel behavior at different times."""
-    jwst_id = sp.bodn2c("JWST")
+    jwst_id = get_backend().bodn2c("JWST")
 
     # Test times within range
     mid_time = Timestamp.from_iso8601("2022-01-01T00:00:00Z")
@@ -136,8 +135,8 @@ def test_jwst_kernel_time_range(jwst_kernel):
 
 def test_jwst_kernel_cleanup(jwst_kernel):
     """Test that JWST kernel is properly cleaned up."""
-    # Verify JWST is available in SPICE
-    jwst_id = sp.bodn2c("JWST")
+    backend = get_backend()
+    jwst_id = backend.bodn2c("JWST")
     assert jwst_id == -170
 
     # Save a reference time
@@ -159,19 +158,22 @@ def test_jwst_kernel_cleanup(jwst_kernel):
 
 
 def test__jd_tdb_to_et():
-    # Test that _jd_tdb_to_et returns the same values as SPICE's str2et
-    sp.furnsh(leapseconds)
-
+    # TDB → ET is pure arithmetic: `ET = (JD_TDB - 2451545.0) * 86400`.
+    # This is the closed-form identity both CSpice and adam-core use; no
+    # kernel required. Verifying the closed-form directly removes the
+    # last spiceypy dependency in this file.
     times = Timestamp.from_mjd(np.arange(40000, 70000, 5), scale="tdb")
     jd_tdb = times.jd().to_numpy()
 
     et_actual = _jd_tdb_to_et(jd_tdb)
-    et_expected = np.array([sp.str2et(f"JD {i:.16f} TDB") for i in jd_tdb])
+    et_expected = (jd_tdb - 2451545.0) * 86400.0
 
     np.testing.assert_equal(et_actual, et_expected)
 
 
 def test_get_perturber_state_spkez_cache(monkeypatch):
+    from .. import spice as spice_mod
+
     clear_spkez_cache()
     setup_SPICE(force=True)
 
@@ -181,13 +183,13 @@ def test_get_perturber_state_spkez_cache(monkeypatch):
     )
 
     calls = {"n": 0}
-    spkez_orig = sp.spkez
+    orig_query = spice_mod._query_states_km_kms_batch
 
-    def _spkez_counted(*args, **kwargs):
+    def _query_counted(*args, **kwargs):
         calls["n"] += 1
-        return spkez_orig(*args, **kwargs)
+        return orig_query(*args, **kwargs)
 
-    monkeypatch.setattr(sp, "spkez", _spkez_counted)
+    monkeypatch.setattr(spice_mod, "_query_states_km_kms_batch", _query_counted)
 
     _ = get_perturber_state(
         OriginCodes.SUN, t, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER
@@ -203,19 +205,21 @@ def test_get_perturber_state_spkez_cache(monkeypatch):
 
 
 def test_get_perturber_state_reverse_pair_cache(monkeypatch):
+    from .. import spice as spice_mod
+
     clear_spkez_cache()
     setup_SPICE(force=True)
 
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
 
     calls = {"n": 0}
-    spkez_orig = sp.spkez
+    orig_query = spice_mod._query_states_km_kms_batch
 
-    def _spkez_counted(*args, **kwargs):
+    def _query_counted(*args, **kwargs):
         calls["n"] += 1
-        return spkez_orig(*args, **kwargs)
+        return orig_query(*args, **kwargs)
 
-    monkeypatch.setattr(sp, "spkez", _spkez_counted)
+    monkeypatch.setattr(spice_mod, "_query_states_km_kms_batch", _query_counted)
 
     sun_wrt_ssb = get_perturber_state(
         OriginCodes.SUN, t, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER

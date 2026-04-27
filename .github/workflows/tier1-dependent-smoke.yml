@@ -1,0 +1,75 @@
+name: Tier-1 Dependent Smoke
+
+on:
+  pull_request:
+    branches: [ main, "v*" ]
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tier1-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - repo: B612-Asteroid-Institute/adam-assist
+            import_cmd: "import adam_assist.propagator"
+          - repo: B612-Asteroid-Institute/adam-api
+            import_cmd: "import api.services.orbit_service"
+          - repo: B612-Asteroid-Institute/adam_etl
+            import_cmd: "import adam_etl"
+    steps:
+      - name: Checkout adam_core
+        uses: actions/checkout@v3
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up PDM
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.12'
+      - name: Install build dependencies
+        run: pdm install -G test
+      - name: Build Rust wheel
+        run: pdm run rust-build
+      - name: Checkout dependent repository
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ matrix.repo }}
+          path: dependent
+      - name: Install dependent and adam_core wheel
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install dist/rust/*.whl
+          python -m pip install -e dependent
+      - name: Run dependent import smoke
+        run: python -c "${{ matrix.import_cmd }}"
+      - name: Run orbit determination smoke
+        run: |
+          python - <<'PY'
+          import numpy as np
+          from adam_core.orbit_determination.gauss import calcGauss
+          from adam_core.orbit_determination.gibbs import calcGibbs
+          from adam_core.orbit_determination.herrick_gibbs import calcHerrickGibbs
+
+          r1 = np.array([1.0, 0.1, -0.2], dtype=np.float64)
+          r2 = np.array([0.7, -0.4, 0.3], dtype=np.float64)
+          r3 = np.array([-0.6, 0.2, 0.9], dtype=np.float64)
+          t1 = 59000.0
+          t2 = 59001.0
+          t3 = 59003.0
+
+          gauss = np.asarray(calcGauss(r1, r2, r3, t1, t2, t3), dtype=np.float64)
+          gibbs = np.asarray(calcGibbs(r1, r2, r3), dtype=np.float64)
+          herrick = np.asarray(calcHerrickGibbs(r1, r2, r3, t1, t2, t3), dtype=np.float64)
+
+          assert gauss.shape == (3,)
+          assert gibbs.shape == (3,)
+          assert herrick.shape == (3,)
+          assert np.all(np.isfinite(gauss))
+          assert np.all(np.isfinite(gibbs))
+          assert np.all(np.isfinite(herrick))
+          PY

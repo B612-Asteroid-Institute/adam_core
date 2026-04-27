@@ -1,83 +1,72 @@
 import multiprocessing as mp
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-import jax.numpy as jnp
 import numpy as np
 import quivr as qv
 import ray
-from jax import config, jit, vmap
 from ray import ObjectRef
 
-from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import (
-    CoordinateCovariances,
-    transform_covariances_jacobian,
+from .._rust import (
+    propagate_2body_arc_batch_numpy as rust_propagate_2body_arc_batch_numpy,
+    propagate_2body_numpy as rust_propagate_2body_numpy,
+    propagate_2body_with_covariance_numpy as rust_propagate_2body_with_covariance_numpy,
 )
+from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin
 from ..orbits.orbits import Orbits
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
-from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
-from .chi import calc_chi_diagnostics
 from .exceptions import DynamicsNumericalError
-from .lagrange import apply_lagrange_coefficients, calc_lagrange_coefficients
-
-config.update("jax_enable_x64", True)
 
 
-@jit
-def _propagate_2body(
-    orbit: jnp.ndarray,
-    t0: float,
-    t1: float,
+@dataclass(frozen=True)
+class ChiDiagnostics:
+    """Lightweight diagnostic snapshot for fail-fast error reporting.
+
+    `chi` is reported as NaN here — the universal-anomaly value is computed
+    inside the Rust kernel and is not surfaced through the FFI for diagnostic
+    use. The other fields are sufficient to triage stiff / non-physical
+    propagation inputs (alpha sign indicates orbit type; finite checks catch
+    NaN/Inf upstream).
+    """
+
+    dt: float
+    mu: float
+    r_norm: float
+    v_norm: float
+    alpha: float
+    chi: float
+    finite: bool
+
+
+def _calc_chi_diagnostics(
+    r: np.ndarray,
+    v: np.ndarray,
+    dt: float,
     mu: float,
-    max_iter: int = 1000,
-    tol: float = 1e-14,
-) -> jnp.ndarray:
-    """
-    Propagate an orbit from t0 to t1.
-
-    Parameters
-    ----------
-    orbit : `~jax.numpy.ndarray` (6)
-        Cartesian orbit with position in units of au and velocity in units of au per day.
-    t0 : float (1)
-        Epoch in MJD at which the orbit are defined.
-    t1 : float (N)
-        Epochs to which to propagate the given orbit.
-    mu : float (1)
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    max_iter : int, optional
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will return the value of the universal anomaly at the last iteration.
-    tol : float, optional
-        Numerical tolerance to which to compute universal anomaly using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    orbits : `~jax.numpy.ndarray` (N, 6)
-        Orbit propagated to each MJD with position in units of au and velocity in units
-        of au per day.
-    """
-    r = orbit[0:3]
-    v = orbit[3:6]
-    dt = t1 - t0
-
-    lagrange_coeffs, stumpff_coeffs, chi = calc_lagrange_coefficients(
-        r, v, dt, mu=mu, max_iter=max_iter, tol=tol
+) -> ChiDiagnostics:
+    r_arr = np.asarray(r, dtype=np.float64)
+    v_arr = np.asarray(v, dtype=np.float64)
+    r_norm = float(np.linalg.norm(r_arr))
+    v_norm = float(np.linalg.norm(v_arr))
+    alpha = float(-(v_norm**2) / mu + 2.0 / r_norm) if r_norm > 0 else float("nan")
+    finite = bool(
+        np.isfinite(r_norm)
+        and np.isfinite(v_norm)
+        and np.isfinite(alpha)
     )
-    r_new, v_new = apply_lagrange_coefficients(r, v, *lagrange_coeffs)
-
-    return jnp.array([r_new[0], r_new[1], r_new[2], v_new[0], v_new[1], v_new[2]])
-
-
-# Vectorization Map: _propagate_2body
-_propagate_2body_vmap = jit(
-    vmap(_propagate_2body, in_axes=(0, 0, 0, 0, None, None), out_axes=(0))
-)
+    return ChiDiagnostics(
+        dt=float(dt),
+        mu=float(mu),
+        r_norm=r_norm,
+        v_norm=v_norm,
+        alpha=alpha,
+        chi=float("nan"),
+        finite=finite,
+    )
 
 
 def _first_non_finite_row(values: np.ndarray) -> Optional[int]:
@@ -100,13 +89,11 @@ def _raise_non_finite_propagation_error(
     max_iter: int,
     tol: float,
 ) -> None:
-    diag = calc_chi_diagnostics(
+    diag = _calc_chi_diagnostics(
         orbit_row[0:3],
         orbit_row[3:6],
         t1 - t0,
         mu=mu,
-        max_iter=max_iter,
-        tol=tol,
     )
     raise DynamicsNumericalError(
         stage=stage,
@@ -130,6 +117,127 @@ def _raise_non_finite_propagation_error(
     )
 
 
+# Rough crossover from microbenchmark (Apple M1, 2026-04-25): below this
+# n_times the warm-started serial arc per orbit beats the rayon-parallel
+# batched cold-start path. Above it, parallel batch wins.
+_ARC_PATH_DTS_THRESHOLD = 500
+
+
+def _can_use_arc_path(num_entries: int, n_times: int) -> bool:
+    """Decide whether the warm-started arc API is preferable to the
+    rayon-parallel batched path for this propagation shape.
+
+    Conditions:
+      * we have ≥ 2 dts to amortize chi warm-starting,
+      * n_times stays under the rayon crossover, AND
+      * the total entry count divides evenly into per-orbit chunks
+        (it always does in our flow, but assert it as a guard).
+    """
+    if n_times < 2 or n_times >= _ARC_PATH_DTS_THRESHOLD:
+        return False
+    if num_entries % n_times != 0:
+        return False
+    return True
+
+
+def _run_2body_propagate(
+    *,
+    orbits_array_: np.ndarray,
+    t0_: np.ndarray,
+    t1_: np.ndarray,
+    mu_: np.ndarray,
+    cov_in_flat: Optional[np.ndarray],
+    n_times: int,
+    orbit_ids_: np.ndarray,
+    object_ids_: np.ndarray,
+    max_iter: int,
+    tol: float,
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """
+    Propagate a flattened (orbit x time) batch using Rust when available,
+    falling back to the legacy JAX chunked path. Raises
+    `DynamicsNumericalError` with the same context/diagnostics as the legacy
+    path on non-finite input or output.
+    """
+    num_entries = orbits_array_.shape[0]
+    dt_ = t1_ - t0_
+
+    bad_input = _first_non_finite_row(orbits_array_)
+    if bad_input is not None:
+        _raise_non_finite_propagation_error(
+            stage="propagation",
+            reason="non_finite_input_state",
+            absolute_idx=bad_input,
+            orbit_id=str(orbit_ids_[bad_input]),
+            object_id=str(object_ids_[bad_input]),
+            orbit_row=np.asarray(orbits_array_[bad_input], dtype=np.float64),
+            t0=float(t0_[bad_input]),
+            t1=float(t1_[bad_input]),
+            mu=float(mu_[bad_input]),
+            max_iter=max_iter,
+            tol=tol,
+        )
+
+    cov_out_flat: Optional[np.ndarray] = None
+    if cov_in_flat is not None:
+        # cov_in_flat is per-orbit (n_orbits, 36); broadcast to per-entry.
+        cov_per_entry = np.repeat(cov_in_flat, n_times, axis=0)
+        rust_result = rust_propagate_2body_with_covariance_numpy(
+            orbits_array_, cov_per_entry, dt_, mu_, max_iter, tol
+        )
+        assert rust_result is not None
+        orbits_propagated, cov_out_flat = rust_result
+        orbits_propagated = np.ascontiguousarray(orbits_propagated, dtype=np.float64)
+        cov_out_flat = np.ascontiguousarray(cov_out_flat, dtype=np.float64)
+    elif _can_use_arc_path(num_entries, n_times):
+        # Single-orbit / many-dts pattern: the Rust arc API computes
+        # orbit-only constants once per orbit and warm-starts the chi
+        # solver from the previous dt's converged value. Rayon parallel
+        # ACROSS orbits + serial warm-start WITHIN orbit. Wins 3-10× over
+        # the rayon-parallel cold-start batched path when the per-orbit
+        # n_times is small (~< 500).
+        n_orbits = num_entries // n_times
+        # Per-orbit base orbit and mu — the ((n_orbits, n_times, 6)
+        # ordered) input has all n_times rows of orbit-i identical.
+        base_orbits = orbits_array_[::n_times]
+        base_mus = mu_[::n_times]
+        dts_per_orbit = dt_.reshape(n_orbits, n_times)
+        arc_out = rust_propagate_2body_arc_batch_numpy(
+            base_orbits, dts_per_orbit, base_mus, max_iter, tol
+        )
+        assert arc_out is not None
+        orbits_propagated = np.ascontiguousarray(arc_out, dtype=np.float64)
+    else:
+        rust_result = rust_propagate_2body_numpy(
+            orbits_array_, dt_, mu_, max_iter, tol
+        )
+        assert rust_result is not None
+        orbits_propagated = np.ascontiguousarray(rust_result, dtype=np.float64)
+
+    bad_output = _first_non_finite_row(orbits_propagated)
+    if bad_output is not None:
+        _raise_non_finite_propagation_error(
+            stage="propagation",
+            reason="non_finite_output_state",
+            absolute_idx=bad_output,
+            orbit_id=str(orbit_ids_[bad_output]),
+            object_id=str(object_ids_[bad_output]),
+            orbit_row=np.asarray(orbits_array_[bad_output], dtype=np.float64),
+            t0=float(t0_[bad_output]),
+            t1=float(t1_[bad_output]),
+            mu=float(mu_[bad_output]),
+            max_iter=max_iter,
+            tol=tol,
+        )
+
+    if orbits_propagated.shape[0] != num_entries:
+        raise RuntimeError(
+            f"Internal error: expected {num_entries} propagated rows, got {orbits_propagated.shape[0]}"
+        )
+
+    return orbits_propagated, cov_out_flat
+
+
 def _propagate_2body_serial(
     orbits: Orbits,
     times: Timestamp,
@@ -150,9 +258,6 @@ def _propagate_2body_serial(
     orbit_ids = orbits.orbit_id.to_numpy(zero_copy_only=False)
     object_ids = orbits.object_id.to_numpy(zero_copy_only=False)
 
-    # Fixed chunk size to keep JAX shapes stable.
-    chunk_size = 200
-
     n_orbits = cartesian_orbits.shape[0]
     n_times = len(times)
     orbit_ids_ = np.repeat(orbit_ids, n_times)
@@ -166,77 +271,30 @@ def _propagate_2body_serial(
     pp_idx = np.repeat(np.arange(n_orbits), n_times).tolist()
     physical_parameters_ = orbits.physical_parameters.take(pp_idx)
 
-    num_entries = n_orbits * n_times
-    orbits_propagated = np.empty((num_entries, 6), dtype=np.float64)
-    start = 0
-    for orbits_chunk, t0_chunk, t1_chunk, mu_chunk in zip(
-        process_in_chunks(orbits_array_, chunk_size),
-        process_in_chunks(t0_, chunk_size),
-        process_in_chunks(t1_, chunk_size),
-        process_in_chunks(mu_, chunk_size),
-    ):
-        valid = min(chunk_size, num_entries - start)
-        bad_input = _first_non_finite_row(orbits_chunk[:valid])
-        if bad_input is not None:
-            abs_idx = start + bad_input
-            _raise_non_finite_propagation_error(
-                stage="propagation",
-                reason="non_finite_input_state",
-                absolute_idx=abs_idx,
-                orbit_id=str(orbit_ids_[abs_idx]),
-                object_id=str(object_ids_[abs_idx]),
-                orbit_row=np.asarray(orbits_chunk[bad_input], dtype=np.float64),
-                t0=float(t0_chunk[bad_input]),
-                t1=float(t1_chunk[bad_input]),
-                mu=float(mu_chunk[bad_input]),
-                max_iter=max_iter,
-                tol=tol,
-            )
-        orbits_propagated_chunk = _propagate_2body_vmap(
-            orbits_chunk, t0_chunk, t1_chunk, mu_chunk, max_iter, tol
-        )
-        chunk_np = np.asarray(orbits_propagated_chunk, dtype=np.float64)[:valid]
-        bad_output = _first_non_finite_row(chunk_np)
-        if bad_output is not None:
-            abs_idx = start + bad_output
-            _raise_non_finite_propagation_error(
-                stage="propagation",
-                reason="non_finite_output_state",
-                absolute_idx=abs_idx,
-                orbit_id=str(orbit_ids_[abs_idx]),
-                object_id=str(object_ids_[abs_idx]),
-                orbit_row=np.asarray(orbits_chunk[bad_output], dtype=np.float64),
-                t0=float(t0_chunk[bad_output]),
-                t1=float(t1_chunk[bad_output]),
-                mu=float(mu_chunk[bad_output]),
-                max_iter=max_iter,
-                tol=tol,
-            )
-        orbits_propagated[start : start + valid] = chunk_np
-        start += valid
+    has_cov = not orbits.coordinates.covariance.is_all_nan()
+    cov_in_flat = (
+        orbits.coordinates.covariance.to_matrix().reshape(n_orbits, 36)
+        if has_cov
+        else None
+    )
 
-    if start != num_entries:
-        raise RuntimeError(
-            f"Internal error: expected {num_entries} propagated rows, got {start}"
-        )
+    orbits_propagated, cov_out_flat = _run_2body_propagate(
+        orbits_array_=orbits_array_,
+        t0_=t0_,
+        t1_=t1_,
+        mu_=mu_,
+        cov_in_flat=cov_in_flat,
+        n_times=n_times,
+        orbit_ids_=orbit_ids_,
+        object_ids_=object_ids_,
+        max_iter=max_iter,
+        tol=tol,
+    )
 
-    if not orbits.coordinates.covariance.is_all_nan():
-        cartesian_covariances = orbits.coordinates.covariance.to_matrix()
-        covariances_array_ = np.repeat(cartesian_covariances, n_times, axis=0)
-
-        cartesian_covariances = transform_covariances_jacobian(
-            orbits_array_,
-            covariances_array_,
-            _propagate_2body,
-            in_axes=(0, 0, 0, 0, None, None),
-            out_axes=0,
-            t0=t0_,
-            t1=t1_,
-            mu=mu_,
-            max_iter=max_iter,
-            tol=tol,
+    if has_cov:
+        cartesian_covariances = CoordinateCovariances.from_matrix(
+            cov_out_flat.reshape(-1, 6, 6)
         )
-        cartesian_covariances = CoordinateCovariances.from_matrix(cartesian_covariances)
     else:
         cartesian_covariances = None
 

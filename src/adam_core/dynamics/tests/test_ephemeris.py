@@ -632,25 +632,38 @@ def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> 
         ),
     )
 
-    def _bad_ephemeris_vmap(
-        propagated_chunk,
-        times_chunk,
-        observer_chunk,
-        mu_chunk,
-        lt_tol,
-        max_iter,
-        tol,
-        stellar_aberration,
+    def _bad_ephemeris_rust(
+        orbits_flat, observer_states, mus, *args, **kwargs
     ):
-        n = len(times_chunk)
+        n = orbits_flat.shape[0]
         eph = np.zeros((n, 6), dtype=np.float64)
         lt = np.zeros((n,), dtype=np.float64)
         lt[0] = np.nan
         aberrated = np.zeros((n, 6), dtype=np.float64)
         return eph, lt, aberrated
 
+    def _bad_ephemeris_rust_cov(
+        orbits_flat, cov_flat, observer_states, mus, *args, **kwargs
+    ):
+        n = orbits_flat.shape[0]
+        eph = np.zeros((n, 6), dtype=np.float64)
+        lt = np.zeros((n,), dtype=np.float64)
+        lt[0] = np.nan
+        aberrated = np.zeros((n, 6), dtype=np.float64)
+        cov = np.zeros((n, 36), dtype=np.float64)
+        return eph, lt, aberrated, cov
+
+    # Patch the Rust backend entry points so this test asserts the row-level
+    # error pass, not which backend happens to be default.
     monkeypatch.setattr(
-        ephemeris_module, "_generate_ephemeris_2body_vmap", _bad_ephemeris_vmap
+        ephemeris_module,
+        "rust_generate_ephemeris_2body_numpy",
+        _bad_ephemeris_rust,
+    )
+    monkeypatch.setattr(
+        ephemeris_module,
+        "rust_generate_ephemeris_2body_with_covariance_numpy",
+        _bad_ephemeris_rust_cov,
     )
 
     with pytest.raises(DynamicsNumericalError, match="non_finite_light_time"):

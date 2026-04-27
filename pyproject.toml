@@ -41,7 +41,6 @@ dependencies = [
   "ray",
   "requests",
   "scipy",
-  "spiceypy",
   "quivr>=0.8.1",
   "mpc-obscodes",
   "naif-de440",
@@ -65,8 +64,8 @@ oem = [
 ]
 
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
 [project.urls]
 "Documentation" = "https://github.com/B612-Asteroid-Institute/adam_core#README.md"
 "Issues" = "https://github.com/B612-Asteroid-Institute/adam_core/issues"
@@ -96,6 +95,7 @@ test = [
     "plotly>=5.24.1",
     "nbformat>=4.2.0",
     "oem>=0.4.5",
+    "maturin>=1.7,<2",
 ]
 
 [tool.black]
@@ -144,3 +144,33 @@ test = "pytest --benchmark-skip -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
+rust-build = "maturin build --manifest-path rust/adam_core_py/Cargo.toml --out dist/rust --release"
+rust-develop = "maturin develop --manifest-path rust/adam_core_py/Cargo.toml --release --uv"
+rust-smoke = { composite = [
+  "pdm run rust-develop",
+  "pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/tests/test_rust_orbit_determination.py src/adam_core/tests/test_rust_parity_randomized.py src/adam_core/coordinates/tests/test_transforms_spherical.py src/adam_core/coordinates/tests/test_transforms_keplerian.py src/adam_core/dynamics/tests/test_kepler.py -k 'mean_motion or spherical or keplerian or rust or gibbs or herrick or gauss'",
+] }
+rust-parity-randomized = "pytest -q src/adam_core/tests/test_rust_parity_randomized.py"
+rust-perf-gate = "python migration/scripts/rust_backend_benchmark_gate.py --repeats 11 --max-rust-over-legacy 0.8333333333333334 --output migration/artifacts/rust_benchmark_gate.json"
+rust-od-benchmark = "python migration/scripts/rust_orbit_determination_benchmark.py --repeats 11 --num-samples 25000 --max-rust-over-legacy 0.8333333333333334 --output migration/artifacts/rust_orbit_determination_benchmark.json"
+test-rust-full = { composite = [
+  "pdm run rust-develop",
+  "env ADAM_CORE_REQUIRE_RUST_BACKEND=1 pytest --benchmark-skip -m 'not profile' {args}",
+] }
+rust-quality = { composite = [
+  "cargo fmt --all --check",
+  "cargo clippy --workspace --all-targets -- -D warnings",
+  "cargo test --workspace",
+] }
+dev-loop = { composite = [
+  "pdm run lint",
+  "pdm run rust-quality",
+  "pdm run rust-smoke",
+  "pdm run rust-parity-randomized",
+  "pdm run rust-perf-gate",
+] }
+
+[tool.maturin]
+manifest-path = "rust/adam_core_py/Cargo.toml"
+module-name = "adam_core._rust_native"
+python-source = "src"

@@ -41,46 +41,39 @@ def _fit_absolute_magnitude_rows(
     sigma_rows: npt.NDArray[np.float64],
 ) -> tuple[float, float | None, float | None, float | None, int]:
     """
-    Fit H statistics for one grouped set of rows.
+    Fit H statistics for one grouped set of rows. Dispatches to the rust
+    kernel `fit_absolute_magnitude_rows_numpy` and translates NaN sentinels
+    in the result back to None.
 
     Returns
     -------
     (H_hat, H_sigma, sigma_eff, chi2_red, n_used)
     """
+    from .._rust import fit_absolute_magnitude_rows_numpy as _rust_fit
+
     n_used = int(h_rows.size)
     if n_used <= 0:
         raise ValueError("h_rows must be non-empty")
 
-    have_all_sigma = bool(np.all(np.isfinite(sigma_rows)))
-    if have_all_sigma:
-        w = 1.0 / np.square(sigma_rows)
-        wsum = float(np.sum(w))
-        if not np.isfinite(wsum) or wsum <= 0.0:
-            raise ValueError("invalid weights derived from mag_sigma")
-        H_hat = float(np.sum(w * h_rows) / wsum)
-    else:
-        H_hat = float(np.mean(h_rows))
+    out = _rust_fit(
+        np.ascontiguousarray(h_rows, dtype=np.float64),
+        np.ascontiguousarray(sigma_rows, dtype=np.float64),
+    )
+    assert out is not None, "rust fit_absolute_magnitude_rows unavailable"
+    H_hat, H_sigma, sigma_eff, chi2_red, n_used_out = out
 
-    resid = h_rows - H_hat
-    sigma_eff = None
-    if n_used >= 2:
-        s = _mad_sigma(resid)
-        if np.isfinite(s):
-            sigma_eff = float(s)
+    if not np.isfinite(H_hat):
+        # Match legacy ValueError on degenerate input (all-NaN rows or
+        # weighted-mean wsum non-finite); rust returns NaN as sentinel.
+        raise ValueError("invalid weights derived from mag_sigma")
 
-    chi2_red = None
-    H_sigma = None
-    if have_all_sigma and n_used >= 2:
-        w = 1.0 / np.square(sigma_rows)
-        chi2 = float(np.sum(w * np.square(resid)))
-        chi2_red = chi2 / float(n_used - 1)
-        H_sigma = float(np.sqrt(1.0 / np.sum(w)))
-        if np.isfinite(chi2_red) and chi2_red > 1.0:
-            H_sigma = float(H_sigma * np.sqrt(chi2_red))
-    elif sigma_eff is not None and n_used >= 2:
-        H_sigma = float(sigma_eff / np.sqrt(float(n_used)))
-
-    return H_hat, H_sigma, sigma_eff, chi2_red, n_used
+    return (
+        float(H_hat),
+        None if not np.isfinite(H_sigma) else float(H_sigma),
+        None if not np.isfinite(sigma_eff) else float(sigma_eff),
+        None if not np.isfinite(chi2_red) else float(chi2_red),
+        int(n_used_out),
+    )
 
 
 def estimate_absolute_magnitude_v_from_detections(
@@ -309,35 +302,46 @@ def estimate_absolute_magnitude_v_from_detections_grouped(
     h_v = h_v[order]
     sig_v = sig_v[order]
 
-    out_id: list[str] = []
-    out_H: list[float] = []
-    out_H_sigma: list[float | None] = []
-    out_sigma_eff: list[float | None] = []
-    out_chi2_red: list[float | None] = []
-    out_n: list[int] = []
-
-    i0 = 0
+    # Compute group offsets in one O(N) pass over the sorted ids_v.
+    # ids_v is sorted; group breaks where consecutive ids differ.
     n = int(ids_v.size)
-    while i0 < n:
-        oid = str(ids_v[i0])
-        i1 = i0 + 1
-        while i1 < n and str(ids_v[i1]) == oid:
-            i1 += 1
-        try:
-            H_hat, H_sig, sigma_eff, chi2_red, n_used = _fit_absolute_magnitude_rows(
-                h_rows=np.asarray(h_v[i0:i1], dtype=np.float64),
-                sigma_rows=np.asarray(sig_v[i0:i1], dtype=np.float64),
-            )
-        except Exception:
-            i0 = i1
-            continue
-        out_id.append(oid)
-        out_H.append(float(H_hat))
-        out_H_sigma.append(None if H_sig is None else float(H_sig))
-        out_sigma_eff.append(None if sigma_eff is None else float(sigma_eff))
-        out_chi2_red.append(None if chi2_red is None else float(chi2_red))
-        out_n.append(int(n_used))
-        i0 = i1
+    if n == 0:
+        return GroupedPhysicalParameters.from_kwargs(
+            object_id=[],
+            physical_parameters=PhysicalParameters.empty(),
+            n_fit_detections=[],
+        )
+    breaks = np.concatenate([
+        [0],
+        np.flatnonzero(ids_v[1:] != ids_v[:-1]) + 1,
+        [n],
+    ]).astype(np.int64)
+
+    from .._rust import fit_absolute_magnitude_grouped_numpy as _rust_fit_grouped
+
+    fit_out = _rust_fit_grouped(
+        np.ascontiguousarray(h_v, dtype=np.float64),
+        np.ascontiguousarray(sig_v, dtype=np.float64),
+        breaks,
+    )
+    assert fit_out is not None, "rust fit_absolute_magnitude_grouped unavailable"
+    H_hat_arr, H_sig_arr, sig_eff_arr, chi2_arr, n_used_arr = fit_out
+
+    # Drop groups where the fit produced NaN H_hat (matches legacy's
+    # try/except continue: degenerate inputs are silently skipped).
+    keep = np.isfinite(H_hat_arr)
+    out_id = [str(ids_v[breaks[i]]) for i in range(len(breaks) - 1) if keep[i]]
+    out_H = H_hat_arr[keep].tolist()
+    out_H_sigma = [
+        None if not np.isfinite(v) else float(v) for v in H_sig_arr[keep]
+    ]
+    out_sigma_eff = [
+        None if not np.isfinite(v) else float(v) for v in sig_eff_arr[keep]
+    ]
+    out_chi2_red = [
+        None if not np.isfinite(v) else float(v) for v in chi2_arr[keep]
+    ]
+    out_n = [int(v) for v in n_used_arr[keep]]
 
     physical_parameters = PhysicalParameters.from_kwargs(
         H_v=out_H,

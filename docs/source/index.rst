@@ -20,6 +20,7 @@ adam_core
    api/propagator
    api/time
    api/utils
+   reference/rust_backend_contracts
 
 Indices and tables
 ==================

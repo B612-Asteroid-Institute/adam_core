@@ -5,7 +5,10 @@ import quivr as qv
 
 from ..time import Timestamp
 from . import cartesian, keplerian, spherical
-from .covariances import CoordinateCovariances, transform_covariances_jacobian
+from .covariances import (
+    CoordinateCovariances,
+    rust_covariance_transform,
+)
 from .origin import Origin
 
 __all__ = [
@@ -81,9 +84,10 @@ class CometaryCoordinates(qv.Table):
         """
         Semi-major axis.
         """
-        from ..dynamics.kepler import calc_semi_major_axis
-
-        return np.array(calc_semi_major_axis(self.q.to_numpy(), self.e.to_numpy()))
+        # Pure-NumPy: a = q / (1 − e).
+        q = self.q.to_numpy()
+        e = self.e.to_numpy()
+        return q / (1.0 - e)
 
     @a.setter
     def a(self, value):
@@ -106,9 +110,10 @@ class CometaryCoordinates(qv.Table):
         """
         Apoapsis distance.
         """
-        from ..dynamics.kepler import calc_apoapsis_distance
-
-        return np.array(calc_apoapsis_distance(self.a, self.e.to_numpy()))
+        # Pure-NumPy: Q = a · (1 + e), or ∞ for e ≥ 1.
+        a = self.a
+        e = self.e.to_numpy()
+        return np.where(e >= 1.0, np.inf, a * (1.0 + e))
 
     @Q.setter
     def Q(self, value):
@@ -131,9 +136,10 @@ class CometaryCoordinates(qv.Table):
         """
         Semi-latus rectum.
         """
-        from ..dynamics.kepler import calc_semi_latus_rectum
-
-        return np.array(calc_semi_latus_rectum(self.a, self.e.to_numpy()))
+        # Pure-NumPy: p = a · (1 − e²).
+        a = self.a
+        e = self.e.to_numpy()
+        return a * (1.0 - e * e)
 
     @p.setter
     def p(self, value):
@@ -156,9 +162,10 @@ class CometaryCoordinates(qv.Table):
         """
         Period.
         """
-        from ..dynamics.kepler import calc_period
-
-        return np.array(calc_period(self.a, self.origin.mu()))
+        # Pure-NumPy: P = 2π · sqrt(|a³|/μ), ∞ for a < 0 (hyperbolic).
+        a = self.a
+        mu = self.origin.mu()
+        return np.where(a < 0.0, np.inf, 2.0 * np.pi * np.sqrt(np.abs(a**3) / mu))
 
     @P.setter
     def P(self, value):
@@ -181,9 +188,15 @@ class CometaryCoordinates(qv.Table):
         """
         Mean motion in degrees.
         """
-        from ..dynamics.kepler import calc_mean_motion
+        # Rust-backed NumPy kernel for concrete-array callers (1.6x faster
+        # than JAX at N=50k per `migration/scripts/calc_mean_motion_bench.py`).
+        from .._rust.api import calc_mean_motion_numpy as _rust_calc_mean_motion
 
-        return np.degrees(np.array(calc_mean_motion(self.a, self.origin.mu())))
+        a = np.asarray(self.a, dtype=np.float64)
+        mu = np.asarray(self.origin.mu(), dtype=np.float64)
+        rust_out = _rust_calc_mean_motion(a, mu)
+        assert rust_out is not None
+        return np.degrees(rust_out)
 
     @n.setter
     def n(self, value):
@@ -202,7 +215,7 @@ class CometaryCoordinates(qv.Table):
         raise ValueError(err)
 
     def to_cartesian(self) -> cartesian.CartesianCoordinates:
-        from .transform import _cometary_to_cartesian, cometary_to_cartesian
+        from .transform import cometary_to_cartesian
 
         if self.time is None:
             err = (
@@ -214,30 +227,28 @@ class CometaryCoordinates(qv.Table):
 
         # Extract gravitational parameter from origin
         mu = self.origin.mu()
-
-        coords_cartesian = cometary_to_cartesian(
-            self.values,
-            t0=self.time.to_numpy(),
-            mu=mu,
-            max_iter=100,
-            tol=1e-15,
-        )
-        coords_cartesian = np.array(coords_cartesian)
+        t0_np = self.time.to_numpy()
 
         if not self.covariance.is_all_nan():
             cometary_covariances = self.covariance.to_matrix()
-            covariances_cartesian = transform_covariances_jacobian(
+            rust_result = rust_covariance_transform(
                 self.values,
                 cometary_covariances,
-                _cometary_to_cartesian,
-                in_axes=(0, 0, 0, None, None),
-                out_axes=0,
-                t0=self.time.to_numpy(),
-                mu=mu,
-                max_iter=100,
-                tol=1e-15,
+                "cometary",
+                "cartesian",
+                t0=np.ascontiguousarray(np.asarray(t0_np, dtype=np.float64)),
+                mu=np.ascontiguousarray(np.asarray(mu, dtype=np.float64)),
+                frame_in=self.frame,
+                frame_out=self.frame,
             )
+            assert rust_result is not None
+            coords_cartesian, covariances_cartesian = rust_result
         else:
+            coords_cartesian = np.array(
+                cometary_to_cartesian(
+                    self.values, t0=t0_np, mu=mu, max_iter=100, tol=1e-15
+                )
+            )
             covariances_cartesian = np.empty(
                 (len(coords_cartesian), 6, 6), dtype=np.float64
             )
@@ -263,7 +274,7 @@ class CometaryCoordinates(qv.Table):
     def from_cartesian(
         cls, cartesian: cartesian.CartesianCoordinates
     ) -> CometaryCoordinates:
-        from .transform import _cartesian_to_cometary, cartesian_to_cometary
+        from .transform import cartesian_to_cometary
 
         if cartesian.time is None:
             err = (
@@ -275,26 +286,26 @@ class CometaryCoordinates(qv.Table):
 
         # Extract gravitational parameter from origin
         mu = cartesian.origin.mu()
-
-        coords_cometary = cartesian_to_cometary(
-            cartesian.values,
-            cartesian.time.to_numpy(),
-            mu=mu,
-        )
-        coords_cometary = np.array(coords_cometary)
+        t0_np = cartesian.time.to_numpy()
 
         if not cartesian.covariance.is_all_nan():
             cartesian_covariances = cartesian.covariance.to_matrix()
-            covariances_cometary = transform_covariances_jacobian(
+            rust_result = rust_covariance_transform(
                 cartesian.values,
                 cartesian_covariances,
-                _cartesian_to_cometary,
-                in_axes=(0, 0, 0),
-                out_axes=0,
-                t0=cartesian.time.to_numpy(),
-                mu=mu,
+                "cartesian",
+                "cometary",
+                t0=np.ascontiguousarray(np.asarray(t0_np, dtype=np.float64)),
+                mu=np.ascontiguousarray(np.asarray(mu, dtype=np.float64)),
+                frame_in=cartesian.frame,
+                frame_out=cartesian.frame,
             )
+            assert rust_result is not None
+            coords_cometary, covariances_cometary = rust_result
         else:
+            coords_cometary = np.array(
+                cartesian_to_cometary(cartesian.values, t0_np, mu=mu)
+            )
             covariances_cometary = np.empty(
                 (len(coords_cometary), 6, 6), dtype=np.float64
             )

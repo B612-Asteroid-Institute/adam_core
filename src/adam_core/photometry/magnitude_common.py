@@ -3,8 +3,6 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TypeAlias, Union
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
@@ -14,7 +12,6 @@ from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integ
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
 from .bandpasses.api import load_bandpass_curves as _load_bandpass_curves
 
-JAX_CHUNK_SIZE = 8192
 
 BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 
@@ -102,14 +99,6 @@ def bandpass_delta_table_for_composition_cached(
     with np.errstate(divide="raise", invalid="raise"):
         delta = -2.5 * np.log10(np.asarray(integrals, dtype=np.float64) / i_v)
     return np.asarray(delta, dtype=np.float64)
-
-
-@lru_cache(maxsize=None)
-def bandpass_delta_table_jax_for_composition_cached(
-    composition_key: BandpassComposition,
-) -> jax.Array:
-    delta = bandpass_delta_table_for_composition_cached(composition_key)
-    return jnp.asarray(delta, dtype=jnp.float64)
 
 
 def bandpass_delta_table_for_composition(

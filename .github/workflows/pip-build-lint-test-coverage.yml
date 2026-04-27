@@ -89,9 +89,63 @@ jobs:
         with:
           path-to-lcov: coverage.xml
 
+  rust-smoke:
+    runs-on: ubuntu-latest
+    needs: [ lint ]
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get git tags
+        run: git fetch --prune --unshallow --tags
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up PDM (cached)
+        if: ${{ hashFiles('**/pdm.lock') != '' }}
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.12'
+          cache: true
+          cache-dependency-path: '**/pdm.lock'
+      - name: Set up PDM (no cache)
+        if: ${{ hashFiles('**/pdm.lock') == '' }}
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: pdm install -G test
+      - name: Rust format check
+        run: cargo fmt --all --check
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --workspace
+      - name: Build Rust wheel
+        run: pdm run rust-build
+      - name: Upload Rust wheel artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-wheel
+          path: dist/rust/*.whl
+      - name: Rust smoke checks
+        run: pdm run rust-smoke
+      - name: Randomized Rust parity tests
+        run: pdm run rust-parity-randomized
+      - name: Rust performance gate
+        run: pdm run rust-perf-gate
+      - name: Upload Rust perf gate artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-perf-gate
+          path: migration/artifacts/rust_benchmark_gate.json
+
   benchmark:
     runs-on: ubuntu-latest
-    needs: [ test ]
+    needs: [ test, rust-smoke ]
     permissions:
       contents: write
       pull-requests: write

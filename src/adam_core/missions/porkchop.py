@@ -1,5 +1,4 @@
 import logging
-import multiprocessing as mp
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -7,20 +6,18 @@ import numpy as np
 import numpy.typing as npt
 import plotly.graph_objects as go
 import quivr as qv
-import ray
 from astropy.time import Time
 
+from adam_core._rust import porkchop_grid_numpy
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.coordinates.units import au_per_day_to_km_per_s
-from adam_core.dynamics.lambert import calculate_c3, solve_lambert
+from adam_core.dynamics.lambert import calculate_c3
 from adam_core.orbits import Orbits
 from adam_core.propagator import Propagator
-from adam_core.ray_cluster import initialize_use_ray
 from adam_core.time import Timestamp
 from adam_core.utils import get_perturber_state
-from adam_core.utils.iter import _iterate_chunk_indices
 from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_base64
 
 logger = logging.getLogger(__name__)
@@ -482,63 +479,6 @@ def departure_spherical_coordinates(
     return spherical
 
 
-def lambert_worker(
-    departure_orbits: Orbits,
-    arrival_orbits: Orbits,
-    propagation_origin: OriginCodes,
-    prograde: bool = True,
-    max_iter: int = 35,
-    tol: float = 1e-10,
-) -> LambertSolutions:
-    # Extract coordinates from orbits
-    departure_coordinates = departure_orbits.coordinates
-    arrival_coordinates = arrival_orbits.coordinates
-
-    r1 = departure_coordinates.r
-    r2 = arrival_coordinates.r
-    tof = arrival_coordinates.time.mjd().to_numpy(
-        zero_copy_only=False
-    ) - departure_coordinates.time.mjd().to_numpy(zero_copy_only=False)
-
-    origins = Origin.from_OriginCodes(propagation_origin, size=len(r1))
-    mu = origins.mu()[0]
-    v1, v2 = solve_lambert(r1, r2, tof, mu, prograde, max_iter, tol)
-
-    # Use actual orbit IDs from the Orbits objects
-    departure_body_ids = departure_orbits.orbit_id.to_pylist()
-    arrival_body_ids = arrival_orbits.orbit_id.to_pylist()
-
-    return LambertSolutions.from_kwargs(
-        departure_body_id=departure_body_ids,
-        departure_time=departure_coordinates.time,
-        departure_body_x=departure_coordinates.x,
-        departure_body_y=departure_coordinates.y,
-        departure_body_z=departure_coordinates.z,
-        departure_body_vx=departure_coordinates.vx,
-        departure_body_vy=departure_coordinates.vy,
-        departure_body_vz=departure_coordinates.vz,
-        arrival_body_id=arrival_body_ids,
-        arrival_time=arrival_coordinates.time,
-        arrival_body_x=arrival_coordinates.x,
-        arrival_body_y=arrival_coordinates.y,
-        arrival_body_z=arrival_coordinates.z,
-        arrival_body_vx=arrival_coordinates.vx,
-        arrival_body_vy=arrival_coordinates.vy,
-        arrival_body_vz=arrival_coordinates.vz,
-        solution_departure_vx=v1[:, 0],
-        solution_departure_vy=v1[:, 1],
-        solution_departure_vz=v1[:, 2],
-        solution_arrival_vx=v2[:, 0],
-        solution_arrival_vy=v2[:, 1],
-        solution_arrival_vz=v2[:, 2],
-        frame=departure_coordinates.frame,
-        origin=origins,
-    )
-
-
-lambert_worker_remote = ray.remote(lambert_worker)
-
-
 def prepare_and_propagate_orbits(
     body: Union[Orbits, OriginCodes],
     start_time: Timestamp,
@@ -626,31 +566,13 @@ def generate_porkchop_data(
     Generate data for a porkchop plot by solving Lambert's problem for a grid of
     departure and arrival times.
 
-    Parameters
-    ----------
-    departure_orbits : Orbits
-        The departure orbits.
-    arrival_orbits : Orbits
-        The arrival orbits.
-    propagation_origin : OriginCodes
-        The origin of the propagation.
-    prograde : bool, optional
-        If True, assume prograde motion. If False, assume retrograde motion.
-    max_iter : int, optional
-        The maximum number of iterations for Lambert's solver.
-    tol : float, optional
-        The numerical tolerance for Lambert's solver.
-    max_processes : Optional[int], optional
-        The maximum number of processes to use.
-    max_processes : Optional[int], optional
-        The maximum number of processes to use.
+    Implementation: a single Rust call covers meshgrid + time-order filter +
+    batched Lambert with rayon-internal parallelism. No Ray dispatch.
 
-
-    Returns
-    -------
-    porkchop_data : LambertOutput
-        The porkchop data.
+    `max_processes` is accepted for API compatibility; the Rust kernel
+    auto-detects available cores via rayon's default thread pool.
     """
+    del max_processes  # API compat — rayon auto-detects
 
     assert (
         departure_orbits.coordinates.frame == arrival_orbits.coordinates.frame
@@ -663,7 +585,6 @@ def generate_porkchop_data(
         == arrival_orbits.coordinates.origin.code[0]
     ), "Departure and arrival origins must be the same"
 
-    # First let's make sure departure and arrival orbits are time-ordered
     departure_orbits = departure_orbits.sort_by(
         ["coordinates.time.days", "coordinates.time.nanos"]
     )
@@ -671,76 +592,78 @@ def generate_porkchop_data(
         ["coordinates.time.days", "coordinates.time.nanos"]
     )
 
-    # Get the actual times for comparison
+    n_dep = len(departure_orbits)
+    n_arr = len(arrival_orbits)
+    if n_dep == 0 or n_arr == 0:
+        return LambertSolutions.empty()
+
     dep_times_mjd = departure_orbits.coordinates.time.mjd().to_numpy(
         zero_copy_only=False
     )
-    arr_times_mjd = arrival_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
-
-    # Create meshgrids of indices and times
-    dep_indices, arr_indices = np.meshgrid(
-        np.arange(len(departure_orbits)), np.arange(len(arrival_orbits))
+    arr_times_mjd = arrival_orbits.coordinates.time.mjd().to_numpy(
+        zero_copy_only=False
     )
-    dep_time_grid, arr_time_grid = np.meshgrid(dep_times_mjd, arr_times_mjd)
+    dep_states = np.ascontiguousarray(
+        departure_orbits.coordinates.values, dtype=np.float64
+    )
+    arr_states = np.ascontiguousarray(
+        arrival_orbits.coordinates.values, dtype=np.float64
+    )
 
-    # Filter to ensure departure time is before arrival time
-    # Use actual time comparison instead of index comparison
-    valid_indices = arr_time_grid > dep_time_grid
+    mu_arr = Origin.from_OriginCodes(propagation_origin, size=1).mu()
+    mu = float(mu_arr[0])
 
-    # Apply the mask to flatten only valid combinations
-    dep_indices_flat = dep_indices[valid_indices].flatten()
-    arr_indices_flat = arr_indices[valid_indices].flatten()
-
-    stacked_departure_orbits = departure_orbits.take(dep_indices_flat)
-    stacked_arrival_orbits = arrival_orbits.take(arr_indices_flat)
-
-    # If no valid combinations exist, return empty results
-    if len(stacked_departure_orbits) == 0:
+    rust_out = porkchop_grid_numpy(
+        dep_states,
+        dep_times_mjd,
+        arr_states,
+        arr_times_mjd,
+        mu,
+        prograde,
+        max_iter,
+        tol,
+        tol,
+    )
+    assert rust_out is not None
+    dep_idx, arr_idx, v1, v2 = rust_out
+    if len(dep_idx) == 0:
         return LambertSolutions.empty()
 
-    if max_processes is None:
-        max_processes = mp.cpu_count()
+    dep_idx_i64 = dep_idx.astype(np.int64)
+    arr_idx_i64 = arr_idx.astype(np.int64)
+    stacked_departure_orbits = departure_orbits.take(dep_idx_i64)
+    stacked_arrival_orbits = arrival_orbits.take(arr_idx_i64)
 
-    use_ray = initialize_use_ray(max_processes)
+    departure_coordinates = stacked_departure_orbits.coordinates
+    arrival_coordinates = stacked_arrival_orbits.coordinates
+    origins = Origin.from_OriginCodes(propagation_origin, size=len(dep_idx))
 
-    lambert_results = LambertSolutions.empty()
-    if use_ray:
-        futures = []
-        for start, end in _iterate_chunk_indices(
-            stacked_departure_orbits, chunk_size=100
-        ):
-            futures.append(
-                lambert_worker_remote.remote(
-                    stacked_departure_orbits[start:end],
-                    stacked_arrival_orbits[start:end],
-                    propagation_origin,
-                    prograde,
-                    max_iter,
-                    tol,
-                )
-            )
-
-            if len(futures) > 1.5 * max_processes:
-                finished, futures = ray.wait(futures, num_returns=1)
-                result = ray.get(finished[0])
-                lambert_results = qv.concatenate([lambert_results, result])
-
-        while futures:
-            finished, futures = ray.wait(futures, num_returns=1)
-            result = ray.get(finished[0])
-            lambert_results = qv.concatenate([lambert_results, result])
-
-    else:
-        lambert_results = lambert_worker(
-            stacked_departure_orbits,
-            stacked_arrival_orbits,
-            propagation_origin,
-            prograde,
-            max_iter,
-            tol,
-        )
-
-    return lambert_results
+    return LambertSolutions.from_kwargs(
+        departure_body_id=stacked_departure_orbits.orbit_id.to_pylist(),
+        departure_time=departure_coordinates.time,
+        departure_body_x=departure_coordinates.x,
+        departure_body_y=departure_coordinates.y,
+        departure_body_z=departure_coordinates.z,
+        departure_body_vx=departure_coordinates.vx,
+        departure_body_vy=departure_coordinates.vy,
+        departure_body_vz=departure_coordinates.vz,
+        arrival_body_id=stacked_arrival_orbits.orbit_id.to_pylist(),
+        arrival_time=arrival_coordinates.time,
+        arrival_body_x=arrival_coordinates.x,
+        arrival_body_y=arrival_coordinates.y,
+        arrival_body_z=arrival_coordinates.z,
+        arrival_body_vx=arrival_coordinates.vx,
+        arrival_body_vy=arrival_coordinates.vy,
+        arrival_body_vz=arrival_coordinates.vz,
+        solution_departure_vx=v1[:, 0],
+        solution_departure_vy=v1[:, 1],
+        solution_departure_vz=v1[:, 2],
+        solution_arrival_vx=v2[:, 0],
+        solution_arrival_vy=v2[:, 1],
+        solution_arrival_vz=v2[:, 2],
+        frame=departure_coordinates.frame,
+        origin=origins,
+    )
 
 
 def plot_porkchop_plotly(

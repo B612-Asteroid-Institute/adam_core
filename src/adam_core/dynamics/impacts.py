@@ -314,7 +314,7 @@ def calculate_impact_probabilities(
     # Loop through the unique set of orbit_ids within variants using quivr
     unique_orbits = pc.unique(variants.orbit_id).to_pylist()
 
-    impact_probabilities = None
+    impact_probabilities_list: list[ImpactProbabilities] = []
 
     for orbit_id in unique_orbits:
         variant_masked = variants.select("orbit_id", orbit_id)
@@ -349,24 +349,23 @@ def calculate_impact_probabilities(
                     1, scale=variant_masked.coordinates.time.scale
                 )
 
-            ip = ImpactProbabilities.from_kwargs(
-                condition_id=[condition_id],
-                orbit_id=[orbit_id],
-                impacts=[impact_count],
-                variants=[variant_count],
-                cumulative_probability=[impact_count / variant_count],
-                mean_impact_time=mean_mjd,
-                stddev_impact_time=[stddev],
-                minimum_impact_time=min_mjd,
-                maximum_impact_time=max_mjd,
+            impact_probabilities_list.append(
+                ImpactProbabilities.from_kwargs(
+                    condition_id=[condition_id],
+                    orbit_id=[orbit_id],
+                    impacts=[impact_count],
+                    variants=[variant_count],
+                    cumulative_probability=[impact_count / variant_count],
+                    mean_impact_time=mean_mjd,
+                    stddev_impact_time=[stddev],
+                    minimum_impact_time=min_mjd,
+                    maximum_impact_time=max_mjd,
+                )
             )
 
-            if impact_probabilities is None:
-                impact_probabilities = ip
-            else:
-                impact_probabilities = qv.concatenate([impact_probabilities, ip])
-
-    return impact_probabilities
+    if not impact_probabilities_list:
+        return ImpactProbabilities.empty()
+    return qv.concatenate(impact_probabilities_list)
 
 
 def link_impacting_variants(variants, impacts):

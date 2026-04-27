@@ -1,0 +1,15 @@
+[package]
+name = "adam_core_py"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "_rust_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+numpy = "0.22"
+ndarray = "0.16"
+adam_core_rs_coords = { path = "../adam_core_rs_coords" }
+adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }

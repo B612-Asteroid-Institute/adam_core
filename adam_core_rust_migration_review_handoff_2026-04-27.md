@@ -1,0 +1,600 @@
+# adam-core Rust Migration Review Handoff
+
+Date: 2026-04-27
+Reviewer: Codex
+Migration checkout: `/Users/aleck/Code/adam-core-rust-migration`
+Baseline checkout: `/Users/aleck/Code/adam-core`
+
+## Executive Summary
+
+The Rust migration contains substantial technical work and many promising ports, but it is not merge-ready. The largest risks are integration and governance risks, not isolated Rust numerical kernels:
+
+- `spicekit` is treated as a hard runtime dependency but is not declared in Python packaging metadata.
+- CI/PDM scripts reference deleted or missing files and will fail as written.
+- Public Python module compatibility has been broken by deleting modules that still exist on baseline main.
+- Runtime behavior is inconsistent: decisions say Rust is mandatory, but `_rust/api.py` still exposes nullable fallback wrappers and production code uses `assert` as a runtime guard.
+- The migration checkout has not integrated current baseline main, including the docs/RTD/CI overhaul in baseline commit `22a1efa3`.
+- Some parity/performance reporting overstates public API coverage because raw Rust kernels are measured where public dispatch intentionally takes a different path.
+- Benchmark governance still contains stale live-legacy tooling even though the journal correctly documents that live legacy benchmarks became contaminated by Rust-backed fallthroughs.
+
+The branch should go through a stabilization pass before approval. The stabilization should focus on packaging, CI, public API compatibility, runtime failure semantics, baseline rebase, and status/gate accuracy.
+
+## Scope And Constraints
+
+The user requested a thorough critique of the adam-core Rust migration compared with baseline main, including journal, decisions, and implementation review. The user initially requested no source changes. This file was created later by explicit request as a handoff artifact.
+
+This review is static/inspection-based. I did not run the full build or test suite because those commands can update build caches/artifacts and the original review request explicitly said not to change anything. I did inspect files, git state, diffs, line references, scripts, workflow metadata, and project journal/decisions.
+
+## Checkouts Reviewed
+
+### Migration Checkout
+
+Path: `/Users/aleck/Code/adam-core-rust-migration`
+
+Observed state during review:
+
+- Branch: `main`
+- HEAD: `f556b5e7a87324d38e9d11953bb724eb56032968`
+- `origin/main`: `f556b5e7a87324d38e9d11953bb724eb56032968`
+- `origin` remote points to local `/Users/aleck/Code/adam-core`
+- Working tree is heavily dirty relative to migration HEAD.
+- Tracked diff size observed: 60 tracked files changed, 2639 insertions, 6023 deletions.
+- Notable untracked migration artifacts/files include `rust/`, `migration/`, `src/adam_core/_rust/`, root `Cargo.toml`, `Cargo.lock`, `uv.lock`, `conftest.py`, docs/reference additions, and workflow changes.
+- Ignored build/cache artifacts include `target/` and Python `__pycache__/` directories.
+
+Static hygiene:
+
+- `git diff --check HEAD --` was clean at review time.
+
+### Baseline Checkout
+
+Path: `/Users/aleck/Code/adam-core`
+
+Observed state during review:
+
+- Branch: `main`
+- HEAD: `22a1efa3979cad5651e3f0765b2536983be6ab99`
+- Commit summary: `Docs: RTD-first narrative overhaul and real-world use-case coverage (#194)`
+- Baseline is one commit ahead of the migration base.
+- Baseline checkout had only unrelated untracked local files such as `.dockerignore`, `.gcloudignore`, grounding files, docs build artifacts, and screenshots.
+
+Important baseline change not integrated by migration:
+
+- Commit `22a1efa3` changed 55 files, including `.github/workflows/pip-build-lint-test-coverage.yml`, `.gitignore`, `.readthedocs.yaml`, many `docs/source/*` files, `pyproject.toml`, `src/adam_core/dynamics/plots.py`, and `test_impact_viz_data.py`.
+- Baseline `docs/source/index.rst` is a substantially rewritten RTD landing page and toctree with `Reference <reference/index>`.
+- Migration `docs/source/index.rst` appears based on the older docs structure and only adds `reference/rust_backend_contracts`.
+
+## Grounding From decisions.md And journal.md
+
+Important decisions that should govern the migration:
+
+- 2026-04-16: Execute migration in sibling checkout `adam-core-rust-migration`.
+- 2026-04-16: Python package surface remains stable while implementation moves to Rust via PyO3/maturin.
+- 2026-04-16: Rust implementations must clear parity and performance gates before default cutover.
+- 2026-04-16: Default switch requires at least +20% p50/p95 speedup versus legacy.
+- 2026-04-16: Existing pytest unit/integration suites must run through Python bindings with Rust backend enabled, not only custom parity tests.
+- 2026-04-16 review period: temporary legacy fallback was accepted to keep legacy vs Rust runnable side by side, but this was explicitly temporary.
+- 2026-04-17: `coordinates.transform_coordinates` promoted to rust-default for supported representation/frame workloads.
+- 2026-04-17: Pure Cartesian to Cartesian frame-only rotations intentionally remain outside the Rust dispatcher because the legacy cached matrix path was faster at that time.
+- 2026-04-20: Production SPICE access must route through `utils/spice_backend.py`; production modules should not import `spiceypy` directly.
+- 2026-04-20: `spicekit` is the extracted pure-Rust SPICE/NAIF package; adam-core consumes it rather than owning all low-level NAIF reader code.
+- 2026-04-20: `adam_core_py` Rust crate depends on `spicekit` via a git-pinned dependency, with an open item that private `spicekit` can break CI unless public or a deploy key is configured.
+- 2026-04-21: `sp.prop2b` oracle tests were replaced with self-consistency roundtrip plus energy/angular-momentum conservation tests. The decision records a tolerance of 100 m position / 1 mm/s velocity over a 10,000-day roundtrip.
+- 2026-04-22: No rustless adam-core environment should remain; Rust extension is mandatory at import time. JAX fallbacks may remain only as explicit parity references, not production safety nets.
+- 2026-04-23: Live `rust_backend_benchmark_gate.py` legacy comparisons became contaminated because the supposed legacy path internally fell through to Rust-backed methods. The journal recommends freezing historical snapshots and switching to Rust-only latency baselines.
+- 2026-04-25: Constitutional parity harness was created against baseline `/Users/aleck/Code/adam-core` pinned to upstream main `22a1efa3`; 21 APIs passed randomized fuzz at that time.
+- 2026-04-25: Photometry warm speedups remained below/near the 1.2x gate for four APIs, while cold Rust performance was much faster due avoiding JAX import/JIT costs. Decision was deferred: use SIMD math, accept warm parity, or add waivers.
+- 2026-04-25: `gaussIOD` randomized parity was intentionally unwired because Rust and legacy root solvers find different subsets of polynomial roots on random triplets.
+- 2026-04-25: Remaining gaps included `calculate_perturber_moids`, `generate_porkchop_data`, and harder `transform_coordinates` cases such as ITRF93/origin translation.
+- 2026-04-27: `calculate_chi2`, `weighted_mean`, and `weighted_covariance` were ported. Journal claims 784 pass / 23 skip in a full sweep. One least-squares test flaked once under suite pollution and passed cleanly on retry.
+
+## Files And Areas Inspected
+
+Key files inspected in the migration checkout:
+
+- `/Users/aleck/Code/adam-core-rust-migration/decisions.md`
+- `/Users/aleck/Code/adam-core-rust-migration/journal.md`
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`
+- `/Users/aleck/Code/adam-core-rust-migration/uv.lock`
+- `/Users/aleck/Code/adam-core-rust-migration/conftest.py`
+- `/Users/aleck/Code/adam-core-rust-migration/.gitignore`
+- `/Users/aleck/Code/adam-core-rust-migration/.github/workflows/pip-build-lint-test-coverage.yml`
+- `/Users/aleck/Code/adam-core-rust-migration/.github/workflows/publish.yml`
+- `/Users/aleck/Code/adam-core-rust-migration/docs/source/index.rst`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/api.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/status.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/utils/spice_backend.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/orbits/spice_kernel.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/transform.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/cartesian.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/covariances.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/residuals.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/dynamics/propagation.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/dynamics/tests/test_propagation.py`
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/photometry/magnitude.py`
+- `/Users/aleck/Code/adam-core-rust-migration/migration/parity/_inputs.py`
+- `/Users/aleck/Code/adam-core-rust-migration/migration/parity/_rust_runner.py`
+- `/Users/aleck/Code/adam-core-rust-migration/migration/parity/parity_main.py`
+- `/Users/aleck/Code/adam-core-rust-migration/migration/parity/parity_speed.py`
+- `/Users/aleck/Code/adam-core-rust-migration/migration/waivers.yaml`
+- `/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_py/src/lib.rs`
+- `/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_rs_coords/src/chi2.rs`
+- `/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_rs_coords/src/weighted.rs`
+
+Key baseline files inspected:
+
+- `/Users/aleck/Code/adam-core/docs/source/index.rst`
+- `/Users/aleck/Code/adam-core/pyproject.toml`
+- `/Users/aleck/Code/adam-core/.github/workflows/pip-build-lint-test-coverage.yml`
+- Public modules that were deleted in migration but exist in baseline, including dynamics and coordinate helper modules listed below.
+
+## Findings
+
+### 1. Blocker: `spicekit` Is A Hard Runtime Dependency But Is Not Declared
+
+Evidence:
+
+- `pyproject.toml` dependencies do not include `spicekit`.
+- `pyproject.toml` removed baseline `spiceypy` from runtime dependencies.
+- `uv.lock` still includes `spiceypy` and does not show `spicekit`; `uv.lock` itself is untracked in the migration checkout.
+- `_rust/api.py` imports `spicekit` dynamically and sets `SPICEKIT_AVAILABLE` based on import success.
+- `utils/spice_backend.py` raises if `SPICEKIT_AVAILABLE` is false.
+- `orbits/spice_kernel.py` creates a NAIF SPK writer through `naif_spk_writer`; if unavailable, SPK writing fails.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: dependencies around lines 27-53. No `spicekit` is present.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/api.py`: optional `spicekit` import around lines 29-35.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/api.py`: NAIF wrapper functions return `None` when `SPICEKIT_AVAILABLE` is false around lines 802-880.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/utils/spice_backend.py`: `RustBackend.__init__` raises if `SPICEKIT_AVAILABLE` is false around lines 98-103.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/utils/spice_backend.py`: `get_backend()` raises if `SPICEKIT_AVAILABLE` is false around lines 372-388.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/orbits/spice_kernel.py`: `naif_spk_writer("adam-core")` is used around lines 129-134.
+
+Impact:
+
+- A clean install of adam-core from this branch can import/build without installing `spicekit`, then fail at runtime for SPICE operations.
+- A published wheel would not carry its true runtime dependency.
+- CI and user environments may accidentally pass only because `spicekit` is installed locally from adjacent development work.
+- This conflicts with the architectural decision that `spicekit` is the extracted dependency and adam-core consumes it explicitly.
+
+Recommended action:
+
+- Decide whether `spicekit` is a Python package dependency, a Rust crate only, or both.
+- If Python `spicekit` is required by `_rust/api.py`, declare it in `pyproject.toml` and lock it.
+- If the package is not yet public, do not pretend this branch is releasable; use a private index/deploy key strategy or keep the branch blocked until publication.
+- Add a clean-install CI job or script that creates a fresh environment and imports/runs SPICE backend operations without relying on local editable packages.
+
+### 2. Blocker: CI And PDM Scripts Are Stale And Reference Missing Files
+
+Evidence:
+
+- `pyproject.toml` defines `rust-smoke`, `rust-parity-randomized`, and `rust-od-benchmark` scripts that point at missing files.
+- Workflow `.github/workflows/pip-build-lint-test-coverage.yml` invokes those scripts.
+- Missing targets observed:
+  - `src/adam_core/tests/test_rust_orbit_determination.py`
+  - `src/adam_core/tests/test_rust_parity_randomized.py`
+  - `src/adam_core/dynamics/tests/test_kepler.py`
+  - `migration/scripts/rust_orbit_determination_benchmark.py`
+- Existing related targets observed:
+  - `src/adam_core/tests/test_rust_backends.py`
+  - `src/adam_core/coordinates/tests/test_transforms_spherical.py`
+  - `src/adam_core/coordinates/tests/test_transforms_keplerian.py`
+  - `migration/scripts/rust_backend_benchmark_gate.py`
+  - `migration/parity/parity_main.py`
+  - `migration/parity/parity_speed.py`
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: `rust-smoke` references missing tests around lines 149-152.
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: `rust-parity-randomized` references a missing test around line 153.
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: `rust-od-benchmark` references a missing script around line 155.
+- `/Users/aleck/Code/adam-core-rust-migration/.github/workflows/pip-build-lint-test-coverage.yml`: rust smoke/parity/perf steps invoke these scripts around lines 133-138.
+
+Impact:
+
+- CI will fail before reaching meaningful Rust correctness checks.
+- Local developer commands advertised by the project are not trustworthy.
+- This undermines the stated validation contract that existing pytest suites plus Rust-enabled tests are the acceptance criteria.
+
+Recommended action:
+
+- Replace stale script targets with the current `migration/parity/parity_main.py` and `migration/parity/parity_speed.py` flow, or recreate the missing tests/scripts intentionally.
+- Ensure every PDM script referenced by CI exists and runs from a clean checkout.
+- Add a quick script self-check in CI or preflight to catch missing script target paths.
+
+### 3. High: Public Python Package Surface Was Broken By Deleted Modules
+
+Evidence:
+
+The migration deletes modules that exist on baseline main and are importable public package paths. Examples include:
+
+- `/Users/aleck/Code/adam-core/src/adam_core/dynamics/aberrations.py`
+- `/Users/aleck/Code/adam-core/src/adam_core/dynamics/barker.py`
+- `/Users/aleck/Code/adam-core/src/adam_core/dynamics/chi.py`
+- `/Users/aleck/Code/adam-core/src/adam_core/dynamics/kepler.py`
+- `/Users/aleck/Code/adam-core/src/adam_core/dynamics/lagrange.py`
+- `/Users/aleck/Code/adam-core/src/adam_core/dynamics/stumpff.py`
+- `/Users/aleck/Code/adam-core/src/adam_core/coordinates/jacobian.py`
+
+Journal context:
+
+- An earlier journal entry indicated `dynamics/aberrations.py` and related chain remained alive by necessity for n-body propagator behavior.
+- A later journal entry says a deletion wave removed the old chain after porting light-time.
+
+Impact:
+
+- External users importing these modules will break even if the top-level workflows still pass.
+- This violates the explicit migration decision to keep the Python package surface stable.
+- This is a compatibility issue separate from whether the internal implementation moved to Rust successfully.
+
+Recommended action:
+
+- Restore deleted public modules as compatibility shims.
+- Re-export Rust-backed implementations or thin wrappers from those module paths.
+- Add import-compatibility tests comparing baseline public module paths with migration public module paths.
+- If any public path is intentionally removed, require an explicit deprecation/removal decision and release-note entry, not an incidental migration deletion.
+
+### 4. High: Runtime Contract Is Inconsistent And Uses `assert` For Production Failure Handling
+
+Evidence:
+
+- Decisions say no rustless adam-core environment should remain and Rust extension is mandatory at import time.
+- `_rust/api.py` still documents review-period behavior where wrappers return `None` when Rust extension is unavailable.
+- `_rust/api.py` catches any exception importing `_rust_native` and sets `RUST_BACKEND_AVAILABLE = False`.
+- Many production modules call Rust wrappers, then use `assert out is not None`.
+- `conftest.py` only enforces Rust backend availability when `ADAM_CORE_REQUIRE_RUST_BACKEND` is set; default tests do not necessarily enforce the no-rustless rule.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/api.py`: review-period nullable fallback docstring around lines 1-13.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/api.py`: import catch and `RUST_BACKEND_AVAILABLE = False` around lines 21-27.
+- `/Users/aleck/Code/adam-core-rust-migration/conftest.py`: backend requirement is env-gated around lines 8-24.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/photometry/magnitude.py`: production `assert out is not None` around line 152 and similar asserts around lines 276, 322, and 446.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/residuals.py`: `calculate_chi2` uses `assert out is not None` around line 448.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/dynamics/propagation.py`: 2-body propagation paths assert Rust outputs around lines 208 and 214.
+- Similar production asserts were observed in `coordinates/covariances.py`, `coordinates/cometary.py`, `coordinates/spherical.py`, `coordinates/transform.py`, `coordinates/geodetics.py`, `coordinates/keplerian.py`, `orbit_determination/gibbs.py`, `orbit_determination/herrick_gibbs.py`, `orbit_determination/gauss.py`, `missions/porkchop.py`, `propagator/propagator.py`, `orbits/variants.py`, `orbits/classification.py`, `dynamics/lambert.py`, `dynamics/moid.py`, and `dynamics/propagation.py`.
+
+Impact:
+
+- `assert` statements are removed under `python -O`; production behavior changes under optimization.
+- Missing Rust can become obscure errors such as `np.asarray(None)` behavior or unpacking failures instead of clear backend initialization errors.
+- The code simultaneously claims to support nullable fallback wrappers and to have no rustless production environment.
+- Catching all exceptions when importing `_rust_native` can hide real ABI/import bugs and convert them into late runtime `None` behavior.
+
+Recommended action:
+
+- Pick one runtime contract and enforce it consistently.
+- If Rust is mandatory, `_rust/api.py` should fail loudly at import time or expose a `_require_rust()` helper that raises a specific exception.
+- Do not use `assert` for runtime validation of backend availability or FFI results.
+- Replace nullable return wrappers with explicit exceptions unless a given function is genuinely optional and documented as such.
+- Make CI run with backend requirement enabled by default, not only when an environment variable is manually set.
+
+### 5. High: Migration Has Not Integrated Current Baseline Main
+
+Evidence:
+
+- Baseline main checkout is at `22a1efa3979cad5651e3f0765b2536983be6ab99`.
+- Migration checkout HEAD/base is `f556b5e7a87324d38e9d11953bb724eb56032968`.
+- Baseline commit `22a1efa3` is a docs/RTD-first overhaul and touches 55 files.
+- Migration docs and CI appear based on the pre-`22a1efa3` structure.
+- Baseline added docs reference structure and docs build/check tooling; migration does not reflect those changes.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core/docs/source/index.rst`: baseline RTD landing page and reference toctree, including `Reference <reference/index>` around line 122.
+- `/Users/aleck/Code/adam-core-rust-migration/docs/source/index.rst`: migration old index with `reference/rust_backend_contracts` insertion around line 20.
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: optional dependencies around lines 55-64 do not include the baseline docs extras from `22a1efa3`.
+- `/Users/aleck/Code/adam-core-rust-migration/.github/workflows/pip-build-lint-test-coverage.yml`: lacks the baseline docs CI job added by the docs overhaul.
+
+Impact:
+
+- Even if Rust migration tests pass, the branch would regress baseline docs, docs CI, and associated project metadata.
+- Reviewers cannot cleanly distinguish Rust migration changes from stale baseline drift.
+- The docs contract for new Rust backend reference material is not integrated into the current docs architecture.
+
+Recommended action:
+
+- Rebase or merge current baseline main before final review.
+- Re-apply Rust docs additions into the new baseline docs/reference structure.
+- Preserve baseline docs extras and docs CI unless there is a separate approved decision to remove them.
+
+### 6. High: `coordinates.transform_coordinates` Parity Coverage Does Not Match Public Dispatch Behavior
+
+Evidence:
+
+- `migration/parity/_inputs.py` tests cartesian-to-cartesian frame rotation by feeding raw NumPy arrays to the Rust kernel.
+- `migration/parity/_rust_runner.py` calls `_rust.api.transform_coordinates_numpy` directly.
+- Public `transform_coordinates` support logic in `coordinates/transform.py` explicitly excludes Cartesian to Cartesian representation output.
+- Journal entry 2026-04-25 says the cart-to-cart frame rotation parity gap was closed using raw Rust and reports a large speedup.
+- Decision 2026-04-17 says pure Cartesian-to-Cartesian frame-only rotations remain on the legacy path because that was faster under the public dispatcher at that time.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/migration/parity/_inputs.py`: cart-to-cart parity sample around lines 82-100.
+- `/Users/aleck/Code/adam-core-rust-migration/migration/parity/_rust_runner.py`: direct raw Rust transform call around lines 31-45.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/transform.py`: support predicate around lines 204-270.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/transform.py`: explicit Cartesian output exclusion around lines 256-263.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/status.py`: `coordinates.transform_coordinates` registry entry around lines 75-80.
+
+Impact:
+
+- The parity report can be technically correct for the raw kernel while misleading for the public API.
+- Status `default="rust"` for `coordinates.transform_coordinates` is too coarse if important public call shapes intentionally bypass the raw Rust dispatcher.
+- Reviewers may believe a public dispatch path has parity/performance coverage when only a lower-level kernel path was tested.
+
+Recommended action:
+
+- Split status/coverage into raw-kernel coverage and public-dispatch coverage.
+- Add public API parity tests for the actual `transform_coordinates(...)` dispatcher path.
+- If Cartesian-to-Cartesian is intentionally routed through `CartesianCoordinates.rotate`, document that as a separate Rust-backed public path rather than claiming raw dispatcher coverage.
+- Update `status.py` to encode unsupported or intentionally excluded cases.
+
+### 7. Medium/High: Benchmark Governance Still Points At Stale Live-Legacy Gates
+
+Evidence:
+
+- Journal correctly documents that the live `rust_backend_benchmark_gate.py` became contaminated because the supposed legacy path now calls Rust-backed methods internally.
+- `.gitignore` marks `migration/artifacts/rust_benchmark_gate.json` as stale and superseded.
+- `pyproject.toml` still has `rust-perf-gate` pointing to `migration/scripts/rust_backend_benchmark_gate.py` and outputting the stale artifact.
+- Workflow uploads or expects `migration/artifacts/rust_benchmark_gate.json`.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: `rust-perf-gate` around line 154.
+- `/Users/aleck/Code/adam-core-rust-migration/.gitignore`: stale benchmark artifact note around lines 123-127.
+- `/Users/aleck/Code/adam-core-rust-migration/.github/workflows/pip-build-lint-test-coverage.yml`: benchmark gate and upload behavior around lines 138-144.
+
+Impact:
+
+- CI may enforce an invalid performance comparison.
+- CI may fail on stale artifact behavior.
+- Performance governance is split between journal-described current strategy and committed script metadata.
+- The +20% gate can be satisfied, failed, or bypassed for reasons unrelated to true Rust-vs-baseline performance.
+
+Recommended action:
+
+- Remove or retire `rust_backend_benchmark_gate.py` from active CI unless it is rewritten to avoid contaminated legacy paths.
+- Promote `migration/parity/parity_speed.py` or a Rust-latency-baseline script as the active gate.
+- Ensure artifacts uploaded by CI match the current benchmark strategy.
+- Explicitly record waivers for APIs that pass cold latency but fail warm +20% p50/p95, especially photometry.
+
+### 8. Medium: Propagation Tests Lost An Independent Oracle
+
+Evidence:
+
+- Baseline tests used `spiceypy.sp.prop2b` as an independent math oracle.
+- Migration replaced this with Rust-backed self-consistency via forward/backward roundtrip plus conservation of energy and angular momentum.
+- The invariants are useful but are not equivalent to an independent implementation oracle.
+- The current test comment allows 100 m / 1 m/s, while the decision records 100 m / 1 mm/s.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/dynamics/tests/test_propagation.py`: `_propagate_2body_single` calls Rust wrapper around lines 21-33.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/dynamics/tests/test_propagation.py`: roundtrip/invariant test helper around lines 46-79.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/dynamics/tests/test_propagation.py`: comment and thresholds around lines 68-72.
+
+Impact:
+
+- Shared implementation bugs can survive if forward and backward propagation share the same bug.
+- Sign/unit mistakes may preserve some invariants while still being wrong relative to an external oracle.
+- The tolerance mismatch between decision and test weakens confidence in the documented validation contract.
+
+Recommended action:
+
+- Add at least one independent oracle fixture that does not call the same Rust implementation.
+- If `sp.prop2b` is intentionally removed because `spicekit` has no equivalent, store fixed expected vectors from a trusted oracle as test fixtures.
+- Reconcile the velocity tolerance: either tighten to 1 mm/s as recorded or update the decision with rationale for 1 m/s.
+
+### 9. Medium: Migration Status Registry Is Not A Trustworthy Source Of Truth
+
+Evidence:
+
+- `src/adam_core/_rust/status.py` describes itself as the single source of truth for migration state.
+- Every listed API has `status="dual"` and `default="rust"`.
+- Several legacy paths have been removed or are no longer true production alternatives.
+- Some entries are raw kernel status rather than public dispatch status.
+- Waiver state appears disconnected from the active registry/status story.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/status.py`: module docstring around lines 1-5.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/status.py`: status fields around lines 21-28.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/status.py`: all API entries around lines 31-186.
+
+Impact:
+
+- Governance reports can be inaccurate.
+- A reviewer cannot tell which APIs are truly dual, rust-only, raw-kernel-only, or public-rust-default.
+- Waivers and unsupported subcases become easy to lose.
+
+Recommended action:
+
+- Extend statuses to include at least `legacy`, `dual`, `rust-only`, `raw-kernel-only`, and `public-rust-default` or equivalent.
+- Track subcase exclusions for broad APIs like `transform_coordinates`.
+- Make status generation fail if it claims dual support but the legacy implementation/module is gone.
+
+### 10. Medium: Runtime Dependency Cleanup Is Incomplete
+
+Evidence:
+
+- `pyproject.toml` still includes heavy dependencies such as `jax`, `jaxlib`, and `numba` in runtime dependencies.
+- The migration removed many JAX production paths and describes retained JAX code as parity references.
+- If these dependencies are no longer production runtime requirements, they should not remain in core runtime dependencies.
+- If they are still required, the remaining production callsites should be explicitly documented.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: runtime dependencies around lines 27-53.
+
+Impact:
+
+- Users pay installation cost for unused heavy dependencies.
+- The packaging story is unclear: `spicekit` is omitted while potentially obsolete dependencies remain.
+- It is harder to validate that the Rust migration actually reduced runtime dependency surface.
+
+Recommended action:
+
+- Audit all production imports of `jax`, `jaxlib`, and `numba`.
+- Move parity/test-only dependencies into optional/test dependency groups.
+- Keep runtime dependencies minimal and aligned with the no-rustless contract.
+
+### 11. Medium: `calculate_chi2` Introduces A Public Behavior Change For Non-SPD Covariances
+
+Evidence:
+
+- Baseline used `np.linalg.inv` and would accept some invertible indefinite covariance matrices.
+- Rust implementation uses Cholesky decomposition and rejects non-positive-definite covariance matrices.
+- This is numerically and scientifically defensible for covariance matrices, but it is still a public behavior change if callers previously passed invertible non-SPD matrices.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/residuals.py`: warning and validation around lines 429-440.
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/residuals.py`: Rust call and assert around lines 442-449.
+- `/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_rs_coords/src/chi2.rs`: Cholesky/positive-definite rejection around lines 99-100.
+
+Impact:
+
+- Some existing caller inputs may now raise where they previously returned a value.
+- This is probably the right mathematical behavior, but it needs an explicit test and release note.
+
+Recommended action:
+
+- Document that covariance matrices must be symmetric positive definite.
+- Add tests for non-SPD input behavior.
+- Prefer explicit Python-side error message before entering Rust if that makes user diagnostics clearer.
+
+### 12. Medium: Publish/Wheel Build Story Needs Clarification
+
+Evidence:
+
+- `pyproject.toml` uses `maturin` as the build backend.
+- `publish.yml` still runs `pdm build`, then `pdm run rust-build` separately.
+- Under a maturin build backend, the relation between `pdm build`, `maturin build`, generated wheels, and uploaded artifacts needs to be explicit.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/pyproject.toml`: build system and `tool.maturin` configuration around lines 66-75.
+- `/Users/aleck/Code/adam-core-rust-migration/.github/workflows/publish.yml`: build sequence around lines 25-30.
+
+Impact:
+
+- Release automation may build the wrong artifact, duplicate artifacts, or fail to include the native extension as expected.
+- This is especially important because the migration declares Rust mandatory.
+
+Recommended action:
+
+- Define one authoritative wheel build path.
+- Test a built wheel in a clean environment and import `adam_core._rust_native`.
+- Ensure the publish workflow uploads only artifacts known to contain the Rust extension.
+
+### 13. Medium: Photometry Warm Performance Gate Is Unresolved
+
+Evidence:
+
+- Journal records four photometry APIs at warm parity or below the +20% gate after chunked Rayon fixes.
+- Cold performance strongly favors Rust due avoiding JAX import/JIT cost.
+- The decision was deferred among SIMD math, accepting warm parity, or waivers.
+
+Impact:
+
+- The original migration gate says Rust defaults require at least 1.2x p50/p95 speedup.
+- If photometry remains Rust-default without waivers, governance is inconsistent.
+
+Recommended action:
+
+- Either implement a SIMD/libm strategy that clears warm gates, or record explicit waivers with rationale based on cold-start/real-world CLI usage.
+- Ensure the active benchmark gate encodes the chosen policy rather than relying on journal narrative.
+
+### 14. Medium: `gaussIOD` Randomized Parity Is Intentionally Unwired But Needs Registry-Level Visibility
+
+Evidence:
+
+- Journal records that `gaussIOD` runner adapters exist but randomized fuzz is unwired because Rust Laguerre/deflation and legacy `np.roots`/LAPACK find different root subsets on roughly 15% of random triplets.
+- `status.py` still marks `orbit_determination.gaussIOD` as `status="dual"`, `default="rust"`.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/_rust/status.py`: `gaussIOD` entry around lines 172-178.
+
+Impact:
+
+- Governance can report randomized coverage that is not actually enforced.
+- The known root-subset mismatch is important enough that it should be visible in status or waivers, not only journal prose.
+
+Recommended action:
+
+- Add a status/waiver note for `gaussIOD` randomized parity exclusion.
+- Separate fixed-fixture parity from randomized fuzz parity in reports.
+
+### 15. Low/Medium: Rust/PyO3 Binding Layer Is Large And Will Become Hard To Maintain
+
+Evidence:
+
+- `rust/adam_core_py/src/lib.rs` contains many PyO3 wrappers in a single large file.
+- Recent wrappers such as weighted mean/covariance and chi-square do good validation, but the file is accumulating many unrelated APIs.
+
+Line references:
+
+- `/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_py/src/lib.rs`: weighted wrappers around lines 751-805.
+- `/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_py/src/lib.rs`: chi-square wrapper around lines 807-842.
+- `/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_py/src/lib.rs`: propagation arc wrappers around lines 897-974.
+
+Impact:
+
+- Not a merge blocker by itself.
+- Long-term maintainability and reviewability will degrade as more APIs are added.
+
+Recommended action:
+
+- After stabilization, split PyO3 bindings into modules by domain: coordinates, dynamics, photometry, orbit determination, SPICE.
+- Keep validation at the PyO3 boundary and avoid duplicating shape rules across Python and Rust.
+
+## Positive Technical Notes
+
+The review should not be read as dismissing the implementation. There is strong technical work here:
+
+- The migration includes substantial Rust kernel coverage across coordinates, photometry, propagation, ephemeris, orbit determination, Lambert/MOID, covariance, residuals, and SPICE-related paths.
+- The journal shows real investigation discipline: benchmark contamination was identified, photometry Rayon overhead was diagnosed, hyperbolic chi solver regression was root-caused, and gaussIOD randomized mismatch was analyzed rather than hidden by tolerance bumps.
+- The `spice_backend.py` direction is architecturally sound. Centralizing SPICE access behind a backend abstraction is preferable to scattered direct `spiceypy` imports.
+- PyO3 wrappers often validate shapes/dimensions before entering Rust, which is the right boundary pattern.
+- Recent `calculate_chi2` implementation is mathematically better than explicit inverse for SPD covariance matrices.
+- `weighted_mean` and `weighted_covariance` are good candidates for Rust: small, deterministic, and easy to parity-test.
+- Arc propagation work appears targeted at real OD inner-loop cost patterns rather than only synthetic batch throughput.
+- `git diff --check` being clean is a good baseline hygiene signal.
+
+## Risk Areas To Re-Review After Fixes
+
+After the stabilization pass, a follow-up reviewer should re-check:
+
+- Clean install from scratch, including `spicekit` availability.
+- Built wheel import of `adam_core._rust_native`.
+- All PDM scripts referenced by workflows.
+- Full CI workflow behavior after baseline rebase.
+- Public import compatibility against baseline module paths.
+- Status registry accuracy against actual dispatch behavior.
+- Performance gates after stale benchmark script removal.
+- `python -O` behavior or equivalent validation that no production logic relies on `assert`.
+- Docs build under the baseline RTD structure.
+- Parity reports for public APIs, not only raw kernels.
+
+## Recommended Stabilization Checklist
+
+1. Declare/package `spicekit` correctly and validate clean install.
+2. Rebase or merge current baseline main at `22a1efa3` or newer.
+3. Preserve baseline docs/RTD/CI changes and re-home Rust docs into the new reference structure.
+4. Remove or fix stale PDM scripts and workflow steps.
+5. Replace nullable Rust wrappers and production `assert`s with explicit fail-fast exceptions.
+6. Restore deleted public modules as compatibility shims or document intentional removals through a proper deprecation process.
+7. Update `status.py` so it reflects actual public dispatch, raw kernel coverage, rust-only APIs, dual APIs, waivers, and unsupported subcases.
+8. Retire contaminated live-legacy benchmark gate from active CI.
+9. Promote the current parity/speed harness or Rust latency baseline strategy into CI.
+10. Add independent oracle fixtures for propagation, or fixed trusted vectors if no runtime oracle remains.
+11. Resolve photometry warm-gate policy with SIMD work or explicit waivers.
+12. Add clean wheel/release validation under the maturin build backend.
+13. Audit runtime dependencies and move parity/test-only dependencies out of core runtime dependencies.
+14. Add public import compatibility tests comparing baseline-known module paths.
+15. Re-run full rust-required pytest, cargo test, cargo fmt, cargo clippy, parity fuzz, and speed gates from a clean checkout.
+
+## Bottom Line
+
+The migration is technically promising but operationally inconsistent. It should not be approved or merged until the packaging, CI, baseline integration, public API compatibility, runtime contract, and governance-reporting issues are fixed. Once those are addressed, the Rust kernel work itself looks worth continuing and likely close to a viable migration path.
