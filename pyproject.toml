@@ -51,6 +51,9 @@ dependencies = [
   "naif-eop-historical",
   "naif-earth-itrf93",
   "timezonefinder",
+  "rebound>=4.6.0",
+  "assist>=1.1.11",
+  "mpcq>=0.4.0; python_version < '3.13'",
 ]
 
 [project.optional-dependencies]
