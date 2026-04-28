@@ -874,6 +874,9 @@ def plot_risk_corridor(
     logo: bool = True,
     height: Optional[int] = None,
     width: Optional[int] = None,
+    map_style: Literal[
+        "carto-positron", "open-street-map", "white-bg"
+    ] = "carto-positron",
 ) -> go.Figure:
     """
     Plot the risk corridor with toggleable globe/map views.
@@ -890,6 +893,9 @@ def plot_risk_corridor(
         The height of the plot.
     width : int, optional
         The width of the plot.
+    map_style : {"carto-positron", "open-street-map", "white-bg"}, optional
+        Basemap style used by Plotly map tiles. Defaults to ``"carto-positron"``
+        to avoid OpenStreetMap tile-rate errors in shared/public viewing contexts.
 
     Returns
     -------
@@ -929,7 +935,7 @@ def plot_risk_corridor(
         height=height,
         width=width,
         map=dict(
-            style="open-street-map",
+            style=map_style,
             center=dict(lat=center_lat, lon=center_lon),
             zoom=1,
         ),
