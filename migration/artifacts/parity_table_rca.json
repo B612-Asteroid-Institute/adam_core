@@ -15,7 +15,12 @@
     "physical_magnitude": "1.89e-10 days \u2248 16 microseconds on Tp \u2248 MJD 60000. omega column: 1.51e-11 deg \u2248 50 microarcsec.",
     "root_cause": "Same as cart\u2192keplerian: M_anom \u2192 Tp conversion accumulates atan2 + division by small n_mean. The omega column hits 100 ulps of degree because raan+omega is a composed angle.",
     "verdict": "equally accurate. JPL Horizons publishes Tp at ~1-second precision; rust-vs-legacy 16\u03bcs drift is below the candle's publishable resolution.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "coordinates.cartesian_to_geodetic",
@@ -33,7 +38,12 @@
     "physical_magnitude": "1.4e-14 = 1 ulp at degree scale.",
     "root_cause": "Bowring iteration converges to same root within 1 ulp.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "coordinates.cartesian_to_keplerian",
@@ -51,7 +61,12 @@
     "physical_magnitude": "2.76e-10 days = 24 microseconds, on tp ~ MJD 60000-62000. All other columns \u22641-100 ulps absolute; all angular columns \u2264 0.05 mas (microarcsec).",
     "root_cause": "tp = t0 + dtp where dtp = -M_anom/n_mean. M_anom is computed via calc_mean_anomaly(nu, e), which composes atan2 + ln (for hyperbolic) / arcsin (for elliptic). Each transcendental contributes ~1 ulp at degree scale; division by small n_mean amplifies the ulp drift. Rust's f64 stdlib implementations of atan2/ln differ from JAX's XLA-compiled versions at the last 1-2 ulps.",
     "verdict": "equally accurate. The Horizons standard candle (test_keplerian.py) holds rust to atol=1e-12 on q, Q, p, n, atol=1e-10 on P (period). Rust passes those with margin; the 24\u03bcs rust-vs-legacy tp drift is well below tp's intrinsic precision (n-body perturbations move tp by seconds/year). Neither rust nor legacy is provably closer to truth on tp \u2014 JPL Horizons publishes tp with ~1-second precision.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "coordinates.cartesian_to_spherical",
@@ -69,7 +84,12 @@
     "physical_magnitude": "1.4e-14 deg \u2248 50 femtoarcsec.",
     "root_cause": "atan2 + asin compose ~1-2 ulps near wraparound.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "coordinates.cometary.to_cartesian",
@@ -87,7 +107,12 @@
     "physical_magnitude": "Position \u2264 4.3e-14 AU \u2248 6 picometers; velocity \u2264 3.2e-17 AU/d.",
     "root_cause": "Same Newton iteration as keplerian\u2192cartesian, after q\u2192a conversion. Same ~2 ulp last-bit drift.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "coordinates.keplerian.to_cartesian",
@@ -105,7 +130,12 @@
     "physical_magnitude": "Position columns \u2264 6.9e-14 AU \u2248 10 picometers. Velocity columns \u2264 1.2e-17 AU/d \u2248 0.2 mm/year \u2014 true bit-parity.",
     "root_cause": "Newton iteration on Kepler's equation E - e\u00b7sin(E) = M. Rust's stdlib sin/cos differ from XLA at last ulp; iteration converges to same root within ~2 ulps.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "coordinates.spherical.to_cartesian",
@@ -123,7 +153,12 @@
     "physical_magnitude": "3.5e-14 AU = 5 picometers.",
     "root_cause": "sin/cos chain composes ~2 ulps at AU scale.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "coordinates.transform_coordinates",
@@ -141,7 +176,19 @@
     "physical_magnitude": "1.7e-18 AU = sub-femtometer (essentially exact).",
     "root_cause": "6\u00d76 constant rotation matrix multiply only \u2014 no transcendentals.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Random fuzz exercises the raw NumPy kernel for cartesian ec<->eq frame rotation. RM-P1-009 owns public-dispatch parity for the broader quivr/transform_coordinates surface.",
+    "covered_subcases": [
+      "Cartesian->Cartesian ecliptic/equatorial constant frame rotation"
+    ],
+    "excluded_subcases": [
+      "public dispatcher quivr-object call shapes",
+      "time-varying ITRF93 rotations",
+      "origin translation and user-kernel SPICE body coverage",
+      "non-Cartesian representation conversions composed by dispatcher"
+    ]
   },
   {
     "api_id": "dynamics.add_light_time",
@@ -159,7 +206,12 @@
     "physical_magnitude": "7.1e-15 AU = 1 picometer. light_time worst 1.1e-16 day = 9.6 femtoseconds.",
     "root_cause": "Each Newton LT iteration solves chi via universal-Kepler (per row), then back-propagates. ~3-4 iterations \u00d7 1 ulp drift = ~4 ulps total. Rust f64 sqrt/log differs from XLA's at last ulp.",
     "verdict": "bit-parity. Both rust and legacy converge to the same physical root within ~1 ulp; differ only in last-ulp rounding. Picometer-scale aberration drift is 14+ orders below astrometric noise.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.add_light_time",
@@ -177,7 +229,12 @@
     "physical_magnitude": "7.1e-15 AU = 1 picometer. light_time worst 1.1e-16 day = 9.6 femtoseconds.",
     "root_cause": "Each Newton LT iteration solves chi via universal-Kepler (per row), then back-propagates. ~3-4 iterations \u00d7 1 ulp drift = ~4 ulps total. Rust f64 sqrt/log differs from XLA's at last ulp.",
     "verdict": "bit-parity. Both rust and legacy converge to the same physical root within ~1 ulp; differ only in last-ulp rounding. Picometer-scale aberration drift is 14+ orders below astrometric noise.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.calc_mean_motion",
@@ -195,7 +252,12 @@
     "physical_magnitude": "3.5e-18 = exactly 1 ulp at AU\u00b3/d\u00b2 scale.",
     "root_cause": "Single sqrt \u2014 atomic op.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_ephemeris_2body",
@@ -213,7 +275,12 @@
     "physical_magnitude": "spherical worst 8.5e-14 deg = 0.3 picoarcsec; light_time 1.1e-16 day = 9.6 fs; aberrated_state 1.4e-14 AU = 2 pm.",
     "root_cause": "Composed ~5 transcendentals (sqrt, atan2, sin, cos, asin). 1-2 ulp per op accumulates to ~1e-13 abs.",
     "verdict": "bit-parity. Horizons-fixture ephemeris test (test_ephemeris.py) holds rust to atol=1e-10 deg (0.36 mas) \u2014 well below DE440's 10 mas noise.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_ephemeris_2body",
@@ -231,7 +298,12 @@
     "physical_magnitude": "spherical worst 8.5e-14 deg = 0.3 picoarcsec; light_time 1.1e-16 day = 9.6 fs; aberrated_state 1.4e-14 AU = 2 pm.",
     "root_cause": "Composed ~5 transcendentals (sqrt, atan2, sin, cos, asin). 1-2 ulp per op accumulates to ~1e-13 abs.",
     "verdict": "bit-parity. Horizons-fixture ephemeris test (test_ephemeris.py) holds rust to atol=1e-10 deg (0.36 mas) \u2014 well below DE440's 10 mas noise.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_ephemeris_2body",
@@ -249,7 +321,12 @@
     "physical_magnitude": "spherical worst 8.5e-14 deg = 0.3 picoarcsec; light_time 1.1e-16 day = 9.6 fs; aberrated_state 1.4e-14 AU = 2 pm.",
     "root_cause": "Composed ~5 transcendentals (sqrt, atan2, sin, cos, asin). 1-2 ulp per op accumulates to ~1e-13 abs.",
     "verdict": "bit-parity. Horizons-fixture ephemeris test (test_ephemeris.py) holds rust to atol=1e-10 deg (0.36 mas) \u2014 well below DE440's 10 mas noise.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_ephemeris_2body_with_covariance",
@@ -267,7 +344,12 @@
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
     "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_ephemeris_2body_with_covariance",
@@ -285,7 +367,12 @@
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
     "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_ephemeris_2body_with_covariance",
@@ -303,7 +390,12 @@
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
     "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_ephemeris_2body_with_covariance",
@@ -321,7 +413,12 @@
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
     "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.propagate_2body",
@@ -339,7 +436,12 @@
     "physical_magnitude": "\u22648.9e-14 AU = ~13 picometers.",
     "root_cause": "Newton iteration on universal-Kepler equation. Chi solver converges to same root within ~2 ulps of f64.",
     "verdict": "bit-parity. The hyperbolic Oumuamua orbit roundtrip test (test_propagation.py) holds rust to atol=100m position / 1mm/s velocity over 10000-day span \u2014 far tighter than the 13-pm rust-vs-legacy drift.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.propagate_2body_with_covariance",
@@ -357,7 +459,12 @@
     "physical_magnitude": "State worst 8.9e-14 AU; covariance worst 1.7e-14 (AU,AU/d)\u00b2 with worst-rel 5.2e-9 \u2014 ~6 sig figs accurate.",
     "root_cause": "\u03a3_out = J \u03a3_in J^T = 6\u00d76\u00d76 matmul. Each multiplication accumulates ~6 sig figs of fp drift relative to JAX's jacfwd path; rtol=1e-6 captures this without rejecting bit-clean cells.",
     "verdict": "more accurate than legacy on stiff inputs. Per journal 2026-04-22: rust Dual<6> AD produces non-NaN tangents on 2/2000 chaotic inputs where JAX's jacfwd overflows to ~1e47 magnitude. Verified rust matches finite-difference Jacobian where JAX diverges.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.propagate_2body_with_covariance",
@@ -375,7 +482,12 @@
     "physical_magnitude": "State worst 8.9e-14 AU; covariance worst 1.7e-14 (AU,AU/d)\u00b2 with worst-rel 5.2e-9 \u2014 ~6 sig figs accurate.",
     "root_cause": "\u03a3_out = J \u03a3_in J^T = 6\u00d76\u00d76 matmul. Each multiplication accumulates ~6 sig figs of fp drift relative to JAX's jacfwd path; rtol=1e-6 captures this without rejecting bit-clean cells.",
     "verdict": "more accurate than legacy on stiff inputs. Per journal 2026-04-22: rust Dual<6> AD produces non-NaN tangents on 2/2000 chaotic inputs where JAX's jacfwd overflows to ~1e47 magnitude. Verified rust matches finite-difference Jacobian where JAX diverges.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.solve_lambert",
@@ -393,7 +505,12 @@
     "physical_magnitude": "3.8e-15 AU/d \u2248 0.0001 mm/s.",
     "root_cause": "Householder iteration converges to atol/rtol=1e-10 internally; output is at fp precision.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "orbit_determination.calcGauss",
@@ -411,7 +528,12 @@
     "physical_magnitude": "0.0e+00 \u2014 bit-identical.",
     "root_cause": "Closed-form Lagrange coefficients only.",
     "verdict": "bit-parity (exact: 0e+00).",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "orbit_determination.calcGibbs",
@@ -429,7 +551,12 @@
     "physical_magnitude": "0.0e+00 \u2014 bit-identical (FP-deterministic chain).",
     "root_cause": "Pure cross-products + scalar ops, no transcendentals.",
     "verdict": "bit-parity (exact: 0e+00).",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "orbit_determination.calcHerrickGibbs",
@@ -447,7 +574,12 @@
     "physical_magnitude": "0.0e+00 \u2014 bit-identical.",
     "root_cause": "Pure scalar arithmetic, no transcendentals.",
     "verdict": "bit-parity (exact: 0e+00).",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "photometry.calculate_apparent_magnitude_v",
@@ -465,7 +597,12 @@
     "physical_magnitude": "2.8e-12 mag \u2248 1 ulp at H-G mag scale.",
     "root_cause": "log10 + powf chain composes ~1-2 ulps.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "photometry.calculate_apparent_magnitude_v_and_phase_angle",
@@ -483,7 +620,12 @@
     "physical_magnitude": "magnitude 2.1e-12 mag (bit-parity); phase_angle 7.9e-12 deg = 28 picoarcsec (same as standalone calculate_phase_angle).",
     "root_cause": "Same composed atan2 + small-angle ceiling as standalone phase_angle. 1 picoarcsec scale is far below any noise.",
     "verdict": "equally accurate (see calculate_phase_angle entry).",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "photometry.calculate_apparent_magnitude_v_and_phase_angle",
@@ -501,7 +643,12 @@
     "physical_magnitude": "magnitude 2.1e-12 mag (bit-parity); phase_angle 7.9e-12 deg = 28 picoarcsec (same as standalone calculate_phase_angle).",
     "root_cause": "Same composed atan2 + small-angle ceiling as standalone phase_angle. 1 picoarcsec scale is far below any noise.",
     "verdict": "equally accurate (see calculate_phase_angle entry).",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "photometry.calculate_phase_angle",
@@ -519,7 +666,12 @@
     "physical_magnitude": "7.87e-12 deg \u2248 28 picoarcsec.",
     "root_cause": "Composed sqrt(1\u2212cos) and sqrt(1+cos) lose precision at small phase angles (near 0\u00b0), where 1\u2212cos\u2248\u03b1\u00b2/2 has relative error 2 ulp. The half-angle atan2 then doubles this. JAX uses XLA's vectorized `atan2`, rust uses f64 stdlib \u2014 they agree to ~1-2 ulps on the small-angle limb.",
     "verdict": "equally accurate. LSST single-observation astrometric uncertainty is ~1 mas = 10\u2079 picoarcsec; DE440 ephemeris noise is ~10 mas. 28 picoarcsec rust-vs-legacy drift is 11 orders of magnitude below either.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "photometry.predict_magnitudes",
@@ -537,7 +689,12 @@
     "physical_magnitude": "2.8e-12 mag \u2014 same as standalone V-band.",
     "root_cause": "Same as calculate_apparent_magnitude_v + 1 fma for delta.",
     "verdict": "bit-parity.",
-    "state": "measured"
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.calculate_perturber_moids",
@@ -555,7 +712,12 @@
     "physical_magnitude": "",
     "root_cause": "",
     "verdict": "",
-    "state": "orchestration-implied"
+    "state": "orchestration-implied",
+    "registry_status": "orchestration-rust-default",
+    "parity_coverage": "orchestration-implied",
+    "coverage_note": "Public quivr orchestration over the Rust MOID batch kernel. Baseline-main random fuzz is deferred because it needs a heavier Orbits/SPK subprocess adapter.",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.calculate_perturber_moids",
@@ -573,7 +735,12 @@
     "physical_magnitude": "",
     "root_cause": "",
     "verdict": "",
-    "state": "orchestration-implied"
+    "state": "orchestration-implied",
+    "registry_status": "orchestration-rust-default",
+    "parity_coverage": "orchestration-implied",
+    "coverage_note": "Public quivr orchestration over the Rust MOID batch kernel. Baseline-main random fuzz is deferred because it needs a heavier Orbits/SPK subprocess adapter.",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "dynamics.generate_porkchop_data",
@@ -591,7 +758,12 @@
     "physical_magnitude": "",
     "root_cause": "",
     "verdict": "",
-    "state": "orchestration-implied"
+    "state": "orchestration-implied",
+    "registry_status": "orchestration-rust-default",
+    "parity_coverage": "orchestration-implied",
+    "coverage_note": "Public quivr orchestration over Rust Lambert/grid kernels. Baseline-main random fuzz is deferred because it needs an Orbits-quivr subprocess adapter.",
+    "covered_subcases": [],
+    "excluded_subcases": []
   },
   {
     "api_id": "orbit_determination.gaussIOD",
@@ -609,7 +781,16 @@
     "physical_magnitude": "",
     "root_cause": "",
     "verdict": "",
-    "state": "unwired"
+    "state": "random-fuzz-excluded",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz-excluded",
+    "coverage_note": "Runner adapters are retained for fixed-fixture/manual parity, but randomized fuzz is intentionally disabled because Rust Laguerre+deflation and legacy np.roots/LAPACK accept different physical root subsets on some random triplets.",
+    "covered_subcases": [
+      "well-conditioned fixed fixtures/manual triplets"
+    ],
+    "excluded_subcases": [
+      "random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
+    ]
   },
   {
     "api_id": "orbit_determination.gaussIOD",
@@ -627,6 +808,15 @@
     "physical_magnitude": "",
     "root_cause": "",
     "verdict": "",
-    "state": "unwired"
+    "state": "random-fuzz-excluded",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz-excluded",
+    "coverage_note": "Runner adapters are retained for fixed-fixture/manual parity, but randomized fuzz is intentionally disabled because Rust Laguerre+deflation and legacy np.roots/LAPACK accept different physical root subsets on some random triplets.",
+    "covered_subcases": [
+      "well-conditioned fixed fixtures/manual triplets"
+    ],
+    "excluded_subcases": [
+      "random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
+    ]
   }
 ]

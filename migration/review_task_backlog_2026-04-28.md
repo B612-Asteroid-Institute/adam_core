@@ -743,18 +743,17 @@ Completion notes:
 
 ## P1 Stabilization Tasks
 
-Recommended current order after 2026-04-29 reviewer feedback:
+Recommended current order after RM-P1-008/RM-P1-015 completion:
 
-1. RM-P1-008, with RM-P1-015 folded into the same change.
-2. RM-P1-009.
-3. RM-P1-010, including lockfile/docs-dependency cleanup and a passing
+1. RM-P1-009.
+2. RM-P1-010, including lockfile/docs-dependency cleanup and a passing
    `pdm run docs-check`.
-4. RM-P1-011.
-5. RM-P1-012.
-6. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
-7. RM-P1-013 / RM-WE2-001.
-8. RM-P1-018.
-9. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
+3. RM-P1-011.
+4. RM-P1-012.
+5. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
+6. RM-P1-013 / RM-WE2-001.
+7. RM-P1-018.
+8. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
 
 Reviewer-feedback disposition:
 
@@ -774,7 +773,7 @@ Reviewer-feedback disposition:
 
 ### RM-P1-008: Make `status.py` A Trustworthy Registry
 
-Status: open
+Status: complete (2026-04-29); RM-P1-015 folded into this task.
 
 Scope:
 
@@ -788,6 +787,62 @@ Scope:
 Acceptance:
 
 - A reviewer can tell which APIs are public-rust-default, raw-kernel-only, rust-only, dual, waived, or partially covered.
+
+Completion notes:
+
+- `src/adam_core/_rust/status.py` now uses an explicit registry taxonomy:
+  `public-rust-default`, `raw-kernel-only`, `orchestration-rust-default`,
+  `rust-only`, `dual`, and `legacy`, with typed boundary, default-backend, and
+  parity-coverage metadata.
+- Registry rows encode direct randomized-fuzz coverage, targeted-test-only
+  coverage, orchestration-implied coverage, and randomized-fuzz exclusions.
+- `orbit_determination.gaussIOD` is explicitly
+  `random-fuzz-excluded`, with the root-subset divergence rationale recorded
+  in both registry metadata and the canonical parity table output.
+- `coordinates.transform_coordinates` is marked as partial randomized-fuzz
+  coverage with supported and excluded subcases called out; RM-P1-009 remains
+  open for public dispatcher/quivr parity.
+- Wave D3/E2/E3 helper surfaces such as `calculate_chi2`, residual helpers,
+  MOID/porkchop helpers, Tisserand, absolute-magnitude fits, weighted stats,
+  and transform/rotation raw kernels are represented as targeted-test coverage
+  instead of being overclaimed as randomized-fuzz coverage.
+- `dynamics.add_light_time` was added to the registry so the fuzzed API set and
+  status registry agree.
+- `validate_api_migrations()` now fails import/report generation on duplicate
+  IDs, invalid enum values, dual rows without a current legacy implementation,
+  Rust-default rows without a Rust module, randomized-fuzz exclusions without
+  excluded subcases, and coverage states that require explanatory notes.
+- `migration/scripts/parity_table.py`,
+  `migration/scripts/rust_migration_state_report.py`, and
+  `migration/scripts/rust_backend_benchmark_gate.py` now consume the registry
+  metadata rather than inferring coverage from tolerance rationale text.
+- Added `src/adam_core/tests/test_rust_migration_status.py` guardrails that
+  validate registry invariants, fuzz-generator alignment, tolerance-manifest
+  alignment, `gaussIOD` exclusion visibility, transform partial-coverage
+  visibility, and latency-gate scope.
+
+Validation:
+
+- `pdm run script-preflight`: passed.
+- `pdm run rust-latency-gate`: passed; compared 22 latency-gate APIs against
+  the Rust-only latency baseline.
+- `pdm run rust-quality`: passed.
+- `pdm run test-rust-full`: passed with escalated permissions:
+  `730 passed, 144 skipped, 2 deselected, 56 warnings`.
+- A non-escalated full-suite run failed only from sandbox limits
+  (`psutil`/Ray macOS `sysctl` denial and DNS/network denial). The first
+  escalated rerun then exposed two deterministic-test hygiene failures in
+  observer tests caused by selecting an arbitrary `OBSERVATORY_CODES` set
+  member whose MPC parallax coefficients were `NaN`; the tests now choose a
+  sorted valid Earth-based MPC code.
+- `pdm run rust-parity-main`: passed; all 22 direct fuzz APIs passed
+  randomized parity against the baseline-main oracle with only existing
+  photometry warm waivers in speed output.
+- `pdm run rust-parity-speed-cold`: passed with existing temporary photometry
+  warm waivers only.
+- Canonical tables regenerated:
+  `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`.
 
 ### RM-P1-009: Add Public Dispatch Parity For `coordinates.transform_coordinates`
 
@@ -889,7 +944,7 @@ Acceptance:
 
 ### RM-P1-015: Make `gaussIOD` Randomized Parity Exclusion Visible
 
-Status: open; fold into RM-P1-008
+Status: complete (2026-04-29); folded into RM-P1-008
 
 Scope:
 

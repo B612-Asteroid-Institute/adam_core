@@ -11,6 +11,7 @@ Combines three sources into one table:
    `rust_latency_current.json` — post-legacy Rust-only latency baseline and
    last-run measurements from `rust_backend_benchmark_gate.py`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from adam_core._rust import API_MIGRATIONS
+from adam_core._rust import API_MIGRATIONS, validate_api_migrations
 
 # Benchmark key → api_id mapping (same mapping the history snapshot uses).
 BENCH_TO_API_ID = {
@@ -92,17 +93,18 @@ def _build_rows(
     baseline: dict[str, Any],
     current: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    validate_api_migrations()
     api_id_to_bench_key = {v: k for k, v in BENCH_TO_API_ID.items()}
 
     rows: list[dict[str, Any]] = []
     for migration in API_MIGRATIONS:
-        if not migration.rust_module:
-            continue
-
         row: dict[str, Any] = {
             "api_id": migration.api_id,
             "default_backend": migration.default,
             "status": migration.status,
+            "boundary": migration.boundary,
+            "parity_coverage": migration.parity_coverage,
+            "partial": bool(migration.excluded_subcases),
             "waiver": migration.waiver or "-",
             "historical_speedup_p50": None,
             "historical_speedup_p95": None,
@@ -129,7 +131,7 @@ def _build_rows(
                 row["historical_speedup_p95"] = hist.get("speedup_p95")
 
         bench_key = api_id_to_bench_key.get(migration.api_id)
-        if bench_key:
+        if migration.latency_gate and bench_key:
             if bench_key in baseline:
                 b = baseline[bench_key]
                 row["rust_p50_baseline_s"] = b.get("rust_seconds_p50")
@@ -159,6 +161,8 @@ def _render_table(rows: list[dict[str, Any]]) -> str:
         "API",
         "Default",
         "Status",
+        "Boundary",
+        "Parity coverage",
         "Hist speedup p50/p95",
         "Rust p50 base (ms)",
         "Rust p50 cur (ms)",
@@ -189,6 +193,12 @@ def _render_table(rows: list[dict[str, Any]]) -> str:
                 row["api_id"],
                 str(row["default_backend"]),
                 str(row["status"]),
+                str(row["boundary"]),
+                (
+                    f"{row['parity_coverage']} (partial)"
+                    if row["partial"]
+                    else str(row["parity_coverage"])
+                ),
                 _speedup_cell(
                     row["historical_speedup_p50"], row["historical_speedup_p95"]
                 ),
@@ -235,9 +245,7 @@ def main() -> None:
         default=Path("migration/artifacts/rust_latency_current.json"),
         help="Latest Rust-only latency measurement (if available).",
     )
-    parser.add_argument(
-        "--format", choices=("table", "json"), default="table"
-    )
+    parser.add_argument("--format", choices=("table", "json"), default="table")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 

@@ -1,8 +1,10 @@
-"""Per-API parity tolerance table — single source of truth.
+"""Per-API baseline-main randomized parity tolerance table.
 
-Every rust-default API in ``src/adam_core/_rust/status.py`` MUST have an
-entry here. The values mirror the per-API tolerances established when
-each port was shipped (see journal.md entries by date).
+Every registry row in ``src/adam_core/_rust/status.py`` with
+``parity_coverage`` set to ``"random-fuzz"``, ``"random-fuzz-excluded"``, or
+``"orchestration-implied"`` must have an entry here. Targeted-test-only and
+raw-kernel-only rows are intentionally tracked in the registry instead of this
+baseline-main random-fuzz manifest.
 
 `atol`/`rtol` apply via ``np.testing.assert_allclose(rust, legacy, atol=atol, rtol=rtol)``.
 For tuple outputs (e.g. ephemeris emits ``(spherical, lt, cart)``) we
@@ -17,7 +19,7 @@ loose tolerances over time.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Mapping
 
 
@@ -86,18 +88,16 @@ class ToleranceSpec:
 # ---------------------------------------------------------------------------
 # Per-API tolerance table.
 #
-# Coverage: every rust-default API in src/adam_core/_rust/status.py PLUS
-# the orchestration functions (calculate_perturber_moids, generate_porkchop_data,
-# add_light_time) that compose them.
+# Coverage: randomized baseline-main parity entries are declared by
+# `src/adam_core/_rust/status.py` via `parity_coverage`. This table stores the
+# tolerance/RCA data for those entries.
 # ---------------------------------------------------------------------------
 
 TOLERANCES: dict[str, ToleranceSpec] = {
     # ---- coordinates representation transforms (numpy boundary) ----
     "coordinates.cartesian_to_spherical": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-11)},
-        rationale=(
-            "Spherical output of cart→sph composed of sqrt + atan2 + asin."
-        ),
+        rationale=("Spherical output of cart→sph composed of sqrt + atan2 + asin."),
         dominant_column="lon (deg) at 0°/360° wraparound",
         physical_magnitude="1.4e-14 deg ≈ 50 femtoarcsec.",
         root_cause="atan2 + asin compose ~1-2 ulps near wraparound.",
@@ -362,9 +362,7 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     # ---- photometry ----
     "photometry.calculate_phase_angle": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-10)},
-        rationale=(
-            "Stable 2·atan2(sqrt(1-cos), sqrt(1+cos)) form for cos→α."
-        ),
+        rationale=("Stable 2·atan2(sqrt(1-cos), sqrt(1+cos)) form for cos→α."),
         dominant_column="α (deg)",
         physical_magnitude="7.87e-12 deg ≈ 28 picoarcsec.",
         root_cause=(
@@ -394,9 +392,7 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "magnitude": OutputTol(atol=1e-12, rtol=1e-12),
             "phase_angle": OutputTol(atol=1e-10),
         },
-        rationale=(
-            "Fused mag+alpha — same kernels as standalone; same ulp ceiling."
-        ),
+        rationale=("Fused mag+alpha — same kernels as standalone; same ulp ceiling."),
         dominant_column="phase_angle (deg)",
         physical_magnitude=(
             "magnitude 2.1e-12 mag (bit-parity); phase_angle 7.9e-12 deg "

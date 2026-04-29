@@ -11,6 +11,27 @@ from ..observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS, Ob
 from ..state import get_mpc_observer_state, get_observer_state
 
 
+def _has_geodetic_coordinates(code: str) -> bool:
+    parallax_coeffs = OBSERVATORY_PARALLAX_COEFFICIENTS.select("code", code)
+    if len(parallax_coeffs) == 0:
+        return False
+    row = parallax_coeffs.table.to_pylist()[0]
+    return not np.any(np.isnan([row["longitude"], row["cos_phi"], row["sin_phi"]]))
+
+
+def _valid_mpc_code(*, backend=None) -> str | None:
+    for code in sorted(OBSERVATORY_CODES):
+        if code == "500" or len(code) != 3 or not _has_geodetic_coordinates(code):
+            continue
+        if backend is None:
+            return code
+        try:
+            backend.bodn2c(code)
+        except NotCovered:
+            return code
+    return None
+
+
 @pytest.fixture
 def codes_times() -> tuple[pa.Array, Timestamp]:
     codes = pa.array(
@@ -156,14 +177,8 @@ def test_mpc_observatory_code():
     # Both should return identical results
     np.testing.assert_allclose(geocenter_state.values, earth_state.values, rtol=1e-10)
 
-    # Test a non-geocenter MPC code if available
-    non_geocenter_codes = [
-        code for code in OBSERVATORY_CODES if code != "500" and len(code) == 3
-    ]
-
-    if non_geocenter_codes:
-        # Use the first available MPC code
-        test_code = non_geocenter_codes[0]
+    test_code = _valid_mpc_code()
+    if test_code is not None:
 
         # Get state using the MPC code
         mpc_state = get_observer_state(
@@ -214,17 +229,8 @@ def test_mpc_vs_spice_precedence(tmp_path):
 
     backend = get_backend()
 
-    # Pick an MPC code not already in SPICE's body-name table.
-    test_mpc_code = None
-    for code in OBSERVATORY_CODES:
-        if code == "500" or len(code) != 3:
-            continue
-        try:
-            backend.bodn2c(code)
-        except NotCovered:
-            test_mpc_code = code
-            break
-
+    # Pick a valid Earth-based MPC code not already in SPICE's body-name table.
+    test_mpc_code = _valid_mpc_code(backend=backend)
     if test_mpc_code is None:
         pytest.skip("Could not find a suitable MPC code for this test")
 

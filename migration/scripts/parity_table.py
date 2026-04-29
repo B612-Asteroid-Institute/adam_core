@@ -25,6 +25,8 @@ from typing import Any, Optional
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from adam_core._rust.status import API_MIGRATIONS_BY_ID, validate_api_migrations
+
 from migration.parity import _inputs, parity_fuzz, tolerances
 
 DEFAULT_PARITY_ARTIFACT = Path("migration/artifacts/parity_gate.json")
@@ -43,17 +45,25 @@ def _truncate(text: str, n: int | None) -> str:
 def _build_rows(
     fuzz_results: list[parity_fuzz.ApiResult],
 ) -> list[dict]:
+    validate_api_migrations()
     rows = []
     by_api = {r.api_id: r for r in fuzz_results}
 
     measured_ids = set(by_api.keys())
     wired_ids = set(_inputs.all_api_ids())
     declared_ids = set(tolerances.all_api_ids())
+    missing_registry = sorted(declared_ids - set(API_MIGRATIONS_BY_ID))
+    if missing_registry:
+        raise RuntimeError(
+            "Parity tolerance entries missing from API_MIGRATIONS registry: "
+            + ", ".join(missing_registry)
+        )
 
     # Measured entries (one row per output)
     for api_id in sorted(measured_ids):
         spec = tolerances.get(api_id)
         api_result = by_api[api_id]
+        migration = API_MIGRATIONS_BY_ID[api_id]
         for out_name, tol in spec.outputs.items():
             worst_abs = 0.0
             worst_rel = 0.0
@@ -81,19 +91,25 @@ def _build_rows(
                     "root_cause": spec.root_cause,
                     "verdict": spec.verdict,
                     "state": "measured",
+                    "registry_status": migration.status,
+                    "parity_coverage": migration.parity_coverage,
+                    "coverage_note": migration.coverage_note,
+                    "covered_subcases": migration.covered_subcases,
+                    "excluded_subcases": migration.excluded_subcases,
                 }
             )
 
-    # Orchestration APIs whose parity is structurally implied by their
-    # underlying kernel entries — recognized by a "ORCHESTRATION" prefix
-    # in the rationale string. We surface them as their own row state.
-    orchestration_markers = ("ORCHESTRATION",)
-
     for api_id in sorted(declared_ids - measured_ids):
         spec = tolerances.get(api_id)
-        is_orch = any(m in spec.rationale for m in orchestration_markers)
-        if is_orch:
+        migration = API_MIGRATIONS_BY_ID[api_id]
+        if migration.parity_coverage == "orchestration-implied":
             state = "orchestration-implied"
+        elif migration.parity_coverage == "random-fuzz-excluded":
+            state = "random-fuzz-excluded"
+        elif migration.parity_coverage == "targeted-tests":
+            state = "targeted-tests"
+        elif migration.parity_coverage == "manual-only":
+            state = "manual-only"
         elif api_id in wired_ids:
             state = "wired-not-measured"
         else:
@@ -117,6 +133,11 @@ def _build_rows(
                     "root_cause": spec.root_cause,
                     "verdict": spec.verdict,
                     "state": state,
+                    "registry_status": migration.status,
+                    "parity_coverage": migration.parity_coverage,
+                    "coverage_note": migration.coverage_note,
+                    "covered_subcases": migration.covered_subcases,
+                    "excluded_subcases": migration.excluded_subcases,
                 }
             )
     return rows
@@ -160,6 +181,12 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
             flag = " (skipped)"
         elif r["state"] == "orchestration-implied":
             flag = " (orchestration)"
+        elif r["state"] == "random-fuzz-excluded":
+            flag = " (random-fuzz excluded)"
+        elif r["state"] == "targeted-tests":
+            flag = " (targeted tests)"
+        elif r["state"] == "manual-only":
+            flag = " (manual only)"
         elif r["investigate"]:
             flag = f" ⚠ {r['investigate_task'] or 'investigate'}"
         rtol_s = f"{r['rtol']:.0e}" if r["rtol"] > 0 else "0"
@@ -228,6 +255,11 @@ def _coverage_summary(rows: list[dict]) -> str:
     orchestration = sorted(
         {r["api_id"] for r in rows if r["state"] == "orchestration-implied"}
     )
+    random_excluded = sorted(
+        {r["api_id"] for r in rows if r["state"] == "random-fuzz-excluded"}
+    )
+    targeted = sorted({r["api_id"] for r in rows if r["state"] == "targeted-tests"})
+    manual = sorted({r["api_id"] for r in rows if r["state"] == "manual-only"})
     unwired = sorted({r["api_id"] for r in rows if r["state"] == "unwired"})
     flagged = sorted(
         {r["api_id"] for r in rows if r["state"] == "measured" and r["investigate"]}
@@ -240,6 +272,7 @@ def _coverage_summary(rows: list[dict]) -> str:
         f"wired directly in random-fuzz GENERATORS; "
         f"{indirect} additional orchestration APIs covered indirectly via "
         f"underlying kernel parity. "
+        f"{len(random_excluded)} intentionally excluded from randomized fuzz. "
         f"{len(measured_apis)} measured this run."
     )
     if wired_not_measured:
@@ -260,6 +293,23 @@ def _coverage_summary(rows: list[dict]) -> str:
             "**Declared but UNWIRED in random fuzz** (no parity, action needed):"
         )
         for a in unwired:
+            lines.append(f"- `{a}`")
+    if random_excluded:
+        lines.append("")
+        lines.append("**Declared but intentionally excluded from randomized fuzz**:")
+        for a in random_excluded:
+            note = API_MIGRATIONS_BY_ID[a].coverage_note
+            suffix = f" — {note}" if note else ""
+            lines.append(f"- `{a}`{suffix}")
+    if targeted:
+        lines.append("")
+        lines.append("**Covered by targeted tests, not baseline-main random fuzz**:")
+        for a in targeted:
+            lines.append(f"- `{a}`")
+    if manual:
+        lines.append("")
+        lines.append("**Manual-only parity coverage**:")
+        for a in manual:
             lines.append(f"- `{a}`")
     if flagged:
         lines.append("")

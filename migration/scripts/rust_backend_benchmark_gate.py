@@ -646,7 +646,9 @@ EXTERNALLY_BENCHMARKED: set[str] = set()
 
 
 def _check_coverage() -> None:
-    default_rust_ids = {m.api_id for m in API_MIGRATIONS if m.default == "rust"}
+    default_rust_ids = {
+        m.api_id for m in API_MIGRATIONS if m.default == "rust" and m.latency_gate
+    }
     mapped = set(BENCHMARK_TO_API_ID.values())
     missing = sorted(default_rust_ids - mapped - EXTERNALLY_BENCHMARKED)
     if missing:

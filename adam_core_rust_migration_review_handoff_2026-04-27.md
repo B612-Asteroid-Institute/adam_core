@@ -17,9 +17,13 @@ Current migration checkout state:
 
 - Path: `/Users/aleck/Code/adam-core-rust-migration`
 - Branch: `rust-migration-waves-d-e`
-- HEAD: `0bf2e3cd` (`Retire live-legacy benchmark governance`)
-- Working tree after the last task commit contains only uncommitted grounding
-  files: `decisions.md` and `journal.md`. They are intentionally not committed.
+- Latest committed baseline before RM-P1-008/RM-P1-015 work:
+  `e58ace8c` (`Track reviewer follow-up conditions`). The current task
+  completes RM-P1-008/RM-P1-015 and should be committed as a separate
+  task-scoped change after validation.
+- After the RM-P1-008/RM-P1-015 commit, the expected uncommitted files are only
+  grounding files: `decisions.md` and `journal.md`. They are intentionally not
+  committed.
 - Baseline oracle remains the sibling checkout `/Users/aleck/Code/adam-core`
   installed in `.legacy-venv` for parity and speed comparisons.
 
@@ -30,21 +34,24 @@ Current milestone posture:
 - The branch is ready for review of the P0 hardening work.
 - The migration is not "finished": P1 governance/coverage tasks and Wave
   D3/E2/E3 performance work remain open.
-- Next open task is RM-P1-008: make `src/adam_core/_rust/status.py` a more
-  trustworthy registry that distinguishes public-rust-default, rust-only,
-  raw-kernel-only, partial coverage, and randomized-fuzz exclusions.
+- RM-P1-008/RM-P1-015 is complete: `src/adam_core/_rust/status.py` now
+  distinguishes public-rust-default, rust-only, raw-kernel-only,
+  orchestration-rust-default, targeted-test-only coverage, partial coverage,
+  and randomized-fuzz exclusions.
+- Next open task is RM-P1-009: add public dispatcher/quivr parity for
+  `coordinates.transform_coordinates`, especially subcases not proven by raw
+  NumPy-kernel parity.
 
-Current validation evidence from the latest completed task, RM-P0-007:
+Current validation evidence from the latest completed task, RM-P1-008/RM-P1-015:
 
 - `pdm run script-preflight`: passed.
-- `pdm run rust-latency-gate`: passed on rerun. First run had one transient
-  p95 microbenchmark outlier on `propagate_2body_with_covariance`; rerun was
-  green and all ratios were within the Rust-only regression thresholds.
+- `pdm run rust-latency-gate`: passed; 22 latency-gate APIs compared against
+  the Rust-only latency baseline.
 - `pdm run rust-quality`: passed (`cargo fmt --all --check`,
   `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo test --workspace`).
 - `pdm run test-rust-full`: passed when run with escalated permissions:
-  `723 passed, 144 skipped, 2 deselected, 56 warnings`.
+  `730 passed, 144 skipped, 2 deselected, 56 warnings`.
 - `pdm run rust-parity-main`: passed. All 22 wired APIs passed randomized
   fuzz parity against baseline main.
 - `pdm run rust-parity-speed-cold`: passed with existing temporary photometry
@@ -59,6 +66,11 @@ Validation caveats:
 - A non-escalated `pdm run test-rust-full` failed only because the tool sandbox
   denied Ray/psutil macOS `sysctl` process inspection and DNS/network access
   for JPL/Horizons-backed tests. The escalated rerun passed.
+- The first escalated full-suite rerun exposed two observer-test hygiene
+  failures caused by nondeterministically selecting an arbitrary
+  `OBSERVATORY_CODES` set member whose MPC parallax coefficients were `NaN`.
+  The tests now select a sorted valid Earth-based MPC code and pass
+  deterministically.
 - `pdm run docs-check` could not run in the active environment because Sphinx
   is not installed. Installing docs dependencies with `pdm install -G docs`
   wanted to refresh a stale lockfile; dependency files were intentionally left
@@ -99,6 +111,11 @@ Current parity/reporting coverage:
   fuzz because Rust Laguerre+deflation and legacy `np.roots` can find different
   root subsets on random triplets. Fixed-fixture/manual parity remains a
   separate follow-up.
+- The status registry includes additional targeted-test-only Rust surfaces
+  without overclaiming randomized-fuzz coverage, including Wave D3/E2/E3 helper
+  kernels such as `calculate_chi2`, residual helpers, MOID/porkchop helpers,
+  Tisserand, absolute-magnitude fits, weighted stats, and raw transform/rotate
+  kernels.
 
 ## Executive Summary
 
@@ -1264,44 +1281,42 @@ Benchmark governance:
 
 Next recommended order:
 
-1. RM-P1-008 + RM-P1-015: make `status.py` a trustworthy registry and encode
-   `gaussIOD` randomized-fuzz exclusion visibility in the same change.
-   - Add richer taxonomy for public-rust-default, rust-only, raw-kernel-only,
-     dual, partial coverage, and exclusions.
-   - Encode `coordinates.transform_coordinates` subcases.
-   - Encode `gaussIOD` randomized-fuzz exclusion.
-   - Fail governance generation if a row claims dual support after the legacy
-     implementation is gone.
-2. RM-P1-009: add public dispatch parity for `coordinates.transform_coordinates`.
+Completed before this list:
+
+- RM-P1-008 + RM-P1-015: `status.py` is now a richer typed registry with
+  public/default/raw/orchestration taxonomy, explicit coverage metadata,
+  transform subcase notes, and `gaussIOD` randomized-fuzz exclusion visibility.
+
+1. RM-P1-009: add public dispatch parity for `coordinates.transform_coordinates`.
    - Raw Rust kernel parity is not enough for quivr/coordinate-object public
      dispatch.
    - Cover the intentional Cartesian-to-Cartesian frame-only exclusion if it is
      still retained.
-3. RM-P1-010: re-home/finalize Rust docs in the current RTD structure, resolve
+2. RM-P1-010: re-home/finalize Rust docs in the current RTD structure, resolve
    lockfile/docs-dependency drift, and make `pdm run docs-check` pass
    locally/CI.
    - This owns the missing Sphinx/docs dependency issue and stale lockfile
      behavior disclosed in RM-P0-007.
-4. RM-P1-011: audit runtime dependencies.
+3. RM-P1-011: audit runtime dependencies.
    - Production imports of `jax`, `jaxlib`, `numba`, `spiceypy`, and Python
      `spicekit` should be justified or moved to optional/test groups.
-5. RM-P1-012: restore or replace an independent propagation oracle.
+4. RM-P1-012: restore or replace an independent propagation oracle.
    - The baseline-main `.legacy-venv` oracle is adequate for migration parity
      today, but fixed trusted vectors or another independent propagation
      reference reduce single-oracle risk.
-6. RM-P1-014 and RM-P1-014A: resolve temporary warm-performance waivers before
+5. RM-P1-014 and RM-P1-014A: resolve temporary warm-performance waivers before
    the 2026-05-12 review date.
    - Decide SIMD/transcendental investment, cold-start waiver, or selective
      dispatch/revert policy.
-7. RM-P1-013 / RM-WE2-001: document and test `calculate_chi2` SPD covariance
+6. RM-P1-013 / RM-WE2-001: document and test `calculate_chi2` SPD covariance
    contract.
    - Rust Cholesky rejects non-SPD covariance matrices. This is likely correct,
      but it is a public behavior change compared with `np.linalg.inv` accepting
      some merely invertible matrices.
-8. RM-P1-018: harden Rust-only latency-gate statistical policy.
+7. RM-P1-018: harden Rust-only latency-gate statistical policy.
    - Define rerun policy, sample aggregation, and artifact requirements for
      pass-after-rerun cases.
-9. RM-P1-016: split `rust/adam_core_py/src/lib.rs` into domain modules after the
+8. RM-P1-016: split `rust/adam_core_py/src/lib.rs` into domain modules after the
    registry/status cleanup.
 10. RM-P1-017: final clean validation pass before asking for broad merge review.
 11. Wave work after governance cleanup:

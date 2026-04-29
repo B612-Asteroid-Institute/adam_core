@@ -2,14 +2,14 @@
 
 ## Parity Tolerance + Observed Difference
 
-**Coverage**: 22 of 25 declared APIs wired directly in random-fuzz GENERATORS; 2 additional orchestration APIs covered indirectly via underlying kernel parity. 22 measured this run.
+**Coverage**: 22 of 25 declared APIs wired directly in random-fuzz GENERATORS; 2 additional orchestration APIs covered indirectly via underlying kernel parity. 1 intentionally excluded from randomized fuzz. 22 measured this run.
 
 **Orchestration (covered indirectly via underlying kernel parity)**:
 - `dynamics.calculate_perturber_moids`
 - `dynamics.generate_porkchop_data`
 
-**Declared but UNWIRED in random fuzz** (no parity, action needed):
-- `orbit_determination.gaussIOD`
+**Declared but intentionally excluded from randomized fuzz**:
+- `orbit_determination.gaussIOD` — Runner adapters are retained for fixed-fixture/manual parity, but randomized fuzz is intentionally disabled because Rust Laguerre+deflation and legacy np.roots/LAPACK accept different physical root subsets on some random triplets.
 
 | API | output | atol | rtol | worst_abs | worst_rel | result | rationale | physical | root cause | verdict |
 |---|---|---:|---:|---:|---:|---|---|---|---|---|
@@ -46,32 +46,32 @@
 | `dynamics.calculate_perturber_moids` (orchestration) | moid | 1e-10 | 0 | — | — | — | ORCHESTRATION (covered indirectly). MOID = min |r1(t) - r2(t+dt)| over analytical 2-body grid + Brent refinement. Bounded by `propagate_2body` kernel parity (atol=1e-11) plus optimizer xtol. Direct random-fuzz wiring would require SPK kernels in subprocess; deferred. | — | — | — |
 | `dynamics.calculate_perturber_moids` (orchestration) | dt_at_min | 1e-06 | 0 | — | — | — | ORCHESTRATION (covered indirectly). MOID = min |r1(t) - r2(t+dt)| over analytical 2-body grid + Brent refinement. Bounded by `propagate_2body` kernel parity (atol=1e-11) plus optimizer xtol. Direct random-fuzz wiring would require SPK kernels in subprocess; deferred. | — | — | — |
 | `dynamics.generate_porkchop_data` (orchestration) | out | 1e-13 | 0 | — | — | — | ORCHESTRATION (covered indirectly). Meshgrid + time-order filter + batched Lambert per (dep, arr) pair. Bounded by `solve_lambert` kernel parity (atol=1e-13). Direct wiring would require Orbits-quivr round-trip; deferred. | — | — | — |
-| `orbit_determination.gaussIOD` (UNWIRED) | epoch | 1e-06 | 0 | — | — | — | Full Gauss IOD: equatorial→ecliptic rotation, 8th-order poly root finding (Laguerre+deflation), per-root orbit construction. INTENTIONALLY UNWIRED FROM RANDOMIZED FUZZ (see comment in _inputs.GENERATORS): rust Laguerre+deflation and legacy np.roots/LAPACK find different SUBSETS of the 8th-order polynomial's roots on a non-trivial fraction of random triplets — intrinsic to the algorithms, not a kernel bug. Best-root parity holds at ~1e-10 AU when both sides find any |r2|≥1.5 AU root, but ~15% of random triplets show NaN-mismatch (one side rejects the root the other accepts). Tolerances retained for fixed-fixture / manual parity. Epoch atol=1e-6 day = 0.1 s; orbit atol=1e-5 AU = 1500 m. | — | — | — |
-| `orbit_determination.gaussIOD` (UNWIRED) | orbit | 1e-05 | 1e-06 | — | — | — | Full Gauss IOD: equatorial→ecliptic rotation, 8th-order poly root finding (Laguerre+deflation), per-root orbit construction. INTENTIONALLY UNWIRED FROM RANDOMIZED FUZZ (see comment in _inputs.GENERATORS): rust Laguerre+deflation and legacy np.roots/LAPACK find different SUBSETS of the 8th-order polynomial's roots on a non-trivial fraction of random triplets — intrinsic to the algorithms, not a kernel bug. Best-root parity holds at ~1e-10 AU when both sides find any |r2|≥1.5 AU root, but ~15% of random triplets show NaN-mismatch (one side rejects the root the other accepts). Tolerances retained for fixed-fixture / manual parity. Epoch atol=1e-6 day = 0.1 s; orbit atol=1e-5 AU = 1500 m. | — | — | — |
+| `orbit_determination.gaussIOD` (random-fuzz excluded) | epoch | 1e-06 | 0 | — | — | — | Full Gauss IOD: equatorial→ecliptic rotation, 8th-order poly root finding (Laguerre+deflation), per-root orbit construction. INTENTIONALLY UNWIRED FROM RANDOMIZED FUZZ (see comment in _inputs.GENERATORS): rust Laguerre+deflation and legacy np.roots/LAPACK find different SUBSETS of the 8th-order polynomial's roots on a non-trivial fraction of random triplets — intrinsic to the algorithms, not a kernel bug. Best-root parity holds at ~1e-10 AU when both sides find any |r2|≥1.5 AU root, but ~15% of random triplets show NaN-mismatch (one side rejects the root the other accepts). Tolerances retained for fixed-fixture / manual parity. Epoch atol=1e-6 day = 0.1 s; orbit atol=1e-5 AU = 1500 m. | — | — | — |
+| `orbit_determination.gaussIOD` (random-fuzz excluded) | orbit | 1e-05 | 1e-06 | — | — | — | Full Gauss IOD: equatorial→ecliptic rotation, 8th-order poly root finding (Laguerre+deflation), per-root orbit construction. INTENTIONALLY UNWIRED FROM RANDOMIZED FUZZ (see comment in _inputs.GENERATORS): rust Laguerre+deflation and legacy np.roots/LAPACK find different SUBSETS of the 8th-order polynomial's roots on a non-trivial fraction of random triplets — intrinsic to the algorithms, not a kernel bug. Best-root parity holds at ~1e-10 AU when both sides find any |r2|≥1.5 AU root, but ~15% of random triplets show NaN-mismatch (one side rejects the root the other accepts). Tolerances retained for fixed-fixture / manual parity. Epoch atol=1e-6 day = 0.1 s; orbit atol=1e-5 AU = 1500 m. | — | — | — |
 
 ## Performance
 
 | API | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |
 |---|---:|---:|---:|---|---|
-| `coordinates.cartesian_to_spherical` | 2.08x | 2.11x | 18.62x | PASS | waiver-20260428-cartesian-to-spherical-warm-performance-temporary |
-| `coordinates.transform_coordinates` | 24.07x | 11.96x | 17.62x | PASS | — |
-| `coordinates.cartesian_to_geodetic` | 4.89x | 2.31x | 18.78x | PASS | — |
-| `coordinates.cartesian_to_keplerian` | 5.53x | 4.96x | 29.61x | PASS | — |
-| `coordinates.keplerian.to_cartesian` | 35.30x | 16.53x | 31.26x | PASS | — |
-| `coordinates.cartesian_to_cometary` | 4.49x | 3.84x | 31.68x | PASS | — |
-| `coordinates.cometary.to_cartesian` | 37.15x | 17.77x | 31.57x | PASS | — |
-| `coordinates.spherical.to_cartesian` | 3.58x | 2.86x | 18.73x | PASS | — |
-| `dynamics.calc_mean_motion` | 7.76x | 8.19x | 0.96x | PASS | — |
-| `dynamics.propagate_2body` | 21.24x | 12.29x | 29.99x | PASS | — |
-| `dynamics.propagate_2body_with_covariance` | 17079.15x | 12649.37x | 51.91x | PASS | — |
-| `dynamics.generate_ephemeris_2body` | 3.64x | 2.92x | 32.48x | PASS | — |
-| `dynamics.generate_ephemeris_2body_with_covariance` | 19005.87x | 15636.81x | 64.97x | PASS | — |
-| `dynamics.solve_lambert` | 6.61x | 4.74x | 32.68x | PASS | — |
-| `dynamics.add_light_time` | 3.94x | 3.62x | 32.03x | PASS | — |
-| `photometry.calculate_phase_angle` | 0.82x | 0.69x | 29.00x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.calculate_apparent_magnitude_v` | 1.26x | 0.93x | 30.93x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | 1.23x | 0.94x | 30.02x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.predict_magnitudes` | 1.19x | 1.19x | 29.92x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `orbit_determination.calcGibbs` | 43.23x | 42.52x | 30.31x | PASS | — |
-| `orbit_determination.calcHerrickGibbs` | 3.83x | 3.86x | 28.57x | PASS | — |
-| `orbit_determination.calcGauss` | 2.36x | 2.33x | 28.51x | PASS | — |
+| `coordinates.cartesian_to_spherical` | 1.67x | 1.63x | 18.55x | PASS | waiver-20260428-cartesian-to-spherical-warm-performance-temporary |
+| `coordinates.transform_coordinates` | 28.07x | 27.53x | 18.20x | PASS | — |
+| `coordinates.cartesian_to_geodetic` | 6.14x | 3.89x | 19.43x | PASS | — |
+| `coordinates.cartesian_to_keplerian` | 6.55x | 6.12x | 30.72x | PASS | — |
+| `coordinates.keplerian.to_cartesian` | 38.27x | 34.59x | 31.77x | PASS | — |
+| `coordinates.cartesian_to_cometary` | 6.13x | 5.47x | 31.22x | PASS | — |
+| `coordinates.cometary.to_cartesian` | 43.08x | 35.62x | 31.01x | PASS | — |
+| `coordinates.spherical.to_cartesian` | 3.24x | 2.40x | 18.01x | PASS | — |
+| `dynamics.calc_mean_motion` | 7.59x | 7.42x | 0.94x | PASS | — |
+| `dynamics.propagate_2body` | 24.71x | 20.26x | 31.54x | PASS | — |
+| `dynamics.propagate_2body_with_covariance` | 22186.02x | 17391.69x | 66.64x | PASS | — |
+| `dynamics.generate_ephemeris_2body` | 3.90x | 3.92x | 31.56x | PASS | — |
+| `dynamics.generate_ephemeris_2body_with_covariance` | 22186.71x | 18762.21x | 70.51x | PASS | — |
+| `dynamics.solve_lambert` | 6.19x | 5.61x | 33.34x | PASS | — |
+| `dynamics.add_light_time` | 3.41x | 3.66x | 30.98x | PASS | — |
+| `photometry.calculate_phase_angle` | 1.05x | 0.90x | 28.92x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.calculate_apparent_magnitude_v` | 1.31x | 1.36x | 30.96x | PASS | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | 1.36x | 1.07x | 29.96x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.predict_magnitudes` | 1.10x | 1.22x | 30.76x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `orbit_determination.calcGibbs` | 44.13x | 43.72x | 29.98x | PASS | — |
+| `orbit_determination.calcHerrickGibbs` | 3.90x | 3.83x | 27.41x | PASS | — |
+| `orbit_determination.calcGauss` | 2.38x | 2.29x | 29.06x | PASS | — |

@@ -67,7 +67,14 @@ from .api import (
     transform_coordinates_numpy,
     transform_coordinates_with_covariance_numpy,
 )
-from .status import API_MIGRATION_STATUS, API_MIGRATIONS, ApiMigration, PerfGate
+from .status import (
+    API_MIGRATION_STATUS,
+    API_MIGRATIONS,
+    API_MIGRATIONS_BY_ID,
+    ApiMigration,
+    PerfGate,
+    validate_api_migrations,
+)
 
 __all__ = [
     "RUST_BACKEND_AVAILABLE",
@@ -134,6 +141,8 @@ __all__ = [
     "naif_spk_writer",
     "API_MIGRATION_STATUS",
     "API_MIGRATIONS",
+    "API_MIGRATIONS_BY_ID",
     "ApiMigration",
     "PerfGate",
+    "validate_api_migrations",
 ]
