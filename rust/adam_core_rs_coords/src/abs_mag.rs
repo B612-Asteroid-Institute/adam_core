@@ -126,7 +126,11 @@ pub fn fit_absolute_magnitude_rows(h_rows: &[f64], sigma_rows: &[f64]) -> AbsMag
 
     let sigma_eff = if n_used >= 2 {
         let s = mad_sigma(&residual);
-        if s.is_finite() { s } else { f64::NAN }
+        if s.is_finite() {
+            s
+        } else {
+            f64::NAN
+        }
     } else {
         f64::NAN
     };
@@ -206,7 +210,7 @@ mod tests {
         let sig = [0.1, f64::NAN, 0.2];
         let fit = fit_absolute_magnitude_rows(&h, &sig);
         assert!(approx(fit.h_hat, 16.0, 1e-15));
-        assert!(fit.chi2_red.is_nan());  // not all sigmas finite
+        assert!(fit.chi2_red.is_nan()); // not all sigmas finite
     }
 
     #[test]

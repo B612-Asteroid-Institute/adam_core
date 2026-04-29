@@ -43,9 +43,7 @@ pub fn bound_longitude_residuals_flat(
                 lr += 360.0;
             }
             // Sign flip on boundary crossings (matches legacy logic).
-            if lr_g180 && lon_obs > 180.0 {
-                lr = -lr;
-            } else if lr_l180 && lon_obs < 180.0 {
+            if (lr_g180 && lon_obs > 180.0) || (lr_l180 && lon_obs < 180.0) {
                 lr = -lr;
             }
             row[1] = lr;
@@ -140,7 +138,7 @@ mod tests {
         let mut res = [0.0, 5.0, 0.0, 0.0, 1.0, 0.0];
         let mut cov = [0.0_f64; 36];
         for i in 0..6 {
-            cov[i * 6 + i] = 1.0;  // identity covariance
+            cov[i * 6 + i] = 1.0; // identity covariance
         }
         apply_cosine_latitude_correction_flat(&lat, &mut res, &mut cov, 1, 6);
         assert!(approx(res[1], 5.0, 1e-15));
@@ -152,7 +150,7 @@ mod tests {
 
     #[test]
     fn cos_lat_60_degrees_halves_lon_residual() {
-        let lat = [60.0_f64];  // cos(60°) = 0.5
+        let lat = [60.0_f64]; // cos(60°) = 0.5
         let mut res = [0.0, 10.0, 0.0, 0.0, 4.0, 0.0];
         let mut cov = [0.0_f64; 36];
         for i in 0..6 {
@@ -162,9 +160,9 @@ mod tests {
         assert!(approx(res[1], 5.0, 1e-14));
         assert!(approx(res[4], 2.0, 1e-14));
         // Diagonal: cov[1,1] = 0.5·1·0.5 = 0.25; cov[4,4] = 0.25; others = 1.0.
-        assert!(approx(cov[1 * 6 + 1], 0.25, 1e-14));
+        assert!(approx(cov[7], 0.25, 1e-14));
         assert!(approx(cov[4 * 6 + 4], 0.25, 1e-14));
-        assert!(approx(cov[0 * 6 + 0], 1.0, 1e-15));
+        assert!(approx(cov[0], 1.0, 1e-15));
     }
 
     #[test]
@@ -172,15 +170,15 @@ mod tests {
         let lat = [60.0_f64];
         let mut res = [0.0, 10.0, 0.0, 0.0, 4.0, 0.0];
         let mut cov = [0.0_f64; 36];
-        cov[1 * 6 + 1] = f64::NAN;
-        cov[1 * 6 + 4] = f64::NAN;
+        cov[7] = f64::NAN;
+        cov[10] = f64::NAN;
         for i in [0, 2, 3, 5] {
             cov[i * 6 + i] = 1.0;
         }
         cov[4 * 6 + 4] = 2.0;
         apply_cosine_latitude_correction_flat(&lat, &mut res, &mut cov, 1, 6);
-        assert!(cov[1 * 6 + 1].is_nan());
-        assert!(cov[1 * 6 + 4].is_nan());
-        assert!(approx(cov[4 * 6 + 4], 0.5, 1e-14));  // 0.5 · 2.0 · 0.5
+        assert!(cov[7].is_nan());
+        assert!(cov[10].is_nan());
+        assert!(approx(cov[4 * 6 + 4], 0.5, 1e-14)); // 0.5 · 2.0 · 0.5
     }
 }

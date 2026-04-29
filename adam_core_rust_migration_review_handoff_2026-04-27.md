@@ -598,3 +598,376 @@ After the stabilization pass, a follow-up reviewer should re-check:
 ## Bottom Line
 
 The migration is technically promising but operationally inconsistent. It should not be approved or merged until the packaging, CI, baseline integration, public API compatibility, runtime contract, and governance-reporting issues are fixed. Once those are addressed, the Rust kernel work itself looks worth continuing and likely close to a viable migration path.
+
+## Addendum: Claude Progress Transcript Reviewed On 2026-04-28
+
+Source reviewed: `/Users/aleck/Code/adam-core/rust-migration-from-claude.txt`
+
+Transcript size: 12,544 lines.
+
+Purpose of this addendum: the original review above was written before reading the Claude progress transcript. The transcript contains later state and several corrections. This addendum should be read together with the original review. Where there is a conflict, this addendum reflects the newer inspected state as of 2026-04-28.
+
+### Current Git State After Reading Transcript
+
+The original review described the migration checkout as dirty on `main` at `f556b5e7`. That was true for the earlier inspection, but it is now stale.
+
+Current migration checkout observed on 2026-04-28:
+
+- Path: `/Users/aleck/Code/adam-core-rust-migration`
+- Branch: `rust-migration-waves-d-e`
+- HEAD: `74b8e02b579b8d1516532f50b39f3231644abd0c`
+- Commit subject: `Rust migration: waves D + E1 + E2 — kernels, parity gate, perf wins`
+- Working tree: clean before this addendum was appended.
+- Commit size: 145 files changed, 39,856 insertions, 6,143 deletions.
+- Migration repo `origin` currently resolves to local `/Users/aleck/Code/adam-core`, not GitHub, despite the transcript saying `origin` was set to GitHub near the end.
+- Baseline checkout `/Users/aleck/Code/adam-core` is still on `main` at `22a1efa3979cad5651e3f0765b2536983be6ab99` and has a local branch plus remote-tracking branch named `rust-migration-waves-d-e`.
+- Baseline checkout `origin` is `git@github.com:B612-Asteroid-Institute/adam_core.git`.
+
+Interpretation:
+
+- The work is no longer just dirty local changes; it has been collapsed into one large commit on `rust-migration-waves-d-e`.
+- The transcript claims the branch was pushed to GitHub. Locally, the baseline checkout has `remotes/origin/rust-migration-waves-d-e`, which is consistent with that claim, but this addendum did not perform a network `ls-remote` verification.
+- The migration checkout's current remote being local is a discrepancy against the transcript and should be verified before any follow-up push/PR work.
+
+### Progress Captured In The Transcript
+
+The transcript records a large amount of implementation, validation, and governance work after the earlier migration journal entries. Key progress:
+
+1. Constitutional parity harness was built and run.
+
+   Components added under `migration/parity/`:
+
+   - `__init__.py`
+   - `README.md`
+   - `tolerances.py`
+   - `_legacy_runner.py`
+   - `_oracle.py`
+   - `_inputs.py`
+   - `_rust_runner.py`
+   - `parity_fuzz.py`
+   - `parity_speed.py`
+   - `parity_main.py`
+
+   Behavior recorded in transcript:
+
+   - Legacy oracle runs in `.legacy-venv` against upstream JAX/numba baseline.
+   - Rust runner calls the migration's `_rust.api` wrappers.
+   - Randomized fuzz samples realistic asteroid/comet orbit inputs.
+   - `parity_main.py` orchestrates parity and speed gates and emits JSON artifacts.
+   - Initial all-API fuzz sweep covered 21 APIs × 8 seeds × 128 rows and passed after tolerance fixes.
+
+2. Tolerance fixes and root-cause notes were added.
+
+   Transcript records:
+
+   - `coordinates.cartesian_to_keplerian` worst absolute difference was about `2.8e-10`, not `2e-7`; tolerance tightened to `1e-9`.
+   - `coordinates.cartesian_to_cometary` received the same tightening.
+   - `photometry.calculate_phase_angle` and fused magnitude+phase phase-angle tolerance moved from `1e-11` to `1e-10` degrees due a documented small-angle `atan2` ULP ceiling.
+   - Propagation covariance tolerance remained looser because 6x6 covariance propagation accumulates floating-point drift through matrix products.
+
+3. Live upstream/legacy bugs or mismatches were discovered while building the oracle.
+
+   Transcript records three important findings:
+
+   - Upstream `_keplerian_to_cartesian_p_vmap` expects semi-latus rectum `p`, not semi-major axis `a`; parity runner was corrected to use `_keplerian_to_cartesian_a_vmap`.
+   - Cometary vmaps live in `coordinates.transform`, not `coordinates.cometary`.
+   - Upstream `calcGauss` numba path has a strict signature mismatch: it calls `approxLangrangeCoeffs(r2_mag, t12)` with two args while the numba signature expects three. The legacy runner re-implements the relevant path inline with explicit `mu`.
+
+4. Hyperbolic universal-Kepler divergence was fixed.
+
+   Transcript records Task #138:
+
+   - Rust `calc_chi` was reverted from Laguerre's method back to plain Newton-Raphson to match JAX reference behavior.
+   - Failure mode: backward hyperbolic propagation through perihelion could diverge catastrophically under Laguerre branch selection.
+   - Concrete case: 1I/'Oumuamua 10,000-day forward/backward roundtrip reportedly diverged to about `2.8e+20 AU` under Laguerre and returned to about `6e-13 AU` under Newton.
+   - Hyperbolic propagation test caps were restored from 5,000 days to 10,000 days.
+   - Validation recorded: cargo tests passed; dynamics/coordinates/propagator/OD pytest subset passed with 295 passed / 23 skipped; dynamics parity fuzz remained within prior worst-case levels.
+
+5. Cold and warm speed gates were separated.
+
+   Transcript records user pushback asking for both cold and warm comparisons and ensuring separate installations were used.
+
+   Implemented behavior:
+
+   - Warm timings run repeated calls inside already-started processes.
+   - Cold timings spawn fresh subprocesses and include import/first-call cost.
+   - Rust process uses migration `.venv`.
+   - Legacy process uses `.legacy-venv` pinned to upstream/baseline.
+   - `PYTHONPATH` is cleared to prevent cross-install leakage.
+
+   Important result:
+
+   - Warm gate: most APIs beat the 1.2x threshold, but four photometry APIs were only about `0.95x` to `1.12x` warm because XLA/Accelerate has SIMD-vectorized transcendentals while Rust stdlib transcendentals are scalar.
+   - Cold gate: Rust was far faster across most APIs, at least `18x` in the journal/transcript summary, except `calc_mean_motion`, which was about `0.95x` cold because legacy does not pay a JAX import for that one-line operation.
+   - This does not remove the photometry warm-gate policy gap; it clarifies it.
+
+6. Photometry Rayon scheduling overhead was fixed.
+
+   Transcript records:
+
+   - Initial photometry Rust kernels used per-row Rayon tasks (`par_iter_mut().enumerate()` style), which made small elementwise transcendental kernels slower.
+   - Kernels were changed to chunked parallelism, `par_chunks_mut(PHOT_CHUNK=1024)`.
+   - This improved scaling but did not fully beat warm XLA/Accelerate transcendental performance.
+   - SIMD options were considered; `sleef-sys` was called old/unmaintained, while `pulp` lacks transcendental functions. Hand-rolled polynomial approximations were considered multi-day/high-validation-risk work.
+
+7. `transform_coordinates` raw cart-to-cart gap was closed at the kernel level.
+
+   Transcript records:
+
+   - Raw Rust `transform_coordinates_numpy` was fuzzed against a legacy public API oracle for cartesian ecliptic-to-equatorial frame rotations.
+   - Reported parity: 4 seeds × 128 rows passed, worst absolute diff about `3.5e-18`, worst relative diff about `9.2e-14`.
+   - Reported speed at n=2000: about `29.0x` p50 / `28.2x` p95.
+
+   Review interpretation remains unchanged:
+
+   - This is strong raw-kernel evidence.
+   - It does not fully invalidate the earlier critique that public `transform_coordinates` dispatch accounting is too coarse, because the public dispatcher still has explicit exclusions/subcases.
+
+8. Arc propagation API was added and wired into production dispatch.
+
+   Transcript records:
+
+   - New API: `propagate_2body_along_arc_numpy(orbit, dts, mu, max_iter, tol)` for single-orbit-many-times patterns.
+   - New batch API: `propagate_2body_arc_batch_numpy`.
+   - Rust computes orbit constants once and warm-starts Newton iterations along sorted `dt` values.
+   - Dispatch heuristic routes single-orbit/many-time cases through the arc path for moderate `n_times` values, while large batches keep the parallel cold-start path.
+   - Reported microbenchmarks: n=10 single-orbit arc around `10.6x` faster than cold batch; n=100 around `3.4x`; n=1000 and above parallel batch wins.
+   - Production `_run_2body_propagate` dispatch was updated.
+   - Full pytest sweep recorded: 784 passed / 23 skipped / 0 failed.
+
+9. Reporter scripts and RCA artifacts were added.
+
+   Transcript records additional scripts/artifacts:
+
+   - `migration/scripts/parity_table.py`
+   - `migration/scripts/perf_scaling_table.py`
+   - `migration/scripts/perf_e1_e2_kernels.py`
+   - `migration/artifacts/parity_table.json`
+   - `migration/artifacts/parity_table_rca.json`
+   - `migration/artifacts/perf_scaling_table.json`
+   - `migration/artifacts/perf_e1_e2_kernels.json`
+
+   Reported coverage after RCA:
+
+   - 22 APIs measured directly.
+   - 2 orchestration-implied APIs: `calculate_perturber_moids` and `generate_porkchop_data`.
+   - 1 unwired randomized-fuzz API: `gaussIOD`, due intrinsic root-subset divergence between Rust Laguerre/deflation and legacy `np.roots`/LAPACK.
+   - Claimed coverage: 24 of 25 declared APIs with parity, 96%; `gaussIOD` has runner adapters retained for fixed-fixture use.
+
+10. RCA verdicts were generated for parity differences.
+
+   Transcript records this breakdown across measured APIs:
+
+   - 3 exact zero-diff bit-parity cases.
+   - 13 last-bit / <=2 ULP bit-parity cases.
+   - 5 equally accurate cases where both legacy and Rust pass standard candles and differ only by expected transcendental/angle ULP behavior.
+   - 5 more-accurate Rust covariance cases, where Rust Dual<6> AD reportedly stays finite on stiff inputs where JAX `jacfwd` can overflow.
+   - 0 less-accurate cases.
+
+   Standard candles mentioned:
+
+   - Keplerian period and derived quantities against JPL/Horizons-like truth.
+   - Propagation roundtrip tests.
+   - Ephemeris against Horizons at about `1e-10 deg` / `0.36 mas` tolerance.
+   - Rust covariance autodiff tests.
+
+   Review interpretation:
+
+   - This improves confidence in numerical ports.
+   - It does not remove the need for governance/status accuracy, public-dispatch coverage clarity, or clean CI packaging.
+
+11. Surface-area audit was performed.
+
+   Transcript records an audit of non-test Python source files:
+
+   - Total counted Python sources: 100.
+   - Bit-identical to upstream legacy: 66.
+   - Altered or new in migration: 34.
+   - Files already using Rust kernels: 19.
+   - Altered without Rust use: 15.
+   - Meaningful remaining Rust-port work estimated: about 17 files, including about 12 untouched hot-path files and about 5 altered-but-still-Python orchestration files.
+
+   High-priority remaining areas listed:
+
+   - `coordinates/variants.py`
+   - `orbit_determination/differential_correction.py`
+   - `orbit_determination/evaluate.py`
+   - `orbit_determination/outliers.py`
+   - `orbit_determination/least_squares.py`
+   - `orbit_determination/od.py`
+   - `orbit_determination/iod.py`
+   - `dynamics/impacts.py`
+   - `coordinates/residuals.py` outer orchestration
+
+   Low-value or non-Rust areas listed:
+
+   - `__init__.py` wiring
+   - quivr schemas
+   - I/O and external clients
+   - plotting/viz
+   - generic utilities
+   - time module backed by ERFA/C
+   - SPICE plumbing that already calls Rust-backed `spicekit`
+
+12. Wave E1/E2 small-kernel ports were added.
+
+   Transcript records these ports:
+
+   - `dynamics/tisserand.py::calc_tisserand_parameter` to Rust.
+   - `orbits/classification.py` orbital classification rules to Rust.
+   - `coordinates/residuals.py::calculate_chi2` to Rust Cholesky solve.
+   - `photometry/absolute_magnitude.py::_fit_absolute_magnitude_rows` single/grouped kernels to Rust.
+   - `coordinates/residuals.py::bound_longitude_residuals` to Rust.
+   - `coordinates/residuals.py::apply_cosine_latitude_correction` to Rust.
+
+   Validation reported across these waves:
+
+   - Tisserand: 4/4 pytest and cargo tests passed.
+   - Classification: 39/39 pytest and cargo tests passed.
+   - Chi2: residual and OD test subsets passed; one least-squares flake was observed once and attributed to pre-existing order-dependent FP drift.
+   - Absolute magnitude: photometry tests passed and full sweep recorded 784/23/0.
+   - Spherical residual helpers: coordinates/photometry subsets passed, cargo tests passed.
+
+13. Weighted mean/covariance were initially ported, then reverted from production dispatch.
+
+   This is a correction to the original review above.
+
+   Original review said `weighted_mean` and `weighted_covariance` now dispatch to Rust. That was true of an intermediate state captured in the journal, but it is false in current commit `74b8e02b`.
+
+   Current observed implementation:
+
+   - `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/covariances.py`: `weighted_mean` returns `np.dot(W, samples)`.
+   - `/Users/aleck/Code/adam-core-rust-migration/src/adam_core/coordinates/covariances.py`: `weighted_covariance` returns `(W_cov * residual.T) @ residual`.
+   - The comments explicitly state these dispatch to NumPy/BLAS, not Rust, because Apple Accelerate/OpenBLAS beats attempted pure-Rust/faer/hand-rolled loops.
+   - Rust weighted kernels still exist in `rust/adam_core_rs_coords/src/weighted.rs` and PyO3 wrappers still exist, but they are no longer production dispatch for these functions.
+
+   Impact on original critique:
+
+   - Remove `weighted_mean`/`weighted_covariance` from the list of production Rust-only `assert` examples.
+   - Keep the broader runtime-contract critique, because many other production sites still use nullable wrappers plus `assert`.
+   - Treat weighted mean/cov as a positive example of reversing a Rust port when BLAS is better.
+
+14. `faer` was added for future linear algebra but is not production-critical yet.
+
+   Transcript records:
+
+   - `faer 0.22` was added to the workspace.
+   - It did not beat BLAS for the weighted mean/covariance case.
+   - It remains available for future Cholesky/SymmetricEigen/SVD work, especially sigma-point sampling and least-squares kernel fusion.
+
+15. Final E1/E2 performance table conclusion.
+
+   Transcript records final conclusion after reverting weighted mean/covariance:
+
+   - `calc_tisserand_parameter`: loses at small N, wins at scale.
+   - `orbits.classification`: loses at small N, wins at scale.
+   - `calculate_chi2`: loses at small N, wins strongly at scale.
+   - `_fit_abs_mag_rows`: wins at all sizes after quickselect median fix.
+   - `bound_longitude_residuals`: loses at small N, wins at scale.
+   - `apply_cosine_latitude_correction`: loses at small N, wins at scale.
+   - `weighted_mean`: reverted to NumPy/BLAS.
+   - `weighted_covariance`: reverted to NumPy/BLAS.
+
+   Review interpretation:
+
+   - The Rust migration is now more honest about small-N PyO3 overhead.
+   - The next performance lever is fusion of higher-level kernels, especially `Residuals.calculate`, not one-function-at-a-time PyO3 crossings.
+
+16. Large single commit and push attempt.
+
+   Transcript records:
+
+   - User asked for one big commit rather than seven logical commits.
+   - Branch created: `rust-migration-waves-d-e`.
+   - Commit made: `74b8e02b Rust migration: waves D + E1 + E2 — kernels, parity gate, perf wins`.
+   - First push went to local `/Users/aleck/Code/adam-core` because migration origin was a local filesystem clone.
+   - Transcript then records setting origin to GitHub and pushing, with GitHub branch and PR creation URLs printed.
+
+   Current observed discrepancy:
+
+   - Migration checkout origin is currently back to `/Users/aleck/Code/adam-core`, not GitHub.
+   - Baseline checkout has GitHub origin and has both local and remote-tracking `rust-migration-waves-d-e` branches.
+
+   Follow-up:
+
+   - Before opening a PR or pushing more changes, explicitly verify remotes and branch tracking from both checkouts.
+
+### How The Transcript Changes The Original Review
+
+The transcript improves the implementation story in several ways:
+
+- The work is committed, not an uncommitted dirty tree.
+- Parity governance is more developed than the original review implied: there are fuzz, speed, scaling, and RCA reporters with JSON artifacts.
+- The numerical accuracy story is stronger: several loose tolerances have root-cause notes and standard-candle arguments.
+- Hyperbolic propagation divergence was diagnosed and fixed.
+- Weighted mean/covariance were reverted from production Rust dispatch after data showed BLAS was better.
+- There is a concrete surface-area audit and future work plan.
+
+The transcript does not remove these original blockers:
+
+- `spicekit` is still a runtime requirement but is not declared in `pyproject.toml` as a Python dependency.
+- `pyproject.toml` still contains stale script targets: `rust-parity-randomized` references a missing `src/adam_core/tests/test_rust_parity_randomized.py`, and `rust-od-benchmark` references a missing `migration/scripts/rust_orbit_determination_benchmark.py`.
+- Workflow `.github/workflows/pip-build-lint-test-coverage.yml` still invokes those stale scripts.
+- Public compatibility issue remains: deleted modules such as `dynamics/kepler.py`, `dynamics/lagrange.py`, `dynamics/stumpff.py`, `dynamics/aberrations.py`, `dynamics/barker.py`, `dynamics/chi.py`, and `coordinates/jacobian.py` still break baseline import paths.
+- Nullable `_rust/api.py` wrappers plus production `assert` checks still conflict with the no-rustless production decision.
+- Migration still has not integrated baseline main commit `22a1efa3` docs/RTD/CI overhaul cleanly.
+- `status.py` still risks overstating public dispatch coverage and does not encode enough subcase/waiver detail.
+- The stale live-legacy `rust_backend_benchmark_gate.py` still exists and remains referenced by active scripts, despite newer parity/speed/RCA tooling being better aligned with the documented benchmark strategy.
+- Photometry warm-gate policy remains unresolved: accept cold-start wins, add waivers, or invest in SIMD/transcendental math.
+- Propagation oracle concern is reduced but not eliminated: roundtrip and standard-candle checks are strong, but replacing independent `prop2b` oracle with self-consistency should remain explicit and justified.
+
+### Updated Priority For The Next Agent
+
+The next agent should not start by writing more Rust kernels. The highest-leverage work is integration hardening:
+
+1. Verify branch/remotes and decide whether the authoritative branch is the migration checkout branch, the baseline checkout branch, or GitHub `rust-migration-waves-d-e`.
+2. Fix `pyproject.toml` script targets and workflow references so CI can run the current parity/speed scripts instead of missing files.
+3. Declare or otherwise package `spicekit` correctly for clean Python installs.
+4. Restore public compatibility shims for deleted baseline modules, or record explicit breaking-change decisions.
+5. Replace production `assert out is not None` patterns with explicit runtime errors or mandatory import-time Rust failure.
+6. Rebase/merge baseline main `22a1efa3` docs/RTD/CI changes into the branch.
+7. Update `status.py` to reflect measured direct coverage, orchestration-implied coverage, raw-kernel coverage, public-dispatch subcases, and `gaussIOD` randomized-fuzz exclusion.
+8. Retire `rust_backend_benchmark_gate.py` from active CI or clearly mark it historical; promote `parity_main.py`, `parity_speed.py`, `parity_table.py`, and `perf_scaling_table.py` as current governance.
+9. Only after the above, continue Wave E3 kernel fusion for `Residuals.calculate` / LSQ inner-loop performance.
+
+### Updated Bottom Line
+
+The Claude transcript materially improves confidence in the Rust numerical work and shows stronger engineering discipline than the original static review alone could see. It also confirms the migration has moved from dirty worktree to a large committed branch.
+
+The approval answer is still the same: do not merge yet. The remaining blockers are packaging, CI correctness, baseline integration, public API compatibility, runtime contract cleanup, and governance/status accuracy. The next review should focus on those integration blockers before approving more kernel work.
+
+## Addendum: Published spicekit Dependency Update On 2026-04-28
+
+`spicekit` is now public as both a Rust crate and a Python package:
+
+- crates.io: `spicekit = "0.1.0"`
+- PyPI: `spicekit==0.1.0`
+
+adam-core no longer directly depends on the Rust `spicekit` crate after
+the `spicekit-py` carve-out; the NAIF PyO3 bindings live in the
+published Python package. The concrete adam-core packaging fix is
+therefore to depend on `spicekit>=0.1.0` in `pyproject.toml`, not to add
+an unused Rust dependency to `rust/adam_core_py/Cargo.toml`.
+
+This resolves the original review's highest-priority `spicekit` Python
+packaging blocker once the lockfiles are refreshed and clean-install CI
+confirms the published wheel imports correctly. The remaining blockers
+from the review still stand: stale CI/PDM script references, deleted
+public compatibility modules, nullable/assert runtime contract,
+baseline docs/RTD drift, and status/governance accuracy.
+
+## Addendum: Review Task Backlog Created On 2026-04-28
+
+The follow-up task list now lives in:
+
+- `/Users/aleck/Code/adam-core-rust-migration/migration/review_task_backlog_2026-04-28.md`
+
+Important clarification: the previous addendum's "do not add a Rust
+`spicekit` dependency to `adam_core_py`" guidance was correct for the
+then-current Python-package-only carve-out. It is not sufficient if
+`adam-core-rs` is intended to ship as a standalone Rust library.
+
+The new RM-P0-001 task explicitly tracks direct Rust-to-Rust
+`adam-core-rs` -> `spicekit` integration, with Python wrappers becoming
+thin consumers of adam-core's Rust backend rather than importing Python
+`spicekit` objects for adam-core SPICE operations.

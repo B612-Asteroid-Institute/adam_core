@@ -5,21 +5,20 @@
 )]
 
 use adam_core_rs_coords::{
-    add_light_time_batch_flat, calc_mean_motion_batch,
+    add_light_time_batch_flat, apply_cosine_latitude_correction_flat,
+    bound_longitude_residuals_flat, calc_mean_motion_batch,
     calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
-    calculate_moid, calculate_moid_batch, calculate_phase_angle_flat,
+    calculate_chi2_flat, calculate_moid, calculate_moid_batch, calculate_phase_angle_flat,
     cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
-    calculate_chi2_flat, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
-    apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat,
-    classify_orbits_flat, cometary_to_cartesian_flat6, fit_absolute_magnitude_grouped,
-    fit_absolute_magnitude_rows, generate_ephemeris_2body_flat6,
-    generate_ephemeris_2body_with_covariance_flat6, izzo_lambert_batch_flat,
-    keplerian_to_cartesian_flat6, porkchop_grid_flat, predict_magnitudes_bandpass_flat,
-    propagate_2body_along_arc, propagate_2body_arc_batch_flat6, propagate_2body_flat6,
-    propagate_2body_with_covariance_flat6, rotate_cartesian_frame_flat6,
-    tisserand_parameter_flat, weighted_covariance_flat, weighted_mean_flat,
+    cartesian_to_spherical_flat6, cartesian_to_spherical_row, classify_orbits_flat,
+    cometary_to_cartesian_flat6, fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows,
+    generate_ephemeris_2body_flat6, generate_ephemeris_2body_with_covariance_flat6,
+    izzo_lambert_batch_flat, keplerian_to_cartesian_flat6, porkchop_grid_flat,
+    predict_magnitudes_bandpass_flat, propagate_2body_along_arc, propagate_2body_arc_batch_flat6,
+    propagate_2body_flat6, propagate_2body_with_covariance_flat6, rotate_cartesian_frame_flat6,
     rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
-    transform_with_covariance_flat6, Frame, Representation as CoordsRepresentation,
+    tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
+    weighted_mean_flat, Frame, Representation as CoordsRepresentation,
 };
 use adam_core_rs_orbit_determination::{
     calc_gauss_row, calc_gibbs_row, calc_herrick_gibbs_row, gauss_iod_fused,
@@ -30,6 +29,8 @@ use numpy::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+
+mod spice;
 
 #[derive(Clone, Copy)]
 enum Representation {
@@ -763,8 +764,12 @@ fn bound_longitude_residuals_numpy<'py>(
     if res.shape() != [n, d] {
         return Err(PyValueError::new_err("residuals must match observed shape"));
     }
-    let obs_slice = obs.as_slice().ok_or_else(|| PyValueError::new_err("observed must be contiguous"))?;
-    let res_slice = res.as_slice().ok_or_else(|| PyValueError::new_err("residuals must be contiguous"))?;
+    let obs_slice = obs
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observed must be contiguous"))?;
+    let res_slice = res
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("residuals must be contiguous"))?;
     // Copy residuals into an owned mutable buffer for the in-place op.
     let mut buf = res_slice.to_vec();
     bound_longitude_residuals_flat(obs_slice, &mut buf, n, d);
@@ -786,7 +791,9 @@ fn apply_cosine_latitude_correction_numpy<'py>(
     let n = lat_arr.len();
     let d = res_arr.ncols();
     if res_arr.nrows() != n {
-        return Err(PyValueError::new_err("residuals row count must match lat length"));
+        return Err(PyValueError::new_err(
+            "residuals row count must match lat length",
+        ));
     }
     if cov_arr.shape() != [n, d, d] {
         return Err(PyValueError::new_err(format!(
@@ -794,9 +801,15 @@ fn apply_cosine_latitude_correction_numpy<'py>(
             cov_arr.shape()
         )));
     }
-    let lat_slice = lat_arr.as_slice().ok_or_else(|| PyValueError::new_err("lat must be contiguous"))?;
-    let res_slice = res_arr.as_slice().ok_or_else(|| PyValueError::new_err("residuals must be contiguous"))?;
-    let cov_slice = cov_arr.as_slice().ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?;
+    let lat_slice = lat_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("lat must be contiguous"))?;
+    let res_slice = res_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("residuals must be contiguous"))?;
+    let cov_slice = cov_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?;
     let mut res_buf = res_slice.to_vec();
     let mut cov_buf = cov_slice.to_vec();
     apply_cosine_latitude_correction_flat(lat_slice, &mut res_buf, &mut cov_buf, n, d);
@@ -804,7 +817,10 @@ fn apply_cosine_latitude_correction_numpy<'py>(
         .map_err(|e| PyValueError::new_err(format!("shape: {e}")))?;
     let cov_out = ndarray::Array3::from_shape_vec((n, d, d), cov_buf)
         .map_err(|e| PyValueError::new_err(format!("shape: {e}")))?;
-    Ok((res_out.into_pyarray_bound(py), cov_out.into_pyarray_bound(py)))
+    Ok((
+        res_out.into_pyarray_bound(py),
+        cov_out.into_pyarray_bound(py),
+    ))
 }
 
 #[pyfunction]
@@ -816,10 +832,16 @@ fn fit_absolute_magnitude_rows_numpy<'py>(
     let h = h_rows.as_array();
     let s = sigma_rows.as_array();
     if h.len() != s.len() {
-        return Err(PyValueError::new_err("h_rows and sigma_rows must be equal length"));
+        return Err(PyValueError::new_err(
+            "h_rows and sigma_rows must be equal length",
+        ));
     }
-    let h_slice = h.as_slice().ok_or_else(|| PyValueError::new_err("h_rows must be contiguous"))?;
-    let s_slice = s.as_slice().ok_or_else(|| PyValueError::new_err("sigma_rows must be contiguous"))?;
+    let h_slice = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h_rows must be contiguous"))?;
+    let s_slice = s
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("sigma_rows must be contiguous"))?;
     let f = fit_absolute_magnitude_rows(h_slice, s_slice);
     Ok((f.h_hat, f.h_sigma, f.sigma_eff, f.chi2_red, f.n_used))
 }
@@ -841,11 +863,17 @@ fn fit_absolute_magnitude_grouped_numpy<'py>(
     let s = sigma_rows.as_array();
     let off = group_offsets.as_array();
     if h.len() != s.len() {
-        return Err(PyValueError::new_err("h_rows and sigma_rows must be equal length"));
+        return Err(PyValueError::new_err(
+            "h_rows and sigma_rows must be equal length",
+        ));
     }
     let off_usize: Vec<usize> = off.iter().map(|&v| v as usize).collect();
-    let h_slice = h.as_slice().ok_or_else(|| PyValueError::new_err("h_rows must be contiguous"))?;
-    let s_slice = s.as_slice().ok_or_else(|| PyValueError::new_err("sigma_rows must be contiguous"))?;
+    let h_slice = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h_rows must be contiguous"))?;
+    let s_slice = s
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("sigma_rows must be contiguous"))?;
     let fits = fit_absolute_magnitude_grouped(h_slice, s_slice, &off_usize);
     let h_hat: Vec<f64> = fits.iter().map(|f| f.h_hat).collect();
     let h_sigma: Vec<f64> = fits.iter().map(|f| f.h_sigma).collect();
@@ -880,8 +908,10 @@ fn weighted_mean_numpy<'py>(
     let w_slice = w_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("W must be contiguous"))?;
-    Ok(ndarray::Array1::from_vec(weighted_mean_flat(s_slice, w_slice, n, d))
-        .into_pyarray_bound(py))
+    Ok(
+        ndarray::Array1::from_vec(weighted_mean_flat(s_slice, w_slice, n, d))
+            .into_pyarray_bound(py),
+    )
 }
 
 #[pyfunction]
@@ -897,7 +927,9 @@ fn weighted_covariance_numpy<'py>(
     let d = m.len();
     let n = s.nrows();
     if s.ncols() != d {
-        return Err(PyValueError::new_err("samples must have D columns matching mean"));
+        return Err(PyValueError::new_err(
+            "samples must have D columns matching mean",
+        ));
     }
     if w_arr.len() != n {
         return Err(PyValueError::new_err("W_cov must have length N"));
@@ -970,10 +1002,18 @@ fn classify_orbits_numpy<'py>(
     if e_arr.len() != n || q_arr.len() != n || q_apo_arr.len() != n {
         return Err(PyValueError::new_err("a, e, q, Q must have equal length"));
     }
-    let a_s = a_arr.as_slice().ok_or_else(|| PyValueError::new_err("a must be contiguous"))?;
-    let e_s = e_arr.as_slice().ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
-    let q_s = q_arr.as_slice().ok_or_else(|| PyValueError::new_err("q must be contiguous"))?;
-    let q_apo_s = q_apo_arr.as_slice().ok_or_else(|| PyValueError::new_err("Q must be contiguous"))?;
+    let a_s = a_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("a must be contiguous"))?;
+    let e_s = e_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
+    let q_s = q_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("q must be contiguous"))?;
+    let q_apo_s = q_apo_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("Q must be contiguous"))?;
     let codes = classify_orbits_flat(a_s, e_s, q_s, q_apo_s);
     Ok(ndarray::Array1::from_vec(codes).into_pyarray_bound(py))
 }
@@ -1027,8 +1067,12 @@ fn propagate_2body_along_arc_numpy<'py>(
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("orbit must be contiguous"))?;
     let orbit_state: [f64; 6] = [
-        orbit_arr_slice[0], orbit_arr_slice[1], orbit_arr_slice[2],
-        orbit_arr_slice[3], orbit_arr_slice[4], orbit_arr_slice[5],
+        orbit_arr_slice[0],
+        orbit_arr_slice[1],
+        orbit_arr_slice[2],
+        orbit_arr_slice[3],
+        orbit_arr_slice[4],
+        orbit_arr_slice[5],
     ];
     let rows = propagate_2body_along_arc(orbit_state, dts_slice, mu, max_iter, tol);
     let n = rows.len();
@@ -2017,5 +2061,6 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_gauss_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(gauss_iod_orbits_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(gauss_iod_fused_numpy, m)?)?;
+    spice::register(m)?;
     Ok(())
 }

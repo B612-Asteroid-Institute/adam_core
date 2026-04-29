@@ -1,16 +1,17 @@
-"""Generate the parity-tolerance table for every wired rust-default API.
+"""Pretty-print parity tolerance/RCA and performance tables.
 
-Runs the random-fuzz parity gate once, then joins each result with the
-configured per-API tolerance from `migration/parity/tolerances.py`. Emits
-a markdown table showing:
+Reads the current parity artifacts (or runs parity_fuzz when requested),
+then joins each result with the configured per-API tolerance from
+`migration/parity/tolerances.py`. Emits markdown tables suitable for
+handoffs and reviews.
 
-    | API | output | atol | rtol | worst_abs | worst_rel | margin | rationale |
+The parity table includes the tolerance/RCA fields:
 
-`margin` = atol / worst_abs (how much headroom the tolerance leaves).
-`rationale` is the short text from `ToleranceSpec.rationale`, truncated.
+    | API | output | atol | rtol | worst_abs | worst_rel | result |
+    | rationale | physical magnitude | root cause | verdict |
 
-Also lists `tolerances.TOLERANCES` entries that are NOT wired in the
-random-fuzz `GENERATORS`, so the table doubles as a coverage gap report.
+The performance table includes warm/cold speedup and waiver state when a
+speed miss is explicitly waived.
 """
 
 from __future__ import annotations
@@ -19,13 +20,21 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from migration.parity import _inputs, parity_fuzz, tolerances
 
+DEFAULT_PARITY_ARTIFACT = Path("migration/artifacts/parity_gate.json")
+DEFAULT_SPEED_ARTIFACT = Path("migration/artifacts/parity_speed_cold_warm.json")
 
-def _truncate(text: str, n: int) -> str:
+
+def _truncate(text: str, n: int | None) -> str:
     text = " ".join(text.split())
+    if n is None or n <= 0:
+        return text
     if len(text) <= n:
         return text
     return text[: n - 1] + "…"
@@ -54,24 +63,26 @@ def _build_rows(
                         worst_abs = max(worst_abs, o.max_abs)
                         worst_rel = max(worst_rel, o.max_rel)
             margin = (tol.atol / worst_abs) if worst_abs > 0 else float("inf")
-            rows.append({
-                "api_id": api_id,
-                "output": out_name,
-                "atol": tol.atol,
-                "rtol": tol.rtol,
-                "worst_abs": worst_abs,
-                "worst_rel": worst_rel,
-                "margin": margin,
-                "passed": api_result.passed,
-                "investigate": spec.investigate,
-                "investigate_task": spec.investigate_task,
-                "rationale": spec.rationale,
-                "dominant_column": spec.dominant_column,
-                "physical_magnitude": spec.physical_magnitude,
-                "root_cause": spec.root_cause,
-                "verdict": spec.verdict,
-                "state": "measured",
-            })
+            rows.append(
+                {
+                    "api_id": api_id,
+                    "output": out_name,
+                    "atol": tol.atol,
+                    "rtol": tol.rtol,
+                    "worst_abs": worst_abs,
+                    "worst_rel": worst_rel,
+                    "margin": margin,
+                    "passed": api_result.passed,
+                    "investigate": spec.investigate,
+                    "investigate_task": spec.investigate_task,
+                    "rationale": spec.rationale,
+                    "dominant_column": spec.dominant_column,
+                    "physical_magnitude": spec.physical_magnitude,
+                    "root_cause": spec.root_cause,
+                    "verdict": spec.verdict,
+                    "state": "measured",
+                }
+            )
 
     # Orchestration APIs whose parity is structurally implied by their
     # underlying kernel entries — recognized by a "ORCHESTRATION" prefix
@@ -88,39 +99,43 @@ def _build_rows(
         else:
             state = "unwired"
         for out_name, tol in spec.outputs.items():
-            rows.append({
-                "api_id": api_id,
-                "output": out_name,
-                "atol": tol.atol,
-                "rtol": tol.rtol,
-                "worst_abs": None,
-                "worst_rel": None,
-                "margin": None,
-                "passed": None,
-                "investigate": spec.investigate,
-                "investigate_task": spec.investigate_task,
-                "rationale": spec.rationale,
-                "dominant_column": spec.dominant_column,
-                "physical_magnitude": spec.physical_magnitude,
-                "root_cause": spec.root_cause,
-                "verdict": spec.verdict,
-                "state": state,
-            })
+            rows.append(
+                {
+                    "api_id": api_id,
+                    "output": out_name,
+                    "atol": tol.atol,
+                    "rtol": tol.rtol,
+                    "worst_abs": None,
+                    "worst_rel": None,
+                    "margin": None,
+                    "passed": None,
+                    "investigate": spec.investigate,
+                    "investigate_task": spec.investigate_task,
+                    "rationale": spec.rationale,
+                    "dominant_column": spec.dominant_column,
+                    "physical_magnitude": spec.physical_magnitude,
+                    "root_cause": spec.root_cause,
+                    "verdict": spec.verdict,
+                    "state": state,
+                }
+            )
     return rows
 
 
-def _format_markdown(rows: list[dict]) -> str:
+def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
     lines = []
     lines.append(
-        "| API | output | atol | rtol | worst_abs | result | dominant col | physical | root cause | verdict |"
+        "| API | output | atol | rtol | worst_abs | worst_rel | result | rationale | physical | root cause | verdict |"
     )
-    lines.append("|---|---|---:|---:|---:|---:|---|---|---|---|")
+    lines.append("|---|---|---:|---:|---:|---:|---|---|---|---|---|")
     for r in rows:
         if r["state"] != "measured":
             wa = "—"
+            wr = "—"
             result = "—"
         else:
             wa = f"{r['worst_abs']:.2e}" if r["worst_abs"] > 0 else "0"
+            wr = f"{r['worst_rel']:.2e}" if r["worst_rel"] > 0 else "0"
             # The margin column now shows pass/fail derived from the actual
             # parity check (worst_abs ≤ atol + rtol·|val|). For atol-only
             # outputs (rtol=0) we also show the bare margin atol/worst_abs.
@@ -148,19 +163,58 @@ def _format_markdown(rows: list[dict]) -> str:
         elif r["investigate"]:
             flag = f" ⚠ {r['investigate_task'] or 'investigate'}"
         rtol_s = f"{r['rtol']:.0e}" if r["rtol"] > 0 else "0"
-        dom = r.get("dominant_column") or "—"
-        phys = _truncate(r.get("physical_magnitude") or "—", 60)
-        rc = _truncate(r.get("root_cause") or _truncate(r["rationale"], 90), 110)
-        verdict = r.get("verdict") or "—"
-        # Verdict cell: highlight non-bit-parity verdicts
-        if verdict and verdict != "—" and not verdict.startswith("bit-parity"):
-            verdict = _truncate(verdict, 100)
+        rationale = _truncate(r.get("rationale") or "—", max_text)
+        phys = _truncate(r.get("physical_magnitude") or "—", max_text)
+        rc = _truncate(r.get("root_cause") or "—", max_text)
+        verdict = _truncate(r.get("verdict") or "—", max_text)
         lines.append(
             f"| `{r['api_id']}`{flag} "
             f"| {r['output']} "
             f"| {r['atol']:.0e} | {rtol_s} "
-            f"| {wa} | {result} "
-            f"| {dom} | {phys} | {rc} | {verdict} |"
+            f"| {wa} | {wr} | {result} "
+            f"| {rationale} | {phys} | {rc} | {verdict} |"
+        )
+    return "\n".join(lines)
+
+
+def _format_speed(value: float | None) -> str:
+    if value is None:
+        return "—"
+    return f"{value:.2f}x"
+
+
+def _load_speed_rows(path: Path | None) -> list[dict[str, Any]]:
+    if path is None or not path.exists():
+        return []
+    data = json.loads(path.read_text())
+    if "parity_speed" in data:
+        return list(data["parity_speed"].get("apis", []))
+    return list(data.get("apis", []))
+
+
+def _format_speed_markdown(rows: list[dict[str, Any]]) -> str:
+    lines = [
+        "| API | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
+        "|---|---:|---:|---:|---|---|",
+    ]
+    for r in rows:
+        raw_passed = bool(r.get("raw_passed", r.get("passed", False)))
+        waived = bool(r.get("waived", False))
+        if waived:
+            gate = "WAIVED"
+        elif raw_passed:
+            gate = "PASS"
+        elif r.get("passed"):
+            gate = "PASS"
+        else:
+            gate = "FAIL"
+        waiver = r.get("waiver") or "—"
+        lines.append(
+            f"| `{r['api_id']}` "
+            f"| {_format_speed(r.get('speedup_p50'))} "
+            f"| {_format_speed(r.get('speedup_p95'))} "
+            f"| {_format_speed(r.get('speedup_cold'))} "
+            f"| {gate} | {waiver} |"
         )
     return "\n".join(lines)
 
@@ -168,16 +222,16 @@ def _format_markdown(rows: list[dict]) -> str:
 def _coverage_summary(rows: list[dict]) -> str:
     declared_apis = sorted({r["api_id"] for r in rows})
     measured_apis = sorted({r["api_id"] for r in rows if r["state"] == "measured"})
-    wired_not_measured = sorted({
-        r["api_id"] for r in rows if r["state"] == "wired-not-measured"
-    })
-    orchestration = sorted({
-        r["api_id"] for r in rows if r["state"] == "orchestration-implied"
-    })
+    wired_not_measured = sorted(
+        {r["api_id"] for r in rows if r["state"] == "wired-not-measured"}
+    )
+    orchestration = sorted(
+        {r["api_id"] for r in rows if r["state"] == "orchestration-implied"}
+    )
     unwired = sorted({r["api_id"] for r in rows if r["state"] == "unwired"})
-    flagged = sorted({
-        r["api_id"] for r in rows if r["state"] == "measured" and r["investigate"]
-    })
+    flagged = sorted(
+        {r["api_id"] for r in rows if r["state"] == "measured" and r["investigate"]}
+    )
     direct = len(measured_apis) + len(wired_not_measured)
     indirect = len(orchestration)
     lines = []
@@ -195,12 +249,16 @@ def _coverage_summary(rows: list[dict]) -> str:
             lines.append(f"- `{a}`")
     if orchestration:
         lines.append("")
-        lines.append("**Orchestration (covered indirectly via underlying kernel parity)**:")
+        lines.append(
+            "**Orchestration (covered indirectly via underlying kernel parity)**:"
+        )
         for a in orchestration:
             lines.append(f"- `{a}`")
     if unwired:
         lines.append("")
-        lines.append("**Declared but UNWIRED in random fuzz** (no parity, action needed):")
+        lines.append(
+            "**Declared but UNWIRED in random fuzz** (no parity, action needed):"
+        )
         for a in unwired:
             lines.append(f"- `{a}`")
     if flagged:
@@ -211,6 +269,44 @@ def _coverage_summary(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _api_result_from_json(entry: dict[str, Any]) -> parity_fuzz.ApiResult:
+    seeds = []
+    for s in entry["seeds"]:
+        outs = [
+            parity_fuzz.OutputResult(
+                name=o["name"],
+                max_abs=o["max_abs"],
+                max_rel=o["max_rel"],
+                atol=o["atol"],
+                rtol=o["rtol"],
+                passed=o["passed"],
+                nan_disagreement=o.get("nan_disagreement", 0),
+            )
+            for o in s["outputs"]
+        ]
+        seeds.append(
+            parity_fuzz.SeedResult(
+                seed=s["seed"],
+                n=s["n"],
+                outputs=outs,
+                error=s["error"],
+            )
+        )
+    return parity_fuzz.ApiResult(
+        api_id=entry["api_id"],
+        seeds=seeds,
+        investigate=entry.get("investigate", False),
+        investigate_task=entry.get("investigate_task", ""),
+    )
+
+
+def _load_fuzz_results(path: Path) -> list[parity_fuzz.ApiResult]:
+    cached = json.loads(path.read_text())
+    if "parity_fuzz" in cached:
+        cached = cached["parity_fuzz"]
+    return [_api_result_from_json(entry) for entry in cached.get("apis", [])]
+
+
 def _build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Parity tolerance + result table.")
     p.add_argument("--seeds", type=int, default=8)
@@ -218,12 +314,61 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--base-seed", type=int, default=20260426)
     p.add_argument("--apis", nargs="*", default=None)
     p.add_argument(
-        "--json-output", type=Path, default=None,
+        "--parity-artifact",
+        type=Path,
+        default=DEFAULT_PARITY_ARTIFACT,
+        help=(
+            "Read fuzz results from this artifact. Accepts either "
+            "parity_gate.json or parity_fuzz.json. Defaults to current "
+            "migration/artifacts/parity_gate.json."
+        ),
+    )
+    p.add_argument(
+        "--speed-artifact",
+        type=Path,
+        default=DEFAULT_SPEED_ARTIFACT,
+        help=(
+            "Read speed results from this artifact. Accepts either "
+            "parity_speed_cold_warm.json or parity_gate.json. Defaults "
+            "to current migration/artifacts/parity_speed_cold_warm.json."
+        ),
+    )
+    p.add_argument(
+        "--no-speed",
+        action="store_true",
+        help="Only print parity tolerance/RCA table.",
+    )
+    p.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Run parity_fuzz instead of reading --parity-artifact.",
+    )
+    p.add_argument(
+        "--max-text",
+        type=int,
+        default=0,
+        help=(
+            "Maximum characters per rationale/RCA cell. Defaults to 0, "
+            "which prints full text. Use a positive value for compact output."
+        ),
+    )
+    p.add_argument(
+        "--json-output",
+        type=Path,
+        default=None,
         help="Write full row data to this JSON path (in addition to stdout markdown).",
     )
     p.add_argument(
-        "--use-cache", type=Path, default=None,
-        help="Read fuzz results from this JSON instead of running parity_fuzz.",
+        "--markdown-output",
+        type=Path,
+        default=None,
+        help="Write the markdown report to this path as well as stdout.",
+    )
+    p.add_argument(
+        "--use-cache",
+        type=Path,
+        default=None,
+        help="Deprecated alias for --parity-artifact.",
     )
     return p
 
@@ -231,46 +376,53 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     api_ids = args.apis or list(_inputs.all_api_ids())
+    parity_artifact = args.use_cache or args.parity_artifact
 
-    if args.use_cache and args.use_cache.exists():
-        cached = json.loads(args.use_cache.read_text())
-        # Reconstruct ApiResult-ish objects for the joiner
-        fuzz_results = []
-        for entry in cached.get("apis", []):
-            seeds = []
-            for s in entry["seeds"]:
-                outs = [
-                    parity_fuzz.OutputResult(
-                        name=o["name"], max_abs=o["max_abs"], max_rel=o["max_rel"],
-                        atol=o["atol"], rtol=o["rtol"], passed=o["passed"],
-                        nan_disagreement=o.get("nan_disagreement", 0),
-                    )
-                    for o in s["outputs"]
-                ]
-                seeds.append(parity_fuzz.SeedResult(
-                    seed=s["seed"], n=s["n"], outputs=outs, error=s["error"],
-                ))
-            fuzz_results.append(parity_fuzz.ApiResult(
-                api_id=entry["api_id"], seeds=seeds,
-                investigate=entry.get("investigate", False),
-                investigate_task=entry.get("investigate_task", ""),
-            ))
+    if not args.refresh and parity_artifact and parity_artifact.exists():
+        fuzz_results = _load_fuzz_results(parity_artifact)
     else:
         fuzz_results = parity_fuzz.fuzz_all(
-            api_ids, seeds=args.seeds, n=args.n, base_seed=args.base_seed,
+            api_ids,
+            seeds=args.seeds,
+            n=args.n,
+            base_seed=args.base_seed,
         )
 
     rows = _build_rows(fuzz_results)
+    speed_rows = [] if args.no_speed else _load_speed_rows(args.speed_artifact)
 
-    print("# Parity tolerance + observed-difference table\n")
-    print(_coverage_summary(rows))
-    print()
-    print(_format_markdown(rows))
+    max_text = None if args.max_text == 0 else args.max_text
+    sections = [
+        "# Rust Migration Parity And Performance Tables",
+        "",
+        "## Parity Tolerance + Observed Difference",
+        "",
+        _coverage_summary(rows),
+        "",
+        _format_parity_markdown(rows, max_text=max_text),
+    ]
+    if speed_rows:
+        sections.extend(
+            [
+                "",
+                "## Performance",
+                "",
+                _format_speed_markdown(speed_rows),
+            ]
+        )
+    report = "\n".join(sections)
+
+    print(report)
 
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
         args.json_output.write_text(json.dumps(rows, indent=2))
         print(f"\nwrote {args.json_output}", file=sys.stderr)
+
+    if args.markdown_output:
+        args.markdown_output.parent.mkdir(parents=True, exist_ok=True)
+        args.markdown_output.write_text(report)
+        print(f"wrote {args.markdown_output}", file=sys.stderr)
 
     return 0
 

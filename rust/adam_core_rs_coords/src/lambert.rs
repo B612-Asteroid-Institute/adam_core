@@ -408,10 +408,9 @@ pub fn porkchop_grid_flat(
     // Single sequential pass to enumerate valid pairs (small relative to
     // the Lambert work that follows).
     let mut valid_pairs: Vec<(u32, u32)> = Vec::with_capacity(n_dep * n_arr / 2);
-    for i in 0..n_dep {
-        let dep_t = dep_mjds[i];
-        for j in 0..n_arr {
-            if arr_mjds[j] > dep_t {
+    for (i, &dep_t) in dep_mjds.iter().enumerate() {
+        for (j, &arr_t) in arr_mjds.iter().enumerate() {
+            if arr_t > dep_t {
                 valid_pairs.push((i as u32, j as u32));
             }
         }
@@ -444,9 +443,7 @@ pub fn porkchop_grid_flat(
                 arr_states_flat[j_us * 6 + 2],
             ];
             let tof = arr_mjds[j_us] - dep_mjds[i_us];
-            let (v1, v2) = izzo_lambert(
-                r1, r2, tof, mu, 0, prograde, true, maxiter, atol, rtol,
-            );
+            let (v1, v2) = izzo_lambert(r1, r2, tof, mu, 0, prograde, true, maxiter, atol, rtol);
             v1_dst.copy_from_slice(&v1);
             v2_dst.copy_from_slice(&v2);
             *dep_dst = i;

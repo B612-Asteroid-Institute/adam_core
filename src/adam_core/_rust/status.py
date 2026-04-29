@@ -35,6 +35,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.cartesian_to_spherical_numpy",
+        waiver="waiver-20260428-cartesian-to-spherical-warm-performance-temporary",
     ),
     ApiMigration(
         api_id="coordinates.cartesian_to_geodetic",
@@ -126,6 +127,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.calculate_phase_angle_numpy",
+        waiver="waiver-20260428-photometry-warm-performance-temporary",
     ),
     ApiMigration(
         api_id="photometry.calculate_apparent_magnitude_v",
@@ -133,6 +135,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.calculate_apparent_magnitude_v_numpy",
+        waiver="waiver-20260428-photometry-warm-performance-temporary",
     ),
     ApiMigration(
         api_id="photometry.calculate_apparent_magnitude_v_and_phase_angle",
@@ -140,6 +143,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.calculate_apparent_magnitude_v_and_phase_angle_numpy",
+        waiver="waiver-20260428-photometry-warm-performance-temporary",
     ),
     ApiMigration(
         api_id="photometry.predict_magnitudes",
@@ -147,6 +151,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.predict_magnitudes_bandpass_numpy",
+        waiver="waiver-20260428-photometry-warm-performance-temporary",
     ),
     ApiMigration(
         api_id="orbit_determination.calcGibbs",

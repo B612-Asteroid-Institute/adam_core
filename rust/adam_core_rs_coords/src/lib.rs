@@ -27,9 +27,7 @@ pub mod abs_mag;
 pub use abs_mag::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, AbsMagFit};
 
 pub mod spherical_resid;
-pub use spherical_resid::{
-    apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat,
-};
+pub use spherical_resid::{apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat};
 
 pub use propagate::{
     calc_chi, calc_chi_with_init, calc_lagrange_coefficients, calc_stumpff,
@@ -49,6 +47,13 @@ pub use photometry::{
     calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
     calculate_phase_angle_flat, predict_magnitudes_bandpass_flat,
 };
+
+/// Rayon chunk size for cheap 6-column coordinate conversions.
+///
+/// Per-row dispatch dominates kernels such as Cartesian <-> spherical at
+/// n~=2000, so each Rayon task gets a block of rows instead of one row.
+const COORD_CHUNK_ROWS: usize = 1024;
+const COORD_CHUNK_FLAT6: usize = COORD_CHUNK_ROWS * 6;
 
 pub mod lambert;
 pub use lambert::{izzo_lambert, izzo_lambert_batch_flat, porkchop_grid_flat};
@@ -464,12 +469,14 @@ pub fn cartesian_to_spherical_flat6(flat_coords: &[f64]) -> Vec<f64> {
         "flat_coords length must be a multiple of 6",
     );
     let mut out = vec![0.0_f64; flat_coords.len()];
-    out.par_chunks_mut(6)
-        .zip(flat_coords.par_chunks(6))
-        .for_each(|(dst, src)| {
-            let row = [src[0], src[1], src[2], src[3], src[4], src[5]];
-            let converted = cartesian_to_spherical_row(&row);
-            dst.copy_from_slice(&converted);
+    out.par_chunks_mut(COORD_CHUNK_FLAT6)
+        .zip(flat_coords.par_chunks(COORD_CHUNK_FLAT6))
+        .for_each(|(dst_chunk, src_chunk)| {
+            for (dst, src) in dst_chunk.chunks_mut(6).zip(src_chunk.chunks(6)) {
+                let row = [src[0], src[1], src[2], src[3], src[4], src[5]];
+                let converted = cartesian_to_spherical_row(&row);
+                dst.copy_from_slice(&converted);
+            }
         });
     out
 }
@@ -481,12 +488,14 @@ pub fn spherical_to_cartesian_flat6(flat_coords: &[f64]) -> Vec<f64> {
         "flat_coords length must be a multiple of 6",
     );
     let mut out = vec![0.0_f64; flat_coords.len()];
-    out.par_chunks_mut(6)
-        .zip(flat_coords.par_chunks(6))
-        .for_each(|(dst, src)| {
-            let row = [src[0], src[1], src[2], src[3], src[4], src[5]];
-            let converted = spherical_to_cartesian_row(&row);
-            dst.copy_from_slice(&converted);
+    out.par_chunks_mut(COORD_CHUNK_FLAT6)
+        .zip(flat_coords.par_chunks(COORD_CHUNK_FLAT6))
+        .for_each(|(dst_chunk, src_chunk)| {
+            for (dst, src) in dst_chunk.chunks_mut(6).zip(src_chunk.chunks(6)) {
+                let row = [src[0], src[1], src[2], src[3], src[4], src[5]];
+                let converted = spherical_to_cartesian_row(&row);
+                dst.copy_from_slice(&converted);
+            }
         });
     out
 }

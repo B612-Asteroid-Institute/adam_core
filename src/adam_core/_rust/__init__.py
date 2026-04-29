@@ -15,6 +15,7 @@ from .api import (
     gauss_iod_orbits_numpy,
     RUST_BACKEND_AVAILABLE,
     SPICEKIT_AVAILABLE,
+    adam_core_spice_backend,
     calc_gibbs_numpy,
     calc_herrick_gibbs_numpy,
     calc_mean_motion_numpy,
@@ -58,6 +59,7 @@ from .status import API_MIGRATION_STATUS, API_MIGRATIONS, ApiMigration, PerfGate
 __all__ = [
     "RUST_BACKEND_AVAILABLE",
     "SPICEKIT_AVAILABLE",
+    "adam_core_spice_backend",
     "add_light_time_numpy",
     "cartesian_to_geodetic_numpy",
     "cartesian_to_keplerian_numpy",

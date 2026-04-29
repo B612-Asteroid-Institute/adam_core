@@ -42,19 +42,45 @@ pub const HYA: i32 = 13;
 #[inline]
 fn classify_row(a: f64, e: f64, q: f64, q_apo: f64) -> i32 {
     let mut code = AST;
-    if a > 1.0 && q > 1.017 && q < 1.3 { code = AMO; }
-    if a > 1.0 && q < 1.017            { code = APO; }
-    if a < 1.0 && q_apo > 0.983        { code = ATE; }
-    if a > 5.5 && a < 30.1             { code = CEN; }
-    if q_apo < 0.983                   { code = IEO; }
-    if a < 2.0 && q > 1.666            { code = IMB; }
-    if a > 2.0 && a < 3.2 && q > 1.666 { code = MBA; }
-    if a < 3.2 && q > 1.3 && q < 1.666 { code = MCA; }
-    if a > 3.2 && a < 4.6              { code = OMB; }
-    if a > 4.6 && a < 5.5 && e < 0.3   { code = TJN; }
-    if a > 30.1                        { code = TNO; }
-    if e == 1.0                        { code = PAA; }
-    if e > 1.0                         { code = HYA; }
+    if a > 1.0 && q > 1.017 && q < 1.3 {
+        code = AMO;
+    }
+    if a > 1.0 && q < 1.017 {
+        code = APO;
+    }
+    if a < 1.0 && q_apo > 0.983 {
+        code = ATE;
+    }
+    if a > 5.5 && a < 30.1 {
+        code = CEN;
+    }
+    if q_apo < 0.983 {
+        code = IEO;
+    }
+    if a < 2.0 && q > 1.666 {
+        code = IMB;
+    }
+    if a > 2.0 && a < 3.2 && q > 1.666 {
+        code = MBA;
+    }
+    if a < 3.2 && q > 1.3 && q < 1.666 {
+        code = MCA;
+    }
+    if a > 3.2 && a < 4.6 {
+        code = OMB;
+    }
+    if a > 4.6 && a < 5.5 && e < 0.3 {
+        code = TJN;
+    }
+    if a > 30.1 {
+        code = TNO;
+    }
+    if e == 1.0 {
+        code = PAA;
+    }
+    if e > 1.0 {
+        code = HYA;
+    }
     code
 }
 

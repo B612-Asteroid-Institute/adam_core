@@ -24,10 +24,10 @@ jobs:
         python-version: "3.11"
     - name: Install build dependencies
       run: pdm install -G test
-    - name: Build Python source dist + wheel
-      run: pdm build
-    - name: Build Rust wheels
-      run: pdm run rust-build
+    - name: Build native adam_core wheel
+      run: pdm run wheel-build
+    - name: Verify native wheel artifact
+      run: pdm run wheel-inspect
     - name: Publish adam_core to Test PyPI
       if: ${{ inputs.test_pypi }}
       uses: pypa/gh-action-pypi-publish@release/v1

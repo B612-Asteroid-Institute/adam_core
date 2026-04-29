@@ -71,7 +71,10 @@ fn chi2_one_row(r: &[f64], cov: &[f64], d: usize, row_idx: usize) -> Result<f64,
         }
         cholesky_in_place_solve_dot(&mut a[..d * d], r, d, row_idx)
     } else {
-        let mut a: Vec<f64> = cov.iter().map(|&v| if v.is_nan() { 0.0 } else { v }).collect();
+        let mut a: Vec<f64> = cov
+            .iter()
+            .map(|&v| if v.is_nan() { 0.0 } else { v })
+            .collect();
         cholesky_in_place_solve_dot(&mut a, r, d, row_idx)
     }
 }
@@ -121,10 +124,7 @@ fn cholesky_in_place_solve_dot(
             }
             y[i] = s / a[i * d + i];
         }
-        let mut chi2 = 0.0;
-        for k in 0..d {
-            chi2 += y[k] * y[k];
-        }
+        let chi2: f64 = y.iter().take(d).map(|v| v * v).sum();
         Ok(chi2)
     } else {
         let mut y = vec![0.0_f64; d];
@@ -155,7 +155,12 @@ mod tests {
         let cov = [0.04, 0.0, 0.0, 0.09];
         let out = calculate_chi2_flat(&r, &cov, 1, 2).unwrap();
         let expected = 0.01 / 0.04 + 0.04 / 0.09;
-        assert!(approx(out[0], expected, 1e-14), "got {} expected {}", out[0], expected);
+        assert!(
+            approx(out[0], expected, 1e-14),
+            "got {} expected {}",
+            out[0],
+            expected
+        );
     }
 
     #[test]

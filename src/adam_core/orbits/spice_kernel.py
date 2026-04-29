@@ -112,7 +112,7 @@ def orbits_to_spk(
     """Convert Orbits to a SPICE SPK file using pure-Rust DAF serialization.
 
     Writes Type 3 (Chebyshev pos+vel) or Type 9 (Lagrange discrete state)
-    segments through ``spicekit.NaifSpkWriter``. Output bytes are
+    segments through adam-core's native Rust SPK writer. Output bytes are
     assembled in memory and committed with an atomic rename so partial
     files never survive a crash. No CSPICE linkage is required.
 
@@ -129,8 +129,8 @@ def orbits_to_spk(
     writer = naif_spk_writer("adam-core")
     if writer is None:
         raise RuntimeError(
-            "spicekit unavailable; SPK writing requires the spicekit "
-            "Python package."
+            "adam-core native SPK writer unavailable; SPK writing requires "
+            "the compiled adam_core._rust_native extension."
         )
 
     cheby_degree = 15
@@ -200,11 +200,7 @@ def _frame_id_for(frame: str) -> int:
 
 def _segment_id_for(orbit: Orbits, start_time: float, end_time: float) -> str:
     segment_id = (
-        str(orbit.orbit_id[0].as_py())
-        + "_"
-        + str(start_time)
-        + "_"
-        + str(end_time)
+        str(orbit.orbit_id[0].as_py()) + "_" + str(start_time) + "_" + str(end_time)
     )
     # SPICE has a 40-byte limit on segment IDs; preserve legacy truncation.
     return segment_id[:40]
@@ -258,7 +254,7 @@ def _add_type3_segment(
         # in that order to match the on-disk SPK Type 3 record layout.
         for comp in range(6):
             col_start = 2 + comp * n_coef
-            records_coeffs[w, col_start:col_start + n_coef] = coeffs[comp]
+            records_coeffs[w, col_start : col_start + n_coef] = coeffs[comp]
 
     center_code = propagated_orbit.coordinates.origin.as_OriginCodes().value
 
@@ -328,7 +324,7 @@ def write_spkw03_segment(
     """Backward-compat shim for callers that passed a writer-like handle.
 
     The `handle` parameter is accepted for API compatibility with the
-    legacy CSPICE-backed helper and must be a `NaifSpkWriter` instance.
+    legacy CSPICE-backed helper and must be a native `NaifSpkWriter` instance.
     """
     _add_type3_segment(
         handle,

@@ -59,6 +59,12 @@ Just the speedup half (warm only — default):
     --n 2000 --reps 7 --output migration/artifacts/parity_speed.json
 ```
 
+Active performance waivers are read from `src/adam_core/_rust/status.py`.
+Waived APIs still record their raw p50/p95 miss in the JSON artifact, but
+the gate reports them as `WAIVED` and exits successfully. Every waiver must
+also be recorded in `migration/waivers.yaml` with an owner, review date,
+and exit criteria.
+
 Add `--cold` to additionally measure cold-call latency. Cold timing
 spawns a fresh Python subprocess per measurement (so each call pays
 process startup + module import + JIT compile cost). This matters for
@@ -67,9 +73,33 @@ legacy.
 
 ```bash
 .venv/bin/python -m migration.parity.parity_speed \
-    --n 2000 --reps 7 --cold \
+    --n 2000 --reps 21 --warmup 3 --cold \
     --output migration/artifacts/parity_speed_cold_warm.json
 ```
+
+The cold/warm review gate intentionally uses more warm timing samples than the
+quick warm-only command. Several Rust APIs complete in tens of microseconds, so
+7 reps makes p95 behave like a single scheduler-outlier detector rather than a
+stable latency estimate.
+
+## Pretty-Printing Review Tables
+
+When presenting parity/performance tables for review, use the canonical
+pretty-printer rather than ad hoc JSON extraction. It joins
+`parity_gate.json` with `tolerances.py`, so the parity table includes
+the tolerance rationale, physical magnitude, root cause, and verdict.
+
+```bash
+.venv/bin/python -m migration.scripts.parity_table \
+    --parity-artifact migration/artifacts/parity_gate.json \
+    --speed-artifact migration/artifacts/parity_speed_cold_warm.json \
+    --json-output migration/artifacts/parity_table_rca.json \
+    --markdown-output migration/artifacts/parity_report.md
+```
+
+Markdown output keeps the full untruncated rationale/RCA text by default.
+Use `--max-text 120` only for compact console summaries. The JSON output
+always keeps the full text.
 
 ## Adding a new rust-default API
 

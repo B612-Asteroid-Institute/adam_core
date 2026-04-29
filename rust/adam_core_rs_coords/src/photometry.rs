@@ -92,25 +92,27 @@ pub fn calculate_phase_angle_flat(object_pos: &[f64], observer_pos: &[f64]) -> V
     // task dispatch dominates the math at typical n. `par_chunks_mut(1024)`
     // gives each worker a substantial batch — small n becomes one chunk
     // (effectively serial, no overhead); large n distributes across cores.
-    out.par_chunks_mut(PHOT_CHUNK).enumerate().for_each(|(ci, chunk)| {
-        let base_i = ci * PHOT_CHUNK;
-        for (k, dst) in chunk.iter_mut().enumerate() {
-            let i = base_i + k;
-            let base = i * 3;
-            let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
-            let obs = [
-                observer_pos[base],
-                observer_pos[base + 1],
-                observer_pos[base + 2],
-            ];
-            let (r, delta, _, cos_alpha) = row_geometry(obj, obs);
-            if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
-                *dst = f64::NAN;
-            } else {
-                *dst = cos_to_alpha_deg(cos_alpha);
+    out.par_chunks_mut(PHOT_CHUNK)
+        .enumerate()
+        .for_each(|(ci, chunk)| {
+            let base_i = ci * PHOT_CHUNK;
+            for (k, dst) in chunk.iter_mut().enumerate() {
+                let i = base_i + k;
+                let base = i * 3;
+                let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
+                let obs = [
+                    observer_pos[base],
+                    observer_pos[base + 1],
+                    observer_pos[base + 2],
+                ];
+                let (r, delta, _, cos_alpha) = row_geometry(obj, obs);
+                if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
+                    *dst = f64::NAN;
+                } else {
+                    *dst = cos_to_alpha_deg(cos_alpha);
+                }
             }
-        }
-    });
+        });
     out
 }
 
@@ -138,25 +140,27 @@ pub fn calculate_apparent_magnitude_v_flat(
     assert_eq!(g.len(), n, "g must have length N");
 
     let mut out = vec![0.0_f64; n];
-    out.par_chunks_mut(PHOT_CHUNK).enumerate().for_each(|(ci, chunk)| {
-        let base_i = ci * PHOT_CHUNK;
-        for (k, dst) in chunk.iter_mut().enumerate() {
-            let i = base_i + k;
-            let base = i * 3;
-            let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
-            let obs = [
-                observer_pos[base],
-                observer_pos[base + 1],
-                observer_pos[base + 2],
-            ];
-            let (r, delta, _, cos_phase) = row_geometry(obj, obs);
-            if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
-                *dst = f64::NAN;
-            } else {
-                *dst = cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase);
+    out.par_chunks_mut(PHOT_CHUNK)
+        .enumerate()
+        .for_each(|(ci, chunk)| {
+            let base_i = ci * PHOT_CHUNK;
+            for (k, dst) in chunk.iter_mut().enumerate() {
+                let i = base_i + k;
+                let base = i * 3;
+                let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
+                let obs = [
+                    observer_pos[base],
+                    observer_pos[base + 1],
+                    observer_pos[base + 2],
+                ];
+                let (r, delta, _, cos_phase) = row_geometry(obj, obs);
+                if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
+                    *dst = f64::NAN;
+                } else {
+                    *dst = cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase);
+                }
             }
-        }
-    });
+        });
     out
 }
 
@@ -244,29 +248,35 @@ pub fn predict_magnitudes_bandpass_flat(
 
     let k = delta_table.len() as i32;
     let mut out = vec![0.0_f64; n];
-    out.par_chunks_mut(PHOT_CHUNK).enumerate().for_each(|(ci, chunk)| {
-        let base_i = ci * PHOT_CHUNK;
-        for (kk, dst) in chunk.iter_mut().enumerate() {
-            let i = base_i + kk;
-            let base = i * 3;
-            let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
-            let obs = [
-                observer_pos[base],
-                observer_pos[base + 1],
-                observer_pos[base + 2],
-            ];
-            let (r, delta, _, cos_phase) = row_geometry(obj, obs);
-            let tid = target_ids[i];
-            if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
-                *dst = f64::NAN;
-            } else if tid < 0 || tid >= k {
-                *dst = f64::NAN;
-            } else {
-                let mag_v = cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase);
-                *dst = mag_v + delta_table[tid as usize];
+    out.par_chunks_mut(PHOT_CHUNK)
+        .enumerate()
+        .for_each(|(ci, chunk)| {
+            let base_i = ci * PHOT_CHUNK;
+            for (kk, dst) in chunk.iter_mut().enumerate() {
+                let i = base_i + kk;
+                let base = i * 3;
+                let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
+                let obs = [
+                    observer_pos[base],
+                    observer_pos[base + 1],
+                    observer_pos[base + 2],
+                ];
+                let (r, delta, _, cos_phase) = row_geometry(obj, obs);
+                let tid = target_ids[i];
+                if !r.is_finite()
+                    || !delta.is_finite()
+                    || r <= 0.0
+                    || delta <= 0.0
+                    || tid < 0
+                    || tid >= k
+                {
+                    *dst = f64::NAN;
+                } else {
+                    let mag_v = cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase);
+                    *dst = mag_v + delta_table[tid as usize];
+                }
             }
-        }
-    });
+        });
     out
 }
 

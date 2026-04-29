@@ -1,5 +1,5 @@
 version: 1
-updated: 2026-04-21
+updated: 2026-04-28
 schema:
   required_fields:
     - id
@@ -20,7 +20,21 @@ waivers:
     exit_criteria: p50 and p95 speedup >= 1.2x with parity tests passing
     status: resolved
     resolved: 2026-04-22
-    resolution: Added focused `migration/scripts/calc_mean_motion_bench.py` (isolated process, no state contamination). At N=50,000 (middle of realistic KeplerianCoordinates.n / CometaryCoordinates.n call-site range) rust measures **1.61x p50 / 2.25x p95** over the JAX kernel, clearing the 1.2x gate. Kernel is a simple scalar auto-vectorizing loop (`|a| * a * a` instead of `.powi(3)` to give the compiler a SIMD-friendly pattern). Note: at very large N (≥400k rows) JAX's XLA streaming kernel wins by ~4.6x, because portable stable Rust can't emit AVX-512 / advanced NEON without `-C target-cpu=native` (which would break wheel portability). That regime isn't representative of real call sites — the main gate's earlier 400k measurement was contaminated by memory/cache state from preceding large benchmarks and is not a fair stand-alone number. Promoted to `default="rust"` and wired dispatch in `calc_mean_motion` with legacy JAX fallback when the Rust extension is unavailable.
+    resolution: >-
+      Added focused `migration/scripts/calc_mean_motion_bench.py` (isolated
+      process, no state contamination). At N=50,000 (middle of realistic
+      KeplerianCoordinates.n / CometaryCoordinates.n call-site range) rust
+      measures **1.61x p50 / 2.25x p95** over the JAX kernel, clearing the
+      1.2x gate. Kernel is a simple scalar auto-vectorizing loop (`|a| * a *
+      a` instead of `.powi(3)` to give the compiler a SIMD-friendly pattern).
+      Note: at very large N (≥400k rows) JAX's XLA streaming kernel wins by
+      ~4.6x, because portable stable Rust can't emit AVX-512 / advanced NEON
+      without `-C target-cpu=native` (which would break wheel portability).
+      That regime isn't representative of real call sites — the main gate's
+      earlier 400k measurement was contaminated by memory/cache state from
+      preceding large benchmarks and is not a fair stand-alone number.
+      Promoted to `default="rust"` and wired dispatch in `calc_mean_motion`
+      with legacy JAX fallback when the Rust extension is unavailable.
   - id: waiver-20260415-gaussiod-perf
     api: orbit_determination.gaussIOD
     owner: core-orbit-determination
@@ -30,7 +44,24 @@ waivers:
     exit_criteria: p50 and p95 speedup >= 1.2x for gaussIOD full-path benchmark with parity tests passing
     status: resolved
     resolved: 2026-04-22
-    resolution: Applied the 2026-04-22 fusion rule — moved the ENTIRE gaussIOD body (equatorial RA/Dec → ecliptic unit-vector rotation, Milani A/B/V/C0/h0 coefficients, 8th-order polynomial root-finding, per-root orbit construction) into a single Rust crossing (`gauss_iod_fused_numpy`). Polynomial roots found via Laguerre's method + deflation (globally convergent, handles ill-conditioned polynomials with wide coefficient dynamic range — prior Durand-Kerner attempt stalled on real-world gauss-IOD polys whose leading coefficient C0² can be ~1e-3 while others are O(1), giving roots at magnitudes from 0.86 to 37.6). Benchmark 128 real-world triplets (legacy full-python vs fused rust): 2.72x p50 / 2.81x p95 — above the 1.2x gate by 2×. Parity: orbit Cartesian components at atol=1e-5 AU (1500 m, below IOD preliminary-orbit noise), epochs at atol=1e-6 days (0.1 s). Root ordering differs between np.roots (LAPACK eigenvalues) and Laguerre+deflation — parity check sorts by r2_mag to canonicalize. Promoted to default="rust" in API_MIGRATIONS; legacy python+numba path retained as fallback when the Rust extension is unavailable.
+    resolution: >-
+      Applied the 2026-04-22 fusion rule — moved the ENTIRE gaussIOD body
+      (equatorial RA/Dec → ecliptic unit-vector rotation, Milani A/B/V/C0/h0
+      coefficients, 8th-order polynomial root-finding, per-root orbit
+      construction) into a single Rust crossing (`gauss_iod_fused_numpy`).
+      Polynomial roots found via Laguerre's method + deflation (globally
+      convergent, handles ill-conditioned polynomials with wide coefficient
+      dynamic range — prior Durand-Kerner attempt stalled on real-world
+      gauss-IOD polys whose leading coefficient C0² can be ~1e-3 while others
+      are O(1), giving roots at magnitudes from 0.86 to 37.6). Benchmark 128
+      real-world triplets (legacy full-python vs fused rust): 2.72x p50 /
+      2.81x p95 — above the 1.2x gate by 2×. Parity: orbit Cartesian
+      components at atol=1e-5 AU (1500 m, below IOD preliminary-orbit noise),
+      epochs at atol=1e-6 days (0.1 s). Root ordering differs between np.roots
+      (LAPACK eigenvalues) and Laguerre+deflation — parity check sorts by
+      r2_mag to canonicalize. Promoted to default="rust" in API_MIGRATIONS;
+      legacy python+numba path retained as fallback when the Rust extension is
+      unavailable.
   - id: waiver-20260415-transform-coordinates-partial-rust
     api: coordinates.transform_coordinates
     owner: core-coordinates
@@ -81,6 +112,22 @@ waivers:
     status: resolved
     resolved: 2026-04-22
     resolution: Formal benchmark added to rust_backend_benchmark_gate.py (100_000-row heliocentric position grid). Rust vs JAX chunked vmap at 6.28x p50 / 6.33x p95 for calculate_phase_angle, 4.14x p50 / 3.64x p95 for calculate_apparent_magnitude_v, 5.36x p50 / 4.55x p95 for the fused calculate_apparent_magnitude_v_and_phase_angle — all comfortably above the 1.2x gate. Speedups are more modest than ephemeris because the math is simple element-wise (no per-row Jacobian for JAX to spend cycles on), but consistent wins across all three APIs. Promoted to default="rust" for all three entries in API_MIGRATIONS and wired dispatch inside the public functions (Rust first, chunked JAX fallback retained for unavailable-backend case).
+  - id: waiver-20260428-photometry-warm-performance-temporary
+    api: photometry.calculate_phase_angle, photometry.calculate_apparent_magnitude_v, photometry.calculate_apparent_magnitude_v_and_phase_angle, photometry.predict_magnitudes
+    owner: core-photometry
+    reason: Temporary waiver for the constitutional n=2000 warm speed gate. Parity passes for all four photometry APIs, and cold-call measurements show roughly 29-30x speedup versus the baseline JAX path by avoiding import/JIT cost. Warm steady-state misses are the known scalar-transcendental gap between portable Rust stdlib atan2/log10/powf and XLA/Accelerate SIMD transcendental implementations, not a correctness or baseline-merge regression.
+    created: 2026-04-28
+    review_by: 2026-05-12
+    exit_criteria: Either clear the n=2000 warm p50/p95 >=1.2x gate for all four photometry APIs, implement an approved SIMD/transcendental strategy with ULP validation, or replace this temporary waiver with a permanent policy decision covering cold-start-prioritized workloads or selective dispatch.
+    status: active
+  - id: waiver-20260428-cartesian-to-spherical-warm-performance-temporary
+    api: coordinates.cartesian_to_spherical
+    owner: core-coordinates
+    reason: Temporary waiver for the constitutional n=2000 warm speed gate. Parity passes and cold-call measurements show roughly 19x speedup versus the baseline JAX path by avoiding import/JIT cost. Warm steady-state p95 is near parity on Apple Silicon because this small workload is dominated by scalar sqrt/atan2/asin math and PyO3 boundary overhead while the legacy JAX/XLA path can use optimized vectorized transcendentals.
+    created: 2026-04-28
+    review_by: 2026-05-12
+    exit_criteria: Either clear the n=2000 warm p50/p95 >=1.2x gate for `coordinates.cartesian_to_spherical`, implement an approved SIMD/transcendental strategy with ULP validation, or replace this temporary waiver with a permanent policy decision covering cold-start-prioritized workloads or selective dispatch.
+    status: active
   - id: waiver-20260422-lambert-perf-pending
     api: dynamics.solve_lambert
     owner: core-dynamics

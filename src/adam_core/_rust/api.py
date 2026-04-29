@@ -26,13 +26,9 @@ except Exception:  # pragma: no cover - importability depends on local build env
     _native = None
     RUST_BACKEND_AVAILABLE = False
 
-try:
-    import spicekit as _spicekit
-
-    SPICEKIT_AVAILABLE = True
-except Exception:  # pragma: no cover - importability depends on local build environment
-    _spicekit = None
-    SPICEKIT_AVAILABLE = False
+SPICEKIT_AVAILABLE = bool(
+    RUST_BACKEND_AVAILABLE and hasattr(_native, "AdamCoreSpiceBackend")
+)
 
 
 def _as_contiguous_f64(
@@ -164,7 +160,9 @@ def transform_coordinates_numpy(
         frame_in=frame_in,
         frame_out=frame_out,
         translation_vectors=(
-            None if translation_vectors is None else _as_contiguous_f64(translation_vectors)
+            None
+            if translation_vectors is None
+            else _as_contiguous_f64(translation_vectors)
         ),
     )
 
@@ -200,7 +198,9 @@ def transform_coordinates_with_covariance_numpy(
         frame_in=frame_in,
         frame_out=frame_out,
         translation_vectors=(
-            None if translation_vectors is None else _as_contiguous_f64(translation_vectors)
+            None
+            if translation_vectors is None
+            else _as_contiguous_f64(translation_vectors)
         ),
     )
 
@@ -222,8 +222,6 @@ def rotate_cartesian_time_varying_numpy(
         mats,
         cov,
     )
-
-
 
 
 def calc_mean_motion_numpy(
@@ -868,15 +866,22 @@ def gauss_iod_orbits_numpy(
 
 def naif_spk_open(path: str):
     """Open a pure-Rust SPK reader on `path`. Returns ``None`` when the
-    spicekit Python package is unavailable."""
+    adam-core native extension is unavailable."""
     if not SPICEKIT_AVAILABLE:
         return None
-    return _spicekit.NaifSpk(path)
+    return _native.naif_spk_open(path)
+
+
+def adam_core_spice_backend():
+    """Create adam-core's direct Rust-to-Rust SPICE backend."""
+    if not SPICEKIT_AVAILABLE:
+        return None
+    return _native.AdamCoreSpiceBackend()
 
 
 def naif_bodn2c(name: str) -> Optional[int]:
     """Resolve a NAIF body name to its integer ID using the pure-Rust
-    built-in table. Returns ``None`` when spicekit is unavailable OR when
+    built-in table. Returns ``None`` when the native backend is unavailable OR when
     the name is not in the built-in set — callers that need to resolve
     custom-kernel names should route through :class:`RustBackend.bodn2c`
     which also consults text-kernel bindings.
@@ -884,18 +889,18 @@ def naif_bodn2c(name: str) -> Optional[int]:
     if not SPICEKIT_AVAILABLE:
         return None
     try:
-        return int(_spicekit.naif_bodn2c(name))
+        return int(_native.naif_bodn2c(name))
     except ValueError:
         return None
 
 
 def naif_bodc2n(code: int) -> Optional[str]:
-    """Reverse of :func:`naif_bodn2c`. Returns ``None`` when spicekit is
+    """Reverse of :func:`naif_bodn2c`. Returns ``None`` when the native backend is
     unavailable OR the code is not in the built-in table."""
     if not SPICEKIT_AVAILABLE:
         return None
     try:
-        return str(_spicekit.naif_bodc2n(int(code)))
+        return str(_native.naif_bodc2n(int(code)))
     except ValueError:
         return None
 
@@ -904,17 +909,17 @@ def naif_parse_text_kernel_bindings(path: str) -> Optional[list[tuple[str, int]]
     """Parse a SPICE text kernel (``.tk``/``.tf``/``.tpc``/``.ti``) and return
     the ordered list of ``NAIF_BODY_NAME`` ↔ ``NAIF_BODY_CODE`` bindings it
     declares. Returns an empty list if no body bindings are present, or
-    ``None`` if spicekit isn't available. Raises ``ValueError`` for
+    ``None`` if the native backend isn't available. Raises ``ValueError`` for
     malformed kernels or mismatched array lengths.
     """
     if not SPICEKIT_AVAILABLE:
         return None
-    return list(_spicekit.naif_parse_text_kernel_bindings(path))
+    return list(_native.naif_parse_text_kernel_bindings(path))
 
 
 def naif_spk_writer(locifn: str = "adam-core"):
-    """Create an in-memory pure-Rust SPK writer. Returns ``None`` when
-    spicekit is unavailable.
+    """Create an in-memory pure-Rust SPK writer. Returns ``None`` when the
+    adam-core native extension is unavailable.
 
     The returned object exposes:
       * ``add_type3(target, center, frame_id, start_et, end_et, segment_id,
@@ -930,12 +935,12 @@ def naif_spk_writer(locifn: str = "adam-core"):
     """
     if not SPICEKIT_AVAILABLE:
         return None
-    return _spicekit.NaifSpkWriter(locifn)
+    return _native.naif_spk_writer(locifn)
 
 
 def naif_pck_open(path: str):
-    """Open a pure-Rust binary PCK reader on `path`. Returns ``None`` when
-    spicekit is unavailable.
+    """Open a pure-Rust binary PCK reader on `path`. Returns ``None`` when the
+    adam-core native extension is unavailable.
 
     The returned object exposes `sxform(from, to, et)` and
     `pxform(from, to, et)` matching CSPICE for the J2000↔ITRF93 pair,
@@ -944,4 +949,4 @@ def naif_pck_open(path: str):
     """
     if not SPICEKIT_AVAILABLE:
         return None
-    return _spicekit.NaifPck(path)
+    return _native.naif_pck_open(path)

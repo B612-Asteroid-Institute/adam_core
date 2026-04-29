@@ -150,7 +150,14 @@ impl<T: Scalar> OrbitConstants<T> {
         let rv = (r[0] * v[0] + r[1] * v[1] + r[2] * v[2]) / r_mag;
         let sqrt_mu = mu.sqrt();
         let alpha = -(v_mag * v_mag) / mu + T::from_f64(2.0) / r_mag;
-        Self { r_mag, rv, sqrt_mu, alpha, r, v }
+        Self {
+            r_mag,
+            rv,
+            sqrt_mu,
+            alpha,
+            r,
+            v,
+        }
     }
 
     /// JAX-mirror initial chi guess: `sqrt(μ) · |α| · dt`.
@@ -327,8 +334,7 @@ pub fn propagate_2body_along_arc(
             f * r[1] + g * v[1],
             f * r[2] + g * v[2],
         ];
-        let r_new_mag =
-            (r_new[0] * r_new[0] + r_new[1] * r_new[1] + r_new[2] * r_new[2]).sqrt();
+        let r_new_mag = (r_new[0] * r_new[0] + r_new[1] * r_new[1] + r_new[2] * r_new[2]).sqrt();
 
         let f_dot = consts.sqrt_mu / (consts.r_mag * r_new_mag) * (consts.alpha * chi3 * c3 - chi);
         let g_dot = one - chi2 / r_new_mag * c2;
@@ -381,8 +387,12 @@ pub fn propagate_2body_arc_batch_flat6(
         .zip(mus.par_iter())
         .for_each(|(((out_chunk, orbit_row), dt_row), mu)| {
             let orbit: [f64; 6] = [
-                orbit_row[0], orbit_row[1], orbit_row[2],
-                orbit_row[3], orbit_row[4], orbit_row[5],
+                orbit_row[0],
+                orbit_row[1],
+                orbit_row[2],
+                orbit_row[3],
+                orbit_row[4],
+                orbit_row[5],
             ];
             let rows = propagate_2body_along_arc(orbit, dt_row, *mu, max_iter, tol);
             for (j, row) in rows.iter().enumerate() {

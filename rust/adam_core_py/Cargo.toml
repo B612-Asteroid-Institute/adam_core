@@ -1,6 +1,6 @@
 [package]
 name = "adam_core_py"
-version = "0.1.0"
+version = "0.5.6"
 edition = "2021"
 
 [lib]
@@ -13,3 +13,4 @@ numpy = "0.22"
 ndarray = "0.16"
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
 adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }
+adam_core_rs_spice = { path = "../adam_core_rs_spice" }

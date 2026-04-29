@@ -1,12 +1,13 @@
 # spicekit — Standalone Rust SPICE Kernel Toolkit Extraction Plan
 
-Status: Rust crate extracted and consumed as a pinned git dependency;
-  CSpice parity oracle carved out into `crates/spicekit-bench`; Python
-  bindings carved out into `crates/spicekit-py` and consumed by
-  adam-core as the `spicekit` Python package. Still pending:
-  crates.io and PyPI publish.
+Status: Rust crate and Python package published as `spicekit = 0.1.0`;
+  CSpice parity oracle carved out into `crates/spicekit-bench`;
+  adam-core now consumes the public Rust crate directly through
+  `rust/adam_core_rs_spice`. The Python `spicekit` package remains
+  available for external users, but adam-core runtime SPICE no longer
+  imports it.
 Drafted: 2026-04-20
-Last updated: 2026-04-21
+Last updated: 2026-04-28
 
 ## Motivation
 
@@ -54,18 +55,23 @@ Rust dependencies. spicekit-py adds `pyo3`, `numpy`, `ndarray`.
 
 ## What stays in adam-core
 
+- `adam_core_rs_spice` — adam-core's Rust-side SPICE backend. Depends
+  directly on crates.io `spicekit = "0.1"` and owns adam-core-specific
+  kernel registration, SPK/PCK reader dispatch, text-kernel bindings,
+  last-loaded-wins semantics, and batched `spkez`/`pxform`/`sxform`/
+  `bodn2c` operations.
 - `adam_core_py` — the PyO3 bindings layer for adam-core-specific
-  coordinate / orbit-determination kernels. No longer depends on
-  spicekit: all NAIF PyO3 wrappers have moved to `spicekit-py`.
+  coordinate, orbit-determination, and SPICE backend wrappers. Its SPICE
+  classes/functions are thin wrappers over `adam_core_rs_spice`.
 - `adam_core_rs_coords`, `adam_core_rs_orbit_determination`,
   `adam_core_rs_autodiff` — unrelated to NAIF work.
-- `src/adam_core/utils/spice_backend.py::RustBackend` — the backend
-  adapter that composes `spicekit` Python primitives into adam-core's
-  `SpiceBackend` protocol. Stays in adam-core; it's adam-core's backend
-  wiring, not spicekit API.
+- `src/adam_core/utils/spice_backend.py::RustBackend` — a process-local
+  Python owner for the native `AdamCoreSpiceBackend` object. Python now
+  owns only locking and exception mapping; kernel semantics live in
+  Rust.
 - `src/adam_core/_rust/api.py::naif_*` — thin Python wrappers that
-  delegate to the `spicekit` package and return `None` when spicekit is
-  unavailable (review-period fallback contract).
+  delegate to `adam_core._rust_native`; they no longer import the
+  Python `spicekit` package.
 
 ## Public Rust API stabilized for v0.1
 
@@ -96,12 +102,13 @@ Surface exposed by the `spicekit` Python package:
 
 ## Design decisions made
 
-1. **Crate name on crates.io**: `spicekit` — confirmed available as of
-   2026-04-21. README carries an explicit first-paragraph disclaimer
-   distancing from NAIF/JPL.
+1. **Crate name on crates.io**: `spicekit` — published as `0.1.0`
+   and confirmed on crates.io on 2026-04-28. README carries an
+   explicit first-paragraph disclaimer distancing from NAIF/JPL.
 
-2. **PyPI package name**: `spicekit` — confirmed available. Published
-   from `crates/spicekit-py/` via maturin (`module-name =
+2. **PyPI package name**: `spicekit` — published as `0.1.0` and
+   confirmed on PyPI on 2026-04-28. Published from
+   `crates/spicekit-py/` via maturin (`module-name =
    spicekit._rust_native`, `python-source = python`). The Python-side
    shim at `python/spicekit/__init__.py` re-exports the native symbols.
 
@@ -148,22 +155,24 @@ Phase-in history:
    from `rust/adam_core_py/src/lib.rs` into
    `crates/spicekit-py/src/lib.rs`. adam-core dropped the `spicekit`
    Rust git dep from `adam_core_py/Cargo.toml` (no longer needed).
-   adam-core's `src/adam_core/_rust/api.py` naif_* wrappers now import
-   from the `spicekit` Python package; `SPICEKIT_AVAILABLE` is the new
-   capability flag, set at module import from `import spicekit`.
-   `RustBackend.__init__` and `get_backend()` now check
-   `SPICEKIT_AVAILABLE`. Full adam-core test suite (762 passing)
-   confirmed green.
+   adam-core's `src/adam_core/_rust/api.py` naif_* wrappers imported
+   from the `spicekit` Python package; `SPICEKIT_AVAILABLE` was set from
+   `import spicekit`. Full adam-core test suite (762 passing) confirmed
+   green at that intermediate architecture.
 
-5. **crates.io publish** [TODO]. Once the git dep has been stable in
-   adam-core for ~2 weeks, publish `spicekit = "0.1.0"` to crates.io.
-   Switch adam-core's `Cargo.toml` from git dep to a versioned
-   crates.io dep.
+5. **Public package consumption.** [DONE 2026-04-28, superseded later
+   the same day] `spicekit` `0.1.0` became public on crates.io and
+   PyPI. adam-core temporarily consumed the published Python wheel via
+   `spicekit>=0.1.0` in `pyproject.toml`.
 
-6. **PyPI publish** [TODO]. Publish `spicekit` Python wheel via
-   `maturin publish` once the native API has been stable in adam-core
-   for ~2 weeks. Switch adam-core from `maturin develop` of the local
-   path to `pip install spicekit>=0.1`.
+6. **Direct Rust-to-Rust consumption.** [DONE 2026-04-28] RM-P0-001
+   reintroduced an adam-core-owned `rust/adam_core_rs_spice` crate, but
+   now as a downstream consumer of the public crates.io `spicekit =
+   "0.1"` library rather than as a fork of the NAIF reader. Python
+   adam-core calls the native `AdamCoreSpiceBackend` PyO3 wrapper; it no
+   longer imports the Python `spicekit` wheel for runtime SPICE behavior.
+   The Python runtime dependency on `spicekit>=0.1.0` was removed from
+   `pyproject.toml`/`uv.lock`.
 
 7. **Regression policy.** Any future adam-core change that needs a new
    spicekit API first lands in spicekit (tagged release, git rev bump,
@@ -216,12 +225,11 @@ env vars, runs `cargo test --release -p spicekit-bench` for parity,
 then `cargo run --release --bin spicekit-bench` for the performance
 table (uploaded as artifact).
 
-**What stays in adam-core.** The adam-core-specific parity harness —
-the Python `RustBackend` unit tests (`test_spice_backend.py`) —
-continues to verify that adam-core's backend adapter correctly composes
-the spicekit primitives. The raw spicekit-vs-CSpice comparison has
-moved to `spicekit-bench`, so that assertion lives with the code being
-asserted.
+**What stays in adam-core.** The adam-core-specific Rust backend
+(`adam_core_rs_spice`) and Python `RustBackend` unit tests
+(`test_spice_backend.py`) verify adam-core wiring and process-local
+semantics. The raw spicekit-vs-CSpice comparison remains in
+`spicekit-bench`, so that assertion lives with the code being asserted.
 
 ## Repo state
 
@@ -233,13 +241,12 @@ asserted.
 - [x] `LICENSE` (MIT) + `LICENSE-NOTICES` (CSpice attribution for
       `naif_builtin_table.rs`)
 - [x] GitHub remote at
-      `ssh://git@github.com/B612-Asteroid-Institute/spicekit.git` (private)
-- [ ] GitHub Actions: `cargo test`, `cargo fmt --check`, `cargo clippy`,
+      `https://github.com/B612-Asteroid-Institute/spicekit`
+- [x] GitHub Actions: `cargo test`, `cargo fmt --check`, `cargo clippy`,
       MSRV check, maturin wheel build
-- [ ] Git tag `v0.1.0` once adam-core has run clean against the git dep
-      for two weeks
-- [ ] `cargo publish` (spicekit, spicekit-py is `publish = false`)
-- [ ] `maturin publish` (spicekit-py → PyPI as `spicekit`)
+- [x] Git tag `v0.1.0`
+- [x] `cargo publish` (`spicekit`; `spicekit-py` is `publish = false`)
+- [x] `maturin publish` (`spicekit-py` → PyPI as `spicekit`)
 
 ## Explicit non-goals for v0.1
 
@@ -256,7 +263,7 @@ These are all reasonable v0.2+ additions driven by external demand.
 
 ## What finishes this task
 
-adam-core's `Cargo.toml` depends on `spicekit = "0.1"` from crates.io;
-adam-core's pyproject depends on `spicekit>=0.1` from PyPI; full
-adam-core test suite and benchmark are green against the published
-crate and published wheel.
+adam-core's Rust workspace depends directly on crates.io `spicekit =
+"0.1"` through `rust/adam_core_rs_spice`, and Python adam-core reaches
+that backend only through `adam_core._rust_native`. The Python
+`spicekit` wheel is no longer required for adam-core runtime SPICE.

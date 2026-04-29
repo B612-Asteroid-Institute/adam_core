@@ -49,7 +49,6 @@ dependencies = [
   "naif-eop-predict",
   "naif-eop-historical",
   "naif-earth-itrf93",
-  "spicekit>=0.1.0",
   "timezonefinder",
 ]
 
@@ -148,14 +147,26 @@ excludes = [
   "**/.DS_Store",
 ]
 
-[tool.pdm.version]
-source = "scm"
-write_to = "adam_core/_version.py"
-write_template = "__version__ = '{}'"
+[tool.uv]
+override-dependencies = [
+  # adam-assist is tested against this checkout, not the published adam-core
+  # version range embedded in the latest adam-assist wheel metadata.
+  "adam-core",
+]
+
+[tool.uv.sources]
+adam-core = { workspace = true }
 
 
 [tool.pdm.scripts]
 check = { composite = ["lint", "typecheck", "test"] }
+script-preflight = "python migration/scripts/check_pdm_ci_scripts.py"
+wheel-version = "python migration/scripts/write_maturin_version.py"
+wheel-build = { composite = [
+  "pdm run wheel-version",
+  "pdm build --no-sdist --dest dist",
+] }
+wheel-inspect = "python migration/scripts/check_wheel_artifacts.py dist"
 format = { composite = ["black ./src/adam_core", "isort ./src/adam_core"] }
 lint = { composite = [
   "ruff check ./src/adam_core",
@@ -171,15 +182,21 @@ benchmark = "pytest --benchmark-only {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
 docs = { cmd = "sphinx-build -b html docs/source docs/build", env = { LC_ALL = "C", LANG = "C" } }
 docs-check = { cmd = "sphinx-build -E -b html -W --keep-going docs/source docs/build_ci", env = { LC_ALL = "C", LANG = "C" } }
-rust-build = "maturin build --manifest-path rust/adam_core_py/Cargo.toml --out dist/rust --release"
-rust-develop = "maturin develop --manifest-path rust/adam_core_py/Cargo.toml --release --uv"
+rust-build = "pdm run wheel-build"
+rust-develop = { composite = [
+  "python -m ensurepip --upgrade",
+  "maturin develop --manifest-path rust/adam_core_py/Cargo.toml --release",
+] }
 rust-smoke = { composite = [
   "pdm run rust-develop",
-  "pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/tests/test_rust_orbit_determination.py src/adam_core/tests/test_rust_parity_randomized.py src/adam_core/coordinates/tests/test_transforms_spherical.py src/adam_core/coordinates/tests/test_transforms_keplerian.py src/adam_core/dynamics/tests/test_kepler.py -k 'mean_motion or spherical or keplerian or rust or gibbs or herrick or gauss'",
+  "env ADAM_CORE_REQUIRE_RUST_BACKEND=1 pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py src/adam_core/coordinates/tests/test_rust_covariance_autodiff.py src/adam_core/orbit_determination/tests/test_iod.py",
 ] }
-rust-parity-randomized = "pytest -q src/adam_core/tests/test_rust_parity_randomized.py"
-rust-perf-gate = "python migration/scripts/rust_backend_benchmark_gate.py --repeats 11 --max-rust-over-legacy 0.8333333333333334 --output migration/artifacts/rust_benchmark_gate.json"
-rust-od-benchmark = "python migration/scripts/rust_orbit_determination_benchmark.py --repeats 11 --num-samples 25000 --max-rust-over-legacy 0.8333333333333334 --output migration/artifacts/rust_orbit_determination_benchmark.json"
+rust-parity-fuzz = "python -m migration.parity.parity_fuzz --seeds 8 --n 128 --output migration/artifacts/parity_fuzz.json"
+rust-parity-main = "python -m migration.parity.parity_main --speed-n 2000 --output migration/artifacts/parity_gate.json"
+rust-parity-speed = "python -m migration.parity.parity_speed --n 2000 --reps 7 --output migration/artifacts/parity_speed.json"
+rust-parity-speed-cold = "python -m migration.parity.parity_speed --n 2000 --reps 21 --warmup 3 --cold --output migration/artifacts/parity_speed_cold_warm.json"
+rust-latency-gate = "python migration/scripts/rust_backend_benchmark_gate.py --repeats 7 --output migration/artifacts/rust_latency_current.json"
+rust-perf-gate = "pdm run rust-latency-gate"
 test-rust-full = { composite = [
   "pdm run rust-develop",
   "env ADAM_CORE_REQUIRE_RUST_BACKEND=1 pytest --benchmark-skip -m 'not profile' {args}",
@@ -190,14 +207,19 @@ rust-quality = { composite = [
   "cargo test --workspace",
 ] }
 dev-loop = { composite = [
+  "pdm run script-preflight",
   "pdm run lint",
   "pdm run rust-quality",
   "pdm run rust-smoke",
-  "pdm run rust-parity-randomized",
-  "pdm run rust-perf-gate",
+  "pdm run rust-parity-main",
+  "pdm run rust-parity-speed-cold",
+  "pdm run rust-latency-gate",
 ] }
 
 [tool.maturin]
 manifest-path = "rust/adam_core_py/Cargo.toml"
 module-name = "adam_core._rust_native"
 python-source = "src"
+# Maturin uses rust/adam_core_py/Cargo.toml [package].version for wheel
+# metadata. `pdm run wheel-version` mirrors that value into adam_core._version.
+include = [{ path = "adam_core/_version.py", format = "wheel" }]

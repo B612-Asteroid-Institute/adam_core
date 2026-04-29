@@ -1,6 +1,16 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-04-21 (spicekit-py integration tests)
+Last updated: 2026-04-28 (review task backlog)
+
+## Current Review-Derived Backlog
+
+- [ ] Work from [`review_task_backlog_2026-04-28.md`](review_task_backlog_2026-04-28.md) before starting additional kernel ports unless the user explicitly reprioritizes.
+- [x] Direct Rust-to-Rust `spicekit` integration for standalone `adam-core-rs` is implemented in `rust/adam_core_rs_spice` and validated through the full parity/performance cadence.
+- [x] RM-P0-004 packaging follow-up cleanup is documented in [`packaging.md`](packaging.md): Cargo is the single wheel version source, uv is lock-only pending local-install revalidation, and current skip-count expectations are recorded.
+- [ ] RM-P0-005F: audit restored Python compatibility surfaces, decide which deserve long-term Python API support, and ensure Rust callers use Rust-to-Rust helpers rather than Python shims.
+- [x] Review feedback from `adam_core_rust_migration_review_handoff_2026-04-27.md` is decomposed into RM-P0/RM-P1 tasks in the review backlog.
+- [x] Other-agent Wave D3/E2/E3 pending work is consolidated under RM-WD3/RM-WE2/RM-WE3 tasks in the review backlog.
+- [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.
 
 ## Active Sprint (Milestone 1 hardening)
 
@@ -47,11 +57,11 @@ Last updated: 2026-04-21 (spicekit-py integration tests)
 - [x] Review refactor (2026-04-16): consolidate `_rust.api` Python wrappers to thin pass-throughs (only `_as_contiguous_f64` coercion + `None` on unavailable backend); Rust owns shape/length validation.
 - [x] Review refactor (2026-04-16): delete `migration/api_status.yaml`; make `src/adam_core/_rust/status.py` (`API_MIGRATIONS`) the single source of truth for migration scripts and runtime dispatch.
 - [x] Review refactor (2026-04-16): collapse `adam_core_rs_math` and `adam_core_rs_dynamics` into `adam_core_rs_coords`; drop them from the workspace.
-- [x] Extract `adam_core_rs_naif` into standalone MIT-licensed crate `spicekit` — Rust library, PyO3 bindings (`spicekit-py` → PyPI `spicekit`), and CSpice parity oracle (`spicekit-bench`) all carved into the sibling repo; adam-core now consumes `spicekit` as both a pinned git dep and a Python package via maturin. See [`migration/spicekit_extraction_plan.md`](spicekit_extraction_plan.md). crates.io / PyPI publish pending.
+- [x] Extract `adam_core_rs_naif` into standalone MIT-licensed crate `spicekit` — Rust library, PyO3 bindings (`spicekit-py` → PyPI `spicekit`), and CSpice parity oracle (`spicekit-bench`) all carved into the sibling repo. `spicekit` is public as crates.io `spicekit = "0.1.0"` and PyPI `spicekit==0.1.0`; adam-core now consumes the Rust crate directly through `rust/adam_core_rs_spice` for runtime SPICE, while the Python `spicekit` wheel remains available for external users. See [`migration/spicekit_extraction_plan.md`](spicekit_extraction_plan.md).
 - [x] Port universal-variable 2-body propagation ladder (`stumpff` → `chi` → `lagrange` → `propagate_2body`) from JAX to Rust with `Dual<6>` covariance transport; ship as `status="dual"` / `default="legacy"` pending perf gate.
 - [x] Add parity tests for `dynamics.propagate_2body` (states + covariance) against JAX reference.
 - [x] Add formal benchmark entry for `dynamics.propagate_2body` in `migration/scripts/rust_backend_benchmark_gate.py` covering a representative (N_orbits, N_times) grid, including a covariance path; promote to `default="rust"` and wire dispatch in `_propagate_2body_serial` once +20% p50/p95 gate clears.
-- [x] spicekit pre-publication polish (2026-04-21): fix 35 `-D warnings` clippy errors across the base crate; flip `spicekit-bench` default feature off; pin MSRV=1.85 via `rust-toolchain.toml` + `rust-version.workspace`; add `.github/workflows/ci.yml` (fmt + clippy + test + maturin wheel matrix across manylinux/macos/windows × py3.10–3.12); add `.pyi` stubs + `py.typed`; add minimal `read_spk` examples (Rust + Python); tighten NAIF attribution in `naif_builtin_table.rs` + README disclaimer. crates.io/PyPI publish still pending user call.
+- [x] spicekit pre-publication polish (2026-04-21): fix 35 `-D warnings` clippy errors across the base crate; flip `spicekit-bench` default feature off; pin MSRV=1.85 via `rust-toolchain.toml` + `rust-version.workspace`; add `.github/workflows/ci.yml` (fmt + clippy + test + maturin wheel matrix across manylinux/macos/windows × py3.10–3.12); add `.pyi` stubs + `py.typed`; add minimal `read_spk` examples (Rust + Python); tighten NAIF attribution in `naif_builtin_table.rs` + README disclaimer. crates.io/PyPI publish confirmed on 2026-04-28.
 - [x] spicekit-py integration tests (2026-04-21): add `crates/spicekit-py/tests/` pytest suite (53 tests: test_names, test_spk, test_pck, test_spk_writer, test_text_kernel) covering every PyO3 symbol including a Type 9 SPK write→read round-trip; kernel fixtures resolved via `naif-*` PyPI packages; wire into `.github/workflows/ci.yml` as a new `pytest` job (ubuntu + macos-14 × py3.10, 3.12) using `maturin develop --release --extras test` then `pytest tests/`. All 53 tests pass in 0.07s.
 - [x] Port `dynamics.generate_ephemeris_2body` as a single fused `T: Scalar`-generic row kernel (LT Newton loop + optional stellar aberration + ec→eq rotation + Cartesian→spherical), reusing `propagate_2body_row` under `Dual<6>` so covariance transport replaces the JAX `transform_covariances_jacobian` call in one pass. Scope: [`migration/generate_ephemeris_2body_plan.md`](generate_ephemeris_2body_plan.md).
 - [x] Add parity tests for `dynamics.generate_ephemeris_2body` (states + light-time + aberrated state + covariance) vs `_generate_ephemeris_2body_vmap` + `transform_covariances_jacobian`.
@@ -89,4 +99,6 @@ Last updated: 2026-04-21 (spicekit-py integration tests)
 - Promotion decision: `coordinates.keplerian.to_cartesian` benchmarked and set to `rust-default`.
 - Active waiver: `waiver-20260414-calc-mean-motion-perf`.
 - Active waiver: `waiver-20260415-gaussiod-perf`.
+- Active temporary waiver: `waiver-20260428-photometry-warm-performance-temporary` for known photometry n=2000 warm speed-gate misses; review by 2026-05-12.
+- Active temporary waiver: `waiver-20260428-cartesian-to-spherical-warm-performance-temporary` for known `coordinates.cartesian_to_spherical` n=2000 warm p95 speed-gate misses; review by 2026-05-12.
 - Promotion decision: `dynamics.propagate_2body` (and `…_with_covariance`) benchmarked and set to `rust-default` (87x/414x p50).

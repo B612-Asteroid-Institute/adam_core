@@ -35,6 +35,8 @@ jobs:
         run: pdm install -G test
       - name: Build Rust wheel
         run: pdm run rust-build
+      - name: Verify native wheel artifact
+        run: pdm run wheel-inspect
       - name: Checkout dependent repository
         uses: actions/checkout@v3
         with:
@@ -43,7 +45,7 @@ jobs:
       - name: Install dependent and adam_core wheel
         run: |
           python -m pip install --upgrade pip
-          python -m pip install dist/rust/*.whl
+          python -m pip install dist/*.whl
           python -m pip install -e dependent
       - name: Run dependent import smoke
         run: python -c "${{ matrix.import_cmd }}"

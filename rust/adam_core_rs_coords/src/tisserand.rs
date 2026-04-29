@@ -41,7 +41,7 @@ mod tests {
         let a = vec![2.5_f64];
         let e = vec![0.1_f64];
         let i = vec![5.0_f64];
-        let ap = 5.203719697535582_f64;  // Jupiter
+        let ap = 5.203719697535582_f64; // Jupiter
         let tp = tisserand_parameter_flat(&a, &e, &i, ap)[0];
         // Hand-computed: 5.2037/2.5 + 2*cos(5°·π/180)*sqrt(2.5/5.2037*(1-0.01))
         let expected = ap / 2.5 + 2.0 * (5.0_f64.to_radians()).cos() * ((2.5 / ap) * 0.99).sqrt();

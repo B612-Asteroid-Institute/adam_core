@@ -1,6 +1,0 @@
-# Use the system `git` CLI for private git deps (spicekit lives in a
-# private B612-Asteroid-Institute/spicekit repo). Cargo's bundled
-# libgit2 doesn't negotiate SSH agent auth reliably on macOS; the git
-# CLI uses whatever ssh-agent / keyring is already configured.
-[net]
-git-fetch-with-cli = true

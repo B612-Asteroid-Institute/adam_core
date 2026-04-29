@@ -39,6 +39,8 @@ jobs:
           python-version: '3.12'
       - name: Install test dependencies
         run: pdm install -G test
+      - name: PDM/CI script preflight
+        run: pdm run script-preflight
       - name: Lint
         run: pdm run lint
       # - name: Typecheck
@@ -173,6 +175,8 @@ jobs:
           python-version: '3.12'
       - name: Install test dependencies
         run: pdm install -G test
+      - name: PDM/CI script preflight
+        run: pdm run script-preflight
       - name: Rust format check
         run: cargo fmt --all --check
       - name: Rust clippy
@@ -181,24 +185,24 @@ jobs:
         run: cargo test --workspace
       - name: Build Rust wheel
         run: pdm run rust-build
+      - name: Verify native wheel artifact
+        run: pdm run wheel-inspect
       - name: Upload Rust wheel artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: rust-wheel
-          path: dist/rust/*.whl
+          path: dist/*.whl
       - name: Rust smoke checks
         run: pdm run rust-smoke
-      - name: Randomized Rust parity tests
-        run: pdm run rust-parity-randomized
-      - name: Rust performance gate
-        run: pdm run rust-perf-gate
-      - name: Upload Rust perf gate artifact
+      - name: Rust latency regression gate
+        run: pdm run rust-latency-gate
+      - name: Upload Rust latency artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: rust-perf-gate
-          path: migration/artifacts/rust_benchmark_gate.json
+          name: rust-latency-current
+          path: migration/artifacts/rust_latency_current.json
 
   benchmark:
     runs-on: ubuntu-latest

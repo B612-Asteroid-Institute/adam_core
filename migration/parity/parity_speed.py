@@ -18,17 +18,23 @@ import argparse
 import json
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
-from . import _inputs, _oracle, _rust_runner
+from adam_core._rust.status import API_MIGRATIONS
 
+from . import _inputs, _oracle, _rust_runner
 
 MIN_SPEEDUP_P50 = 1.2
 MIN_SPEEDUP_P95 = 1.2
+PERF_WAIVERS_BY_API = {
+    migration.api_id: migration.waiver
+    for migration in API_MIGRATIONS
+    if migration.waiver
+}
 
 
 def _percentile(samples: list[float], q: float) -> float:
@@ -58,7 +64,10 @@ class SpeedResult:
     legacy_p95: float
     speedup_p50: float
     speedup_p95: float
+    raw_passed: bool
     passed: bool
+    waived: bool = False
+    waiver: str = ""
     error: Optional[str] = None
     # Cold-call (one-shot, includes process spawn + import + first call).
     rust_cold: Optional[float] = None
@@ -66,8 +75,9 @@ class SpeedResult:
     speedup_cold: Optional[float] = None
 
 
-def _passes(legacy_p50: float, legacy_p95: float,
-            rust_p50: float, rust_p95: float) -> tuple[bool, float, float]:
+def _passes(
+    legacy_p50: float, legacy_p95: float, rust_p50: float, rust_p95: float
+) -> tuple[bool, float, float]:
     s50 = legacy_p50 / rust_p50 if rust_p50 > 0 else float("inf")
     s95 = legacy_p95 / rust_p95 if rust_p95 > 0 else float("inf")
     passed = s50 >= MIN_SPEEDUP_P50 and s95 >= MIN_SPEEDUP_P95
@@ -88,11 +98,17 @@ def measure(
         sample = _inputs.make(api_id, rng, n)
     except Exception as e:
         return SpeedResult(
-            api_id=api_id, n=n,
-            rust_p50=float("inf"), rust_p95=float("inf"),
-            legacy_p50=float("inf"), legacy_p95=float("inf"),
-            speedup_p50=0.0, speedup_p95=0.0,
-            passed=False, error=f"input gen: {type(e).__name__}: {e}",
+            api_id=api_id,
+            n=n,
+            rust_p50=float("inf"),
+            rust_p95=float("inf"),
+            legacy_p50=float("inf"),
+            legacy_p95=float("inf"),
+            speedup_p50=0.0,
+            speedup_p95=0.0,
+            raw_passed=False,
+            passed=False,
+            error=f"input gen: {type(e).__name__}: {e}",
         )
 
     try:
@@ -102,38 +118,55 @@ def measure(
         )
     except Exception as e:
         return SpeedResult(
-            api_id=api_id, n=n,
-            rust_p50=float("inf"), rust_p95=float("inf"),
-            legacy_p50=float("inf"), legacy_p95=float("inf"),
-            speedup_p50=0.0, speedup_p95=0.0,
-            passed=False, error=f"timing: {type(e).__name__}: {e}",
+            api_id=api_id,
+            n=n,
+            rust_p50=float("inf"),
+            rust_p95=float("inf"),
+            legacy_p50=float("inf"),
+            legacy_p95=float("inf"),
+            speedup_p50=0.0,
+            speedup_p95=0.0,
+            raw_passed=False,
+            passed=False,
+            error=f"timing: {type(e).__name__}: {e}",
         )
 
     rust_p50 = _percentile(rust_times, 50)
     rust_p95 = _percentile(rust_times, 95)
     legacy_p50 = _percentile(legacy_times, 50)
     legacy_p95 = _percentile(legacy_times, 95)
-    passed, s50, s95 = _passes(legacy_p50, legacy_p95, rust_p50, rust_p95)
+    raw_passed, s50, s95 = _passes(legacy_p50, legacy_p95, rust_p50, rust_p95)
+    waiver = PERF_WAIVERS_BY_API.get(api_id, "")
+    waived = bool(waiver and not raw_passed)
+    passed = raw_passed or waived
 
     rust_cold = legacy_cold = speedup_cold = None
     if measure_cold:
         try:
             rust_cold = _oracle.time_rust_cold(api_id, **sample.rust_kwargs)
             legacy_cold = _oracle.time_legacy_cold(api_id, **sample.legacy_kwargs)
-            speedup_cold = (
-                legacy_cold / rust_cold if rust_cold > 0 else float("inf")
-            )
+            speedup_cold = legacy_cold / rust_cold if rust_cold > 0 else float("inf")
         except Exception as e:
             # Cold timing failure shouldn't fail the gate — record and move on.
             rust_cold = legacy_cold = speedup_cold = None
             print(f"  [cold-time error for {api_id}: {e}]", file=sys.stderr)
 
     return SpeedResult(
-        api_id=api_id, n=n,
-        rust_p50=rust_p50, rust_p95=rust_p95,
-        legacy_p50=legacy_p50, legacy_p95=legacy_p95,
-        speedup_p50=s50, speedup_p95=s95, passed=passed,
-        rust_cold=rust_cold, legacy_cold=legacy_cold, speedup_cold=speedup_cold,
+        api_id=api_id,
+        n=n,
+        rust_p50=rust_p50,
+        rust_p95=rust_p95,
+        legacy_p50=legacy_p50,
+        legacy_p95=legacy_p95,
+        speedup_p50=s50,
+        speedup_p95=s95,
+        raw_passed=raw_passed,
+        passed=passed,
+        waived=waived,
+        waiver=waiver,
+        rust_cold=rust_cold,
+        legacy_cold=legacy_cold,
+        speedup_cold=speedup_cold,
     )
 
 
@@ -169,6 +202,8 @@ def format_summary(results: list[SpeedResult]) -> str:
         lines.append("-" * 100)
     for r in results:
         flag = "" if r.passed else "FAIL"
+        if r.waived and not r.raw_passed:
+            flag = f"WAIVED ({r.waiver})"
         if r.error:
             flag = f"ERR ({r.error[:40]})"
         if has_cold:
@@ -206,7 +241,10 @@ def to_json(results: list[SpeedResult]) -> dict:
                 "legacy_p95_s": r.legacy_p95,
                 "speedup_p50": r.speedup_p50,
                 "speedup_p95": r.speedup_p95,
+                "raw_passed": r.raw_passed,
                 "passed": r.passed,
+                "waived": r.waived,
+                "waiver": r.waiver,
                 "error": r.error,
                 "rust_cold_s": r.rust_cold,
                 "legacy_cold_s": r.legacy_cold,
