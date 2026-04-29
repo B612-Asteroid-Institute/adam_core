@@ -17,10 +17,9 @@ Current migration checkout state:
 
 - Path: `/Users/aleck/Code/adam-core-rust-migration`
 - Branch: `rust-migration-waves-d-e`
-- Latest committed baseline before RM-P1-008/RM-P1-015 work:
-  `e58ace8c` (`Track reviewer follow-up conditions`). The current task
-  completes RM-P1-008/RM-P1-015 and should be committed as a separate
-  task-scoped change after validation.
+- Latest task commit: `ed41064c`
+  (`Make Rust migration status registry authoritative`), completing
+  RM-P1-008/RM-P1-015.
 - After the RM-P1-008/RM-P1-015 commit, the expected uncommitted files are only
   grounding files: `decisions.md` and `journal.md`. They are intentionally not
   committed.
