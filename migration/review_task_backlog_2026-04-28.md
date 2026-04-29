@@ -395,14 +395,14 @@ Acceptance:
   `adam_core.coordinates.jacobian`.
 - `dynamics.aberrations` is a compatibility shim over the mandatory Rust
   light-time kernel for `_add_light_time`, `_add_light_time_vmap`, and
-  `add_light_time`; `add_stellar_aberration` is retained as a NumPy helper
-  matching the baseline formula.
+  `add_light_time`.
 - Restored scalar/universal-variable helper modules from baseline for public
   import compatibility. These are not wired into the current production
-  propagation/ephemeris paths, which remain Rust-backed.
-- Added `_calc_mean_motion_jax = calc_mean_motion` in `dynamics.kepler` so
-  the focused calc-mean-motion benchmark can still import its JAX reference
-  explicitly.
+  propagation/ephemeris paths, which remain Rust-backed. RM-P0-005G later
+  converted the supported restored helper implementations themselves to thin
+  Rust-backed wrappers.
+- The focused calc-mean-motion benchmark now uses the separate baseline-main
+  oracle instead of importing an in-checkout JAX reference alias.
 - Restored `coordinates.jacobian.calc_jacobian` for compatibility and tests;
   production covariance transforms still use the Rust forward-mode AD path.
 - Added `src/adam_core/tests/test_public_module_compatibility.py` to guard
@@ -526,7 +526,7 @@ Acceptance:
 
 ### RM-P0-005G: Make Supported Python Compatibility Helpers Rust-Backed
 
-Status: open
+Status: complete (2026-04-29)
 
 Reason: RM-P0-005F exposed Rust-native helper functions for the retained
 orbital helper surfaces, but several supported Python wrappers still execute
@@ -561,6 +561,26 @@ Acceptance:
   production package code without a concrete local reason.
 - Public compatibility tests still pass and cover representative scalar and
   batched inputs where applicable.
+
+Completion notes:
+
+- Added PyO3 and `adam_core._rust.api` wrappers for Kepler scalar helpers,
+  `solve_barker`, `solve_kepler`, `calc_stumpff`, `calc_chi`,
+  `calc_lagrange_coefficients`, `apply_lagrange_coefficients`, and
+  `add_stellar_aberration`.
+- Rewrote the supported restored Python modules to delegate to Rust and fail
+  loudly if `_rust_native` is unavailable. The reference-only
+  `coordinates.jacobian.calc_jacobian` remains a separate RM-P0-005H concern.
+- Updated the focused `calc_mean_motion` benchmark script to use the
+  baseline-main oracle instead of importing an in-checkout JAX alias.
+- Added guardrails that reject JAX imports in supported restored helper
+  modules, while preserving the documented reference-only jacobian exception.
+- Validation: targeted public compatibility tests `15 passed`; `cargo check -p
+  adam_core_py`; `cargo test -p adam_core_rs_coords` `57 passed`;
+  `pdm run rust-quality`; full rust-required suite `723 passed / 144 skipped /
+  2 deselected / 56 warnings`; `pdm run rust-parity-main` passed 22/22 measured
+  APIs; `pdm run rust-parity-speed-cold` passed with the existing temporary
+  photometry waiver; parity report artifacts regenerated.
 
 ### RM-P0-005H: Remove Deprecated Private Shims And In-Repo Reference-Only JAX Helpers
 

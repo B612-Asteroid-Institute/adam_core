@@ -5,11 +5,14 @@ from typing import Tuple
 import numpy as np
 import numpy.typing as npt
 
-from .._rust.api import add_light_time_numpy as _rust_add_light_time_numpy
+from .._rust.api import (
+    add_light_time_numpy as _rust_add_light_time_numpy,
+    add_stellar_aberration_numpy as _rust_add_stellar_aberration_numpy,
+)
 from ..constants import Constants as c
+from ._rust_compat import require_rust
 
 MU = c.MU
-C = c.C
 
 
 def _require_rust_light_time(
@@ -168,26 +171,18 @@ def add_stellar_aberration(
     """
     Apply stellar aberration to topocentric position vectors.
 
-    The velocity components are not modified. This is the NumPy equivalent of
-    the baseline JAX helper and is retained for import compatibility.
+    This compatibility API is backed by
+    ``adam_core_rs_coords::apply_stellar_aberration_row``. The velocity
+    components are not returned, matching the historical public helper.
     """
     orbits_arr = _as_state_rows(orbits, name="orbits")
     observer_arr = _as_state_rows(observer_states, name="observer_states")
     if observer_arr.shape[0] != orbits_arr.shape[0]:
         raise ValueError("observer_states must have the same row count as orbits")
-
-    topo_states = orbits_arr - observer_arr
-    v_obs = observer_arr[:, 3:]
-    gamma = v_obs / C
-    beta_inv = np.sqrt(1.0 - np.linalg.norm(gamma, axis=1, keepdims=True) ** 2)
-    delta = np.linalg.norm(topo_states[:, :3], axis=1, keepdims=True)
-
-    rho = topo_states[:, :3] / delta
-    rho_dot_gamma = np.sum(rho * gamma, axis=1, keepdims=True)
-    rho_aberrated = (
-        beta_inv * rho + gamma + rho_dot_gamma * gamma / (1.0 + beta_inv)
-    ) / (1.0 + rho_dot_gamma)
-    return rho_aberrated * delta
+    return require_rust(
+        _rust_add_stellar_aberration_numpy(orbits_arr, observer_arr),
+        "dynamics.add_stellar_aberration",
+    )
 
 
 __all__ = [

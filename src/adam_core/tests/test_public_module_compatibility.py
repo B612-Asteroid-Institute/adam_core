@@ -49,6 +49,9 @@ RESTORED_COMPATIBILITY_FILES = {
     SRC_ROOT / "dynamics" / "stumpff.py",
     SRC_ROOT / "coordinates" / "jacobian.py",
 }
+RUST_BACKED_COMPATIBILITY_FILES = RESTORED_COMPATIBILITY_FILES - {
+    SRC_ROOT / "coordinates" / "jacobian.py",
+}
 
 
 def _module_name_for_path(path: Path) -> str:
@@ -117,6 +120,23 @@ def test_production_code_does_not_import_restored_compatibility_modules() -> Non
     assert offenders == []
 
 
+def test_supported_compatibility_modules_do_not_embed_jax_implementations() -> None:
+    offenders: list[str] = []
+    for path in sorted(RUST_BACKED_COMPATIBILITY_FILES):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "jax" or alias.name.startswith("jax."):
+                        offenders.append(f"{path}: import {alias.name}")
+            if isinstance(node, ast.ImportFrom):
+                imported = node.module or ""
+                if imported == "jax" or imported.startswith("jax."):
+                    offenders.append(f"{path}: from {imported} import ...")
+
+    assert offenders == []
+
+
 def test_kepler_compatibility_smoke() -> None:
     kepler = importlib.import_module("adam_core.dynamics.kepler")
 
@@ -125,6 +145,22 @@ def test_kepler_compatibility_smoke() -> None:
     np.testing.assert_allclose(kepler.calc_semi_major_axis(1.5, 0.25), 2.0)
     np.testing.assert_allclose(kepler.calc_semi_latus_rectum(2.0, 0.25), 1.875)
     assert np.isfinite(np.asarray(kepler.solve_kepler(0.1, 0.2)))
+
+    a = np.array([1.0, 2.0], dtype=np.float64)
+    e = np.array([0.1, 0.25], dtype=np.float64)
+    np.testing.assert_allclose(kepler.calc_periapsis_distance(a, e), a * (1 - e))
+    assert np.asarray(kepler.calc_mean_motion(a, np.full(2, 1.0))).shape == (2,)
+    assert np.asarray(kepler.calc_mean_anomaly(np.array([0.2, 0.4]), e)).shape == (2,)
+    assert np.asarray(kepler.solve_kepler(e, np.array([0.2, 0.4]))).shape == (2,)
+
+
+def test_barker_compatibility_smoke() -> None:
+    barker = importlib.import_module("adam_core.dynamics.barker")
+
+    assert np.isfinite(np.asarray(barker.solve_barker(0.2)))
+    out = np.asarray(barker.solve_barker(np.array([0.1, 0.2], dtype=np.float64)))
+    assert out.shape == (2,)
+    assert np.isfinite(out).all()
 
 
 def test_universal_variable_compatibility_smoke() -> None:
@@ -136,6 +172,8 @@ def test_universal_variable_compatibility_smoke() -> None:
     np.testing.assert_allclose(
         np.asarray([c0, c1, c2, c3, c4, c5]), [1, 1, 0.5, 1 / 6, 1 / 24, 1 / 120]
     )
+    c0_batch, *_ = stumpff.calc_stumpff(np.array([0.0, 0.1, -0.1], dtype=np.float64))
+    assert np.asarray(c0_batch).shape == (3,)
 
     r = np.array([1.0, 0.0, 0.0], dtype=np.float64)
     v = np.array([0.0, 0.017, 0.0], dtype=np.float64)
@@ -146,6 +184,20 @@ def test_universal_variable_compatibility_smoke() -> None:
     r_new, v_new = lagrange.apply_lagrange_coefficients(r, v, *coeffs)
     assert np.isfinite(np.asarray(r_new)).all()
     assert np.isfinite(np.asarray(v_new)).all()
+
+    r_batch = np.vstack([r, r])
+    v_batch = np.vstack([v, v])
+    dts = np.array([1.0, 2.0], dtype=np.float64)
+    chi_batch = chi.calc_chi(r_batch, v_batch, dts)
+    assert np.asarray(chi_batch[0]).shape == (2,)
+    coeffs_batch, _, _ = lagrange.calc_lagrange_coefficients(r_batch, v_batch, dts)
+    r_batch_new, v_batch_new = lagrange.apply_lagrange_coefficients(
+        r_batch,
+        v_batch,
+        *coeffs_batch,
+    )
+    assert r_batch_new.shape == (2, 3)
+    assert v_batch_new.shape == (2, 3)
 
 
 def test_aberrations_compatibility_smoke() -> None:

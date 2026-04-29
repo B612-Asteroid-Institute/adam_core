@@ -67,11 +67,11 @@ Inventory
      - ``adam_core_rs_coords::add_light_time_row`` and ``adam_core_rs_coords::add_light_time_batch_flat``.
    * - ``adam_core.dynamics.aberrations.add_stellar_aberration``
      - Supported Python API
-     - NumPy compatibility helper matching the historical formula.
+     - Thin wrapper over ``adam_core._rust.api.add_stellar_aberration_numpy``.
      - ``adam_core_rs_coords::apply_stellar_aberration_row``; fused ephemeris kernels use the same Rust helper internally.
    * - ``adam_core.dynamics.barker.solve_barker``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.solve_barker_numpy``.
      - ``adam_core_rs_coords::solve_barker``.
    * - ``adam_core.dynamics.chi.ChiDiagnostics``
      - Supported Python diagnostic API
@@ -79,55 +79,55 @@ Inventory
      - Not a Rust algorithm dependency.
    * - ``adam_core.dynamics.chi.calc_chi``
      - Supported Python API
-     - JAX-compatible reference/helper implementation.
+     - Thin wrapper over ``adam_core._rust.api.calc_chi_numpy``.
      - ``adam_core_rs_coords::calc_chi`` and ``adam_core_rs_coords::calc_chi_with_init``.
    * - ``adam_core.dynamics.chi.calc_chi_diagnostics``
      - Supported Python diagnostic API
-     - Host-side diagnostic wrapper around the compatibility ``calc_chi``.
+     - Host-side diagnostic wrapper around Rust-backed ``calc_chi``.
      - Production propagation diagnostics compute host metadata directly and do not re-enter this module.
    * - ``adam_core.dynamics.kepler.calc_period``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.calc_period_numpy``.
      - ``adam_core_rs_coords::calc_period``.
    * - ``adam_core.dynamics.kepler.calc_periapsis_distance``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.calc_periapsis_distance_numpy``.
      - ``adam_core_rs_coords::calc_periapsis_distance``.
    * - ``adam_core.dynamics.kepler.calc_apoapsis_distance``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.calc_apoapsis_distance_numpy``.
      - ``adam_core_rs_coords::calc_apoapsis_distance``.
    * - ``adam_core.dynamics.kepler.calc_semi_major_axis``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.calc_semi_major_axis_numpy``.
      - ``adam_core_rs_coords::calc_semi_major_axis``.
    * - ``adam_core.dynamics.kepler.calc_semi_latus_rectum``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.calc_semi_latus_rectum_numpy``.
      - ``adam_core_rs_coords::calc_semi_latus_rectum``.
    * - ``adam_core.dynamics.kepler.calc_mean_motion``
      - Supported Python API
-     - JAX-compatible scalar/vector helper retained for transform composition and benchmarks.
+     - Thin wrapper over ``adam_core._rust.api.calc_mean_motion_numpy``.
      - ``adam_core_rs_coords::calc_mean_motion`` and ``adam_core_rs_coords::calc_mean_motion_batch``.
    * - ``adam_core.dynamics.kepler.calc_mean_anomaly``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.calc_mean_anomaly_numpy``.
      - ``adam_core_rs_coords::calc_mean_anomaly``.
    * - ``adam_core.dynamics.kepler.solve_kepler``
      - Supported Python API
-     - JAX-compatible scalar orbital helper.
+     - Thin wrapper over ``adam_core._rust.api.solve_kepler_numpy``.
      - ``adam_core_rs_coords::solve_kepler_true_anomaly``.
    * - ``adam_core.dynamics.lagrange.calc_lagrange_coefficients``
      - Supported Python API
-     - JAX-compatible reference/helper implementation.
+     - Thin wrapper over ``adam_core._rust.api.calc_lagrange_coefficients_numpy``.
      - ``adam_core_rs_coords::calc_lagrange_coefficients``.
    * - ``adam_core.dynamics.lagrange.apply_lagrange_coefficients``
      - Supported Python API
-     - JAX-compatible scalar/vector helper.
+     - Thin wrapper over ``adam_core._rust.api.apply_lagrange_coefficients_numpy``.
      - ``adam_core_rs_coords::apply_lagrange_coefficients``.
    * - ``adam_core.dynamics.stumpff.calc_stumpff``
      - Supported Python API
-     - JAX-compatible reference/helper implementation.
+     - Thin wrapper over ``adam_core._rust.api.calc_stumpff_numpy``.
      - ``adam_core_rs_coords::calc_stumpff``.
    * - ``adam_core.coordinates.jacobian.calc_jacobian``
      - Reference-only compatibility helper

@@ -233,6 +233,173 @@ def calc_mean_motion_numpy(
     return _native.calc_mean_motion_numpy(_as_contiguous_f64(a), _as_contiguous_f64(mu))
 
 
+def calc_period_numpy(
+    a: np.ndarray | list[float] | tuple[float, ...],
+    mu: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_period_numpy(_as_contiguous_f64(a), _as_contiguous_f64(mu))
+
+
+def calc_periapsis_distance_numpy(
+    a: np.ndarray | list[float] | tuple[float, ...],
+    e: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_periapsis_distance_numpy(
+        _as_contiguous_f64(a),
+        _as_contiguous_f64(e),
+    )
+
+
+def calc_apoapsis_distance_numpy(
+    a: np.ndarray | list[float] | tuple[float, ...],
+    e: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_apoapsis_distance_numpy(
+        _as_contiguous_f64(a),
+        _as_contiguous_f64(e),
+    )
+
+
+def calc_semi_major_axis_numpy(
+    q: np.ndarray | list[float] | tuple[float, ...],
+    e: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_semi_major_axis_numpy(
+        _as_contiguous_f64(q),
+        _as_contiguous_f64(e),
+    )
+
+
+def calc_semi_latus_rectum_numpy(
+    a: np.ndarray | list[float] | tuple[float, ...],
+    e: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_semi_latus_rectum_numpy(
+        _as_contiguous_f64(a),
+        _as_contiguous_f64(e),
+    )
+
+
+def calc_mean_anomaly_numpy(
+    nu: np.ndarray | list[float] | tuple[float, ...],
+    e: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_mean_anomaly_numpy(
+        _as_contiguous_f64(nu),
+        _as_contiguous_f64(e),
+    )
+
+
+def solve_barker_numpy(
+    m: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.solve_barker_numpy(_as_contiguous_f64(m))
+
+
+def solve_kepler_numpy(
+    e: np.ndarray | list[float] | tuple[float, ...],
+    m: np.ndarray | list[float] | tuple[float, ...],
+    max_iter: int = 100,
+    tol: float = 1e-15,
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.solve_kepler_numpy(
+        _as_contiguous_f64(e),
+        _as_contiguous_f64(m),
+        int(max_iter),
+        float(tol),
+    )
+
+
+def calc_stumpff_numpy(
+    psi: np.ndarray | list[float] | tuple[float, ...],
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_stumpff_numpy(_as_contiguous_f64(psi))
+
+
+def calc_chi_numpy(
+    r: np.ndarray,
+    v: np.ndarray,
+    dts: np.ndarray | list[float] | tuple[float, ...],
+    mus: np.ndarray | list[float] | tuple[float, ...],
+    max_iter: int = 100,
+    tol: float = 1e-16,
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_chi_numpy(
+        _as_contiguous_f64(r),
+        _as_contiguous_f64(v),
+        _as_contiguous_f64(dts),
+        _as_contiguous_f64(mus),
+        int(max_iter),
+        float(tol),
+    )
+
+
+def calc_lagrange_coefficients_numpy(
+    r: np.ndarray,
+    v: np.ndarray,
+    dts: np.ndarray | list[float] | tuple[float, ...],
+    mus: np.ndarray | list[float] | tuple[float, ...],
+    max_iter: int = 100,
+    tol: float = 1e-16,
+) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.calc_lagrange_coefficients_numpy(
+        _as_contiguous_f64(r),
+        _as_contiguous_f64(v),
+        _as_contiguous_f64(dts),
+        _as_contiguous_f64(mus),
+        int(max_iter),
+        float(tol),
+    )
+
+
+def apply_lagrange_coefficients_numpy(
+    r: np.ndarray,
+    v: np.ndarray,
+    coeffs: np.ndarray,
+) -> Optional[tuple[np.ndarray, np.ndarray]]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.apply_lagrange_coefficients_numpy(
+        _as_contiguous_f64(r),
+        _as_contiguous_f64(v),
+        _as_contiguous_f64(coeffs),
+    )
+
+
+def add_stellar_aberration_numpy(
+    orbits: np.ndarray,
+    observer_states: np.ndarray,
+) -> Optional[np.ndarray]:
+    if not RUST_BACKEND_AVAILABLE:
+        return None
+    return _native.add_stellar_aberration_numpy(
+        _as_contiguous_f64(orbits),
+        _as_contiguous_f64(observer_states),
+    )
+
+
 def propagate_2body_numpy(
     orbits: np.ndarray,
     dts: np.ndarray | list[float] | tuple[float, ...],

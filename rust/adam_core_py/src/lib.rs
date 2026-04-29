@@ -5,8 +5,10 @@
 )]
 
 use adam_core_rs_coords::{
-    add_light_time_batch_flat, apply_cosine_latitude_correction_flat,
-    bound_longitude_residuals_flat, calc_mean_motion_batch,
+    add_light_time_batch_flat, apply_cosine_latitude_correction_flat, apply_lagrange_coefficients,
+    apply_stellar_aberration_row, bound_longitude_residuals_flat, calc_apoapsis_distance, calc_chi,
+    calc_lagrange_coefficients, calc_mean_anomaly, calc_mean_motion_batch, calc_periapsis_distance,
+    calc_period, calc_semi_latus_rectum, calc_semi_major_axis, calc_stumpff,
     calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
     calculate_chi2_flat, calculate_moid, calculate_moid_batch, calculate_phase_angle_flat,
     cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
@@ -16,9 +18,10 @@ use adam_core_rs_coords::{
     izzo_lambert_batch_flat, keplerian_to_cartesian_flat6, porkchop_grid_flat,
     predict_magnitudes_bandpass_flat, propagate_2body_along_arc, propagate_2body_arc_batch_flat6,
     propagate_2body_flat6, propagate_2body_with_covariance_flat6, rotate_cartesian_frame_flat6,
-    rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
-    tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
-    weighted_mean_flat, Frame, Representation as CoordsRepresentation,
+    rotate_cartesian_time_varying_flat6, solve_barker, solve_kepler_true_anomaly,
+    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
+    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat, Frame,
+    Representation as CoordsRepresentation,
 };
 use adam_core_rs_orbit_determination::{
     calc_gauss_row, calc_gibbs_row, calc_herrick_gibbs_row, gauss_iod_fused,
@@ -711,6 +714,469 @@ fn calc_mean_motion_numpy<'py>(
     );
 
     Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn calc_period_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray1<'py, f64>,
+    mu: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a_arr = a.as_array();
+    let mu_arr = mu.as_array();
+    if a_arr.len() != mu_arr.len() {
+        return Err(PyValueError::new_err("a and mu must have the same length"));
+    }
+    let a_slice = a_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("a must be contiguous"))?;
+    let mu_slice = mu_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?;
+    let out: Vec<f64> = a_slice
+        .iter()
+        .zip(mu_slice)
+        .map(|(&ai, &mi)| calc_period(ai, mi))
+        .collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn calc_periapsis_distance_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a_arr = a.as_array();
+    let e_arr = e.as_array();
+    if a_arr.len() != e_arr.len() {
+        return Err(PyValueError::new_err("a and e must have the same length"));
+    }
+    let a_slice = a_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("a must be contiguous"))?;
+    let e_slice = e_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
+    let out: Vec<f64> = a_slice
+        .iter()
+        .zip(e_slice)
+        .map(|(&ai, &ei)| calc_periapsis_distance(ai, ei))
+        .collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn calc_apoapsis_distance_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a_arr = a.as_array();
+    let e_arr = e.as_array();
+    if a_arr.len() != e_arr.len() {
+        return Err(PyValueError::new_err("a and e must have the same length"));
+    }
+    let a_slice = a_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("a must be contiguous"))?;
+    let e_slice = e_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
+    let out: Vec<f64> = a_slice
+        .iter()
+        .zip(e_slice)
+        .map(|(&ai, &ei)| calc_apoapsis_distance(ai, ei))
+        .collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn calc_semi_major_axis_numpy<'py>(
+    py: Python<'py>,
+    q: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let q_arr = q.as_array();
+    let e_arr = e.as_array();
+    if q_arr.len() != e_arr.len() {
+        return Err(PyValueError::new_err("q and e must have the same length"));
+    }
+    let q_slice = q_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("q must be contiguous"))?;
+    let e_slice = e_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
+    let out: Vec<f64> = q_slice
+        .iter()
+        .zip(e_slice)
+        .map(|(&qi, &ei)| calc_semi_major_axis(qi, ei))
+        .collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn calc_semi_latus_rectum_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a_arr = a.as_array();
+    let e_arr = e.as_array();
+    if a_arr.len() != e_arr.len() {
+        return Err(PyValueError::new_err("a and e must have the same length"));
+    }
+    let a_slice = a_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("a must be contiguous"))?;
+    let e_slice = e_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
+    let out: Vec<f64> = a_slice
+        .iter()
+        .zip(e_slice)
+        .map(|(&ai, &ei)| calc_semi_latus_rectum(ai, ei))
+        .collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn calc_mean_anomaly_numpy<'py>(
+    py: Python<'py>,
+    nu: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let nu_arr = nu.as_array();
+    let e_arr = e.as_array();
+    if nu_arr.len() != e_arr.len() {
+        return Err(PyValueError::new_err("nu and e must have the same length"));
+    }
+    let nu_slice = nu_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("nu must be contiguous"))?;
+    let e_slice = e_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
+    let out: Vec<f64> = nu_slice
+        .iter()
+        .zip(e_slice)
+        .map(|(&nui, &ei)| calc_mean_anomaly(nui, ei))
+        .collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn solve_barker_numpy<'py>(
+    py: Python<'py>,
+    m: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let m_arr = m.as_array();
+    let m_slice = m_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("m must be contiguous"))?;
+    let out: Vec<f64> = m_slice.iter().map(|&mi| solve_barker(mi)).collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (e, m, max_iter=100, tol=1e-15))]
+fn solve_kepler_numpy<'py>(
+    py: Python<'py>,
+    e: PyReadonlyArray1<'py, f64>,
+    m: PyReadonlyArray1<'py, f64>,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let e_arr = e.as_array();
+    let m_arr = m.as_array();
+    if e_arr.len() != m_arr.len() {
+        return Err(PyValueError::new_err("e and m must have the same length"));
+    }
+    let e_slice = e_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("e must be contiguous"))?;
+    let m_slice = m_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("m must be contiguous"))?;
+    let out: Vec<f64> = e_slice
+        .iter()
+        .zip(m_slice)
+        .map(|(&ei, &mi)| solve_kepler_true_anomaly(ei, mi, max_iter, tol))
+        .collect();
+    Ok(out.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+fn calc_stumpff_numpy<'py>(
+    py: Python<'py>,
+    psi: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let psi_arr = psi.as_array();
+    let psi_slice = psi_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("psi must be contiguous"))?;
+    let mut out = Vec::with_capacity(psi_slice.len() * 6);
+    for &psi_i in psi_slice {
+        out.extend_from_slice(&calc_stumpff::<f64>(psi_i));
+    }
+    let shaped = ndarray::Array2::from_shape_vec((psi_slice.len(), 6), out)
+        .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
+    Ok(shaped.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (r, v, dts, mus, max_iter=100, tol=1e-16))]
+fn calc_chi_numpy<'py>(
+    py: Python<'py>,
+    r: PyReadonlyArray2<'py, f64>,
+    v: PyReadonlyArray2<'py, f64>,
+    dts: PyReadonlyArray1<'py, f64>,
+    mus: PyReadonlyArray1<'py, f64>,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let r_arr = r.as_array();
+    let v_arr = v.as_array();
+    let dts_arr = dts.as_array();
+    let mus_arr = mus.as_array();
+    if r_arr.ncols() != 3 || v_arr.ncols() != 3 {
+        return Err(PyValueError::new_err("r and v must each have shape (N, 3)"));
+    }
+    let n = r_arr.nrows();
+    if v_arr.nrows() != n || dts_arr.len() != n || mus_arr.len() != n {
+        return Err(PyValueError::new_err(
+            "v, dts, and mus must have length/rows N matching r",
+        ));
+    }
+    let r_slice = r_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("r must be contiguous"))?;
+    let v_slice = v_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("v must be contiguous"))?;
+    let dts_slice = dts_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("dts must be contiguous"))?;
+    let mus_slice = mus_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("mus must be contiguous"))?;
+
+    let mut out = Vec::with_capacity(n * 7);
+    for i in 0..n {
+        let base = i * 3;
+        let (chi, stumpff) = calc_chi::<f64>(
+            [r_slice[base], r_slice[base + 1], r_slice[base + 2]],
+            [v_slice[base], v_slice[base + 1], v_slice[base + 2]],
+            dts_slice[i],
+            mus_slice[i],
+            max_iter,
+            tol,
+        );
+        out.push(chi);
+        out.extend_from_slice(&stumpff);
+    }
+    let shaped = ndarray::Array2::from_shape_vec((n, 7), out)
+        .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
+    Ok(shaped.into_pyarray_bound(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (r, v, dts, mus, max_iter=100, tol=1e-16))]
+fn calc_lagrange_coefficients_numpy<'py>(
+    py: Python<'py>,
+    r: PyReadonlyArray2<'py, f64>,
+    v: PyReadonlyArray2<'py, f64>,
+    dts: PyReadonlyArray1<'py, f64>,
+    mus: PyReadonlyArray1<'py, f64>,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<(
+    Bound<'py, PyArray2<f64>>,
+    Bound<'py, PyArray2<f64>>,
+    Bound<'py, PyArray1<f64>>,
+)> {
+    let r_arr = r.as_array();
+    let v_arr = v.as_array();
+    let dts_arr = dts.as_array();
+    let mus_arr = mus.as_array();
+    if r_arr.ncols() != 3 || v_arr.ncols() != 3 {
+        return Err(PyValueError::new_err("r and v must each have shape (N, 3)"));
+    }
+    let n = r_arr.nrows();
+    if v_arr.nrows() != n || dts_arr.len() != n || mus_arr.len() != n {
+        return Err(PyValueError::new_err(
+            "v, dts, and mus must have length/rows N matching r",
+        ));
+    }
+    let r_slice = r_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("r must be contiguous"))?;
+    let v_slice = v_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("v must be contiguous"))?;
+    let dts_slice = dts_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("dts must be contiguous"))?;
+    let mus_slice = mus_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("mus must be contiguous"))?;
+
+    let mut coeffs_out = Vec::with_capacity(n * 4);
+    let mut stumpff_out = Vec::with_capacity(n * 6);
+    let mut chi_out = Vec::with_capacity(n);
+    for i in 0..n {
+        let base = i * 3;
+        let (coeffs, stumpff, chi) = calc_lagrange_coefficients::<f64>(
+            [r_slice[base], r_slice[base + 1], r_slice[base + 2]],
+            [v_slice[base], v_slice[base + 1], v_slice[base + 2]],
+            dts_slice[i],
+            mus_slice[i],
+            max_iter,
+            tol,
+        );
+        coeffs_out.extend_from_slice(&coeffs);
+        stumpff_out.extend_from_slice(&stumpff);
+        chi_out.push(chi);
+    }
+
+    let coeffs = ndarray::Array2::from_shape_vec((n, 4), coeffs_out)
+        .map_err(|e| PyValueError::new_err(format!("failed to shape coeffs output: {e}")))?;
+    let stumpff = ndarray::Array2::from_shape_vec((n, 6), stumpff_out)
+        .map_err(|e| PyValueError::new_err(format!("failed to shape stumpff output: {e}")))?;
+    Ok((
+        coeffs.into_pyarray_bound(py),
+        stumpff.into_pyarray_bound(py),
+        ndarray::Array1::from_vec(chi_out).into_pyarray_bound(py),
+    ))
+}
+
+#[pyfunction]
+fn apply_lagrange_coefficients_numpy<'py>(
+    py: Python<'py>,
+    r: PyReadonlyArray2<'py, f64>,
+    v: PyReadonlyArray2<'py, f64>,
+    coeffs: PyReadonlyArray2<'py, f64>,
+) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)> {
+    let r_arr = r.as_array();
+    let v_arr = v.as_array();
+    let coeffs_arr = coeffs.as_array();
+    if r_arr.ncols() != 3 || v_arr.ncols() != 3 {
+        return Err(PyValueError::new_err("r and v must each have shape (N, 3)"));
+    }
+    let n = r_arr.nrows();
+    if v_arr.nrows() != n || coeffs_arr.nrows() != n || coeffs_arr.ncols() != 4 {
+        return Err(PyValueError::new_err(
+            "v must have rows N and coeffs must have shape (N, 4)",
+        ));
+    }
+    let r_slice = r_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("r must be contiguous"))?;
+    let v_slice = v_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("v must be contiguous"))?;
+    let coeffs_slice = coeffs_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("coeffs must be contiguous"))?;
+
+    let mut r_out = Vec::with_capacity(n * 3);
+    let mut v_out = Vec::with_capacity(n * 3);
+    for i in 0..n {
+        let state_base = i * 3;
+        let coeff_base = i * 4;
+        let (r_new, v_new) = apply_lagrange_coefficients::<f64>(
+            [
+                r_slice[state_base],
+                r_slice[state_base + 1],
+                r_slice[state_base + 2],
+            ],
+            [
+                v_slice[state_base],
+                v_slice[state_base + 1],
+                v_slice[state_base + 2],
+            ],
+            [
+                coeffs_slice[coeff_base],
+                coeffs_slice[coeff_base + 1],
+                coeffs_slice[coeff_base + 2],
+                coeffs_slice[coeff_base + 3],
+            ],
+        );
+        r_out.extend_from_slice(&r_new);
+        v_out.extend_from_slice(&v_new);
+    }
+
+    let r_shaped = ndarray::Array2::from_shape_vec((n, 3), r_out)
+        .map_err(|e| PyValueError::new_err(format!("failed to shape r output: {e}")))?;
+    let v_shaped = ndarray::Array2::from_shape_vec((n, 3), v_out)
+        .map_err(|e| PyValueError::new_err(format!("failed to shape v output: {e}")))?;
+    Ok((
+        r_shaped.into_pyarray_bound(py),
+        v_shaped.into_pyarray_bound(py),
+    ))
+}
+
+#[pyfunction]
+fn add_stellar_aberration_numpy<'py>(
+    py: Python<'py>,
+    orbits: PyReadonlyArray2<'py, f64>,
+    observer_states: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let orbits_arr = orbits.as_array();
+    let observers_arr = observer_states.as_array();
+    if orbits_arr.ncols() != 6 || observers_arr.ncols() != 6 {
+        return Err(PyValueError::new_err(
+            "orbits and observer_states must each have shape (N, 6)",
+        ));
+    }
+    let n = orbits_arr.nrows();
+    if observers_arr.nrows() != n {
+        return Err(PyValueError::new_err(
+            "observer_states must have the same row count as orbits",
+        ));
+    }
+    let orbits_slice = orbits_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("orbits must be contiguous"))?;
+    let observers_slice = observers_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observer_states must be contiguous"))?;
+
+    let mut out = Vec::with_capacity(n * 3);
+    for i in 0..n {
+        let base = i * 6;
+        let orbit = [
+            orbits_slice[base],
+            orbits_slice[base + 1],
+            orbits_slice[base + 2],
+            orbits_slice[base + 3],
+            orbits_slice[base + 4],
+            orbits_slice[base + 5],
+        ];
+        let observer = [
+            observers_slice[base],
+            observers_slice[base + 1],
+            observers_slice[base + 2],
+            observers_slice[base + 3],
+            observers_slice[base + 4],
+            observers_slice[base + 5],
+        ];
+        let topo = [
+            orbit[0] - observer[0],
+            orbit[1] - observer[1],
+            orbit[2] - observer[2],
+            orbit[3] - observer[3],
+            orbit[4] - observer[4],
+            orbit[5] - observer[5],
+        ];
+        let aberrated = apply_stellar_aberration_row(topo, observer);
+        out.extend_from_slice(&aberrated[..3]);
+    }
+
+    let shaped = ndarray::Array2::from_shape_vec((n, 3), out)
+        .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
+    Ok(shaped.into_pyarray_bound(py))
 }
 
 #[pyfunction]
@@ -2026,6 +2492,19 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(rotate_cartesian_time_varying_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calc_mean_motion_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_period_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_periapsis_distance_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_apoapsis_distance_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_semi_major_axis_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_semi_latus_rectum_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_mean_anomaly_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(solve_barker_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(solve_kepler_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_stumpff_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_chi_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_lagrange_coefficients_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(apply_lagrange_coefficients_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(add_stellar_aberration_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(propagate_2body_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(tisserand_parameter_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(classify_orbits_numpy, m)?)?;
