@@ -524,6 +524,75 @@ Acceptance:
   tables regenerated in `migration/artifacts/parity_report.md` and
   `migration/artifacts/parity_table_rca.json`; `git diff --check`.
 
+### RM-P0-005G: Make Supported Python Compatibility Helpers Rust-Backed
+
+Status: open
+
+Reason: RM-P0-005F exposed Rust-native helper functions for the retained
+orbital helper surfaces, but several supported Python wrappers still execute
+local JAX/NumPy compatibility implementations. If a symbol is a supported
+Python public API in this migration branch, it should be a thin wrapper over
+the Rust implementation unless there is an explicit composability reason to
+keep a separate Python/JAX implementation.
+
+Scope:
+
+- Add PyO3/native bindings and `adam_core._rust.api` wrappers for supported
+  helper surfaces that currently remain Python/JAX implementations:
+  `calc_stumpff`, `calc_chi`, `calc_lagrange_coefficients`,
+  `apply_lagrange_coefficients`, `solve_barker`, `solve_kepler`,
+  Kepler scalar helpers, and `add_stellar_aberration`.
+- Prefer batched/vectorized NumPy-boundary wrappers where callers may pass
+  arrays. Avoid replacing vectorized Python/JAX helpers with per-element
+  Python loops over scalar Rust calls.
+- Keep JAX compatibility only under a clearly private name if a current
+  migration script or test still needs in-checkout JAX composability. Otherwise
+  rely on the separate baseline-main checkout for legacy parity references.
+- Update `docs/source/reference/rust_public_compatibility.rst` so the Python
+  implementation column no longer claims these supported APIs are
+  JAX-compatible local implementations once they delegate to Rust.
+- Run the full baseline-main parity/performance cadence after changing wrappers.
+
+Acceptance:
+
+- Every supported restored Python API either delegates to Rust or has an
+  explicit documented exception.
+- No supported restored helper performs duplicate JAX/NumPy orbital math in
+  production package code without a concrete local reason.
+- Public compatibility tests still pass and cover representative scalar and
+  batched inputs where applicable.
+
+### RM-P0-005H: Remove Deprecated Private Shims And In-Repo Reference-Only JAX Helpers
+
+Status: open
+
+Reason: The migration checkout now uses a separate baseline-main checkout and
+`.legacy-venv` for parity and benchmark references. Keeping duplicate
+reference-only JAX implementations inside the migrated package increases
+surface area and contradicts the mandatory-Rust direction unless there is a
+specific local diagnostic or downstream-compatibility need.
+
+Scope:
+
+- Audit `_add_light_time`, `_add_light_time_vmap`, and
+  `coordinates.jacobian.calc_jacobian` for in-repo usage and plausible
+  downstream utility.
+- Remove private/deprecated shims when they are not useful standalone utilities
+  and not required for known consumers. If removal is a breaking change for a
+  baseline-imported symbol, document it explicitly in release notes.
+- Remove or relocate any JAX-only reference helpers from package modules when
+  the baseline-main oracle already supplies the legacy implementation for
+  parity/benchmark comparisons.
+- Adjust public compatibility tests from "must import" to "documented removal"
+  for any symbol intentionally removed.
+
+Acceptance:
+
+- No in-package JAX reference implementation remains solely for parity with
+  baseline main.
+- Any removed private/reference-only symbol has explicit release-note coverage.
+- Existing production and parity/performance gates remain green.
+
 ### RM-P0-006: Enforce One Runtime Contract For Rust Backend Availability
 
 Status: open

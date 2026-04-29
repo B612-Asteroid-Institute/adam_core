@@ -8,6 +8,8 @@ Last updated: 2026-04-29 (review task backlog)
 - [x] Direct Rust-to-Rust `spicekit` integration for standalone `adam-core-rs` is implemented in `rust/adam_core_rs_spice` and validated through the full parity/performance cadence.
 - [x] RM-P0-004 packaging follow-up cleanup is documented in [`packaging.md`](packaging.md): Cargo is the single wheel version source, uv is lock-only pending local-install revalidation, and current skip-count expectations are recorded.
 - [x] RM-P0-005F: restored Python compatibility surfaces are classified in [`../docs/source/reference/rust_public_compatibility.rst`](../docs/source/reference/rust_public_compatibility.rst), Rust-native helper paths are exposed, and production imports of compatibility modules are statically guarded.
+- [ ] RM-P0-005G: convert supported restored Python helper APIs to thin Rust-backed wrappers, using batched NumPy-boundary bindings where arrays are expected.
+- [ ] RM-P0-005H: remove deprecated private shims and in-package JAX/reference-only helpers unless there is a concrete downstream or diagnostic reason to keep them.
 - [x] Review feedback from `adam_core_rust_migration_review_handoff_2026-04-27.md` is decomposed into RM-P0/RM-P1 tasks in the review backlog.
 - [x] Other-agent Wave D3/E2/E3 pending work is consolidated under RM-WD3/RM-WE2/RM-WE3 tasks in the review backlog.
 - [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.
