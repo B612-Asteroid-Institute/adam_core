@@ -140,8 +140,10 @@ def test_supported_compatibility_modules_do_not_embed_jax_implementations() -> N
 def test_kepler_compatibility_smoke() -> None:
     kepler = importlib.import_module("adam_core.dynamics.kepler")
 
+    assert np.isinf(kepler.calc_period(-2.0, 1.0))
     np.testing.assert_allclose(kepler.calc_periapsis_distance(2.0, 0.25), 1.5)
     np.testing.assert_allclose(kepler.calc_apoapsis_distance(2.0, 0.25), 2.5)
+    assert np.isinf(kepler.calc_apoapsis_distance(2.0, 1.0))
     np.testing.assert_allclose(kepler.calc_semi_major_axis(1.5, 0.25), 2.0)
     np.testing.assert_allclose(kepler.calc_semi_latus_rectum(2.0, 0.25), 1.875)
     assert np.isfinite(np.asarray(kepler.solve_kepler(0.1, 0.2)))

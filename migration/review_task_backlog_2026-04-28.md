@@ -582,6 +582,21 @@ Completion notes:
   APIs; `pdm run rust-parity-speed-cold` passed with the existing temporary
   photometry waiver; parity report artifacts regenerated.
 
+2026-04-29 reviewer follow-up:
+
+- Aligned the supported `calc_chi` and `calc_lagrange_coefficients`
+  compatibility defaults to `tol=1e-15`, matching the production propagation
+  default and avoiding unnecessarily strict default iteration.
+- Removed stale JAX cache-clearing from the ephemeris profile test rather than
+  treating it as a local parity oracle.
+- Added smoke coverage for Kepler infinity contracts (`calc_period(a < 0)` and
+  `calc_apoapsis_distance(e >= 1)`).
+- Documented that the `calc_chi` compatibility wrapper is not the warm-started
+  single-orbit/many-dt hot path; callers should use the production propagation
+  path for that workload.
+- Clarified that broadcasted inputs are intentionally copied to contiguous
+  float64 arrays at the PyO3/FFI boundary.
+
 ### RM-P0-005H: Remove Deprecated Private Shims And In-Repo Reference-Only JAX Helpers
 
 Status: open

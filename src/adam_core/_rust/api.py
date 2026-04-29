@@ -340,7 +340,7 @@ def calc_chi_numpy(
     dts: np.ndarray | list[float] | tuple[float, ...],
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
-    tol: float = 1e-16,
+    tol: float = 1e-15,
 ) -> Optional[np.ndarray]:
     if not RUST_BACKEND_AVAILABLE:
         return None
@@ -360,7 +360,7 @@ def calc_lagrange_coefficients_numpy(
     dts: np.ndarray | list[float] | tuple[float, ...],
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
-    tol: float = 1e-16,
+    tol: float = 1e-15,
 ) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     if not RUST_BACKEND_AVAILABLE:
         return None

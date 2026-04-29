@@ -45,6 +45,8 @@ def broadcast_pair(
         np.asarray(right, dtype=np.float64),
     )
     shape = left_arr.shape
+    # PyO3 receives only contiguous float64 vectors; broadcasts often create
+    # strided views, so this copy is an intentional FFI-boundary normalization.
     return (
         np.ascontiguousarray(left_arr.reshape(-1), dtype=np.float64),
         np.ascontiguousarray(right_arr.reshape(-1), dtype=np.float64),

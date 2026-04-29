@@ -926,7 +926,7 @@ fn calc_stumpff_numpy<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (r, v, dts, mus, max_iter=100, tol=1e-16))]
+#[pyo3(signature = (r, v, dts, mus, max_iter=100, tol=1e-15))]
 fn calc_chi_numpy<'py>(
     py: Python<'py>,
     r: PyReadonlyArray2<'py, f64>,
@@ -982,7 +982,7 @@ fn calc_chi_numpy<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (r, v, dts, mus, max_iter=100, tol=1e-16))]
+#[pyo3(signature = (r, v, dts, mus, max_iter=100, tol=1e-15))]
 fn calc_lagrange_coefficients_numpy<'py>(
     py: Python<'py>,
     r: PyReadonlyArray2<'py, f64>,

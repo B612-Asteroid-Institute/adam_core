@@ -56,12 +56,14 @@ def calc_chi(
     dt: npt.ArrayLike,
     mu: npt.ArrayLike = MU,
     max_iter: int = 100,
-    tol: float = 1e-16,
+    tol: float = 1e-15,
 ) -> CHI_TYPES:
     """
     Calculate universal anomaly chi and the first six Stumpff coefficients.
 
     This compatibility API is backed by ``adam_core_rs_coords::calc_chi``.
+    For single-orbit, many-time propagation workloads, prefer the production
+    propagation path, which can use the warm-started arc kernel.
     """
     r_rows, r_single = as_rows(r, name="r", width=3)
     v_rows, v_single = as_rows(v, name="v", width=3)
@@ -85,7 +87,7 @@ def calc_chi_diagnostics(
     dt: float,
     mu: float = MU,
     max_iter: int = 100,
-    tol: float = 1e-16,
+    tol: float = 1e-15,
 ) -> ChiDiagnostics:
     """Host-side chi diagnostics helper for fail-fast error reporting."""
     r_arr = np.asarray(r, dtype=np.float64)

@@ -1,6 +1,5 @@
 import cProfile
 
-import jax
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -162,8 +161,6 @@ def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
     """Profile the generate_ephemeris_2body function with different combinations of orbits,
     observers and times. Results are saved to a stats file that can be visualized with snakeviz.
     """
-    # Clear the jax cache
-    jax.clear_caches()
     # Create profiler
     profiler = cProfile.Profile(subcalls=True, builtins=True)
     profiler.bias = 0
@@ -632,9 +629,7 @@ def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> 
         ),
     )
 
-    def _bad_ephemeris_rust(
-        orbits_flat, observer_states, mus, *args, **kwargs
-    ):
+    def _bad_ephemeris_rust(orbits_flat, observer_states, mus, *args, **kwargs):
         n = orbits_flat.shape[0]
         eph = np.zeros((n, 6), dtype=np.float64)
         lt = np.zeros((n,), dtype=np.float64)

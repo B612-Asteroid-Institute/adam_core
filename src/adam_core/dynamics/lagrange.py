@@ -42,7 +42,7 @@ def calc_lagrange_coefficients(
     dt: npt.ArrayLike,
     mu: npt.ArrayLike = MU,
     max_iter: int = 100,
-    tol: float = 1e-16,
+    tol: float = 1e-15,
 ) -> tuple[LAGRANGE_TYPES, STUMPFF_TYPES, ScalarOrArray]:
     """
     Calculate Lagrange coefficients for propagating an initial state by ``dt``.
