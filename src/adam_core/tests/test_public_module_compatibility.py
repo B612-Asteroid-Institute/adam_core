@@ -15,8 +15,6 @@ PUBLIC_COMPATIBILITY_DOC = (
 
 PUBLIC_MODULE_SYMBOLS = {
     "adam_core.dynamics.aberrations": (
-        "_add_light_time",
-        "_add_light_time_vmap",
         "add_light_time",
         "add_stellar_aberration",
     ),
@@ -37,6 +35,13 @@ PUBLIC_MODULE_SYMBOLS = {
         "calc_lagrange_coefficients",
     ),
     "adam_core.dynamics.stumpff": ("calc_stumpff",),
+}
+
+REMOVED_COMPATIBILITY_SYMBOLS = {
+    "adam_core.dynamics.aberrations": (
+        "_add_light_time",
+        "_add_light_time_vmap",
+    ),
     "adam_core.coordinates.jacobian": ("calc_jacobian",),
 }
 
@@ -47,11 +52,8 @@ RESTORED_COMPATIBILITY_FILES = {
     SRC_ROOT / "dynamics" / "kepler.py",
     SRC_ROOT / "dynamics" / "lagrange.py",
     SRC_ROOT / "dynamics" / "stumpff.py",
-    SRC_ROOT / "coordinates" / "jacobian.py",
 }
-RUST_BACKED_COMPATIBILITY_FILES = RESTORED_COMPATIBILITY_FILES - {
-    SRC_ROOT / "coordinates" / "jacobian.py",
-}
+RUST_BACKED_COMPATIBILITY_FILES = RESTORED_COMPATIBILITY_FILES
 
 
 def _module_name_for_path(path: Path) -> str:
@@ -91,8 +93,21 @@ def test_public_surface_inventory_documents_every_restored_symbol() -> None:
             assert f"``{module_name}.{symbol}``" in doc
 
 
+def test_removed_compatibility_symbols_are_documented_and_absent() -> None:
+    doc = PUBLIC_COMPATIBILITY_DOC.read_text()
+    for module_name, symbols in REMOVED_COMPATIBILITY_SYMBOLS.items():
+        for symbol in symbols:
+            assert f"``{module_name}.{symbol}``" in doc
+
+    aberrations = importlib.import_module("adam_core.dynamics.aberrations")
+    assert not hasattr(aberrations, "_add_light_time")
+    assert not hasattr(aberrations, "_add_light_time_vmap")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("adam_core.coordinates.jacobian")
+
+
 def test_production_code_does_not_import_restored_compatibility_modules() -> None:
-    forbidden = set(PUBLIC_MODULE_SYMBOLS)
+    forbidden = set(PUBLIC_MODULE_SYMBOLS) | set(REMOVED_COMPATIBILITY_SYMBOLS)
     offenders: list[str] = []
 
     for path in SRC_ROOT.rglob("*.py"):
@@ -220,17 +235,3 @@ def test_aberrations_compatibility_smoke() -> None:
     observer_state = np.zeros((1, 6), dtype=np.float64)
     aberrated = aberrations.add_stellar_aberration(orbit, observer_state)
     np.testing.assert_allclose(aberrated, orbit[:, :3])
-
-
-def test_jacobian_compatibility_smoke() -> None:
-    jacobian = importlib.import_module("adam_core.coordinates.jacobian")
-
-    def square(coords: np.ndarray) -> np.ndarray:
-        return coords * coords
-
-    result = jacobian.calc_jacobian(
-        np.array([[2.0, 3.0]], dtype=np.float64),
-        square,
-    )
-    assert result.shape == (1, 2, 2)
-    np.testing.assert_allclose(result[0], np.diag([4.0, 6.0]))

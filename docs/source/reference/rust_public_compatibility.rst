@@ -8,11 +8,9 @@ Python implementation part of the long-term hot path.
 Classification meanings:
 
 - Supported Python API: downstream code may keep using the Python symbol.
-- Deprecated/private compatibility shim: retained only to avoid an accidental
-  break in this release; scheduled for removal in the next planned breaking
-  release.
-- Reference-only compatibility helper: retained for parity tests, benchmark
-  references, or diagnostics. New production code must not depend on it.
+- Removed private/reference-only helper: intentionally not retained in the
+  migrated package. Use the documented replacement or the separate baseline
+  checkout for legacy reference behavior.
 
 Rust implementation rule:
 
@@ -26,21 +24,23 @@ Release Note
 The following baseline module paths remain importable in this migration branch:
 ``adam_core.dynamics.aberrations``, ``adam_core.dynamics.barker``,
 ``adam_core.dynamics.chi``, ``adam_core.dynamics.kepler``,
-``adam_core.dynamics.lagrange``, ``adam_core.dynamics.stumpff``, and
-``adam_core.coordinates.jacobian``.
+``adam_core.dynamics.lagrange``, and ``adam_core.dynamics.stumpff``.
 
 The private light-time helpers
 ``adam_core.dynamics.aberrations._add_light_time`` and
-``adam_core.dynamics.aberrations._add_light_time_vmap`` are deprecated/private
-compatibility shims. Use
+``adam_core.dynamics.aberrations._add_light_time_vmap`` are removed from the
+migration package. Use
 ``adam_core.dynamics.aberrations.add_light_time`` at the Python level. Internal
 code should use ``adam_core._rust.api.add_light_time_numpy`` or the Rust
 ``adam_core_rs_coords::add_light_time_row`` /
 ``adam_core_rs_coords::add_light_time_batch_flat`` functions directly.
 
-``adam_core.coordinates.jacobian.calc_jacobian`` is retained as a reference-only
-JAX helper. Production covariance transforms use Rust forward-mode AD and must
-not route through this module.
+``adam_core.coordinates.jacobian.calc_jacobian`` and the
+``adam_core.coordinates.jacobian`` module are removed from the migration
+package. Production covariance transforms use Rust forward-mode AD. Legacy
+``jax.jacfwd`` reference behavior remains available through the separate
+baseline-main checkout used by the parity harness, not through the migrated
+runtime package.
 
 Inventory
 ---------
@@ -53,14 +53,6 @@ Inventory
      - Classification
      - Python implementation
      - Rust-native path
-   * - ``adam_core.dynamics.aberrations._add_light_time``
-     - Deprecated/private compatibility shim
-     - Thin wrapper over ``adam_core._rust.api.add_light_time_numpy``.
-     - ``adam_core_rs_coords::add_light_time_row``.
-   * - ``adam_core.dynamics.aberrations._add_light_time_vmap``
-     - Deprecated/private compatibility shim
-     - Thin wrapper over ``adam_core.dynamics.aberrations.add_light_time``.
-     - ``adam_core_rs_coords::add_light_time_batch_flat``.
    * - ``adam_core.dynamics.aberrations.add_light_time``
      - Supported Python API
      - Thin wrapper over ``adam_core._rust.api.add_light_time_numpy``.
@@ -129,16 +121,33 @@ Inventory
      - Supported Python API
      - Thin wrapper over ``adam_core._rust.api.calc_stumpff_numpy``.
      - ``adam_core_rs_coords::calc_stumpff``.
+
+Removed Surfaces
+----------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 44
+
+   * - Symbol
+     - Classification
+     - Replacement / rationale
+   * - ``adam_core.dynamics.aberrations._add_light_time``
+     - Removed private helper
+     - Use ``adam_core.dynamics.aberrations.add_light_time`` or ``adam_core._rust.api.add_light_time_numpy``.
+   * - ``adam_core.dynamics.aberrations._add_light_time_vmap``
+     - Removed private helper
+     - Use ``adam_core.dynamics.aberrations.add_light_time`` or ``adam_core._rust.api.add_light_time_numpy``.
    * - ``adam_core.coordinates.jacobian.calc_jacobian``
-     - Reference-only compatibility helper
-     - JAX ``jacfwd``/``vmap`` helper retained for parity and tests.
-     - Production covariance transforms use ``adam_core_rs_autodiff`` through the Rust coordinate kernels.
+     - Removed reference-only helper
+     - Use Rust covariance transforms in production; use the baseline-main checkout for legacy JAX reference behavior.
 
 Guardrails
 ----------
 
 ``src/adam_core/tests/test_public_module_compatibility.py`` checks that every
-restored symbol above remains importable and documented. It also statically
-rejects production imports of the restored compatibility modules, so future
-production code keeps using the Rust-backed entrypoints directly instead of
-creating Python-to-Rust-to-Python ping-pong.
+supported symbol above remains importable and documented, and that removed
+private/reference-only symbols are documented and absent. It also statically
+rejects production imports of the restored or removed compatibility modules, so
+future production code keeps using the Rust-backed entrypoints directly instead
+of creating Python-to-Rust-to-Python ping-pong.

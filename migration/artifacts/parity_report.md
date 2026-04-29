@@ -53,25 +53,25 @@
 
 | API | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |
 |---|---:|---:|---:|---|---|
-| `coordinates.cartesian_to_spherical` | 1.74x | 1.70x | 19.59x | PASS | waiver-20260428-cartesian-to-spherical-warm-performance-temporary |
-| `coordinates.transform_coordinates` | 29.10x | 25.51x | 18.48x | PASS | — |
-| `coordinates.cartesian_to_geodetic` | 7.54x | 4.85x | 19.45x | PASS | — |
-| `coordinates.cartesian_to_keplerian` | 6.42x | 5.90x | 33.09x | PASS | — |
-| `coordinates.keplerian.to_cartesian` | 38.14x | 34.42x | 31.55x | PASS | — |
-| `coordinates.cartesian_to_cometary` | 5.87x | 4.19x | 32.10x | PASS | — |
-| `coordinates.cometary.to_cartesian` | 31.59x | 17.52x | 29.59x | PASS | — |
-| `coordinates.spherical.to_cartesian` | 3.26x | 2.26x | 18.59x | PASS | — |
-| `dynamics.calc_mean_motion` | 8.24x | 8.02x | 0.98x | PASS | — |
-| `dynamics.propagate_2body` | 23.53x | 13.36x | 31.95x | PASS | — |
-| `dynamics.propagate_2body_with_covariance` | 26683.38x | 23056.73x | 72.90x | PASS | — |
-| `dynamics.generate_ephemeris_2body` | 3.31x | 3.65x | 32.02x | PASS | — |
-| `dynamics.generate_ephemeris_2body_with_covariance` | 16238.12x | 10272.79x | 82.46x | PASS | — |
-| `dynamics.solve_lambert` | 5.20x | 3.08x | 33.53x | PASS | — |
-| `dynamics.add_light_time` | 3.22x | 2.63x | 29.63x | PASS | — |
-| `photometry.calculate_phase_angle` | 0.88x | 0.66x | 30.92x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.calculate_apparent_magnitude_v` | 1.25x | 1.02x | 31.12x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | 1.38x | 1.17x | 28.45x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.predict_magnitudes` | 1.02x | 0.95x | 30.95x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `orbit_determination.calcGibbs` | 44.04x | 42.63x | 30.20x | PASS | — |
-| `orbit_determination.calcHerrickGibbs` | 3.85x | 3.84x | 28.00x | PASS | — |
-| `orbit_determination.calcGauss` | 2.41x | 2.33x | 29.63x | PASS | — |
+| `coordinates.cartesian_to_spherical` | 1.76x | 1.53x | 19.18x | PASS | waiver-20260428-cartesian-to-spherical-warm-performance-temporary |
+| `coordinates.transform_coordinates` | 30.99x | 30.82x | 18.09x | PASS | — |
+| `coordinates.cartesian_to_geodetic` | 7.05x | 4.94x | 19.52x | PASS | — |
+| `coordinates.cartesian_to_keplerian` | 4.85x | 2.47x | 32.18x | PASS | — |
+| `coordinates.keplerian.to_cartesian` | 37.30x | 31.17x | 31.85x | PASS | — |
+| `coordinates.cartesian_to_cometary` | 5.24x | 2.94x | 32.05x | PASS | — |
+| `coordinates.cometary.to_cartesian` | 29.17x | 13.37x | 28.64x | PASS | — |
+| `coordinates.spherical.to_cartesian` | 4.12x | 2.94x | 19.47x | PASS | — |
+| `dynamics.calc_mean_motion` | 7.80x | 7.41x | 0.94x | PASS | — |
+| `dynamics.propagate_2body` | 21.22x | 18.76x | 31.71x | PASS | — |
+| `dynamics.propagate_2body_with_covariance` | 19958.67x | 16346.52x | 31.63x | PASS | — |
+| `dynamics.generate_ephemeris_2body` | 3.10x | 1.72x | 33.07x | PASS | — |
+| `dynamics.generate_ephemeris_2body_with_covariance` | 21038.56x | 19853.40x | 67.40x | PASS | — |
+| `dynamics.solve_lambert` | 5.74x | 4.80x | 32.02x | PASS | — |
+| `dynamics.add_light_time` | 3.83x | 3.44x | 30.59x | PASS | — |
+| `photometry.calculate_phase_angle` | 0.81x | 0.68x | 30.13x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.calculate_apparent_magnitude_v` | 1.02x | 0.96x | 30.99x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | 1.18x | 1.03x | 31.96x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.predict_magnitudes` | 0.82x | 0.91x | 31.84x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `orbit_determination.calcGibbs` | 44.22x | 43.07x | 29.25x | PASS | — |
+| `orbit_determination.calcHerrickGibbs` | 3.87x | 3.81x | 28.71x | PASS | — |
+| `orbit_determination.calcGauss` | 2.36x | 2.37x | 27.46x | PASS | — |

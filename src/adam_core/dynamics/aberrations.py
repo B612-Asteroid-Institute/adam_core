@@ -72,64 +72,6 @@ def _broadcast_mu(mu: npt.ArrayLike, n: int) -> np.ndarray:
     return np.ascontiguousarray(arr, dtype=np.float64)
 
 
-def _add_light_time(
-    orbit: npt.ArrayLike,
-    t0: float,
-    observer_position: npt.ArrayLike,
-    lt_tol: float = 1e-10,
-    mu: float = MU,
-    max_iter: int = 1000,
-    tol: float = 1e-15,
-    max_lt_iter: int = 10,
-) -> Tuple[np.ndarray, np.float64]:
-    """
-    Compatibility wrapper for the historical single-row light-time helper.
-
-    The current implementation delegates to the mandatory Rust backend. `t0`
-    is retained for signature compatibility; the correction depends only on
-    the state and the solved light-time interval.
-    """
-    _ = t0
-    orbits = _as_state_rows(orbit, name="orbit")
-    observer_positions = _as_position_rows(observer_position, name="observer_position")
-    mus = _broadcast_mu(mu, 1)
-    corrected, light_time = _require_rust_light_time(
-        orbits,
-        observer_positions,
-        mus,
-        lt_tol,
-        max_iter,
-        tol,
-        max_lt_iter,
-    )
-    return corrected[0], np.float64(light_time[0])
-
-
-def _add_light_time_vmap(
-    orbits: npt.ArrayLike,
-    t0: npt.ArrayLike,
-    observer_positions: npt.ArrayLike,
-    lt_tol: float = 1e-10,
-    mu: npt.ArrayLike = MU,
-    max_iter: int = 1000,
-    tol: float = 1e-15,
-    max_lt_iter: int = 10,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compatibility wrapper for the historical vmapped light-time helper.
-    """
-    return add_light_time(
-        orbits,
-        t0,
-        observer_positions,
-        lt_tol=lt_tol,
-        mu=mu,
-        max_iter=max_iter,
-        tol=tol,
-        max_lt_iter=max_lt_iter,
-    )
-
-
 def add_light_time(
     orbits: npt.ArrayLike,
     t0: npt.ArrayLike,
@@ -186,8 +128,6 @@ def add_stellar_aberration(
 
 
 __all__ = [
-    "_add_light_time",
-    "_add_light_time_vmap",
     "add_light_time",
     "add_stellar_aberration",
 ]

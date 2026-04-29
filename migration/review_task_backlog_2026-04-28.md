@@ -599,7 +599,7 @@ Completion notes:
 
 ### RM-P0-005H: Remove Deprecated Private Shims And In-Repo Reference-Only JAX Helpers
 
-Status: open
+Status: complete (2026-04-29)
 
 Reason: The migration checkout now uses a separate baseline-main checkout and
 `.legacy-venv` for parity and benchmark references. Keeping duplicate
@@ -627,6 +627,26 @@ Acceptance:
   baseline main.
 - Any removed private/reference-only symbol has explicit release-note coverage.
 - Existing production and parity/performance gates remain green.
+
+Completion notes:
+
+- Audited `_add_light_time`, `_add_light_time_vmap`, and
+  `coordinates.jacobian.calc_jacobian`. No production in-repo callers were
+  found. The only remaining `_add_light_time_vmap` reference is the legacy
+  parity runner importing from the separate baseline-main checkout, so it is not
+  a migration-package dependency.
+- Removed the private light-time shims from
+  `adam_core.dynamics.aberrations`; retained the supported Rust-backed
+  `add_light_time` and `add_stellar_aberration` APIs.
+- Deleted `src/adam_core/coordinates/jacobian.py`, removing the in-package JAX
+  reference-only jacfwd/vmap helper. Legacy JAX behavior remains available via
+  the baseline-main oracle checkout used by parity harnesses.
+- Updated `docs/source/reference/rust_public_compatibility.rst` release-note
+  coverage and inventory so removed private/reference-only symbols are
+  documented as absent with replacements/rationale.
+- Updated public compatibility tests to assert supported symbols remain
+  importable while removed private/reference-only symbols are documented and
+  absent.
 
 ### RM-P0-006: Enforce One Runtime Contract For Rust Backend Availability
 
