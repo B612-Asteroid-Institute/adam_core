@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import ast
 import importlib
+from pathlib import Path
 
 import numpy as np
 import pytest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SRC_ROOT = PROJECT_ROOT / "src" / "adam_core"
+PUBLIC_COMPATIBILITY_DOC = (
+    PROJECT_ROOT / "docs" / "source" / "reference" / "rust_public_compatibility.rst"
+)
 
 PUBLIC_MODULE_SYMBOLS = {
     "adam_core.dynamics.aberrations": (
@@ -32,12 +40,81 @@ PUBLIC_MODULE_SYMBOLS = {
     "adam_core.coordinates.jacobian": ("calc_jacobian",),
 }
 
+RESTORED_COMPATIBILITY_FILES = {
+    SRC_ROOT / "dynamics" / "aberrations.py",
+    SRC_ROOT / "dynamics" / "barker.py",
+    SRC_ROOT / "dynamics" / "chi.py",
+    SRC_ROOT / "dynamics" / "kepler.py",
+    SRC_ROOT / "dynamics" / "lagrange.py",
+    SRC_ROOT / "dynamics" / "stumpff.py",
+    SRC_ROOT / "coordinates" / "jacobian.py",
+}
+
+
+def _module_name_for_path(path: Path) -> str:
+    relative = path.relative_to(PROJECT_ROOT / "src").with_suffix("")
+    return ".".join(relative.parts)
+
+
+def _resolve_import_from(module_name: str, node: ast.ImportFrom) -> str | None:
+    if node.level == 0:
+        return node.module
+
+    package_parts = module_name.split(".")[:-1]
+    if node.level > len(package_parts) + 1:
+        return None
+
+    base_parts = package_parts[: len(package_parts) - node.level + 1]
+    if node.module:
+        base_parts.extend(node.module.split("."))
+    return ".".join(base_parts)
+
+
+def _is_test_path(path: Path) -> bool:
+    return "tests" in path.relative_to(SRC_ROOT).parts
+
 
 @pytest.mark.parametrize("module_name", sorted(PUBLIC_MODULE_SYMBOLS))
 def test_baseline_public_module_imports(module_name: str) -> None:
     module = importlib.import_module(module_name)
     for symbol in PUBLIC_MODULE_SYMBOLS[module_name]:
         assert hasattr(module, symbol), f"{module_name} is missing {symbol}"
+
+
+def test_public_surface_inventory_documents_every_restored_symbol() -> None:
+    doc = PUBLIC_COMPATIBILITY_DOC.read_text()
+    for module_name, symbols in PUBLIC_MODULE_SYMBOLS.items():
+        for symbol in symbols:
+            assert f"``{module_name}.{symbol}``" in doc
+
+
+def test_production_code_does_not_import_restored_compatibility_modules() -> None:
+    forbidden = set(PUBLIC_MODULE_SYMBOLS)
+    offenders: list[str] = []
+
+    for path in SRC_ROOT.rglob("*.py"):
+        if path in RESTORED_COMPATIBILITY_FILES or _is_test_path(path):
+            continue
+
+        module_name = _module_name_for_path(path)
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported = alias.name
+                    if any(
+                        imported == forbidden_module
+                        or imported.startswith(f"{forbidden_module}.")
+                        for forbidden_module in forbidden
+                    ):
+                        offenders.append(f"{path}: import {imported}")
+
+            if isinstance(node, ast.ImportFrom):
+                imported = _resolve_import_from(module_name, node)
+                if imported in forbidden:
+                    offenders.append(f"{path}: from {imported} import ...")
+
+    assert offenders == []
 
 
 def test_kepler_compatibility_smoke() -> None:

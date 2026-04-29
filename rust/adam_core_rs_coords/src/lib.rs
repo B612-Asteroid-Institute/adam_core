@@ -30,16 +30,17 @@ pub mod spherical_resid;
 pub use spherical_resid::{apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat};
 
 pub use propagate::{
-    calc_chi, calc_chi_with_init, calc_lagrange_coefficients, calc_stumpff,
-    propagate_2body_along_arc, propagate_2body_arc_batch_flat6, propagate_2body_flat6,
-    propagate_2body_row, propagate_2body_with_covariance_flat6, OrbitConstants,
+    apply_lagrange_coefficients, calc_chi, calc_chi_with_init, calc_lagrange_coefficients,
+    calc_stumpff, propagate_2body_along_arc, propagate_2body_arc_batch_flat6,
+    propagate_2body_flat6, propagate_2body_row, propagate_2body_with_covariance_flat6,
+    OrbitConstants,
 };
 
 pub mod ephemeris;
 pub use ephemeris::{
-    add_light_time_batch_flat, add_light_time_row, generate_ephemeris_2body_flat6,
-    generate_ephemeris_2body_row, generate_ephemeris_2body_with_covariance_flat6, C_AU_PER_DAY,
-    DEFAULT_MAX_LT_ITER,
+    add_light_time_batch_flat, add_light_time_row, apply_stellar_aberration_row,
+    generate_ephemeris_2body_flat6, generate_ephemeris_2body_row,
+    generate_ephemeris_2body_with_covariance_flat6, C_AU_PER_DAY, DEFAULT_MAX_LT_ITER,
 };
 
 pub mod photometry;
@@ -131,6 +132,39 @@ pub fn normalize_lon_rad(lon: f64) -> f64 {
     }
 }
 
+pub fn calc_period(a: f64, mu: f64) -> f64 {
+    if a < 0.0 {
+        f64::INFINITY
+    } else {
+        TWO_PI * (a * a * a / mu).sqrt()
+    }
+}
+
+pub fn calc_periapsis_distance(a: f64, e: f64) -> f64 {
+    a * (1.0 - e)
+}
+
+pub fn calc_apoapsis_distance(a: f64, e: f64) -> f64 {
+    if e >= 1.0 {
+        f64::INFINITY
+    } else {
+        a * (1.0 + e)
+    }
+}
+
+pub fn calc_semi_major_axis(q: f64, e: f64) -> f64 {
+    q / (1.0 - e)
+}
+
+pub fn calc_semi_latus_rectum(a: f64, e: f64) -> f64 {
+    a * (1.0 - e * e)
+}
+
+pub fn calc_mean_motion(a: f64, mu: f64) -> f64 {
+    let abs_a = a.abs();
+    (mu / (abs_a * abs_a * abs_a)).sqrt()
+}
+
 pub fn calc_mean_motion_batch(a: &[f64], mu: &[f64]) -> Vec<f64> {
     assert_eq!(a.len(), mu.len(), "a and mu must have the same length");
     let mut out = vec![0.0_f64; a.len()];
@@ -143,8 +177,7 @@ pub fn calc_mean_motion_batch(a: &[f64], mu: &[f64]) -> Vec<f64> {
     // streaming, but that regime is not representative of production
     // gaussIOD/Keplerian.n call patterns.
     for ((o, &ai), &mi) in out.iter_mut().zip(a).zip(mu) {
-        let abs_a = ai.abs();
-        *o = (mi / (abs_a * abs_a * abs_a)).sqrt();
+        *o = calc_mean_motion(ai, mi);
     }
     out
 }
@@ -906,7 +939,7 @@ fn clamp_unit(x: f64) -> f64 {
     x.clamp(-1.0, 1.0)
 }
 
-fn calc_mean_anomaly(nu: f64, e: f64) -> f64 {
+pub fn calc_mean_anomaly(nu: f64, e: f64) -> f64 {
     let nu_norm = if nu >= TWO_PI { nu % TWO_PI } else { nu };
     if e < 1.0 {
         let ecc_anomaly = ((1.0 - e * e).sqrt() * nu_norm.sin()).atan2(e + nu_norm.cos());
@@ -934,12 +967,12 @@ fn calc_mean_anomaly(nu: f64, e: f64) -> f64 {
     mean
 }
 
-fn solve_barker(m: f64) -> f64 {
+pub fn solve_barker(m: f64) -> f64 {
     let term = 3.0 * m + (9.0 * m * m + 1.0).sqrt();
     2.0 * (term.cbrt() - term.powf(-1.0 / 3.0)).atan()
 }
 
-fn solve_kepler_true_anomaly(e: f64, m: f64, max_iter: usize, tol: f64) -> f64 {
+pub fn solve_kepler_true_anomaly(e: f64, m: f64, max_iter: usize, tol: f64) -> f64 {
     let mut ratio = 1e15_f64;
     let mut iter = 0_usize;
     let anomaly = if e < 1.0 {
@@ -1155,4 +1188,45 @@ pub fn cartesian_to_keplerian_row(v: &[f64; 6], t0: f64, mu: f64) -> [f64; 13] {
         period,
         tp,
     ]
+}
+
+#[cfg(test)]
+mod orbital_public_tests {
+    use super::*;
+
+    fn approx(a: f64, b: f64, tol: f64) {
+        assert!(
+            (a - b).abs() <= tol * (1.0 + b.abs()),
+            "expected {a} ~= {b} (tol {tol})"
+        );
+    }
+
+    #[test]
+    fn public_kepler_scalar_helpers_match_python_contract() {
+        approx(calc_periapsis_distance(2.0, 0.25), 1.5, 1e-15);
+        approx(calc_apoapsis_distance(2.0, 0.25), 2.5, 1e-15);
+        assert!(calc_apoapsis_distance(2.0, 1.0).is_infinite());
+        approx(calc_semi_major_axis(1.5, 0.25), 2.0, 1e-15);
+        approx(calc_semi_latus_rectum(2.0, 0.25), 1.875, 1e-15);
+
+        let mu = 2.95912208284120e-04_f64;
+        approx(calc_mean_motion(2.0, mu), (mu / 8.0).sqrt(), 1e-15);
+        approx(calc_period(2.0, mu), TWO_PI * (8.0 / mu).sqrt(), 1e-15);
+        assert!(calc_period(-2.0, mu).is_infinite());
+    }
+
+    #[test]
+    fn public_anomaly_helpers_are_finite_and_normalized() {
+        let mean = calc_mean_anomaly(0.5, 0.2);
+        assert!((0.0..TWO_PI).contains(&mean));
+
+        let parabolic_nu = solve_barker(0.1);
+        assert!(parabolic_nu.is_finite());
+
+        let elliptical_nu = solve_kepler_true_anomaly(0.2, 0.1, 100, 1e-15);
+        assert!((0.0..TWO_PI).contains(&elliptical_nu));
+
+        let hyperbolic_nu = solve_kepler_true_anomaly(1.2, 0.1, 100, 1e-15);
+        assert!(hyperbolic_nu.is_finite());
+    }
 }

@@ -60,6 +60,12 @@ fn stellar_aberrate<T: Scalar>(topo: &mut [T; 6], observer_state: &[T; 6]) {
     topo[2] = delta * num_z / denom;
 }
 
+pub fn apply_stellar_aberration_row(topo: [f64; 6], observer_state: [f64; 6]) -> [f64; 6] {
+    let mut out = topo;
+    stellar_aberrate::<f64>(&mut out, &observer_state);
+    out
+}
+
 /// Single-row light-time correction.
 ///
 /// Iteratively back-propagates `orbit` by `lt = ||r_orbit - r_observer|| / C`
@@ -594,6 +600,15 @@ mod tests {
             sph_on[0],
             sph_off[0]
         );
+    }
+
+    #[test]
+    fn public_stellar_aberration_row_preserves_zero_velocity_case() {
+        let topo = [1.0, 0.2, -0.1, 0.01, 0.02, 0.03];
+        let got = apply_stellar_aberration_row(topo, [0.0; 6]);
+        for i in 0..6 {
+            assert!((got[i] - topo[i]).abs() < 1e-15);
+        }
     }
 
     #[test]

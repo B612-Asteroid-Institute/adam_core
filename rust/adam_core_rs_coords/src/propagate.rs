@@ -252,6 +252,26 @@ pub fn calc_lagrange_coefficients<T: Scalar>(
     ([f, g, f_dot, g_dot], stumpff, chi)
 }
 
+pub fn apply_lagrange_coefficients<T: Scalar>(
+    r: [T; 3],
+    v: [T; 3],
+    coeffs: [T; 4],
+) -> ([T; 3], [T; 3]) {
+    let (f, g, f_dot, g_dot) = (coeffs[0], coeffs[1], coeffs[2], coeffs[3]);
+    (
+        [
+            f * r[0] + g * v[0],
+            f * r[1] + g * v[1],
+            f * r[2] + g * v[2],
+        ],
+        [
+            f_dot * r[0] + g_dot * v[0],
+            f_dot * r[1] + g_dot * v[1],
+            f_dot * r[2] + g_dot * v[2],
+        ],
+    )
+}
+
 /// Propagate a single 6-element Cartesian state by `dt` under a point-mass
 /// Kepler orbit with gravitational parameter `mu`.
 pub fn propagate_2body_row<T: Scalar>(
@@ -264,15 +284,8 @@ pub fn propagate_2body_row<T: Scalar>(
     let r = [orbit[0], orbit[1], orbit[2]];
     let v = [orbit[3], orbit[4], orbit[5]];
     let (coeffs, _, _) = calc_lagrange_coefficients::<T>(r, v, dt, mu, max_iter, tol);
-    let (f, g, f_dot, g_dot) = (coeffs[0], coeffs[1], coeffs[2], coeffs[3]);
-    [
-        f * r[0] + g * v[0],
-        f * r[1] + g * v[1],
-        f * r[2] + g * v[2],
-        f_dot * r[0] + g_dot * v[0],
-        f_dot * r[1] + g_dot * v[1],
-        f_dot * r[2] + g_dot * v[2],
-    ]
+    let (r_new, v_new) = apply_lagrange_coefficients::<T>(r, v, coeffs);
+    [r_new[0], r_new[1], r_new[2], v_new[0], v_new[1], v_new[2]]
 }
 
 /// Propagate a single orbit to many dt values.
@@ -568,6 +581,18 @@ mod tests {
                 out[i],
                 orbit[i]
             );
+        }
+    }
+
+    #[test]
+    fn public_apply_lagrange_coefficients_matches_manual_formula() {
+        let r = [1.0, 2.0, 3.0];
+        let v = [0.1, 0.2, 0.3];
+        let coeffs = [0.9, 2.0, -0.01, 1.1];
+        let (r_new, v_new) = apply_lagrange_coefficients::<f64>(r, v, coeffs);
+        for i in 0..3 {
+            assert!((r_new[i] - [1.1, 2.2, 3.3][i]).abs() < 1e-15);
+            assert!((v_new[i] - [0.1, 0.2, 0.3][i]).abs() < 1e-15);
         }
     }
 

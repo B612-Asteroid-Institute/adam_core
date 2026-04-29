@@ -435,7 +435,7 @@ Acceptance:
 
 ### RM-P0-005F: Audit Retained Python Public Surfaces And Rust-Native Ownership
 
-Status: open
+Status: completed 2026-04-29
 
 Reason: RM-P0-005 restored baseline Python module paths to avoid an accidental
 breaking change, but restoring an import path is not the same as deciding it
@@ -488,6 +488,41 @@ Acceptance:
   helper math.
 - Public import compatibility tests remain green for supported/deprecated
   surfaces, and any planned removals have explicit release-note coverage.
+
+2026-04-29 execution notes:
+
+- Added `docs/source/reference/rust_public_compatibility.rst` and linked it
+  from the reference toctree. The page records every restored symbol, its
+  classification, its Python implementation posture, the Rust-native path
+  where one exists, and release-note language for the deprecated/private
+  light-time shims and reference-only `coordinates.jacobian.calc_jacobian`.
+- Classification outcome: `_add_light_time` and `_add_light_time_vmap` are
+  deprecated/private compatibility shims; `coordinates.jacobian.calc_jacobian`
+  is reference-only; all other restored helper symbols remain supported Python
+  APIs or supported diagnostics, with the caveat that production paths must use
+  Rust-native entrypoints directly.
+- Exposed Rust-to-Rust helper paths for retained orbital/helper surfaces:
+  `calc_period`, `calc_periapsis_distance`, `calc_apoapsis_distance`,
+  `calc_semi_major_axis`, `calc_semi_latus_rectum`, `calc_mean_motion`,
+  `calc_mean_anomaly`, `solve_barker`, `solve_kepler_true_anomaly`,
+  `apply_lagrange_coefficients`, and `apply_stellar_aberration_row`.
+  Existing public Rust paths already covered `calc_stumpff`, `calc_chi`,
+  `calc_chi_with_init`, `calc_lagrange_coefficients`, `add_light_time_row`,
+  and `add_light_time_batch_flat`.
+- Extended `test_public_module_compatibility.py` to assert that every restored
+  symbol is documented and to statically reject production imports of the
+  restored compatibility modules outside the modules themselves and tests. This
+  preserves import compatibility while preventing future Python production code
+  from re-routing Rust-owned orbital helper math through compatibility shims.
+- Validation passed: targeted compatibility test (`13 passed`);
+  ruff/black for the updated test; `cargo test -p adam_core_rs_coords`
+  (`57 passed`); `pdm run rust-develop`; `pdm run script-preflight`;
+  `pdm run rust-quality`; full rust-required pytest (`721 passed,
+  144 skipped, 2 deselected, 56 warnings`); baseline-main `pdm run
+  rust-parity-main` (22/22 fuzzed APIs and warm speed pass); cold/warm
+  `pdm run rust-parity-speed-cold` (`all_passed=true`); canonical parity
+  tables regenerated in `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`; `git diff --check`.
 
 ### RM-P0-006: Enforce One Runtime Contract For Rust Backend Availability
 
