@@ -1,13 +1,21 @@
-# Parity + speedup gate
+# Parity + Baseline Speed Gate
 
-Constitutional rust-vs-legacy enforcement for the Rust migration. Two
-gates run side-by-side:
+Baseline-main enforcement for the Rust migration. Two gates run side-by-side
+for APIs wired into this harness:
 
-1. **Parity-fuzz** — randomized inputs, every rust-default API must
-   match the upstream JAX/numba legacy implementation within the
-   per-API tolerance defined in `tolerances.py`.
-2. **Speedup** — every rust-default API must be ≥ 1.2× faster than
-   legacy at p50 and p95 latency on identical workloads.
+1. **Parity-fuzz** — randomized inputs, current Rust output must match the
+   upstream `main` implementation within the per-API tolerance defined in
+   `tolerances.py`.
+2. **Speedup** — current Rust must be >= 1.2x faster than the upstream `main`
+   implementation at p50 and p95 latency on identical workloads, unless an
+   explicit waiver is attached.
+
+This harness does not time a current-branch Python fallback as "legacy".
+The legacy side is the separate baseline-main checkout installed in
+`.legacy-venv`, so it cannot accidentally call migration-branch Rust
+fallthroughs. When a fair baseline-main oracle does not exist for an API, use
+fixed trusted vectors or the Rust-only latency gate described in
+[`migration/benchmark_governance.md`](../benchmark_governance.md).
 
 ## Legacy oracle
 
@@ -32,7 +40,7 @@ Verify it's reachable:
 
 ## Running the gates
 
-Full constitutional gate (writes `migration/artifacts/parity_gate.json`):
+Full baseline-main gate (writes `migration/artifacts/parity_gate.json`):
 
 ```bash
 .venv/bin/python -m migration.parity.parity_main
@@ -113,30 +121,36 @@ always keeps the full text.
 4. Add an input generator in `_inputs.py` that returns a `Sample` with
    `rust_kwargs` and `legacy_kwargs` (often the same dict).
 5. Run `parity_main --apis <your.api>` and confirm both gates pass.
+6. If the legacy implementation is being removed or the current-branch legacy
+   path would call Rust, preserve dated evidence first, then track future
+   performance with `pdm run rust-latency-gate`.
 
 ## Coverage
 
-The harness covers the constitutional scope: every rust-default API in
-`src/adam_core/_rust/status.py` plus orchestration functions that
-compose them. Higher-level Python wrappers (e.g. `Orbits.propagate_to`,
-`EphemerisMixin.generate_ephemeris`, OD `LeastSquares`, `Variants`,
-`Residuals`) are pure-Python compositions over rust-default kernels;
-their parity follows from the wired primitives.
+The harness covers the baseline-main scope: rust-default APIs wired in
+`_inputs.GENERATORS`, plus selected orchestration functions whose correctness
+is bounded by underlying kernel parity. Higher-level Python wrappers
+(e.g. `Orbits.propagate_to`, `EphemerisMixin.generate_ephemeris`, OD
+`LeastSquares`, `Variants`, `Residuals`) are pure-Python compositions over
+rust-default kernels; their parity follows from the wired primitives.
 
-Currently wired (21):
+Currently wired directly in randomized fuzz (22):
 - 7 coordinates representation transforms
-- 6 dynamics primitives + 1 LT-correction orchestration
+- 7 dynamics primitives + 1 LT-correction orchestration
 - 4 photometry
 - 3 OD primitives
 
-Known gaps (5):
-- `coordinates.transform_coordinates` — needs Python+pyarrow path through quivr
-- `orbit_determination.gaussIOD` — variable-length output (0–3 orbits) makes byte-by-byte parity tricky
+Covered indirectly through underlying kernel parity:
 - `dynamics.calculate_perturber_moids` — orchestration over Orbits quivr table
 - `dynamics.generate_porkchop_data` — orchestration over Orbits quivr table
 
-These need a different harness style (Python+pyarrow round-trip rather
-than numpy-boundary subprocess hand-off). Track as follow-up work.
+Declared but intentionally unwired in randomized fuzz:
+- `orbit_determination.gaussIOD` — variable-length output (0-3 orbits) and
+  root-subset differences between Rust Laguerre+deflation and legacy
+  `np.roots` make random byte-by-byte parity misleading.
+
+These need a different harness style or fixed fixtures rather than
+numpy-boundary random subprocess hand-off. Track as follow-up work.
 
 ## Files
 
@@ -148,5 +162,5 @@ than numpy-boundary subprocess hand-off). Track as follow-up work.
 | `_legacy_runner.py` | legacy dispatch — runs inside `.legacy-venv` via subprocess |
 | `_oracle.py` | subprocess helper that talks to `_legacy_runner` |
 | `parity_fuzz.py` | randomized parity gate (rust vs legacy outputs) |
-| `parity_speed.py` | 1.2× speedup gate (rust vs legacy timing) |
+| `parity_speed.py` | 1.2× speedup gate against baseline-main timing |
 | `parity_main.py` | orchestrator running both gates → JSON artifact |

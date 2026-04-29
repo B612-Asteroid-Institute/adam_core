@@ -1,11 +1,11 @@
-"""20% speedup gate: rust ≥ 1.2× legacy at p50 and p95.
+"""20% speedup gate: Rust >= 1.2x baseline main at p50 and p95.
 
-For each rust-default API plus orchestration functions, time both the
-rust path (in-process) and the legacy path (in the legacy-venv
-subprocess) on identical workloads, and assert::
+For each measured API, time both the current Rust path (in-process) and the
+baseline-main path (in the legacy-venv subprocess) on identical workloads, and
+assert::
 
-    legacy_p50 / rust_p50 ≥ 1.2
-    legacy_p95 / rust_p95 ≥ 1.2
+    legacy_p50 / rust_p50 >= 1.2
+    legacy_p95 / rust_p95 >= 1.2
 
 Each timing loop runs ``reps`` repetitions inside its respective
 process so subprocess invocation overhead is excluded from the legacy
@@ -257,7 +257,7 @@ def to_json(results: list[SpeedResult]) -> dict:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Rust-vs-legacy speedup gate.")
+    p = argparse.ArgumentParser(description="Rust-vs-baseline-main speedup gate.")
     p.add_argument(
         "--n",
         type=int,

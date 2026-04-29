@@ -18,6 +18,21 @@ the gate script was rewritten to Rust-only.
 Each entry has `speedup_p50` / `speedup_p95` = `legacy_p50 / rust_p50`.
 Higher is better for Rust.
 
+### `ephemeris_wide_observer_bench_2026-04-22.json`
+
+Frozen one-off wide-observer measurement for
+`generate_ephemeris_2body` and `generate_ephemeris_2body_with_covariance`.
+The active script that produced this file depended on legacy JAX helper imports
+that were removed when the standing gate became Rust-only, so the JSON is
+preserved here as dated evidence rather than regenerated in CI.
+
+### `rust_orbit_determination_benchmark_2026-04-22.json`
+
+Frozen orbit-determination promotion artifact from the retired
+`rust_orbit_determination_benchmark.py` script. Keep this artifact for
+historical waiver/promotion evidence; active governance now uses
+`migration/parity/` plus Rust-only latency regression.
+
 ## Per-API validity notes
 
 Most entries are legitimate JAX-vmap-vs-Rust or Numba-vs-Rust measurements:

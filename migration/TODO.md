@@ -11,6 +11,7 @@ Last updated: 2026-04-29 (review task backlog)
 - [x] RM-P0-005G: convert supported restored Python helper APIs to thin Rust-backed wrappers, using batched NumPy-boundary bindings where arrays are expected.
 - [x] RM-P0-005H: remove deprecated private shims and in-package JAX/reference-only helpers unless there is a concrete downstream or diagnostic reason to keep them.
 - [x] RM-P0-006: enforce the mandatory Rust backend runtime contract; `_rust.api` now fails at import if `_rust_native` is missing or incomplete, and CI/default test scripts no longer rely on `ADAM_CORE_REQUIRE_RUST_BACKEND`.
+- [x] RM-P0-007: retire contaminated live-legacy benchmark governance from active CI; use baseline-main parity/speed for fair wired APIs and Rust-only latency regression for post-legacy APIs.
 - [x] Review feedback from `adam_core_rust_migration_review_handoff_2026-04-27.md` is decomposed into RM-P0/RM-P1 tasks in the review backlog.
 - [x] Other-agent Wave D3/E2/E3 pending work is consolidated under RM-WD3/RM-WE2/RM-WE3 tasks in the review backlog.
 - [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.

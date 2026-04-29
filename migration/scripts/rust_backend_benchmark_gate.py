@@ -81,7 +81,7 @@ def _latency_summary(rust_times: np.ndarray) -> dict[str, Any]:
     }
 
 
-# ---------- input builders (unchanged from legacy gate) -------------------
+# ---------- representative input builders ---------------------------------
 
 
 def _build_cartesian(n: int) -> np.ndarray:

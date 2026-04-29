@@ -690,7 +690,7 @@ Completion notes:
 
 ### RM-P0-007: Retire Contaminated Live-Legacy Benchmark Governance From Active CI
 
-Status: open
+Status: complete (2026-04-29)
 
 Reason: the journal correctly records that some live legacy paths became contaminated by Rust-backed fallthroughs. Active script metadata still points at stale live-legacy concepts.
 
@@ -706,6 +706,40 @@ Acceptance:
 - CI cannot claim a Rust-vs-legacy speedup from a path that calls Rust on both sides.
 - Current artifacts are named and uploaded consistently.
 - Governance docs explain when to use parity speed vs Rust-latency baseline.
+
+Completion notes:
+
+- Added `migration/benchmark_governance.md` and
+  `docs/source/reference/rust_benchmark_governance.rst` to document the active
+  split: baseline-main parity/speed for fair APIs wired through
+  `migration/parity/`, and Rust-only latency regression for post-legacy APIs.
+- Updated `migration/parity/README.md`, `migration/parity/__init__.py`,
+  `parity_main.py`, and `parity_speed.py` wording so the active speed gate is
+  described as Rust vs baseline-main subprocess timing, not current-branch
+  live-legacy fallback timing.
+- Deleted the broken active one-off
+  `migration/scripts/ephemeris_wide_observer_bench.py`, whose legacy JAX helper
+  imports no longer exist after the Rust-only latency gate rewrite.
+- Preserved dated one-off historical outputs under
+  `migration/artifacts/history/`:
+  `ephemeris_wide_observer_bench_2026-04-22.json` and
+  `rust_orbit_determination_benchmark_2026-04-22.json`.
+- Strengthened `migration/scripts/check_pdm_ci_scripts.py` so preflight rejects
+  stale live-legacy artifacts in active paths and enforces that
+  `rust-latency-gate` writes `migration/artifacts/rust_latency_current.json`
+  while CI uploads it as `rust-latency-current`.
+- Validation passed: targeted compile/ruff/black; `pdm run script-preflight`;
+  `pdm run rust-latency-gate` after one transient microbenchmark p95 outlier
+  rerun; `pdm run rust-quality`; escalated `pdm run test-rust-full`
+  (`723 passed, 144 skipped, 2 deselected`); `pdm run rust-parity-main`;
+  `pdm run rust-parity-speed-cold`; regenerated canonical parity/performance
+  tables; `git diff --check`.
+  A non-escalated `pdm run test-rust-full` failed only from sandbox restrictions
+  (`psutil`/Ray macOS `sysctl` denial and DNS/network denial); the escalated
+  rerun passed.
+  `pdm run docs-check` could not run because the active environment lacks
+  Sphinx and `pdm install -G docs` wanted to refresh a stale lockfile; no
+  dependency files were changed.
 
 ## P1 Stabilization Tasks
 

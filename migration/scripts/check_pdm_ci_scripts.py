@@ -29,7 +29,17 @@ STALE_REFERENCES = (
     "rust-od-benchmark",
     "--max-rust-over-legacy",
     "migration/artifacts/rust_benchmark_gate.json",
+    "migration/artifacts/ephemeris_wide_observer_bench.json",
+    "migration/artifacts/rust_orbit_determination_benchmark.json",
 )
+
+REQUIRED_SCRIPT_OUTPUTS = {
+    "rust-latency-gate": "migration/artifacts/rust_latency_current.json",
+}
+
+REQUIRED_WORKFLOW_ARTIFACTS = {
+    "rust-latency-current": "migration/artifacts/rust_latency_current.json",
+}
 
 PATH_PREFIXES = (
     "src/",
@@ -146,6 +156,36 @@ def _workflow_pdm_run_failures(
     return failures
 
 
+def _required_script_output_failures(scripts: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    for script, expected_output in REQUIRED_SCRIPT_OUTPUTS.items():
+        commands = _script_commands(scripts.get(script))
+        if not commands:
+            failures.append(f"pyproject.toml: required PDM script `{script}` missing")
+            continue
+        command_text = " ".join(commands)
+        if expected_output not in command_text:
+            failures.append(
+                f"pyproject.toml: `{script}` must write `{expected_output}`"
+            )
+    return failures
+
+
+def _required_workflow_artifact_failures(
+    workflows: list[tuple[Path, str]],
+) -> list[str]:
+    workflow_text = "\n".join(text for _, text in workflows)
+    failures: list[str] = []
+    for artifact_name, expected_path in REQUIRED_WORKFLOW_ARTIFACTS.items():
+        if f"name: {artifact_name}" not in workflow_text:
+            failures.append(f"workflows: artifact `{artifact_name}` is not uploaded")
+        if f"path: {expected_path}" not in workflow_text:
+            failures.append(
+                f"workflows: artifact `{artifact_name}` must upload `{expected_path}`"
+            )
+    return failures
+
+
 def main() -> None:
     scripts = _load_scripts()
     script_names = set(scripts)
@@ -160,11 +200,14 @@ def main() -> None:
     failures.extend(
         _missing_paths("pyproject.toml", (cmd for _, cmd in script_commands))
     )
+    failures.extend(_required_script_output_failures(scripts))
 
-    for path, text in _workflow_texts():
+    workflows = _workflow_texts()
+    for path, text in workflows:
         source = str(path.relative_to(REPO_ROOT))
         failures.extend(_stale_reference_failures(source, text))
         failures.extend(_workflow_pdm_run_failures(source, text, script_names))
+    failures.extend(_required_workflow_artifact_failures(workflows))
 
     if failures:
         print("PDM/CI script preflight failed:", file=sys.stderr)
@@ -174,7 +217,7 @@ def main() -> None:
 
     print(
         f"PDM/CI script preflight passed "
-        f"({len(script_names)} PDM scripts, {len(_workflow_texts())} workflows)."
+        f"({len(script_names)} PDM scripts, {len(workflows)} workflows)."
     )
 
 
