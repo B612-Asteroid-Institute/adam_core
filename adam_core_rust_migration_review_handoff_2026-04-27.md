@@ -1,11 +1,93 @@
 # adam-core Rust Migration Review Handoff
 
 Date: 2026-04-27
+Last updated: 2026-04-29
 Reviewer: Codex
 Migration checkout: `/Users/aleck/Code/adam-core-rust-migration`
 Baseline checkout: `/Users/aleck/Code/adam-core`
 
+## Read This First: Current Reviewer State On 2026-04-29
+
+This document began as a 2026-04-27 static critique. The original critique is
+kept below for provenance, but several blockers listed there have since been
+closed. Reviewers should treat this section and the 2026-04-29 addendum at the
+end of the file as the current state.
+
+Current migration checkout state:
+
+- Path: `/Users/aleck/Code/adam-core-rust-migration`
+- Branch: `rust-migration-waves-d-e`
+- HEAD: `0bf2e3cd` (`Retire live-legacy benchmark governance`)
+- Working tree after the last task commit contains only uncommitted grounding
+  files: `decisions.md` and `journal.md`. They are intentionally not committed.
+- Baseline oracle remains the sibling checkout `/Users/aleck/Code/adam-core`
+  installed in `.legacy-venv` for parity and speed comparisons.
+
+Current milestone posture:
+
+- All RM-P0 stabilization blockers in
+  `migration/review_task_backlog_2026-04-28.md` are complete.
+- The branch is ready for review of the P0 hardening work.
+- The migration is not "finished": P1 governance/coverage tasks and Wave
+  D3/E2/E3 performance work remain open.
+- Next open task is RM-P1-008: make `src/adam_core/_rust/status.py` a more
+  trustworthy registry that distinguishes public-rust-default, rust-only,
+  raw-kernel-only, partial coverage, and randomized-fuzz exclusions.
+
+Current validation evidence from the latest completed task, RM-P0-007:
+
+- `pdm run script-preflight`: passed.
+- `pdm run rust-latency-gate`: passed on rerun. First run had one transient
+  p95 microbenchmark outlier on `propagate_2body_with_covariance`; rerun was
+  green and all ratios were within the Rust-only regression thresholds.
+- `pdm run rust-quality`: passed (`cargo fmt --all --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings`,
+  `cargo test --workspace`).
+- `pdm run test-rust-full`: passed when run with escalated permissions:
+  `723 passed, 144 skipped, 2 deselected, 56 warnings`.
+- `pdm run rust-parity-main`: passed. All 22 wired APIs passed randomized
+  fuzz parity against baseline main.
+- `pdm run rust-parity-speed-cold`: passed with existing temporary photometry
+  warm-speed waivers only.
+- Canonical tables were regenerated:
+  `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`.
+- `git diff --check`: passed.
+
+Validation caveats:
+
+- A non-escalated `pdm run test-rust-full` failed only because the tool sandbox
+  denied Ray/psutil macOS `sysctl` process inspection and DNS/network access
+  for JPL/Horizons-backed tests. The escalated rerun passed.
+- `pdm run docs-check` could not run in the active environment because Sphinx
+  is not installed. Installing docs dependencies with `pdm install -G docs`
+  wanted to refresh a stale lockfile; dependency files were intentionally left
+  untouched.
+
+Active waivers still requiring reviewer attention:
+
+- `waiver-20260428-photometry-warm-performance-temporary`: four photometry APIs
+  miss or skim the n=2000 warm p50/p95 speed policy, while cold-start speedups
+  remain around 29-31x. Review by 2026-05-12.
+- `waiver-20260428-cartesian-to-spherical-warm-performance-temporary` remains
+  recorded for prior repeated warm p95 instability, although the latest
+  cold/warm artifact raw-passed this API. Review by 2026-05-12.
+
+Current parity/reporting coverage:
+
+- 22 of 25 declared APIs are wired directly into randomized fuzz generators.
+- 2 orchestration APIs are covered indirectly by underlying kernel parity:
+  `dynamics.calculate_perturber_moids` and `dynamics.generate_porkchop_data`.
+- `orbit_determination.gaussIOD` remains intentionally unwired from randomized
+  fuzz because Rust Laguerre+deflation and legacy `np.roots` can find different
+  root subsets on random triplets. Fixed-fixture/manual parity remains a
+  separate follow-up.
+
 ## Executive Summary
+
+Historical 2026-04-27 assessment follows. It is useful context, but it is not
+the current blocker list. See the section above and the final 2026-04-29
+addendum for the current review posture.
 
 The Rust migration contains substantial technical work and many promising ports, but it is not merge-ready. The largest risks are integration and governance risks, not isolated Rust numerical kernels:
 
@@ -971,3 +1053,264 @@ The new RM-P0-001 task explicitly tracks direct Rust-to-Rust
 `adam-core-rs` -> `spicekit` integration, with Python wrappers becoming
 thin consumers of adam-core's Rust backend rather than importing Python
 `spicekit` objects for adam-core SPICE operations.
+
+## Addendum: Current Review Handoff After RM-P0 Completion On 2026-04-29
+
+This addendum supersedes the unresolved-blocker list in the original
+2026-04-27 review and the 2026-04-28 addenda. It should be the starting point
+for the next reviewer.
+
+### Current Branch And Commit State
+
+- Migration checkout: `/Users/aleck/Code/adam-core-rust-migration`
+- Branch: `rust-migration-waves-d-e`
+- Current HEAD: `0bf2e3cd` (`Retire live-legacy benchmark governance`)
+- Recent task commits, newest first:
+  - `0bf2e3cd` Retire live-legacy benchmark governance
+  - `da362611` Enforce mandatory Rust backend contract
+  - `1125d7a2` Remove reference-only compatibility shims
+  - `f2334505` Address compatibility wrapper review flags
+  - `4ccc547b` Make compatibility helpers Rust-backed
+  - `02481391` Track Rust-backed compatibility wrapper cleanup
+  - `f9b0f25b` Audit Rust migration public compatibility surfaces
+  - `f3e71ecf` Complete Rust migration P0 validation chunk
+- Working tree after `0bf2e3cd` contains only `decisions.md` and `journal.md`
+  modifications. These are local grounding files and should not be committed
+  unless the user explicitly asks.
+
+### What Changed Since The Original Review
+
+The original review identified seven practical P0 blockers. Their current state:
+
+| Original blocker | Current status |
+|---|---|
+| `spicekit` packaging/runtime ambiguity | Resolved for adam-core architecture: Python production no longer imports Python `spicekit`; `rust/adam_core_rs_spice` depends directly on public crates.io `spicekit = "0.1"`, and Python uses adam-core's Rust backend. |
+| Stale PDM/CI scripts | Resolved by `script-preflight`, current `rust-parity-*` scripts, wheel inspection, and CI artifact-path checks. |
+| Deleted public Python modules | Resolved for supported surfaces: public helper modules are restored as thin Rust-backed wrappers where retained; private/reference-only shims were removed intentionally and documented. |
+| Nullable `_rust.api` wrappers / production `assert` guards | Resolved by mandatory Rust backend contract. `adam_core` imports `_rust`; `_rust/api.py` eagerly imports `_rust_native` and validates required symbols. Missing/stale native extension fails loudly. |
+| Baseline docs/RTD drift | Partially addressed: Rust docs now live under `docs/source/reference/`, but `pdm run docs-check` remains blocked locally by missing Sphinx/stale lockfile behavior. RM-P1-010 remains open for final docs re-home/build validation. |
+| Status/governance overstatement | Improved by parity table RCA and benchmark governance docs, but not complete. RM-P1-008 remains the next open task to make `status.py` encode richer coverage/status taxonomy. |
+| Contaminated live-legacy benchmark governance | Resolved by RM-P0-007. Active speed comparisons are baseline-main subprocess parity speed for fair APIs and Rust-only latency regression for post-legacy APIs. Historical live-legacy artifacts are preserved under `migration/artifacts/history/`. |
+
+### Current Architecture Decisions To Preserve
+
+- The Rust extension is mandatory. There is no supported rustless production
+  environment.
+- Parity and performance comparisons use the sibling baseline-main checkout at
+  `/Users/aleck/Code/adam-core` through `.legacy-venv`, not in-process JAX
+  fallbacks inside the migration package.
+- Python public helper APIs that remain supported should be thin Rust-backed
+  wrappers. Rust code should call Rust directly, not route back through Python.
+- Private compatibility shims and reference-only JAX helpers may be removed when
+  they are not useful standalone utilities and not known downstream
+  dependencies.
+- `adam-core-rs` should call public Rust `spicekit` directly; Python
+  `spicekit` is not a production boundary for adam-core Rust operations.
+- New functional/performance changes should be validated with the standard
+  cadence before moving to the next task.
+
+### Validation Cadence To Keep Using
+
+For each unique migration task, continue running:
+
+```bash
+pdm run script-preflight
+pdm run rust-quality
+pdm run test-rust-full
+pdm run rust-parity-main
+pdm run rust-parity-speed-cold
+pdm run python -m migration.scripts.parity_table \
+  --parity-artifact migration/artifacts/parity_gate.json \
+  --speed-artifact migration/artifacts/parity_speed_cold_warm.json \
+  --json-output migration/artifacts/parity_table_rca.json \
+  --markdown-output migration/artifacts/parity_report.md
+git diff --check
+```
+
+Important execution note: in this environment, `pdm run test-rust-full` may need
+escalated permissions because Ray uses psutil/macOS `sysctl`, and some tests hit
+network-backed JPL/Horizons/SPK paths. A non-escalated failure in those areas is
+not automatically a code regression; rerun with the proper permissions before
+triage.
+
+### Latest Validation Results
+
+Latest complete task validation was RM-P0-007, commit `0bf2e3cd`:
+
+- Targeted Python checks: `py_compile`, `ruff`, and `black --check` passed for
+  touched governance/parity scripts.
+- `pdm run script-preflight`: passed (`27 PDM scripts`, `4 workflows`).
+- `pdm run rust-latency-gate`: passed on rerun. The first run had one transient
+  p95 outlier on `propagate_2body_with_covariance`; rerun showed worst p50
+  regression ratio `1.293x` (`predict_magnitudes`) and worst p95 ratio
+  `1.256x` (`solve_lambert`), both inside the default thresholds of `1.75x`
+  p50 and `2.50x` p95.
+- `pdm run rust-quality`: passed. Rust workspace tests passed for autodiff,
+  coords, orbit determination, and SPICE crates.
+- `pdm run test-rust-full`: passed with escalated permissions,
+  `723 passed, 144 skipped, 2 deselected, 56 warnings`.
+- `pdm run rust-parity-main`: passed. All 22 wired APIs passed randomized fuzz
+  parity and the warm speed gate passed with existing waivers only.
+- `pdm run rust-parity-speed-cold`: passed. Existing photometry warm-speed
+  waivers were applied; no new waiver was introduced.
+- Canonical parity/performance artifacts regenerated:
+  - `migration/artifacts/parity_gate.json`
+  - `migration/artifacts/parity_speed_cold_warm.json`
+  - `migration/artifacts/parity_report.md`
+  - `migration/artifacts/parity_table_rca.json`
+- `git diff --check`: passed.
+
+Docs validation caveat:
+
+- `pdm run docs-check` could not run because `sphinx-build` is not installed in
+  the active environment. Attempting `pdm install -G docs` wanted to refresh the
+  stale `pdm.lock` hash and wrote outside the normal sandbox log path, so docs
+  dependency state was left untouched. This is tracked as part of RM-P1-010.
+
+### Current Parity And Performance Coverage
+
+Current canonical report: `migration/artifacts/parity_report.md`.
+
+Coverage summary:
+
+- 22 of 25 declared APIs are wired directly in randomized-fuzz `GENERATORS`.
+- 2 additional orchestration APIs are covered indirectly by underlying kernel
+  parity:
+  - `dynamics.calculate_perturber_moids`
+  - `dynamics.generate_porkchop_data`
+- 1 declared API remains intentionally unwired from randomized fuzz:
+  - `orbit_determination.gaussIOD`
+
+Reason for `gaussIOD` exclusion:
+
+- Rust Laguerre+deflation and legacy `np.roots`/LAPACK can find different
+  subsets of the 8th-order polynomial roots on random triplets. This is an
+  algorithmic root-selection mismatch, not a direct kernel drift. Fixed-fixture
+  parity/manual checks are the right next representation.
+
+Performance state:
+
+- Warm speed gates are green after applying existing temporary waivers.
+- Cold speedups remain strong for Rust-backed paths because the baseline-main
+  side pays fresh Python/JAX import/JIT costs.
+- Photometry warm speed remains the known unresolved policy issue.
+- `coordinates.cartesian_to_spherical` currently raw-passes but still has a
+  temporary waiver because earlier p95 misses were reproducible enough to need a
+  policy/SIMD decision rather than relying on one green run.
+
+### Active Waivers And Review Dates
+
+Active temporary waivers:
+
+- `waiver-20260428-photometry-warm-performance-temporary`
+  - Applies to four photometry APIs in the n=2000 warm speed gate.
+  - Latest cold/warm artifact still shows waived warm misses or near-misses,
+    with cold speedups around `29x` to `31x`.
+  - Review by 2026-05-12.
+- `waiver-20260428-cartesian-to-spherical-warm-performance-temporary`
+  - Applies to prior repeated p95-only warm instability for
+    `coordinates.cartesian_to_spherical`.
+  - Latest artifact raw-passes, but the waiver remains because this needs a
+    durable policy or SIMD/transcendental resolution.
+  - Review by 2026-05-12.
+
+### Current Governance And Packaging State
+
+Packaging:
+
+- Supported wheel path is `pdm run wheel-build` followed by
+  `pdm run wheel-inspect`.
+- Cargo package version in `rust/adam_core_py/Cargo.toml` is the wheel/runtime
+  version source.
+- `src/adam_core/_version.py` is generated during the wheel-version step.
+- Clean pip install/import/native SPICE smoke passed during RM-P0-004.
+- `uv` remains lock-only/local-install caveat: local uv `0.6.16` previously
+  selected or retained PyPI `adam_core 0.5.5` without `_rust_native` for direct
+  local wheel/develop tests. Do not use `maturin develop --uv` or direct
+  `uv pip install dist/*.whl` as authoritative until revalidated on the intended
+  uv version.
+
+Benchmark governance:
+
+- Active baseline-main parity/speed gates live under `migration/parity/`.
+- Active Rust-only regression gate is
+  `migration/scripts/rust_backend_benchmark_gate.py` writing
+  `migration/artifacts/rust_latency_current.json`.
+- Historical rust-vs-legacy evidence lives under `migration/artifacts/history/`.
+- Current CI artifact contract uploads `rust-latency-current` from
+  `migration/artifacts/rust_latency_current.json`.
+- `migration/scripts/check_pdm_ci_scripts.py` rejects stale live-legacy flags and
+  old artifact paths such as `--max-rust-over-legacy` and
+  `migration/artifacts/rust_benchmark_gate.json`.
+
+### Open Task List For The Next Agent
+
+Next recommended order:
+
+1. RM-P1-008: make `status.py` a trustworthy registry.
+   - Add richer taxonomy for public-rust-default, rust-only, raw-kernel-only,
+     dual, partial coverage, and exclusions.
+   - Encode `coordinates.transform_coordinates` subcases.
+   - Encode `gaussIOD` randomized-fuzz exclusion.
+   - Fail governance generation if a row claims dual support after the legacy
+     implementation is gone.
+2. RM-P1-009: add public dispatch parity for `coordinates.transform_coordinates`.
+   - Raw Rust kernel parity is not enough for quivr/coordinate-object public
+     dispatch.
+   - Cover the intentional Cartesian-to-Cartesian frame-only exclusion if it is
+     still retained.
+3. RM-P1-010: re-home/finalize Rust docs in the current RTD structure and make
+   docs build locally/CI.
+   - Resolve missing Sphinx/docs dependency issue without accidentally mutating
+     lockfiles in an unrelated task.
+4. RM-P1-011: audit runtime dependencies.
+   - Production imports of `jax`, `jaxlib`, `numba`, `spiceypy`, and Python
+     `spicekit` should be justified or moved to optional/test groups.
+5. RM-P1-013 / RM-WE2-001: document and test `calculate_chi2` SPD covariance
+   contract.
+   - Rust Cholesky rejects non-SPD covariance matrices. This is likely correct,
+     but it is a public behavior change compared with `np.linalg.inv` accepting
+     some merely invertible matrices.
+6. RM-P1-014 and RM-P1-014A: resolve temporary warm-performance waivers.
+   - Decide SIMD/transcendental investment, cold-start waiver, or selective
+     dispatch/revert policy.
+7. RM-P1-015: make `gaussIOD` randomized parity exclusion visible in governance.
+8. RM-P1-016: split `rust/adam_core_py/src/lib.rs` into domain modules after the
+   registry/status cleanup.
+9. RM-P1-017: final clean validation pass before asking for broad merge review.
+10. Wave work after governance cleanup:
+    - RM-WD3-001 parallel backend abstraction for remaining Ray/rayon/sequential
+      policy surfaces.
+    - RM-WE2-002 fused `Residuals.calculate`.
+    - RM-WE2-003 variants and covariance sampling linalg.
+    - RM-WE2-004 OD evaluation/outlier helpers.
+    - RM-WE3-001 least-squares inner-loop fusion.
+    - RM-WE3-002 quivr-bound constitutional gaps.
+
+### Reviewer Focus Areas
+
+A reviewer should focus on these files and contracts first:
+
+- `src/adam_core/_rust/status.py`: current registry is still too coarse.
+- `migration/parity/README.md`, `migration/benchmark_governance.md`, and
+  `docs/source/reference/rust_benchmark_governance.rst`: ensure benchmark
+  governance wording is precise and does not overclaim live legacy speedups.
+- `migration/artifacts/parity_report.md`: verify tolerance rationale and RCA are
+  sufficient for each widened tolerance.
+- `src/adam_core/dynamics/_rust_compat.py` and restored compatibility modules:
+  verify retained public helper APIs are thin Rust-backed wrappers and not
+  production hot-path detours through Python.
+- `src/adam_core/_rust/api.py`: verify mandatory native-extension contract and
+  required-symbol list are complete enough to catch stale wheels.
+- `.github/workflows/*` and `pyproject.toml`: verify wheel-build/inspect,
+  script-preflight, and artifact upload paths match the documented contracts.
+- `migration/packaging.md`: review Cargo-version source and uv local-install
+  caveat.
+
+### Bottom Line For Review
+
+The branch has moved from "not merge-ready P0 blockers" to "P0 stabilization
+complete; ready for focused review." Do not evaluate the original 2026-04-27
+blocker list as current without checking the status table above. The remaining
+work is now governance fidelity, public-dispatch coverage, dependency/docs
+cleanup, and performance-policy decisions before additional large kernel waves.
