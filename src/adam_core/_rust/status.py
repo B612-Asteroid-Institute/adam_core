@@ -125,18 +125,21 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         rust_module="adam_core._rust_native.transform_coordinates_numpy",
         parity_coverage="random-fuzz",
         covered_subcases=(
-            "Cartesian->Cartesian ecliptic/equatorial constant frame rotation",
+            "Public dispatcher CartesianCoordinates ecliptic->equatorial "
+            "to SphericalCoordinates",
         ),
         excluded_subcases=(
-            "public dispatcher quivr-object call shapes",
+            "Cartesian->Cartesian frame-only public dispatcher fallthrough "
+            "(intentional: cached cartesian_to_frame path is faster)",
             "time-varying ITRF93 rotations",
             "origin translation and user-kernel SPICE body coverage",
-            "non-Cartesian representation conversions composed by dispatcher",
+            "remaining non-Cartesian representation conversions",
         ),
         coverage_note=(
-            "Random fuzz exercises the raw NumPy kernel for cartesian "
-            "ec<->eq frame rotation. RM-P1-009 owns public-dispatch parity "
-            "for the broader quivr/transform_coordinates surface."
+            "Random fuzz now exercises the public quivr-object dispatcher for "
+            "a supported Cartesian->Spherical frame-change workload. The "
+            "remaining excluded subcases are explicit and should not be "
+            "inferred as fuzz-covered."
         ),
         latency_gate=True,
     ),

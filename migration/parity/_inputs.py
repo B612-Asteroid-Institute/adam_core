@@ -27,7 +27,6 @@ from typing import Any
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Constants pulled from upstream — keep these in sync with adam_core.constants.
 # ---------------------------------------------------------------------------
@@ -70,7 +69,9 @@ def _kep_to_cart(coords_kep: np.ndarray) -> np.ndarray:
         np.full(n, MU_SUN, dtype=np.float64),
     )
     if out is None:
-        raise RuntimeError("rust backend unavailable; cannot synthesize cartesian states")
+        raise RuntimeError(
+            "rust backend unavailable; cannot synthesize cartesian states"
+        )
     return np.ascontiguousarray(out, dtype=np.float64)
 
 
@@ -80,24 +81,23 @@ def _kep_to_cart(coords_kep: np.ndarray) -> np.ndarray:
 
 
 def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
-    """Cart→Cart frame rotation, ecliptic → equatorial, no origin shift.
+    """Public dispatcher Cart→Spherical, ecliptic → equatorial, no origin shift.
 
-    The rust kernel takes generic representation_in/out + frame_in/out;
-    we exercise the most common path (cart→cart, ec→eq) which reduces
-    to a constant 6×6 rotation matrix. The legacy oracle invokes
-    `cartesian_to_frame(coords, frame="equatorial")` on a quivr
-    CartesianCoordinates table built from the same numpy inputs.
+    This deliberately goes through the public ``transform_coordinates`` quivr
+    object boundary on both sides. The migration side should fuse the frame
+    change and representation conversion into one Rust dispatcher call; the
+    baseline-main side exercises the upstream public dispatcher.
     """
     coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
-    rust_kw = {
+    time_mjd = rng.uniform(58000.0, 63000.0, size=n).astype(np.float64)
+    kw = {
         "coords": coords,
-        "representation_in": "cartesian",
-        "representation_out": "cartesian",
+        "time_mjd": time_mjd,
+        "representation_out": "spherical",
         "frame_in": "ecliptic",
         "frame_out": "equatorial",
     }
-    legacy_kw = {"coords": coords}  # legacy runner builds the table from numpy
-    return Sample(rust_kwargs=rust_kw, legacy_kwargs=legacy_kw)
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
 def make_cartesian_to_spherical(rng: np.random.Generator, n: int) -> Sample:
@@ -213,7 +213,7 @@ def make_propagate_2body_with_covariance(rng: np.random.Generator, n: int) -> Sa
     sigmas = np.array([1e-8, 1e-8, 1e-8, 1e-10, 1e-10, 1e-10])  # small but non-zero
     cov_3d = np.zeros((n, 6, 6), dtype=np.float64)
     for i in range(n):
-        cov_3d[i] = np.diag(sigmas ** 2)
+        cov_3d[i] = np.diag(sigmas**2)
     # Rust kernel expects flattened (N, 36) row-major; legacy
     # transform_covariances_jacobian wants (N, 6, 6).
     rust_kw = {
@@ -266,7 +266,7 @@ def make_generate_ephemeris_2body_with_covariance(
     sigmas = np.array([1e-8, 1e-8, 1e-8, 1e-10, 1e-10, 1e-10])
     cov_3d = np.zeros((n, 6, 6), dtype=np.float64)
     for i in range(n):
-        cov_3d[i] = np.diag(sigmas ** 2)
+        cov_3d[i] = np.diag(sigmas**2)
     rust_kw = dict(base)
     rust_kw["covariances"] = np.ascontiguousarray(cov_3d.reshape(n, 36))
     legacy_kw = dict(base)
@@ -434,16 +434,18 @@ def _make_iod_observation(
     kep[:, 0] = np.clip(kep[:, 0], 1.5, 5.0)  # main-belt-ish
     kep[:, 1] = np.clip(kep[:, 1], 0.0, 0.4)
     cart = _kep_to_cart(kep)
-    mus = np.full(n_triplets, MU_SUN)
 
     base_t = rng.uniform(59000.0, 60000.0, size=n_triplets).astype(np.float64)
     dt12 = rng.uniform(1.0, 3.0, size=n_triplets).astype(np.float64)
     dt23 = rng.uniform(1.0, 3.0, size=n_triplets).astype(np.float64)
-    times = np.stack([
-        base_t,
-        base_t + dt12,
-        base_t + dt12 + dt23,
-    ], axis=1)  # (n, 3)
+    times = np.stack(
+        [
+            base_t,
+            base_t + dt12,
+            base_t + dt12 + dt23,
+        ],
+        axis=1,
+    )  # (n, 3)
 
     # Per-orbit propagate to each of 3 epochs; observer at fixed (1, 0, 0)
     obs_pos_single = np.array([1.0, 0.0, 0.0])
@@ -464,11 +466,13 @@ def _make_iod_observation(
         # Convert to equatorial RA/Dec. Sample is in ecliptic frame; rotate
         # to equatorial first via a single 3×3 obliquity rotation matrix.
         OBLIQUITY = 84381.448 * np.pi / (180.0 * 3600.0)
-        EC2EQ = np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, np.cos(OBLIQUITY), -np.sin(OBLIQUITY)],
-            [0.0, np.sin(OBLIQUITY), np.cos(OBLIQUITY)],
-        ])
+        EC2EQ = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, np.cos(OBLIQUITY), -np.sin(OBLIQUITY)],
+                [0.0, np.sin(OBLIQUITY), np.cos(OBLIQUITY)],
+            ]
+        )
         rho_eq = rho @ EC2EQ.T
         rho_norm = np.linalg.norm(rho_eq, axis=1)
         ra_deg[i] = np.degrees(np.arctan2(rho_eq[:, 1], rho_eq[:, 0])) % 360.0

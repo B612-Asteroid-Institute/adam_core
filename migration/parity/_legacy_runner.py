@@ -37,7 +37,6 @@ from typing import Any
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Dispatch table — one entry per API id we expose to the gate.
 # Each entry is a callable f(**kwargs) -> dict[str, np.ndarray] (the
@@ -45,35 +44,50 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 
-def _coordinates_transform_coordinates(coords: np.ndarray) -> dict[str, np.ndarray]:
-    """Cart→Cart, ec→eq frame rotation via legacy `cartesian_to_frame`.
+def _coordinates_transform_coordinates(
+    coords: np.ndarray,
+    time_mjd: np.ndarray,
+    representation_out: str,
+    frame_in: str,
+    frame_out: str,
+) -> dict[str, np.ndarray]:
+    """Public ``transform_coordinates`` dispatcher on baseline main.
 
-    Legacy expects a quivr CartesianCoordinates table; we build one
-    from the numpy input, rotate, then extract values back to numpy.
+    The migration gate compares public quivr-object dispatch, not only the raw
+    Rust ``transform_coordinates_numpy`` kernel.
     """
     from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.cometary import CometaryCoordinates
+    from adam_core.coordinates.keplerian import KeplerianCoordinates
     from adam_core.coordinates.origin import Origin
-    from adam_core.coordinates.transform import cartesian_to_frame
+    from adam_core.coordinates.spherical import SphericalCoordinates
+    from adam_core.coordinates.transform import transform_coordinates
     from adam_core.time import Timestamp
 
+    representations = {
+        "cartesian": CartesianCoordinates,
+        "spherical": SphericalCoordinates,
+        "keplerian": KeplerianCoordinates,
+        "cometary": CometaryCoordinates,
+    }
     n = coords.shape[0]
     cc = CartesianCoordinates.from_kwargs(
-        x=coords[:, 0], y=coords[:, 1], z=coords[:, 2],
-        vx=coords[:, 3], vy=coords[:, 4], vz=coords[:, 5],
-        time=Timestamp.from_mjd(np.zeros(n), scale="tdb"),
+        x=coords[:, 0],
+        y=coords[:, 1],
+        z=coords[:, 2],
+        vx=coords[:, 3],
+        vy=coords[:, 4],
+        vz=coords[:, 5],
+        time=Timestamp.from_mjd(time_mjd, scale="tdb"),
         origin=Origin.from_kwargs(code=np.full(n, "SUN", dtype="object")),
-        frame="ecliptic",
+        frame=frame_in,
     )
-    rotated = cartesian_to_frame(cc, "equatorial")
-    out = np.column_stack([
-        rotated.x.to_numpy(zero_copy_only=False),
-        rotated.y.to_numpy(zero_copy_only=False),
-        rotated.z.to_numpy(zero_copy_only=False),
-        rotated.vx.to_numpy(zero_copy_only=False),
-        rotated.vy.to_numpy(zero_copy_only=False),
-        rotated.vz.to_numpy(zero_copy_only=False),
-    ]).astype(np.float64)
-    return {"out": out}
+    transformed = transform_coordinates(
+        cc,
+        representation_out=representations[representation_out],
+        frame_out=frame_out,
+    )
+    return {"out": np.asarray(transformed.values, dtype=np.float64)}
 
 
 def _coordinates_cartesian_to_spherical(coords: np.ndarray) -> dict[str, np.ndarray]:
@@ -88,8 +102,9 @@ def _coordinates_cartesian_to_geodetic(
 ) -> dict[str, np.ndarray]:
     from adam_core.coordinates.transform import _cartesian_to_geodetic_vmap
 
-    out = np.asarray(_cartesian_to_geodetic_vmap(coords, a, f, max_iter, tol),
-                     dtype=np.float64)
+    out = np.asarray(
+        _cartesian_to_geodetic_vmap(coords, a, f, max_iter, tol), dtype=np.float64
+    )
     return {"out": out}
 
 
@@ -109,8 +124,9 @@ def _coordinates_keplerian_to_cartesian(
     # convention. The "_p" variant takes semi-latus rectum p instead.
     from adam_core.coordinates.transform import _keplerian_to_cartesian_a_vmap
 
-    out = np.asarray(_keplerian_to_cartesian_a_vmap(coords, mu, max_iter, tol),
-                     dtype=np.float64)
+    out = np.asarray(
+        _keplerian_to_cartesian_a_vmap(coords, mu, max_iter, tol), dtype=np.float64
+    )
     return {"out": out}
 
 
@@ -128,8 +144,9 @@ def _coordinates_cometary_to_cartesian(
 ) -> dict[str, np.ndarray]:
     from adam_core.coordinates.transform import _cometary_to_cartesian_vmap
 
-    out = np.asarray(_cometary_to_cartesian_vmap(coords, t0, mu, max_iter, tol),
-                     dtype=np.float64)
+    out = np.asarray(
+        _cometary_to_cartesian_vmap(coords, t0, mu, max_iter, tol), dtype=np.float64
+    )
     return {"out": out}
 
 
@@ -140,12 +157,12 @@ def _coordinates_spherical_to_cartesian(coords: np.ndarray) -> dict[str, np.ndar
     return {"out": out}
 
 
-def _dynamics_calc_mean_motion(
-    a: np.ndarray, mu: np.ndarray
-) -> dict[str, np.ndarray]:
+def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.ndarray]:
     # Legacy has no batched calc_mean_motion — it's a 1-line np expression.
     # The rust kernel mirrors `np.sqrt(mu / a**3)` element-wise.
-    out = np.sqrt(np.asarray(mu, dtype=np.float64) / np.asarray(a, dtype=np.float64) ** 3)
+    out = np.sqrt(
+        np.asarray(mu, dtype=np.float64) / np.asarray(a, dtype=np.float64) ** 3
+    )
     return {"out": out}
 
 
@@ -158,8 +175,9 @@ def _dynamics_propagate_2body(
 
     n = orbits.shape[0]
     t0 = np.zeros(n, dtype=np.float64)
-    out = np.asarray(_propagate_2body_vmap(orbits, t0, dts, mus, max_iter, tol),
-                     dtype=np.float64)
+    out = np.asarray(
+        _propagate_2body_vmap(orbits, t0, dts, mus, max_iter, tol), dtype=np.float64
+    )
     return {"out": out}
 
 
@@ -176,8 +194,9 @@ def _dynamics_propagate_2body_with_covariance(
 
     n = orbits.shape[0]
     t0 = np.zeros(n, dtype=np.float64)
-    states = np.asarray(_propagate_2body_vmap(orbits, t0, dts, mus, max_iter, tol),
-                        dtype=np.float64)
+    states = np.asarray(
+        _propagate_2body_vmap(orbits, t0, dts, mus, max_iter, tol), dtype=np.float64
+    )
 
     cov_out = np.empty_like(covariances)
     for i in range(n):
@@ -185,8 +204,9 @@ def _dynamics_propagate_2body_with_covariance(
             transform_covariances_jacobian(
                 orbits[i : i + 1],
                 covariances[i : i + 1],
-                lambda x: _propagate_2body(x, 0.0, float(dts[i]), float(mus[i]),
-                                            max_iter, tol),
+                lambda x: _propagate_2body(
+                    x, 0.0, float(dts[i]), float(mus[i]), max_iter, tol
+                ),
             )[0],
             dtype=np.float64,
         )
@@ -260,9 +280,17 @@ def _dynamics_generate_ephemeris_2body_with_covariance(
                 orbits[i : i + 1],
                 covariances[i : i + 1],
                 lambda x: _generate_ephemeris_2body(
-                    x, 0.0, observer_states[i], float(mus[i]),
-                    lt_tol, max_iter, tol, stellar_aberration,
-                )[0],  # only the spherical output's Jacobian
+                    x,
+                    0.0,
+                    observer_states[i],
+                    float(mus[i]),
+                    lt_tol,
+                    max_iter,
+                    tol,
+                    stellar_aberration,
+                )[
+                    0
+                ],  # only the spherical output's Jacobian
             )[0],
             dtype=np.float64,
         )
@@ -289,8 +317,9 @@ def _dynamics_solve_lambert(
 ) -> dict[str, np.ndarray]:
     from adam_core.dynamics.lambert import _izzo_lambert_vmap
 
-    v1, v2 = _izzo_lambert_vmap(r1, r2, tof, mu, m, prograde, low_path,
-                                maxiter, atol, rtol)
+    v1, v2 = _izzo_lambert_vmap(
+        r1, r2, tof, mu, m, prograde, low_path, maxiter, atol, rtol
+    )
     out = np.concatenate(
         [np.asarray(v1, dtype=np.float64), np.asarray(v2, dtype=np.float64)], axis=1
     )
@@ -418,7 +447,9 @@ def _orbit_determination_calc_herrick_gibbs(
     out = np.empty((n, 3), dtype=np.float64)
     for i in range(n):
         out[i] = np.asarray(
-            calcHerrickGibbs(r1[i], r2[i], r3[i], float(t1[i]), float(t2[i]), float(t3[i])),
+            calcHerrickGibbs(
+                r1[i], r2[i], r3[i], float(t1[i]), float(t2[i]), float(t3[i])
+            ),
             dtype=np.float64,
         )
     return {"out": out}
@@ -457,6 +488,7 @@ def _orbit_determination_calc_gauss(
 # Dispatch
 # ---------------------------------------------------------------------------
 
+
 def _orbit_determination_gauss_iod(
     ra_deg_per_triplet: np.ndarray,
     dec_deg_per_triplet: np.ndarray,
@@ -475,16 +507,23 @@ def _orbit_determination_gauss_iod(
     epoch_out = np.full((n, K_MAX), np.nan, dtype=np.float64)
     orbit_out = np.full((n, K_MAX, 6), np.nan, dtype=np.float64)
     for i in range(n):
-        coords = np.column_stack([
-            ra_deg_per_triplet[i], dec_deg_per_triplet[i],
-        ]).astype(np.float64)
+        coords = np.column_stack(
+            [
+                ra_deg_per_triplet[i],
+                dec_deg_per_triplet[i],
+            ]
+        ).astype(np.float64)
         times = np.asarray(times_per_triplet[i], dtype=np.float64)
         obs = np.asarray(obs_pos_per_triplet[i], dtype=np.float64)
         result = gaussIOD(
-            coords, times, obs,
+            coords,
+            times,
+            obs,
             velocity_method="gibbs",
             light_time=True,
-            mu=mu, max_iter=10, tol=1e-15,
+            mu=mu,
+            max_iter=10,
+            tol=1e-15,
         )
         if not hasattr(result, "coordinates"):
             continue
@@ -492,14 +531,16 @@ def _orbit_determination_gauss_iod(
         n_roots = len(cart.x)
         if n_roots == 0:
             continue
-        triplet = np.column_stack([
-            cart.x.to_numpy(zero_copy_only=False),
-            cart.y.to_numpy(zero_copy_only=False),
-            cart.z.to_numpy(zero_copy_only=False),
-            cart.vx.to_numpy(zero_copy_only=False),
-            cart.vy.to_numpy(zero_copy_only=False),
-            cart.vz.to_numpy(zero_copy_only=False),
-        ])
+        triplet = np.column_stack(
+            [
+                cart.x.to_numpy(zero_copy_only=False),
+                cart.y.to_numpy(zero_copy_only=False),
+                cart.z.to_numpy(zero_copy_only=False),
+                cart.vx.to_numpy(zero_copy_only=False),
+                cart.vy.to_numpy(zero_copy_only=False),
+                cart.vz.to_numpy(zero_copy_only=False),
+            ]
+        )
         eps = cart.time.mjd().to_numpy(zero_copy_only=False)
         r2_mag = np.linalg.norm(triplet[:, :3], axis=1)
         # Drop near-observer trivial roots (|r2| < 1.5 AU) for symmetry

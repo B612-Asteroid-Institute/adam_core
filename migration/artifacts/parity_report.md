@@ -20,7 +20,7 @@
 | `coordinates.cometary.to_cartesian` | out | 3e-12 | 0 | 5.06e-14 | 5.92e-14 | PASS (59.3×) | Mirror of keplerian→cartesian — same kernel, same precision. | Position ≤ 4.3e-14 AU ≈ 6 picometers; velocity ≤ 3.2e-17 AU/d. | Same Newton iteration as keplerian→cartesian, after q→a conversion. Same ~2 ulp last-bit drift. | bit-parity. |
 | `coordinates.keplerian.to_cartesian` | out | 3e-12 | 0 | 7.95e-14 | 3.92e-12 | PASS (37.7×) | Closed-form keplerian→cartesian via Kepler equation Newton solve. 6-column output (x, y, z, vx, vy, vz). | Position columns ≤ 6.9e-14 AU ≈ 10 picometers. Velocity columns ≤ 1.2e-17 AU/d ≈ 0.2 mm/year — true bit-parity. | Newton iteration on Kepler's equation E - e·sin(E) = M. Rust's stdlib sin/cos differ from XLA at last ulp; iteration converges to same root within ~2 ulps. | bit-parity. |
 | `coordinates.spherical.to_cartesian` | out | 1e-11 | 0 | 3.55e-14 | 1.37e-12 | PASS (281.5×) | Inverse of cart→sph. 1-2 ulp angular composition ceiling. | 3.5e-14 AU = 5 picometers. | sin/cos chain composes ~2 ulps at AU scale. | bit-parity. |
-| `coordinates.transform_coordinates` | out | 1e-10 | 1e-12 | 3.47e-18 | 9.23e-14 | PASS (rtol) | Cart→cart frame rotation (ec↔eq). | 1.7e-18 AU = sub-femtometer (essentially exact). | 6×6 constant rotation matrix multiply only — no transcendentals. | bit-parity. |
+| `coordinates.transform_coordinates` | out | 1e-10 | 1e-12 | 1.42e-14 | 7.25e-14 | PASS (rtol) | Public dispatcher Cart→Spherical with ecliptic→equatorial frame rotation. Exercises quivr object construction, public transform_coordinates dispatch, Rust fused frame+representation path on the migration side, and baseline-main public dispatch. | Atol 1e-10 deg is 0.36 microarcsec for angular columns; AU radial drift at observed levels is picometer-scale. | Constant 6×6 frame rotation followed by sqrt/atan2/asin spherical conversion. Rust stdlib and baseline JAX/XLA transcendentals can differ by last-ulp rounding. | public-dispatch parity for this supported subcase. |
 | `dynamics.add_light_time` | aberrated_orbit | 1e-13 | 0 | 1.42e-14 | 3.31e-15 | PASS (7.0×) | Newton fixed-point LT iteration + universal-Kepler back-prop. Convergence threshold lt_tol=1e-10 day; the actual residual is at fp precision. | 7.1e-15 AU = 1 picometer. light_time worst 1.1e-16 day = 9.6 femtoseconds. | Each Newton LT iteration solves chi via universal-Kepler (per row), then back-propagates. ~3-4 iterations × 1 ulp drift = ~4 ulps total. Rust f64 sqrt/log differs from XLA's at last ulp. | bit-parity. Both rust and legacy converge to the same physical root within ~1 ulp; differ only in last-ulp rounding. Picometer-scale aberration drift is 14+ orders below astrometric noise. |
 | `dynamics.add_light_time` | light_time | 1e-15 | 0 | 1.11e-16 | 4.82e-16 | PASS (9.0×) | Newton fixed-point LT iteration + universal-Kepler back-prop. Convergence threshold lt_tol=1e-10 day; the actual residual is at fp precision. | 7.1e-15 AU = 1 picometer. light_time worst 1.1e-16 day = 9.6 femtoseconds. | Each Newton LT iteration solves chi via universal-Kepler (per row), then back-propagates. ~3-4 iterations × 1 ulp drift = ~4 ulps total. Rust f64 sqrt/log differs from XLA's at last ulp. | bit-parity. Both rust and legacy converge to the same physical root within ~1 ulp; differ only in last-ulp rounding. Picometer-scale aberration drift is 14+ orders below astrometric noise. |
 | `dynamics.calc_mean_motion` | out | 1e-13 | 0 | 3.47e-18 | 2.87e-16 | PASS (28823.0×) | Scalar n = sqrt(mu / a^3). | 3.5e-18 = exactly 1 ulp at AU³/d² scale. | Single sqrt — atomic op. | bit-parity. |
@@ -53,25 +53,25 @@
 
 | API | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |
 |---|---:|---:|---:|---|---|
-| `coordinates.cartesian_to_spherical` | 1.67x | 1.63x | 18.55x | PASS | waiver-20260428-cartesian-to-spherical-warm-performance-temporary |
-| `coordinates.transform_coordinates` | 28.07x | 27.53x | 18.20x | PASS | — |
-| `coordinates.cartesian_to_geodetic` | 6.14x | 3.89x | 19.43x | PASS | — |
-| `coordinates.cartesian_to_keplerian` | 6.55x | 6.12x | 30.72x | PASS | — |
-| `coordinates.keplerian.to_cartesian` | 38.27x | 34.59x | 31.77x | PASS | — |
-| `coordinates.cartesian_to_cometary` | 6.13x | 5.47x | 31.22x | PASS | — |
-| `coordinates.cometary.to_cartesian` | 43.08x | 35.62x | 31.01x | PASS | — |
-| `coordinates.spherical.to_cartesian` | 3.24x | 2.40x | 18.01x | PASS | — |
-| `dynamics.calc_mean_motion` | 7.59x | 7.42x | 0.94x | PASS | — |
-| `dynamics.propagate_2body` | 24.71x | 20.26x | 31.54x | PASS | — |
-| `dynamics.propagate_2body_with_covariance` | 22186.02x | 17391.69x | 66.64x | PASS | — |
-| `dynamics.generate_ephemeris_2body` | 3.90x | 3.92x | 31.56x | PASS | — |
-| `dynamics.generate_ephemeris_2body_with_covariance` | 22186.71x | 18762.21x | 70.51x | PASS | — |
-| `dynamics.solve_lambert` | 6.19x | 5.61x | 33.34x | PASS | — |
-| `dynamics.add_light_time` | 3.41x | 3.66x | 30.98x | PASS | — |
-| `photometry.calculate_phase_angle` | 1.05x | 0.90x | 28.92x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.calculate_apparent_magnitude_v` | 1.31x | 1.36x | 30.96x | PASS | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | 1.36x | 1.07x | 29.96x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `photometry.predict_magnitudes` | 1.10x | 1.22x | 30.76x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
-| `orbit_determination.calcGibbs` | 44.13x | 43.72x | 29.98x | PASS | — |
-| `orbit_determination.calcHerrickGibbs` | 3.90x | 3.83x | 27.41x | PASS | — |
-| `orbit_determination.calcGauss` | 2.38x | 2.29x | 29.06x | PASS | — |
+| `coordinates.cartesian_to_spherical` | 2.14x | 1.70x | 19.64x | PASS | waiver-20260428-cartesian-to-spherical-warm-performance-temporary |
+| `coordinates.transform_coordinates` | 3.24x | 3.08x | 1.48x | PASS | — |
+| `coordinates.cartesian_to_geodetic` | 7.37x | 6.53x | 18.82x | PASS | — |
+| `coordinates.cartesian_to_keplerian` | 6.75x | 5.98x | 31.44x | PASS | — |
+| `coordinates.keplerian.to_cartesian` | 36.94x | 30.57x | 31.91x | PASS | — |
+| `coordinates.cartesian_to_cometary` | 5.27x | 4.17x | 30.64x | PASS | — |
+| `coordinates.cometary.to_cartesian` | 45.36x | 41.24x | 31.03x | PASS | — |
+| `coordinates.spherical.to_cartesian` | 3.71x | 3.27x | 18.07x | PASS | — |
+| `dynamics.calc_mean_motion` | 7.81x | 11.76x | 0.97x | PASS | — |
+| `dynamics.propagate_2body` | 24.18x | 22.88x | 27.38x | PASS | — |
+| `dynamics.propagate_2body_with_covariance` | 21816.87x | 12577.95x | 72.02x | PASS | — |
+| `dynamics.generate_ephemeris_2body` | 4.31x | 3.15x | 30.61x | PASS | — |
+| `dynamics.generate_ephemeris_2body_with_covariance` | 20664.50x | 15693.54x | 72.02x | PASS | — |
+| `dynamics.solve_lambert` | 6.97x | 5.42x | 31.34x | PASS | — |
+| `dynamics.add_light_time` | 3.55x | 2.50x | 30.57x | PASS | — |
+| `photometry.calculate_phase_angle` | 0.93x | 0.74x | 29.15x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.calculate_apparent_magnitude_v` | 1.31x | 1.38x | 29.64x | PASS | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | 1.29x | 0.97x | 28.71x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `photometry.predict_magnitudes` | 1.09x | 1.12x | 29.26x | WAIVED | waiver-20260428-photometry-warm-performance-temporary |
+| `orbit_determination.calcGibbs` | 43.85x | 43.02x | 30.48x | PASS | — |
+| `orbit_determination.calcHerrickGibbs` | 3.85x | 3.84x | 28.32x | PASS | — |
+| `orbit_determination.calcGauss` | 2.39x | 2.36x | 27.81x | PASS | — |

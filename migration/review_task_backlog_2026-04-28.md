@@ -743,17 +743,16 @@ Completion notes:
 
 ## P1 Stabilization Tasks
 
-Recommended current order after RM-P1-008/RM-P1-015 completion:
+Recommended current order after RM-P1-009 completion:
 
-1. RM-P1-009.
-2. RM-P1-010, including lockfile/docs-dependency cleanup and a passing
+1. RM-P1-010, including lockfile/docs-dependency cleanup and a passing
    `pdm run docs-check`.
-3. RM-P1-011.
-4. RM-P1-012.
-5. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
-6. RM-P1-013 / RM-WE2-001.
-7. RM-P1-018.
-8. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
+2. RM-P1-011.
+3. RM-P1-012.
+4. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
+5. RM-P1-013 / RM-WE2-001.
+6. RM-P1-018.
+7. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
 
 Reviewer-feedback disposition:
 
@@ -800,8 +799,8 @@ Completion notes:
   `random-fuzz-excluded`, with the root-subset divergence rationale recorded
   in both registry metadata and the canonical parity table output.
 - `coordinates.transform_coordinates` is marked as partial randomized-fuzz
-  coverage with supported and excluded subcases called out; RM-P1-009 remains
-  open for public dispatcher/quivr parity.
+  coverage with supported and excluded subcases called out; RM-P1-009 later
+  moved the randomized parity case to the public dispatcher boundary.
 - Wave D3/E2/E3 helper surfaces such as `calculate_chi2`, residual helpers,
   MOID/porkchop helpers, Tisserand, absolute-magnitude fits, weighted stats,
   and transform/rotation raw kernels are represented as targeted-test coverage
@@ -846,7 +845,7 @@ Validation:
 
 ### RM-P1-009: Add Public Dispatch Parity For `coordinates.transform_coordinates`
 
-Status: open
+Status: complete (2026-04-29)
 
 Reason: raw Rust kernel parity does not prove the public dispatcher path, especially for Cartesian-to-Cartesian frame-only paths intentionally excluded from the raw Rust dispatcher.
 
@@ -859,6 +858,42 @@ Scope:
 Acceptance:
 
 - Parity reports do not overstate public dispatch coverage.
+
+Completion notes:
+
+- The canonical `coordinates.transform_coordinates` baseline-main parity case
+  now builds `CartesianCoordinates` quivr objects in both the migration and
+  baseline-main subprocesses and calls public `transform_coordinates(...)`.
+  It no longer compares the raw `transform_coordinates_numpy` kernel directly
+  while labeling the row as the public API.
+- The fuzzed public case is `CartesianCoordinates` ecliptic -> equatorial into
+  `SphericalCoordinates`, which exercises the migration-side fused Rust
+  frame+representation path and the baseline-main public dispatcher.
+- The registry remains partial by design. It now lists the public dispatcher
+  subcase as covered and calls out remaining exclusions:
+  Cartesian-to-Cartesian frame-only fallthrough, ITRF93/time-varying rotations,
+  origin translation/user-kernel SPICE coverage, and remaining non-Cartesian
+  representation combinations.
+- `migration/parity/tolerances.py` rationale now describes the public
+  dispatcher case and the expected last-ulp rotation/transcendental drift.
+
+Validation:
+
+- Targeted diagnostic before broad validation:
+  `pdm run python -m migration.parity.parity_main --apis coordinates.transform_coordinates --fuzz-seeds 4 --fuzz-n 64 --speed-n 500 --speed-reps 5 --speed-warmup 1`
+  passed with `4/4` fuzz seeds, worst_abs `1.421e-14`, worst_rel `6.151e-15`,
+  and speed `2.03x` p50 / `2.16x` p95.
+- Full task validation passed: targeted ruff/black/status-registry tests;
+  `pdm run script-preflight`; `pdm run rust-quality`; escalated
+  `pdm run test-rust-full` (`730 passed, 144 skipped, 2 deselected,
+  56 warnings`); `pdm run rust-parity-main` (all 22 direct fuzz APIs passed,
+  public transform dispatch speed `2.92x` p50 / `3.01x` p95);
+  `pdm run rust-parity-speed-cold` (public transform dispatch `3.24x` warm p50
+  / `3.08x` warm p95 / `1.48x` cold; existing photometry warm waivers only);
+  regenerated canonical parity/RCA tables; `git diff --check`.
+- A non-escalated `pdm run test-rust-full` failed only from sandbox-denied
+  Ray/psutil macOS `sysctl` process inspection and DNS/network access; the
+  escalated rerun passed.
 
 ### RM-P1-010: Re-Home Rust Docs Into Current Baseline RTD Structure
 

@@ -209,11 +209,23 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     ),
     "coordinates.transform_coordinates": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-10, rtol=1e-12)},
-        rationale="Cart→cart frame rotation (ec↔eq).",
-        dominant_column="x (AU)",
-        physical_magnitude="1.7e-18 AU = sub-femtometer (essentially exact).",
-        root_cause="6×6 constant rotation matrix multiply only — no transcendentals.",
-        verdict="bit-parity.",
+        rationale=(
+            "Public dispatcher Cart→Spherical with ecliptic→equatorial frame "
+            "rotation. Exercises quivr object construction, public "
+            "transform_coordinates dispatch, Rust fused frame+representation "
+            "path on the migration side, and baseline-main public dispatch."
+        ),
+        dominant_column="rho/lon/lat output",
+        physical_magnitude=(
+            "Atol 1e-10 deg is 0.36 microarcsec for angular columns; AU "
+            "radial drift at observed levels is picometer-scale."
+        ),
+        root_cause=(
+            "Constant 6×6 frame rotation followed by sqrt/atan2/asin spherical "
+            "conversion. Rust stdlib and baseline JAX/XLA transcendentals can "
+            "differ by last-ulp rounding."
+        ),
+        verdict="public-dispatch parity for this supported subcase.",
     ),
     # ---- dynamics ----
     "dynamics.calc_mean_motion": ToleranceSpec(

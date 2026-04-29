@@ -155,10 +155,11 @@ Declared but intentionally unwired in randomized fuzz:
   `np.roots` make random byte-by-byte parity misleading.
 
 `coordinates.transform_coordinates` is marked partial in the registry: direct
-randomized fuzz covers only the raw Cartesian ecliptic/equatorial frame
-rotation kernel. RM-P1-009 owns public-dispatch parity for broader quivr
-call shapes, ITRF93/time-varying rotations, origin translation, and composed
-representation conversions.
+randomized fuzz now covers a public quivr-object dispatcher case
+(`CartesianCoordinates` ecliptic -> equatorial into `SphericalCoordinates`).
+The intentionally excluded subcases remain explicit: Cartesian-to-Cartesian
+frame-only fallthrough, ITRF93/time-varying rotations, origin translation, and
+remaining non-Cartesian representation combinations.
 
 These excluded/indirect cases need a different harness style, fixed fixtures,
 or quivr round-trips rather than numpy-boundary random subprocess hand-off.

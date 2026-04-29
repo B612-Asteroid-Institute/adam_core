@@ -165,29 +165,29 @@
     "output": "out",
     "atol": 1e-10,
     "rtol": 1e-12,
-    "worst_abs": 3.469446951953614e-18,
-    "worst_rel": 9.231056381178316e-14,
-    "margin": 28823037.615171175,
+    "worst_abs": 1.4210854715202004e-14,
+    "worst_rel": 7.252745643771501e-14,
+    "margin": 7036.8744177664,
     "passed": true,
     "investigate": false,
     "investigate_task": "",
-    "rationale": "Cart\u2192cart frame rotation (ec\u2194eq).",
-    "dominant_column": "x (AU)",
-    "physical_magnitude": "1.7e-18 AU = sub-femtometer (essentially exact).",
-    "root_cause": "6\u00d76 constant rotation matrix multiply only \u2014 no transcendentals.",
-    "verdict": "bit-parity.",
+    "rationale": "Public dispatcher Cart\u2192Spherical with ecliptic\u2192equatorial frame rotation. Exercises quivr object construction, public transform_coordinates dispatch, Rust fused frame+representation path on the migration side, and baseline-main public dispatch.",
+    "dominant_column": "rho/lon/lat output",
+    "physical_magnitude": "Atol 1e-10 deg is 0.36 microarcsec for angular columns; AU radial drift at observed levels is picometer-scale.",
+    "root_cause": "Constant 6\u00d76 frame rotation followed by sqrt/atan2/asin spherical conversion. Rust stdlib and baseline JAX/XLA transcendentals can differ by last-ulp rounding.",
+    "verdict": "public-dispatch parity for this supported subcase.",
     "state": "measured",
     "registry_status": "public-rust-default",
     "parity_coverage": "random-fuzz",
-    "coverage_note": "Random fuzz exercises the raw NumPy kernel for cartesian ec<->eq frame rotation. RM-P1-009 owns public-dispatch parity for the broader quivr/transform_coordinates surface.",
+    "coverage_note": "Random fuzz now exercises the public quivr-object dispatcher for a supported Cartesian->Spherical frame-change workload. The remaining excluded subcases are explicit and should not be inferred as fuzz-covered.",
     "covered_subcases": [
-      "Cartesian->Cartesian ecliptic/equatorial constant frame rotation"
+      "Public dispatcher CartesianCoordinates ecliptic->equatorial to SphericalCoordinates"
     ],
     "excluded_subcases": [
-      "public dispatcher quivr-object call shapes",
+      "Cartesian->Cartesian frame-only public dispatcher fallthrough (intentional: cached cartesian_to_frame path is faster)",
       "time-varying ITRF93 rotations",
       "origin translation and user-kernel SPICE body coverage",
-      "non-Cartesian representation conversions composed by dispatcher"
+      "remaining non-Cartesian representation conversions"
     ]
   },
   {

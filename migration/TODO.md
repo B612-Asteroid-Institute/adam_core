@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-04-29 (RM-P1-008/RM-P1-015 registry cleanup)
+Last updated: 2026-04-29 (RM-P1-009 transform public dispatch parity)
 
 ## Current Review-Derived Backlog
 
@@ -13,10 +13,11 @@ Last updated: 2026-04-29 (RM-P1-008/RM-P1-015 registry cleanup)
 - [x] RM-P0-006: enforce the mandatory Rust backend runtime contract; `_rust.api` now fails at import if `_rust_native` is missing or incomplete, and CI/default test scripts no longer rely on `ADAM_CORE_REQUIRE_RUST_BACKEND`.
 - [x] RM-P0-007: retire contaminated live-legacy benchmark governance from active CI; use baseline-main parity/speed for fair wired APIs and Rust-only latency regression for post-legacy APIs.
 - [x] RM-P1-008/RM-P1-015: make `src/adam_core/_rust/status.py` a trustworthy registry with public/default/raw/orchestration taxonomy, explicit parity coverage metadata, and visible `gaussIOD` randomized-fuzz exclusion.
+- [x] RM-P1-009: move canonical `coordinates.transform_coordinates` randomized parity to the public quivr-object dispatcher boundary and keep remaining transform subcase exclusions explicit.
 - [x] Review feedback from `adam_core_rust_migration_review_handoff_2026-04-27.md` is decomposed into RM-P0/RM-P1 tasks in the review backlog.
 - [x] Other-agent Wave D3/E2/E3 pending work is consolidated under RM-WD3/RM-WE2/RM-WE3 tasks in the review backlog.
 - [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.
-- [ ] Next review-derived task: RM-P1-009 public dispatch parity for `coordinates.transform_coordinates`.
+- [ ] Next review-derived task: RM-P1-010 docs re-home/build, including lockfile/docs-dependency cleanup and passing `pdm run docs-check`.
 
 ## Active Sprint (Milestone 1 hardening)
 

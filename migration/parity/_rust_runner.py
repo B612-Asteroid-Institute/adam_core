@@ -30,19 +30,44 @@ def _ensure(arr: Any, name: str) -> np.ndarray:
 
 def _coordinates_transform_coordinates(
     coords: np.ndarray,
-    representation_in: str,
+    time_mjd: np.ndarray,
     representation_out: str,
     frame_in: str,
     frame_out: str,
 ) -> dict[str, np.ndarray]:
-    out = _rust_api.transform_coordinates_numpy(
-        coords,
-        representation_in,
-        representation_out,
-        frame_in=frame_in,
+    """Public ``transform_coordinates`` dispatcher on the migration checkout."""
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.cometary import CometaryCoordinates
+    from adam_core.coordinates.keplerian import KeplerianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.coordinates.spherical import SphericalCoordinates
+    from adam_core.coordinates.transform import transform_coordinates
+    from adam_core.time import Timestamp
+
+    representations = {
+        "cartesian": CartesianCoordinates,
+        "spherical": SphericalCoordinates,
+        "keplerian": KeplerianCoordinates,
+        "cometary": CometaryCoordinates,
+    }
+    n = coords.shape[0]
+    cc = CartesianCoordinates.from_kwargs(
+        x=coords[:, 0],
+        y=coords[:, 1],
+        z=coords[:, 2],
+        vx=coords[:, 3],
+        vy=coords[:, 4],
+        vz=coords[:, 5],
+        time=Timestamp.from_mjd(time_mjd, scale="tdb"),
+        origin=Origin.from_kwargs(code=np.full(n, "SUN", dtype="object")),
+        frame=frame_in,
+    )
+    transformed = transform_coordinates(
+        cc,
+        representation_out=representations[representation_out],
         frame_out=frame_out,
     )
-    return {"out": _ensure(out, "transform_coordinates")}
+    return {"out": np.asarray(transformed.values, dtype=np.float64)}
 
 
 def _coordinates_cartesian_to_spherical(coords: np.ndarray) -> dict[str, np.ndarray]:

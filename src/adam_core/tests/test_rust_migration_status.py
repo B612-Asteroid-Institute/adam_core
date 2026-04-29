@@ -56,7 +56,9 @@ def test_transform_coordinates_partial_coverage_is_visible() -> None:
     assert migration.parity_coverage == "random-fuzz"
     assert migration.covered_subcases
     assert migration.excluded_subcases
-    assert "RM-P1-009" in migration.coverage_note
+    assert "public quivr-object dispatcher" in migration.coverage_note
+    assert any("CartesianCoordinates" in case for case in migration.covered_subcases)
+    assert any("Cartesian->Cartesian" in case for case in migration.excluded_subcases)
 
 
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
