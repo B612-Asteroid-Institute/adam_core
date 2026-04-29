@@ -17,9 +17,8 @@ Current migration checkout state:
 
 - Path: `/Users/aleck/Code/adam-core-rust-migration`
 - Branch: `rust-migration-waves-d-e`
-- Latest completed task at this handoff point: RM-P1-009
-  (`coordinates.transform_coordinates` public dispatch parity). Commit as a
-  separate task-scoped change after validation.
+- Latest task commit: `9468ab56` (`Add public transform dispatch parity`),
+  completing RM-P1-009.
 - After the RM-P1-009 commit, the expected uncommitted files are only grounding
   files: `decisions.md` and `journal.md`. They are intentionally not committed.
 - Baseline oracle remains the sibling checkout `/Users/aleck/Code/adam-core`
