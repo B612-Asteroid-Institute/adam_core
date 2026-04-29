@@ -306,29 +306,15 @@ class CartesianCoordinates(qv.Table):
             cov_flat,
         )
 
-        if rust_result is not None:
-            coords_rotated, cov_flat_rotated = rust_result
-            assert cov_flat_rotated is not None
-            covariances_rotated = np.asarray(
-                cov_flat_rotated, dtype=np.float64
-            ).reshape(n, 6, 6)
-        else:
-            # Legacy NumPy masked-array fallback used only when the Rust
-            # backend is unavailable at import time.
-            masked_coords = np.ma.masked_array(self.values, fill_value=np.nan)
-            masked_coords.mask = np.isnan(masked_coords.data)
-            coords_rotated = np.ma.dot(
-                masked_coords, rotation_matrix.T, strict=False
+        coords_rotated, cov_flat_rotated = rust_result
+        if cov_flat_rotated is None:
+            raise RuntimeError(
+                "rotate_cartesian_time_varying_numpy returned no covariance output "
+                "despite covariance input"
             )
-
-            masked_covariances = np.ma.masked_array(
-                self.covariance.to_matrix(), fill_value=0.0
-            )
-            masked_covariances.mask = np.isnan(masked_covariances.data)
-            covariances_rotated = (
-                rotation_matrix @ masked_covariances.filled() @ rotation_matrix.T
-            )
-            covariances_rotated[masked_covariances.mask] = np.nan
+        covariances_rotated = np.asarray(cov_flat_rotated, dtype=np.float64).reshape(
+            n, 6, 6
+        )
 
         # Check if any covariance elements are near zero, if so set them to zero
         near_zero = len(

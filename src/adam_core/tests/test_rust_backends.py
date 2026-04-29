@@ -20,7 +20,6 @@ from adam_core.coordinates.transform import (
     spherical_to_cartesian,
     transform_coordinates,
 )
-from adam_core._rust import calc_mean_motion_numpy as _calc_mean_motion_rust
 from adam_core.time import Timestamp
 
 
@@ -117,9 +116,19 @@ class _FakeRustNative:
         return out
 
 
+def test_rust_api_mandatory_native_contract() -> None:
+    assert rust_api.RUST_BACKEND_AVAILABLE is True
+    assert rust_api.SPICEKIT_AVAILABLE is True
+    missing = [
+        name
+        for name in rust_api._REQUIRED_NATIVE_SYMBOLS
+        if not hasattr(rust_api._native, name)
+    ]
+    assert missing == []
+
+
 def test_cartesian_to_spherical_prefers_rust_when_available(monkeypatch):
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
     got = cartesian_to_spherical(coords)
@@ -131,7 +140,6 @@ def test_cartesian_to_spherical_prefers_rust_when_available(monkeypatch):
 
 def test_calc_mean_motion_rust_wrapper_when_available(monkeypatch):
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     a = np.array([2.0], dtype=np.float64)
     mu = np.array([8.0], dtype=np.float64)
@@ -142,7 +150,6 @@ def test_calc_mean_motion_rust_wrapper_when_available(monkeypatch):
 
 def test_spherical_to_cartesian_prefers_rust_when_available(monkeypatch):
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
     got = spherical_to_cartesian(coords)
@@ -154,7 +161,6 @@ def test_spherical_to_cartesian_prefers_rust_when_available(monkeypatch):
 
 def test_cartesian_to_geodetic_prefers_rust_when_available(monkeypatch):
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
     got = cartesian_to_geodetic(coords, a=1.0, f=0.1, max_iter=3, tol=0.01)
@@ -169,7 +175,6 @@ def test_cartesian_to_geodetic_prefers_rust_when_available(monkeypatch):
 
 def test_cartesian_to_keplerian_prefers_rust_when_available(monkeypatch):
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
     t0 = np.array([10.0], dtype=np.float64)
@@ -186,7 +191,6 @@ def test_cartesian_to_keplerian_prefers_rust_when_available(monkeypatch):
 
 def test_keplerian_to_cartesian_prefers_rust_when_available(monkeypatch):
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = np.array([[1.0, 0.1, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
     mu = np.array([2.0], dtype=np.float64)
@@ -239,7 +243,6 @@ def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
 
     strict_native = _StrictRustNative()
     monkeypatch.setattr(rust_api, "_native", strict_native)
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = SphericalCoordinates.from_kwargs(
         rho=[1.0],
@@ -309,7 +312,6 @@ def test_transform_coordinates_uses_single_rust_crossing_for_frame_change(monkey
 
     strict_native = _StrictRustNative()
     monkeypatch.setattr(rust_api, "_native", strict_native)
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = SphericalCoordinates.from_kwargs(
         rho=[1.0],
@@ -377,7 +379,6 @@ def test_transform_coordinates_uses_single_rust_crossing_for_keplerian_input(
 
     strict_native = _StrictRustNative()
     monkeypatch.setattr(rust_api, "_native", strict_native)
-    monkeypatch.setattr(rust_api, "RUST_BACKEND_AVAILABLE", True)
 
     coords = KeplerianCoordinates.from_kwargs(
         a=[1.0],
@@ -506,8 +507,12 @@ def test_rust_transform_supports_covers_origin_change():
     # But mixed-origin arrays (no single target) are still unsupported.
     mixed_origin_out = np.array(["EARTH", "SUN"])
     coords_two = CartesianCoordinates.from_kwargs(
-        x=[1.0, 2.0], y=[0.0, 0.0], z=[0.0, 0.0],
-        vx=[0.0, 0.0], vy=[0.0, 0.0], vz=[0.0, 0.0],
+        x=[1.0, 2.0],
+        y=[0.0, 0.0],
+        z=[0.0, 0.0],
+        vx=[0.0, 0.0],
+        vy=[0.0, 0.0],
+        vz=[0.0, 0.0],
         time=Timestamp.from_mjd(np.array([60000.0, 60000.0]), scale="tdb"),
         covariance=CoordinateCovariances.nulls(2),
         origin=Origin.from_kwargs(code=["SUN", "SUN"]),

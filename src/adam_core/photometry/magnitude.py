@@ -149,7 +149,6 @@ def calculate_phase_angle(
     _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
 
     rust_out = rust_calculate_phase_angle_numpy(object_pos, observer_pos)
-    assert rust_out is not None
     return np.ascontiguousarray(rust_out, dtype=np.float64)
 
 
@@ -273,7 +272,6 @@ def calculate_apparent_magnitude_v(
     rust_out = rust_calculate_apparent_magnitude_v_numpy(
         H_v_arr, object_pos, observer_pos, G_arr
     )
-    assert rust_out is not None
     return np.ascontiguousarray(rust_out, dtype=np.float64)
 
 
@@ -319,7 +317,6 @@ def calculate_apparent_magnitude_v_and_phase_angle(
     rust_out = rust_calculate_apparent_magnitude_v_and_phase_angle_numpy(
         H_v_arr, object_pos, observer_pos, G_arr
     )
-    assert rust_out is not None
     mag_r, alpha_r = rust_out
     return (
         np.ascontiguousarray(mag_r, dtype=np.float64),
@@ -443,5 +440,4 @@ def predict_magnitudes(
     rust_out = rust_predict_magnitudes_bandpass_numpy(
         H_v_arr, object_pos, observer_pos, G_arr, target_ids, delta_table_np
     )
-    assert rust_out is not None
     return np.ascontiguousarray(rust_out, dtype=np.float64)

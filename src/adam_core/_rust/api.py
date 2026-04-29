@@ -2,14 +2,15 @@
 
 Each wrapper does three things and nothing else:
 
-1. Returns ``None`` when the compiled Rust extension is unavailable (the
-   review-period fallback contract; see `decisions.md`). Callers treat ``None``
-   as "not supported by Rust, use legacy" rather than an error.
-2. Coerces Python-side inputs (list/tuple/non-contiguous arrays) into
+1. Coerces Python-side inputs (list/tuple/non-contiguous arrays) into
    contiguous ``float64`` NumPy arrays so they can cross the PyO3 boundary.
-3. Delegates to ``adam_core._rust_native`` and trusts Rust to own all
+2. Delegates to ``adam_core._rust_native`` and trusts Rust to own all
    shape/length/value validation. Do not re-implement checks here - PyO3
    raises ``ValueError`` with the same messages.
+
+The compiled Rust extension is mandatory for this migration branch. Importing
+this module fails immediately if the extension is missing or if the installed
+extension lacks any required native symbol.
 """
 
 from __future__ import annotations
@@ -20,15 +21,88 @@ import numpy as np
 
 try:
     from adam_core import _rust_native as _native
+except Exception as exc:  # pragma: no cover - depends on build/install state
+    raise ImportError(
+        "adam_core requires the compiled Rust extension "
+        "`adam_core._rust_native`. Build/install the native wheel or run "
+        "`pdm run rust-develop` in this checkout."
+    ) from exc
 
-    RUST_BACKEND_AVAILABLE = True
-except Exception:  # pragma: no cover - importability depends on local build environment
-    _native = None
-    RUST_BACKEND_AVAILABLE = False
-
-SPICEKIT_AVAILABLE = bool(
-    RUST_BACKEND_AVAILABLE and hasattr(_native, "AdamCoreSpiceBackend")
+_REQUIRED_NATIVE_SYMBOLS = (
+    "AdamCoreSpiceBackend",
+    "add_light_time_numpy",
+    "add_stellar_aberration_numpy",
+    "apply_cosine_latitude_correction_numpy",
+    "apply_lagrange_coefficients_numpy",
+    "bound_longitude_residuals_numpy",
+    "calc_apoapsis_distance_numpy",
+    "calc_chi_numpy",
+    "calc_gauss_numpy",
+    "calc_gibbs_numpy",
+    "calc_herrick_gibbs_numpy",
+    "calc_lagrange_coefficients_numpy",
+    "calc_mean_anomaly_numpy",
+    "calc_mean_motion_numpy",
+    "calc_period_numpy",
+    "calc_periapsis_distance_numpy",
+    "calc_semi_latus_rectum_numpy",
+    "calc_semi_major_axis_numpy",
+    "calc_stumpff_numpy",
+    "calculate_apparent_magnitude_v_and_phase_angle_numpy",
+    "calculate_apparent_magnitude_v_numpy",
+    "calculate_chi2_numpy",
+    "calculate_moid_batch_numpy",
+    "calculate_moid_numpy",
+    "calculate_phase_angle_numpy",
+    "cartesian_to_cometary_numpy",
+    "cartesian_to_geodetic_numpy",
+    "cartesian_to_keplerian_numpy",
+    "cartesian_to_spherical_numpy",
+    "classify_orbits_numpy",
+    "cometary_to_cartesian_numpy",
+    "fit_absolute_magnitude_grouped_numpy",
+    "fit_absolute_magnitude_rows_numpy",
+    "gauss_iod_fused_numpy",
+    "gauss_iod_orbits_numpy",
+    "generate_ephemeris_2body_numpy",
+    "generate_ephemeris_2body_with_covariance_numpy",
+    "izzo_lambert_numpy",
+    "keplerian_to_cartesian_numpy",
+    "naif_bodc2n",
+    "naif_bodn2c",
+    "naif_parse_text_kernel_bindings",
+    "naif_pck_open",
+    "naif_spk_open",
+    "naif_spk_writer",
+    "porkchop_grid_numpy",
+    "predict_magnitudes_bandpass_numpy",
+    "propagate_2body_along_arc_numpy",
+    "propagate_2body_arc_batch_numpy",
+    "propagate_2body_numpy",
+    "propagate_2body_with_covariance_numpy",
+    "rotate_cartesian_time_varying_numpy",
+    "solve_barker_numpy",
+    "solve_kepler_numpy",
+    "spherical_to_cartesian_numpy",
+    "tisserand_parameter_numpy",
+    "transform_coordinates_numpy",
+    "transform_coordinates_with_covariance_numpy",
+    "weighted_covariance_numpy",
+    "weighted_mean_numpy",
 )
+
+_missing_native_symbols = tuple(
+    name for name in _REQUIRED_NATIVE_SYMBOLS if not hasattr(_native, name)
+)
+if _missing_native_symbols:  # pragma: no cover - depends on broken install state
+    missing = ", ".join(_missing_native_symbols)
+    raise ImportError(
+        "adam_core._rust_native is present but incomplete; missing required "
+        f"native symbol(s): {missing}"
+    )
+
+RUST_BACKEND_AVAILABLE = True
+SPICEKIT_AVAILABLE = True
 
 
 def _as_contiguous_f64(
@@ -43,15 +117,11 @@ def _as_contiguous_f64(
     return np.ascontiguousarray(np.asarray(values, dtype=np.float64))
 
 
-def cartesian_to_spherical_numpy(coords: np.ndarray) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+def cartesian_to_spherical_numpy(coords: np.ndarray) -> np.ndarray:
     return _native.cartesian_to_spherical_numpy(_as_contiguous_f64(coords))
 
 
-def spherical_to_cartesian_numpy(coords: np.ndarray) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+def spherical_to_cartesian_numpy(coords: np.ndarray) -> np.ndarray:
     return _native.spherical_to_cartesian_numpy(_as_contiguous_f64(coords))
 
 
@@ -61,9 +131,7 @@ def cartesian_to_geodetic_numpy(
     f: float,
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.cartesian_to_geodetic_numpy(
         _as_contiguous_f64(coords), a, f, max_iter, tol
     )
@@ -73,9 +141,7 @@ def cartesian_to_keplerian_numpy(
     coords: np.ndarray,
     t0: np.ndarray | list[float] | tuple[float, ...],
     mu: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.cartesian_to_keplerian_numpy(
         _as_contiguous_f64(coords),
         _as_contiguous_f64(t0),
@@ -88,9 +154,7 @@ def keplerian_to_cartesian_numpy(
     mu: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.keplerian_to_cartesian_numpy(
         _as_contiguous_f64(coords),
         _as_contiguous_f64(mu),
@@ -103,9 +167,7 @@ def cartesian_to_cometary_numpy(
     coords: np.ndarray,
     t0: np.ndarray | list[float] | tuple[float, ...],
     mu: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.cartesian_to_cometary_numpy(
         _as_contiguous_f64(coords),
         _as_contiguous_f64(t0),
@@ -119,9 +181,7 @@ def cometary_to_cartesian_numpy(
     mu: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.cometary_to_cartesian_numpy(
         _as_contiguous_f64(coords),
         _as_contiguous_f64(t0),
@@ -144,9 +204,7 @@ def transform_coordinates_numpy(
     frame_in: str | None = None,
     frame_out: str | None = None,
     translation_vectors: np.ndarray | None = None,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.transform_coordinates_numpy(
         _as_contiguous_f64(coords),
         representation_in,
@@ -181,9 +239,7 @@ def transform_coordinates_with_covariance_numpy(
     frame_in: str | None = None,
     frame_out: str | None = None,
     translation_vectors: np.ndarray | None = None,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray]:
     return _native.transform_coordinates_with_covariance_numpy(
         _as_contiguous_f64(coords),
         _as_contiguous_f64(covariances),
@@ -210,9 +266,7 @@ def rotate_cartesian_time_varying_numpy(
     time_index: np.ndarray,
     matrices: np.ndarray,
     covariances: Optional[np.ndarray] = None,
-) -> Optional[tuple[np.ndarray, Optional[np.ndarray]]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, Optional[np.ndarray]]:
     ti = np.ascontiguousarray(np.asarray(time_index, dtype=np.int64))
     mats = np.ascontiguousarray(np.asarray(matrices, dtype=np.float64))
     cov = None if covariances is None else _as_contiguous_f64(covariances)
@@ -227,27 +281,21 @@ def rotate_cartesian_time_varying_numpy(
 def calc_mean_motion_numpy(
     a: np.ndarray | list[float] | tuple[float, ...],
     mu: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_mean_motion_numpy(_as_contiguous_f64(a), _as_contiguous_f64(mu))
 
 
 def calc_period_numpy(
     a: np.ndarray | list[float] | tuple[float, ...],
     mu: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_period_numpy(_as_contiguous_f64(a), _as_contiguous_f64(mu))
 
 
 def calc_periapsis_distance_numpy(
     a: np.ndarray | list[float] | tuple[float, ...],
     e: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_periapsis_distance_numpy(
         _as_contiguous_f64(a),
         _as_contiguous_f64(e),
@@ -257,9 +305,7 @@ def calc_periapsis_distance_numpy(
 def calc_apoapsis_distance_numpy(
     a: np.ndarray | list[float] | tuple[float, ...],
     e: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_apoapsis_distance_numpy(
         _as_contiguous_f64(a),
         _as_contiguous_f64(e),
@@ -269,9 +315,7 @@ def calc_apoapsis_distance_numpy(
 def calc_semi_major_axis_numpy(
     q: np.ndarray | list[float] | tuple[float, ...],
     e: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_semi_major_axis_numpy(
         _as_contiguous_f64(q),
         _as_contiguous_f64(e),
@@ -281,9 +325,7 @@ def calc_semi_major_axis_numpy(
 def calc_semi_latus_rectum_numpy(
     a: np.ndarray | list[float] | tuple[float, ...],
     e: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_semi_latus_rectum_numpy(
         _as_contiguous_f64(a),
         _as_contiguous_f64(e),
@@ -293,9 +335,7 @@ def calc_semi_latus_rectum_numpy(
 def calc_mean_anomaly_numpy(
     nu: np.ndarray | list[float] | tuple[float, ...],
     e: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_mean_anomaly_numpy(
         _as_contiguous_f64(nu),
         _as_contiguous_f64(e),
@@ -304,9 +344,7 @@ def calc_mean_anomaly_numpy(
 
 def solve_barker_numpy(
     m: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.solve_barker_numpy(_as_contiguous_f64(m))
 
 
@@ -315,9 +353,7 @@ def solve_kepler_numpy(
     m: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.solve_kepler_numpy(
         _as_contiguous_f64(e),
         _as_contiguous_f64(m),
@@ -328,9 +364,7 @@ def solve_kepler_numpy(
 
 def calc_stumpff_numpy(
     psi: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_stumpff_numpy(_as_contiguous_f64(psi))
 
 
@@ -341,9 +375,7 @@ def calc_chi_numpy(
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_chi_numpy(
         _as_contiguous_f64(r),
         _as_contiguous_f64(v),
@@ -361,9 +393,7 @@ def calc_lagrange_coefficients_numpy(
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return _native.calc_lagrange_coefficients_numpy(
         _as_contiguous_f64(r),
         _as_contiguous_f64(v),
@@ -378,9 +408,7 @@ def apply_lagrange_coefficients_numpy(
     r: np.ndarray,
     v: np.ndarray,
     coeffs: np.ndarray,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray]:
     return _native.apply_lagrange_coefficients_numpy(
         _as_contiguous_f64(r),
         _as_contiguous_f64(v),
@@ -391,9 +419,7 @@ def apply_lagrange_coefficients_numpy(
 def add_stellar_aberration_numpy(
     orbits: np.ndarray,
     observer_states: np.ndarray,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.add_stellar_aberration_numpy(
         _as_contiguous_f64(orbits),
         _as_contiguous_f64(observer_states),
@@ -406,9 +432,7 @@ def propagate_2body_numpy(
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.propagate_2body_numpy(
         _as_contiguous_f64(orbits),
         _as_contiguous_f64(dts),
@@ -421,13 +445,11 @@ def propagate_2body_numpy(
 def bound_longitude_residuals_numpy(
     observed: np.ndarray,
     residuals: np.ndarray,
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Wrap longitude residuals to [-180, 180]° with sign-flip on 0/360 crossings.
 
     Returns a NEW array (rust kernel operates in place on a copy).
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.bound_longitude_residuals_numpy(
         _as_contiguous_f64(observed),
         _as_contiguous_f64(residuals),
@@ -438,11 +460,9 @@ def apply_cosine_latitude_correction_numpy(
     lat: np.ndarray | list[float] | tuple[float, ...],
     residuals: np.ndarray,
     covariances: np.ndarray,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Apply cos(latitude) factor to spherical residuals (cols 1, 4) and
     covariance (rows/cols 1, 4). Returns (residuals, covariances)."""
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.apply_cosine_latitude_correction_numpy(
         _as_contiguous_f64(lat),
         _as_contiguous_f64(residuals),
@@ -453,14 +473,12 @@ def apply_cosine_latitude_correction_numpy(
 def fit_absolute_magnitude_rows_numpy(
     h_rows: np.ndarray | list[float] | tuple[float, ...],
     sigma_rows: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[tuple[float, float, float, float, int]]:
+) -> tuple[float, float, float, float, int]:
     """Single-group H-fit: weighted mean (with σ) or arithmetic mean (without).
 
     Returns (H_hat, H_sigma, sigma_eff, chi2_red, n_used). NaN values
     where the metric isn't applicable; the caller should map NaN → None.
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.fit_absolute_magnitude_rows_numpy(
         _as_contiguous_f64(h_rows),
         _as_contiguous_f64(sigma_rows),
@@ -471,13 +489,11 @@ def fit_absolute_magnitude_grouped_numpy(
     h_rows: np.ndarray | list[float] | tuple[float, ...],
     sigma_rows: np.ndarray | list[float] | tuple[float, ...],
     group_offsets: np.ndarray | list[int] | tuple[int, ...],
-) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Batched grouped H-fit. `group_offsets` shape (K+1,) with [0, ..., len(h_rows)].
 
     Returns 5-tuple of arrays each shape (K,): (H_hat, H_sigma, sigma_eff, chi2_red, n_used).
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.fit_absolute_magnitude_grouped_numpy(
         _as_contiguous_f64(h_rows),
         _as_contiguous_f64(sigma_rows),
@@ -488,10 +504,8 @@ def fit_absolute_magnitude_grouped_numpy(
 def weighted_mean_numpy(
     samples: np.ndarray,
     w: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Weighted mean: `mean[k] = Σ_i W[i] · samples[i, k]` for k in 0..d."""
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.weighted_mean_numpy(
         _as_contiguous_f64(samples),
         _as_contiguous_f64(w),
@@ -502,10 +516,8 @@ def weighted_covariance_numpy(
     mean: np.ndarray | list[float] | tuple[float, ...],
     samples: np.ndarray,
     w_cov: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Weighted covariance: `cov[j, k] = Σ_i W_cov[i] · (samples[i,j]−mean[j]) · (samples[i,k]−mean[k])`."""
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.weighted_covariance_numpy(
         _as_contiguous_f64(mean),
         _as_contiguous_f64(samples),
@@ -516,7 +528,7 @@ def weighted_covariance_numpy(
 def calculate_chi2_numpy(
     residuals: np.ndarray,
     covariances: np.ndarray,
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Per-row Mahalanobis χ² = r·Σ⁻¹·rᵀ via Cholesky solve.
 
     Parameters
@@ -529,8 +541,6 @@ def calculate_chi2_numpy(
     -------
     chi2 : (N,) float64 array
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.calculate_chi2_numpy(
         _as_contiguous_f64(residuals),
         _as_contiguous_f64(covariances),
@@ -542,14 +552,12 @@ def classify_orbits_numpy(
     e: np.ndarray | list[float] | tuple[float, ...],
     q: np.ndarray | list[float] | tuple[float, ...],
     q_apo: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """PDS Small Bodies Node dynamical classification.
 
     Returns an int32 array of class codes (0=AST, 1=AMO, …, 13=HYA).
     Caller maps codes → string labels (see `dynamics/classification.py::CLASS_CODE_TO_NAME`).
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.classify_orbits_numpy(
         _as_contiguous_f64(a),
         _as_contiguous_f64(e),
@@ -563,10 +571,8 @@ def tisserand_parameter_numpy(
     e: np.ndarray | list[float] | tuple[float, ...],
     i_deg: np.ndarray | list[float] | tuple[float, ...],
     ap: float,
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Tisserand's parameter Tp = a_p/a + 2·cos(i)·sqrt((a/a_p)·(1−e²))."""
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.tisserand_parameter_numpy(
         _as_contiguous_f64(a),
         _as_contiguous_f64(e),
@@ -581,7 +587,7 @@ def propagate_2body_along_arc_numpy(
     mu: float,
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Propagate a SINGLE orbit to many dt values.
 
     Internally caches the orbit-only constants (`r_mag`, `sqrt_mu`,
@@ -592,8 +598,6 @@ def propagate_2body_along_arc_numpy(
 
     Returns a `(N, 6)` array in the original `dts` order.
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.propagate_2body_along_arc_numpy(
         _as_contiguous_f64(orbit),
         _as_contiguous_f64(dts),
@@ -609,7 +613,7 @@ def propagate_2body_arc_batch_numpy(
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Propagate N orbits to K dts each, with rayon parallelism across
     orbits and warm-started chi solving within each orbit.
 
@@ -622,8 +626,6 @@ def propagate_2body_arc_batch_numpy(
     then orbit 1's K rows, etc.). Output preserves the input dt order
     within each orbit's block.
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.propagate_2body_arc_batch_numpy(
         _as_contiguous_f64(orbits),
         _as_contiguous_f64(dts),
@@ -640,9 +642,7 @@ def propagate_2body_with_covariance_numpy(
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray]:
     return _native.propagate_2body_with_covariance_numpy(
         _as_contiguous_f64(orbits),
         _as_contiguous_f64(covariances),
@@ -662,9 +662,7 @@ def generate_ephemeris_2body_numpy(
     tol: float = 1e-15,
     stellar_aberration: bool = False,
     max_lt_iter: int = 10,
-) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return _native.generate_ephemeris_2body_numpy(
         _as_contiguous_f64(orbits),
         _as_contiguous_f64(observer_states),
@@ -687,9 +685,7 @@ def generate_ephemeris_2body_with_covariance_numpy(
     tol: float = 1e-15,
     stellar_aberration: bool = False,
     max_lt_iter: int = 10,
-) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     return _native.generate_ephemeris_2body_with_covariance_numpy(
         _as_contiguous_f64(orbits),
         _as_contiguous_f64(covariances),
@@ -706,9 +702,7 @@ def generate_ephemeris_2body_with_covariance_numpy(
 def calculate_phase_angle_numpy(
     object_pos: np.ndarray,
     observer_pos: np.ndarray,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calculate_phase_angle_numpy(
         _as_contiguous_f64(object_pos),
         _as_contiguous_f64(observer_pos),
@@ -720,9 +714,7 @@ def calculate_apparent_magnitude_v_numpy(
     object_pos: np.ndarray,
     observer_pos: np.ndarray,
     g: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calculate_apparent_magnitude_v_numpy(
         _as_contiguous_f64(h_v),
         _as_contiguous_f64(object_pos),
@@ -736,9 +728,7 @@ def calculate_apparent_magnitude_v_and_phase_angle_numpy(
     object_pos: np.ndarray,
     observer_pos: np.ndarray,
     g: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray]:
     return _native.calculate_apparent_magnitude_v_and_phase_angle_numpy(
         _as_contiguous_f64(h_v),
         _as_contiguous_f64(object_pos),
@@ -754,7 +744,7 @@ def predict_magnitudes_bandpass_numpy(
     g: np.ndarray | list[float] | tuple[float, ...],
     target_ids: np.ndarray | list[int] | tuple[int, ...],
     delta_table: np.ndarray | list[float] | tuple[float, ...],
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """
     Predict apparent magnitudes in arbitrary target filters.
 
@@ -762,8 +752,6 @@ def predict_magnitudes_bandpass_numpy(
     delta lookup. `target_ids` indexes into `delta_table` (canonical filter
     ID table ordering). Out-of-range target_ids surface as NaN.
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.predict_magnitudes_bandpass_numpy(
         _as_contiguous_f64(h_v),
         _as_contiguous_f64(object_pos),
@@ -779,9 +767,7 @@ def calc_gibbs_numpy(
     r2: np.ndarray | list[float] | tuple[float, ...],
     r3: np.ndarray | list[float] | tuple[float, ...],
     mu: float,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_gibbs_numpy(
         _as_contiguous_f64(r1),
         _as_contiguous_f64(r2),
@@ -798,9 +784,7 @@ def calc_herrick_gibbs_numpy(
     t2: float,
     t3: float,
     mu: float,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_herrick_gibbs_numpy(
         _as_contiguous_f64(r1),
         _as_contiguous_f64(r2),
@@ -820,7 +804,7 @@ def add_light_time_numpy(
     max_iter: int = 1000,
     tol: float = 1e-15,
     max_lt_iter: int = 10,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Batched light-time correction.
 
     Iterates `lt = ||r_orbit - r_obs|| / C` and back-propagates the input
@@ -829,8 +813,6 @@ def add_light_time_numpy(
     Returns ``(aberrated_orbits[N, 6], light_time_days[N])``. NaN
     light-time on non-convergence within ``max_lt_iter`` iterations.
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.add_light_time_numpy(
         _as_contiguous_f64(orbits),
         _as_contiguous_f64(observer_positions),
@@ -848,12 +830,10 @@ def calculate_moid_numpy(
     mu: float,
     max_iter: int = 100,
     xtol: float = 1e-10,
-) -> Optional[tuple[float, float]]:
+) -> tuple[float, float]:
     """Returns `(moid, dt_at_min)`. Both orbits given as 6-vector Cartesian
     (x, y, z, vx, vy, vz). mu is the gravitational parameter of the central
     body in AU³/d² (consistent with the Cartesian units)."""
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.calculate_moid_numpy(
         _as_contiguous_f64(primary_orbit),
         _as_contiguous_f64(secondary_orbit),
@@ -869,13 +849,11 @@ def calculate_moid_batch_numpy(
     mus: np.ndarray | list[float] | tuple[float, ...],
     max_iter: int = 100,
     xtol: float = 1e-10,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Batched MOID over N (primary, secondary) orbit pairs. Rayon-parallel.
 
     Returns `(moids[N], dt_at_min[N])`.
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.calculate_moid_batch_numpy(
         _as_contiguous_f64(primary_orbits),
         _as_contiguous_f64(secondary_orbits),
@@ -895,14 +873,12 @@ def porkchop_grid_numpy(
     maxiter: int = 35,
     atol: float = 1e-10,
     rtol: float = 1e-10,
-) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Single Rust call: meshgrid + time-order filter + batched Lambert.
 
     Returns ``(dep_idx[V], arr_idx[V], v1[V, 3], v2[V, 3])`` for the V valid
     pairs (arr_mjd > dep_mjd). Rayon-parallel internally.
     """
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.porkchop_grid_numpy(
         _as_contiguous_f64(dep_states),
         _as_contiguous_f64(dep_mjds),
@@ -927,10 +903,8 @@ def izzo_lambert_numpy(
     maxiter: int = 35,
     atol: float = 1e-10,
     rtol: float = 1e-10,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Izzo's Lambert solver, Rust-backed. Returns (v1, v2) arrays shape (N, 3)."""
-    if not RUST_BACKEND_AVAILABLE:
-        return None
     return _native.izzo_lambert_numpy(
         _as_contiguous_f64(r1),
         _as_contiguous_f64(r2),
@@ -953,9 +927,7 @@ def calc_gauss_numpy(
     t2: float,
     t3: float,
     mu: float,
-) -> Optional[np.ndarray]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> np.ndarray:
     return _native.calc_gauss_numpy(
         _as_contiguous_f64(r1),
         _as_contiguous_f64(r2),
@@ -976,9 +948,7 @@ def gauss_iod_fused_numpy(
     light_time: bool,
     mu: float,
     c: float,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray]:
     epochs, orbits = _native.gauss_iod_fused_numpy(
         _as_contiguous_f64(ra_deg),
         _as_contiguous_f64(dec_deg),
@@ -1008,9 +978,7 @@ def gauss_iod_orbits_numpy(
     light_time: bool,
     mu: float,
     c: float,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
-    if not RUST_BACKEND_AVAILABLE:
-        return None
+) -> tuple[np.ndarray, np.ndarray]:
     epochs, orbits = _native.gauss_iod_orbits_numpy(
         _as_contiguous_f64(r2_mags),
         _as_contiguous_f64(q1),
@@ -1032,29 +1000,23 @@ def gauss_iod_orbits_numpy(
 
 
 def naif_spk_open(path: str):
-    """Open a pure-Rust SPK reader on `path`. Returns ``None`` when the
-    adam-core native extension is unavailable."""
-    if not SPICEKIT_AVAILABLE:
-        return None
+    """Open a pure-Rust SPK reader on `path`."""
     return _native.naif_spk_open(path)
 
 
 def adam_core_spice_backend():
     """Create adam-core's direct Rust-to-Rust SPICE backend."""
-    if not SPICEKIT_AVAILABLE:
-        return None
     return _native.AdamCoreSpiceBackend()
 
 
 def naif_bodn2c(name: str) -> Optional[int]:
     """Resolve a NAIF body name to its integer ID using the pure-Rust
-    built-in table. Returns ``None`` when the native backend is unavailable OR when
-    the name is not in the built-in set — callers that need to resolve
-    custom-kernel names should route through :class:`RustBackend.bodn2c`
-    which also consults text-kernel bindings.
+    built-in table.
+
+    Returns ``None`` when the name is not in the built-in set. Callers that
+    need to resolve custom-kernel names should route through
+    :class:`RustBackend.bodn2c`, which also consults text-kernel bindings.
     """
-    if not SPICEKIT_AVAILABLE:
-        return None
     try:
         return int(_native.naif_bodn2c(name))
     except ValueError:
@@ -1062,31 +1024,29 @@ def naif_bodn2c(name: str) -> Optional[int]:
 
 
 def naif_bodc2n(code: int) -> Optional[str]:
-    """Reverse of :func:`naif_bodn2c`. Returns ``None`` when the native backend is
-    unavailable OR the code is not in the built-in table."""
-    if not SPICEKIT_AVAILABLE:
-        return None
+    """Reverse of :func:`naif_bodn2c`.
+
+    Returns ``None`` when the code is not in the built-in table.
+    """
     try:
         return str(_native.naif_bodc2n(int(code)))
     except ValueError:
         return None
 
 
-def naif_parse_text_kernel_bindings(path: str) -> Optional[list[tuple[str, int]]]:
+def naif_parse_text_kernel_bindings(path: str) -> list[tuple[str, int]]:
     """Parse a SPICE text kernel (``.tk``/``.tf``/``.tpc``/``.ti``) and return
     the ordered list of ``NAIF_BODY_NAME`` ↔ ``NAIF_BODY_CODE`` bindings it
-    declares. Returns an empty list if no body bindings are present, or
-    ``None`` if the native backend isn't available. Raises ``ValueError`` for
-    malformed kernels or mismatched array lengths.
+    declares.
+
+    Returns an empty list if no body bindings are present. Raises
+    ``ValueError`` for malformed kernels or mismatched array lengths.
     """
-    if not SPICEKIT_AVAILABLE:
-        return None
     return list(_native.naif_parse_text_kernel_bindings(path))
 
 
 def naif_spk_writer(locifn: str = "adam-core"):
-    """Create an in-memory pure-Rust SPK writer. Returns ``None`` when the
-    adam-core native extension is unavailable.
+    """Create an in-memory pure-Rust SPK writer.
 
     The returned object exposes:
       * ``add_type3(target, center, frame_id, start_et, end_et, segment_id,
@@ -1100,20 +1060,15 @@ def naif_spk_writer(locifn: str = "adam-core"):
       * ``write(path)`` — serialize the assembled DAF/SPK to disk via an
         atomic temp-file rename.
     """
-    if not SPICEKIT_AVAILABLE:
-        return None
     return _native.naif_spk_writer(locifn)
 
 
 def naif_pck_open(path: str):
-    """Open a pure-Rust binary PCK reader on `path`. Returns ``None`` when the
-    adam-core native extension is unavailable.
+    """Open a pure-Rust binary PCK reader on `path`.
 
     The returned object exposes `sxform(from, to, et)` and
     `pxform(from, to, et)` matching CSPICE for the J2000↔ITRF93 pair,
     plus `euler_state(body_frame, et)` for raw angle access and
     `rotate_state_batch(from, to, ets, states)` for vectorized rotation.
     """
-    if not SPICEKIT_AVAILABLE:
-        return None
     return _native.naif_pck_open(path)

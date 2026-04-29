@@ -149,7 +149,6 @@ class SphericalCoordinates(qv.Table):
                 frame_in=self.frame,
                 frame_out=self.frame,
             )
-            assert rust_result is not None
             coords_cartesian, covariances_cartesian = rust_result
         else:
             coords_cartesian = np.array(spherical_to_cartesian(self.values))
@@ -190,12 +189,10 @@ class SphericalCoordinates(qv.Table):
                 frame_in=cartesian.frame,
                 frame_out=cartesian.frame,
             )
-            assert rust_result is not None
             coords_spherical, covariances_spherical = rust_result
 
         if coords_spherical is None:
             coords_spherical = cartesian_to_spherical_numpy(cartesian.values)
-            assert coords_spherical is not None
 
         if covariances_spherical is None:
             covariances_spherical = np.empty(

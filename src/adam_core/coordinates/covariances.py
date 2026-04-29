@@ -8,7 +8,6 @@ import quivr as qv
 from scipy.linalg import sqrtm
 from scipy.stats import multivariate_normal
 
-
 logger = logging.getLogger(__name__)
 
 COVARIANCE_FILL_VALUE = np.nan
@@ -503,20 +502,17 @@ def rust_covariance_transform(
     f: Optional[float] = None,
     frame_in: str = "ecliptic",
     frame_out: Optional[str] = None,
-) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Run the Rust forward-mode autodiff covariance transform in a single batched
-    pass. Returns ``(coords_out [N, 6], cov_out [N, 6, 6])`` when the Rust
-    backend is available, else ``None`` so callers can fall back to the JAX
-    `transform_covariances_jacobian` path.
+    pass. Returns ``(coords_out [N, 6], cov_out [N, 6, 6])``.
 
     The kernel evaluates every rep-in -> cartesian(frame_in) -> cartesian(frame_out)
     -> rep-out function as ``Dual<6>`` and reads the propagated covariance as
     ``J @ Sigma @ J^T``. NaN covariance rows pass NaN through (consistent with
     the legacy policy).
     """
-    # Local import to avoid a module-level cycle and to keep the JAX fallback
-    # working when the native extension is not built.
+    # Local import avoids a module-level cycle.
     from .._rust.api import transform_coordinates_with_covariance_numpy
 
     coords_values = np.ascontiguousarray(coords_values, dtype=np.float64)
@@ -543,8 +539,6 @@ def rust_covariance_transform(
         frame_in=frame_in,
         frame_out=frame_out,
     )
-    if result is None:
-        return None
     coords_out, cov_flat_out = result
     return (
         np.asarray(coords_out, dtype=np.float64),

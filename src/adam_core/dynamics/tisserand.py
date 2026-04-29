@@ -69,7 +69,6 @@ def calc_tisserand_parameter(a, e, i, third_body="jupiter"):
     i_arr = np.atleast_1d(np.asarray(i, dtype=np.float64))
 
     out = _rust_tisserand_parameter_numpy(a_arr, e_arr, i_arr, ap)
-    assert out is not None, "rust tisserand_parameter unavailable"
 
     if np.isscalar(a) and np.isscalar(e) and np.isscalar(i):
         return float(out[0])

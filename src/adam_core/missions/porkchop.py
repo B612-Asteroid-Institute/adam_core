@@ -624,7 +624,6 @@ def generate_porkchop_data(
         tol,
         tol,
     )
-    assert rust_out is not None
     dep_idx, arr_idx, v1, v2 = rust_out
     if len(dep_idx) == 0:
         return LambertSolutions.empty()

@@ -708,7 +708,6 @@ class VariantEphemeris(qv.Table):
             tol=1e-15,
             max_lt_iter=10,
         )
-        assert rust_out is not None
         aberrated_vals, light_time = rust_out
         del times_tdb_mjd  # not needed; LT depends only on relative position
 

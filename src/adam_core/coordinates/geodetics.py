@@ -148,7 +148,6 @@ class GeodeticCoordinates(qv.Table):
                 frame_in=cartesian.frame,
                 frame_out=cartesian.frame,
             )
-            assert rust_result is not None
             coords_geodetic, covariances_geodetic = rust_result
 
         if coords_geodetic is None:

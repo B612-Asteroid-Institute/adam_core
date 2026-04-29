@@ -111,7 +111,6 @@ def apply_cosine_latitude_correction(
         np.ascontiguousarray(residuals, dtype=np.float64),
         np.ascontiguousarray(covariances, dtype=np.float64),
     )
-    assert out is not None, "rust apply_cosine_latitude_correction unavailable"
     return np.asarray(out[0], dtype=np.float64), np.asarray(out[1], dtype=np.float64)
 
 
@@ -145,7 +144,6 @@ def bound_longitude_residuals(
         np.ascontiguousarray(observed, dtype=np.float64),
         np.ascontiguousarray(residuals, dtype=np.float64),
     )
-    assert out is not None, "rust bound_longitude_residuals unavailable"
     # Mutate the caller's array IN PLACE to preserve the legacy semantic
     # (legacy passed `residuals[:, 1] = longitude_residual` and returned
     # the same array; some callsites rely on that aliasing).
@@ -408,7 +406,6 @@ def calculate_chi2(
         np.ascontiguousarray(residuals, dtype=np.float64),
         np.ascontiguousarray(covariances, dtype=np.float64),
     )
-    assert out is not None, "rust calculate_chi2 unavailable"
     return np.asarray(out, dtype=np.float64)
 
 

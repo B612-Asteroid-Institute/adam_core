@@ -62,7 +62,6 @@ def calcGauss(r1, r2, r3, t1, t2, t3):
         raise ValueError("r1, r2, and r3 must each have shape (3,)")
 
     rust_out = calc_gauss_numpy(r1_np, r2_np, r3_np, t1, t2, t3, MU)
-    assert rust_out is not None
     return rust_out
 
 
@@ -114,7 +113,6 @@ def gaussIOD(
         float(mu),
         float(C),
     )
-    assert fused_out is not None
     epochs, orbits = fused_out
     if len(orbits) == 0:
         return Orbits.empty()

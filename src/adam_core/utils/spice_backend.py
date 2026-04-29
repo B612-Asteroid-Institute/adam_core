@@ -20,7 +20,7 @@ from typing import Optional
 
 import numpy as np
 
-from .._rust import SPICEKIT_AVAILABLE, adam_core_spice_backend
+from .._rust import adam_core_spice_backend
 
 
 class NotCovered(Exception):
@@ -35,13 +35,7 @@ class RustBackend:
     """
 
     def __init__(self) -> None:
-        inner = adam_core_spice_backend()
-        if inner is None:
-            raise RuntimeError(
-                "RustBackend requires adam_core._rust_native with the "
-                "AdamCoreSpiceBackend symbol available."
-            )
-        self._inner = inner
+        self._inner = adam_core_spice_backend()
         self._lock = threading.Lock()
 
     def furnsh(self, path: str) -> None:
@@ -144,12 +138,6 @@ def get_backend() -> RustBackend:
     pid = os.getpid()
     with _BACKEND_LOCK:
         if _BACKEND is None or _BACKEND_PID != pid:
-            if not SPICEKIT_AVAILABLE:
-                raise RuntimeError(
-                    "adam-core's SPICE backend requires the compiled "
-                    "adam_core._rust_native extension with direct spicekit "
-                    "support."
-                )
             _BACKEND = RustBackend()
             _BACKEND_PID = pid
         return _BACKEND

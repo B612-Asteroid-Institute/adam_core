@@ -1,6 +1,6 @@
 """Rust backend integration helpers for adam_core.
 
-This module centralizes optional loading of the compiled PyO3 extension.
+This module centralizes loading of the mandatory compiled PyO3 extension.
 """
 
 from .api import (

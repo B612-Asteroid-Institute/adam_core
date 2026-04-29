@@ -76,13 +76,10 @@ def solve_lambert(
         float(tol),
         float(tol),
     )
-    assert result is not None
     return result
 
 
-def calculate_c3(
-    v1: np.ndarray, body_v: np.ndarray
-) -> npt.NDArray[np.float64]:
+def calculate_c3(v1: np.ndarray, body_v: np.ndarray) -> npt.NDArray[np.float64]:
     """
     Calculate the C3 of a spacecraft given its velocity relative to a body.
 

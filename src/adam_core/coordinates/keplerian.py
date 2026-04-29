@@ -193,7 +193,6 @@ class KeplerianCoordinates(qv.Table):
         a = self.a.to_numpy()
         mu = self.origin.mu()
         rust_out = _rust_calc_mean_motion(a, mu)
-        assert rust_out is not None
         return np.degrees(rust_out)
 
     @n.setter
@@ -229,7 +228,6 @@ class KeplerianCoordinates(qv.Table):
                 frame_in=self.frame,
                 frame_out=self.frame,
             )
-            assert rust_result is not None
             coords_cartesian, covariances_cartesian = rust_result
         else:
             coords_cartesian = np.array(
@@ -276,7 +274,6 @@ class KeplerianCoordinates(qv.Table):
                 frame_in=cartesian.frame,
                 frame_out=cartesian.frame,
             )
-            assert rust_result is not None
             rust_coords, covariances_keplerian = rust_result
             # The 6-col generic returns (a, e, i, raan, ap, M).
             a_col, e_col, i_col, raan_col, ap_col, m_col = 0, 1, 2, 3, 4, 5

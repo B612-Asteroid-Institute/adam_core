@@ -51,5 +51,4 @@ def calcGibbs(r1, r2, r3):
         raise ValueError("r1, r2, and r3 must each have shape (3,)")
 
     rust_out = calc_gibbs_numpy(r1_np, r2_np, r3_np, MU)
-    assert rust_out is not None
     return rust_out

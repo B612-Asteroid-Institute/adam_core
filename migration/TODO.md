@@ -10,6 +10,7 @@ Last updated: 2026-04-29 (review task backlog)
 - [x] RM-P0-005F: restored Python compatibility surfaces are classified in [`../docs/source/reference/rust_public_compatibility.rst`](../docs/source/reference/rust_public_compatibility.rst), Rust-native helper paths are exposed, and production imports of compatibility modules are statically guarded.
 - [x] RM-P0-005G: convert supported restored Python helper APIs to thin Rust-backed wrappers, using batched NumPy-boundary bindings where arrays are expected.
 - [x] RM-P0-005H: remove deprecated private shims and in-package JAX/reference-only helpers unless there is a concrete downstream or diagnostic reason to keep them.
+- [x] RM-P0-006: enforce the mandatory Rust backend runtime contract; `_rust.api` now fails at import if `_rust_native` is missing or incomplete, and CI/default test scripts no longer rely on `ADAM_CORE_REQUIRE_RUST_BACKEND`.
 - [x] Review feedback from `adam_core_rust_migration_review_handoff_2026-04-27.md` is decomposed into RM-P0/RM-P1 tasks in the review backlog.
 - [x] Other-agent Wave D3/E2/E3 pending work is consolidated under RM-WD3/RM-WE2/RM-WE3 tasks in the review backlog.
 - [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.
@@ -89,7 +90,7 @@ Last updated: 2026-04-29 (review task backlog)
 - Canonical perf gate from `migration/PLAN.md`: Rust must be >=20% faster (p50/p95) before `rust-default`.
 - Non-violable boundary rule from `migration/PLAN.md`: high-level APIs must run end-to-end in Rust after boundary entry, with a single Python->Rust crossing per call.
 - Migration scope rule from `migration/PLAN.md`: prioritize highest-level atomic entrypoints over internal helper-by-helper ports unless helper migration is required for measurable gains.
-- Full-suite validation contract: run standard `pytest --benchmark-skip -m 'not profile'` with `ADAM_CORE_REQUIRE_RUST_BACKEND=1`.
+- Full-suite validation contract: run standard `pytest --benchmark-skip -m 'not profile'` after `pdm run rust-develop`; the compiled Rust extension is mandatory at import time.
 - Local environment note: rust-required full-suite pytest run passes in this checkout when `PYTHONPATH=/Users/aleck/Code/mpcq/src` is set.
 - Engineering policy contract: follow `/Users/aleck/Code/AGENTS.md` rules for control flow, functional style, fallback posture, vectorization, scripting discipline, and Python typing.
 - Any retained fallback path must be represented in `migration/waivers.yaml` once a waiver exists.

@@ -650,7 +650,7 @@ Completion notes:
 
 ### RM-P0-006: Enforce One Runtime Contract For Rust Backend Availability
 
-Status: open
+Status: complete (2026-04-29)
 
 Reason: decisions say there is no rustless adam-core environment, but `_rust/api.py` still catches backend import exceptions, wrappers return `None`, and production code uses `assert out is not None`.
 
@@ -667,6 +667,26 @@ Acceptance:
 - `python -O` cannot change production behavior.
 - Missing or broken Rust extension fails loudly with a specific error.
 - No production path converts missing Rust into late `None` behavior.
+
+Completion notes:
+
+- `_rust/api.py` now imports `adam_core._rust_native` eagerly and raises a
+  specific `ImportError` if the native extension is missing.
+- `_rust/api.py` validates all required native symbols at import time and raises
+  a specific `ImportError` listing missing symbols if the installed extension is
+  stale or incomplete.
+- Native wrapper functions no longer return `None` for backend unavailability.
+  They return concrete native results or propagate native exceptions. The
+  remaining `None` returns in NAIF name helpers represent unresolved NAIF names,
+  not backend absence.
+- Removed production `assert rust_* is not None` checks that could disappear
+  under `python -O`; wrapper-level import/symbol validation now owns backend
+  availability.
+- Removed `ADAM_CORE_REQUIRE_RUST_BACKEND=1` from the default PDM Rust smoke and
+  full-suite scripts. The compiled extension is now required by import behavior
+  rather than an opt-in environment flag.
+- Updated `docs/source/reference/rust_backend_contracts.rst` and current
+  migration notes to document the mandatory Rust backend contract.
 
 ### RM-P0-007: Retire Contaminated Live-Legacy Benchmark Governance From Active CI
 

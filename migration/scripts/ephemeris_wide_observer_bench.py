@@ -23,7 +23,6 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from adam_core._rust import RUST_BACKEND_AVAILABLE  # noqa: E402
 from adam_core._rust import api as rust_api  # noqa: E402
 from rust_backend_benchmark_gate import (  # noqa: E402
     _build_ephemeris_cov_inputs,
@@ -31,7 +30,6 @@ from rust_backend_benchmark_gate import (  # noqa: E402
     _ephemeris_jax_chunked,
     _ephemeris_jax_cov,
 )
-
 
 REPEATS = 5
 
@@ -60,12 +58,11 @@ def _summary(legacy_ts: np.ndarray, rust_ts: np.ndarray) -> dict:
 
 
 def main() -> None:
-    if not RUST_BACKEND_AVAILABLE:
-        raise SystemExit("Rust backend unavailable; `maturin develop` first.")
-
     # State: 100 orbits x 100_000 observations = 10M rows.
     print("Building state inputs (100 x 100_000 = 10_000_000 rows)...", flush=True)
-    eph_orbits, eph_times, eph_observers, eph_mus = _build_ephemeris_inputs(100, 100_000)
+    eph_orbits, eph_times, eph_observers, eph_mus = _build_ephemeris_inputs(
+        100, 100_000
+    )
     print(f"  state rows: {eph_orbits.shape[0]:,}", flush=True)
 
     # Cov: 100 x 10_000 = 1M rows (cov arrays are 36-wide so memory
@@ -100,7 +97,9 @@ def main() -> None:
     )
     rust_state_ts, rust_state_out = _timed(
         lambda: np.asarray(
-            rust_api.generate_ephemeris_2body_numpy(eph_orbits, eph_observers, eph_mus)[0],
+            rust_api.generate_ephemeris_2body_numpy(eph_orbits, eph_observers, eph_mus)[
+                0
+            ],
             dtype=np.float64,
         )
     )
@@ -131,7 +130,9 @@ def main() -> None:
         "grid_cov": "100 orbits x 10000 observers = 1,000,000 rows",
         "repeats": REPEATS,
         "generate_ephemeris_2body": _summary(legacy_state_ts, rust_state_ts),
-        "generate_ephemeris_2body_with_covariance": _summary(legacy_cov_ts, rust_cov_ts),
+        "generate_ephemeris_2body_with_covariance": _summary(
+            legacy_cov_ts, rust_cov_ts
+        ),
     }
     out_path = Path("migration/artifacts/ephemeris_wide_observer_bench.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -15,7 +15,6 @@ from pathlib import Path
 
 import numpy as np
 
-from adam_core._rust import RUST_BACKEND_AVAILABLE
 from adam_core._rust import api as rust_api
 from migration.parity._oracle import parity, time_legacy
 
@@ -34,9 +33,6 @@ def _timed(fn: Callable[[], object]) -> np.ndarray:
 
 
 def main() -> None:
-    if not RUST_BACKEND_AVAILABLE:
-        raise SystemExit("Rust backend unavailable; run `pdm run rust-develop` first.")
-
     rng = np.random.default_rng(20260414)
     a = np.ascontiguousarray(0.5 + 4.0 * rng.random(N), dtype=np.float64)
     mu = np.ascontiguousarray(2.959122e-4 * np.ones(N), dtype=np.float64)

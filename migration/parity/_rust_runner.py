@@ -5,9 +5,9 @@ dict the legacy runner expects and returns ``dict[str, np.ndarray]``
 keyed by the same output names defined in ``tolerances.py``.
 
 Everything routes through ``adam_core._rust.api`` (the post-Phase-D
-single-source rust surface). Returning ``None`` from any entry means
-the rust extension is not loaded — the gate treats that as a hard
-failure.
+single-source rust surface). The Rust extension is mandatory at import time;
+``None`` from any entry is therefore a wrapper-contract violation and the gate
+treats it as a hard failure.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ from adam_core._rust import api as _rust_api
 def _ensure(arr: Any, name: str) -> np.ndarray:
     if arr is None:
         raise RuntimeError(
-            f"Rust backend returned None for {name!r}; the compiled "
-            "extension may be unavailable. Run `maturin develop` first."
+            f"Rust backend returned None for {name!r}; native wrappers must "
+            "raise or return arrays, never silently fall back."
         )
     return np.asarray(arr, dtype=np.float64)
 
@@ -46,8 +46,11 @@ def _coordinates_transform_coordinates(
 
 
 def _coordinates_cartesian_to_spherical(coords: np.ndarray) -> dict[str, np.ndarray]:
-    return {"out": _ensure(_rust_api.cartesian_to_spherical_numpy(coords),
-                           "cartesian_to_spherical")}
+    return {
+        "out": _ensure(
+            _rust_api.cartesian_to_spherical_numpy(coords), "cartesian_to_spherical"
+        )
+    }
 
 
 def _coordinates_cartesian_to_geodetic(
@@ -106,15 +109,15 @@ def _coordinates_cometary_to_cartesian(
 
 
 def _coordinates_spherical_to_cartesian(coords: np.ndarray) -> dict[str, np.ndarray]:
-    return {"out": _ensure(_rust_api.spherical_to_cartesian_numpy(coords),
-                           "spherical_to_cartesian")}
+    return {
+        "out": _ensure(
+            _rust_api.spherical_to_cartesian_numpy(coords), "spherical_to_cartesian"
+        )
+    }
 
 
-def _dynamics_calc_mean_motion(
-    a: np.ndarray, mu: np.ndarray
-) -> dict[str, np.ndarray]:
-    return {"out": _ensure(_rust_api.calc_mean_motion_numpy(a, mu),
-                           "calc_mean_motion")}
+def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.ndarray]:
+    return {"out": _ensure(_rust_api.calc_mean_motion_numpy(a, mu), "calc_mean_motion")}
 
 
 def _dynamics_propagate_2body(
@@ -409,9 +412,7 @@ def _orbit_determination_gauss_iod(
         dec = np.ascontiguousarray(dec_deg_per_triplet[i], dtype=np.float64)
         ts = np.ascontiguousarray(times_per_triplet[i], dtype=np.float64)
         obs = np.ascontiguousarray(obs_pos_per_triplet[i], dtype=np.float64)
-        result = _rust_api.gauss_iod_fused_numpy(
-            ra, dec, ts, obs, "gibbs", True, mu, c
-        )
+        result = _rust_api.gauss_iod_fused_numpy(ra, dec, ts, obs, "gibbs", True, mu, c)
         if result is None:
             raise RuntimeError("rust gauss_iod_fused unavailable")
         eps, orbs = result

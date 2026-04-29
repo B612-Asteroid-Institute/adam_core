@@ -195,7 +195,6 @@ class CometaryCoordinates(qv.Table):
         a = np.asarray(self.a, dtype=np.float64)
         mu = np.asarray(self.origin.mu(), dtype=np.float64)
         rust_out = _rust_calc_mean_motion(a, mu)
-        assert rust_out is not None
         return np.degrees(rust_out)
 
     @n.setter
@@ -241,7 +240,6 @@ class CometaryCoordinates(qv.Table):
                 frame_in=self.frame,
                 frame_out=self.frame,
             )
-            assert rust_result is not None
             coords_cartesian, covariances_cartesian = rust_result
         else:
             coords_cartesian = np.array(
@@ -300,7 +298,6 @@ class CometaryCoordinates(qv.Table):
                 frame_in=cartesian.frame,
                 frame_out=cartesian.frame,
             )
-            assert rust_result is not None
             coords_cometary, covariances_cometary = rust_result
         else:
             coords_cometary = np.array(

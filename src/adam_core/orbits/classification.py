@@ -66,7 +66,6 @@ def calc_orbit_class(
         )
 
     codes = _rust_classify_orbits_numpy(a, e, q, q_apo)
-    assert codes is not None, "rust classify_orbits unavailable"
 
     name_lookup = np.asarray(CLASS_CODE_TO_NAME, dtype=object)
     return name_lookup[np.asarray(codes, dtype=np.int64)]

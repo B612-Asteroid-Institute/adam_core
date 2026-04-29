@@ -189,7 +189,7 @@ rust-develop = { composite = [
 ] }
 rust-smoke = { composite = [
   "pdm run rust-develop",
-  "env ADAM_CORE_REQUIRE_RUST_BACKEND=1 pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py src/adam_core/coordinates/tests/test_rust_covariance_autodiff.py src/adam_core/orbit_determination/tests/test_iod.py",
+  "pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py src/adam_core/coordinates/tests/test_rust_covariance_autodiff.py src/adam_core/orbit_determination/tests/test_iod.py",
 ] }
 rust-parity-fuzz = "python -m migration.parity.parity_fuzz --seeds 8 --n 128 --output migration/artifacts/parity_fuzz.json"
 rust-parity-main = "python -m migration.parity.parity_main --speed-n 2000 --output migration/artifacts/parity_gate.json"
@@ -199,7 +199,7 @@ rust-latency-gate = "python migration/scripts/rust_backend_benchmark_gate.py --r
 rust-perf-gate = "pdm run rust-latency-gate"
 test-rust-full = { composite = [
   "pdm run rust-develop",
-  "env ADAM_CORE_REQUIRE_RUST_BACKEND=1 pytest --benchmark-skip -m 'not profile' {args}",
+  "pytest --benchmark-skip -m 'not profile' {args}",
 ] }
 rust-quality = { composite = [
   "cargo fmt --all --check",

@@ -59,7 +59,6 @@ def _fit_absolute_magnitude_rows(
         np.ascontiguousarray(h_rows, dtype=np.float64),
         np.ascontiguousarray(sigma_rows, dtype=np.float64),
     )
-    assert out is not None, "rust fit_absolute_magnitude_rows unavailable"
     H_hat, H_sigma, sigma_eff, chi2_red, n_used_out = out
 
     if not np.isfinite(H_hat):
@@ -324,7 +323,6 @@ def estimate_absolute_magnitude_v_from_detections_grouped(
         np.ascontiguousarray(sig_v, dtype=np.float64),
         breaks,
     )
-    assert fit_out is not None, "rust fit_absolute_magnitude_grouped unavailable"
     H_hat_arr, H_sig_arr, sig_eff_arr, chi2_arr, n_used_arr = fit_out
 
     # Drop groups where the fit produced NaN H_hat (matches legacy's

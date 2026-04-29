@@ -3,6 +3,20 @@ Rust Backend Contracts
 
 This document defines boundary and behavior contracts for migrated APIs in ``adam_core``.
 
+Runtime Availability Contract
+-----------------------------
+
+- The compiled ``adam_core._rust_native`` extension is mandatory for this
+  migration branch.
+- Importing ``adam_core._rust.api`` raises ``ImportError`` immediately if the
+  native extension is missing or if the installed extension lacks a required
+  native symbol.
+- Python wrappers around native kernels return concrete results or propagate
+  native exceptions. They do not return ``None`` to signal backend
+  unavailability.
+- CI and local validation scripts rely on the mandatory import contract; they
+  no longer need ``ADAM_CORE_REQUIRE_RUST_BACKEND``.
+
 Boundary Selection Rule
 -----------------------
 
@@ -86,7 +100,9 @@ Current Migrated APIs
 Fallback and Waivers
 --------------------
 
-- If Rust backend cannot satisfy parity/performance criteria, keep legacy behavior under waiver control.
+- If a Rust-backed API cannot satisfy parity/performance criteria, keep that
+  API off the migrated production surface or record an explicit waiver. Do not
+  add rustless production fallbacks.
 - Waivers are tracked in ``migration/waivers.yaml`` with owner and review date.
 
 Status Registry
@@ -100,7 +116,7 @@ Validation Contract
 -------------------
 
 - The standard Python test suite command ``pytest --benchmark-skip -m 'not profile'`` must run in a Rust-enabled environment for migration validation.
-- Rust-required runs must fail fast if the Rust extension is unavailable.
+- Validation runs fail during import if the Rust extension is unavailable.
 - High-level migrated APIs must include a contract test that enforces single-crossing execution (one Python->Rust entry and one Rust->Python return).
 
 Engineering Requirements Contract

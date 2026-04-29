@@ -185,7 +185,6 @@ def _run_2body_propagate(
         rust_result = rust_propagate_2body_with_covariance_numpy(
             orbits_array_, cov_per_entry, dt_, mu_, max_iter, tol
         )
-        assert rust_result is not None
         orbits_propagated, cov_out_flat = rust_result
         orbits_propagated = np.ascontiguousarray(orbits_propagated, dtype=np.float64)
         cov_out_flat = np.ascontiguousarray(cov_out_flat, dtype=np.float64)
@@ -205,13 +204,11 @@ def _run_2body_propagate(
         arc_out = rust_propagate_2body_arc_batch_numpy(
             base_orbits, dts_per_orbit, base_mus, max_iter, tol
         )
-        assert arc_out is not None
         orbits_propagated = np.ascontiguousarray(arc_out, dtype=np.float64)
     else:
         rust_result = rust_propagate_2body_numpy(
             orbits_array_, dt_, mu_, max_iter, tol
         )
-        assert rust_result is not None
         orbits_propagated = np.ascontiguousarray(rust_result, dtype=np.float64)
 
     bad_output = _first_non_finite_row(orbits_propagated)

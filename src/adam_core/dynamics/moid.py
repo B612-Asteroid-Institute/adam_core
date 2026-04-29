@@ -60,7 +60,6 @@ def calculate_moid(
     )
 
     result = calculate_moid_numpy(primary_state, secondary_state, mu)
-    assert result is not None
     moid, dt_min = result
     moid_time = Timestamp.from_mjd(
         [primary_ellipse.coordinates.time.mjd()[0].as_py() + dt_min],
@@ -138,7 +137,6 @@ def calculate_perturber_moids(
         result = calculate_moid_batch_numpy(
             primary_states, secondary_states, primary_mus
         )
-        assert result is not None
         moids, dt_mins = result
         moid_mjds = primary_mjds + dt_mins
         moids_list.append(

@@ -28,6 +28,7 @@ from ..ray_cluster import initialize_use_ray
 from ..utils.iter import _iterate_chunks
 from .exceptions import DynamicsNumericalError
 
+
 def _first_non_finite(values: np.ndarray) -> Optional[int]:
     bad = np.flatnonzero(~np.isfinite(values))
     return int(bad[0]) if bad.size > 0 else None
@@ -325,7 +326,6 @@ def generate_ephemeris_2body(
             tol=tol,
             stellar_aberration=stellar_aberration,
         )
-        assert rust_result is not None
         sph_r, lt_r, aberrated_r, cov_r = rust_result
         ephemeris_spherical = np.ascontiguousarray(sph_r, dtype=np.float64)
         light_time = np.ascontiguousarray(lt_r, dtype=np.float64)
@@ -341,7 +341,6 @@ def generate_ephemeris_2body(
             tol=tol,
             stellar_aberration=stellar_aberration,
         )
-        assert rust_result is not None
         sph_r, lt_r, aberrated_r = rust_result
         ephemeris_spherical = np.ascontiguousarray(sph_r, dtype=np.float64)
         light_time = np.ascontiguousarray(lt_r, dtype=np.float64)
@@ -354,14 +353,14 @@ def generate_ephemeris_2body(
             reason=reason,
             row_index=row,
             orbit_id=str(
-                propagated_orbits_barycentric.orbit_id.to_numpy(
-                    zero_copy_only=False
-                )[row]
+                propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
+                    row
+                ]
             ),
             object_id=str(
-                propagated_orbits_barycentric.object_id.to_numpy(
-                    zero_copy_only=False
-                )[row]
+                propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
+                    row
+                ]
             ),
             observation_time=float(times[row]),
             light_time=float(light_time[row]),
@@ -467,10 +466,15 @@ def generate_ephemeris_2body(
         ),
     )
 
+    if want_mags and (H_v is None or G is None or has_params is None):
+        raise RuntimeError(
+            "Internal error: H/G photometry parameters are required for "
+            "magnitude prediction"
+        )
+
     alpha_deg = None
     mags = None
     if want_mags and want_alpha:
-        assert H_v is not None and G is not None and has_params is not None
         mags, alpha_deg = calculate_apparent_magnitude_v_and_phase_angle(
             H_v=H_v,
             object_coords=aberrated_heliocentric,
@@ -482,7 +486,6 @@ def generate_ephemeris_2body(
             aberrated_heliocentric, observers_heliocentric
         )
     elif want_mags:
-        assert H_v is not None and G is not None and has_params is not None
         mags = calculate_apparent_magnitude_v(
             H_v=H_v,
             object_coords=aberrated_heliocentric,
@@ -498,7 +501,10 @@ def generate_ephemeris_2body(
         )
 
     if mags is not None:
-        assert has_params is not None
+        if has_params is None:
+            raise RuntimeError(
+                "Internal error: photometry mask is required for magnitude output"
+            )
         mags = np.asarray(mags, dtype=np.float64)
         valid = has_params & np.isfinite(mags)
         ephemeris = ephemeris.set_column(

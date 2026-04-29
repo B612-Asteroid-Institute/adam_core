@@ -489,7 +489,6 @@ def cartesian_to_geodetic(
         raise ValueError("coords_cartesian must have shape (N, 6)")
 
     rust_coords = cartesian_to_geodetic_numpy(coords_cartesian_np, a, f, max_iter, tol)
-    assert rust_coords is not None
     return rust_coords
 
 
@@ -529,7 +528,6 @@ def cartesian_to_spherical(coords_cartesian: np.ndarray) -> np.ndarray:
         raise ValueError("coords_cartesian must have shape (N, 6)")
 
     rust_coords = cartesian_to_spherical_numpy(coords_cartesian_np)
-    assert rust_coords is not None
     return rust_coords
 
 
@@ -571,7 +569,6 @@ def spherical_to_cartesian(
         raise ValueError("coords_spherical must have shape (N, 6)")
 
     rust_coords = spherical_to_cartesian_numpy(coords_spherical_np)
-    assert rust_coords is not None
     return rust_coords
 
 
@@ -635,7 +632,6 @@ def cartesian_to_keplerian(
         )
 
     rust_coords = cartesian_to_keplerian_numpy(coords_cartesian_np, t0_np, mu_np)
-    assert rust_coords is not None
     return rust_coords
 
 
@@ -733,7 +729,6 @@ def keplerian_to_cartesian(
     rust_coords = keplerian_to_cartesian_numpy(
         coords_keplerian_np, mu_np, max_iter=max_iter, tol=tol
     )
-    assert rust_coords is not None
     return rust_coords
 
 
@@ -778,7 +773,6 @@ def cartesian_to_cometary(
     t0_np = np.ascontiguousarray(np.asarray(t0, dtype=np.float64))
     mu_np = np.ascontiguousarray(np.asarray(mu, dtype=np.float64))
     rust_coords = cartesian_to_cometary_numpy(coords_cartesian_np, t0_np, mu_np)
-    assert rust_coords is not None
     return rust_coords
 
 
@@ -827,7 +821,6 @@ def cometary_to_cartesian(
     rust_coords = cometary_to_cartesian_numpy(
         coords_cometary_np, t0_np, mu_np, max_iter=max_iter, tol=tol
     )
-    assert rust_coords is not None
     return rust_coords
 
 

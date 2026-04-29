@@ -21,6 +21,7 @@ Parity checks are intentionally NOT performed here. Use the dedicated
 parity tests (`src/adam_core/*/tests/test_rust_*_parity.py`) for
 correctness validation; this script is strictly a performance gate.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,7 +32,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from adam_core._rust import API_MIGRATIONS, RUST_BACKEND_AVAILABLE
+from adam_core._rust import API_MIGRATIONS
 from adam_core._rust import api as rust_api
 from adam_core.constants import Constants as c
 from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -248,9 +249,7 @@ def _build_gaussiod_inputs(n: int):
     return coords_lon, coords_lat, times, np.ascontiguousarray(coords_obs)
 
 
-def _gauss_iod_rust_batch(
-    coords_lon, coords_lat, times, coords_obs
-):
+def _gauss_iod_rust_batch(coords_lon, coords_lat, times, coords_obs):
     """Loop over rust_api.gauss_iod_fused_numpy for N triplets."""
     n = times.shape[0]
     for i in range(n):
@@ -274,8 +273,12 @@ def _build_cartesian_bundle_with_covariance(n: int) -> CartesianCoordinates:
         a = RNG.normal(size=(6, 6)) * 1e-6
         cov[i] = a @ a.T + np.eye(6) * 1e-9
     return CartesianCoordinates.from_kwargs(
-        x=pos[:, 0], y=pos[:, 1], z=pos[:, 2],
-        vx=vel[:, 0], vy=vel[:, 1], vz=vel[:, 2],
+        x=pos[:, 0],
+        y=pos[:, 1],
+        z=pos[:, 2],
+        vx=vel[:, 0],
+        vy=vel[:, 1],
+        vz=vel[:, 2],
         time=Timestamp.from_mjd(np.full(n, 59000.0), scale="tdb"),
         covariance=CoordinateCovariances.from_matrix(cov),
         origin=Origin.from_kwargs(code=np.full(n, "SUN")),
@@ -407,9 +410,7 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
     giod_lon, giod_lat, giod_times, giod_obs = _build_gaussiod_inputs(256)
     photo_obj, photo_obs, photo_h, photo_g = _build_photometry_inputs(100_000)
     # Bandpass predict_magnitudes: 5-entry delta table (V + 4 target filters).
-    predict_delta_table = np.array(
-        [0.0, -0.2, 0.1, 0.3, -0.1], dtype=np.float64
-    )
+    predict_delta_table = np.array([0.0, -0.2, 0.1, 0.3, -0.1], dtype=np.float64)
     predict_target_ids = RNG.integers(
         0, len(predict_delta_table), size=photo_h.shape[0]
     ).astype(np.int32)
@@ -459,16 +460,18 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
         photo_h, photo_obj, photo_obs, photo_g
     )
     _ = rust_api.predict_magnitudes_bandpass_numpy(
-        photo_h, photo_obj, photo_obs, photo_g,
-        predict_target_ids, predict_delta_table,
+        photo_h,
+        photo_obj,
+        photo_obs,
+        photo_g,
+        predict_target_ids,
+        predict_delta_table,
     )
     _ = rust_api.izzo_lambert_numpy(lam_r1[:128], lam_r2[:128], lam_tof[:128], MU)
     _gauss_iod_rust_batch(giod_lon[:8], giod_lat[:8], giod_times[:8], giod_obs[:8])
 
     # Timed runs.
-    rust_mm, _ = _timed_runs(
-        lambda: rust_api.calc_mean_motion_numpy(a, mu), repeats
-    )
+    rust_mm, _ = _timed_runs(lambda: rust_api.calc_mean_motion_numpy(a, mu), repeats)
     rust_cart, _ = _timed_runs(
         lambda: rust_api.cartesian_to_spherical_numpy(coords), repeats
     )
@@ -568,8 +571,12 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
     )
     rust_predict_mag, _ = _timed_runs(
         lambda: rust_api.predict_magnitudes_bandpass_numpy(
-            photo_h, photo_obj, photo_obs, photo_g,
-            predict_target_ids, predict_delta_table,
+            photo_h,
+            photo_obj,
+            photo_obs,
+            photo_g,
+            predict_target_ids,
+            predict_delta_table,
         ),
         repeats,
     )
@@ -664,7 +671,9 @@ def _compare_to_baseline(
         base = baseline[name]
         ratio_p50 = cur["rust_seconds_p50"] / base["rust_seconds_p50"]
         ratio_p95 = cur["rust_seconds_p95"] / base["rust_seconds_p95"]
-        marker = "  " if ratio_p50 <= p50_max_ratio and ratio_p95 <= p95_max_ratio else "!!"
+        marker = (
+            "  " if ratio_p50 <= p50_max_ratio and ratio_p95 <= p95_max_ratio else "!!"
+        )
         print(
             f"{marker}{name:<48}"
             f"  p50 {cur['rust_seconds_p50']*1e3:8.3f} ms "
@@ -708,9 +717,6 @@ def main() -> None:
     parser.add_argument("--p50-max-ratio", type=float, default=DEFAULT_P50_MAX_RATIO)
     parser.add_argument("--p95-max-ratio", type=float, default=DEFAULT_P95_MAX_RATIO)
     args = parser.parse_args()
-
-    if not RUST_BACKEND_AVAILABLE:
-        raise SystemExit("Rust backend unavailable. Run `pdm run rust-develop` first.")
 
     _check_coverage()
 

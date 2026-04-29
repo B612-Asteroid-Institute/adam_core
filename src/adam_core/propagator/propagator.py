@@ -237,10 +237,15 @@ def attach_magnitude_or_phase(
         ),
     )
 
+    if want_mags and (H_v is None or G is None or has_params is None):
+        raise RuntimeError(
+            "Internal error: H/G photometry parameters are required for "
+            "magnitude prediction"
+        )
+
     alpha_deg = None
     mags = None
     if want_mags and want_alpha:
-        assert H_v is not None and G is not None and has_params is not None
         mags, alpha_deg = calculate_apparent_magnitude_v_and_phase_angle(
             H_v=H_v,
             object_coords=obj_helio,
@@ -250,7 +255,6 @@ def attach_magnitude_or_phase(
     elif want_alpha:
         alpha_deg = calculate_phase_angle(obj_helio, obs_helio)
     elif want_mags:
-        assert H_v is not None and G is not None and has_params is not None
         mags = calculate_apparent_magnitude_v(
             H_v=H_v,
             object_coords=obj_helio,
@@ -266,7 +270,10 @@ def attach_magnitude_or_phase(
         )
 
     if mags is not None:
-        assert has_params is not None
+        if has_params is None:
+            raise RuntimeError(
+                "Internal error: photometry mask is required for magnitude output"
+            )
         mags = np.asarray(mags, dtype=np.float64)
         valid = has_params & np.isfinite(mags)
         predicted = pa.array(mags, mask=~valid, type=pa.float64())
@@ -387,11 +394,6 @@ class EphemerisMixin:
         propagated_orbits_barycentric_values = (
             propagated_orbits_barycentric.coordinates.values
         )
-        propagated_orbits_barycentric_time = (
-            propagated_orbits_barycentric.coordinates.time.mjd().to_numpy(
-                zero_copy_only=False
-            )
-        )
         observers_barycentric_tiled_values = observers_barycentric_tiled.coordinates.r
 
         n = int(propagated_orbits_barycentric_values.shape[0])
@@ -404,7 +406,6 @@ class EphemerisMixin:
             tol=1e-15,
             max_lt_iter=10,
         )
-        assert rust_out is not None
         propagated_orbits_aberrated, light_time = rust_out
 
         # Guard against pathological light-time values before constructing timestamps.

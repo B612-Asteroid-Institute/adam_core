@@ -58,5 +58,4 @@ def calcHerrickGibbs(r1, r2, r3, t1, t2, t3):
         raise ValueError("r1, r2, and r3 must each have shape (3,)")
 
     rust_out = calc_herrick_gibbs_numpy(r1_np, r2_np, r3_np, t1, t2, t3, MU)
-    assert rust_out is not None
     return rust_out
