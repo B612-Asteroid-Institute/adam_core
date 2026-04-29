@@ -743,6 +743,35 @@ Completion notes:
 
 ## P1 Stabilization Tasks
 
+Recommended current order after 2026-04-29 reviewer feedback:
+
+1. RM-P1-008, with RM-P1-015 folded into the same change.
+2. RM-P1-009.
+3. RM-P1-010, including lockfile/docs-dependency cleanup and a passing
+   `pdm run docs-check`.
+4. RM-P1-011.
+5. RM-P1-012.
+6. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
+7. RM-P1-013 / RM-WE2-001.
+8. RM-P1-018.
+9. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
+
+Reviewer-feedback disposition:
+
+- The reported `calc_chi_numpy` / `calc_lagrange_coefficients_numpy`
+  `tol=1e-16` issue is stale. RM-P0-005G reviewer follow-up already aligned
+  PyO3 signatures, `_rust.api`, and Python compatibility wrappers to
+  `tol=1e-15`.
+- The `calc_chi` compatibility wrapper still does not internally route
+  single-orbit/many-dt batches to the warm-started arc kernel. This was
+  deliberately handled as documentation, not a hidden routing optimization.
+  It is unrelated to the photometry warm-performance waiver. Revisit only if
+  direct downstream use of `adam_core.dynamics.chi.calc_chi` shows it is a hot
+  loop.
+- The RM-P0-007 latency-gate rerun is accepted as task validation, but the
+  statistical policy for the Rust-only latency gate is now tracked explicitly
+  in RM-P1-018.
+
 ### RM-P1-008: Make `status.py` A Trustworthy Registry
 
 Status: open
@@ -752,7 +781,8 @@ Scope:
 - Extend status taxonomy beyond `legacy`, `dual`, and `rust-default`.
 - Represent `rust-only`, `raw-kernel-only`, `public-rust-default`, and subcase exclusions.
 - Encode broad API subcases, especially `coordinates.transform_coordinates`.
-- Encode `gaussIOD` randomized-fuzz exclusion.
+- Encode `gaussIOD` randomized-fuzz exclusion. This folds RM-P1-015 into
+  RM-P1-008; do not do the same registry/exclusion work twice.
 - Fail governance generation if a row claims dual support but the legacy implementation is gone.
 
 Acceptance:
@@ -783,10 +813,13 @@ Scope:
 
 - Preserve baseline docs extras and docs CI.
 - Move Rust backend docs into the new baseline `docs/source/reference/` structure.
-- Ensure docs build locally and in CI.
+- Resolve lockfile/docs-dependency drift without smuggling unrelated
+  dependency changes into another task.
+- Ensure `pdm run docs-check` builds locally and in CI.
 
 Acceptance:
 
+- `pdm run docs-check` passes in a clean/current dev environment.
 - Docs build under the baseline RTD structure.
 - Rust migration docs are discoverable and not bolted onto stale docs layout.
 
@@ -856,7 +889,7 @@ Acceptance:
 
 ### RM-P1-015: Make `gaussIOD` Randomized Parity Exclusion Visible
 
-Status: open
+Status: open; fold into RM-P1-008
 
 Scope:
 
@@ -934,6 +967,30 @@ Scope:
 Acceptance:
 
 - Final review can start from green, current artifacts rather than journal claims.
+
+### RM-P1-018: Harden Rust-Only Latency Gate Statistical Policy
+
+Status: open
+
+Reason: RM-P0-007 validation accepted `rust-latency-gate` after one rerun
+cleared a transient p95 microbenchmark outlier. That is defensible for a
+documentation/governance task, but it is not a durable statistical policy for
+the active post-legacy performance regression signal.
+
+Scope:
+
+- Define the allowed rerun policy for `pdm run rust-latency-gate`.
+- Increase repeats or add repeated-trial aggregation if needed for microsecond
+  APIs.
+- Preserve raw samples and failed attempts when a rerun changes the outcome.
+- Document when a p95 miss is considered scheduler noise versus a real
+  regression requiring action.
+
+Acceptance:
+
+- A reviewer can reproduce the latency-gate decision policy without relying on
+  chat-time judgment.
+- CI/local artifacts expose enough raw data to audit pass-after-rerun cases.
 
 ## Other Agent Backlog And Wave Status
 

@@ -73,6 +73,23 @@ Active waivers still requiring reviewer attention:
   recorded for prior repeated warm p95 instability, although the latest
   cold/warm artifact raw-passed this API. Review by 2026-05-12.
 
+Disposition of post-handoff reviewer feedback:
+
+- The claim that `calc_chi_numpy` and `calc_lagrange_coefficients_numpy` still
+  default to `tol=1e-16` is stale. Current PyO3 signatures, `_rust.api`, and
+  Python compatibility wrappers use `tol=1e-15`, implemented in `f2334505`.
+- The `calc_chi` compatibility wrapper does bypass the warm-started
+  `OrbitConstants` arc optimization, but that was intentionally documented
+  rather than hidden behind compat routing. It is not a cause of the photometry
+  warm waivers. Revisit only if direct downstream use of
+  `adam_core.dynamics.chi.calc_chi` is measured as a hot loop.
+- The docs-check/lockfile gap is real and is now an explicit hard requirement
+  in RM-P1-010.
+- The "rerun once" handling of the Rust-only latency gate is a real
+  statistical-discipline gap and is now tracked as RM-P1-018.
+- RM-P1-015 should be folded into RM-P1-008 because RM-P1-008 already owns
+  registry-level `gaussIOD` randomized-fuzz exclusion visibility.
+
 Current parity/reporting coverage:
 
 - 22 of 25 declared APIs are wired directly into randomized fuzz generators.
@@ -1247,7 +1264,8 @@ Benchmark governance:
 
 Next recommended order:
 
-1. RM-P1-008: make `status.py` a trustworthy registry.
+1. RM-P1-008 + RM-P1-015: make `status.py` a trustworthy registry and encode
+   `gaussIOD` randomized-fuzz exclusion visibility in the same change.
    - Add richer taxonomy for public-rust-default, rust-only, raw-kernel-only,
      dual, partial coverage, and exclusions.
    - Encode `coordinates.transform_coordinates` subcases.
@@ -1259,26 +1277,34 @@ Next recommended order:
      dispatch.
    - Cover the intentional Cartesian-to-Cartesian frame-only exclusion if it is
      still retained.
-3. RM-P1-010: re-home/finalize Rust docs in the current RTD structure and make
-   docs build locally/CI.
-   - Resolve missing Sphinx/docs dependency issue without accidentally mutating
-     lockfiles in an unrelated task.
+3. RM-P1-010: re-home/finalize Rust docs in the current RTD structure, resolve
+   lockfile/docs-dependency drift, and make `pdm run docs-check` pass
+   locally/CI.
+   - This owns the missing Sphinx/docs dependency issue and stale lockfile
+     behavior disclosed in RM-P0-007.
 4. RM-P1-011: audit runtime dependencies.
    - Production imports of `jax`, `jaxlib`, `numba`, `spiceypy`, and Python
      `spicekit` should be justified or moved to optional/test groups.
-5. RM-P1-013 / RM-WE2-001: document and test `calculate_chi2` SPD covariance
+5. RM-P1-012: restore or replace an independent propagation oracle.
+   - The baseline-main `.legacy-venv` oracle is adequate for migration parity
+     today, but fixed trusted vectors or another independent propagation
+     reference reduce single-oracle risk.
+6. RM-P1-014 and RM-P1-014A: resolve temporary warm-performance waivers before
+   the 2026-05-12 review date.
+   - Decide SIMD/transcendental investment, cold-start waiver, or selective
+     dispatch/revert policy.
+7. RM-P1-013 / RM-WE2-001: document and test `calculate_chi2` SPD covariance
    contract.
    - Rust Cholesky rejects non-SPD covariance matrices. This is likely correct,
      but it is a public behavior change compared with `np.linalg.inv` accepting
      some merely invertible matrices.
-6. RM-P1-014 and RM-P1-014A: resolve temporary warm-performance waivers.
-   - Decide SIMD/transcendental investment, cold-start waiver, or selective
-     dispatch/revert policy.
-7. RM-P1-015: make `gaussIOD` randomized parity exclusion visible in governance.
-8. RM-P1-016: split `rust/adam_core_py/src/lib.rs` into domain modules after the
+8. RM-P1-018: harden Rust-only latency-gate statistical policy.
+   - Define rerun policy, sample aggregation, and artifact requirements for
+     pass-after-rerun cases.
+9. RM-P1-016: split `rust/adam_core_py/src/lib.rs` into domain modules after the
    registry/status cleanup.
-9. RM-P1-017: final clean validation pass before asking for broad merge review.
-10. Wave work after governance cleanup:
+10. RM-P1-017: final clean validation pass before asking for broad merge review.
+11. Wave work after governance cleanup:
     - RM-WD3-001 parallel backend abstraction for remaining Ray/rayon/sequential
       policy surfaces.
     - RM-WE2-002 fused `Residuals.calculate`.
