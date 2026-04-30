@@ -44,6 +44,10 @@ Development with PDM
 
 For contributor/development tasks, use PDM in a cloned repository checkout:
 
+This repository does not commit ``pdm.lock``. CI resolves dependencies from
+``pyproject.toml`` for each job, and local ``pdm.lock`` files are disposable
+developer artifacts.
+
 .. code-block:: bash
 
    # install runtime + test + docs dependency groups
