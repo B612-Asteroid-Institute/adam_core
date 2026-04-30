@@ -27,6 +27,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 *_version.py
+# This is a source helper, not a generated runtime version module.
+!migration/scripts/write_maturin_version.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

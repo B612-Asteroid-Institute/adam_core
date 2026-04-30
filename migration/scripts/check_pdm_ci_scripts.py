@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import shlex
+import subprocess
 import sys
 import tomllib
 from collections.abc import Iterable
@@ -134,7 +135,27 @@ def _missing_paths(source: str, commands: Iterable[str]) -> list[str]:
             path = REPO_ROOT / token.removeprefix("./")
             if not path.exists():
                 failures.append(f"{source}: missing referenced path `{token}`")
+            elif not _has_tracked_entries(path):
+                failures.append(
+                    f"{source}: referenced path `{token}` exists locally but has no "
+                    "tracked git entries"
+                )
     return failures
+
+
+def _has_tracked_entries(path: Path) -> bool:
+    relative_path = path.relative_to(REPO_ROOT).as_posix()
+    result = subprocess.run(
+        ["git", "ls-files", "--", relative_path],
+        cwd=REPO_ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(result.stderr.strip() or "git ls-files failed")
+    return bool(result.stdout.strip())
 
 
 def _stale_reference_failures(source: str, text: str) -> list[str]:
