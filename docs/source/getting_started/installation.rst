@@ -49,6 +49,19 @@ For contributor/development tasks, use PDM in a cloned repository checkout:
    # install runtime + test + docs dependency groups
    pdm install -G test -G docs
 
+If an existing local ``pdm.lock`` was generated before the docs group was
+included, PDM may report ``Requested groups not in lockfile: docs``. Refresh the
+ignored local lockfile for the requested groups, then retry the install:
+
+.. code-block:: bash
+
+   pdm lock -G test -G docs
+   pdm install -G test -G docs
+
+Then run the documentation builds:
+
+.. code-block:: bash
+
    # run documentation builds
    pdm run docs
    pdm run docs-check

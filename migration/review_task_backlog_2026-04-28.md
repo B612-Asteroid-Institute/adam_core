@@ -743,16 +743,14 @@ Completion notes:
 
 ## P1 Stabilization Tasks
 
-Recommended current order after RM-P1-009 completion:
+Recommended current order after RM-P1-010 completion:
 
-1. RM-P1-010, including lockfile/docs-dependency cleanup and a passing
-   `pdm run docs-check`.
-2. RM-P1-011.
-3. RM-P1-012.
-4. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
-5. RM-P1-013 / RM-WE2-001.
-6. RM-P1-018.
-7. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
+1. RM-P1-011.
+2. RM-P1-012.
+3. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
+4. RM-P1-013 / RM-WE2-001.
+5. RM-P1-018.
+6. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
 
 Reviewer-feedback disposition:
 
@@ -897,7 +895,7 @@ Validation:
 
 ### RM-P1-010: Re-Home Rust Docs Into Current Baseline RTD Structure
 
-Status: open
+Status: completed 2026-04-30
 
 Scope:
 
@@ -912,6 +910,41 @@ Acceptance:
 - `pdm run docs-check` passes in a clean/current dev environment.
 - Docs build under the baseline RTD structure.
 - Rust migration docs are discoverable and not bolted onto stale docs layout.
+
+Completion notes:
+
+- The project docs were already under the current baseline
+  `docs/source/reference/` RTD structure; the stale blocker was local docs
+  dependency state.
+- Refreshed the ignored local PDM lock with `pdm lock -G test -G docs`, then
+  installed with `pdm install -G test -G docs`. `pdm.lock` remains ignored, so
+  no tracked dependency lockfile churn is part of this task.
+- Added contributor docs for the specific stale local lock failure:
+  `Requested groups not in lockfile: docs`.
+- Confirmed Sphinx-generated API reference files under
+  `docs/source/reference/api/` and build outputs under `docs/build*` remain
+  ignored/generated artifacts.
+- Non-escalated `pdm run docs-check` in this tool sandbox failed only from DNS
+  denial for intersphinx inventories and local socket denial inside
+  `sphinx_sitemap`; the escalated run passed.
+
+Validation:
+
+- `pdm run docs-check`: passed with network/socket permissions.
+- `pdm run docs`: passed with network/socket permissions.
+- `pdm run script-preflight`: passed (`27 PDM scripts`, `4 workflows`).
+- `pdm run rust-quality`: passed.
+- Escalated `pdm run test-rust-full`: `730 passed, 144 skipped, 2 deselected,
+  56 warnings`.
+- `pdm run rust-parity-main`: all 22 wired APIs passed randomized fuzz parity;
+  warm speed passed with existing photometry waivers only.
+- `pdm run rust-parity-speed-cold`: passed with existing temporary waivers only
+  (`coordinates.cartesian_to_spherical` warm waiver plus photometry warm
+  waivers).
+- Regenerated `migration/artifacts/parity_gate.json`,
+  `migration/artifacts/parity_speed_cold_warm.json`,
+  `migration/artifacts/parity_report.md`, and
+  `migration/artifacts/parity_table_rca.json`.
 
 ### RM-P1-011: Audit Runtime Dependencies
 

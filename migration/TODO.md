@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-04-29 (RM-P1-009 transform public dispatch parity)
+Last updated: 2026-04-30 (RM-P1-010 docs re-home/build validation)
 
 ## Current Review-Derived Backlog
 
@@ -14,10 +14,11 @@ Last updated: 2026-04-29 (RM-P1-009 transform public dispatch parity)
 - [x] RM-P0-007: retire contaminated live-legacy benchmark governance from active CI; use baseline-main parity/speed for fair wired APIs and Rust-only latency regression for post-legacy APIs.
 - [x] RM-P1-008/RM-P1-015: make `src/adam_core/_rust/status.py` a trustworthy registry with public/default/raw/orchestration taxonomy, explicit parity coverage metadata, and visible `gaussIOD` randomized-fuzz exclusion.
 - [x] RM-P1-009: move canonical `coordinates.transform_coordinates` randomized parity to the public quivr-object dispatcher boundary and keep remaining transform subcase exclusions explicit.
+- [x] RM-P1-010: finalize Rust docs under the current RTD structure, document stale local PDM lock repair, and make `pdm run docs-check` pass.
 - [x] Review feedback from `adam_core_rust_migration_review_handoff_2026-04-27.md` is decomposed into RM-P0/RM-P1 tasks in the review backlog.
 - [x] Other-agent Wave D3/E2/E3 pending work is consolidated under RM-WD3/RM-WE2/RM-WE3 tasks in the review backlog.
 - [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.
-- [ ] Next review-derived task: RM-P1-010 docs re-home/build, including lockfile/docs-dependency cleanup and passing `pdm run docs-check`.
+- [ ] Next review-derived task: RM-P1-011 runtime dependency audit.
 
 ## Active Sprint (Milestone 1 hardening)
 
