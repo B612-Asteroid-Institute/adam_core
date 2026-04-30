@@ -16,16 +16,18 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Set up PDM
+      uses: pdm-project/setup-pdm@v4
       with:
         python-version: "3.11"
-    - name: Install Development Dependencies
-      run: |
-        pip install pip --upgrade
-        pip install ".[dev]"
-    - name: Build Source Distribution and Wheel
-      run: pdm build
+    - name: Install build dependencies
+      run: pdm install -G test
+    - name: Build native adam_core wheel
+      run: pdm run wheel-build
+    - name: Verify native wheel artifact
+      run: pdm run wheel-inspect
     - name: Publish adam_core to Test PyPI
       if: ${{ inputs.test_pypi }}
       uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,0 +1,46 @@
+name: Nightly Rust Benchmark
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nightly-bench:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get git tags
+        run: git fetch --prune --unshallow --tags
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up PDM (cached)
+        if: ${{ hashFiles('**/pdm.lock') != '' }}
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.12'
+          cache: true
+          cache-dependency-path: '**/pdm.lock'
+      - name: Set up PDM (no cache)
+        if: ${{ hashFiles('**/pdm.lock') == '' }}
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: pdm install -G test
+      - name: Build Rust extension
+        run: pdm run rust-develop
+      - name: Run full benchmarks
+        run: pdm run benchmark --benchmark-json bench-nightly.json
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-nightly-json
+          path: bench-nightly.json

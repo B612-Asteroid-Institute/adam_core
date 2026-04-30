@@ -244,7 +244,7 @@ def query_neocc(
     else:
         raise ValueError(f"Invalid orbit epoch: {orbit_epoch}")
 
-    orbits = Orbits.empty()
+    orbits_list: list[Orbits] = []
 
     for object_id in object_ids:
 
@@ -272,29 +272,30 @@ def query_neocc(
 
             phys = _physical_parameters_from_neocc(data)
 
-            orbit = Orbits.from_kwargs(
-                orbit_id=[data["object_id"]],
-                object_id=[data["object_id"]],
-                coordinates=KeplerianCoordinates.from_kwargs(
-                    a=[data["elements"]["a"]],
-                    e=[data["elements"]["e"]],
-                    i=[data["elements"]["i"]],
-                    raan=[data["elements"]["node"]],
-                    ap=[data["elements"]["peri"]],
-                    M=[data["elements"]["M"]],
-                    time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
-                    covariance=CoordinateCovariances.from_matrix(
-                        data["covariance"].reshape(
-                            1,
-                            6,
-                            6,
-                        )
-                    ),
-                    frame="ecliptic",
-                    origin=Origin.from_kwargs(code=["SUN"]),
-                ).to_cartesian(),
-                physical_parameters=phys,
+            orbits_list.append(
+                Orbits.from_kwargs(
+                    orbit_id=[data["object_id"]],
+                    object_id=[data["object_id"]],
+                    coordinates=KeplerianCoordinates.from_kwargs(
+                        a=[data["elements"]["a"]],
+                        e=[data["elements"]["e"]],
+                        i=[data["elements"]["i"]],
+                        raan=[data["elements"]["node"]],
+                        ap=[data["elements"]["peri"]],
+                        M=[data["elements"]["M"]],
+                        time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
+                        covariance=CoordinateCovariances.from_matrix(
+                            data["covariance"].reshape(
+                                1,
+                                6,
+                                6,
+                            )
+                        ),
+                        frame="ecliptic",
+                        origin=Origin.from_kwargs(code=["SUN"]),
+                    ).to_cartesian(),
+                    physical_parameters=phys,
+                )
             )
-            orbits = qv.concatenate([orbits, orbit])
 
-    return orbits
+    return qv.concatenate(orbits_list) if orbits_list else Orbits.empty()

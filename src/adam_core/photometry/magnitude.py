@@ -1,20 +1,21 @@
 from typing import Union
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
-from jax import jit
 
+from .._rust.api import (
+    calculate_apparent_magnitude_v_and_phase_angle_numpy as rust_calculate_apparent_magnitude_v_and_phase_angle_numpy,
+    calculate_apparent_magnitude_v_numpy as rust_calculate_apparent_magnitude_v_numpy,
+    calculate_phase_angle_numpy as rust_calculate_phase_angle_numpy,
+    predict_magnitudes_bandpass_numpy as rust_predict_magnitudes_bandpass_numpy,
+)
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
-from ..utils.chunking import process_in_chunks
 from .magnitude_common import (
-    JAX_CHUNK_SIZE,
     BandpassComposition,
     assert_filter_ids_have_curves,
 )
@@ -24,9 +25,6 @@ from .magnitude_common import (
 )
 from .magnitude_common import (
     bandpass_delta_table_for_composition_cached as _bandpass_delta_table_for_composition_cached,
-)
-from .magnitude_common import (
-    bandpass_delta_table_jax_for_composition_cached as _bandpass_delta_table_jax_for_composition_cached,
 )
 from .magnitude_common import bandpass_filter_id_table as _bandpass_filter_id_table
 
@@ -150,27 +148,8 @@ def calculate_phase_angle(
     observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
     _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
 
-    # -------------------------------------------------------------------------
-    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
-    # -------------------------------------------------------------------------
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n_obj + chunk_size - 1) // chunk_size) * chunk_size)
-    out = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[jax.Array] = []
-    for obj_chunk, obs_chunk in zip(
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-    ):
-        chunks.append(_calculate_phase_angle_core_jax(obj_chunk, obs_chunk))
-
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for alpha_chunk in host_chunks:
-        out[offset : offset + chunk_size] = alpha_chunk
-        offset += chunk_size
-
-    return out[:n_obj]
+    rust_out = rust_calculate_phase_angle_numpy(object_pos, observer_pos)
+    return np.ascontiguousarray(rust_out, dtype=np.float64)
 
 
 def convert_magnitude(
@@ -247,131 +226,6 @@ def convert_magnitude(
     return mags + (delta_tgt - delta_src)
 
 
-@jit
-def _calculate_apparent_magnitude_core_jax(
-    H_v: jnp.ndarray,
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-    G: jnp.ndarray,
-) -> jnp.ndarray:
-    """
-    JAX core computation for apparent magnitude in V-band.
-
-    Notes
-    -----
-    This function is intentionally "array-only" (no ADAM classes) to keep it
-    JIT-friendly. Use `calculate_apparent_magnitude_v` for the public API.
-    """
-    # Heliocentric distance r (AU)
-    # (manual norm is typically a bit leaner than jnp.linalg.norm for small fixed dims)
-    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
-
-    # Observer-to-object distance delta (AU)
-    delta_vec = object_pos - observer_pos
-    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
-
-    # Phase angle
-    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
-    numer = r**2 + delta**2 - observer_sun_dist**2
-    denom = 2.0 * r * delta
-    cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
-    # H-G phase function
-    #
-    # Best practice (perf): avoid arccos() + tan() since we only need tan(phase/2).
-    # Use identity: tan(phase/2) = sqrt((1 - cos_phase) / (1 + cos_phase)).
-    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = jnp.exp(-3.33 * tan_half**0.63)
-    phi2 = jnp.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-
-    return H_v + 5.0 * jnp.log10(r * delta) - 2.5 * jnp.log10(phase_function)
-
-
-@jit
-def _calculate_phase_angle_core_jax(
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-) -> jnp.ndarray:
-    """
-    JAX core computation for phase angle in degrees.
-
-    Notes
-    -----
-    This is intentionally array-only and expects paired rows (N, 3).
-    """
-    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
-    delta_vec = object_pos - observer_pos
-    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
-    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
-
-    numer = r * r + delta * delta - observer_sun_dist * observer_sun_dist
-    denom = 2.0 * r * delta
-    cos_alpha = jnp.clip(numer / denom, -1.0, 1.0)
-
-    # Stable conversion from cos(alpha) -> alpha without arccos().
-    y = jnp.sqrt(jnp.maximum(0.0, 1.0 - cos_alpha))
-    x = jnp.sqrt(jnp.maximum(0.0, 1.0 + cos_alpha))
-    alpha_rad = 2.0 * jnp.arctan2(y, x)
-    return alpha_rad * (180.0 / jnp.pi)
-
-
-@jit
-def _calculate_apparent_magnitude_and_phase_core_jax(
-    H_v: jnp.ndarray,
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-    G: jnp.ndarray,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """
-    JAX core computation for (apparent V magnitude, phase angle in degrees).
-    """
-    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
-    delta_vec = object_pos - observer_pos
-    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
-    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
-
-    numer = r * r + delta * delta - observer_sun_dist * observer_sun_dist
-    denom = 2.0 * r * delta
-    cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
-
-    # Magnitude H-G phase function (uses tan(phase/2)).
-    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = jnp.exp(-3.33 * tan_half**0.63)
-    phi2 = jnp.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-    mags_v = H_v + 5.0 * jnp.log10(r * delta) - 2.5 * jnp.log10(phase_function)
-
-    # Phase angle in degrees.
-    y = jnp.sqrt(jnp.maximum(0.0, 1.0 - cos_phase))
-    x = jnp.sqrt(jnp.maximum(0.0, 1.0 + cos_phase))
-    alpha_rad = 2.0 * jnp.arctan2(y, x)
-    alpha_deg = alpha_rad * (180.0 / jnp.pi)
-    return mags_v, alpha_deg
-
-
-@jit
-def _predict_magnitudes_bandpass_core_jax(
-    H_v: jnp.ndarray,
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-    G: jnp.ndarray,
-    target_ids: jnp.ndarray,
-    delta_table: jnp.ndarray,
-) -> jnp.ndarray:
-    """
-    JAX core computation for per-exposure magnitudes (V-band geometry + bandpass conversion).
-
-    This fuses:
-    1) apparent V magnitude calculation (H-G system)
-    2) V -> target filter conversion via a per-filter delta magnitude table
-    """
-    mags_v = _calculate_apparent_magnitude_core_jax(
-        H_v=H_v, object_pos=object_pos, observer_pos=observer_pos, G=G
-    )
-    delta = delta_table[target_ids]
-    return mags_v + delta
-
-
 def calculate_apparent_magnitude_v(
     H_v: Union[float, npt.NDArray[np.float64]],
     object_coords: CartesianCoordinates,
@@ -415,36 +269,10 @@ def calculate_apparent_magnitude_v(
             f"G array length ({len(G_arr)}) must match H array length ({n})"
         )
 
-    # -------------------------------------------------------------------------
-    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
-    # -------------------------------------------------------------------------
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
-    out = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[jax.Array] = []
-    for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
-        process_in_chunks(H_v_arr, chunk_size),
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-        process_in_chunks(G_arr, chunk_size),
-    ):
-        chunks.append(
-            _calculate_apparent_magnitude_core_jax(
-                H_v=H_chunk,
-                object_pos=obj_chunk,
-                observer_pos=obs_chunk,
-                G=G_chunk,
-            )
-        )
-
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for mags_v_chunk in host_chunks:
-        out[offset : offset + chunk_size] = mags_v_chunk
-        offset += chunk_size
-
-    return out[:n]
+    rust_out = rust_calculate_apparent_magnitude_v_numpy(
+        H_v_arr, object_pos, observer_pos, G_arr
+    )
+    return np.ascontiguousarray(rust_out, dtype=np.float64)
 
 
 def calculate_apparent_magnitude_v_and_phase_angle(
@@ -486,35 +314,14 @@ def calculate_apparent_magnitude_v_and_phase_angle(
             f"G array length ({len(G_arr)}) must match H array length ({n})"
         )
 
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
-    out_mag = np.empty((padded_n,), dtype=np.float64)
-    out_alpha = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[tuple[jax.Array, jax.Array]] = []
-    for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
-        process_in_chunks(H_v_arr, chunk_size),
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-        process_in_chunks(G_arr, chunk_size),
-    ):
-        chunks.append(
-            _calculate_apparent_magnitude_and_phase_core_jax(
-                H_v=H_chunk,
-                object_pos=obj_chunk,
-                observer_pos=obs_chunk,
-                G=G_chunk,
-            )
-        )
-
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for mags_v_chunk, alpha_chunk in host_chunks:
-        out_mag[offset : offset + chunk_size] = mags_v_chunk
-        out_alpha[offset : offset + chunk_size] = alpha_chunk
-        offset += chunk_size
-
-    return out_mag[:n], out_alpha[:n]
+    rust_out = rust_calculate_apparent_magnitude_v_and_phase_angle_numpy(
+        H_v_arr, object_pos, observer_pos, G_arr
+    )
+    mag_r, alpha_r = rust_out
+    return (
+        np.ascontiguousarray(mag_r, dtype=np.float64),
+        np.ascontiguousarray(alpha_r, dtype=np.float64),
+    )
 
 
 def predict_magnitudes(
@@ -627,37 +434,10 @@ def predict_magnitudes(
             + missing.tolist().__repr__()
         )
 
-    # -------------------------------------------------------------------------
-    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
-    # -------------------------------------------------------------------------
-    delta_table_jax = _bandpass_delta_table_jax_for_composition_cached(comp_key)
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
-    out = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[jax.Array] = []
-    for H_chunk, obj_chunk, obs_chunk, G_chunk, tgt_chunk in zip(
-        process_in_chunks(H_v_arr, chunk_size),
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-        process_in_chunks(G_arr, chunk_size),
-        process_in_chunks(target_ids, chunk_size),
-    ):
-        chunks.append(
-            _predict_magnitudes_bandpass_core_jax(
-                H_v=H_chunk,
-                object_pos=obj_chunk,
-                observer_pos=obs_chunk,
-                G=G_chunk,
-                target_ids=tgt_chunk,
-                delta_table=delta_table_jax,
-            )
-        )
-
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for mags_out_chunk in host_chunks:
-        out[offset : offset + chunk_size] = mags_out_chunk
-        offset += chunk_size
-
-    return out[:n]
+    delta_table_np = np.ascontiguousarray(
+        np.asarray(delta_table, dtype=np.float64)
+    )
+    rust_out = rust_predict_magnitudes_bandpass_numpy(
+        H_v_arr, object_pos, observer_pos, G_arr, target_ids, delta_table_np
+    )
+    return np.ascontiguousarray(rust_out, dtype=np.float64)

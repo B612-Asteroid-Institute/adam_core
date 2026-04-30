@@ -8,8 +8,6 @@ import quivr as qv
 from scipy.linalg import sqrtm
 from scipy.stats import multivariate_normal
 
-from .jacobian import calc_jacobian
-
 logger = logging.getLogger(__name__)
 
 COVARIANCE_FILL_VALUE = np.nan
@@ -52,6 +50,37 @@ class CoordinateCovariances(qv.Table):
         sigmas = np.sqrt(cov_diag)
         return sigmas
 
+    def _fast_to_matrix(self) -> Optional[np.ndarray]:
+        """
+        Return (N, 6, 6) by reshaping the underlying flat buffer when the
+        LargeListArray has uniform stride-36 offsets and no nulls. Returns
+        None to signal the caller to use the slower stack-based fallback
+        when those invariants do not hold (ragged rows, arrow-level nulls,
+        or chunked arrays that fail to combine).
+        """
+        n = len(self)
+        arr = self.values
+        if hasattr(arr, "combine_chunks"):
+            arr = arr.combine_chunks()
+        if not hasattr(arr, "offsets") or not hasattr(arr, "values"):
+            return None
+        if arr.null_count != 0:
+            return None
+        offsets = np.asarray(arr.offsets)
+        if len(offsets) != n + 1 or offsets[0] != 0 or offsets[-1] != n * 36:
+            return None
+        if n > 0 and not np.array_equal(
+            np.diff(offsets), np.full(n, 36, dtype=offsets.dtype)
+        ):
+            return None
+        flat = arr.values.to_numpy(zero_copy_only=False)
+        if len(flat) != n * 36:
+            return None
+        # np.copy() so the caller owns a writable, arrow-independent buffer —
+        # matching the existing to_matrix contract (callers routinely mutate
+        # the result, e.g. near-zero cleanup in CartesianCoordinates.rotate).
+        return np.ascontiguousarray(flat).reshape(n, 6, 6).copy()
+
     def to_matrix(self) -> np.ndarray:
         """
         Return the covariance matrices as a 3D array of shape (N, 6, 6).
@@ -61,6 +90,13 @@ class CoordinateCovariances(qv.Table):
         covariances : `numpy.ndarray` (N, 6, 6)
             Covariance matrices for N coordinates in 6 dimensions.
         """
+        # Fast path: LargeListArray with uniform stride-36 offsets and no nulls
+        # (the normal shape produced by `from_matrix`). Reshape the underlying
+        # flat buffer instead of stacking per-row pyarrow objects.
+        fast = self._fast_to_matrix()
+        if fast is not None:
+            return fast
+
         # return self.values.combine_chunks().to_numpy_ndarray()
         values = self.values.to_numpy(zero_copy_only=False)
 
@@ -363,6 +399,14 @@ def weighted_mean(samples: np.ndarray, W: np.ndarray) -> np.ndarray:
     """
     Calculate the weighted mean of a set of samples.
 
+    NOTE: this dispatches to numpy `np.dot`, NOT a rust kernel. Apple
+    Accelerate / OpenBLAS GEMV is hand-tuned NEON/AVX SIMD and beats
+    every pure-rust loop we tried (faer, hand-rolled rayon, hand-rolled
+    serial — see journal 2026-04-27 perf measurements). Rust would need
+    sleef-vectorized FMA to compete; deferred until we add SIMD math
+    crate. The function exists as a vectored entry point but is BLAS
+    underneath.
+
     Parameters
     ----------
     samples : `~numpy.ndarray` (N, D)
@@ -385,6 +429,10 @@ def weighted_covariance(
     """
     Calculate a covariance matrix from samples and their corresponding weights.
 
+    NOTE: this dispatches to numpy (BLAS GEMM), NOT rust — same reason
+    as `weighted_mean` above (BLAS hand-tuned SIMD wins until we add a
+    rust SIMD math crate).
+
     Parameters
     ----------
     mean : `~numpy.ndarray` (D)
@@ -401,13 +449,8 @@ def weighted_covariance(
     cov : `~numpy.ndarray` (D, D)
         Covariance matrix calculated from the samples and weights.
     """
-    # Calculate the covariance matrix from the sigma points and weights
-    # `~numpy.cov` does not support negative weights so we will calculate
-    # the covariance manually
-    # cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
     residual = samples - mean
-    cov = (W_cov * residual.T) @ residual
-    return cov
+    return (W_cov * residual.T) @ residual
 
 
 def transform_covariances_sampling(
@@ -447,35 +490,60 @@ def transform_covariances_sampling(
     return covariances_out
 
 
-def transform_covariances_jacobian(
-    coords: np.ndarray,
+def rust_covariance_transform(
+    coords_values: np.ndarray,
     covariances: np.ndarray,
-    _func: Callable,
-    **kwargs,
-) -> np.ndarray:
+    representation_in: str,
+    representation_out: str,
+    *,
+    t0: Optional[np.ndarray] = None,
+    mu: Optional[np.ndarray] = None,
+    a: Optional[float] = None,
+    f: Optional[float] = None,
+    frame_in: str = "ecliptic",
+    frame_out: Optional[str] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Transform covariance matrices by calculating the Jacobian of the transformation function
-    using `~jax.jacfwd`.
+    Run the Rust forward-mode autodiff covariance transform in a single batched
+    pass. Returns ``(coords_out [N, 6], cov_out [N, 6, 6])``.
 
-    Parameters
-    ----------
-    coords : `~numpy.ndarray` (N, D)
-        Coordinates that correspond to the input covariance matrices.
-    covariances : `~numpy.ndarray` (N, D, D)
-        Covariance matrices to transform via numerical differentiation.
-    _func : function
-        A function that takes a single coord (D) as input and return the transformed
-        coordinate (D). See for example: `thor.coordinates._cartesian_to_spherical`
-        or `thor.coordinates._cartesian_to_keplerian`.
-
-    Returns
-    -------
-    covariances_out : `~numpy.ndarray` (N, D, D)
-        Transformed covariance matrices.
+    The kernel evaluates every rep-in -> cartesian(frame_in) -> cartesian(frame_out)
+    -> rep-out function as ``Dual<6>`` and reads the propagated covariance as
+    ``J @ Sigma @ J^T``. NaN covariance rows pass NaN through (consistent with
+    the legacy policy).
     """
-    jacobian = calc_jacobian(coords, _func, **kwargs)
-    covariances = jacobian @ covariances @ np.transpose(jacobian, axes=(0, 2, 1))
-    return covariances
+    # Local import avoids a module-level cycle.
+    from .._rust.api import transform_coordinates_with_covariance_numpy
+
+    coords_values = np.ascontiguousarray(coords_values, dtype=np.float64)
+    if coords_values.ndim != 2 or coords_values.shape[1] != 6:
+        raise ValueError("coords_values must have shape (N, 6)")
+    n = coords_values.shape[0]
+    if covariances.shape != (n, 6, 6):
+        raise ValueError("covariances must have shape (N, 6, 6)")
+
+    cov_flat = np.ascontiguousarray(
+        np.asarray(covariances, dtype=np.float64).reshape(n, 36)
+    )
+    result = transform_coordinates_with_covariance_numpy(
+        coords_values,
+        cov_flat,
+        representation_in,
+        representation_out,
+        t0=t0,
+        mu=mu,
+        a=a,
+        f=f,
+        max_iter=100,
+        tol=1e-15,
+        frame_in=frame_in,
+        frame_out=frame_out,
+    )
+    coords_out, cov_flat_out = result
+    return (
+        np.asarray(coords_out, dtype=np.float64),
+        np.asarray(cov_flat_out, dtype=np.float64).reshape(n, 6, 6),
+    )
 
 
 def _upper_triangular_to_full(

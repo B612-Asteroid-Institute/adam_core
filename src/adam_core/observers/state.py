@@ -8,14 +8,19 @@ from typing import Literal, Union
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
-import spiceypy as sp
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
 from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
-from ..utils.spice import get_perturber_state, get_spice_body_state, setup_SPICE
+from ..utils.spice import (
+    _query_pxform_itrf93_batch,
+    get_perturber_state,
+    get_spice_body_state,
+    setup_SPICE,
+)
+from ..utils.spice_backend import NotCovered, get_backend
 from .observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS
 
 R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
@@ -182,36 +187,25 @@ def get_mpc_observer_state(
     if code == "500":
         return state
 
-    # If not then we need to add a topocentric correction
+    # If not then we need to add a topocentric correction.
     # Warning! Converting times to ET will incur a loss of precision.
-    epochs_et = times.et()
-    unique_epochs_et_tdb = epochs_et.unique()
+    epochs_et_np = times.et().to_numpy(zero_copy_only=False).astype(np.float64)
+    unique_ets, inv = np.unique(epochs_et_np, return_inverse=True)
 
-    N = len(epochs_et)
-    r_obs = np.empty((N, 3), dtype=np.float64)
-    v_obs = np.empty((N, 3), dtype=np.float64)
-    r_geo = state.r
-    v_geo = state.v
-    for epoch in unique_epochs_et_tdb:
-        # Grab rotation matrices from ITRF93 to ecliptic J2000
-        # The ITRF93 high accuracy Earth rotation model takes into account:
-        # Precession:  1976 IAU model from Lieske.
-        # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
-        # True sidereal time using accurate values of TAI-UT1
-        # Polar motion
-        rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch.as_py())
+    rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
+    v_offset_ITRF93 = -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
 
-        # Find indices of epochs that match the current unique epoch
-        mask = pc.equal(epochs_et, epoch).to_numpy(False)
+    # ITRF93 high-accuracy Earth rotation: precession (IAU-1976), nutation
+    # (IAU-1980 with IERS corrections), true sidereal time, polar motion.
+    unique_rot = _query_pxform_itrf93_batch(frame_spice, unique_ets)
 
-        # Add o_vec + r_geo to get r_obs (thank you numpy broadcasting)
-        r_obs[mask] = r_geo[mask] + rotation_matrix @ o_vec_ITRF93
-
-        # Calculate the velocity (thank you numpy broadcasting)
-        rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
-        v_obs[mask] = v_geo[mask] + rotation_matrix @ (
-            -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
-        )
+    rot = unique_rot[inv]  # shape (N, 3, 3)
+    # rot @ vec broadcasts to (N, 3) with BLAS-compatible FP ordering, so it
+    # matches a per-epoch `M @ v` loop bit-for-bit.
+    r_offsets = rot @ o_vec_ITRF93
+    v_offsets = rot @ v_offset_ITRF93
+    r_obs = state.r + r_offsets
+    v_obs = state.v + v_offsets
 
     observer_states = CartesianCoordinates.from_kwargs(
         time=times,
@@ -286,11 +280,10 @@ def get_observer_state(
 
     # Try to retrieve the body ID from SPICE, could be a custom SPICE kernel NAIF code
     try:
-        body_id = sp.bodn2c(code)
-    except sp.SpiceyError:
+        body_id = get_backend().bodn2c(code)
+    except (NotCovered, RuntimeError):
         err = f"{code} is not a valid MPC observatory code and was not found in SPICE kernels."
         raise ValueError(err)
-    else:
-        return get_spice_body_state(
-            body_id=body_id, times=times, frame=frame, origin=origin
-        )
+    return get_spice_body_state(
+        body_id=body_id, times=times, frame=frame, origin=origin
+    )

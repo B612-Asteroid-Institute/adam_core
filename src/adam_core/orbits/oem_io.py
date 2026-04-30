@@ -539,7 +539,7 @@ def orbit_from_oem(
     """
     oem_file = OrbitEphemerisMessage.open(input_file)
 
-    orbits = Orbits.empty()
+    orbits_list: list[Orbits] = []
 
     for i, segment in enumerate(oem_file.segments):
         object_id = segment.metadata["OBJECT_ID"]
@@ -584,12 +584,12 @@ def orbit_from_oem(
 
             orbit_id = f"{object_id}_seg_{i}_{time.to_iso8601()[0].as_py()}"
 
-            orbit = Orbits.from_kwargs(
-                object_id=[object_id],
-                orbit_id=[orbit_id],
-                coordinates=coordinates,
+            orbits_list.append(
+                Orbits.from_kwargs(
+                    object_id=[object_id],
+                    orbit_id=[orbit_id],
+                    coordinates=coordinates,
+                )
             )
 
-            orbits = qv.concatenate([orbits, orbit])
-
-    return orbits
+    return qv.concatenate(orbits_list) if orbits_list else Orbits.empty()

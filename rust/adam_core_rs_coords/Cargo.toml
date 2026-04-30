@@ -1,0 +1,15 @@
+[package]
+name = "adam_core_rs_coords"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rayon = "1.11"
+adam_core_rs_autodiff = { path = "../adam_core_rs_autodiff" }
+# Pure-rust dense linalg with hand-tuned SIMD (NEON, AVX2/512). Used for
+# weighted_mean / weighted_covariance GEMV/GEMM and unblocks future
+# Cholesky/LU/QR/eigen kernels (sigma-point sampling, ATWA solve, etc.).
+faer = "0.22"
+
+[lib]
+path = "src/lib.rs"

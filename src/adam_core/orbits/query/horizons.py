@@ -283,7 +283,7 @@ def query_horizons(
     chunk_size = (
         50  # This is based on the Horizon's limit of 50-75 times before it fails
     )
-    total_orbits = Orbits.empty()
+    total_orbits_list: list[Orbits] = []
     assert len(times) > 0, "Must have at least one time"
 
     # Sort times to make sure they are in order
@@ -321,7 +321,7 @@ def query_horizons(
                 orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
             )
 
-            total_orbits = qv.concatenate([orbits, total_orbits])
+            total_orbits_list.append(orbits)
 
         elif coordinate_type == "keplerian":
             elements = _get_horizons_elements(
@@ -357,7 +357,7 @@ def query_horizons(
                 coordinates=coordinates.to_cartesian(),
             )
 
-            total_orbits = qv.concatenate([orbits, total_orbits])
+            total_orbits_list.append(orbits)
 
         elif coordinate_type == "cometary":
             elements = _get_horizons_elements(
@@ -391,12 +391,15 @@ def query_horizons(
                 coordinates=coordinates.to_cartesian(),
             )
 
-            total_orbits = qv.concatenate([orbits, total_orbits])
+            total_orbits_list.append(orbits)
 
         else:
             err = "coordinate_type should be one of {'cartesian', 'keplerian', 'cometary'}"
             raise ValueError(err)
 
+    total_orbits = (
+        qv.concatenate(total_orbits_list) if total_orbits_list else Orbits.empty()
+    )
     # Sort orbits by time
     total_orbits = total_orbits.sort_by(
         ["coordinates.time.days", "coordinates.time.nanos"]

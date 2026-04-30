@@ -1,23 +1,21 @@
 import multiprocessing as mp
 from typing import Dict, List, Optional, Tuple
 
-import jax.numpy as jnp
 import numpy as np
 import pyarrow as pa
 import quivr as qv
 import ray
-from jax import jit, lax, vmap
 from ray import ObjectRef
 
-from ..constants import Constants as c
-from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import (
-    CoordinateCovariances,
-    transform_covariances_jacobian,
+from .._rust.api import (
+    generate_ephemeris_2body_numpy as rust_generate_ephemeris_2body_numpy,
+    generate_ephemeris_2body_with_covariance_numpy as rust_generate_ephemeris_2body_with_covariance_numpy,
 )
+from ..coordinates.cartesian import CartesianCoordinates
+from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
-from ..coordinates.transform import _cartesian_to_spherical, transform_coordinates
+from ..coordinates.transform import transform_coordinates
 from ..observers.observers import Observers
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
@@ -27,133 +25,8 @@ from ..photometry.magnitude import (
     calculate_phase_angle,
 )
 from ..ray_cluster import initialize_use_ray
-from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
-from .aberrations import _add_light_time, add_stellar_aberration
 from .exceptions import DynamicsNumericalError
-
-_TRANSFORM_EC2EQ = jnp.asarray(c.TRANSFORM_EC2EQ, dtype=jnp.float64)
-
-
-@jit
-def _rotate_cartesian_state_ec2eq(state_ec: jnp.ndarray) -> jnp.ndarray:
-    """
-    Rotate a 6D Cartesian state from ecliptic J2000 to equatorial J2000.
-    """
-    pos_eq = _TRANSFORM_EC2EQ @ state_ec[0:3]
-    vel_eq = _TRANSFORM_EC2EQ @ state_ec[3:6]
-    return jnp.concatenate([pos_eq, vel_eq])
-
-
-@jit
-def _generate_ephemeris_2body(
-    propagated_orbit: np.ndarray,
-    observation_time: float,
-    observer_coordinates: jnp.ndarray,
-    mu: float,
-    lt_tol: float = 1e-10,
-    max_iter: int = 100,
-    tol: float = 1e-15,
-    stellar_aberration: bool = False,
-) -> Tuple[jnp.ndarray, jnp.float64, jnp.ndarray]:
-    """
-    Given a propagated orbit, generate its on-sky ephemeris as viewed from the observer.
-    This function calculates the light time delay between the propagated orbit and the observer,
-    and then propagates the orbit backward by that amount to when the light from object was actually
-    emitted towards the observer ("astrometric coordinates").
-
-    The motion of the observer in an inertial frame will cause an object
-    to appear in a different location than its true location, this is known as
-    stellar aberration (often referred to in combination with other aberrations as "apparent
-    coordinates"). Stellar aberration can optionally be applied after
-    light time correction has been added but it should not be necessary when comparing to ephemerides
-    of solar system small bodies extracted from astrometric catalogs. The stars to which the
-    catalog is calibrated undergo the same aberration as the moving objects as seen from the observer.
-
-    If stellar aberration is applied then the velocity of the input orbits are unmodified, only the position
-    vector is modified with stellar aberration.
-
-    For more details on aberrations see:
-        https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/FORTRAN/req/abcorr.html
-        https://ssd.jpl.nasa.gov/horizons/manual.html#defs
-
-    Parameters
-    ----------
-    propagated_orbit : `~jax.numpy.ndarray` (6)
-        Barycentric Cartesian orbit propagated to the given time.
-    observation_time : float
-        Epoch at which orbit and observer coordinates are defined.
-    observer_coordinates : `~jax.numpy.ndarray` (3)
-        Barycentric Cartesian observer coordinates.
-    mu : float (1)
-        Gravitational parameter (GM) of the attracting body in units of
-        AU**3 / d**2.
-    lt_tol : float, optional
-        Calculate aberration to within this value in time (units of days).
-    max_iter : int, optional
-        Maximum number of iterations over which to converge for propagation.
-    tol : float, optional
-        Numerical tolerance to which to compute universal anomaly during propagation using the Newtown-Raphson
-        method.
-    stellar_aberration : bool, optional
-        Apply stellar aberration to the ephemerides.
-
-    Returns
-    -------
-    ephemeris_spherical : `~jax.numpy.ndarray` (6)
-        Topocentric Spherical ephemeris.
-    lt : float
-        Light time correction (t0 - corrected_t0).
-    aberrated_orbit : `~jax.numpy.ndarray` (6)
-        Barycentric Cartesian orbit corrected for light time (emission time state).
-    """
-    # Add light time correction
-    propagated_orbits_aberrated, light_time = _add_light_time(
-        propagated_orbit,
-        observation_time,
-        observer_coordinates[0:3],
-        lt_tol=lt_tol,
-        mu=mu,
-        max_iter=max_iter,
-        tol=tol,
-    )
-
-    # Calculate topocentric coordinates
-    topocentric_coordinates = propagated_orbits_aberrated - observer_coordinates
-
-    # Apply stellar aberration to topocentric coordinates
-    topocentric_coordinates = lax.cond(
-        stellar_aberration,
-        lambda topocentric_coords: topocentric_coords.at[0:3].set(
-            add_stellar_aberration(
-                propagated_orbits_aberrated.reshape(1, -1),
-                observer_coordinates.reshape(1, -1),
-            )[0],
-        ),
-        lambda topocentric_coords: topocentric_coords,
-        topocentric_coordinates,
-    )
-
-    # Convert to spherical coordinates in the equatorial frame.
-    #
-    # `topocentric_coordinates` is in the same (ecliptic) inertial frame as the inputs.
-    # Rotating the Cartesian state and then converting avoids an expensive
-    # spherical->cartesian->spherical round-trip later in the public wrapper.
-    ephemeris_spherical = _cartesian_to_spherical(
-        _rotate_cartesian_state_ec2eq(topocentric_coordinates)
-    )
-
-    return ephemeris_spherical, light_time, propagated_orbits_aberrated
-
-
-# Vectorization Map: _generate_ephemeris_2body
-_generate_ephemeris_2body_vmap = jit(
-    vmap(
-        _generate_ephemeris_2body,
-        in_axes=(0, 0, 0, 0, None, None, None, None),
-        out_axes=(0, 0, 0),
-    )
-)
 
 
 def _first_non_finite(values: np.ndarray) -> Optional[int]:
@@ -428,141 +301,85 @@ def generate_ephemeris_2body(
     mu = observers_barycentric.coordinates.origin.mu()
     times = propagated_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
-    # Inner (JAX) batch size.
-    #
-    # This controls the shape of the vmapped JAX kernel inside each process/worker.
-    # Larger batches reduce Python loop overhead significantly for large workloads.
-    chunk_size = 2000
+    orbits_array = propagated_orbits_barycentric.coordinates.values
+    need_covariance = not propagated_orbits.coordinates.covariance.is_all_nan()
+    if need_covariance:
+        cartesian_covariances = propagated_orbits.coordinates.covariance.to_matrix()
+    else:
+        cartesian_covariances = None
 
-    # Process in chunks
-    ephemeris_spherical = np.empty((num_entries, 6), dtype=np.float64)
-    light_time = np.empty((num_entries,), dtype=np.float64)
-    aberrated_orbits = np.empty((num_entries, 6), dtype=np.float64)
-    start = 0
-    for orbits_chunk, times_chunk, observer_coords_chunk, mu_chunk in zip(
-        process_in_chunks(propagated_orbits_barycentric.coordinates.values, chunk_size),
-        process_in_chunks(times, chunk_size),
-        process_in_chunks(observer_coordinates, chunk_size),
-        process_in_chunks(mu, chunk_size),
-    ):
-        valid = min(chunk_size, num_entries - start)
-        ephemeris_chunk, light_time_chunk, aberrated_chunk = (
-            _generate_ephemeris_2body_vmap(
-                orbits_chunk,
-                times_chunk,
-                observer_coords_chunk,
-                mu_chunk,
-                lt_tol,
-                max_iter,
-                tol,
-                stellar_aberration,
-            )
+    covariances_spherical_flat: Optional[np.ndarray] = None
+
+    # Rust single-crossing path: one call fuses LT Newton + aberration +
+    # ec->eq + cart->sph (+ Dual<6> Jacobian when covariance is needed).
+    if need_covariance:
+        cov_flat = np.ascontiguousarray(
+            np.asarray(cartesian_covariances, dtype=np.float64).reshape(num_entries, 36)
         )
-        eph_np = np.asarray(ephemeris_chunk, dtype=np.float64)[:valid]
-        lt_np = np.asarray(light_time_chunk, dtype=np.float64)[:valid]
-        aberrated_np = np.asarray(aberrated_chunk, dtype=np.float64)[:valid]
-
-        bad_lt = _first_non_finite(lt_np)
-        if bad_lt is not None:
-            abs_idx = start + bad_lt
-            _raise_ephemeris_numerical_error(
-                reason="non_finite_light_time",
-                row_index=abs_idx,
-                orbit_id=str(
-                    propagated_orbits_barycentric.orbit_id.to_numpy(
-                        zero_copy_only=False
-                    )[abs_idx]
-                ),
-                object_id=str(
-                    propagated_orbits_barycentric.object_id.to_numpy(
-                        zero_copy_only=False
-                    )[abs_idx]
-                ),
-                observation_time=float(times_chunk[bad_lt]),
-                light_time=float(lt_np[bad_lt]),
-                max_iter=max_iter,
-                tol=tol,
-                lt_tol=lt_tol,
-            )
-
-        bad_eph = _first_non_finite(eph_np)
-        if bad_eph is not None:
-            abs_idx = start + bad_eph
-            _raise_ephemeris_numerical_error(
-                reason="non_finite_ephemeris_state",
-                row_index=abs_idx,
-                orbit_id=str(
-                    propagated_orbits_barycentric.orbit_id.to_numpy(
-                        zero_copy_only=False
-                    )[abs_idx]
-                ),
-                object_id=str(
-                    propagated_orbits_barycentric.object_id.to_numpy(
-                        zero_copy_only=False
-                    )[abs_idx]
-                ),
-                observation_time=float(times_chunk[bad_eph]),
-                light_time=float(lt_np[bad_eph]),
-                max_iter=max_iter,
-                tol=tol,
-                lt_tol=lt_tol,
-            )
-
-        bad_aberrated = _first_non_finite(aberrated_np)
-        if bad_aberrated is not None:
-            abs_idx = start + bad_aberrated
-            _raise_ephemeris_numerical_error(
-                reason="non_finite_aberrated_state",
-                row_index=abs_idx,
-                orbit_id=str(
-                    propagated_orbits_barycentric.orbit_id.to_numpy(
-                        zero_copy_only=False
-                    )[abs_idx]
-                ),
-                object_id=str(
-                    propagated_orbits_barycentric.object_id.to_numpy(
-                        zero_copy_only=False
-                    )[abs_idx]
-                ),
-                observation_time=float(times_chunk[bad_aberrated]),
-                light_time=float(lt_np[bad_aberrated]),
-                max_iter=max_iter,
-                tol=tol,
-                lt_tol=lt_tol,
-            )
-
-        ephemeris_spherical[start : start + valid] = eph_np
-        light_time[start : start + valid] = lt_np
-        aberrated_orbits[start : start + valid] = aberrated_np
-        start += valid
-
-    if start != num_entries:
-        raise RuntimeError(
-            f"Internal error: expected {num_entries} ephemeris rows, got {start}"
+        rust_result = rust_generate_ephemeris_2body_with_covariance_numpy(
+            orbits_array,
+            cov_flat,
+            observer_coordinates,
+            mu,
+            lt_tol=lt_tol,
+            max_iter=max_iter,
+            tol=tol,
+            stellar_aberration=stellar_aberration,
         )
+        sph_r, lt_r, aberrated_r, cov_r = rust_result
+        ephemeris_spherical = np.ascontiguousarray(sph_r, dtype=np.float64)
+        light_time = np.ascontiguousarray(lt_r, dtype=np.float64)
+        aberrated_orbits = np.ascontiguousarray(aberrated_r, dtype=np.float64)
+        covariances_spherical_flat = np.ascontiguousarray(cov_r, dtype=np.float64)
+    else:
+        rust_result = rust_generate_ephemeris_2body_numpy(
+            orbits_array,
+            observer_coordinates,
+            mu,
+            lt_tol=lt_tol,
+            max_iter=max_iter,
+            tol=tol,
+            stellar_aberration=stellar_aberration,
+        )
+        sph_r, lt_r, aberrated_r = rust_result
+        ephemeris_spherical = np.ascontiguousarray(sph_r, dtype=np.float64)
+        light_time = np.ascontiguousarray(lt_r, dtype=np.float64)
+        aberrated_orbits = np.ascontiguousarray(aberrated_r, dtype=np.float64)
 
-    # Compute emission times by subtracting light-time (in days) from the observation times.
-    bad_light_time = _first_non_finite(light_time)
-    if bad_light_time is not None:
+    # Row-level error context for any NaN emitted by either backend. The Rust
+    # kernel mirrors the JAX NaN policy (iter >= max_lt_iter → NaN light-time).
+    def _error_context_for(row: int, reason: str) -> None:
         _raise_ephemeris_numerical_error(
-            reason="non_finite_light_time_before_emission_time",
-            row_index=bad_light_time,
+            reason=reason,
+            row_index=row,
             orbit_id=str(
                 propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
-                    bad_light_time
+                    row
                 ]
             ),
             object_id=str(
                 propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
-                    bad_light_time
+                    row
                 ]
             ),
-            observation_time=float(times[bad_light_time]),
-            light_time=float(light_time[bad_light_time]),
+            observation_time=float(times[row]),
+            light_time=float(light_time[row]),
             max_iter=max_iter,
             tol=tol,
             lt_tol=lt_tol,
         )
+
+    bad_lt = _first_non_finite(light_time)
+    if bad_lt is not None:
+        _error_context_for(bad_lt, "non_finite_light_time")
+    bad_eph = _first_non_finite(ephemeris_spherical)
+    if bad_eph is not None:
+        _error_context_for(bad_eph, "non_finite_ephemeris_state")
+    bad_aberrated = _first_non_finite(aberrated_orbits)
+    if bad_aberrated is not None:
+        _error_context_for(bad_aberrated, "non_finite_aberrated_state")
+
+    # Compute emission times by subtracting light-time (in days) from the observation times.
     emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
         pa.array(-light_time)
     )
@@ -580,27 +397,10 @@ def generate_ephemeris_2body(
         frame="ecliptic",
     )
 
-    if not propagated_orbits.coordinates.covariance.is_all_nan():
-
-        cartesian_covariances = propagated_orbits.coordinates.covariance.to_matrix()
-        covariances_spherical = transform_covariances_jacobian(
-            propagated_orbits.coordinates.values,
-            cartesian_covariances,
-            _generate_ephemeris_2body,
-            in_axes=(0, 0, 0, 0, None, None, None, None),
-            out_axes=(0, 0, 0),
-            observation_times=times,
-            observer_coordinates=observer_coordinates,
-            mu=mu,
-            lt_tol=lt_tol,
-            max_iter=max_iter,
-            tol=tol,
-            stellar_aberration=stellar_aberration,
-        )
+    if need_covariance:
         covariances_spherical = CoordinateCovariances.from_matrix(
-            np.array(covariances_spherical)
+            covariances_spherical_flat.reshape(num_entries, 6, 6)
         )
-
     else:
         covariances_spherical = None
 
@@ -666,10 +466,15 @@ def generate_ephemeris_2body(
         ),
     )
 
+    if want_mags and (H_v is None or G is None or has_params is None):
+        raise RuntimeError(
+            "Internal error: H/G photometry parameters are required for "
+            "magnitude prediction"
+        )
+
     alpha_deg = None
     mags = None
     if want_mags and want_alpha:
-        assert H_v is not None and G is not None and has_params is not None
         mags, alpha_deg = calculate_apparent_magnitude_v_and_phase_angle(
             H_v=H_v,
             object_coords=aberrated_heliocentric,
@@ -681,7 +486,6 @@ def generate_ephemeris_2body(
             aberrated_heliocentric, observers_heliocentric
         )
     elif want_mags:
-        assert H_v is not None and G is not None and has_params is not None
         mags = calculate_apparent_magnitude_v(
             H_v=H_v,
             object_coords=aberrated_heliocentric,
@@ -697,7 +501,10 @@ def generate_ephemeris_2body(
         )
 
     if mags is not None:
-        assert has_params is not None
+        if has_params is None:
+            raise RuntimeError(
+                "Internal error: photometry mask is required for magnitude output"
+            )
         mags = np.asarray(mags, dtype=np.float64)
         valid = has_params & np.isfinite(mags)
         ephemeris = ephemeris.set_column(

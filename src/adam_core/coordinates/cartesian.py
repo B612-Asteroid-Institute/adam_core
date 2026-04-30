@@ -290,25 +290,31 @@ class CartesianCoordinates(qv.Table):
         -------
             Rotated Cartesian coordinates and their covariances.
         """
-        # Extract coordinate values into a masked array and mask NaNss
-        masked_coords = np.ma.masked_array(self.values, fill_value=np.nan)
-        masked_coords.mask = np.isnan(masked_coords.data)
+        from .._rust.api import rotate_cartesian_time_varying_numpy
 
-        # Rotate coordinates
-        coords_rotated = np.ma.dot(masked_coords, rotation_matrix.T, strict=False)
-
-        # Extract covariances
-        masked_covariances = np.ma.masked_array(
-            self.covariance.to_matrix(), fill_value=0.0
+        n = len(self)
+        cov_matrix = self.covariance.to_matrix()
+        cov_flat = np.ascontiguousarray(cov_matrix.reshape(n, 36))
+        # Single shared rotation matrix applied to all rows; time_index
+        # is a zero-vector pointing into a length-1 matrix table. The Rust
+        # kernel handles the NaN policy for covariance (fill NaN with 0,
+        # rotate, restore NaN) and propagates coord NaN via IEEE.
+        rust_result = rotate_cartesian_time_varying_numpy(
+            self.values,
+            np.zeros(n, dtype=np.int64),
+            rotation_matrix.reshape(1, 6, 6),
+            cov_flat,
         )
-        masked_covariances.mask = np.isnan(masked_covariances.data)
 
-        # Rotate covariances
-        covariances_rotated = (
-            rotation_matrix @ masked_covariances.filled() @ rotation_matrix.T
+        coords_rotated, cov_flat_rotated = rust_result
+        if cov_flat_rotated is None:
+            raise RuntimeError(
+                "rotate_cartesian_time_varying_numpy returned no covariance output "
+                "despite covariance input"
+            )
+        covariances_rotated = np.asarray(cov_flat_rotated, dtype=np.float64).reshape(
+            n, 6, 6
         )
-        # Reset the mask to the original mask
-        covariances_rotated[masked_covariances.mask] = np.nan
 
         # Check if any covariance elements are near zero, if so set them to zero
         near_zero = len(

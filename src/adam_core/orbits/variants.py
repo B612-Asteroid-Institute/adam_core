@@ -13,10 +13,9 @@ from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
-from ..dynamics.aberrations import add_light_time
+from .._rust.api import add_light_time_numpy
 from ..observers.observers import Observers
 from ..time import Timestamp
-from ..utils.chunking import process_in_chunks
 from .ephemeris import Ephemeris
 from .orbits import Orbits
 from .physical_parameters import PhysicalParameters
@@ -190,51 +189,63 @@ class VariantOrbits(qv.Table):
         collapsed_orbits : `~adam_core.orbits.orbits.Orbits`
             The collapsed orbits.
         """
-        # Group the variants by object_id
         unique_object_ids = self.object_id.unique()
+        n_objects = len(unique_object_ids)
+        if n_objects == 0:
+            return Orbits.empty()
 
-        orbits = Orbits.empty()
-        for object_id in unique_object_ids:
+        # Pre-allocate output columns.
+        means = np.empty((n_objects, 6), dtype=np.float64)
+        covariances = np.empty((n_objects, 6, 6), dtype=np.float64)
+        orbit_ids = np.empty(n_objects, dtype=object)
+        object_id_strs = np.empty(n_objects, dtype=object)
+        physical_parameters_rows: list = []
+        times_rows: list = []
+        origins_rows: list = []
+
+        frame = None
+        for i, object_id in enumerate(unique_object_ids):
             object_variants = self.select("object_id", object_id)
 
             # All the variants must have the same epoch
             assert len(object_variants.coordinates.time.unique()) == 1
             assert len(pc.unique(object_variants.coordinates.origin.code)) == 1
 
-            # Calculate the mean
-            mean = np.average(
-                object_variants.coordinates.values,
-                axis=0,
-            )
-
-            # Calculate the covariance matrix
-            covariance = weighted_covariance(
+            samples = object_variants.coordinates.values
+            mean = np.average(samples, axis=0)
+            means[i] = mean
+            covariances[i] = weighted_covariance(
                 mean,
-                object_variants.coordinates.values,
+                samples,
                 np.ones(len(object_variants), dtype=np.float64) / len(object_variants),
-            ).reshape(1, 6, 6)
-
-            # Create the collapsed orbit
-            orbit = Orbits.from_kwargs(
-                orbit_id=[uuid.uuid4().hex],
-                object_id=[object_id],
-                physical_parameters=object_variants.physical_parameters.take([0]),
-                coordinates=CartesianCoordinates.from_kwargs(
-                    x=[mean[0]],
-                    y=[mean[1]],
-                    z=[mean[2]],
-                    vx=[mean[3]],
-                    vy=[mean[4]],
-                    vz=[mean[5]],
-                    covariance=CoordinateCovariances.from_matrix(covariance),
-                    time=object_variants.coordinates.time[0],
-                    origin=object_variants.coordinates.origin[0],
-                    frame=object_variants.coordinates.frame,
-                ),
             )
-            orbits = qv.concatenate([orbits, orbit])
+            orbit_ids[i] = uuid.uuid4().hex
+            object_id_strs[i] = object_id
+            physical_parameters_rows.append(
+                object_variants.physical_parameters.take([0])
+            )
+            times_rows.append(object_variants.coordinates.time[0])
+            origins_rows.append(object_variants.coordinates.origin[0])
+            if frame is None:
+                frame = object_variants.coordinates.frame
 
-        return orbits
+        return Orbits.from_kwargs(
+            orbit_id=orbit_ids,
+            object_id=object_id_strs,
+            physical_parameters=qv.concatenate(physical_parameters_rows),
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=means[:, 0],
+                y=means[:, 1],
+                z=means[:, 2],
+                vx=means[:, 3],
+                vy=means[:, 4],
+                vz=means[:, 5],
+                covariance=CoordinateCovariances.from_matrix(covariances),
+                time=qv.concatenate(times_rows),
+                origin=qv.concatenate(origins_rows),
+                frame=frame,
+            ),
+        )
 
 
 class VariantEphemeris(qv.Table):
@@ -687,30 +698,18 @@ class VariantEphemeris(qv.Table):
         observer_positions = observers_barycentric.coordinates.r
 
         # Use the same iterative light-time correction as ephemeris generation.
-        chunk_size = 200
-        aberrated_vals: np.ndarray = np.empty((0, 6), dtype=np.float64)
-        light_time: np.ndarray = np.empty((0,), dtype=np.float64)
-        for barycentric_chunk, times_chunk, observers_chunk in zip(
-            process_in_chunks(barycentric_vals, chunk_size),
-            process_in_chunks(times_tdb_mjd, chunk_size),
-            process_in_chunks(observer_positions, chunk_size),
-        ):
-            aberrated_chunk, light_time_chunk = add_light_time(
-                barycentric_chunk,
-                times_chunk,
-                observers_chunk,
-                lt_tol=1e-12,
-                mu=c.MU,
-                max_iter=100,
-                tol=1e-15,
-            )
-            aberrated_vals = np.concatenate(
-                (aberrated_vals, np.array(aberrated_chunk)), axis=0
-            )
-            light_time = np.concatenate((light_time, np.array(light_time_chunk)))
-
-        aberrated_vals = aberrated_vals[: len(ephemeris)]
-        light_time = light_time[: len(ephemeris)]
+        n = barycentric_vals.shape[0]
+        rust_out = add_light_time_numpy(
+            np.ascontiguousarray(barycentric_vals, dtype=np.float64),
+            np.ascontiguousarray(observer_positions, dtype=np.float64),
+            np.full(n, c.MU, dtype=np.float64),
+            lt_tol=1e-12,
+            max_iter=100,
+            tol=1e-15,
+            max_lt_iter=10,
+        )
+        aberrated_vals, light_time = rust_out
+        del times_tdb_mjd  # not needed; LT depends only on relative position
 
         # add_light_time assumes a physically valid inertial state; if the collapsed
         # topocentric state is not dynamically consistent, fall back to geometric

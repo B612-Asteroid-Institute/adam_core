@@ -5,7 +5,6 @@ from typing import List, Literal, Optional, Set
 
 import numpy as np
 import pyarrow.compute as pc
-import spiceypy as sp
 from naif_de440 import de440
 from naif_earth_itrf93 import earth_itrf93
 from naif_eop_high_prec import eop_high_prec
@@ -18,6 +17,7 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
 from .bounded_lru import bounded_lru_get, bounded_lru_put
+from .spice_backend import get_backend
 
 DEFAULT_KERNELS = [
     leapseconds,
@@ -45,6 +45,38 @@ class _SpkezCacheKey:
 
 _SPKEZ_CACHE_MAXSIZE = int(os.environ.get("ADAM_CORE_SPKEZ_CACHE_MAXSIZE", "200000"))
 _SPKEZ_CACHE: "OrderedDict[_SpkezCacheKey, np.ndarray]" = OrderedDict()
+
+
+# Backward-compatible shims: existing callers and tests monkeypatch these
+# names directly, so keep them as thin delegates onto the active backend
+# rather than inlining get_backend() at every call site.
+
+
+def _query_pxform_itrf93_batch(frame_spice: str, ets: np.ndarray) -> np.ndarray:
+    """Batched 3×3 rotation ITRF93 → inertial. Returns shape `(N, 3, 3)`."""
+    ets = np.ascontiguousarray(ets, dtype=np.float64)
+    return get_backend().pxform_batch("ITRF93", frame_spice, ets)
+
+
+def _query_sxform_itrf93_batch(
+    frame_from: str, frame_to: str, ets: np.ndarray
+) -> np.ndarray:
+    """Batched 6×6 state transform across ITRF93 ↔ inertial. Shape `(N, 6, 6)`."""
+    ets = np.ascontiguousarray(ets, dtype=np.float64)
+    return get_backend().sxform_batch(frame_from, frame_to, ets)
+
+
+def _query_states_km_kms_batch(
+    reader, target: int, center: int, frame_spice: str, ets: np.ndarray
+) -> np.ndarray:
+    """Batched (N, 6) state query in km / km-s.
+
+    The ``reader`` positional argument is retained for backward
+    compatibility but ignored — the active backend owns its own readers
+    and routes Rust-first, CSPICE-fallback under the covers.
+    """
+    ets = np.ascontiguousarray(ets, dtype=np.float64)
+    return get_backend().spkez_batch(int(target), int(center), frame_spice, ets)
 
 
 def _spkez_cache_get(key: _SpkezCacheKey) -> np.ndarray | None:
@@ -184,6 +216,10 @@ def get_perturber_state(
     epochs_et = times_tdb.et().to_numpy(zero_copy_only=False).astype(np.float64)
     uniq_states = np.empty((uniq_keys.shape[0], 6), dtype=np.float64)
 
+    # First pass: cache probe for every unique epoch; collect misses for a
+    # single batched query.
+    cache_hit = np.zeros(uniq_keys.shape[0], dtype=bool)
+    miss_idx: list[int] = []
     for i_u in range(int(uniq_keys.shape[0])):
         i0 = int(rep_idx[i_u])
         key = _SpkezCacheKey(
@@ -196,9 +232,9 @@ def get_perturber_state(
         cached = _spkez_cache_get(key)
         if cached is not None:
             uniq_states[i_u, :] = cached
+            cache_hit[i_u] = True
             continue
 
-        # Invert from cached reverse pair if present (exact negation).
         rev_key = _SpkezCacheKey(
             target=int(origin.value),
             observer=int(perturber.value),
@@ -211,21 +247,44 @@ def get_perturber_state(
             s = -cached_rev
             uniq_states[i_u, :] = s
             _spkez_cache_put(key, s)
+            cache_hit[i_u] = True
             continue
 
-        state_km_kms, _lt = sp.spkez(
-            perturber.value,
-            float(epochs_et[i0]),
+        miss_idx.append(i_u)
+
+    if miss_idx:
+        miss_i0 = rep_idx[np.asarray(miss_idx, dtype=np.int64)]
+        miss_ets = epochs_et[miss_i0]
+        batched = _query_states_km_kms_batch(
+            None,
+            int(perturber.value),
+            int(origin.value),
             frame_spice,
-            "NONE",
-            origin.value,
+            miss_ets,
         )
-        s = np.asarray(state_km_kms, dtype=np.float64) / KM_P_AU
-        s[3:] *= S_P_DAY
-        uniq_states[i_u, :] = s
-        _spkez_cache_put(key, s)
-        # Also populate reverse pair to avoid redundant SPICE calls later.
-        _spkez_cache_put(rev_key, -s)
+        scale = np.array([KM_P_AU, KM_P_AU, KM_P_AU, KM_P_AU / S_P_DAY,
+                          KM_P_AU / S_P_DAY, KM_P_AU / S_P_DAY], dtype=np.float64)
+        miss_states = batched / scale
+        for local_i, i_u in enumerate(miss_idx):
+            i0 = int(rep_idx[i_u])
+            s = miss_states[local_i]
+            uniq_states[i_u, :] = s
+            key = _SpkezCacheKey(
+                target=int(perturber.value),
+                observer=int(origin.value),
+                frame=str(frame_spice),
+                days=int(days[i0]),
+                nanos=int(nanos[i0]),
+            )
+            rev_key = _SpkezCacheKey(
+                target=int(origin.value),
+                observer=int(perturber.value),
+                frame=str(frame_spice),
+                days=int(days[i0]),
+                nanos=int(nanos[i0]),
+            )
+            _spkez_cache_put(key, s)
+            _spkez_cache_put(rev_key, -s)
 
     states = uniq_states[inv]
 
@@ -264,7 +323,7 @@ def register_spice_kernel(kernel_path: str) -> None:
         Path to the SPICE kernel file
     """
     if kernel_path not in _REGISTERED_KERNELS:
-        sp.furnsh(kernel_path)
+        get_backend().furnsh(kernel_path)
         _REGISTERED_KERNELS.add(kernel_path)
 
 
@@ -278,7 +337,7 @@ def unregister_spice_kernel(kernel_path: str) -> None:
         Path to the SPICE kernel file
     """
     if kernel_path in _REGISTERED_KERNELS:
-        sp.unload(kernel_path)
+        get_backend().unload(kernel_path)
         _REGISTERED_KERNELS.remove(kernel_path)
 
 
@@ -331,17 +390,22 @@ def get_spice_body_state(
     N = len(times)
     states = np.empty((N, 6), dtype=np.float64)
 
+    # One batched query per unique epoch set — the active backend routes
+    # Rust-first for J2000/ECLIPJ2000 and falls back to CSPICE for ITRF93
+    # or any body the Rust DE440 reader does not cover.
+    unique_ets_np = unique_epochs_et.to_numpy(zero_copy_only=False).astype(np.float64)
+    try:
+        unique_states_km = _query_states_km_kms_batch(
+            None, int(body_id), int(origin.value), frame_spice, unique_ets_np
+        )
+    except Exception as e:
+        raise ValueError(
+            f"Could not get state data for body ID {body_id}: {str(e)}"
+        )
+
     for i, epoch in enumerate(unique_epochs_et):
         mask = pc.equal(epochs_et, epoch).to_numpy(False)
-        try:
-            state, lt = sp.spkez(
-                body_id, epoch.as_py(), frame_spice, "NONE", origin.value
-            )
-            states[mask, :] = state
-        except sp.SpiceyError as e:
-            raise ValueError(
-                f"Could not get state data for body ID {body_id} at time {epoch}: {str(e)}"
-            )
+        states[mask, :] = unique_states_km[i]
 
     # Convert units (vectorized operations)
     states = states / KM_P_AU

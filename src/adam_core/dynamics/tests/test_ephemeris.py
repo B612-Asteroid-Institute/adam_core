@@ -1,6 +1,5 @@
 import cProfile
 
-import jax
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -162,8 +161,6 @@ def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
     """Profile the generate_ephemeris_2body function with different combinations of orbits,
     observers and times. Results are saved to a stats file that can be visualized with snakeviz.
     """
-    # Clear the jax cache
-    jax.clear_caches()
     # Create profiler
     profiler = cProfile.Profile(subcalls=True, builtins=True)
     profiler.bias = 0
@@ -632,25 +629,36 @@ def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> 
         ),
     )
 
-    def _bad_ephemeris_vmap(
-        propagated_chunk,
-        times_chunk,
-        observer_chunk,
-        mu_chunk,
-        lt_tol,
-        max_iter,
-        tol,
-        stellar_aberration,
-    ):
-        n = len(times_chunk)
+    def _bad_ephemeris_rust(orbits_flat, observer_states, mus, *args, **kwargs):
+        n = orbits_flat.shape[0]
         eph = np.zeros((n, 6), dtype=np.float64)
         lt = np.zeros((n,), dtype=np.float64)
         lt[0] = np.nan
         aberrated = np.zeros((n, 6), dtype=np.float64)
         return eph, lt, aberrated
 
+    def _bad_ephemeris_rust_cov(
+        orbits_flat, cov_flat, observer_states, mus, *args, **kwargs
+    ):
+        n = orbits_flat.shape[0]
+        eph = np.zeros((n, 6), dtype=np.float64)
+        lt = np.zeros((n,), dtype=np.float64)
+        lt[0] = np.nan
+        aberrated = np.zeros((n, 6), dtype=np.float64)
+        cov = np.zeros((n, 36), dtype=np.float64)
+        return eph, lt, aberrated, cov
+
+    # Patch the Rust backend entry points so this test asserts the row-level
+    # error pass, not which backend happens to be default.
     monkeypatch.setattr(
-        ephemeris_module, "_generate_ephemeris_2body_vmap", _bad_ephemeris_vmap
+        ephemeris_module,
+        "rust_generate_ephemeris_2body_numpy",
+        _bad_ephemeris_rust,
+    )
+    monkeypatch.setattr(
+        ephemeris_module,
+        "rust_generate_ephemeris_2body_with_covariance_numpy",
+        _bad_ephemeris_rust_cov,
     )
 
     with pytest.raises(DynamicsNumericalError, match="non_finite_light_time"):

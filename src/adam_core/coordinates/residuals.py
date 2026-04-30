@@ -28,8 +28,46 @@ SUPPORTED_COORDINATES = (
 __all__ = [
     "Residuals",
     "calculate_chi2",
+    "compute_residuals_ndarray",
     "_batch_coords_and_covariances",
 ]
+
+
+def compute_residuals_ndarray(
+    observed: CoordinateType,
+    predicted: CoordinateType,
+) -> npt.NDArray[np.float64]:
+    """
+    Compute only the residual values (no chi2, no quivr table) as an (N, D) ndarray.
+
+    Applies longitude wrap + cos(lat) scaling for SphericalCoordinates.
+    Use this instead of `Residuals.calculate` when only the numeric residuals
+    are needed and chi2/probability/dof would be discarded — it skips the
+    chi2 machinery, covariance batching, and quivr table assembly, which
+    dominate the per-call cost in tight OD / least-squares inner loops.
+    """
+    if type(observed) is not type(predicted):
+        raise TypeError(
+            "Observed and predicted coordinates must be the same type, "
+            f"not {type(observed)} and {type(predicted)}."
+        )
+
+    observed_values = observed.values
+    predicted_values = predicted.values
+
+    N, D = observed_values.shape
+    if len(predicted_values) == 1 and N > 1:
+        predicted_values = np.broadcast_to(predicted_values, (N, D))
+
+    residuals = observed_values - predicted_values
+
+    if isinstance(observed, SphericalCoordinates):
+        residuals = bound_longitude_residuals(observed_values, residuals)
+        cos_lat = np.cos(np.radians(observed_values[:, 2]))
+        residuals[:, 1] *= cos_lat
+        residuals[:, 4] *= cos_lat
+
+    return residuals
 
 
 def apply_cosine_latitude_correction(
@@ -41,6 +79,12 @@ def apply_cosine_latitude_correction(
     Apply a correction factor of cosine latitude to the residuals and covariance matrix.
     This is designed to account for the fact that longitudes get smaller as you approach
     the poles.
+
+    Dispatches to the rust kernel `apply_cosine_latitude_correction_numpy`.
+    Equivalent of the legacy `D · cov · D.T` (with D diagonal of [1, cos_lat,
+    1, 1, cos_lat, 1]) reduces to a per-element `cov[i,j] = D[i] · cov[i,j] · D[j]`
+    scale, which is what the rust kernel does. NaN entries in `covariances`
+    are preserved.
 
     Parameters
     ----------
@@ -58,42 +102,16 @@ def apply_cosine_latitude_correction(
     covariances : `~numpy.ndarray` (N, D, D)
         Covariance matrices for spherical residuals with the correction factor applied.
     """
-    N = len(lat)
-    cos_lat = np.cos(np.radians(lat))
-
-    identity = np.identity(6, dtype=np.float64)
-
-    # Populate the diagonal of the matrix with cos(latitude) for
-    # the longitude and longitudinal velocity dimensions
-    diag = np.ones((N, 6))
-    diag[:, 1] = cos_lat
-    diag[:, 4] = cos_lat
-
-    # Calculate the cos(latitude) factor for the covariance matrix
-    cos_lat_cov = np.einsum("kj,ji->kij", diag, identity, order="C")
-
-    # Apply the cos(latitude) factor to the residuals in longitude
-    # and longitudinal velocity
-    residuals[:, 1] *= cos_lat
-    residuals[:, 4] *= cos_lat
-
-    # Identify locations where the covariance matrix is NaN and set
-    # those values to 0.0
-    nan_cov = np.isnan(covariances)
-    covariances_masked = np.where(nan_cov, 0.0, covariances)
-
-    # Apply the cos(latitude) factor to the covariance matrix.
-    covariances_masked = (
-        cos_lat_cov @ covariances_masked @ cos_lat_cov.transpose(0, 2, 1)
+    from .._rust import (
+        apply_cosine_latitude_correction_numpy as _rust_cos_lat_correct,
     )
 
-    # Set the covariance matrix to nan where it was nan before.
-    # Note that when we apply cos(latitude) to the covariance matrix in the previous statement,
-    # we are only modifying the longitude and longitudinal velocity dimensions. The remaining
-    # dimensions are left unchanged which is why we can use a mask to reset the
-    # the missing values in the resulting matrix to NaN.
-    covariances = np.where(nan_cov, np.nan, covariances_masked)
-    return residuals, covariances
+    out = _rust_cos_lat_correct(
+        np.ascontiguousarray(lat, dtype=np.float64),
+        np.ascontiguousarray(residuals, dtype=np.float64),
+        np.ascontiguousarray(covariances, dtype=np.float64),
+    )
+    return np.asarray(out[0], dtype=np.float64), np.asarray(out[1], dtype=np.float64)
 
 
 def bound_longitude_residuals(
@@ -104,6 +122,8 @@ def bound_longitude_residuals(
     signs of the residuals that cross the 0/360 degree boundary. By convention, we define
     residuals that cross from <360 to >0 as a positive residual (355 - 5 = +10) and cross
     from >0 to <360 as a negative residual (5 - 355 = -10).
+
+    Dispatches to the rust kernel `bound_longitude_residuals_numpy`.
 
     Parameters
     ----------
@@ -118,37 +138,16 @@ def bound_longitude_residuals(
     residuals : `~numpy.ndarray` (N, D)
         Residuals wrapped to the range [-180, 180] degrees.
     """
-    # Extract the observed longitude and residuals
-    observed_longitude = observed[:, 1]
-    longitude_residual = residuals[:, 1]
+    from .._rust import bound_longitude_residuals_numpy as _rust_bound_lon
 
-    # Identify residuals that exceed a half circle
-    longitude_residual_g180 = longitude_residual > 180
-    longitude_residual_l180 = longitude_residual < -180
-
-    # Wrap the residuals to the range [-180, 180] degrees
-    longitude_residual = np.where(
-        longitude_residual_g180, longitude_residual - 360, longitude_residual
+    out = _rust_bound_lon(
+        np.ascontiguousarray(observed, dtype=np.float64),
+        np.ascontiguousarray(residuals, dtype=np.float64),
     )
-    longitude_residual = np.where(
-        longitude_residual_l180, longitude_residual + 360, longitude_residual
-    )
-
-    # Adjust the signs of the residuals that cross the 0/360 degree boundary
-    # We want it so that crossing from <360 to >0 is a positive residual (355 - 5 = +10)
-    # and crossing from >0 to <360 is a negative residual (5 - 355 = -10)
-    longitude_residual = np.where(
-        longitude_residual_g180 & (observed_longitude > 180),
-        -longitude_residual,
-        longitude_residual,
-    )
-    longitude_residual = np.where(
-        longitude_residual_l180 & (observed_longitude < 180),
-        -longitude_residual,
-        longitude_residual,
-    )
-
-    residuals[:, 1] = longitude_residual
+    # Mutate the caller's array IN PLACE to preserve the legacy semantic
+    # (legacy passed `residuals[:, 1] = longitude_residual` and returned
+    # the same array; some callsites rely on that aliasing).
+    residuals[:] = np.asarray(out, dtype=np.float64)
     return residuals
 
 
@@ -388,21 +387,26 @@ def calculate_chi2(
     [1] Carpino, M. et al. (2003). Error statistics of asteroid optical astrometric observations.
         Icarus, 166, 248-270. https://doi.org/10.1016/S0019-1035(03)00051-4
     """
-    # Raise error if any of the diagonal elements are nan
-    if np.any(np.isnan(np.diagonal(covariances, axis1=1, axis2=2))):
+    # Surface the NaN-off-diagonal warning at the Python boundary; the
+    # rust kernel silently substitutes 0.0 (matching the legacy semantic
+    # but moving the warning emission up here so callers see one warning
+    # per call rather than per row).
+    diag = np.diagonal(covariances, axis1=1, axis2=2)
+    if np.any(np.isnan(diag)):
         raise ValueError("Covariance matrix has NaNs on the diagonal.")
-
-    # Warn if any of the non-diagonal elements are nan
     if np.any(np.isnan(covariances)):
         warnings.warn(
             "Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).",
             UserWarning,
         )
-        covariances = np.where(np.isnan(covariances), 0.0, covariances)
 
-    W = np.linalg.inv(covariances)
-    chi2 = np.einsum("ij,ji->i", np.einsum("ij,ijk->ik", residuals, W), residuals.T)
-    return chi2
+    from .._rust import calculate_chi2_numpy as _rust_calculate_chi2_numpy
+
+    out = _rust_calculate_chi2_numpy(
+        np.ascontiguousarray(residuals, dtype=np.float64),
+        np.ascontiguousarray(covariances, dtype=np.float64),
+    )
+    return np.asarray(out, dtype=np.float64)
 
 
 def calculate_reduced_chi2(residuals: Residuals, parameters: int) -> float:

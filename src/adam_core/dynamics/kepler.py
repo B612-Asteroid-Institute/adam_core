@@ -1,331 +1,97 @@
-from typing import Tuple
+from __future__ import annotations
 
-import jax.numpy as jnp
-import jax.typing as jnpt
-from jax import config, jit, lax
+import numpy.typing as npt
 
-from .barker import solve_barker
-
-config.update("jax_enable_x64", True)
-
-
-@jit
-def calc_period(a: jnpt.ArrayLike, mu: jnpt.ArrayLike) -> jnpt.ArrayLike:
-    """
-    Calculate the period of an orbit given the semi-major axis and
-    gravitational parameter.
-
-    Parameters
-    ----------
-    a
-        Semi-major axis.
-    mu
-        Gravitational parameter.
-
-    Returns
-    -------
-    P
-        Period.
-    """
-    return jnp.where(a < 0.0, jnp.inf, 2 * jnp.pi * jnp.sqrt(a**3 / mu))
+from .._rust.api import (
+    calc_apoapsis_distance_numpy as _rust_calc_apoapsis_distance_numpy,
+    calc_mean_anomaly_numpy as _rust_calc_mean_anomaly_numpy,
+    calc_mean_motion_numpy as _rust_calc_mean_motion_numpy,
+    calc_periapsis_distance_numpy as _rust_calc_periapsis_distance_numpy,
+    calc_period_numpy as _rust_calc_period_numpy,
+    calc_semi_latus_rectum_numpy as _rust_calc_semi_latus_rectum_numpy,
+    calc_semi_major_axis_numpy as _rust_calc_semi_major_axis_numpy,
+    solve_kepler_numpy as _rust_solve_kepler_numpy,
+)
+from ._rust_compat import ScalarOrArray, broadcast_pair, require_rust, restore_shape
 
 
-@jit
-def calc_periapsis_distance(a: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
-    """
-    Calculate the periapsis distance of an orbit given the semi-major axis and
-    eccentricity.
-
-    Parameters
-    ----------
-    a
-        Semi-major axis.
-    e
-        Eccentricity.
-
-    Returns
-    -------
-    q
-        Periapsis distance.
-    """
-    return a * (1 - e)
+def calc_period(a: npt.ArrayLike, mu: npt.ArrayLike) -> ScalarOrArray:
+    """Calculate orbital period from semi-major axis and gravitational parameter."""
+    a_flat, mu_flat, shape = broadcast_pair(a, mu)
+    out = require_rust(_rust_calc_period_numpy(a_flat, mu_flat), "dynamics.calc_period")
+    return restore_shape(out, shape)
 
 
-@jit
-def calc_apoapsis_distance(a: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
-    """
-    Calculate the apoapsis distance of an orbit given the semi-major axis and
-    eccentricity.
-
-    Parameters
-    ----------
-    a
-        Semi-major axis.
-    e
-        Eccentricity.
-
-    Returns
-    -------
-    Q
-        Apoapsis distance.
-    """
-    return jnp.where(e >= 1.0, jnp.inf, a * (1 + e))
-
-
-@jit
-def calc_semi_major_axis(q: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
-    """
-    Calculate the semi-major axis of an orbit given the periapsis distance and
-    eccentricity.
-
-    Parameters
-    ----------
-    q
-        Periapsis distance.
-    e
-        Eccentricity.
-
-    Returns
-    -------
-    a
-        Semi-major axis.
-    """
-    return q / (1 - e)
-
-
-@jit
-def calc_semi_latus_rectum(a: jnpt.ArrayLike, e: jnpt.ArrayLike) -> jnpt.ArrayLike:
-    """
-    Calculate the semi-latus rectum of an orbit given the semi-major axis and
-    eccentricity.
-
-    Parameters
-    ----------
-    a
-        Semi-major axis.
-    e
-        Eccentricity.
-
-    Returns
-    -------
-    p
-        Semi-latus rectum.
-    """
-    return a * (1 - e**2)
-
-
-@jit
-def calc_mean_motion(a: jnpt.ArrayLike, mu: jnpt.ArrayLike) -> jnpt.ArrayLike:
-    """
-    Calculate the mean motion of an orbit given the semi-major axis and
-    gravitational parameter.
-
-    Parameters
-    ----------
-    a
-        Semi-major axis.
-    mu
-        Gravitational parameter.
-
-    Returns
-    -------
-    n
-        Mean motion in radians per unit time.
-    """
-    return jnp.sqrt(mu / jnp.abs(a) ** 3)
-
-
-@jit
-def calc_mean_anomaly(nu: float, e: float) -> float:
-    """
-    Calculate the mean anomaly given true anomaly in radians
-    and eccentricity.
-
-    Parameters
-    ----------
-    nu : float
-        True anomaly in radians.
-    e : float
-        Eccentricity.
-
-    Returns
-    -------
-    M : float
-        Mean anomaly in radians.
-    """
-    E, M = lax.cond(
-        e < 1.0,
-        _calc_elliptical_anomalies,
-        lambda nu, e: lax.cond(
-            e > 1.0, _calc_hyperbolic_anomalies, _calc_parabolic_anomalies, nu, e
-        ),
-        nu,
-        e,
+def calc_periapsis_distance(a: npt.ArrayLike, e: npt.ArrayLike) -> ScalarOrArray:
+    """Calculate periapsis distance from semi-major axis and eccentricity."""
+    a_flat, e_flat, shape = broadcast_pair(a, e)
+    out = require_rust(
+        _rust_calc_periapsis_distance_numpy(a_flat, e_flat),
+        "dynamics.calc_periapsis_distance",
     )
-
-    return M
-
-
-@jit
-def _calc_elliptical_anomalies(nu: float, e: float) -> Tuple[float, float]:
-    nu_ = jnp.where(nu >= 2 * jnp.pi, nu % (2 * jnp.pi), nu)
-    E = jnp.arctan2(jnp.sqrt(1 - e**2) * jnp.sin(nu_), e + jnp.cos(nu_))
-    M = E - e * jnp.sin(E)
-    M = jnp.where(M < 0.0, M + 2 * jnp.pi, M)
-    return E, M
+    return restore_shape(out, shape)
 
 
-@jit
-def _calc_hyperbolic_anomalies(nu: float, e: float) -> Tuple[float, float]:
-    nu_ = jnp.where(nu >= 2 * jnp.pi, nu % (2 * jnp.pi), nu)
-    H = 2 * jnp.arctanh(jnp.sqrt((e - 1) / (e + 1)) * jnp.tan(nu_ / 2))
-    M = e * jnp.sinh(H) - H
-    M = jnp.where(M < 0.0, M + 2 * jnp.pi, M)
-    return H, M
-
-
-@jit
-def _calc_parabolic_anomalies(nu: float, e: float) -> Tuple[float, float]:
-    nu_ = jnp.where(nu >= 2 * jnp.pi, nu % (2 * jnp.pi), nu)
-    D = jnp.arctan(nu_ / 2)
-    M = D + (D**3 / 3)
-    M = jnp.where(M < 0.0, M + 2 * jnp.pi, M)
-    return D, M
-
-
-@jit
-def solve_kepler(e: float, M: float, max_iter: int = 100, tol: float = 1e-15) -> float:
-    """
-    Solve Kepler's equation for true anomaly (nu) given eccentricity
-    and mean anomaly using Newton-Raphson. Technically, this is only valid for orbits
-    with eccentricity < 1.0 and eccentricity > 1.0. However, for parabolic orbits (e = 1.0)
-    this function will call the `solve_barker` function from `thor.dynamics.barker`.
-
-    Parameters
-    ----------
-    e : float
-        Eccentricity
-    M : float
-        Mean anomaly in radians.
-    max_iter : int, optional
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will use the value of the relevant anomaly at the last iteration.
-    tol : float, optional
-        Numerical tolerance to which to compute anomalies using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    nu : float
-        True anomaly in radians.
-
-    References
-    ----------
-    [1] Curtis, H. D. (2014). Orbital Mechanics for Engineering Students. 3rd ed.,
-        Elsevier Ltd. ISBN-13: 978-0080977478
-    """
-    ratio = 1e15
-    iterations = 0
-    E_init = jnp.where(e < 1.0, M, M)
-
-    p = [E_init, e, M, ratio, iterations]
-
-    @jit
-    def _elliptical_newton_raphson(p):
-        E = p[0]
-        e = p[1]
-        M = p[2]
-        iterations = p[4]
-
-        # Newton-Raphson
-        # Equation 3.17 in Curtis (2014) [1]
-        f = E - e * jnp.sin(E) - M
-        fp = 1 - e * jnp.cos(E)
-
-        ratio = f / fp
-        E -= ratio
-        iterations += 1
-
-        p[0] = E
-        p[1] = e
-        p[2] = M
-        p[3] = ratio
-        p[4] = iterations
-        return p
-
-    @jit
-    def _hyperbolic_newton_raphson(p):
-        F = p[0]
-        e = p[1]
-        M = p[2]
-        iterations = p[4]
-
-        # Newton-Raphson
-        # Equation 3.45 in Curtis (2014) [1]
-        f = e * jnp.sinh(F) - F - M
-        fp = e * jnp.cosh(F) - 1
-
-        ratio = f / fp
-        F -= ratio
-        iterations += 1
-
-        p[0] = F
-        p[1] = e
-        p[2] = M
-        p[3] = ratio
-        p[4] = iterations
-        return p
-
-    # Define while loop condition function
-    @jit
-    def _while_condition(p):
-        ratio = p[-2]
-        iterations = p[-1]
-        return (jnp.abs(ratio) > tol) & (iterations <= max_iter)
-
-    # Calculate parameters, if e < 1.0 then the orbit is elliptical
-    # if e > 1.0 then the orbit is hyperbolic
-    p = lax.cond(
-        e < 1.0,
-        lambda p: lax.while_loop(_while_condition, _elliptical_newton_raphson, p),
-        lambda p: lax.cond(
-            e > 1.0,
-            lambda p: lax.while_loop(
-                _while_condition,
-                _hyperbolic_newton_raphson,
-                p,
-            ),
-            # For parabolic orbits return the parameters as is since
-            # no iteration is needed for parabolic orbits
-            lambda p: p,
-            p,
-        ),
-        p,
+def calc_apoapsis_distance(a: npt.ArrayLike, e: npt.ArrayLike) -> ScalarOrArray:
+    """Calculate apoapsis distance from semi-major axis and eccentricity."""
+    a_flat, e_flat, shape = broadcast_pair(a, e)
+    out = require_rust(
+        _rust_calc_apoapsis_distance_numpy(a_flat, e_flat),
+        "dynamics.calc_apoapsis_distance",
     )
+    return restore_shape(out, shape)
 
-    nu = lax.cond(
-        e < 1.0,
-        lambda E, e, M: 2
-        * jnp.arctan2(
-            jnp.sqrt(1 + e) * jnp.sin(E / 2), jnp.sqrt(1 - e) * jnp.cos(E / 2)
-        ),
-        lambda E, e, M: lax.cond(
-            e > 1.0,
-            lambda H, e, M: 2
-            * jnp.arctan(
-                jnp.sqrt(e + 1) * jnp.sinh(H / 2) / (jnp.sqrt(e - 1) * jnp.cosh(H / 2))
-            ),
-            lambda P, e, M: solve_barker(M),
-            p[0],
-            p[1],
-            p[2],
-        ),
-        p[0],
-        p[1],
-        p[2],
+
+def calc_semi_major_axis(q: npt.ArrayLike, e: npt.ArrayLike) -> ScalarOrArray:
+    """Calculate semi-major axis from periapsis distance and eccentricity."""
+    q_flat, e_flat, shape = broadcast_pair(q, e)
+    out = require_rust(
+        _rust_calc_semi_major_axis_numpy(q_flat, e_flat),
+        "dynamics.calc_semi_major_axis",
     )
+    return restore_shape(out, shape)
 
-    # True anomaly should be in the range [0, 2*pi)
-    nu = jnp.where(nu < 0.0, nu + 2 * jnp.pi, nu)
-    nu = jnp.where(nu >= 2 * jnp.pi, nu % (2 * jnp.pi), nu)
-    return nu
+
+def calc_semi_latus_rectum(a: npt.ArrayLike, e: npt.ArrayLike) -> ScalarOrArray:
+    """Calculate semi-latus rectum from semi-major axis and eccentricity."""
+    a_flat, e_flat, shape = broadcast_pair(a, e)
+    out = require_rust(
+        _rust_calc_semi_latus_rectum_numpy(a_flat, e_flat),
+        "dynamics.calc_semi_latus_rectum",
+    )
+    return restore_shape(out, shape)
+
+
+def calc_mean_motion(a: npt.ArrayLike, mu: npt.ArrayLike) -> ScalarOrArray:
+    """Calculate mean motion from semi-major axis and gravitational parameter."""
+    a_flat, mu_flat, shape = broadcast_pair(a, mu)
+    out = require_rust(
+        _rust_calc_mean_motion_numpy(a_flat, mu_flat),
+        "dynamics.calc_mean_motion",
+    )
+    return restore_shape(out, shape)
+
+
+def calc_mean_anomaly(nu: npt.ArrayLike, e: npt.ArrayLike) -> ScalarOrArray:
+    """Calculate mean anomaly from true anomaly and eccentricity."""
+    nu_flat, e_flat, shape = broadcast_pair(nu, e)
+    out = require_rust(
+        _rust_calc_mean_anomaly_numpy(nu_flat, e_flat),
+        "dynamics.calc_mean_anomaly",
+    )
+    return restore_shape(out, shape)
+
+
+def solve_kepler(
+    e: npt.ArrayLike,
+    M: npt.ArrayLike,
+    max_iter: int = 100,
+    tol: float = 1e-15,
+) -> ScalarOrArray:
+    """Solve Kepler's equation and return true anomaly in radians."""
+    e_flat, m_flat, shape = broadcast_pair(e, M)
+    out = require_rust(
+        _rust_solve_kepler_numpy(e_flat, m_flat, max_iter=max_iter, tol=tol),
+        "dynamics.solve_kepler",
+    )
+    return restore_shape(out, shape)

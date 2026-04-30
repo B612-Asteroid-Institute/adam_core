@@ -1,128 +1,128 @@
+from __future__ import annotations
+
 from typing import Tuple
 
-import jax.numpy as jnp
-from jax import config, jit
+import numpy as np
+import numpy.typing as npt
 
+from .._rust.api import (
+    apply_lagrange_coefficients_numpy as _rust_apply_lagrange_coefficients_numpy,
+    calc_lagrange_coefficients_numpy as _rust_calc_lagrange_coefficients_numpy,
+)
 from ..constants import Constants as C
-from .chi import calc_chi
+from ._rust_compat import (
+    ScalarOrArray,
+    as_rows,
+    broadcast_to_rows,
+    require_rust,
+)
 from .stumpff import STUMPFF_TYPES
 
-config.update("jax_enable_x64", True)
-
-
 MU = C.MU
-LAGRANGE_TYPES = Tuple[jnp.float64, jnp.float64, jnp.float64, jnp.float64]
+LAGRANGE_TYPES = Tuple[ScalarOrArray, ScalarOrArray, ScalarOrArray, ScalarOrArray]
 
 
-@jit
+def _is_scalar_like(values: npt.ArrayLike) -> bool:
+    return np.asarray(values, dtype=np.float64).ndim == 0
+
+
+def _restore_rows(
+    rows: np.ndarray, width: int, *, scalar: bool
+) -> tuple[ScalarOrArray, ...]:
+    if scalar:
+        return tuple(np.float64(rows[0, i]) for i in range(width))
+    return tuple(
+        np.ascontiguousarray(rows[:, i], dtype=np.float64) for i in range(width)
+    )
+
+
 def calc_lagrange_coefficients(
-    r: jnp.ndarray,
-    v: jnp.ndarray,
-    dt: float,
-    mu: float = MU,
+    r: npt.ArrayLike,
+    v: npt.ArrayLike,
+    dt: npt.ArrayLike,
+    mu: npt.ArrayLike = MU,
     max_iter: int = 100,
-    tol: float = 1e-16,
-) -> Tuple[LAGRANGE_TYPES, STUMPFF_TYPES, jnp.float64]:
+    tol: float = 1e-15,
+) -> tuple[LAGRANGE_TYPES, STUMPFF_TYPES, ScalarOrArray]:
     """
-    Calculate the exact Lagrange coefficients given an initial state defined at t0,
-    and the change in time from t0 to t1 (dt = t1 - t0).
+    Calculate Lagrange coefficients for propagating an initial state by ``dt``.
 
-    Parameters
-    ----------
-    r : `~jax.numpy.ndarray` (3)
-        Position vector in au.
-    v : `~jax.numpy.ndarray` (3)
-        Velocity vector in au per day.
-    dt : float
-        Time from epoch to which calculate chi in units of decimal days.
-    mu : float
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    max_iter : int
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will return the value of the universal anomaly at the last iteration.
-    tol : float
-        Numerical tolerance to which to compute chi using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    lagrange_coeffs : (float x 4)
-        f : float
-            Langrange f coefficient.
-        g : float
-            Langrange g coefficient.
-        f_dot : float
-            Time deriviative of the Langrange f coefficient.
-        g_dot : float
-            Time deriviative of the Langrange g coefficient.
-    stumpff_coeffs : (float x 6)
-        First six Stumpff functions (c0, c1, c2, c3, c4, c5)
-    chi : float
-        Universal anomaly.
-
-    References
-    ----------
-    [1] Curtis, H. D. (2014). Orbital Mechanics for Engineering Students. 3rd ed.,
-        Elsevier Ltd. ISBN-13: 978-0080977478
+    This compatibility API is backed by
+    ``adam_core_rs_coords::calc_lagrange_coefficients``.
     """
-    sqrt_mu = jnp.sqrt(mu)
-    chi, c0, c1, c2, c3, c4, c5 = calc_chi(r, v, dt, mu=mu, max_iter=max_iter, tol=tol)
-    stumpff_coeffs = (c0, c1, c2, c3, c4, c5)
-    chi2 = chi**2
+    r_rows, r_single = as_rows(r, name="r", width=3)
+    v_rows, v_single = as_rows(v, name="v", width=3)
+    if v_rows.shape[0] != r_rows.shape[0]:
+        raise ValueError("v must have the same row count as r")
 
-    r_mag = jnp.linalg.norm(r)
-    v_mag = jnp.linalg.norm(v)
+    n = r_rows.shape[0]
+    dts = broadcast_to_rows(dt, n, name="dt")
+    mus = broadcast_to_rows(mu, n, name="mu")
+    coeffs, stumpff, chi = require_rust(
+        _rust_calc_lagrange_coefficients_numpy(
+            r_rows,
+            v_rows,
+            dts,
+            mus,
+            max_iter=max_iter,
+            tol=tol,
+        ),
+        "dynamics.calc_lagrange_coefficients",
+    )
+    scalar = r_single and v_single and _is_scalar_like(dt) and _is_scalar_like(mu)
+    coeffs_out = _restore_rows(coeffs, 4, scalar=scalar)
+    stumpff_out = _restore_rows(stumpff, 6, scalar=scalar)
+    chi_out: ScalarOrArray
+    if scalar:
+        chi_out = np.float64(chi[0])
+    else:
+        chi_out = np.ascontiguousarray(chi, dtype=np.float64)
+    return coeffs_out, stumpff_out, chi_out  # type: ignore[return-value]
 
-    # Equations 3.48 and 3.50 in Curtis (2014) [1]
-    alpha = -(v_mag**2) / mu + 2 / r_mag
 
-    # Equations 3.69a and 3.69b in Curtis (2014) [1]
-    f = 1 - chi**2 / r_mag * c2
-    g = dt - 1 / sqrt_mu * chi**3 * c3
-
-    r_new = f * r + g * v
-    r_new_mag = jnp.linalg.norm(r_new)
-
-    # Equations 3.69c and 3.69d in Curtis (2014) [1]
-    f_dot = sqrt_mu / (r_mag * r_new_mag) * (alpha * chi**3 * c3 - chi)
-    g_dot = 1 - chi2 / r_new_mag * c2
-
-    lagrange_coeffs = (f, g, f_dot, g_dot)
-
-    return lagrange_coeffs, stumpff_coeffs, chi
-
-
-@jit
 def apply_lagrange_coefficients(
-    r: jnp.ndarray, v: jnp.ndarray, f: float, g: float, f_dot: float, g_dot: float
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    r: npt.ArrayLike,
+    v: npt.ArrayLike,
+    f: npt.ArrayLike,
+    g: npt.ArrayLike,
+    f_dot: npt.ArrayLike,
+    g_dot: npt.ArrayLike,
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Apply the Lagrange coefficients to r and v.
+    Apply Lagrange coefficients to position and velocity vectors.
 
-    Parameters
-    ----------
-    r : `~jax.numpy.ndarray` (3)
-        Position vector in au.
-    v : `~jax.numpy.ndarray` (3)
-        Velocity vector in au per day.
-    f : float
-        Langrange f coefficient.
-    g : float
-        Langrange g coefficient.
-    f_dot : float
-        Time deriviative of the Langrange f coefficient.
-    g_dot : float
-        Time deriviative of the Langrange g coefficient.
-
-    Returns
-    -------
-    r_new : `~jax.numpy.ndarray` (3)
-        New position vector in au propagated with the Lagrange coefficients.
-    v_new : `~jax.numpy.ndarray` (3)
-        New velocity vector in au per day propagated with the Lagrange coefficients.
+    This compatibility API is backed by
+    ``adam_core_rs_coords::apply_lagrange_coefficients``.
     """
-    r_new = f * r + g * v
-    v_new = f_dot * r + g_dot * v
+    r_rows, r_single = as_rows(r, name="r", width=3)
+    v_rows, v_single = as_rows(v, name="v", width=3)
+    if v_rows.shape[0] != r_rows.shape[0]:
+        raise ValueError("v must have the same row count as r")
 
+    n = r_rows.shape[0]
+    coeffs = np.ascontiguousarray(
+        np.column_stack(
+            [
+                broadcast_to_rows(f, n, name="f"),
+                broadcast_to_rows(g, n, name="g"),
+                broadcast_to_rows(f_dot, n, name="f_dot"),
+                broadcast_to_rows(g_dot, n, name="g_dot"),
+            ]
+        ),
+        dtype=np.float64,
+    )
+    r_new, v_new = require_rust(
+        _rust_apply_lagrange_coefficients_numpy(r_rows, v_rows, coeffs),
+        "dynamics.apply_lagrange_coefficients",
+    )
+    scalar = (
+        r_single
+        and v_single
+        and _is_scalar_like(f)
+        and _is_scalar_like(g)
+        and _is_scalar_like(f_dot)
+        and _is_scalar_like(g_dot)
+    )
+    if scalar:
+        return np.ascontiguousarray(r_new[0]), np.ascontiguousarray(v_new[0])
     return r_new, v_new
