@@ -14,14 +14,20 @@ jobs:
   tier1-smoke:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - repo: B612-Asteroid-Institute/adam-assist
             import_cmd: "import adam_assist.propagator"
+            private: false
           - repo: B612-Asteroid-Institute/adam-api
             import_cmd: "import api.services.orbit_service"
+            private: true
           - repo: B612-Asteroid-Institute/adam_etl
             import_cmd: "import adam_etl"
+            private: true
+    env:
+      TIER1_DEPENDENT_SMOKE_TOKEN: ${{ secrets.TIER1_DEPENDENT_SMOKE_TOKEN }}
     steps:
       - name: Checkout adam_core
         uses: actions/checkout@v3
@@ -31,25 +37,37 @@ jobs:
         uses: pdm-project/setup-pdm@v4
         with:
           python-version: '3.12'
+      - name: Skip private dependent without token
+        if: ${{ matrix.private && env.TIER1_DEPENDENT_SMOKE_TOKEN == '' }}
+        run: |
+          echo "::notice::Skipping ${{ matrix.repo }} because TIER1_DEPENDENT_SMOKE_TOKEN is not configured."
       - name: Install build dependencies
+        if: ${{ !matrix.private || env.TIER1_DEPENDENT_SMOKE_TOKEN != '' }}
         run: pdm install -G test
       - name: Build Rust wheel
+        if: ${{ !matrix.private || env.TIER1_DEPENDENT_SMOKE_TOKEN != '' }}
         run: pdm run rust-build
       - name: Verify native wheel artifact
+        if: ${{ !matrix.private || env.TIER1_DEPENDENT_SMOKE_TOKEN != '' }}
         run: pdm run wheel-inspect
       - name: Checkout dependent repository
+        if: ${{ !matrix.private || env.TIER1_DEPENDENT_SMOKE_TOKEN != '' }}
         uses: actions/checkout@v3
         with:
           repository: ${{ matrix.repo }}
           path: dependent
+          token: ${{ env.TIER1_DEPENDENT_SMOKE_TOKEN || github.token }}
       - name: Install dependent and adam_core wheel
+        if: ${{ !matrix.private || env.TIER1_DEPENDENT_SMOKE_TOKEN != '' }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install dist/*.whl
           python -m pip install -e dependent
       - name: Run dependent import smoke
+        if: ${{ !matrix.private || env.TIER1_DEPENDENT_SMOKE_TOKEN != '' }}
         run: python -c "${{ matrix.import_cmd }}"
       - name: Run orbit determination smoke
+        if: ${{ !matrix.private || env.TIER1_DEPENDENT_SMOKE_TOKEN != '' }}
         run: |
           python - <<'PY'
           import numpy as np
