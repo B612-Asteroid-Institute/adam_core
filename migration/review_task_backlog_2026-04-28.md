@@ -283,7 +283,7 @@ Acceptance:
   because the generated file is gitignored and was otherwise missing from
   the native wheel.
 - Rewired `rust-build` to call `wheel-build`; rewired publish, CI, and
-  tier-1 dependent smoke workflows to build `dist/*.whl`, inspect the wheel,
+  public dependent-package smoke workflows to build `dist/*.whl`, inspect the wheel,
   and upload/install only the inspected wheel artifact.
 - Repaired `rust-develop` by removing `maturin develop --uv` and ensuring
   pip is available before `maturin develop`. In this local environment,

@@ -39,7 +39,8 @@ Status: authoritative
   - Re-reviewed every milestone; no implicit permanent fallback.
 
 - Downstream integration gates:
-  - Tier-1 compatibility checks: `adam-assist`, `adam-api`, `adam_etl`.
+  - Public dependent-package compatibility checks may run in CI.
+  - Private downstream application smoke checks are local-only and must not be named or wired into this repository.
   - PR smoke + nightly full compatibility/perf suites.
 
 ## Public APIs / Interfaces / Types

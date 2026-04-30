@@ -15,7 +15,7 @@ Scope:
 - First NumPy-boundary Rust kernels:
   - `coordinates.cartesian_to_spherical`
   - `dynamics.calc_mean_motion`
-- CI smoke + nightly benchmark + tier-1 dependent smoke wiring.
+- CI smoke + nightly benchmark + public dependent-package smoke wiring.
 - Governance artifacts (`src/adam_core/_rust/status.py`, `waivers.yaml`, contracts docs).
 
 Exit Criteria:
@@ -65,7 +65,7 @@ Scope:
 
 Exit Criteria:
 - Demonstrated >=20% p50/p95 speedup for each `rust-default` API (target rust_over_legacy <= 0.8333).
-- Tier-1 dependent smoke remains green.
+- Public dependent-package smoke remains green.
 - At least one high-level orchestrator (`transform_coordinates`) runs end-to-end in Rust with single-crossing contract test coverage.
 
 ## Ongoing Governance
