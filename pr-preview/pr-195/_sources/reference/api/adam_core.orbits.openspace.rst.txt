@@ -1,0 +1,18 @@
+adam\_core.orbits.openspace package
+===================================
+
+.. automodule:: adam_core.orbits.openspace
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbits.openspace.assets
+   adam_core.orbits.openspace.lua
+   adam_core.orbits.openspace.renderable
+   adam_core.orbits.openspace.translation

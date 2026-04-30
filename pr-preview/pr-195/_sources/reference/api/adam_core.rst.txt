@@ -1,0 +1,34 @@
+adam\_core package
+==================
+
+.. automodule:: adam_core
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.coordinates
+   adam_core.dynamics
+   adam_core.missions
+   adam_core.observations
+   adam_core.observers
+   adam_core.orbit_determination
+   adam_core.orbits
+   adam_core.photometry
+   adam_core.propagator
+   adam_core.time
+   adam_core.utils
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.constants
+   adam_core.ray_cluster

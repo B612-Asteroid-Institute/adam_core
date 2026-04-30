@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.gauss module
+============================================
+
+.. automodule:: adam_core.orbit_determination.gauss
+   :members:
+   :show-inheritance:
+   :undoc-members:

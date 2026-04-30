@@ -1,0 +1,7 @@
+adam\_core.coordinates.cartesian module
+=======================================
+
+.. automodule:: adam_core.coordinates.cartesian
+   :members:
+   :show-inheritance:
+   :undoc-members:
