@@ -1,25 +1,25 @@
 # adam-core Rust Migration Review Handoff
 
 Date: 2026-04-27
-Last updated: 2026-04-29
+Last updated: 2026-04-30
 Reviewer: Codex
 Migration checkout: `/Users/aleck/Code/adam-core-rust-migration`
 Baseline checkout: `/Users/aleck/Code/adam-core`
 
-## Read This First: Current Reviewer State On 2026-04-29
+## Read This First: Current Reviewer State On 2026-04-30
 
 This document began as a 2026-04-27 static critique. The original critique is
 kept below for provenance, but several blockers listed there have since been
-closed. Reviewers should treat this section and the 2026-04-29 addendum at the
-end of the file as the current state.
+closed. Reviewers should treat this section as the current state; dated addenda
+below are preserved for context.
 
 Current migration checkout state:
 
 - Path: `/Users/aleck/Code/adam-core-rust-migration`
 - Branch: `rust-migration-waves-d-e`
-- Latest task commit: `9468ab56` (`Add public transform dispatch parity`),
-  completing RM-P1-009.
-- After the RM-P1-009 commit, the expected uncommitted files are only grounding
+- Latest task commit: `46066a9a` (`Validate current docs build`),
+  completing RM-P1-010.
+- After the RM-P1-010 commit, the expected uncommitted files are only grounding
   files: `decisions.md` and `journal.md`. They are intentionally not committed.
 - Baseline oracle remains the sibling checkout `/Users/aleck/Code/adam-core`
   installed in `.legacy-venv` for parity and speed comparisons.
@@ -40,12 +40,15 @@ Current milestone posture:
   `CartesianCoordinates` ecliptic -> equatorial into `SphericalCoordinates`
   workload, rather than calling the raw NumPy kernel while labeling the row as
   the public API.
-- Next open task is RM-P1-010: re-home/finalize Rust docs in the current RTD
-  structure, resolve lockfile/docs-dependency drift, and make
-  `pdm run docs-check` pass.
+- RM-P1-010 is complete: docs build under the current RTD structure,
+  `pdm run docs-check` and `pdm run docs` pass with normal network/socket
+  permissions, and the stale local `pdm.lock` repair path is documented.
+- Next open task is RM-P1-011: runtime dependency audit.
 
-Current validation evidence from the latest completed task, RM-P1-009:
+Current validation evidence from the latest completed task, RM-P1-010:
 
+- `pdm run docs-check`: passed with network/socket permissions.
+- `pdm run docs`: passed with network/socket permissions.
 - `pdm run script-preflight`: passed.
 - `pdm run rust-quality`: passed (`cargo fmt --all --check`,
   `cargo clippy --workspace --all-targets -- -D warnings`,
@@ -53,12 +56,12 @@ Current validation evidence from the latest completed task, RM-P1-009:
 - `pdm run test-rust-full`: passed when run with escalated permissions:
   `730 passed, 144 skipped, 2 deselected, 56 warnings`.
 - `pdm run rust-parity-main`: passed. All 22 wired APIs passed randomized
-  fuzz parity against baseline main; `coordinates.transform_coordinates` now
-  uses the public dispatcher case and passed at `2.92x` p50 / `3.01x` p95 in
-  the warm speed section.
-- `pdm run rust-parity-speed-cold`: passed with existing temporary photometry
-  warm-speed waivers only; `coordinates.transform_coordinates` measured
-  `3.24x` warm p50 / `3.08x` warm p95 / `1.48x` cold.
+  fuzz parity against baseline main; warm speed passed with only existing
+  photometry waivers.
+- `pdm run rust-parity-speed-cold`: passed with existing temporary waivers only:
+  `coordinates.cartesian_to_spherical` warm waiver plus photometry warm
+  waivers. `coordinates.transform_coordinates` measured `3.20x` warm p50 /
+  `3.07x` warm p95 / `1.52x` cold in the regenerated canonical report.
 - Canonical tables were regenerated:
   `migration/artifacts/parity_report.md` and
   `migration/artifacts/parity_table_rca.json`.
@@ -69,10 +72,9 @@ Validation caveats:
 - A non-escalated `pdm run test-rust-full` failed only because the tool sandbox
   denied Ray/psutil macOS `sysctl` process inspection and DNS/network access
   for JPL/Horizons-backed tests. The escalated rerun passed.
-- `pdm run docs-check` could not run in the active environment because Sphinx
-  is not installed. Installing docs dependencies with `pdm install -G docs`
-  wanted to refresh a stale lockfile; dependency files were intentionally left
-  untouched.
+- A non-escalated `pdm run docs-check` failed only because the tool sandbox
+  denied DNS for intersphinx inventories and local socket bind inside
+  `sphinx_sitemap`. The escalated rerun passed.
 
 Active waivers still requiring reviewer attention:
 
@@ -93,8 +95,9 @@ Disposition of post-handoff reviewer feedback:
   rather than hidden behind compat routing. It is not a cause of the photometry
   warm waivers. Revisit only if direct downstream use of
   `adam_core.dynamics.chi.calc_chi` is measured as a hot loop.
-- The docs-check/lockfile gap is real and is now an explicit hard requirement
-  in RM-P1-010.
+- The docs-check/lockfile gap is closed by RM-P1-010. The local repair path is
+  `pdm lock -G test -G docs` followed by `pdm install -G test -G docs`; the
+  generated `pdm.lock` remains ignored and was not committed.
 - The "rerun once" handling of the Rust-only latency gate is a real
   statistical-discipline gap and is now tracked as RM-P1-018.
 - RM-P1-015 should be folded into RM-P1-008 because RM-P1-008 already owns
@@ -123,8 +126,8 @@ Current parity/reporting coverage:
 ## Executive Summary
 
 Historical 2026-04-27 assessment follows. It is useful context, but it is not
-the current blocker list. See the section above and the final 2026-04-29
-addendum for the current review posture.
+the current blocker list. See the section above and current addenda for the
+current review posture.
 
 The Rust migration contains substantial technical work and many promising ports, but it is not merge-ready. The largest risks are integration and governance risks, not isolated Rust numerical kernels:
 
@@ -1125,8 +1128,8 @@ The original review identified seven practical P0 blockers. Their current state:
 | Stale PDM/CI scripts | Resolved by `script-preflight`, current `rust-parity-*` scripts, wheel inspection, and CI artifact-path checks. |
 | Deleted public Python modules | Resolved for supported surfaces: public helper modules are restored as thin Rust-backed wrappers where retained; private/reference-only shims were removed intentionally and documented. |
 | Nullable `_rust.api` wrappers / production `assert` guards | Resolved by mandatory Rust backend contract. `adam_core` imports `_rust`; `_rust/api.py` eagerly imports `_rust_native` and validates required symbols. Missing/stale native extension fails loudly. |
-| Baseline docs/RTD drift | Partially addressed: Rust docs now live under `docs/source/reference/`, but `pdm run docs-check` remains blocked locally by missing Sphinx/stale lockfile behavior. RM-P1-010 remains open for final docs re-home/build validation. |
-| Status/governance overstatement | Improved by parity table RCA and benchmark governance docs, but not complete. RM-P1-008 remains the next open task to make `status.py` encode richer coverage/status taxonomy. |
+| Baseline docs/RTD drift | Resolved by RM-P1-010. Rust docs live under `docs/source/reference/`; `pdm run docs-check` and `pdm run docs` pass with normal network/socket permissions; stale local ignored `pdm.lock` repair is documented. |
+| Status/governance overstatement | Resolved by RM-P1-008/RM-P1-015. `status.py` now encodes richer public/default/raw/orchestration status and explicit parity coverage taxonomy. |
 | Contaminated live-legacy benchmark governance | Resolved by RM-P0-007. Active speed comparisons are baseline-main subprocess parity speed for fair APIs and Rust-only latency regression for post-legacy APIs. Historical live-legacy artifacts are preserved under `migration/artifacts/history/`. |
 
 ### Current Architecture Decisions To Preserve
@@ -1172,24 +1175,23 @@ triage.
 
 ### Latest Validation Results
 
-Latest complete task validation was RM-P0-007, commit `0bf2e3cd`:
+Latest complete task validation was RM-P1-010, commit `46066a9a`:
 
-- Targeted Python checks: `py_compile`, `ruff`, and `black --check` passed for
-  touched governance/parity scripts.
+- Local docs dependency repair: refreshed ignored local `pdm.lock` with
+  `pdm lock -G test -G docs`, then installed with
+  `pdm install -G test -G docs`. No tracked lockfile/dependency manifest was
+  changed.
+- `pdm run docs-check`: passed with network/socket permissions.
+- `pdm run docs`: passed with network/socket permissions.
 - `pdm run script-preflight`: passed (`27 PDM scripts`, `4 workflows`).
-- `pdm run rust-latency-gate`: passed on rerun. The first run had one transient
-  p95 outlier on `propagate_2body_with_covariance`; rerun showed worst p50
-  regression ratio `1.293x` (`predict_magnitudes`) and worst p95 ratio
-  `1.256x` (`solve_lambert`), both inside the default thresholds of `1.75x`
-  p50 and `2.50x` p95.
-- `pdm run rust-quality`: passed. Rust workspace tests passed for autodiff,
-  coords, orbit determination, and SPICE crates.
-- `pdm run test-rust-full`: passed with escalated permissions,
-  `723 passed, 144 skipped, 2 deselected, 56 warnings`.
+- `pdm run rust-quality`: passed.
+- Escalated `pdm run test-rust-full`: `730 passed, 144 skipped, 2 deselected,
+  56 warnings`.
 - `pdm run rust-parity-main`: passed. All 22 wired APIs passed randomized fuzz
-  parity and the warm speed gate passed with existing waivers only.
-- `pdm run rust-parity-speed-cold`: passed. Existing photometry warm-speed
-  waivers were applied; no new waiver was introduced.
+  parity and the warm speed gate passed with existing photometry waivers only.
+- `pdm run rust-parity-speed-cold`: passed with existing temporary waivers only:
+  `coordinates.cartesian_to_spherical` warm waiver plus photometry warm
+  waivers.
 - Canonical parity/performance artifacts regenerated:
   - `migration/artifacts/parity_gate.json`
   - `migration/artifacts/parity_speed_cold_warm.json`
@@ -1197,12 +1199,12 @@ Latest complete task validation was RM-P0-007, commit `0bf2e3cd`:
   - `migration/artifacts/parity_table_rca.json`
 - `git diff --check`: passed.
 
-Docs validation caveat:
+Validation caveat:
 
-- `pdm run docs-check` could not run because `sphinx-build` is not installed in
-  the active environment. Attempting `pdm install -G docs` wanted to refresh the
-  stale `pdm.lock` hash and wrote outside the normal sandbox log path, so docs
-  dependency state was left untouched. This is tracked as part of RM-P1-010.
+- Non-escalated `pdm run docs-check` failed only from sandbox-denied DNS for
+  intersphinx inventories plus local socket bind denial inside
+  `sphinx_sitemap`; the escalated run passed. Non-escalated full-suite runs can
+  similarly fail on Ray/psutil macOS `sysctl` and network-backed paths.
 
 ### Current Parity And Performance Coverage
 
@@ -1292,35 +1294,32 @@ Completed before this list:
 - RM-P1-009: `coordinates.transform_coordinates` parity now uses the public
   quivr-object dispatcher for a supported frame+representation transform, and
   the remaining unsupported/untested subcases are explicit registry exclusions.
+- RM-P1-010: docs build under the current RTD structure, stale local PDM lock
+  repair is documented, and `pdm run docs-check` / `pdm run docs` pass.
 
-1. RM-P1-010: re-home/finalize Rust docs in the current RTD structure, resolve
-   lockfile/docs-dependency drift, and make `pdm run docs-check` pass
-   locally/CI.
-   - This owns the missing Sphinx/docs dependency issue and stale lockfile
-     behavior disclosed in RM-P0-007.
-2. RM-P1-011: audit runtime dependencies.
+1. RM-P1-011: audit runtime dependencies.
    - Production imports of `jax`, `jaxlib`, `numba`, `spiceypy`, and Python
      `spicekit` should be justified or moved to optional/test groups.
-3. RM-P1-012: restore or replace an independent propagation oracle.
+2. RM-P1-012: restore or replace an independent propagation oracle.
    - The baseline-main `.legacy-venv` oracle is adequate for migration parity
      today, but fixed trusted vectors or another independent propagation
      reference reduce single-oracle risk.
-4. RM-P1-014 and RM-P1-014A: resolve temporary warm-performance waivers before
+3. RM-P1-014 and RM-P1-014A: resolve temporary warm-performance waivers before
    the 2026-05-12 review date.
    - Decide SIMD/transcendental investment, cold-start waiver, or selective
      dispatch/revert policy.
-5. RM-P1-013 / RM-WE2-001: document and test `calculate_chi2` SPD covariance
+4. RM-P1-013 / RM-WE2-001: document and test `calculate_chi2` SPD covariance
    contract.
    - Rust Cholesky rejects non-SPD covariance matrices. This is likely correct,
      but it is a public behavior change compared with `np.linalg.inv` accepting
      some merely invertible matrices.
-6. RM-P1-018: harden Rust-only latency-gate statistical policy.
+5. RM-P1-018: harden Rust-only latency-gate statistical policy.
    - Define rerun policy, sample aggregation, and artifact requirements for
      pass-after-rerun cases.
-7. RM-P1-016: split `rust/adam_core_py/src/lib.rs` into domain modules after the
+6. RM-P1-016: split `rust/adam_core_py/src/lib.rs` into domain modules after the
    registry/status cleanup.
-8. RM-P1-017: final clean validation pass before asking for broad merge review.
-11. Wave work after governance cleanup:
+7. RM-P1-017: final clean validation pass before asking for broad merge review.
+8. Wave work after governance cleanup:
     - RM-WD3-001 parallel backend abstraction for remaining Ray/rayon/sequential
       policy surfaces.
     - RM-WE2-002 fused `Residuals.calculate`.
