@@ -17,6 +17,103 @@ from ...utils.helpers.orbits import make_real_orbits
 from .. import propagation as propagation_module
 from ..propagation import propagate_2body
 
+# Fixed independent oracle vectors generated from CSPICE `spiceypy.prop2b`
+# in the baseline-main `.legacy-venv` on 2026-04-30. The pre-migration
+# tests computed this oracle live; keeping a small fixed subset preserves the
+# independent check without reintroducing `spiceypy` as a test dependency.
+# Oracle generation used adam-core's `OriginGravitationalParameters` values
+# for `mu` so this isolates Kepler-solver behavior from GM convention choices.
+_PROP2B_ORACLE_CASES = (
+    {
+        "id": "sun_elliptical_multi_rev",
+        "origin_code": "SUN",
+        "t0_mjd_tdb": 59091.0,
+        "dt_days": 4990.0,
+        "state": (
+            0.2184969861179754,
+            -0.488165331818421,
+            -0.1450698595270714,
+            0.0225265741518987,
+            0.005220079188059638,
+            0.0007255527925032393,
+        ),
+        "expected": (
+            0.2251964470659416,
+            -0.48657131508421136,
+            -0.14484234782346428,
+            0.022411936510779062,
+            0.005471927776407792,
+            0.0008004590886333903,
+        ),
+    },
+    {
+        "id": "sun_hyperbolic_medium",
+        "origin_code": "SUN",
+        "t0_mjd_tdb": 58080.0,
+        "dt_days": 1000.0,
+        "state": (
+            1.889136186533479,
+            0.6815829716216527,
+            0.259065170725899,
+            0.0210650228586455,
+            0.003903782164346327,
+            0.008115468208135282,
+        ),
+        "expected": (
+            17.751479210772544,
+            3.123635865329321,
+            7.073742444802862,
+            0.014731074779228361,
+            0.0021987873982522175,
+            0.00642638500647284,
+        ),
+    },
+    {
+        "id": "ssb_elliptical_multi_rev",
+        "origin_code": "SOLAR_SYSTEM_BARYCENTER",
+        "t0_mjd_tdb": 59091.0,
+        "dt_days": 4990.0,
+        "state": (
+            0.2127380745372033,
+            -0.4815155316206986,
+            -0.1449911948382041,
+            0.0225189702381014,
+            0.005215419523856744,
+            0.0007257758516405377,
+        ),
+        "expected": (
+            -0.2366066308701146,
+            0.4130694115536764,
+            0.12622225401687803,
+            -0.02028332510271844,
+            -0.015106639469414181,
+            -0.0036315361999360403,
+        ),
+    },
+    {
+        "id": "ssb_hyperbolic_medium",
+        "origin_code": "SOLAR_SYSTEM_BARYCENTER",
+        "t0_mjd_tdb": 58080.0,
+        "dt_days": 1000.0,
+        "state": (
+            1.891160191883445,
+            0.6875120603422388,
+            0.258939713700702,
+            0.0210594865646723,
+            0.00390906388113403,
+            0.008115600602499821,
+        ),
+        "expected": (
+            17.753816132590185,
+            3.1280145364976573,
+            7.075534455355301,
+            0.014731071510713982,
+            0.002196317711876263,
+            0.006428193609586648,
+        ),
+    },
+)
+
 
 def _propagate_2body_single(
     orbit: np.ndarray, t0: float, t1: float, mu: float
@@ -65,11 +162,11 @@ def _check_roundtrip(orbital_elements, mu_vec, max_dt: float = 10000.0):
             v_diff = np.linalg.norm(back[3:] - cartesian_i[3:]) * (u.au / u.d).to(
                 u.mm / u.s
             )
-            # 100 m / 1 m/s over a 10,000-day (~27 year) roundtrip absorbs
+            # 100 m / 1 mm/s over a 10,000-day (~27 year) roundtrip absorbs
             # universal-variable-Kepler time-reversibility drift and is
             # still well below any science-relevant threshold.
             np.testing.assert_array_less(r_diff, 100.0)
-            np.testing.assert_array_less(v_diff, 1000.0)
+            np.testing.assert_array_less(v_diff, 1.0)
 
             # Energy and angular momentum are conservation invariants of
             # the two-body problem and must hold along the propagated arc.
@@ -77,6 +174,50 @@ def _check_roundtrip(orbital_elements, mu_vec, max_dt: float = 10000.0):
             h_fwd = _angular_momentum(forward)
             np.testing.assert_allclose(e_fwd, e0, rtol=1e-10, atol=1e-18)
             np.testing.assert_allclose(h_fwd, h0, rtol=1e-10, atol=1e-18)
+
+
+@pytest.mark.parametrize(
+    "case",
+    _PROP2B_ORACLE_CASES,
+    ids=[str(case["id"]) for case in _PROP2B_ORACLE_CASES],
+)
+def test_propagate_2body_matches_fixed_cspice_prop2b_oracle(case) -> None:
+    state = np.asarray(case["state"], dtype=np.float64)
+    expected = np.asarray(case["expected"], dtype=np.float64)
+    t0 = float(case["t0_mjd_tdb"])
+    t1 = t0 + float(case["dt_days"])
+
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[state[0]],
+        y=[state[1]],
+        z=[state[2]],
+        vx=[state[3]],
+        vy=[state[4]],
+        vz=[state[5]],
+        time=Timestamp.from_mjd([t0], scale="tdb"),
+        origin=Origin.from_kwargs(code=[case["origin_code"]]),
+        frame="ecliptic",
+    )
+    orbits = Orbits.from_kwargs(
+        orbit_id=[case["id"]],
+        object_id=[case["id"]],
+        coordinates=coordinates,
+    )
+
+    propagated = propagate_2body(
+        orbits,
+        Timestamp.from_mjd([t1], scale="tdb"),
+        max_processes=1,
+    )
+    actual = np.asarray(propagated.coordinates.values[0], dtype=np.float64)
+    diff = actual - expected
+
+    r_diff_cm = np.linalg.norm(diff[:3]) * u.au.to(u.cm)
+    v_diff_mm_s = np.linalg.norm(diff[3:]) * (u.au / u.d).to(u.mm / u.s)
+
+    # Preserve the pre-migration CSPICE oracle tolerances.
+    np.testing.assert_array_less(r_diff_cm, 10.0)
+    np.testing.assert_array_less(v_diff_mm_s, 1.0)
 
 
 def test__propagate_2body_single_roundtrip_elliptical(orbital_elements):
@@ -91,16 +232,24 @@ def test__propagate_2body_single_roundtrip_hyperbolic(orbital_elements):
     _check_roundtrip(orbital_elements, origin.mu())
 
 
-def test__propagate_2body_single_roundtrip_elliptical_barycentric(orbital_elements_barycentric):
-    orbital_elements = orbital_elements_barycentric[orbital_elements_barycentric["e"] < 1.0]
+def test__propagate_2body_single_roundtrip_elliptical_barycentric(
+    orbital_elements_barycentric,
+):
+    orbital_elements = orbital_elements_barycentric[
+        orbital_elements_barycentric["e"] < 1.0
+    ]
     origin = Origin.from_kwargs(
         code=["SOLAR_SYSTEM_BARYCENTER"] * len(orbital_elements)
     )
     _check_roundtrip(orbital_elements, origin.mu())
 
 
-def test__propagate_2body_single_roundtrip_hyperbolic_barycentric(orbital_elements_barycentric):
-    orbital_elements = orbital_elements_barycentric[orbital_elements_barycentric["e"] > 1.0]
+def test__propagate_2body_single_roundtrip_hyperbolic_barycentric(
+    orbital_elements_barycentric,
+):
+    orbital_elements = orbital_elements_barycentric[
+        orbital_elements_barycentric["e"] > 1.0
+    ]
     origin = Origin.from_kwargs(
         code=["SOLAR_SYSTEM_BARYCENTER"] * len(orbital_elements)
     )
@@ -293,9 +442,7 @@ def test_propagate_2body_single_failfast_nonfinite_output(monkeypatch) -> None:
         out[:] = np.nan
         return out
 
-    monkeypatch.setattr(
-        propagation_module, "rust_propagate_2body_numpy", _nan_rust
-    )
+    monkeypatch.setattr(propagation_module, "rust_propagate_2body_numpy", _nan_rust)
 
     with pytest.raises(DynamicsNumericalError, match="non_finite_output_state"):
         propagate_2body(orbits, times, max_processes=1)
