@@ -102,6 +102,27 @@ def _build_spherical(n: int) -> np.ndarray:
     )
 
 
+def _build_chi2_inputs(n: int) -> tuple[np.ndarray, np.ndarray]:
+    sigma_a = RNG.uniform(0.05, 1.0, size=n)
+    sigma_b = RNG.uniform(0.05, 1.0, size=n)
+    rho = RNG.uniform(-0.8, 0.8, size=n)
+    residuals = np.ascontiguousarray(
+        np.column_stack(
+            [
+                RNG.normal(0.0, sigma_a),
+                RNG.normal(0.0, sigma_b),
+            ]
+        ),
+        dtype=np.float64,
+    )
+    covariances = np.empty((n, 2, 2), dtype=np.float64)
+    covariances[:, 0, 0] = sigma_a * sigma_a
+    covariances[:, 1, 1] = sigma_b * sigma_b
+    covariances[:, 0, 1] = rho * sigma_a * sigma_b
+    covariances[:, 1, 0] = covariances[:, 0, 1]
+    return residuals, np.ascontiguousarray(covariances, dtype=np.float64)
+
+
 def _build_geodetic_cartesian(n: int, a: float, f: float) -> np.ndarray:
     b = a * (1.0 - f)
     e2 = (a * a - b * b) / (a * a)
@@ -414,6 +435,7 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
     predict_target_ids = RNG.integers(
         0, len(predict_delta_table), size=photo_h.shape[0]
     ).astype(np.int32)
+    chi2_residuals, chi2_covariances = _build_chi2_inputs(100_000)
 
     # Warm-up each Rust kernel on real-sized inputs to cover rayon pool spin-up.
     _ = rust_api.cartesian_to_spherical_numpy(coords[:1024])
@@ -427,6 +449,7 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
         keplerian_a_coords[:1024], keplerian_a_mu[:1024], 100, 1e-15
     )
     _ = rust_api.spherical_to_cartesian_numpy(spherical_coords[:1024])
+    _ = rust_api.calculate_chi2_numpy(chi2_residuals[:1024], chi2_covariances[:1024])
     _ = rust_api.calc_mean_motion_numpy(a[:1024], mu[:1024])
     _ = rust_api.cartesian_to_cometary_numpy(
         coords[:1024], keplerian_t0[:1024], keplerian_mu[:1024]
@@ -495,6 +518,10 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
     )
     rust_sph2cart, _ = _timed_runs(
         lambda: rust_api.spherical_to_cartesian_numpy(spherical_coords), repeats
+    )
+    rust_chi2, _ = _timed_runs(
+        lambda: rust_api.calculate_chi2_numpy(chi2_residuals, chi2_covariances),
+        repeats,
     )
     rust_gibbs, _ = _timed_runs(lambda: _gibbs_rust_batch(r1, r2, r3), repeats)
     rust_herrick, _ = _timed_runs(
@@ -587,6 +614,7 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
         "cartesian_to_keplerian": _latency_summary(rust_keplerian),
         "keplerian_to_cartesian": _latency_summary(rust_k2c),
         "spherical_to_cartesian": _latency_summary(rust_sph2cart),
+        "calculate_chi2": _latency_summary(rust_chi2),
         "cartesian_to_cometary": _latency_summary(rust_c2com),
         "cometary_to_cartesian": _latency_summary(rust_com2c),
         "calc_mean_motion": _latency_summary(rust_mm),
@@ -620,6 +648,7 @@ BENCHMARK_TO_API_ID = {
     "cartesian_to_cometary": "coordinates.cartesian_to_cometary",
     "cometary_to_cartesian": "coordinates.cometary.to_cartesian",
     "spherical_to_cartesian": "coordinates.spherical.to_cartesian",
+    "calculate_chi2": "coordinates.residuals.calculate_chi2",
     "calc_mean_motion": "dynamics.calc_mean_motion",
     "propagate_2body": "dynamics.propagate_2body",
     "propagate_2body_with_covariance": "dynamics.propagate_2body_with_covariance",

@@ -4,6 +4,10 @@ from adam_core._rust.status import (
     validate_api_migrations,
 )
 from migration.parity import _inputs, tolerances
+from migration.scripts.rust_backend_benchmark_gate import (
+    BENCHMARK_TO_API_ID,
+    EXTERNALLY_BENCHMARKED,
+)
 
 
 def test_rust_migration_registry_validates() -> None:
@@ -63,9 +67,14 @@ def test_transform_coordinates_partial_coverage_is_visible() -> None:
 
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
     latency_ids = {
-        migration.api_id for migration in API_MIGRATIONS if migration.latency_gate
+        migration.api_id
+        for migration in API_MIGRATIONS
+        if migration.default == "rust" and migration.latency_gate
     }
+    benchmarked_ids = set(BENCHMARK_TO_API_ID.values()) | EXTERNALLY_BENCHMARKED
 
+    assert latency_ids <= benchmarked_ids
+    assert "coordinates.residuals.calculate_chi2" in latency_ids
     assert "dynamics.add_light_time" not in latency_ids
     assert "orbit_determination.gaussIOD" in latency_ids
     assert "dynamics.calculate_perturber_moids" not in latency_ids
