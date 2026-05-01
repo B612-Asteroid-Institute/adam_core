@@ -150,7 +150,6 @@ def _direct_backend_states(
     """
     backend = get_backend()
     sun = OriginCodes.SUN.value
-    n = len(times) * len(target_ids) if False else len(target_ids)
     # target_ids is the flat per-row list; len(target_ids) == len(times).
     ets = times.et().to_numpy(zero_copy_only=False).astype("float64")
     assert len(target_ids) == len(ets)

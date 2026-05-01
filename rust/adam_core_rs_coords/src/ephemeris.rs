@@ -277,11 +277,11 @@ fn generate_ephemeris_2body_with_jacobian_row(
     let mut sph = [0.0_f64; 6];
     let mut aberrated = [0.0_f64; 6];
     let mut jac = [[0.0_f64; 6]; 6];
-    for i in 0..6 {
+    for (i, row) in jac.iter_mut().enumerate() {
         sph[i] = sph_d[i].re;
         aberrated[i] = aberrated_d[i].re;
-        for j in 0..6 {
-            jac[i][j] = sph_d[i].du[j];
+        for (j, dst) in row.iter_mut().enumerate() {
+            *dst = sph_d[i].du[j];
         }
     }
     (sph, lt_d.re, aberrated, jac)
@@ -557,12 +557,7 @@ mod tests {
         }
         // Spherical ρ sensitivity to an input position component should be nonzero
         // (changes in observer-aligned position move the observed range).
-        let mut any_nonzero = false;
-        for j in 0..3 {
-            if jac[0][j].abs() > 1e-6 {
-                any_nonzero = true;
-            }
-        }
+        let any_nonzero = jac[0].iter().take(3).any(|v| v.abs() > 1e-6);
         assert!(any_nonzero, "d rho / d pos is all zero: {:?}", jac[0]);
     }
 

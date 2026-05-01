@@ -23,7 +23,7 @@ from adam_core.coordinates.cometary import CometaryCoordinates
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.geodetics import GeodeticCoordinates
 from adam_core.coordinates.keplerian import KeplerianCoordinates
-from adam_core.coordinates.origin import Origin, OriginCodes
+from adam_core.coordinates.origin import Origin
 from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.time import Timestamp
 from adam_core.utils.helpers.orbits import make_real_orbits

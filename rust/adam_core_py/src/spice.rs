@@ -305,7 +305,7 @@ impl NaifSpkWriter {
             ));
         }
         let coef_block = row_len - 2;
-        if coef_block % 6 != 0 {
+        if !coef_block.is_multiple_of(6) {
             return Err(PyValueError::new_err(
                 "records_coeffs row length - 2 must be a multiple of 6",
             ));

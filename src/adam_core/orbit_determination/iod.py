@@ -7,7 +7,6 @@ from typing import Literal, Optional, Tuple, Type, Union
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 import ray
 

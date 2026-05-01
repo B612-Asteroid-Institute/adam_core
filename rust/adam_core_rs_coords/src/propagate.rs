@@ -463,10 +463,10 @@ fn propagate_with_jacobian_row(
     let out_d = propagate_2body_row::<Dual<6>>(rows_d, dt_d, mu_d, max_iter, tol);
     let mut value = [0.0_f64; 6];
     let mut jac = [[0.0_f64; 6]; 6];
-    for i in 0..6 {
+    for (i, row) in jac.iter_mut().enumerate() {
         value[i] = out_d[i].re;
-        for j in 0..6 {
-            jac[i][j] = out_d[i].du[j];
+        for (j, dst) in row.iter_mut().enumerate() {
+            *dst = out_d[i].du[j];
         }
     }
     (value, jac)

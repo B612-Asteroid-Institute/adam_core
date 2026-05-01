@@ -319,10 +319,10 @@ pub fn transform_row_with_jacobian(
     );
     let mut values = [0.0_f64; 6];
     let mut jac = [[0.0_f64; 6]; 6];
-    for i in 0..6 {
+    for (i, row) in jac.iter_mut().enumerate() {
         values[i] = out[i].re;
-        for j in 0..6 {
-            jac[i][j] = out[i].du[j];
+        for (j, dst) in row.iter_mut().enumerate() {
+            *dst = out[i].du[j];
         }
     }
     (values, jac)
@@ -671,14 +671,14 @@ pub fn rotate_cartesian_time_varying_flat6(
     time_index: &[usize],
     matrices_flat: &[f64],
 ) -> Result<(Vec<f64>, Vec<f64>), &'static str> {
-    if flat_coords.len() % 6 != 0 {
+    if !flat_coords.len().is_multiple_of(6) {
         return Err("flat_coords length must be a multiple of 6");
     }
     let n = flat_coords.len() / 6;
     if time_index.len() != n {
         return Err("time_index length must match coords rows");
     }
-    if matrices_flat.len() % 36 != 0 {
+    if !matrices_flat.len().is_multiple_of(36) {
         return Err("matrices_flat length must be a multiple of 36");
     }
     let u = matrices_flat.len() / 36;
