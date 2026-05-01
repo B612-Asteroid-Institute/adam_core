@@ -28,14 +28,30 @@ use rayon::prelude::*;
 
 const RAD2DEG: f64 = 180.0_f64 / std::f64::consts::PI;
 
-/// Rayon chunk size for batched photometry kernels. Per-row work is ~10
-/// flops, so per-row `par_iter_mut` task dispatch dominates the math.
-/// Chunking gives each worker a substantial batch — small n becomes one
-/// chunk (effectively serial), large n distributes across cores.
+/// Rayon chunk size for batched photometry kernels. Per-row work is tiny,
+/// so each worker gets a block of rows instead of one row.
 const PHOT_CHUNK: usize = 1024;
 
+/// Avoid Rayon scheduling overhead for small batches. The canonical baseline
+/// gates (`parity_main --speed-n 2000` and `rust-parity-speed-cold`) currently
+/// use n=2000, where two chunks add p95 jitter but do not amortize
+/// work-stealing reliably. Re-sweep this threshold if the canonical gate size
+/// rises above roughly 4k rows.
+const PHOT_PHASE_SERIAL_THRESHOLD_ROWS: usize = 4096;
+
 #[inline]
-fn row_geometry(obj: [f64; 3], obs: [f64; 3]) -> (f64, f64, f64, f64) {
+fn load3(flat: &[f64], i: usize) -> [f64; 3] {
+    let base = i * 3;
+    [flat[base], flat[base + 1], flat[base + 2]]
+}
+
+#[inline]
+fn invalid_geometry(r: f64, delta: f64) -> bool {
+    !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0
+}
+
+#[inline]
+fn row_geometry(obj: [f64; 3], obs: [f64; 3]) -> (f64, f64, f64) {
     let r = (obj[0] * obj[0] + obj[1] * obj[1] + obj[2] * obj[2]).sqrt();
     let dx = obj[0] - obs[0];
     let dy = obj[1] - obs[1];
@@ -45,28 +61,119 @@ fn row_geometry(obj: [f64; 3], obs: [f64; 3]) -> (f64, f64, f64, f64) {
     let numer = r * r + delta * delta - obs_sun * obs_sun;
     let denom = 2.0 * r * delta;
     let cos_alpha = (numer / denom).clamp(-1.0, 1.0);
-    (r, delta, obs_sun, cos_alpha)
+    (r, delta, cos_alpha)
+}
+
+#[inline]
+fn cos_to_half_angle_terms(cos_alpha: f64) -> (f64, f64) {
+    (
+        (0.0_f64.max(1.0 - cos_alpha)).sqrt(),
+        (0.0_f64.max(1.0 + cos_alpha)).sqrt(),
+    )
+}
+
+#[inline]
+fn half_angle_terms_to_alpha_deg(y: f64, x: f64) -> f64 {
+    2.0 * y.atan2(x) * RAD2DEG
 }
 
 #[inline]
 fn cos_to_alpha_deg(cos_alpha: f64) -> f64 {
     // Stable conversion from cos(alpha) → alpha without `acos`; matches
-    // `_calculate_phase_angle_core_jax` byte-for-byte.
-    let y = (0.0_f64.max(1.0 - cos_alpha)).sqrt();
-    let x = (0.0_f64.max(1.0 + cos_alpha)).sqrt();
-    let alpha_rad = 2.0 * y.atan2(x);
-    alpha_rad * RAD2DEG
+    // `_calculate_phase_angle_core_jax` and preserves endpoint precision.
+    let (y, x) = cos_to_half_angle_terms(cos_alpha);
+    half_angle_terms_to_alpha_deg(y, x)
 }
 
 #[inline]
-fn cos_to_mag_v(h_v: f64, g: f64, r: f64, delta: f64, cos_phase: f64) -> f64 {
-    // tan(phase/2) = sqrt((1 - cos) / (1 + cos)); the law-of-cosines clamp
-    // guarantees the denominator > 0 for any finite, positive r & delta.
-    let tan_half = ((1.0 - cos_phase) / (1.0 + cos_phase)).sqrt();
+fn mag_v_from_tan_half(h_v: f64, g: f64, r: f64, delta: f64, tan_half: f64) -> f64 {
     let phi1 = (-3.33_f64 * tan_half.powf(0.63)).exp();
     let phi2 = (-1.87_f64 * tan_half.powf(1.22)).exp();
     let phase_fn = (1.0 - g) * phi1 + g * phi2;
     h_v + 5.0 * (r * delta).log10() - 2.5 * phase_fn.log10()
+}
+
+#[inline]
+fn cos_to_mag_v(h_v: f64, g: f64, r: f64, delta: f64, cos_phase: f64) -> f64 {
+    // tan(phase/2) = sqrt((1 - cos) / (1 + cos)); the clamp guarantees the
+    // denominator > 0 for finite, positive geometry except the physical 180°
+    // limit, where this naturally becomes +inf.
+    let tan_half = ((1.0 - cos_phase) / (1.0 + cos_phase)).sqrt();
+    mag_v_from_tan_half(h_v, g, r, delta, tan_half)
+}
+
+#[inline]
+fn phase_angle_row(object_pos: &[f64], observer_pos: &[f64], i: usize) -> f64 {
+    let obj = load3(object_pos, i);
+    let obs = load3(observer_pos, i);
+    let (r, delta, cos_alpha) = row_geometry(obj, obs);
+    if invalid_geometry(r, delta) {
+        f64::NAN
+    } else {
+        cos_to_alpha_deg(cos_alpha)
+    }
+}
+
+#[inline]
+fn apparent_magnitude_v_row(
+    h_v: &[f64],
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    g: &[f64],
+    i: usize,
+) -> f64 {
+    let obj = load3(object_pos, i);
+    let obs = load3(observer_pos, i);
+    let (r, delta, cos_phase) = row_geometry(obj, obs);
+    if invalid_geometry(r, delta) {
+        f64::NAN
+    } else {
+        cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase)
+    }
+}
+
+#[inline]
+fn apparent_magnitude_v_and_phase_angle_row(
+    h_v: &[f64],
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    g: &[f64],
+    i: usize,
+) -> (f64, f64) {
+    let obj = load3(object_pos, i);
+    let obs = load3(observer_pos, i);
+    let (r, delta, cos_phase) = row_geometry(obj, obs);
+    if invalid_geometry(r, delta) {
+        (f64::NAN, f64::NAN)
+    } else {
+        let (y, x) = cos_to_half_angle_terms(cos_phase);
+        let tan_half = y / x;
+        (
+            mag_v_from_tan_half(h_v[i], g[i], r, delta, tan_half),
+            half_angle_terms_to_alpha_deg(y, x),
+        )
+    }
+}
+
+#[inline]
+fn predict_magnitude_row(
+    h_v: &[f64],
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    g: &[f64],
+    target_ids: &[i32],
+    delta_table: &[f64],
+    i: usize,
+) -> f64 {
+    let obj = load3(object_pos, i);
+    let obs = load3(observer_pos, i);
+    let (r, delta, cos_phase) = row_geometry(obj, obs);
+    let tid = target_ids[i];
+    if invalid_geometry(r, delta) || tid < 0 || tid >= delta_table.len() as i32 {
+        f64::NAN
+    } else {
+        cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase) + delta_table[tid as usize]
+    }
 }
 
 /// Batched solar phase angle in degrees.
@@ -88,29 +195,19 @@ pub fn calculate_phase_angle_flat(object_pos: &[f64], observer_pos: &[f64]) -> V
     );
 
     let mut out = vec![0.0_f64; n];
-    // Chunked rayon: per-row work is ~10 flops, so per-row `par_iter_mut`
-    // task dispatch dominates the math at typical n. `par_chunks_mut(1024)`
-    // gives each worker a substantial batch — small n becomes one chunk
-    // (effectively serial, no overhead); large n distributes across cores.
+    if n <= PHOT_PHASE_SERIAL_THRESHOLD_ROWS {
+        for (i, dst) in out.iter_mut().enumerate() {
+            *dst = phase_angle_row(object_pos, observer_pos, i);
+        }
+        return out;
+    }
+
     out.par_chunks_mut(PHOT_CHUNK)
         .enumerate()
         .for_each(|(ci, chunk)| {
             let base_i = ci * PHOT_CHUNK;
             for (k, dst) in chunk.iter_mut().enumerate() {
-                let i = base_i + k;
-                let base = i * 3;
-                let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
-                let obs = [
-                    observer_pos[base],
-                    observer_pos[base + 1],
-                    observer_pos[base + 2],
-                ];
-                let (r, delta, _, cos_alpha) = row_geometry(obj, obs);
-                if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
-                    *dst = f64::NAN;
-                } else {
-                    *dst = cos_to_alpha_deg(cos_alpha);
-                }
+                *dst = phase_angle_row(object_pos, observer_pos, base_i + k);
             }
         });
     out
@@ -145,20 +242,7 @@ pub fn calculate_apparent_magnitude_v_flat(
         .for_each(|(ci, chunk)| {
             let base_i = ci * PHOT_CHUNK;
             for (k, dst) in chunk.iter_mut().enumerate() {
-                let i = base_i + k;
-                let base = i * 3;
-                let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
-                let obs = [
-                    observer_pos[base],
-                    observer_pos[base + 1],
-                    observer_pos[base + 2],
-                ];
-                let (r, delta, _, cos_phase) = row_geometry(obj, obs);
-                if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
-                    *dst = f64::NAN;
-                } else {
-                    *dst = cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase);
-                }
+                *dst = apparent_magnitude_v_row(h_v, object_pos, observer_pos, g, base_i + k);
             }
         });
     out
@@ -197,22 +281,15 @@ pub fn calculate_apparent_magnitude_v_and_phase_angle_flat(
             for (k, (mag_dst, alpha_dst)) in
                 mag_chunk.iter_mut().zip(alpha_chunk.iter_mut()).enumerate()
             {
-                let i = base_i + k;
-                let base = i * 3;
-                let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
-                let obs = [
-                    observer_pos[base],
-                    observer_pos[base + 1],
-                    observer_pos[base + 2],
-                ];
-                let (r, delta, _, cos_phase) = row_geometry(obj, obs);
-                if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
-                    *mag_dst = f64::NAN;
-                    *alpha_dst = f64::NAN;
-                } else {
-                    *mag_dst = cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase);
-                    *alpha_dst = cos_to_alpha_deg(cos_phase);
-                }
+                let (mag, alpha) = apparent_magnitude_v_and_phase_angle_row(
+                    h_v,
+                    object_pos,
+                    observer_pos,
+                    g,
+                    base_i + k,
+                );
+                *mag_dst = mag;
+                *alpha_dst = alpha;
             }
         });
     (mag_out, alpha_out)
@@ -246,35 +323,21 @@ pub fn predict_magnitudes_bandpass_flat(
     assert_eq!(g.len(), n, "g must have length N");
     assert_eq!(target_ids.len(), n, "target_ids must have length N");
 
-    let k = delta_table.len() as i32;
     let mut out = vec![0.0_f64; n];
     out.par_chunks_mut(PHOT_CHUNK)
         .enumerate()
         .for_each(|(ci, chunk)| {
             let base_i = ci * PHOT_CHUNK;
             for (kk, dst) in chunk.iter_mut().enumerate() {
-                let i = base_i + kk;
-                let base = i * 3;
-                let obj = [object_pos[base], object_pos[base + 1], object_pos[base + 2]];
-                let obs = [
-                    observer_pos[base],
-                    observer_pos[base + 1],
-                    observer_pos[base + 2],
-                ];
-                let (r, delta, _, cos_phase) = row_geometry(obj, obs);
-                let tid = target_ids[i];
-                if !r.is_finite()
-                    || !delta.is_finite()
-                    || r <= 0.0
-                    || delta <= 0.0
-                    || tid < 0
-                    || tid >= k
-                {
-                    *dst = f64::NAN;
-                } else {
-                    let mag_v = cos_to_mag_v(h_v[i], g[i], r, delta, cos_phase);
-                    *dst = mag_v + delta_table[tid as usize];
-                }
+                *dst = predict_magnitude_row(
+                    h_v,
+                    object_pos,
+                    observer_pos,
+                    g,
+                    target_ids,
+                    delta_table,
+                    base_i + kk,
+                );
             }
         });
     out
@@ -301,6 +364,26 @@ mod tests {
         // Roughly Sun-object-observer geometry for an asteroid visible near
         // quadrature; phase angle should be well under 90°.
         assert!((0.0..90.0).contains(&a));
+    }
+
+    #[test]
+    fn phase_angle_matches_small_angle_geometry() {
+        let alpha_deg = 0.001_f64;
+        let offset = alpha_deg.to_radians().tan();
+        let object = [2.0, 0.0, 0.0];
+        let observer = [1.0, offset, 0.0];
+        let alpha = calculate_phase_angle_flat(&object, &observer);
+        assert!((alpha[0] - alpha_deg).abs() < 1e-10);
+    }
+
+    #[test]
+    fn phase_angle_matches_near_one_eighty_geometry() {
+        let miss_deg = 0.001_f64;
+        let offset = miss_deg.to_radians().tan();
+        let object = [2.0, 0.0, 0.0];
+        let observer = [3.0, offset, 0.0];
+        let alpha = calculate_phase_angle_flat(&object, &observer);
+        assert!((alpha[0] - (180.0 - miss_deg)).abs() < 3e-9);
     }
 
     #[test]

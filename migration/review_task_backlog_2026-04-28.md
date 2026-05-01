@@ -948,7 +948,7 @@ Validation:
 
 ### RM-P1-011: Audit Runtime Dependencies
 
-Status: open
+Status: complete (2026-04-30)
 
 Scope:
 
@@ -956,13 +956,20 @@ Scope:
 - Move parity/test-only dependencies into optional/test groups.
 - Keep production dependencies aligned with mandatory Rust and direct Rust `spicekit` decisions.
 
+Completion notes:
+
+- AST import survey found no production imports of `jax`, `jaxlib`, `numba`, `spiceypy`, or Python `spicekit` in `src/adam_core` or `migration`.
+- Removed `jax`, `jaxlib`, and `numba` from project runtime dependencies and regenerated `uv.lock`, dropping their transitive lock entries.
+- Added static pytest coverage to guard production code, migration Python utilities, and runtime dependency metadata against reintroducing the retired Python backends.
+- Rust `spicekit` remains a Cargo dependency of `adam_core_rs_spice`; there is still no Python runtime dependency on `spiceypy` or Python `spicekit`.
+
 Acceptance:
 
 - Runtime dependencies are minimal and justified by production imports.
 
 ### RM-P1-012: Restore Or Replace Independent Propagation Oracle
 
-Status: open
+Status: complete (2026-04-30)
 
 Reason: replacing `sp.prop2b` with forward/backward self-consistency is useful but not an independent oracle.
 
@@ -970,6 +977,12 @@ Scope:
 
 - Add fixed trusted propagation vectors from an independent implementation, or restore a non-production oracle path in tests.
 - Reconcile velocity tolerance mismatch: decision says 1 mm/s, test comment allowed 1 m/s at review time.
+
+Completion notes:
+
+- Added fixed heliocentric and barycentric elliptical/hyperbolic expected-output vectors generated from CSPICE `spiceypy.prop2b` in the baseline-main `.legacy-venv`; this is two physics scenarios (one multi-revolution elliptical orbit and one hyperbolic orbit) evaluated under two origin/GM conventions.
+- The new public `propagate_2body` regression test compares against those fixed vectors at the pre-migration CSPICE oracle tolerances: 10 cm position and 1 mm/s velocity.
+- Tightened the existing forward/backward roundtrip self-consistency velocity tolerance/comment to 1 mm/s after measuring the worst current fixture drift at roughly 0.019 mm/s; the position tolerance remains 100 m.
 
 Acceptance:
 
@@ -994,7 +1007,7 @@ Acceptance:
 
 ### RM-P1-014: Resolve Photometry Warm Performance Gate Policy
 
-Status: temporary waiver active; permanent resolution still open
+Status: temporary waiver active; permanent resolution still open; phase-angle now raw-passes but magnitude-style warm misses remain
 
 Scope:
 
@@ -1009,6 +1022,16 @@ Acceptance:
 2026-04-28 note:
 
 - Temporary waiver `waiver-20260428-photometry-warm-performance-temporary` is active for the four photometry APIs in the constitutional speed gate. This is not a permanent resolution; review by 2026-05-12.
+
+2026-04-30 review-fix note:
+
+- Accepted the reviewer concern that switching phase-angle output to `acos(cos)` is not safe without explicit small-angle and near-180° coverage; kept the half-angle form and added Rust unit coverage for those geometries.
+- Added a serial threshold for the standalone phase-angle kernel at the n=2000 gate size, which now raw-passes in targeted and full speed runs. Kept the original law-of-cosines geometry because a dot-product rewrite drifted too much on 0.001° stress geometry relative to the baseline formula.
+- Shared half-angle intermediates in the fused mag+phase row. The remaining warm misses are magnitude/fused/predict variability in the full cold/warm artifact; the SIMD/transcendental or permanent policy decision remains open.
+
+2026-05-01 review clarification:
+
+- Do not close RM-P1-014 from the green `parity_main` warm rerun alone. The canonical cold/warm artifact still has three photometry APIs under `waiver-20260428-photometry-warm-performance-temporary`: `calculate_apparent_magnitude_v` (`1.19x` p50 / `1.24x` p95), `calculate_apparent_magnitude_v_and_phase_angle` (`1.21x` / `1.01x`), and `predict_magnitudes` (`1.17x` / `0.99x`). `calculate_phase_angle` now raw-passes, but the warm magnitude path remains the unresolved RM-P1-014 policy/optimization question before the 2026-05-12 review date.
 
 ### RM-P1-015: Make `gaussIOD` Randomized Parity Exclusion Visible
 
@@ -1059,6 +1082,10 @@ Acceptance:
   cold. The waiver remains active because earlier full-artifact p95 misses
   were reproducible enough that this still needs a permanent policy or SIMD
   resolution rather than relying on one green run.
+
+2026-04-30 review-fix note:
+
+- Added an n≤4096 serial path for `cartesian_to_spherical_flat6`, hoisted `xy2`, and removed the dead post-`asin` latitude normalization branch. The full cold/warm artifact raw-passed at `1.97x` p50 / `2.57x` p95 / `18.02x` cold. The waiver is intentionally left attached until RM-P1-014A is closed explicitly rather than removed mid-review; if future artifacts keep raw-passing, close RM-P1-014A by updating waiver/status governance rather than treating this note as closure.
 
 ### RM-P1-016: Split Large PyO3 Binding File After Stabilization
 

@@ -56,6 +56,13 @@ pub use photometry::{
 const COORD_CHUNK_ROWS: usize = 1024;
 const COORD_CHUNK_FLAT6: usize = COORD_CHUNK_ROWS * 6;
 
+/// Avoid Rayon scheduling jitter for small batches where the per-row math is
+/// cheaper than work-stealing overhead. The canonical baseline gates
+/// (`parity_main --speed-n 2000` and `rust-parity-speed-cold`) currently use
+/// n=2000; re-sweep this threshold if that gate size rises above roughly 4k
+/// rows.
+const COORD_SERIAL_THRESHOLD_ROWS: usize = 4096;
+
 pub mod lambert;
 pub use lambert::{izzo_lambert, izzo_lambert_batch_flat, porkchop_grid_flat};
 
@@ -501,7 +508,17 @@ pub fn cartesian_to_spherical_flat6(flat_coords: &[f64]) -> Vec<f64> {
         0,
         "flat_coords length must be a multiple of 6",
     );
+    let n = flat_coords.len() / 6;
     let mut out = vec![0.0_f64; flat_coords.len()];
+    if n <= COORD_SERIAL_THRESHOLD_ROWS {
+        for (dst, src) in out.chunks_mut(6).zip(flat_coords.chunks(6)) {
+            let row = [src[0], src[1], src[2], src[3], src[4], src[5]];
+            let converted = cartesian_to_spherical_row(&row);
+            dst.copy_from_slice(&converted);
+        }
+        return out;
+    }
+
     out.par_chunks_mut(COORD_CHUNK_FLAT6)
         .zip(flat_coords.par_chunks(COORD_CHUNK_FLAT6))
         .for_each(|(dst_chunk, src_chunk)| {
@@ -780,13 +797,11 @@ pub fn cartesian_to_spherical_row(v: &[f64; 6]) -> [f64; 6] {
     let vy = v[4];
     let vz = v[5];
 
-    let rho = (x * x + y * y + z * z).sqrt();
+    let xy2 = x * x + y * y;
+    let rho = (xy2 + z * z).sqrt();
     let lon = normalize_lon_rad(y.atan2(x));
 
-    let mut lat = if rho == 0.0 { 0.0 } else { (z / rho).asin() };
-    if (3.0 * std::f64::consts::PI / 2.0..=TWO_PI).contains(&lat) {
-        lat -= TWO_PI;
-    }
+    let lat = if rho == 0.0 { 0.0 } else { (z / rho).asin() };
 
     let vrho = if rho == 0.0 {
         0.0
@@ -794,16 +809,16 @@ pub fn cartesian_to_spherical_row(v: &[f64; 6]) -> [f64; 6] {
         (x * vx + y * vy + z * vz) / rho
     };
 
-    let vlon = if x == 0.0 && y == 0.0 {
+    let vlon = if xy2 == 0.0 {
         0.0
     } else {
-        (vy * x - vx * y) / (x * x + y * y)
+        (vy * x - vx * y) / xy2
     };
 
-    let vlat = if (x == 0.0 && y == 0.0) || rho == 0.0 {
+    let vlat = if xy2 == 0.0 || rho == 0.0 {
         0.0
     } else {
-        (vz - vrho * z / rho) / (x * x + y * y).sqrt()
+        (vz - vrho * z / rho) / xy2.sqrt()
     };
 
     [

@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-04-30 (RM-P1-010 docs re-home/build validation)
+Last updated: 2026-05-01 (RM-P1-014 review-framing clarification)
 
 ## Current Review-Derived Backlog
 
@@ -18,7 +18,9 @@ Last updated: 2026-04-30 (RM-P1-010 docs re-home/build validation)
 - [x] Review feedback from `adam_core_rust_migration_review_handoff_2026-04-27.md` is decomposed into RM-P0/RM-P1 tasks in the review backlog.
 - [x] Other-agent Wave D3/E2/E3 pending work is consolidated under RM-WD3/RM-WE2/RM-WE3 tasks in the review backlog.
 - [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.
-- [ ] Next review-derived task: RM-P1-011 runtime dependency audit.
+- [x] RM-P1-011 runtime dependency audit removed unreferenced JAX/Numba runtime dependencies and added static guards.
+- [x] RM-P1-012 restored independent propagation oracle coverage with fixed CSPICE `sp.prop2b` vectors.
+- [ ] Next review-derived task: RM-P1-014/RM-P1-014A warm-performance waiver resolution before 2026-05-12. Current cleanup made `coordinates.cartesian_to_spherical` and `photometry.calculate_phase_angle` raw-pass in the cold/warm artifact, but three photometry magnitude-style APIs remain waived there.
 
 ## Active Sprint (Milestone 1 hardening)
 
