@@ -202,11 +202,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.calculate_chi2_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note=(
-            "Wave E2 OD-inner-loop kernel; RM-P1-013 owns the SPD covariance "
-            "contract and any expanded baseline-main governance."
+        parity_coverage="random-fuzz",
+        covered_subcases=(
+            "2-D symmetric-positive-definite astrometric covariance rows",
         ),
+        coverage_note=(
+            "Wave E2 OD-inner-loop kernel; RM-P1-013 documents the SPD "
+            "covariance contract and targeted tests cover non-SPD diagnostics."
+        ),
+        latency_gate=True,
     ),
     ApiMigration(
         api_id="dynamics.calc_mean_motion",

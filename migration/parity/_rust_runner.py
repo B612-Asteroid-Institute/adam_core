@@ -145,6 +145,16 @@ def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.nd
     return {"out": _ensure(_rust_api.calc_mean_motion_numpy(a, mu), "calc_mean_motion")}
 
 
+def _coordinates_residuals_calculate_chi2(
+    residuals: np.ndarray, covariances: np.ndarray
+) -> dict[str, np.ndarray]:
+    return {
+        "out": _ensure(
+            _rust_api.calculate_chi2_numpy(residuals, covariances), "calculate_chi2"
+        )
+    }
+
+
 def _dynamics_propagate_2body(
     orbits: np.ndarray, dts: np.ndarray, mus: np.ndarray, max_iter: int, tol: float
 ) -> dict[str, np.ndarray]:
@@ -470,6 +480,7 @@ DISPATCH = {
     "coordinates.cartesian_to_cometary": _coordinates_cartesian_to_cometary,
     "coordinates.cometary.to_cartesian": _coordinates_cometary_to_cartesian,
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
+    "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
     "dynamics.propagate_2body_with_covariance": _dynamics_propagate_2body_with_covariance,

@@ -21,7 +21,8 @@ Last updated: 2026-05-01 (RM-P1-014 review-framing clarification)
 - [x] RM-P1-011 runtime dependency audit removed unreferenced JAX/Numba runtime dependencies and added static guards.
 - [x] RM-P1-012 restored independent propagation oracle coverage with fixed CSPICE `sp.prop2b` vectors.
 - [x] RM-P1-013 documented and tested the `coordinates.residuals.calculate_chi2` symmetric-positive-definite covariance contract.
-- [ ] Next review-derived task: RM-P1-014/RM-P1-014A warm-performance waiver resolution before 2026-05-12. Current cleanup made `coordinates.cartesian_to_spherical` and `photometry.calculate_phase_angle` raw-pass in the cold/warm artifact, but three photometry magnitude-style APIs remain waived there.
+- [x] RM-WE2-001 added `coordinates.residuals.calculate_chi2` to baseline-main parity/speed governance for representative 2-D SPD covariance rows.
+- [ ] Next review-derived task: RM-P1-014/RM-P1-014A warm-performance waiver resolution before 2026-05-12. Current artifacts show `coordinates.cartesian_to_spherical` raw-passing, while photometry waiver rows remain unstable (`calculate_phase_angle` and `predict_magnitudes` missed p95 in the latest cold/warm run; prior run had magnitude-style misses). Decide whether to narrow/remove waivers after repeated raw passes, invest in SIMD/transcendental work, or encode a permanent workload policy.
 
 ## Active Sprint (Milestone 1 hardening)
 

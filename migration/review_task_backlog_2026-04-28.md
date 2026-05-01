@@ -1031,7 +1031,7 @@ Acceptance:
 
 2026-05-01 review clarification:
 
-- Do not close RM-P1-014 from the green `parity_main` warm rerun alone. The canonical cold/warm artifact still has three photometry APIs under `waiver-20260428-photometry-warm-performance-temporary`: `calculate_apparent_magnitude_v` (`1.19x` p50 / `1.24x` p95), `calculate_apparent_magnitude_v_and_phase_angle` (`1.21x` / `1.01x`), and `predict_magnitudes` (`1.17x` / `0.99x`). `calculate_phase_angle` now raw-passes, but the warm magnitude path remains the unresolved RM-P1-014 policy/optimization question before the 2026-05-12 review date.
+- Do not close RM-P1-014 from a single green warm rerun. The earlier canonical cold/warm artifact had three magnitude-style photometry APIs under `waiver-20260428-photometry-warm-performance-temporary`: `calculate_apparent_magnitude_v` (`1.19x` p50 / `1.24x` p95), `calculate_apparent_magnitude_v_and_phase_angle` (`1.21x` / `1.01x`), and `predict_magnitudes` (`1.17x` / `0.99x`). A later governance-only rerun after adding `calculate_chi2` to the parity manifest raw-passed `calculate_apparent_magnitude_v` and fused mag+phase, but still waived `calculate_phase_angle` (`1.34x` / `0.98x`) and `predict_magnitudes` (`1.14x` / `0.96x`). The active waiver therefore remains unresolved: the decision before 2026-05-12 is still whether to invest in SIMD/transcendental work, narrow/remove waivers based on repeated raw passes, or encode a permanent cold-start/workload policy.
 
 ### RM-P1-015: Make `gaussIOD` Randomized Parity Exclusion Visible
 
@@ -1185,17 +1185,14 @@ Verification:
 
 ### RM-WE2-001: Wave E2 `calculate_chi2` Follow-Up
 
-Status: partially complete
+Status: complete (2026-05-01)
 
 Completed:
 
 - Rust Cholesky kernel is implemented and production-dispatched.
-- Cargo, residuals, OD, and full pytest sweeps were recorded green.
-
-Open:
-
-- RM-P1-013 documentation/tests for SPD behavior.
-- Include `calculate_chi2` in current parity/speed governance if not already represented after status registry cleanup.
+- Cargo, residuals, OD, and full pytest sweeps were recorded green during Wave E2.
+- RM-P1-013 documented and tested the symmetric-positive-definite covariance contract, including the public non-SPD diagnostic behavior.
+- `coordinates.residuals.calculate_chi2` is now represented in baseline-main random-fuzz parity and warm/cold speed governance for representative 2-D SPD astrometric covariance rows. The canonical run passed parity at `8/8` seeds with worst_abs `2.487e-14` / worst_rel `9.289e-16`, and passed speed at `4.12x` p50 / `2.21x` p95 warm and `16.80x` cold.
 
 ### RM-WE2-002: Fuse `Residuals.calculate`
 

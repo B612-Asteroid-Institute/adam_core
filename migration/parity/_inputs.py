@@ -187,6 +187,29 @@ def make_spherical_to_cartesian(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_calculate_chi2(rng: np.random.Generator, n: int) -> Sample:
+    # Representative OD astrometry residual rows: 2-D residuals with positive
+    # sigmas and bounded correlations, yielding symmetric-positive-definite
+    # 2x2 covariance matrices.
+    sigma_a = rng.uniform(0.05, 1.0, size=n)
+    sigma_b = rng.uniform(0.05, 1.0, size=n)
+    rho = rng.uniform(-0.8, 0.8, size=n)
+    residuals = np.stack(
+        [
+            rng.normal(scale=sigma_a),
+            rng.normal(scale=sigma_b),
+        ],
+        axis=1,
+    ).astype(np.float64)
+    covariances = np.empty((n, 2, 2), dtype=np.float64)
+    covariances[:, 0, 0] = sigma_a * sigma_a
+    covariances[:, 1, 1] = sigma_b * sigma_b
+    covariances[:, 0, 1] = rho * sigma_a * sigma_b
+    covariances[:, 1, 0] = covariances[:, 0, 1]
+    kw = {"residuals": residuals, "covariances": covariances}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def make_calc_mean_motion(rng: np.random.Generator, n: int) -> Sample:
     a = rng.uniform(0.5, 50.0, size=n).astype(np.float64)
     mu = np.full(n, MU_SUN, dtype=np.float64)
@@ -516,6 +539,7 @@ GENERATORS = {
     "coordinates.cartesian_to_cometary": make_cartesian_to_cometary,
     "coordinates.cometary.to_cartesian": make_cometary_to_cartesian,
     "coordinates.spherical.to_cartesian": make_spherical_to_cartesian,
+    "coordinates.residuals.calculate_chi2": make_calculate_chi2,
     "dynamics.calc_mean_motion": make_calc_mean_motion,
     "dynamics.propagate_2body": make_propagate_2body,
     "dynamics.propagate_2body_with_covariance": make_propagate_2body_with_covariance,

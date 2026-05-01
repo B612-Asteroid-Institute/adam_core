@@ -227,6 +227,22 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict="public-dispatch parity for this supported subcase.",
     ),
+    "coordinates.residuals.calculate_chi2": ToleranceSpec(
+        outputs={"out": OutputTol(atol=1e-12, rtol=1e-12)},
+        rationale=(
+            "Mahalanobis χ² over representative 2-D astrometric residual rows. "
+            "Rust uses per-row Cholesky solve while baseline-main forms an "
+            "explicit inverse; both evaluate r·Σ⁻¹·rᵀ for SPD covariance input."
+        ),
+        dominant_column="chi2 scalar",
+        physical_magnitude="≤1e-13 absolute on unit-scale χ² values.",
+        root_cause=(
+            "Cholesky triangular solve and explicit matrix inverse accumulate "
+            "floating-point products in different orders; observed drift is at "
+            "the last few ulps for 2×2 SPD matrices."
+        ),
+        verdict="equally accurate for valid SPD covariance matrices.",
+    ),
     # ---- dynamics ----
     "dynamics.calc_mean_motion": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-13)},

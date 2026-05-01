@@ -138,6 +138,31 @@
     "excluded_subcases": []
   },
   {
+    "api_id": "coordinates.residuals.calculate_chi2",
+    "output": "out",
+    "atol": 1e-12,
+    "rtol": 1e-12,
+    "worst_abs": 2.4868995751603507e-14,
+    "worst_rel": 9.28903183090721e-16,
+    "margin": 40.21071095866514,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "Mahalanobis \u03c7\u00b2 over representative 2-D astrometric residual rows. Rust uses per-row Cholesky solve while baseline-main forms an explicit inverse; both evaluate r\u00b7\u03a3\u207b\u00b9\u00b7r\u1d40 for SPD covariance input.",
+    "dominant_column": "chi2 scalar",
+    "physical_magnitude": "\u22641e-13 absolute on unit-scale \u03c7\u00b2 values.",
+    "root_cause": "Cholesky triangular solve and explicit matrix inverse accumulate floating-point products in different orders; observed drift is at the last few ulps for 2\u00d72 SPD matrices.",
+    "verdict": "equally accurate for valid SPD covariance matrices.",
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Wave E2 OD-inner-loop kernel; RM-P1-013 documents the SPD covariance contract and targeted tests cover non-SPD diagnostics.",
+    "covered_subcases": [
+      "2-D symmetric-positive-definite astrometric covariance rows"
+    ],
+    "excluded_subcases": []
+  },
+  {
     "api_id": "coordinates.spherical.to_cartesian",
     "output": "out",
     "atol": 1e-11,
