@@ -990,20 +990,20 @@ Acceptance:
 
 ### RM-P1-013: Document And Test `calculate_chi2` SPD Covariance Contract
 
-Status: open
+Status: complete (2026-05-01)
 
-Reason: Rust Cholesky rejects non-SPD covariance matrices that baseline `np.linalg.inv` may have accepted if merely invertible. This is probably correct, but it is a public behavior change.
+Reason: Rust Cholesky rejects non-SPD covariance matrices that baseline `np.linalg.inv` may have accepted if merely invertible. This is correct for covariance inputs, but it is a public behavior change.
 
-Scope:
+Completed:
 
-- Document covariance matrices must be symmetric positive definite.
-- Add tests for non-SPD behavior and diagnostic errors.
-- Keep NaN policy explicit: NaN diagonal raises, NaN off-diagonal maps to zero to match legacy behavior.
+- Documented that covariance matrices must be symmetric positive definite in the public residual helper docstring, residuals cookbook, Rust backend contracts, and changelog.
+- Added Rust and Python tests showing an invertible but indefinite covariance raises a clear `ValueError`/`NotPositiveDefinite` diagnostic.
+- Kept NaN policy explicit: NaN diagonal raises, NaN off-diagonal maps to zero with a Python warning to match legacy behavior.
 
 Acceptance:
 
 - Users get a clear error for non-SPD covariance input.
-- The behavior change is documented and release-noted if needed.
+- The behavior change is documented and release-noted.
 
 ### RM-P1-014: Resolve Photometry Warm Performance Gate Policy
 

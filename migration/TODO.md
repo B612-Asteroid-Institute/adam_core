@@ -20,6 +20,7 @@ Last updated: 2026-05-01 (RM-P1-014 review-framing clarification)
 - [ ] For every functional/performance change, follow the baseline-main parity and speed verification workflow documented in the review backlog and `migration/parity/README.md`.
 - [x] RM-P1-011 runtime dependency audit removed unreferenced JAX/Numba runtime dependencies and added static guards.
 - [x] RM-P1-012 restored independent propagation oracle coverage with fixed CSPICE `sp.prop2b` vectors.
+- [x] RM-P1-013 documented and tested the `coordinates.residuals.calculate_chi2` symmetric-positive-definite covariance contract.
 - [ ] Next review-derived task: RM-P1-014/RM-P1-014A warm-performance waiver resolution before 2026-05-12. Current cleanup made `coordinates.cartesian_to_spherical` and `photometry.calculate_phase_angle` raw-pass in the cold/warm artifact, but three photometry magnitude-style APIs remain waived there.
 
 ## Active Sprint (Milestone 1 hardening)

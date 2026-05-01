@@ -195,6 +195,19 @@ mod tests {
     }
 
     #[test]
+    fn invertible_indefinite_covariance_errors() {
+        // det([[1, 2], [2, 1]]) = -3, so np.linalg.inv can invert it, but it
+        // is not a valid covariance matrix because it is not positive definite.
+        let r = [1.0, 0.0];
+        let cov = [1.0, 2.0, 2.0, 1.0];
+        let err = calculate_chi2_flat(&r, &cov, 1, 2).unwrap_err();
+        match err {
+            Chi2Error::NotPositiveDefinite { row: 0 } => {}
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
     fn six_d_state_matches_inverse() {
         // SPD 6×6 = identity scaled. r = (1,…,1). chi² = 6.
         let r = [1.0_f64; 6];

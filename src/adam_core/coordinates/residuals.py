@@ -367,8 +367,10 @@ def calculate_chi2(
     For residuals with no covariance (all non-diagonal covariance elements are zero) this
     is exactly equivalent to chi2.
 
-    If the off-diagonal covariance elements (the covariate terms) are missing (represented by NaNs),
-    then they will assumed to be 0.0.
+    Covariance matrices must be symmetric positive definite. Singular or indefinite
+    matrices are rejected with ``ValueError`` instead of being inverted explicitly.
+    If the off-diagonal covariance elements (the covariate terms) are missing
+    (represented by NaNs), then they will be assumed to be 0.0.
 
     Parameters
     ----------

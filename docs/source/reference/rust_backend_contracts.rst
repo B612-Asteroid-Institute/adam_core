@@ -71,6 +71,17 @@ Current Migrated APIs
   - Rust entrypoint: ``adam_core._rust_native.spherical_to_cartesian_numpy``.
   - Error behavior: raises ``ValueError`` on shape mismatch.
 
+- ``coordinates.residuals.calculate_chi2``
+  - Boundary: NumPy ``float64`` arrays with shapes ``(N, D)`` for
+    residuals and ``(N, D, D)`` for covariances.
+  - Rust entrypoint: ``adam_core._rust_native.calculate_chi2_numpy``.
+  - Contract: covariance matrices must be symmetric positive definite;
+    the Rust kernel solves with Cholesky rather than forming an explicit inverse.
+  - NaN behavior: NaN diagonal entries raise ``ValueError``; NaN off-diagonal
+    entries are treated as zero with a Python ``UserWarning`` for legacy compatibility.
+  - Error behavior: raises ``ValueError`` on shape mismatch or
+    non-positive-definite covariance input.
+
 - ``dynamics.calc_mean_motion``
   - Boundary: NumPy ``float64`` arrays with shape ``(N,)`` for ``a`` and ``mu``.
   - Rust entrypoint: ``adam_core._rust_native.calc_mean_motion_numpy``.
