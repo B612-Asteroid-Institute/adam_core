@@ -74,8 +74,12 @@ thread_local! {
 struct VForceScratch {
     rd_sq: Vec<f64>,
     tan_half_sq: Vec<f64>,
-    phi1: Vec<f64>,
-    phi2: Vec<f64>,
+    /// Backing storage for both `phi1` and `phi2` as a single contiguous
+    /// `2 * PHOT_VFORCE_TILE_ROWS` buffer. The first half is `phi1`, the
+    /// second half is `phi2`. Storing them contiguously lets the magnitude
+    /// pipeline run each `vvexp` once over both halves instead of twice,
+    /// saving two vForce dispatches per tile.
+    phi: Vec<f64>,
 }
 
 #[cfg(target_os = "macos")]
@@ -84,8 +88,7 @@ impl VForceScratch {
         Self {
             rd_sq: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
             tan_half_sq: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
-            phi1: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
-            phi2: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
+            phi: vec![0.0_f64; 2 * PHOT_VFORCE_TILE_ROWS],
         }
     }
 }
@@ -657,26 +660,29 @@ fn finish_magnitude_neon(h_v: &[f64], row_offset: usize, log_arg: &[f64], out: &
 /// Invalid rows are NaN-stamped at the end. Used by both the magnitude and
 /// fused entry points.
 #[cfg(target_os = "macos")]
-#[allow(clippy::too_many_arguments)]
 fn magnitude_pipeline_tile(
     h_v: &[f64],
     g: &[f64],
     row_offset: usize,
     rd_sq: &[f64],
     tan_half_sq: &mut [f64],
-    phi1: &mut [f64],
-    phi2: &mut [f64],
+    phi: &mut [f64],
     out: &mut [f64],
     has_invalid: bool,
 ) {
     let m = out.len();
+    debug_assert_eq!(phi.len(), 2 * m);
     vforce::ln_in_place(tan_half_sq);
+    let (phi1, phi2) = phi.split_at_mut(m);
     fill_phi_logs_from_ln_tan_sq(tan_half_sq, phi1, phi2);
-    vforce::exp_in_place(&mut phi1[..m]);
-    vforce::exp_in_place(&mut phi2[..m]);
-    scale_phi_outer(&mut phi1[..m], &mut phi2[..m]);
-    vforce::exp_in_place(&mut phi1[..m]);
-    vforce::exp_in_place(&mut phi2[..m]);
+    // First exp pass: phi[0..m] = tan_half^0.63, phi[m..2m] = tan_half^1.22.
+    vforce::exp_in_place(phi);
+    let (phi1, phi2) = phi.split_at_mut(m);
+    scale_phi_outer(phi1, phi2);
+    // Second exp pass: phi[0..m] = exp(-3.33·tan_half^0.63),
+    // phi[m..2m] = exp(-1.87·tan_half^1.22).
+    vforce::exp_in_place(phi);
+    let (phi1, phi2) = phi.split_at(m);
 
     // Reuse `tan_half_sq` as the log-arg scratch; its prior contents
     // (ln_tan_sq) have been consumed by the phi pipeline above.
@@ -785,14 +791,13 @@ fn calculate_apparent_magnitude_v_macos(
         let VForceScratch {
             rd_sq,
             tan_half_sq,
-            phi1,
-            phi2,
-            ..
+            phi,
         } = &mut *scratch;
         for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
             let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
             let tan_tile = &mut tan_half_sq[..m];
+            let phi_tile = &mut phi[..2 * m];
             let out_tile = &mut out[row_offset..row_offset + m];
             let has_invalid =
                 fill_mag_geometry_tile(object_pos, observer_pos, row_offset, rd_tile, tan_tile);
@@ -802,8 +807,7 @@ fn calculate_apparent_magnitude_v_macos(
                 row_offset,
                 rd_tile,
                 tan_tile,
-                &mut phi1[..m],
-                &mut phi2[..m],
+                phi_tile,
                 out_tile,
                 has_invalid,
             );
@@ -826,14 +830,13 @@ fn calculate_apparent_magnitude_v_and_phase_angle_macos(
         let VForceScratch {
             rd_sq,
             tan_half_sq,
-            phi1,
-            phi2,
-            ..
+            phi,
         } = &mut *scratch;
         for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
             let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
             let tan_tile = &mut tan_half_sq[..m];
+            let phi_tile = &mut phi[..2 * m];
             let mag_tile = &mut mag_out[row_offset..row_offset + m];
             let alpha_tile = &mut alpha_out[row_offset..row_offset + m];
             let has_invalid =
@@ -847,8 +850,7 @@ fn calculate_apparent_magnitude_v_and_phase_angle_macos(
                 row_offset,
                 rd_tile,
                 tan_tile,
-                &mut phi1[..m],
-                &mut phi2[..m],
+                phi_tile,
                 mag_tile,
                 has_invalid,
             );
@@ -955,30 +957,30 @@ fn predict_magnitudes_macos_valid_targets(
         let VForceScratch {
             rd_sq,
             tan_half_sq,
-            phi1,
-            phi2,
-            ..
+            phi,
         } = &mut *scratch;
         for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
             let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
             let tan_tile = &mut tan_half_sq[..m];
-            let phi1_tile = &mut phi1[..m];
-            let phi2_tile = &mut phi2[..m];
+            let phi_tile = &mut phi[..2 * m];
             let out_tile = &mut out[row_offset..row_offset + m];
             let has_invalid =
                 fill_mag_geometry_tile(object_pos, observer_pos, row_offset, rd_tile, tan_tile);
 
             // Magnitude pipeline through the final `vvln(log_arg)`, leaving
-            // the log-arg in `tan_tile`. Then add the bandpass delta in the
-            // NEON finish step.
+            // the log-arg in `tan_tile`. The contiguous `phi` buffer lets us
+            // run each `vvexp` once over both halves instead of twice. The
+            // bandpass delta is fused into the final NEON write so predict
+            // doesn't pay an extra pass beyond magnitude.
             vforce::ln_in_place(tan_tile);
+            let (phi1_tile, phi2_tile) = phi_tile.split_at_mut(m);
             fill_phi_logs_from_ln_tan_sq(tan_tile, phi1_tile, phi2_tile);
-            vforce::exp_in_place(phi1_tile);
-            vforce::exp_in_place(phi2_tile);
+            vforce::exp_in_place(phi_tile);
+            let (phi1_tile, phi2_tile) = phi_tile.split_at_mut(m);
             scale_phi_outer(phi1_tile, phi2_tile);
-            vforce::exp_in_place(phi1_tile);
-            vforce::exp_in_place(phi2_tile);
+            vforce::exp_in_place(phi_tile);
+            let (phi1_tile, phi2_tile) = phi_tile.split_at(m);
             fill_mag_log_arg(g, row_offset, rd_tile, phi1_tile, phi2_tile, tan_tile);
             vforce::ln_in_place(tan_tile);
             finish_predict_neon(h_v, row_offset, target_ids, delta_table, tan_tile, out_tile);
