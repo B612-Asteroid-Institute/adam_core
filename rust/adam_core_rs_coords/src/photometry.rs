@@ -41,17 +41,49 @@ const PHOT_CHUNK: usize = 1024;
 const PHOT_PHASE_SERIAL_THRESHOLD_ROWS: usize = 4096;
 
 /// Switch to the tiled vForce/NEON pipeline once we have enough rows for the
-/// batched transcendentals to amortize their per-call setup. Below this we
-/// stay on the scalar Rayon path which already wins on n=2000 small-call
-/// timings via lower per-row overhead.
+/// batched transcendentals to amortize their per-call setup. The small-n
+/// canonical gate (n=2000) sits just under this; we ride the vForce path for
+/// it because the saved per-row `pow`/`acos` work outweighs vForce's
+/// per-call dispatch cost once thread-local scratch is reused.
 #[cfg(target_os = "macos")]
-const PHOT_VFORCE_MIN_ROWS: usize = 4096;
+const PHOT_VFORCE_MIN_ROWS: usize = 1024;
 
 /// Tile size for the vForce/NEON path. Sized so that all per-tile scratch
 /// buffers fit comfortably in L2 cache (~64 KB each × 5 buffers ≈ 320 KB) on
 /// Apple Silicon while still amortizing vForce per-call dispatch costs.
 #[cfg(target_os = "macos")]
 const PHOT_VFORCE_TILE_ROWS: usize = 8192;
+
+// Reuse a per-thread scratch buffer pool across photometry calls. The
+// buffers are sized to the full vForce tile so they can be sliced down to
+// the per-call N. Avoids a heap allocation on every public-API entry.
+#[cfg(target_os = "macos")]
+thread_local! {
+    static VFORCE_SCRATCH: std::cell::RefCell<VForceScratch> =
+        std::cell::RefCell::new(VForceScratch::new());
+}
+
+#[cfg(target_os = "macos")]
+struct VForceScratch {
+    rd_sq: Vec<f64>,
+    denom: Vec<f64>,
+    tan_half_sq: Vec<f64>,
+    phi1: Vec<f64>,
+    phi2: Vec<f64>,
+}
+
+#[cfg(target_os = "macos")]
+impl VForceScratch {
+    fn new() -> Self {
+        Self {
+            rd_sq: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
+            denom: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
+            tan_half_sq: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
+            phi1: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
+            phi2: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
+        }
+    }
+}
 
 /// Phase-angle slow-path threshold: when the clamped `cos(α)` is closer than
 /// `1 - PHOT_ENDPOINT_COS_ABS_MAX` to ±1, the half-angle identity gives
@@ -742,36 +774,42 @@ fn finish_phase_angle_tile(
 #[cfg(target_os = "macos")]
 fn calculate_phase_angle_macos(object_pos: &[f64], observer_pos: &[f64], out: &mut [f64]) {
     let n = out.len();
-    let mut rd_sq = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut denom = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut cos_phase = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
-        let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
-        let rd_tile = &mut rd_sq[..m];
-        let denom_tile = &mut denom[..m];
-        let cos_tile = &mut cos_phase[..m];
-        let out_tile = &mut out[row_offset..row_offset + m];
-        fill_geometry_squared_terms_tile(
-            object_pos,
-            observer_pos,
-            row_offset,
-            rd_tile,
-            denom_tile,
-            cos_tile,
-        );
-        fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-        vforce::sqrt_in_place(denom_tile);
-        let needs_slow = clamp_cos_in_place_detect_endpoint(cos_tile, denom_tile);
-        finish_phase_angle_tile(
-            object_pos,
-            observer_pos,
-            row_offset,
-            cos_tile,
-            rd_tile,
-            out_tile,
-            needs_slow,
-        );
-    }
+    VFORCE_SCRATCH.with(|cell| {
+        let mut scratch = cell.borrow_mut();
+        let VForceScratch {
+            rd_sq,
+            denom,
+            tan_half_sq,
+            ..
+        } = &mut *scratch;
+        for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
+            let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
+            let rd_tile = &mut rd_sq[..m];
+            let denom_tile = &mut denom[..m];
+            let cos_tile = &mut tan_half_sq[..m];
+            let out_tile = &mut out[row_offset..row_offset + m];
+            fill_geometry_squared_terms_tile(
+                object_pos,
+                observer_pos,
+                row_offset,
+                rd_tile,
+                denom_tile,
+                cos_tile,
+            );
+            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
+            vforce::sqrt_in_place(denom_tile);
+            let needs_slow = clamp_cos_in_place_detect_endpoint(cos_tile, denom_tile);
+            finish_phase_angle_tile(
+                object_pos,
+                observer_pos,
+                row_offset,
+                cos_tile,
+                rd_tile,
+                out_tile,
+                needs_slow,
+            );
+        }
+    });
 }
 
 #[cfg(target_os = "macos")]
@@ -783,41 +821,46 @@ fn calculate_apparent_magnitude_v_macos(
     out: &mut [f64],
 ) {
     let n = out.len();
-    let mut rd_sq = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut denom = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut tan_half_sq = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut phi1 = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut phi2 = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
-        let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
-        let rd_tile = &mut rd_sq[..m];
-        let denom_tile = &mut denom[..m];
-        let tan_tile = &mut tan_half_sq[..m];
-        let out_tile = &mut out[row_offset..row_offset + m];
-        fill_geometry_squared_terms_tile(
-            object_pos,
-            observer_pos,
-            row_offset,
-            rd_tile,
-            denom_tile,
-            tan_tile,
-        );
-        fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-        vforce::sqrt_in_place(denom_tile);
-        fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
-        let has_invalid = rd_sq_has_invalid(rd_tile);
-        magnitude_pipeline_tile(
-            h_v,
-            g,
-            row_offset,
-            rd_tile,
-            tan_tile,
-            &mut phi1[..m],
-            &mut phi2[..m],
-            out_tile,
-            has_invalid,
-        );
-    }
+    VFORCE_SCRATCH.with(|cell| {
+        let mut scratch = cell.borrow_mut();
+        let VForceScratch {
+            rd_sq,
+            denom,
+            tan_half_sq,
+            phi1,
+            phi2,
+        } = &mut *scratch;
+        for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
+            let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
+            let rd_tile = &mut rd_sq[..m];
+            let denom_tile = &mut denom[..m];
+            let tan_tile = &mut tan_half_sq[..m];
+            let out_tile = &mut out[row_offset..row_offset + m];
+            fill_geometry_squared_terms_tile(
+                object_pos,
+                observer_pos,
+                row_offset,
+                rd_tile,
+                denom_tile,
+                tan_tile,
+            );
+            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
+            vforce::sqrt_in_place(denom_tile);
+            fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
+            let has_invalid = rd_sq_has_invalid(rd_tile);
+            magnitude_pipeline_tile(
+                h_v,
+                g,
+                row_offset,
+                rd_tile,
+                tan_tile,
+                &mut phi1[..m],
+                &mut phi2[..m],
+                out_tile,
+                has_invalid,
+            );
+        }
+    });
 }
 
 #[cfg(target_os = "macos")]
@@ -830,61 +873,66 @@ fn calculate_apparent_magnitude_v_and_phase_angle_macos(
     alpha_out: &mut [f64],
 ) {
     let n = mag_out.len();
-    let mut rd_sq = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut denom = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut tan_half_sq = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut phi1 = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut phi2 = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
-        let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
-        let rd_tile = &mut rd_sq[..m];
-        let denom_tile = &mut denom[..m];
-        let tan_tile = &mut tan_half_sq[..m];
-        let mag_tile = &mut mag_out[row_offset..row_offset + m];
-        let alpha_tile = &mut alpha_out[row_offset..row_offset + m];
-        fill_geometry_squared_terms_tile(
-            object_pos,
-            observer_pos,
-            row_offset,
-            rd_tile,
-            denom_tile,
-            tan_tile,
-        );
-        fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-        vforce::sqrt_in_place(denom_tile);
-        fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
-        // Save tan_half_sq for the alpha branch before the magnitude pipeline
-        // consumes it. alpha_tile becomes our tan_half_sq scratch from here.
-        alpha_tile.copy_from_slice(tan_tile);
-        let has_invalid = rd_sq_has_invalid(rd_tile);
-        magnitude_pipeline_tile(
-            h_v,
-            g,
-            row_offset,
-            rd_tile,
-            tan_tile,
-            &mut phi1[..m],
-            &mut phi2[..m],
-            mag_tile,
-            has_invalid,
-        );
-        // alpha = 2 * atan(sqrt(tan_half_sq)) * RAD2DEG.
-        vforce::sqrt_in_place(alpha_tile);
-        vforce::atan_in_place(alpha_tile);
-        if has_invalid {
-            for k in 0..m {
-                alpha_tile[k] = if !rd_tile[k].is_finite() || rd_tile[k] <= 0.0 {
-                    f64::NAN
-                } else {
-                    2.0 * alpha_tile[k] * RAD2DEG
-                };
-            }
-        } else {
-            for v in alpha_tile.iter_mut() {
-                *v *= 2.0 * RAD2DEG;
+    VFORCE_SCRATCH.with(|cell| {
+        let mut scratch = cell.borrow_mut();
+        let VForceScratch {
+            rd_sq,
+            denom,
+            tan_half_sq,
+            phi1,
+            phi2,
+        } = &mut *scratch;
+        for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
+            let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
+            let rd_tile = &mut rd_sq[..m];
+            let denom_tile = &mut denom[..m];
+            let tan_tile = &mut tan_half_sq[..m];
+            let mag_tile = &mut mag_out[row_offset..row_offset + m];
+            let alpha_tile = &mut alpha_out[row_offset..row_offset + m];
+            fill_geometry_squared_terms_tile(
+                object_pos,
+                observer_pos,
+                row_offset,
+                rd_tile,
+                denom_tile,
+                tan_tile,
+            );
+            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
+            vforce::sqrt_in_place(denom_tile);
+            fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
+            // Save tan_half_sq for the alpha branch before the magnitude pipeline
+            // consumes it. alpha_tile becomes our tan_half_sq scratch from here.
+            alpha_tile.copy_from_slice(tan_tile);
+            let has_invalid = rd_sq_has_invalid(rd_tile);
+            magnitude_pipeline_tile(
+                h_v,
+                g,
+                row_offset,
+                rd_tile,
+                tan_tile,
+                &mut phi1[..m],
+                &mut phi2[..m],
+                mag_tile,
+                has_invalid,
+            );
+            // alpha = 2 * atan(sqrt(tan_half_sq)) * RAD2DEG.
+            vforce::sqrt_in_place(alpha_tile);
+            vforce::atan_in_place(alpha_tile);
+            if has_invalid {
+                for k in 0..m {
+                    alpha_tile[k] = if !rd_tile[k].is_finite() || rd_tile[k] <= 0.0 {
+                        f64::NAN
+                    } else {
+                        2.0 * alpha_tile[k] * RAD2DEG
+                    };
+                }
+            } else {
+                for v in alpha_tile.iter_mut() {
+                    *v *= 2.0 * RAD2DEG;
+                }
             }
         }
-    }
+    });
 }
 
 /// True iff every `target_ids[i]` is in-range for `delta_table` and
@@ -965,54 +1013,59 @@ fn predict_magnitudes_macos_valid_targets(
     out: &mut [f64],
 ) {
     let n = out.len();
-    let mut rd_sq = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut denom = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut tan_half_sq = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut phi1 = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    let mut phi2 = vec![0.0_f64; PHOT_VFORCE_TILE_ROWS];
-    for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
-        let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
-        let rd_tile = &mut rd_sq[..m];
-        let denom_tile = &mut denom[..m];
-        let tan_tile = &mut tan_half_sq[..m];
-        let phi1_tile = &mut phi1[..m];
-        let phi2_tile = &mut phi2[..m];
-        let out_tile = &mut out[row_offset..row_offset + m];
-        fill_geometry_squared_terms_tile(
-            object_pos,
-            observer_pos,
-            row_offset,
-            rd_tile,
-            denom_tile,
-            tan_tile,
-        );
-        fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-        vforce::sqrt_in_place(denom_tile);
-        fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
-        let has_invalid = rd_sq_has_invalid(rd_tile);
+    VFORCE_SCRATCH.with(|cell| {
+        let mut scratch = cell.borrow_mut();
+        let VForceScratch {
+            rd_sq,
+            denom,
+            tan_half_sq,
+            phi1,
+            phi2,
+        } = &mut *scratch;
+        for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
+            let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
+            let rd_tile = &mut rd_sq[..m];
+            let denom_tile = &mut denom[..m];
+            let tan_tile = &mut tan_half_sq[..m];
+            let phi1_tile = &mut phi1[..m];
+            let phi2_tile = &mut phi2[..m];
+            let out_tile = &mut out[row_offset..row_offset + m];
+            fill_geometry_squared_terms_tile(
+                object_pos,
+                observer_pos,
+                row_offset,
+                rd_tile,
+                denom_tile,
+                tan_tile,
+            );
+            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
+            vforce::sqrt_in_place(denom_tile);
+            fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
+            let has_invalid = rd_sq_has_invalid(rd_tile);
 
-        // Magnitude pipeline through the final `vvln(log_arg)`, leaving the
-        // log-arg in `tan_tile`. Then add the bandpass delta in the NEON
-        // finish step.
-        vforce::ln_in_place(tan_tile);
-        fill_phi_logs_from_ln_tan_sq(tan_tile, phi1_tile, phi2_tile);
-        vforce::exp_in_place(phi1_tile);
-        vforce::exp_in_place(phi2_tile);
-        scale_phi_outer(phi1_tile, phi2_tile);
-        vforce::exp_in_place(phi1_tile);
-        vforce::exp_in_place(phi2_tile);
-        fill_mag_log_arg(g, row_offset, rd_tile, phi1_tile, phi2_tile, tan_tile);
-        vforce::ln_in_place(tan_tile);
-        finish_predict_neon(h_v, row_offset, target_ids, delta_table, tan_tile, out_tile);
+            // Magnitude pipeline through the final `vvln(log_arg)`, leaving
+            // the log-arg in `tan_tile`. Then add the bandpass delta in the
+            // NEON finish step.
+            vforce::ln_in_place(tan_tile);
+            fill_phi_logs_from_ln_tan_sq(tan_tile, phi1_tile, phi2_tile);
+            vforce::exp_in_place(phi1_tile);
+            vforce::exp_in_place(phi2_tile);
+            scale_phi_outer(phi1_tile, phi2_tile);
+            vforce::exp_in_place(phi1_tile);
+            vforce::exp_in_place(phi2_tile);
+            fill_mag_log_arg(g, row_offset, rd_tile, phi1_tile, phi2_tile, tan_tile);
+            vforce::ln_in_place(tan_tile);
+            finish_predict_neon(h_v, row_offset, target_ids, delta_table, tan_tile, out_tile);
 
-        if has_invalid {
-            for k in 0..m {
-                if !rd_tile[k].is_finite() || rd_tile[k] <= 0.0 {
-                    out_tile[k] = f64::NAN;
+            if has_invalid {
+                for k in 0..m {
+                    if !rd_tile[k].is_finite() || rd_tile[k] <= 0.0 {
+                        out_tile[k] = f64::NAN;
+                    }
                 }
             }
         }
-    }
+    });
 }
 
 /// Batched solar phase angle in degrees, writing into a caller-owned buffer.
