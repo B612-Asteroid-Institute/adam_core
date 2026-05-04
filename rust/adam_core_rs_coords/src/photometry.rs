@@ -176,12 +176,12 @@ fn predict_magnitude_row(
     }
 }
 
-/// Batched solar phase angle in degrees.
+/// Batched solar phase angle in degrees, writing into a caller-owned buffer.
 ///
 /// Inputs are flattened `N × 3` heliocentric Cartesian positions (AU) —
 /// caller's responsibility to transform to SUN origin before calling.
 /// Invalid rows (non-finite or non-positive `r`/`delta`) yield NaN.
-pub fn calculate_phase_angle_flat(object_pos: &[f64], observer_pos: &[f64]) -> Vec<f64> {
+pub fn calculate_phase_angle_into(object_pos: &[f64], observer_pos: &[f64], out: &mut [f64]) {
     assert_eq!(
         object_pos.len() % 3,
         0,
@@ -193,13 +193,13 @@ pub fn calculate_phase_angle_flat(object_pos: &[f64], observer_pos: &[f64]) -> V
         n * 3,
         "observer_pos must have the same length as object_pos",
     );
+    assert_eq!(out.len(), n, "out must have length N");
 
-    let mut out = vec![0.0_f64; n];
     if n <= PHOT_PHASE_SERIAL_THRESHOLD_ROWS {
         for (i, dst) in out.iter_mut().enumerate() {
             *dst = phase_angle_row(object_pos, observer_pos, i);
         }
-        return out;
+        return;
     }
 
     out.par_chunks_mut(PHOT_CHUNK)
@@ -210,18 +210,27 @@ pub fn calculate_phase_angle_flat(object_pos: &[f64], observer_pos: &[f64]) -> V
                 *dst = phase_angle_row(object_pos, observer_pos, base_i + k);
             }
         });
+}
+
+/// Allocating wrapper around [`calculate_phase_angle_into`].
+pub fn calculate_phase_angle_flat(object_pos: &[f64], observer_pos: &[f64]) -> Vec<f64> {
+    let n = object_pos.len() / 3;
+    let mut out = vec![0.0_f64; n];
+    calculate_phase_angle_into(object_pos, observer_pos, &mut out);
     out
 }
 
-/// Batched apparent V-band magnitude under the H-G phase function.
+/// Batched apparent V-band magnitude under the H-G phase function,
+/// writing into a caller-owned buffer.
 ///
 /// `h_v` and `g` are per-row (length `N`); positions are `N × 3`.
-pub fn calculate_apparent_magnitude_v_flat(
+pub fn calculate_apparent_magnitude_v_into(
     h_v: &[f64],
     object_pos: &[f64],
     observer_pos: &[f64],
     g: &[f64],
-) -> Vec<f64> {
+    out: &mut [f64],
+) {
     assert_eq!(
         object_pos.len() % 3,
         0,
@@ -235,8 +244,8 @@ pub fn calculate_apparent_magnitude_v_flat(
     );
     assert_eq!(h_v.len(), n, "h_v must have length N");
     assert_eq!(g.len(), n, "g must have length N");
+    assert_eq!(out.len(), n, "out must have length N");
 
-    let mut out = vec![0.0_f64; n];
     out.par_chunks_mut(PHOT_CHUNK)
         .enumerate()
         .for_each(|(ci, chunk)| {
@@ -245,17 +254,32 @@ pub fn calculate_apparent_magnitude_v_flat(
                 *dst = apparent_magnitude_v_row(h_v, object_pos, observer_pos, g, base_i + k);
             }
         });
-    out
 }
 
-/// Fused batched (V-band magnitude, phase-angle deg). Faster than two
-/// separate calls because the shared `row_geometry` runs once per row.
-pub fn calculate_apparent_magnitude_v_and_phase_angle_flat(
+/// Allocating wrapper around [`calculate_apparent_magnitude_v_into`].
+pub fn calculate_apparent_magnitude_v_flat(
     h_v: &[f64],
     object_pos: &[f64],
     observer_pos: &[f64],
     g: &[f64],
-) -> (Vec<f64>, Vec<f64>) {
+) -> Vec<f64> {
+    let n = object_pos.len() / 3;
+    let mut out = vec![0.0_f64; n];
+    calculate_apparent_magnitude_v_into(h_v, object_pos, observer_pos, g, &mut out);
+    out
+}
+
+/// Fused batched (V-band magnitude, phase-angle deg) writing into
+/// caller-owned buffers. Faster than two separate calls because the shared
+/// `row_geometry` runs once per row.
+pub fn calculate_apparent_magnitude_v_and_phase_angle_into(
+    h_v: &[f64],
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    g: &[f64],
+    mag_out: &mut [f64],
+    alpha_out: &mut [f64],
+) {
     assert_eq!(
         object_pos.len() % 3,
         0,
@@ -269,9 +293,9 @@ pub fn calculate_apparent_magnitude_v_and_phase_angle_flat(
     );
     assert_eq!(h_v.len(), n, "h_v must have length N");
     assert_eq!(g.len(), n, "g must have length N");
+    assert_eq!(mag_out.len(), n, "mag_out must have length N");
+    assert_eq!(alpha_out.len(), n, "alpha_out must have length N");
 
-    let mut mag_out = vec![0.0_f64; n];
-    let mut alpha_out = vec![0.0_f64; n];
     mag_out
         .par_chunks_mut(PHOT_CHUNK)
         .zip(alpha_out.par_chunks_mut(PHOT_CHUNK))
@@ -292,6 +316,27 @@ pub fn calculate_apparent_magnitude_v_and_phase_angle_flat(
                 *alpha_dst = alpha;
             }
         });
+}
+
+/// Allocating wrapper around
+/// [`calculate_apparent_magnitude_v_and_phase_angle_into`].
+pub fn calculate_apparent_magnitude_v_and_phase_angle_flat(
+    h_v: &[f64],
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    g: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
+    let n = object_pos.len() / 3;
+    let mut mag_out = vec![0.0_f64; n];
+    let mut alpha_out = vec![0.0_f64; n];
+    calculate_apparent_magnitude_v_and_phase_angle_into(
+        h_v,
+        object_pos,
+        observer_pos,
+        g,
+        &mut mag_out,
+        &mut alpha_out,
+    );
     (mag_out, alpha_out)
 }
 
@@ -300,14 +345,15 @@ pub fn calculate_apparent_magnitude_v_and_phase_angle_flat(
 /// Computes `mag_v + delta_table[target_ids[i]]` per row. Invalid geometry
 /// rows (r ≤ 0, δ ≤ 0) produce NaN. Out-of-range target_ids produce NaN
 /// (caller should pre-validate; NaN surfaces downstream).
-pub fn predict_magnitudes_bandpass_flat(
+pub fn predict_magnitudes_bandpass_into(
     h_v: &[f64],
     object_pos: &[f64],
     observer_pos: &[f64],
     g: &[f64],
     target_ids: &[i32],
     delta_table: &[f64],
-) -> Vec<f64> {
+    out: &mut [f64],
+) {
     assert_eq!(
         object_pos.len() % 3,
         0,
@@ -322,8 +368,8 @@ pub fn predict_magnitudes_bandpass_flat(
     assert_eq!(h_v.len(), n, "h_v must have length N");
     assert_eq!(g.len(), n, "g must have length N");
     assert_eq!(target_ids.len(), n, "target_ids must have length N");
+    assert_eq!(out.len(), n, "out must have length N");
 
-    let mut out = vec![0.0_f64; n];
     out.par_chunks_mut(PHOT_CHUNK)
         .enumerate()
         .for_each(|(ci, chunk)| {
@@ -340,6 +386,28 @@ pub fn predict_magnitudes_bandpass_flat(
                 );
             }
         });
+}
+
+/// Allocating wrapper around [`predict_magnitudes_bandpass_into`].
+pub fn predict_magnitudes_bandpass_flat(
+    h_v: &[f64],
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    g: &[f64],
+    target_ids: &[i32],
+    delta_table: &[f64],
+) -> Vec<f64> {
+    let n = object_pos.len() / 3;
+    let mut out = vec![0.0_f64; n];
+    predict_magnitudes_bandpass_into(
+        h_v,
+        object_pos,
+        observer_pos,
+        g,
+        target_ids,
+        delta_table,
+        &mut out,
+    );
     out
 }
 

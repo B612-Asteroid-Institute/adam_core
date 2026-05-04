@@ -17,8 +17,40 @@ implementation in a separate Python subprocess. They are valid because the
 legacy side is not imported from the migration checkout and cannot fall
 through to current-branch Rust implementations.
 
+Baseline speed artifacts now carry named size lanes:
+
+- `tiny-n`: a quick one-off/small-call lane (`n≈10`) that answers whether the
+  Rust boundary is fast for tiny public calls. Enforced at the standard
+  1.2× p50/p95 threshold.
+- `small-n`: the historical `n=2000` p50/p95 promotion gate. Enforced at the
+  standard 1.2× p50/p95 threshold.
+- `large-n`: API-shaped larger workloads. Structured workload metadata records
+  axes such as rows, orbits × epochs, orbits × observers, and OD triplet counts
+  instead of only a flat free-form size string. Enforced at the standard
+  1.2× p50/p95 threshold; substantially larger speedups are preferred.
+
+Per the 2026-05-04 user decisions captured in `decisions.md`, no large-n
+performance waivers are acceptable. Every lane must meet ≥1.2× p50/p95.
+Underlying performance misses must be optimized, not waived; transient timing
+rerouting via short-lived waivers is only acceptable while an active
+optimization is in flight.
+
+All governance lanes default to single-process/single-thread warm timing. Native
+or multithreaded scaling measurements are allowed only as separately labeled
+artifacts and must not be used as default pass/fail evidence unless explicitly
+approved.
+
+Baseline-main legacy timings are serialized in
+`migration/artifacts/parity_legacy_speed_baseline.json` and reused by the
+canonical speed gates. The cache is keyed by API, lane, structured workload
+shape, reps/warmup, seed, thread mode, baseline checkout identity, and benchmark
+process version/source hash. Refresh it intentionally after adding benchmark
+APIs, changing workload shapes, changing the timing process, or updating the
+baseline checkout.
+
 Artifacts:
 
+- `migration/artifacts/parity_legacy_speed_baseline.json`
 - `migration/artifacts/parity_gate.json`
 - `migration/artifacts/parity_speed_cold_warm.json`
 - `migration/artifacts/parity_report.md`
@@ -28,7 +60,15 @@ Artifacts:
 
 Use `pdm run rust-latency-gate` for post-legacy APIs and active CI
 performance regression tracking. This gate measures current Rust latency only
-and compares it with the committed Rust-only baseline.
+and compares it with the committed Rust-only baseline. The default harness runs
+three independent timing trials per API and compares the median of the per-trial
+p50/p95 estimates, while preserving all raw samples in the current artifact.
+This absorbs isolated scheduler outliers without requiring ad hoc manual reruns.
+The default pass/fail mode is single-process/single-thread so the committed
+baseline and current run are apples-to-apples; production/library Rust still
+uses native Rayon/thread-pool behavior outside the benchmark harness. Native
+measurements are allowed only as explicitly labeled diagnostics with separate
+baseline/output paths. Use `--trials 1` only for explicitly labeled diagnostics.
 
 Artifacts:
 
