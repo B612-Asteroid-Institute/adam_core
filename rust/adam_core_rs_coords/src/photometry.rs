@@ -48,11 +48,18 @@ const PHOT_PHASE_SERIAL_THRESHOLD_ROWS: usize = 4096;
 #[cfg(target_os = "macos")]
 const PHOT_VFORCE_MIN_ROWS: usize = 1024;
 
-/// Tile size for the vForce/NEON path. Sized so that all per-tile scratch
-/// buffers fit comfortably in L2 cache (~64 KB each × 5 buffers ≈ 320 KB) on
-/// Apple Silicon while still amortizing vForce per-call dispatch costs.
+/// Scratch-pool capacity for the vForce/NEON path. Magnitude / fused /
+/// predict work best at this tile because their five per-tile vForce
+/// transcendentals amortize the per-call dispatch cost across more rows.
 #[cfg(target_os = "macos")]
 const PHOT_VFORCE_TILE_ROWS: usize = 8192;
+
+/// Phase-angle uses a smaller tile so its two scratch buffers sit in the
+/// 192 KB Apple Silicon L1 across the geometry+`vvacos`+finishing passes.
+/// Magnitude / fused / predict do the opposite trade and stay at the larger
+/// tile because each extra vForce dispatch costs more than the L1 win.
+#[cfg(target_os = "macos")]
+const PHOT_VFORCE_PHASE_TILE_ROWS: usize = 4096;
 
 // Reuse a per-thread scratch buffer pool across photometry calls. The
 // buffers are sized to the full vForce tile so they can be sliced down to
@@ -739,8 +746,8 @@ fn calculate_phase_angle_macos(object_pos: &[f64], observer_pos: &[f64], out: &m
         let VForceScratch {
             rd_sq, tan_half_sq, ..
         } = &mut *scratch;
-        for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
-            let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
+        for row_offset in (0..n).step_by(PHOT_VFORCE_PHASE_TILE_ROWS) {
+            let m = PHOT_VFORCE_PHASE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
             let cos_tile = &mut tan_half_sq[..m];
             let out_tile = &mut out[row_offset..row_offset + m];
