@@ -66,7 +66,6 @@ thread_local! {
 #[cfg(target_os = "macos")]
 struct VForceScratch {
     rd_sq: Vec<f64>,
-    denom: Vec<f64>,
     tan_half_sq: Vec<f64>,
     phi1: Vec<f64>,
     phi2: Vec<f64>,
@@ -77,7 +76,6 @@ impl VForceScratch {
     fn new() -> Self {
         Self {
             rd_sq: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
-            denom: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
             tan_half_sq: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
             phi1: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
             phi2: vec![0.0_f64; PHOT_VFORCE_TILE_ROWS],
@@ -314,52 +312,76 @@ fn predict_magnitude_row(
 //     of a separate pass.
 // =============================================================================
 
+/// Fused NEON pass that streams `(object_pos, observer_pos)` once and writes
+/// `rd_sq = r²·δ²` plus the per-row clamped cosine into the caller's tile
+/// buffer. Returns `true` if any row has non-finite or non-positive geometry,
+/// so callers can NaN-stamp those rows after `vvacos`. Replaces the prior
+/// four-pass geometry pipeline (squared terms → rd_sq+denom_sq → sqrt → clamp).
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn fill_geometry_squared_terms_tile(
+fn fill_phase_geometry_tile(
     object_pos: &[f64],
     observer_pos: &[f64],
     row_offset: usize,
-    r_sq: &mut [f64],
-    delta_sq: &mut [f64],
-    numer: &mut [f64],
-) {
+    rd_sq: &mut [f64],
+    cos_clamped: &mut [f64],
+) -> bool {
     use core::arch::aarch64::*;
 
     let mut k = 0;
-    while k + 2 <= r_sq.len() {
+    let zero = unsafe { vdupq_n_f64(0.0) };
+    let one = unsafe { vdupq_n_f64(1.0) };
+    let neg_one = unsafe { vdupq_n_f64(-1.0) };
+    let max_finite = unsafe { vdupq_n_f64(f64::MAX) };
+    let all_bits = unsafe { vdupq_n_u64(u64::MAX) };
+    let mut bad = unsafe { vdupq_n_u64(0) };
+    while k + 2 <= rd_sq.len() {
         let i = row_offset + k;
-        // SAFETY: callers pass tile slices sized within the asserted N×3
-        // object/observer rows; vld3q_f64 reads two interleaved xyz rows.
+        // SAFETY: caller passes tile slices sized within the asserted N×3
+        // input buffers; vld3q_f64 reads two interleaved xyz rows.
         unsafe {
             let obj = vld3q_f64(object_pos.as_ptr().add(i * 3));
             let obs = vld3q_f64(observer_pos.as_ptr().add(i * 3));
-
-            let dx = vsubq_f64(obj.0, obs.0);
-            let dy = vsubq_f64(obj.1, obs.1);
-            let dz = vsubq_f64(obj.2, obs.2);
-
             let r_sq_v = vfmaq_f64(
                 vfmaq_f64(vmulq_f64(obj.0, obj.0), obj.1, obj.1),
                 obj.2,
                 obj.2,
             );
+            let dx = vsubq_f64(obj.0, obs.0);
+            let dy = vsubq_f64(obj.1, obs.1);
+            let dz = vsubq_f64(obj.2, obs.2);
             let delta_sq_v = vfmaq_f64(vfmaq_f64(vmulq_f64(dx, dx), dy, dy), dz, dz);
             let dot_v = vfmaq_f64(
                 vfmaq_f64(vmulq_f64(obj.0, obs.0), obj.1, obs.1),
                 obj.2,
                 obs.2,
             );
-            // numer = 2*(r² − dot); the matching `denom = 2 r δ` is computed
-            // separately, and the factor of 2 cancels in cos = numer/denom.
+            // numer = 2(r² − dot); the factor of 2 cancels with the 2 in the
+            // legacy denom = 2 r δ, so we compute numer = r² − dot, denom = r · δ.
             let numer_v = vsubq_f64(r_sq_v, dot_v);
+            let rd_sq_v = vmulq_f64(r_sq_v, delta_sq_v);
+            let denom_v = vsqrtq_f64(rd_sq_v);
+            let raw_cos = vdivq_f64(numer_v, denom_v);
+            let clamped = vmaxq_f64(neg_one, vminq_f64(one, raw_cos));
+            vst1q_f64(rd_sq.as_mut_ptr().add(k), rd_sq_v);
+            vst1q_f64(cos_clamped.as_mut_ptr().add(k), clamped);
 
-            vst1q_f64(r_sq.as_mut_ptr().add(k), r_sq_v);
-            vst1q_f64(delta_sq.as_mut_ptr().add(k), delta_sq_v);
-            vst1q_f64(numer.as_mut_ptr().add(k), numer_v);
+            // Track invalid geometry: r_sq or delta_sq non-finite or ≤ 0.
+            // r_sq and delta_sq are sums of squares so they are ≥0, but a
+            // NaN/Inf input or a coincident object/observer row will trip this.
+            let r_finite = vcleq_f64(r_sq_v, max_finite);
+            let delta_finite = vcleq_f64(delta_sq_v, max_finite);
+            let r_pos = vcgtq_f64(r_sq_v, zero);
+            let delta_pos = vcgtq_f64(delta_sq_v, zero);
+            let row_ok = vandq_u64(
+                vandq_u64(r_finite, delta_finite),
+                vandq_u64(r_pos, delta_pos),
+            );
+            bad = vorrq_u64(bad, veorq_u64(row_ok, all_bits));
         }
         k += 2;
     }
-    while k < r_sq.len() {
+    let mut has_invalid = unsafe { (vgetq_lane_u64::<0>(bad) | vgetq_lane_u64::<1>(bad)) != 0 };
+    while k < rd_sq.len() {
         let i = row_offset + k;
         let base = i * 3;
         let ox = object_pos[base];
@@ -374,23 +396,79 @@ fn fill_geometry_squared_terms_tile(
         let r_sq_v = ox * ox + oy * oy + oz * oz;
         let delta_sq_v = dx * dx + dy * dy + dz * dz;
         let dot = ox * bx + oy * by + oz * bz;
-        r_sq[k] = r_sq_v;
-        delta_sq[k] = delta_sq_v;
-        numer[k] = r_sq_v - dot;
+        let numer = r_sq_v - dot;
+        let rd_sq_v = r_sq_v * delta_sq_v;
+        let denom = rd_sq_v.sqrt();
+        rd_sq[k] = rd_sq_v;
+        cos_clamped[k] = (numer / denom).clamp(-1.0, 1.0);
+        has_invalid |=
+            !r_sq_v.is_finite() || !delta_sq_v.is_finite() || r_sq_v <= 0.0 || delta_sq_v <= 0.0;
         k += 1;
     }
+    has_invalid
 }
 
-#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
-fn fill_geometry_squared_terms_tile(
+/// Fused NEON pass that streams `(object_pos, observer_pos)` once and writes
+/// `rd_sq` plus `tan²(α/2)` directly. Used by the magnitude / fused / predict
+/// pipelines. Returns `true` for any non-finite/≤0 geometry row.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn fill_mag_geometry_tile(
     object_pos: &[f64],
     observer_pos: &[f64],
     row_offset: usize,
-    r_sq: &mut [f64],
-    delta_sq: &mut [f64],
-    numer: &mut [f64],
-) {
-    for k in 0..r_sq.len() {
+    rd_sq: &mut [f64],
+    tan_half_sq: &mut [f64],
+) -> bool {
+    use core::arch::aarch64::*;
+
+    let mut k = 0;
+    let zero = unsafe { vdupq_n_f64(0.0) };
+    let max_finite = unsafe { vdupq_n_f64(f64::MAX) };
+    let all_bits = unsafe { vdupq_n_u64(u64::MAX) };
+    let mut bad = unsafe { vdupq_n_u64(0) };
+    while k + 2 <= rd_sq.len() {
+        let i = row_offset + k;
+        // SAFETY: see fill_phase_geometry_tile.
+        unsafe {
+            let obj = vld3q_f64(object_pos.as_ptr().add(i * 3));
+            let obs = vld3q_f64(observer_pos.as_ptr().add(i * 3));
+            let r_sq_v = vfmaq_f64(
+                vfmaq_f64(vmulq_f64(obj.0, obj.0), obj.1, obj.1),
+                obj.2,
+                obj.2,
+            );
+            let dx = vsubq_f64(obj.0, obs.0);
+            let dy = vsubq_f64(obj.1, obs.1);
+            let dz = vsubq_f64(obj.2, obs.2);
+            let delta_sq_v = vfmaq_f64(vfmaq_f64(vmulq_f64(dx, dx), dy, dy), dz, dz);
+            let dot_v = vfmaq_f64(
+                vfmaq_f64(vmulq_f64(obj.0, obs.0), obj.1, obs.1),
+                obj.2,
+                obs.2,
+            );
+            let numer_v = vsubq_f64(r_sq_v, dot_v);
+            let rd_sq_v = vmulq_f64(r_sq_v, delta_sq_v);
+            let denom_v = vsqrtq_f64(rd_sq_v);
+            // tan²(α/2) = (denom − clamp(numer, ±denom)) / (denom + clamp(…)).
+            let clamped = vmaxq_f64(vnegq_f64(denom_v), vminq_f64(denom_v, numer_v));
+            let tan_sq_v = vdivq_f64(vsubq_f64(denom_v, clamped), vaddq_f64(denom_v, clamped));
+            vst1q_f64(rd_sq.as_mut_ptr().add(k), rd_sq_v);
+            vst1q_f64(tan_half_sq.as_mut_ptr().add(k), tan_sq_v);
+
+            let r_finite = vcleq_f64(r_sq_v, max_finite);
+            let delta_finite = vcleq_f64(delta_sq_v, max_finite);
+            let r_pos = vcgtq_f64(r_sq_v, zero);
+            let delta_pos = vcgtq_f64(delta_sq_v, zero);
+            let row_ok = vandq_u64(
+                vandq_u64(r_finite, delta_finite),
+                vandq_u64(r_pos, delta_pos),
+            );
+            bad = vorrq_u64(bad, veorq_u64(row_ok, all_bits));
+        }
+        k += 2;
+    }
+    let mut has_invalid = unsafe { (vgetq_lane_u64::<0>(bad) | vgetq_lane_u64::<1>(bad)) != 0 };
+    while k < rd_sq.len() {
         let i = row_offset + k;
         let base = i * 3;
         let ox = object_pos[base];
@@ -405,143 +483,17 @@ fn fill_geometry_squared_terms_tile(
         let r_sq_v = ox * ox + oy * oy + oz * oz;
         let delta_sq_v = dx * dx + dy * dy + dz * dz;
         let dot = ox * bx + oy * by + oz * bz;
-        r_sq[k] = r_sq_v;
-        delta_sq[k] = delta_sq_v;
-        numer[k] = r_sq_v - dot;
-    }
-}
-
-/// Combine `r_sq` and `delta_sq` into `rd_sq = r²·δ²` (left in `r_sq`) and
-/// `denom_sq = rd_sq` (left in `delta_sq`) so a single `vvsqrt` over the
-/// `delta_sq` slice produces `denom = r·δ`. Splitting into two slots lets
-/// us preserve `rd_sq` for the final `mag = h_v + (5/2 ln10)·ln(rd_sq/phase_fn)`
-/// step without re-multiplying.
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn fill_rd_sq_and_denom_sq(r_sq: &mut [f64], delta_sq: &mut [f64]) {
-    use core::arch::aarch64::*;
-    let mut k = 0;
-    while k + 2 <= r_sq.len() {
-        // SAFETY: equal-length slices stepped two doubles at a time.
-        unsafe {
-            let r_v = vld1q_f64(r_sq.as_ptr().add(k));
-            let d_v = vld1q_f64(delta_sq.as_ptr().add(k));
-            let rd = vmulq_f64(r_v, d_v);
-            vst1q_f64(r_sq.as_mut_ptr().add(k), rd);
-            vst1q_f64(delta_sq.as_mut_ptr().add(k), rd);
-        }
-        k += 2;
-    }
-    while k < r_sq.len() {
-        let rd = r_sq[k] * delta_sq[k];
-        r_sq[k] = rd;
-        delta_sq[k] = rd;
+        let numer = r_sq_v - dot;
+        let rd_sq_v = r_sq_v * delta_sq_v;
+        let denom = rd_sq_v.sqrt();
+        let clamped = numer.clamp(-denom, denom);
+        rd_sq[k] = rd_sq_v;
+        tan_half_sq[k] = (denom - clamped) / (denom + clamped);
+        has_invalid |=
+            !r_sq_v.is_finite() || !delta_sq_v.is_finite() || r_sq_v <= 0.0 || delta_sq_v <= 0.0;
         k += 1;
     }
-}
-
-#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
-fn fill_rd_sq_and_denom_sq(r_sq: &mut [f64], delta_sq: &mut [f64]) {
-    for k in 0..r_sq.len() {
-        let rd = r_sq[k] * delta_sq[k];
-        r_sq[k] = rd;
-        delta_sq[k] = rd;
-    }
-}
-
-/// Clamp `cos = numer / denom` to `[-1, 1]` and detect the slow-path band
-/// `|cos| > PHOT_ENDPOINT_COS_ABS_MAX` and any non-finite raw cos. Returns
-/// `true` if any row needs the half-angle slow-path fix-up.
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn clamp_cos_in_place_detect_endpoint(numer: &mut [f64], denom: &[f64]) -> bool {
-    use core::arch::aarch64::*;
-    let mut k = 0;
-    let one = unsafe { vdupq_n_f64(1.0) };
-    let neg_one = unsafe { vdupq_n_f64(-1.0) };
-    let endpoint_threshold = unsafe { vdupq_n_f64(PHOT_ENDPOINT_COS_ABS_MAX) };
-    let max_finite = unsafe { vdupq_n_f64(f64::MAX) };
-    let all_bits = unsafe { vdupq_n_u64(u64::MAX) };
-    let mut bad = unsafe { vdupq_n_u64(0) };
-    while k + 2 <= numer.len() {
-        // SAFETY: numer/denom equal length, two-lane stride.
-        unsafe {
-            let nu = vld1q_f64(numer.as_ptr().add(k));
-            let de = vld1q_f64(denom.as_ptr().add(k));
-            let raw = vdivq_f64(nu, de);
-            let clamped = vmaxq_f64(neg_one, vminq_f64(one, raw));
-            vst1q_f64(numer.as_mut_ptr().add(k), clamped);
-
-            let raw_finite = vcleq_f64(vabsq_f64(raw), max_finite);
-            let endpoint = vcgtq_f64(vabsq_f64(clamped), endpoint_threshold);
-            let row_bad = vorrq_u64(veorq_u64(raw_finite, all_bits), endpoint);
-            bad = vorrq_u64(bad, row_bad);
-        }
-        k += 2;
-    }
-    let mut needs_slow = unsafe { (vgetq_lane_u64::<0>(bad) | vgetq_lane_u64::<1>(bad)) != 0 };
-    while k < numer.len() {
-        let raw = numer[k] / denom[k];
-        let clamped = raw.clamp(-1.0, 1.0);
-        numer[k] = clamped;
-        needs_slow |= !raw.is_finite() || clamped.abs() > PHOT_ENDPOINT_COS_ABS_MAX;
-        k += 1;
-    }
-    needs_slow
-}
-
-#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
-fn clamp_cos_in_place_detect_endpoint(numer: &mut [f64], denom: &[f64]) -> bool {
-    let mut needs_slow = false;
-    for k in 0..numer.len() {
-        let raw = numer[k] / denom[k];
-        let clamped = raw.clamp(-1.0, 1.0);
-        numer[k] = clamped;
-        needs_slow |= !raw.is_finite() || clamped.abs() > PHOT_ENDPOINT_COS_ABS_MAX;
-    }
-    needs_slow
-}
-
-/// Compute `tan²(α/2) = (1−cos)/(1+cos)` directly from `(numer, denom)` with
-/// the same algebraic clamp the JAX path uses on `cos`. This skips the
-/// `sqrt` that the legacy formula does on `(1−cos)/(1+cos)` before raising
-/// to fractional powers.
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn fill_tan_half_sq_from_numer_denom(numer: &mut [f64], denom: &[f64]) {
-    use core::arch::aarch64::*;
-    let mut k = 0;
-    while k + 2 <= numer.len() {
-        // SAFETY: equal-length slices, two-lane stride.
-        unsafe {
-            let nu = vld1q_f64(numer.as_ptr().add(k));
-            let de = vld1q_f64(denom.as_ptr().add(k));
-            // clamp(numer, -denom, +denom) matches clamp(cos, ±1) since denom = r·δ ≥ 0.
-            let clamped = vmaxq_f64(vnegq_f64(de), vminq_f64(de, nu));
-            let tan_sq = vdivq_f64(vsubq_f64(de, clamped), vaddq_f64(de, clamped));
-            vst1q_f64(numer.as_mut_ptr().add(k), tan_sq);
-        }
-        k += 2;
-    }
-    while k < numer.len() {
-        let de = denom[k];
-        let clamped = numer[k].clamp(-de, de);
-        numer[k] = (de - clamped) / (de + clamped);
-        k += 1;
-    }
-}
-
-#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
-fn fill_tan_half_sq_from_numer_denom(numer: &mut [f64], denom: &[f64]) {
-    for k in 0..numer.len() {
-        let de = denom[k];
-        let clamped = numer[k].clamp(-de, de);
-        numer[k] = (de - clamped) / (de + clamped);
-    }
-}
-
-/// Detect any row whose `rd_sq` is non-finite or non-positive so the magnitude
-/// kernel can stamp NaN at the end. Cheap because rd_sq is already computed.
-#[cfg(target_os = "macos")]
-fn rd_sq_has_invalid(rd_sq: &[f64]) -> bool {
-    rd_sq.iter().any(|&v| !v.is_finite() || v <= 0.0)
+    has_invalid
 }
 
 /// `phi1 = 0.315 * ln_tan_sq`; `phi2 = 0.61 * ln_tan_sq`. Multiplications by
@@ -734,9 +686,11 @@ fn magnitude_pipeline_tile(
     }
 }
 
-/// Phase-angle finishing: `vvacos` over the clamped `cos` slice gives radians;
-/// scale to degrees and replace endpoint-band rows with the JAX half-angle
-/// reference for the precision the legacy gate expects.
+/// Phase-angle finishing on the `vvacos` output. The fast common case is one
+/// NEON multiply-by-RAD2DEG sweep; rows whose clamped cosine sits in the
+/// endpoint band `|cos| > PHOT_ENDPOINT_COS_ABS_MAX` are recomputed via the
+/// JAX half-angle reference for the precision the legacy gate expects, and
+/// invalid-geometry rows are NaN-stamped.
 #[cfg(target_os = "macos")]
 fn finish_phase_angle_tile(
     object_pos: &[f64],
@@ -745,28 +699,34 @@ fn finish_phase_angle_tile(
     cos_phase: &[f64],
     rd_sq: &[f64],
     out_tile: &mut [f64],
-    needs_slow: bool,
+    has_invalid: bool,
 ) {
-    vforce::acos(cos_phase, out_tile);
-    if needs_slow {
-        for k in 0..out_tile.len() {
-            if !rd_sq[k].is_finite() || rd_sq[k] <= 0.0 {
-                out_tile[k] = f64::NAN;
-                continue;
-            }
-            if cos_phase[k].abs() > PHOT_ENDPOINT_COS_ABS_MAX {
-                let i = row_offset + k;
-                let obj = load3(object_pos, i);
-                let obs = load3(observer_pos, i);
-                let (_, _, cos_alpha) = row_geometry(obj, obs);
-                out_tile[k] = cos_to_alpha_deg(cos_alpha);
-            } else {
-                out_tile[k] *= RAD2DEG;
-            }
-        }
-    } else {
+    // Single SIMD scan to confirm whether any row sits in the endpoint band.
+    // This is cheaper than threading the detection through the geometry pass
+    // and lets the common (no slow-path) case skip a per-row branch.
+    let needs_endpoint = has_invalid
+        || cos_phase
+            .iter()
+            .any(|&c| c.abs() > PHOT_ENDPOINT_COS_ABS_MAX);
+    if !needs_endpoint {
         for v in out_tile.iter_mut() {
             *v *= RAD2DEG;
+        }
+        return;
+    }
+    for k in 0..out_tile.len() {
+        if !rd_sq[k].is_finite() || rd_sq[k] <= 0.0 {
+            out_tile[k] = f64::NAN;
+            continue;
+        }
+        if cos_phase[k].abs() > PHOT_ENDPOINT_COS_ABS_MAX {
+            let i = row_offset + k;
+            let obj = load3(object_pos, i);
+            let obs = load3(observer_pos, i);
+            let (_, _, cos_alpha) = row_geometry(obj, obs);
+            out_tile[k] = cos_to_alpha_deg(cos_alpha);
+        } else {
+            out_tile[k] *= RAD2DEG;
         }
     }
 }
@@ -777,28 +737,20 @@ fn calculate_phase_angle_macos(object_pos: &[f64], observer_pos: &[f64], out: &m
     VFORCE_SCRATCH.with(|cell| {
         let mut scratch = cell.borrow_mut();
         let VForceScratch {
-            rd_sq,
-            denom,
-            tan_half_sq,
-            ..
+            rd_sq, tan_half_sq, ..
         } = &mut *scratch;
         for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
             let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
-            let denom_tile = &mut denom[..m];
             let cos_tile = &mut tan_half_sq[..m];
             let out_tile = &mut out[row_offset..row_offset + m];
-            fill_geometry_squared_terms_tile(
-                object_pos,
-                observer_pos,
-                row_offset,
-                rd_tile,
-                denom_tile,
-                cos_tile,
-            );
-            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-            vforce::sqrt_in_place(denom_tile);
-            let needs_slow = clamp_cos_in_place_detect_endpoint(cos_tile, denom_tile);
+            let has_invalid =
+                fill_phase_geometry_tile(object_pos, observer_pos, row_offset, rd_tile, cos_tile);
+            vforce::acos(cos_tile, out_tile);
+            // The half-angle reference is required only inside the slow-path
+            // band `|cos| > PHOT_ENDPOINT_COS_ABS_MAX`. Without scanning we'd
+            // pay precision near 0°/180°; with the scan, the common case is a
+            // single multiply-by-RAD2DEG sweep.
             finish_phase_angle_tile(
                 object_pos,
                 observer_pos,
@@ -806,7 +758,7 @@ fn calculate_phase_angle_macos(object_pos: &[f64], observer_pos: &[f64], out: &m
                 cos_tile,
                 rd_tile,
                 out_tile,
-                needs_slow,
+                has_invalid,
             );
         }
     });
@@ -825,29 +777,18 @@ fn calculate_apparent_magnitude_v_macos(
         let mut scratch = cell.borrow_mut();
         let VForceScratch {
             rd_sq,
-            denom,
             tan_half_sq,
             phi1,
             phi2,
+            ..
         } = &mut *scratch;
         for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
             let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
-            let denom_tile = &mut denom[..m];
             let tan_tile = &mut tan_half_sq[..m];
             let out_tile = &mut out[row_offset..row_offset + m];
-            fill_geometry_squared_terms_tile(
-                object_pos,
-                observer_pos,
-                row_offset,
-                rd_tile,
-                denom_tile,
-                tan_tile,
-            );
-            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-            vforce::sqrt_in_place(denom_tile);
-            fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
-            let has_invalid = rd_sq_has_invalid(rd_tile);
+            let has_invalid =
+                fill_mag_geometry_tile(object_pos, observer_pos, row_offset, rd_tile, tan_tile);
             magnitude_pipeline_tile(
                 h_v,
                 g,
@@ -877,33 +818,22 @@ fn calculate_apparent_magnitude_v_and_phase_angle_macos(
         let mut scratch = cell.borrow_mut();
         let VForceScratch {
             rd_sq,
-            denom,
             tan_half_sq,
             phi1,
             phi2,
+            ..
         } = &mut *scratch;
         for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
             let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
-            let denom_tile = &mut denom[..m];
             let tan_tile = &mut tan_half_sq[..m];
             let mag_tile = &mut mag_out[row_offset..row_offset + m];
             let alpha_tile = &mut alpha_out[row_offset..row_offset + m];
-            fill_geometry_squared_terms_tile(
-                object_pos,
-                observer_pos,
-                row_offset,
-                rd_tile,
-                denom_tile,
-                tan_tile,
-            );
-            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-            vforce::sqrt_in_place(denom_tile);
-            fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
+            let has_invalid =
+                fill_mag_geometry_tile(object_pos, observer_pos, row_offset, rd_tile, tan_tile);
             // Save tan_half_sq for the alpha branch before the magnitude pipeline
             // consumes it. alpha_tile becomes our tan_half_sq scratch from here.
             alpha_tile.copy_from_slice(tan_tile);
-            let has_invalid = rd_sq_has_invalid(rd_tile);
             magnitude_pipeline_tile(
                 h_v,
                 g,
@@ -1017,31 +947,20 @@ fn predict_magnitudes_macos_valid_targets(
         let mut scratch = cell.borrow_mut();
         let VForceScratch {
             rd_sq,
-            denom,
             tan_half_sq,
             phi1,
             phi2,
+            ..
         } = &mut *scratch;
         for row_offset in (0..n).step_by(PHOT_VFORCE_TILE_ROWS) {
             let m = PHOT_VFORCE_TILE_ROWS.min(n - row_offset);
             let rd_tile = &mut rd_sq[..m];
-            let denom_tile = &mut denom[..m];
             let tan_tile = &mut tan_half_sq[..m];
             let phi1_tile = &mut phi1[..m];
             let phi2_tile = &mut phi2[..m];
             let out_tile = &mut out[row_offset..row_offset + m];
-            fill_geometry_squared_terms_tile(
-                object_pos,
-                observer_pos,
-                row_offset,
-                rd_tile,
-                denom_tile,
-                tan_tile,
-            );
-            fill_rd_sq_and_denom_sq(rd_tile, denom_tile);
-            vforce::sqrt_in_place(denom_tile);
-            fill_tan_half_sq_from_numer_denom(tan_tile, denom_tile);
-            let has_invalid = rd_sq_has_invalid(rd_tile);
+            let has_invalid =
+                fill_mag_geometry_tile(object_pos, observer_pos, row_offset, rd_tile, tan_tile);
 
             // Magnitude pipeline through the final `vvln(log_arg)`, leaving
             // the log-arg in `tan_tile`. Then add the bandpass delta in the
