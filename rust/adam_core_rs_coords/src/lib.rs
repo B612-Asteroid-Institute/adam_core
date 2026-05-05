@@ -43,10 +43,15 @@ pub use ephemeris::{
     generate_ephemeris_2body_with_covariance_flat6, C_AU_PER_DAY, DEFAULT_MAX_LT_ITER,
 };
 
+#[cfg(target_os = "macos")]
+mod c2k_macos;
+
 pub mod photometry;
 pub use photometry::{
-    calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
-    calculate_phase_angle_flat, predict_magnitudes_bandpass_flat,
+    calculate_apparent_magnitude_v_and_phase_angle_flat,
+    calculate_apparent_magnitude_v_and_phase_angle_into, calculate_apparent_magnitude_v_flat,
+    calculate_apparent_magnitude_v_into, calculate_phase_angle_flat, calculate_phase_angle_into,
+    predict_magnitudes_bandpass_flat, predict_magnitudes_bandpass_into,
 };
 
 /// Rayon chunk size for cheap 6-column coordinate conversions.
@@ -55,6 +60,7 @@ pub use photometry::{
 /// n~=2000, so each Rayon task gets a block of rows instead of one row.
 const COORD_CHUNK_ROWS: usize = 1024;
 const COORD_CHUNK_FLAT6: usize = COORD_CHUNK_ROWS * 6;
+const COORD_CHUNK_KEPLERIAN13: usize = COORD_CHUNK_ROWS * 13;
 
 /// Avoid Rayon scheduling jitter for small batches where the per-row math is
 /// cheaper than work-stealing overhead. The canonical baseline gates
@@ -189,7 +195,8 @@ pub fn calc_mean_motion_batch(a: &[f64], mu: &[f64]) -> Vec<f64> {
     out
 }
 
-const OBLIQUITY_RAD: f64 = 84381.448_f64 * std::f64::consts::PI / (180.0_f64 * 3600.0_f64);
+const OBLIQUITY_COS: f64 = 0.9174820620691818_f64;
+const OBLIQUITY_SIN: f64 = 0.39777715593191365_f64;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Frame {
@@ -584,19 +591,49 @@ pub fn cartesian_to_keplerian_flat6(flat_coords: &[f64], t0: &[f64], mu: &[f64])
     assert_eq!(mu.len(), n, "mu length must match coords rows");
 
     let mut out = vec![0.0_f64; n * 13];
-    out.par_chunks_mut(13).enumerate().for_each(|(i, dst)| {
-        let base = i * 6;
-        let row = [
-            flat_coords[base],
-            flat_coords[base + 1],
-            flat_coords[base + 2],
-            flat_coords[base + 3],
-            flat_coords[base + 4],
-            flat_coords[base + 5],
-        ];
-        let converted = cartesian_to_keplerian_row(&row, t0[i], mu[i]);
-        dst.copy_from_slice(&converted);
-    });
+
+    #[cfg(target_os = "macos")]
+    if n >= c2k_macos::C2K_MACOS_MIN_ROWS {
+        c2k_macos::cartesian_to_keplerian_flat6_into(flat_coords, t0, mu, &mut out);
+        return out;
+    }
+
+    if n <= COORD_SERIAL_THRESHOLD_ROWS {
+        for i in 0..n {
+            let base = i * 6;
+            let row = [
+                flat_coords[base],
+                flat_coords[base + 1],
+                flat_coords[base + 2],
+                flat_coords[base + 3],
+                flat_coords[base + 4],
+                flat_coords[base + 5],
+            ];
+            let converted = cartesian_to_keplerian_row(&row, t0[i], mu[i]);
+            out[i * 13..(i + 1) * 13].copy_from_slice(&converted);
+        }
+        return out;
+    }
+
+    out.par_chunks_mut(COORD_CHUNK_KEPLERIAN13)
+        .enumerate()
+        .for_each(|(ci, dst_chunk)| {
+            let base_row = ci * COORD_CHUNK_ROWS;
+            for (k, dst) in dst_chunk.chunks_mut(13).enumerate() {
+                let i = base_row + k;
+                let base = i * 6;
+                let row = [
+                    flat_coords[base],
+                    flat_coords[base + 1],
+                    flat_coords[base + 2],
+                    flat_coords[base + 3],
+                    flat_coords[base + 4],
+                    flat_coords[base + 5],
+                ];
+                let converted = cartesian_to_keplerian_row(&row, t0[i], mu[i]);
+                dst.copy_from_slice(&converted);
+            }
+        });
     out
 }
 
@@ -832,8 +869,8 @@ pub fn cartesian_to_spherical_row(v: &[f64; 6]) -> [f64; 6] {
 }
 
 pub fn rotate_equatorial_to_ecliptic_row(v: &[f64; 6]) -> [f64; 6] {
-    let cos_o = OBLIQUITY_RAD.cos();
-    let sin_o = OBLIQUITY_RAD.sin();
+    let cos_o = OBLIQUITY_COS;
+    let sin_o = OBLIQUITY_SIN;
     [
         v[0],
         cos_o * v[1] + sin_o * v[2],
@@ -845,8 +882,8 @@ pub fn rotate_equatorial_to_ecliptic_row(v: &[f64; 6]) -> [f64; 6] {
 }
 
 pub fn rotate_ecliptic_to_equatorial_row(v: &[f64; 6]) -> [f64; 6] {
-    let cos_o = OBLIQUITY_RAD.cos();
-    let sin_o = OBLIQUITY_RAD.sin();
+    let cos_o = OBLIQUITY_COS;
+    let sin_o = OBLIQUITY_SIN;
     [
         v[0],
         cos_o * v[1] - sin_o * v[2],
@@ -1100,8 +1137,9 @@ pub fn cartesian_to_keplerian_row(v: &[f64; 6], t0: f64, mu: f64) -> [f64; 13] {
     let vel = [v[3], v[4], v[5]];
 
     let r_mag = norm(r);
-    let v_mag = norm(vel);
-    let sme = v_mag * v_mag / 2.0 - mu / r_mag;
+    let v2 = dot(vel, vel);
+    let mu_over_r = mu / r_mag;
+    let sme = v2 / 2.0 - mu_over_r;
 
     let h = cross(r, vel);
     let h_mag = norm(h);
@@ -1109,7 +1147,7 @@ pub fn cartesian_to_keplerian_row(v: &[f64; 6], t0: f64, mu: f64) -> [f64; 13] {
     let n_mag = norm(n_vec);
 
     let rv = dot(r, vel);
-    let scale = v_mag * v_mag - mu / r_mag;
+    let scale = v2 - mu_over_r;
     let e_vec = [
         (scale * r[0] - rv * vel[0]) / mu,
         (scale * r[1] - rv * vel[1]) / mu,
@@ -1172,9 +1210,10 @@ pub fn cartesian_to_keplerian_row(v: &[f64; 6], t0: f64, mu: f64) -> [f64; 13] {
     let m_anom = calc_mean_anomaly(nu, e);
 
     let n_mean = if near_parabolic {
-        (mu / (2.0 * q.powi(3))).sqrt()
+        (mu / (2.0 * q * q * q)).sqrt()
     } else {
-        (mu / a.abs().powi(3)).sqrt()
+        let abs_a = a.abs();
+        (mu / (abs_a * abs_a * abs_a)).sqrt()
     };
     let period = if e < (1.0 - float_tol) {
         TWO_PI / n_mean
