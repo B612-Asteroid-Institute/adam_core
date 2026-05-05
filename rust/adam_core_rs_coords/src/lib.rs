@@ -85,6 +85,13 @@ pub fn cartesian_to_cometary_flat6(flat_coords: &[f64], t0: &[f64], mu: &[f64]) 
     assert_eq!(t0.len(), n, "t0 length must match coords rows");
     assert_eq!(mu.len(), n, "mu length must match coords rows");
     let mut out = vec![0.0_f64; flat_coords.len()];
+
+    #[cfg(target_os = "macos")]
+    if n >= c2k_macos::C2K_MACOS_MIN_ROWS {
+        c2k_macos::cartesian_to_cometary_flat6_into(flat_coords, t0, mu, &mut out);
+        return out;
+    }
+
     out.par_chunks_mut(6).enumerate().for_each(|(i, dst)| {
         let base = i * 6;
         let row = [
