@@ -7,7 +7,14 @@ from adam_core._rust.status import (
     API_MIGRATIONS_BY_ID,
     validate_api_migrations,
 )
-from migration.parity import _inputs, _oracle, _threading, parity_speed, tolerances
+from migration.parity import (
+    _inputs,
+    _oracle,
+    _threading,
+    parity_main,
+    parity_speed,
+    tolerances,
+)
 from migration.scripts.rust_backend_benchmark_gate import (
     BENCHMARK_TO_API_ID,
     EXTERNALLY_BENCHMARKED,
@@ -117,14 +124,10 @@ def test_multi_thread_mode_removes_caps_for_both_rust_and_legacy() -> None:
     # Non-default external values are preserved as authored.
     base_with_external = dict(base)
     base_with_external["RAYON_NUM_THREADS"] = "4"
-    env2 = _threading.env_for_thread_mode(
-        "multi-thread", base_env=base_with_external
-    )
+    env2 = _threading.env_for_thread_mode("multi-thread", base_env=base_with_external)
     assert env2["RAYON_NUM_THREADS"] == "4"
     # 'native' alias produces the same env as canonical 'multi-thread'.
-    assert _threading.env_for_thread_mode(
-        "native", base_env=base
-    ) == env
+    assert _threading.env_for_thread_mode("native", base_env=base) == env
 
 
 def test_latency_summary_uses_median_of_trial_percentiles() -> None:
@@ -210,6 +213,64 @@ def test_speed_artifact_records_thread_metadata() -> None:
     assert artifact["lanes"][0]["enforced"] is True
     assert "large-n" in artifact["lane_policy"]
     assert "SIMD" in artifact["thread_policy"]
+
+
+def test_parity_main_exposes_additive_legacy_cache_refresh_controls() -> None:
+    parser = parity_main._build_arg_parser()
+    help_text = parser.format_help()
+    args = parser.parse_args(
+        [
+            "--speed-legacy-cache",
+            "cache.json",
+            "--speed-refresh-legacy-cache",
+            "--speed-replace-legacy-cache",
+        ]
+    )
+
+    assert args.speed_refresh_legacy_cache
+    assert args.speed_replace_legacy_cache
+    assert "merge" in help_text
+    assert "--speed-replace-legacy-cache" in help_text
+
+
+def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> None:
+    identity = {"git_commit": "baseline", "process_version": "test"}
+    monkeypatch.setattr(parity_speed, "_legacy_identity", lambda: identity)
+    cache_path = tmp_path / "legacy_cache.json"
+    cache_path.write_text("""
+        {
+          "schema_version": 1,
+          "process_version": "rm-p1-019a-shaped-lanes-v1",
+          "created_at": "2026-05-05T00:00:00+00:00",
+          "updated_at": "2026-05-05T00:00:00+00:00",
+          "legacy_identity": {"git_commit": "baseline", "process_version": "test"},
+          "warm": {"existing-warm": {"key_fields": {"kind": "warm"}}},
+          "cold": {"existing-cold": {"key_fields": {"kind": "cold"}}}
+        }
+        """)
+
+    cache = parity_speed.prepare_legacy_timing_cache(cache_path, refresh=True)
+    assert cache is not None
+    parity_speed._write_cache_entry(
+        cache,
+        "warm",
+        "new-warm",
+        {"key_fields": {"kind": "warm", "api_id": "new"}, "samples_s": [1.0]},
+    )
+    parity_speed.write_legacy_timing_cache(cache)
+
+    merged = __import__("json").loads(cache_path.read_text())
+    assert set(merged["warm"]) == {"existing-warm", "new-warm"}
+    assert set(merged["cold"]) == {"existing-cold"}
+
+    replaced = parity_speed.prepare_legacy_timing_cache(
+        cache_path,
+        refresh=True,
+        replace=True,
+    )
+    assert replaced is not None
+    assert parity_speed._cache_section(replaced, "warm") == {}
+    assert parity_speed._cache_section(replaced, "cold") == {}
 
 
 def test_speed_artifact_records_legacy_cache_metadata() -> None:

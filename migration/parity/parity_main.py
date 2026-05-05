@@ -126,7 +126,19 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--speed-refresh-legacy-cache",
         action="store_true",
-        help="Recapture and overwrite --speed-legacy-cache for the speed lanes.",
+        help=(
+            "Recapture missing/requested --speed-legacy-cache entries and merge "
+            "them into the existing cache. Existing entries for other lanes/APIs "
+            "are preserved."
+        ),
+    )
+    p.add_argument(
+        "--speed-replace-legacy-cache",
+        action="store_true",
+        help=(
+            "With --speed-refresh-legacy-cache, discard the existing speed cache "
+            "before capturing requested lanes/APIs."
+        ),
     )
     p.add_argument(
         "--base-seed",
@@ -175,6 +187,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.speed_refresh_legacy_cache and args.speed_legacy_cache is None:
         parser.error("--speed-refresh-legacy-cache requires --speed-legacy-cache")
+    if args.speed_replace_legacy_cache and not args.speed_refresh_legacy_cache:
+        parser.error(
+            "--speed-replace-legacy-cache requires --speed-refresh-legacy-cache"
+        )
 
     api_ids = args.apis or list(_inputs.all_api_ids())
 
@@ -204,6 +220,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         legacy_cache = parity_speed.prepare_legacy_timing_cache(
             args.speed_legacy_cache,
             refresh=args.speed_refresh_legacy_cache,
+            replace=args.speed_replace_legacy_cache,
         )
         speed_lanes = parity_speed.build_speed_lanes(
             n=args.speed_n,

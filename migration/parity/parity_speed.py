@@ -4,7 +4,7 @@ For each measured API, time both the current Rust path (in-process) and the
 baseline-main path (in the legacy-venv subprocess) on identical workloads, and
 assert that each enforced lane meets its configured p50/p95 threshold. The
 historical small-n lane keeps the standard 1.2x promotion threshold; tiny-n and
-large-n currently enforce no-regression thresholds unless waived.
+large-n are enforced at the same 1.2x threshold.
 
 Each timing loop runs ``reps`` repetitions inside its respective process so
 subprocess invocation overhead is excluded from the legacy measurements.
@@ -276,11 +276,12 @@ def prepare_legacy_timing_cache(
     path: Path | None,
     *,
     refresh: bool = False,
+    replace: bool = False,
 ) -> dict[str, object] | None:
     if path is None:
         return None
     identity = _legacy_identity()
-    if path.exists() and not refresh:
+    if path.exists() and (not refresh or not replace):
         data = json.loads(path.read_text())
         _validate_legacy_cache(data, identity, path)
     elif refresh:
@@ -294,6 +295,7 @@ def prepare_legacy_timing_cache(
         "path": path,
         "data": data,
         "refresh": refresh,
+        "replace": replace,
         "dirty": False,
         "hits": {"warm": 0, "cold": 0},
         "misses": {"warm": 0, "cold": 0},
@@ -832,7 +834,7 @@ def build_speed_lanes(
                 name=DEFAULT_TINY_LANE_NAME,
                 description=(
                     f"One-off/small-call lane at n={DEFAULT_TINY_N}; enforced "
-                    f"with a no-regression threshold of {DEFAULT_TINY_SPEEDUP:.1f}x."
+                    f"for p50/p95 >= {DEFAULT_TINY_SPEEDUP:.1f}x."
                 ),
                 enforced=True,
                 reps=tiny_reps if tiny_reps is not None else reps,
@@ -1284,7 +1286,20 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--refresh-legacy-cache",
         action="store_true",
-        help="Recapture and overwrite --legacy-cache for the requested lanes/APIs.",
+        help=(
+            "Recapture missing/requested --legacy-cache entries and merge them "
+            "into the existing cache. Existing entries for other lanes/APIs are "
+            "preserved."
+        ),
+    )
+    p.add_argument(
+        "--replace-legacy-cache",
+        action="store_true",
+        help=(
+            "With --refresh-legacy-cache, discard the existing cache before "
+            "capturing requested lanes/APIs. Use after benchmark process or "
+            "legacy identity changes."
+        ),
     )
     p.add_argument(
         "--output",
@@ -1305,11 +1320,14 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.refresh_legacy_cache and args.legacy_cache is None:
         parser.error("--refresh-legacy-cache requires --legacy-cache")
+    if args.replace_legacy_cache and not args.refresh_legacy_cache:
+        parser.error("--replace-legacy-cache requires --refresh-legacy-cache")
 
     api_ids = args.apis or list(_inputs.all_api_ids())
     legacy_cache = prepare_legacy_timing_cache(
         args.legacy_cache,
         refresh=args.refresh_legacy_cache,
+        replace=args.replace_legacy_cache,
     )
     lanes = build_speed_lanes(
         n=args.n,

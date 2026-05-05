@@ -6,9 +6,11 @@ for APIs wired into this harness:
 1. **Parity-fuzz** — randomized inputs, current Rust output must match the
    upstream `main` implementation within the per-API tolerance defined in
    `tolerances.py`.
-2. **Speedup** — current Rust must be >= 1.2x faster than the upstream `main`
-   implementation at p50 and p95 latency on identical workloads, unless an
-   explicit waiver is attached.
+2. **Speedup** — current Rust must meet lane-specific p50/p95 thresholds
+   versus the upstream `main` implementation on identical workloads, unless an
+   explicit lane-scoped waiver is attached. Speed artifacts include `tiny-n`
+   for quick one-off calls, `small-n` for the historical `n=2000` promotion
+   gate, and enforced API-shaped `large-n` workloads with structured axes.
 
 This harness does not time a current-branch Python fallback as "legacy".
 The legacy side is the separate baseline-main checkout installed in
@@ -43,8 +45,32 @@ Verify it's reachable:
 Full baseline-main gate (writes `migration/artifacts/parity_gate.json`):
 
 ```bash
-.venv/bin/python -m migration.parity.parity_main
+.venv/bin/python -m migration.parity.parity_main \
+    --threads single \
+    --speed-tiny --speed-tiny-reps 101 --speed-tiny-warmup 3 \
+    --speed-n 2000 --speed-reps 21 --speed-warmup 3 \
+    --speed-large --speed-large-reps 7 --speed-large-warmup 1 \
+    --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
 ```
+
+The `tiny-n`, `small-n`, and `large-n` speed lanes are enforced by default.
+Known large-workload misses must be recorded as lane-scoped waivers in
+`migration/waivers.yaml`; `--speed-large-diagnostic` is only for ad-hoc local
+probes.
+
+Refresh the serialized baseline-main timing cache once after adding benchmark
+APIs, changing workload shapes, changing reps/warmup/thread policy, or updating
+the baseline checkout. Refreshes merge newly captured entries into the existing
+cache by default, so API-scoped recaptures do not wipe unrelated rows. Use
+`--replace-legacy-cache` / `--speed-replace-legacy-cache` only for intentional
+full recapture after benchmark process or baseline-identity changes.
+
+```bash
+pdm run rust-parity-legacy-cache-refresh
+```
+
+Normal canonical gates reuse that cache and fail loudly if a requested legacy
+entry is missing or stale.
 
 Single-API iteration during a port:
 
@@ -60,18 +86,19 @@ Just the parity-fuzz half:
     --seeds 8 --n 128 --output migration/artifacts/parity_fuzz.json
 ```
 
-Just the speedup half (warm only — default):
+Just the speedup half (warm only — default, small lane only):
 
 ```bash
 .venv/bin/python -m migration.parity.parity_speed \
-    --n 2000 --reps 7 --output migration/artifacts/parity_speed.json
+    --threads single --n 2000 --reps 7 \
+    --output migration/artifacts/parity_speed.json
 ```
 
-Active performance waivers are read from `src/adam_core/_rust/status.py`.
-Waived APIs still record their raw p50/p95 miss in the JSON artifact, but
-the gate reports them as `WAIVED` and exits successfully. Every waiver must
-also be recorded in `migration/waivers.yaml` with an owner, review date,
-and exit criteria.
+Active performance waivers are read from `migration/waivers.yaml` and legacy
+registry waiver fields. Current waivers must include the failing lane (for
+example `lane: large-n`) so a tiny/small pass cannot hide a large-workload miss.
+Waived rows still record their raw p50/p95 miss in the JSON artifact, but the
+gate reports them as `WAIVED` and exits successfully until the review date.
 
 Add `--cold` to additionally measure cold-call latency. Cold timing
 spawns a fresh Python subprocess per measurement (so each call pays
@@ -81,14 +108,23 @@ legacy.
 
 ```bash
 .venv/bin/python -m migration.parity.parity_speed \
+    --threads single \
+    --tiny --tiny-reps 101 --tiny-warmup 3 \
     --n 2000 --reps 21 --warmup 3 --cold \
+    --large --large-reps 7 --large-warmup 1 --large-cold \
+    --legacy-cache migration/artifacts/parity_legacy_speed_baseline.json \
     --output migration/artifacts/parity_speed_cold_warm.json
 ```
 
+This canonical cold/warm artifact contains enforced `tiny-n`, `small-n`, and
+`large-n` lanes. The large lane records structured shape labels such as
+`orbits=400 × epochs=50 (20000 rows)` and collects cold-call timing when
+`--large-cold` is present.
+
 The cold/warm review gate intentionally uses more warm timing samples than the
-quick warm-only command. Several Rust APIs complete in tens of microseconds, so
-7 reps makes p95 behave like a single scheduler-outlier detector rather than a
-stable latency estimate.
+quick warm-only command. The tiny lane uses 101 reps because microsecond-scale
+p95 is otherwise dominated by a single scheduler outlier; the historical small
+lane uses 21 reps, while large workloads are millisecond-scale and keep 7 reps.
 
 ## Pretty-Printing Review Tables
 
