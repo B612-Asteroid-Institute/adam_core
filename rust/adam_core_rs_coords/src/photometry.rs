@@ -41,12 +41,15 @@ const PHOT_CHUNK: usize = 1024;
 const PHOT_PHASE_SERIAL_THRESHOLD_ROWS: usize = 4096;
 
 /// Switch to the tiled vForce/NEON pipeline once we have enough rows for the
-/// batched transcendentals to amortize their per-call setup. The small-n
-/// canonical gate (n=2000) sits just under this; we ride the vForce path for
-/// it because the saved per-row `pow`/`acos` work outweighs vForce's
-/// per-call dispatch cost once thread-local scratch is reused.
+/// batched transcendentals to amortize their per-call setup. Sized to be at
+/// or below the canonical `parity_fuzz --n 128` workload so the vForce path
+/// is exercised by every parity gate run, not just by the small-/large-n
+/// speed governance at n>=2000. Below this threshold the existing scalar
+/// Rayon path is still the cross-platform fallback and is generally faster
+/// on per-row dispatch overhead, but the cost is irrelevant: parity_fuzz is
+/// correctness-only and there is no speed gate at n in [64, 2000).
 #[cfg(target_os = "macos")]
-const PHOT_VFORCE_MIN_ROWS: usize = 1024;
+const PHOT_VFORCE_MIN_ROWS: usize = 64;
 
 /// Scratch-pool capacity for the vForce/NEON path. Magnitude / fused /
 /// predict work best at this tile because their five per-tile vForce

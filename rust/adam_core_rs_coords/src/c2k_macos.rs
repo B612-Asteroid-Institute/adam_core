@@ -33,9 +33,14 @@ use crate::{calc_mean_anomaly, RAD2DEG, TWO_PI};
 const C2K_TILE_ROWS: usize = 8192;
 
 /// Threshold above which the public flat6 entry points divert into the
-/// macOS batched-`acos` path. Below this the existing scalar / Rayon path
-/// already wins on per-row dispatch overhead.
-pub const C2K_MACOS_MIN_ROWS: usize = 1024;
+/// macOS batched-`acos` path. Sized to be at or below the canonical
+/// `parity_fuzz --n 128` workload so the macOS fast path is exercised by
+/// every parity gate run, not just by the small-/large-n speed governance
+/// at n>=2000. Below this threshold the existing scalar / Rayon path is
+/// still the cross-platform fallback and is generally faster on per-row
+/// dispatch overhead, but the cost is irrelevant: parity_fuzz is correctness-
+/// only and there is no speed gate at n in [64, 2000).
+pub const C2K_MACOS_MIN_ROWS: usize = 64;
 
 const FLOAT_TOL: f64 = 1e-15;
 
