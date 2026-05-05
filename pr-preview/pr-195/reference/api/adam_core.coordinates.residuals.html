@@ -524,8 +524,10 @@ If False, use only the observed covariance (Σ_obs).</p></li>
 This normalized residual is equivalent to the Mahalanobis distance squared.
 For residuals with no covariance (all non-diagonal covariance elements are zero) this
 is exactly equivalent to chi2.</p>
-<p>If the off-diagonal covariance elements (the covariate terms) are missing (represented by NaNs),
-then they will assumed to be 0.0.</p>
+<p>Covariance matrices must be symmetric positive definite. Singular or indefinite
+matrices are rejected with <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> instead of being inverted explicitly.
+If the off-diagonal covariance elements (the covariate terms) are missing
+(represented by NaNs), then they will be assumed to be 0.0.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -595,7 +597,7 @@ dominate the per-call cost in tight OD / least-squares inner loops.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-04-30</div>
+              Last updated on 2026-05-05</div>
           </div>
           <div class="right-details">
             

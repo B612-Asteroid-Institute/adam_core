@@ -480,18 +480,25 @@ fine-grained control for diagnostics.</p>
 <span class="n">chi2</span> <span class="o">=</span> <span class="n">calculate_chi2</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
 
 <span class="n">reduced</span> <span class="o">=</span> <span class="n">calculate_reduced_chi2</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">parameters</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
-
-<span class="c1"># Spherical-specific helpers.</span>
-<span class="n">observed_sph</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">359.0</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
-<span class="n">raw_resid_sph</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">358.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
-<span class="n">wrapped</span> <span class="o">=</span> <span class="n">bound_longitude_residuals</span><span class="p">(</span><span class="n">observed_sph</span><span class="p">,</span> <span class="n">raw_resid_sph</span><span class="p">)</span>
-<span class="n">corrected</span><span class="p">,</span> <span class="n">corrected_cov</span> <span class="o">=</span> <span class="n">apply_cosine_latitude_correction</span><span class="p">(</span>
-    <span class="n">observed_sph</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-    <span class="n">wrapped</span><span class="p">,</span>
-    <span class="n">c</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
-<span class="p">)</span>
 </pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">calculate_chi2</span></code> expects each covariance matrix to be symmetric positive
+definite. Singular or indefinite matrices raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>; NaNs on the
+diagonal also raise, while NaN off-diagonal covariances are treated as zero
+with a warning for legacy compatibility.</p>
+<blockquote>
+<div><p># Spherical-specific helpers.
+observed_sph = np.array([[1.0, 359.0, 20.0, 0.0, 0.0, 0.0]])
+raw_resid_sph = np.array([[0.0, 358.0, 0.0, 0.0, 5.0, 0.0]])
+wrapped = bound_longitude_residuals(observed_sph, raw_resid_sph)
+corrected, corrected_cov = apply_cosine_latitude_correction(</p>
+<blockquote>
+<div><p>observed_sph[:, 2],
+wrapped,
+c.copy(),</p>
+</div></blockquote>
+<p>)</p>
+</div></blockquote>
 </section>
 <section id="predicted-covariance-tradeoff">
 <h2>Predicted Covariance Tradeoff<a class="headerlink" href="#predicted-covariance-tradeoff" title="Link to this heading">¶</a></h2>
@@ -568,7 +575,7 @@ weighting when prediction uncertainty is a material part of the decision.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-04-30</div>
+              Last updated on 2026-05-05</div>
           </div>
           <div class="right-details">
             

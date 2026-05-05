@@ -797,8 +797,10 @@
 <span class="sd">    For residuals with no covariance (all non-diagonal covariance elements are zero) this</span>
 <span class="sd">    is exactly equivalent to chi2.</span>
 
-<span class="sd">    If the off-diagonal covariance elements (the covariate terms) are missing (represented by NaNs),</span>
-<span class="sd">    then they will assumed to be 0.0.</span>
+<span class="sd">    Covariance matrices must be symmetric positive definite. Singular or indefinite</span>
+<span class="sd">    matrices are rejected with ``ValueError`` instead of being inverted explicitly.</span>
+<span class="sd">    If the off-diagonal covariance elements (the covariate terms) are missing</span>
+<span class="sd">    (represented by NaNs), then they will be assumed to be 0.0.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -942,7 +944,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-04-30</div>
+              Last updated on 2026-05-05</div>
           </div>
           <div class="right-details">
             

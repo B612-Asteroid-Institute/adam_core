@@ -61,6 +61,11 @@ Atomic Helper Functions
 
    reduced = calculate_reduced_chi2(residuals, parameters=6)
 
+``calculate_chi2`` expects each covariance matrix to be symmetric positive
+definite. Singular or indefinite matrices raise ``ValueError``; NaNs on the
+diagonal also raise, while NaN off-diagonal covariances are treated as zero
+with a warning for legacy compatibility.
+
    # Spherical-specific helpers.
    observed_sph = np.array([[1.0, 359.0, 20.0, 0.0, 0.0, 0.0]])
    raw_resid_sph = np.array([[0.0, 358.0, 0.0, 0.0, 5.0, 0.0]])
