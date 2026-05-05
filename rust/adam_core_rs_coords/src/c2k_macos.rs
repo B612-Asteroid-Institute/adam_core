@@ -25,6 +25,8 @@
 
 use std::cell::RefCell;
 
+use rayon::prelude::*;
+
 use crate::{calc_mean_anomaly, RAD2DEG, TWO_PI};
 
 /// Tile size for the macOS path. Sized so each tile's scratch state fits in
@@ -286,65 +288,73 @@ pub fn cartesian_to_keplerian_flat6_into(
     debug_assert_eq!(mu.len(), n);
     debug_assert_eq!(out.len(), n * 13);
 
-    SCRATCH.with(|cell| {
-        let mut scratch = cell.borrow_mut();
-        for tile_start in (0..n).step_by(C2K_TILE_ROWS) {
-            let m = C2K_TILE_ROWS.min(n - tile_start);
-            fill_geometry_and_angles_tile(&mut scratch, flat_coords, mu, tile_start, m);
+    // Distribute tiles across Rayon workers for native multi-thread
+    // throughput. With `RAYON_NUM_THREADS=1` (the canonical single-thread
+    // gate) this collapses to a sequential walk so the gate timings are
+    // unchanged; with unconstrained Rayon the work scales across cores
+    // because each worker uses its own thread-local `SCRATCH` slab.
+    out.par_chunks_mut(C2K_TILE_ROWS * 13)
+        .enumerate()
+        .for_each(|(tile_idx, out_tile)| {
+            let tile_start = tile_idx * C2K_TILE_ROWS;
+            let m = out_tile.len() / 13;
+            SCRATCH.with(|cell| {
+                let mut scratch = cell.borrow_mut();
+                fill_geometry_and_angles_tile(&mut scratch, flat_coords, mu, tile_start, m);
 
-            for k in 0..m {
-                let i_global = tile_start + k;
-                let (inc, raan, ap, nu) = correct_angles(&scratch, k, m);
-                let a_v = scratch.a[k];
-                let p_v = scratch.p[k];
-                let e_v = scratch.e[k];
-                let near_parabolic = (e_v > (1.0 - FLOAT_TOL)) && (e_v < (1.0 + FLOAT_TOL));
-                let q = if near_parabolic {
-                    p_v / 2.0
-                } else {
-                    a_v * (1.0 - e_v)
-                };
-                let q_apo = if e_v < 1.0 {
-                    a_v * (1.0 + e_v)
-                } else {
-                    f64::INFINITY
-                };
-                let m_anom = calc_mean_anomaly(nu, e_v);
-                let n_mean = if near_parabolic {
-                    (mu[i_global] / (2.0 * q * q * q)).sqrt()
-                } else {
-                    let abs_a = a_v.abs();
-                    (mu[i_global] / (abs_a * abs_a * abs_a)).sqrt()
-                };
-                let period = if e_v < (1.0 - FLOAT_TOL) {
-                    TWO_PI / n_mean
-                } else {
-                    f64::INFINITY
-                };
-                let dtp = if (m_anom > std::f64::consts::PI) && (e_v < (1.0 - FLOAT_TOL)) {
-                    period - m_anom / n_mean
-                } else {
-                    -m_anom / n_mean
-                };
-                let tp = t0[i_global] + dtp;
+                for k in 0..m {
+                    let i_global = tile_start + k;
+                    let (inc, raan, ap, nu) = correct_angles(&scratch, k, m);
+                    let a_v = scratch.a[k];
+                    let p_v = scratch.p[k];
+                    let e_v = scratch.e[k];
+                    let near_parabolic = (e_v > (1.0 - FLOAT_TOL)) && (e_v < (1.0 + FLOAT_TOL));
+                    let q = if near_parabolic {
+                        p_v / 2.0
+                    } else {
+                        a_v * (1.0 - e_v)
+                    };
+                    let q_apo = if e_v < 1.0 {
+                        a_v * (1.0 + e_v)
+                    } else {
+                        f64::INFINITY
+                    };
+                    let m_anom = calc_mean_anomaly(nu, e_v);
+                    let n_mean = if near_parabolic {
+                        (mu[i_global] / (2.0 * q * q * q)).sqrt()
+                    } else {
+                        let abs_a = a_v.abs();
+                        (mu[i_global] / (abs_a * abs_a * abs_a)).sqrt()
+                    };
+                    let period = if e_v < (1.0 - FLOAT_TOL) {
+                        TWO_PI / n_mean
+                    } else {
+                        f64::INFINITY
+                    };
+                    let dtp = if (m_anom > std::f64::consts::PI) && (e_v < (1.0 - FLOAT_TOL)) {
+                        period - m_anom / n_mean
+                    } else {
+                        -m_anom / n_mean
+                    };
+                    let tp = t0[i_global] + dtp;
 
-                let row = &mut out[i_global * 13..i_global * 13 + 13];
-                row[0] = a_v;
-                row[1] = p_v;
-                row[2] = q;
-                row[3] = q_apo;
-                row[4] = e_v;
-                row[5] = inc * RAD2DEG;
-                row[6] = raan * RAD2DEG;
-                row[7] = ap * RAD2DEG;
-                row[8] = m_anom * RAD2DEG;
-                row[9] = nu * RAD2DEG;
-                row[10] = n_mean * RAD2DEG;
-                row[11] = period;
-                row[12] = tp;
-            }
-        }
-    });
+                    let row = &mut out_tile[k * 13..k * 13 + 13];
+                    row[0] = a_v;
+                    row[1] = p_v;
+                    row[2] = q;
+                    row[3] = q_apo;
+                    row[4] = e_v;
+                    row[5] = inc * RAD2DEG;
+                    row[6] = raan * RAD2DEG;
+                    row[7] = ap * RAD2DEG;
+                    row[8] = m_anom * RAD2DEG;
+                    row[9] = nu * RAD2DEG;
+                    row[10] = n_mean * RAD2DEG;
+                    row[11] = period;
+                    row[12] = tp;
+                }
+            });
+        });
 }
 
 /// Tile-batched `acos` Cartesian-to-Cometary conversion. Output is
@@ -364,44 +374,47 @@ pub fn cartesian_to_cometary_flat6_into(
     debug_assert_eq!(mu.len(), n);
     debug_assert_eq!(out.len(), n * 6);
 
-    SCRATCH.with(|cell| {
-        let mut scratch = cell.borrow_mut();
-        for tile_start in (0..n).step_by(C2K_TILE_ROWS) {
-            let m = C2K_TILE_ROWS.min(n - tile_start);
-            fill_geometry_and_angles_tile(&mut scratch, flat_coords, mu, tile_start, m);
+    out.par_chunks_mut(C2K_TILE_ROWS * 6)
+        .enumerate()
+        .for_each(|(tile_idx, out_tile)| {
+            let tile_start = tile_idx * C2K_TILE_ROWS;
+            let m = out_tile.len() / 6;
+            SCRATCH.with(|cell| {
+                let mut scratch = cell.borrow_mut();
+                fill_geometry_and_angles_tile(&mut scratch, flat_coords, mu, tile_start, m);
 
-            for k in 0..m {
-                let i_global = tile_start + k;
-                let (inc, raan, ap, nu) = correct_angles(&scratch, k, m);
-                let a_v = scratch.a[k];
-                let p_v = scratch.p[k];
-                let e_v = scratch.e[k];
-                let near_parabolic = (e_v > (1.0 - FLOAT_TOL)) && (e_v < (1.0 + FLOAT_TOL));
-                let q = if near_parabolic {
-                    p_v / 2.0
-                } else {
-                    a_v * (1.0 - e_v)
-                };
-                let m_anom = calc_mean_anomaly(nu, e_v);
-                // Cometary uses `e < 1.0` with no FLOAT_TOL margin (matches
-                // `cartesian_to_cometary6` in `generic.rs`).
-                let n_mean = (mu[i_global] / a_v.abs().powi(3)).sqrt();
-                let period = TWO_PI / n_mean;
-                let dtp = if m_anom > std::f64::consts::PI && e_v < 1.0 {
-                    period - m_anom / n_mean
-                } else {
-                    -(m_anom / n_mean)
-                };
-                let tp = t0[i_global] + dtp;
+                for k in 0..m {
+                    let i_global = tile_start + k;
+                    let (inc, raan, ap, nu) = correct_angles(&scratch, k, m);
+                    let a_v = scratch.a[k];
+                    let p_v = scratch.p[k];
+                    let e_v = scratch.e[k];
+                    let near_parabolic = (e_v > (1.0 - FLOAT_TOL)) && (e_v < (1.0 + FLOAT_TOL));
+                    let q = if near_parabolic {
+                        p_v / 2.0
+                    } else {
+                        a_v * (1.0 - e_v)
+                    };
+                    let m_anom = calc_mean_anomaly(nu, e_v);
+                    // Cometary uses `e < 1.0` with no FLOAT_TOL margin
+                    // (matches `cartesian_to_cometary6` in `generic.rs`).
+                    let n_mean = (mu[i_global] / a_v.abs().powi(3)).sqrt();
+                    let period = TWO_PI / n_mean;
+                    let dtp = if m_anom > std::f64::consts::PI && e_v < 1.0 {
+                        period - m_anom / n_mean
+                    } else {
+                        -(m_anom / n_mean)
+                    };
+                    let tp = t0[i_global] + dtp;
 
-                let row = &mut out[i_global * 6..i_global * 6 + 6];
-                row[0] = q;
-                row[1] = e_v;
-                row[2] = inc * RAD2DEG;
-                row[3] = raan * RAD2DEG;
-                row[4] = ap * RAD2DEG;
-                row[5] = tp;
-            }
-        }
-    });
+                    let row = &mut out_tile[k * 6..k * 6 + 6];
+                    row[0] = q;
+                    row[1] = e_v;
+                    row[2] = inc * RAD2DEG;
+                    row[3] = raan * RAD2DEG;
+                    row[4] = ap * RAD2DEG;
+                    row[5] = tp;
+                }
+            });
+        });
 }
