@@ -66,8 +66,10 @@ p50/p95 estimates, while preserving all raw samples in the current artifact.
 This absorbs isolated scheduler outliers without requiring ad hoc manual reruns.
 The default pass/fail mode is single-process/single-thread so the committed
 baseline and current run are apples-to-apples; production/library Rust still
-uses native Rayon/thread-pool behavior outside the benchmark harness. Native
-measurements are allowed only as explicitly labeled diagnostics with separate
+uses normal multi-thread Rayon / OpenMP / BLAS / JAX behavior outside the
+benchmark harness. Multi-thread measurements (also written as `--threads
+multi-thread`; `native` is accepted as a deprecated alias) are allowed only
+as explicitly labeled diagnostics with separate
 baseline/output paths. Use `--trials 1` only for explicitly labeled diagnostics.
 
 Artifacts:

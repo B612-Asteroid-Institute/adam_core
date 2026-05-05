@@ -26,21 +26,44 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable
 
-import numpy as np
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from adam_core._rust import API_MIGRATIONS
-from adam_core._rust import api as rust_api
-from adam_core.constants import Constants as c
-from adam_core.coordinates.cartesian import CartesianCoordinates
-from adam_core.coordinates.covariances import CoordinateCovariances
-from adam_core.coordinates.keplerian import KeplerianCoordinates
-from adam_core.coordinates.origin import Origin, OriginCodes
-from adam_core.coordinates.transform import transform_coordinates
-from adam_core.time import Timestamp
+from migration.parity import _threading
+
+
+DEFAULT_THREAD_MODE = "single"
+
+
+def _thread_mode_from_argv(argv: list[str]) -> str:
+    for idx, arg in enumerate(argv):
+        if arg == "--threads" and idx + 1 < len(argv):
+            return argv[idx + 1]
+        if arg.startswith("--threads="):
+            return arg.split("=", 1)[1]
+    return DEFAULT_THREAD_MODE
+
+
+# Apply before importing NumPy or the PyO3 extension so Rust/JAX/BLAS thread
+# pools see the benchmark policy at runtime initialization.
+_threading.apply_thread_mode(_thread_mode_from_argv(sys.argv[1:]))
+
+import numpy as np  # noqa: E402
+
+from adam_core._rust import API_MIGRATIONS  # noqa: E402
+from adam_core._rust import api as rust_api  # noqa: E402
+from adam_core.constants import Constants as c  # noqa: E402
+from adam_core.coordinates.cartesian import CartesianCoordinates  # noqa: E402
+from adam_core.coordinates.covariances import CoordinateCovariances  # noqa: E402
+from adam_core.coordinates.keplerian import KeplerianCoordinates  # noqa: E402
+from adam_core.coordinates.origin import Origin, OriginCodes  # noqa: E402
+from adam_core.coordinates.transform import transform_coordinates  # noqa: E402
+from adam_core.time import Timestamp  # noqa: E402
 
 RNG = np.random.default_rng(20260414)
 MU = float(c.MU)
@@ -61,10 +84,10 @@ DEFAULT_P50_MAX_RATIO = 1.75
 DEFAULT_P95_MAX_RATIO = 2.50
 
 
-def _timed_runs(fn: Callable[[], Any], repeats: int) -> tuple[np.ndarray, Any]:
+def _timed_once(fn: Callable[[], Any], repeats: int) -> tuple[np.ndarray, Any]:
     if repeats < 2:
         raise ValueError("repeats must be >= 2 to estimate p50/p95 runtime.")
-    out: Any = fn()  # prime
+    out: Any = fn()  # prime each trial outside the recorded samples.
     times = np.empty(repeats, dtype=np.float64)
     for idx in range(repeats):
         t0 = time.perf_counter()
@@ -73,12 +96,44 @@ def _timed_runs(fn: Callable[[], Any], repeats: int) -> tuple[np.ndarray, Any]:
     return times, out
 
 
+def _timed_runs(
+    fn: Callable[[], Any], repeats: int, trials: int = 1
+) -> tuple[np.ndarray, Any]:
+    if trials < 1:
+        raise ValueError("trials must be >= 1.")
+    samples = np.empty((trials, repeats), dtype=np.float64)
+    out: Any = None
+    for trial in range(trials):
+        samples[trial], out = _timed_once(fn, repeats)
+    return samples, out
+
+
 def _latency_summary(rust_times: np.ndarray) -> dict[str, Any]:
+    samples = np.asarray(rust_times, dtype=np.float64)
+    if samples.ndim == 1:
+        samples = samples.reshape(1, -1)
+    trial_p50 = np.percentile(samples, 50, axis=1)
+    trial_p95 = np.percentile(samples, 95, axis=1)
     return {
-        "rust_seconds_p50": float(np.percentile(rust_times, 50)),
-        "rust_seconds_p95": float(np.percentile(rust_times, 95)),
-        "rust_samples_seconds": rust_times.tolist(),
+        "rust_seconds_p50": float(np.median(trial_p50)),
+        "rust_seconds_p95": float(np.median(trial_p95)),
+        "rust_seconds_p50_trials": trial_p50.tolist(),
+        "rust_seconds_p95_trials": trial_p95.tolist(),
+        "rust_samples_seconds": samples.reshape(-1).tolist(),
+        "rust_sample_trials_seconds": samples.tolist(),
+        "latency_aggregation": "median-of-trial-percentiles",
     }
+
+
+def _annotate_latency_summaries(
+    measurements: dict[str, dict[str, Any]],
+    thread_mode: str,
+    thread_env: dict[str, str | None],
+) -> dict[str, dict[str, Any]]:
+    for summary in measurements.values():
+        summary["thread_mode"] = thread_mode
+        summary["thread_env"] = thread_env.copy()
+    return measurements
 
 
 # ---------- representative input builders ---------------------------------
@@ -401,7 +456,7 @@ def _build_ephemeris_cov_inputs(n_orbits: int, n_times: int):
 # ---------- measurement orchestration ---------------------------------------
 
 
-def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
+def _run_measurements(repeats: int, trials: int = 1) -> dict[str, dict[str, Any]]:
     coords = _build_cartesian(120_000)
     geodetic_coords = _build_geodetic_cartesian(120_000, GEODETIC_A, GEODETIC_F)
     keplerian_t0 = np.ascontiguousarray(
@@ -494,53 +549,61 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
     _gauss_iod_rust_batch(giod_lon[:8], giod_lat[:8], giod_times[:8], giod_obs[:8])
 
     # Timed runs.
-    rust_mm, _ = _timed_runs(lambda: rust_api.calc_mean_motion_numpy(a, mu), repeats)
+    rust_mm, _ = _timed_runs(
+        lambda: rust_api.calc_mean_motion_numpy(a, mu), repeats, trials
+    )
     rust_cart, _ = _timed_runs(
-        lambda: rust_api.cartesian_to_spherical_numpy(coords), repeats
+        lambda: rust_api.cartesian_to_spherical_numpy(coords), repeats, trials
     )
     rust_geodetic, _ = _timed_runs(
         lambda: rust_api.cartesian_to_geodetic_numpy(
             geodetic_coords, GEODETIC_A, GEODETIC_F, 100, 1e-15
         ),
         repeats,
+        trials,
     )
     rust_keplerian, _ = _timed_runs(
         lambda: rust_api.cartesian_to_keplerian_numpy(
             coords, keplerian_t0, keplerian_mu
         ),
         repeats,
+        trials,
     )
     rust_k2c, _ = _timed_runs(
         lambda: rust_api.keplerian_to_cartesian_numpy(
             keplerian_a_coords, keplerian_a_mu, 100, 1e-15
         ),
         repeats,
+        trials,
     )
     rust_sph2cart, _ = _timed_runs(
-        lambda: rust_api.spherical_to_cartesian_numpy(spherical_coords), repeats
+        lambda: rust_api.spherical_to_cartesian_numpy(spherical_coords), repeats, trials
     )
     rust_chi2, _ = _timed_runs(
         lambda: rust_api.calculate_chi2_numpy(chi2_residuals, chi2_covariances),
         repeats,
+        trials,
     )
-    rust_gibbs, _ = _timed_runs(lambda: _gibbs_rust_batch(r1, r2, r3), repeats)
+    rust_gibbs, _ = _timed_runs(lambda: _gibbs_rust_batch(r1, r2, r3), repeats, trials)
     rust_herrick, _ = _timed_runs(
-        lambda: _herrick_rust_batch(r1, r2, r3, t1, t2, t3), repeats
+        lambda: _herrick_rust_batch(r1, r2, r3, t1, t2, t3), repeats, trials
     )
     rust_gauss, _ = _timed_runs(
-        lambda: _gauss_rust_batch(r1, r2, r3, t1, t2, t3), repeats
+        lambda: _gauss_rust_batch(r1, r2, r3, t1, t2, t3), repeats, trials
     )
     rust_c2com, _ = _timed_runs(
         lambda: rust_api.cartesian_to_cometary_numpy(
             coords, keplerian_t0, keplerian_mu
         ),
         repeats,
+        trials,
     )
     rust_com2c, _ = _timed_runs(
         lambda: rust_api.cometary_to_cartesian_numpy(
             cometary_coords, cometary_t0, cometary_mu, 100, 1e-15
         ),
         repeats,
+        trials,
     )
     rust_transform, _ = _timed_runs(
         lambda: transform_coordinates(
@@ -549,52 +612,64 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
             origin_out=OriginCodes.SUN,
         ),
         repeats,
+        trials,
     )
     rust_prop, _ = _timed_runs(
         lambda: rust_api.propagate_2body_numpy(
             propagate_orbits, propagate_dts, propagate_mus, 1000, 1e-14
         ),
         repeats,
+        trials,
     )
     rust_prop_cov, _ = _timed_runs(
         lambda: rust_api.propagate_2body_with_covariance_numpy(
             cov_orbits, cov_cov_in, cov_dts, cov_mus, 1000, 1e-14
         ),
         repeats,
+        trials,
     )
     rust_eph, _ = _timed_runs(
         lambda: rust_api.generate_ephemeris_2body_numpy(
             eph_orbits, eph_observers, eph_mus
         ),
         repeats,
+        trials,
     )
     rust_eph_cov, _ = _timed_runs(
         lambda: rust_api.generate_ephemeris_2body_with_covariance_numpy(
             eph_cov_orbits, eph_cov_cov_in, eph_cov_observers, eph_cov_mus
         ),
         repeats,
+        trials,
     )
     rust_phase, _ = _timed_runs(
-        lambda: rust_api.calculate_phase_angle_numpy(photo_obj, photo_obs), repeats
+        lambda: rust_api.calculate_phase_angle_numpy(photo_obj, photo_obs),
+        repeats,
+        trials,
     )
     rust_mag, _ = _timed_runs(
         lambda: rust_api.calculate_apparent_magnitude_v_numpy(
             photo_h, photo_obj, photo_obs, photo_g
         ),
         repeats,
+        trials,
     )
     rust_mag_alpha, _ = _timed_runs(
         lambda: rust_api.calculate_apparent_magnitude_v_and_phase_angle_numpy(
             photo_h, photo_obj, photo_obs, photo_g
         ),
         repeats,
+        trials,
     )
     rust_lambert, _ = _timed_runs(
-        lambda: rust_api.izzo_lambert_numpy(lam_r1, lam_r2, lam_tof, MU), repeats
+        lambda: rust_api.izzo_lambert_numpy(lam_r1, lam_r2, lam_tof, MU),
+        repeats,
+        trials,
     )
     rust_gauss_iod, _ = _timed_runs(
         lambda: _gauss_iod_rust_batch(giod_lon, giod_lat, giod_times, giod_obs),
         repeats,
+        trials,
     )
     rust_predict_mag, _ = _timed_runs(
         lambda: rust_api.predict_magnitudes_bandpass_numpy(
@@ -606,6 +681,7 @@ def _run_measurements(repeats: int) -> dict[str, dict[str, Any]]:
             predict_delta_table,
         ),
         repeats,
+        trials,
     )
 
     return {
@@ -700,6 +776,14 @@ def _compare_to_baseline(
             continue
         cur = current[name]
         base = baseline[name]
+        cur_thread_mode = cur.get("thread_mode")
+        base_thread_mode = base.get("thread_mode")
+        if base_thread_mode is not None and cur_thread_mode != base_thread_mode:
+            failures.append(
+                f"{name} thread mode mismatch: current {cur_thread_mode!r} vs "
+                f"baseline {base_thread_mode!r}"
+            )
+            continue
         ratio_p50 = cur["rust_seconds_p50"] / base["rust_seconds_p50"]
         ratio_p95 = cur["rust_seconds_p95"] / base["rust_seconds_p95"]
         marker = (
@@ -727,6 +811,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument(
+        "--trials",
+        type=int,
+        default=3,
+        help=(
+            "Independent timing trials per API (default: 3). The gate compares "
+            "median-of-trial p50/p95 values while preserving every raw sample."
+        ),
+    )
+    parser.add_argument(
         "--capture-baseline",
         action="store_true",
         help="Write migration/artifacts/rust_latency_baseline.json with current "
@@ -747,12 +840,28 @@ def main() -> None:
     )
     parser.add_argument("--p50-max-ratio", type=float, default=DEFAULT_P50_MAX_RATIO)
     parser.add_argument("--p95-max-ratio", type=float, default=DEFAULT_P95_MAX_RATIO)
+    parser.add_argument(
+        "--threads",
+        choices=("single", "multi-thread", "native"),
+        default=DEFAULT_THREAD_MODE,
+        help=(
+            "Thread policy for Rust latency measurements (default: single). "
+            "Native/multithread measurements are diagnostic and should use a "
+            "separate, explicitly labeled baseline/output path."
+        ),
+    )
     args = parser.parse_args()
 
+    thread_env = _threading.apply_thread_mode(args.threads)
     _check_coverage()
 
-    print(f"Measuring Rust-only latency ({args.repeats} repeats)...")
-    current = _run_measurements(args.repeats)
+    print(
+        f"Measuring Rust-only latency ({args.trials} trials × {args.repeats} repeats, "
+        f"threads={args.threads})..."
+    )
+    current = _annotate_latency_summaries(
+        _run_measurements(args.repeats, args.trials), args.threads, thread_env
+    )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(current, indent=2), encoding="utf-8")

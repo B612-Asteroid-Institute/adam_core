@@ -562,7 +562,7 @@ class SpeedResult:
     rust_cold: Optional[float] = None
     legacy_cold: Optional[float] = None
     speedup_cold: Optional[float] = None
-    cold_thread_mode: str = "native"
+    cold_thread_mode: str = "multi-thread"
     cold_thread_env: dict[str, str | None] = field(default_factory=dict)
     legacy_cold_source: str = "not-measured"
     legacy_cold_cache_key: str = ""
@@ -644,7 +644,7 @@ def measure(
     seed: int = 20260425,
     measure_cold: bool = False,
     thread_mode: str = "single",
-    cold_thread_mode: str = "native",
+    cold_thread_mode: str = "multi-thread",
     lane: str = DEFAULT_SMALL_LANE_NAME,
     lane_description: str = "historical n=2000 promotion gate",
     lane_enforced: bool = True,
@@ -903,7 +903,7 @@ def measure_all(
     seed: int = 20260425,
     measure_cold: bool = False,
     thread_mode: str = "single",
-    cold_thread_mode: str = "native",
+    cold_thread_mode: str = "multi-thread",
     legacy_cache: dict[str, object] | None = None,
 ) -> list[SpeedResult]:
     lanes = build_speed_lanes(
@@ -928,7 +928,7 @@ def measure_lanes(
     *,
     seed: int = 20260425,
     thread_mode: str = "single",
-    cold_thread_mode: str = "native",
+    cold_thread_mode: str = "multi-thread",
     legacy_cache: dict[str, object] | None = None,
 ) -> list[SpeedResult]:
     results: list[SpeedResult] = []
@@ -997,7 +997,7 @@ def _flag(r: SpeedResult) -> str:
 def format_summary(results: list[SpeedResult]) -> str:
     has_cold = any(r.rust_cold is not None for r in results)
     warm_mode = _result_mode(results, "thread_mode", "single")
-    cold_mode = _result_mode(results, "cold_thread_mode", "native")
+    cold_mode = _result_mode(results, "cold_thread_mode", "multi-thread")
     lines = [
         f"Thread mode: warm={warm_mode}; cold={cold_mode if has_cold else 'not measured'}",
         "Note: single-thread caps thread pools only; SIMD/ILP remain enabled within each CPU core.",
@@ -1092,7 +1092,7 @@ def to_json(
         "default_tiny_speedup": DEFAULT_TINY_SPEEDUP,
         "thread_mode": _result_mode(results, "thread_mode", "single"),
         "thread_env": _result_env(results, "thread_env"),
-        "cold_thread_mode": _result_mode(results, "cold_thread_mode", "native"),
+        "cold_thread_mode": _result_mode(results, "cold_thread_mode", "multi-thread"),
         "cold_thread_env": _result_env(results, "cold_thread_env"),
         "thread_policy": (
             "Warm p50/p95 timings use thread_mode for apples-to-apples "
@@ -1246,20 +1246,24 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--threads",
-        choices=("single", "native"),
+        choices=("single", "multi-thread", "native"),
         default="single",
         help=(
-            "Warm p50/p95 thread policy (default: single). Use native only "
-            "for separately labeled scaling artifacts."
+            "Warm p50/p95 thread policy (default: single). Use 'multi-thread' "
+            "only for separately labeled scaling artifacts that allow both "
+            "Rust Rayon and the legacy NumPy/JAX/BLAS pools to scale across "
+            "available cores. 'native' is accepted as a deprecated alias "
+            "for 'multi-thread'."
         ),
     )
     p.add_argument(
         "--cold-threads",
-        choices=("single", "native"),
-        default="native",
+        choices=("single", "multi-thread", "native"),
+        default="multi-thread",
         help=(
-            "Cold-call thread policy when --cold is set (default: native for "
-            "one-shot production realism)."
+            "Cold-call thread policy when --cold is set (default: "
+            "multi-thread for one-shot production realism). 'native' is "
+            "accepted as a deprecated alias for 'multi-thread'."
         ),
     )
     p.add_argument(

@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import _inputs, parity_fuzz, parity_speed
+from . import _threading
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -60,10 +60,91 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Speed gate warmup reps (default: 1).",
     )
     p.add_argument(
+        "--speed-tiny",
+        action="store_true",
+        help="Also measure the enforced tiny-N one-off speed lane.",
+    )
+    p.add_argument(
+        "--speed-tiny-reps",
+        type=int,
+        default=None,
+        help="Timing reps for the tiny speed lane (default: --speed-reps).",
+    )
+    p.add_argument(
+        "--speed-tiny-warmup",
+        type=int,
+        default=None,
+        help="Warmup reps for the tiny speed lane (default: --speed-warmup).",
+    )
+    p.add_argument(
+        "--speed-large",
+        action="store_true",
+        help="Also measure the enforced API-shaped large-N speed lane.",
+    )
+    p.add_argument(
+        "--speed-large-n",
+        type=int,
+        default=None,
+        help="Override the large speed lane to use this n for every API.",
+    )
+    p.add_argument(
+        "--speed-large-reps",
+        type=int,
+        default=None,
+        help="Timing reps for the large speed lane (default: --speed-reps).",
+    )
+    p.add_argument(
+        "--speed-large-warmup",
+        type=int,
+        default=None,
+        help="Warmup reps for the large speed lane (default: --speed-warmup).",
+    )
+    p.add_argument(
+        "--speed-large-cold",
+        action="store_true",
+        help="Also collect cold-call timings for the large speed lane.",
+    )
+    p.add_argument(
+        "--speed-large-enforced",
+        action="store_true",
+        help="Deprecated compatibility flag; large-N is enforced by default.",
+    )
+    p.add_argument(
+        "--speed-large-diagnostic",
+        action="store_true",
+        help="Ad-hoc escape hatch: measure large-N but exclude it from pass/fail.",
+    )
+    p.add_argument(
+        "--speed-legacy-cache",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON cache for baseline-main legacy speed timings. Missing "
+            "or stale entries fail unless --speed-refresh-legacy-cache is set."
+        ),
+    )
+    p.add_argument(
+        "--speed-refresh-legacy-cache",
+        action="store_true",
+        help="Recapture and overwrite --speed-legacy-cache for the speed lanes.",
+    )
+    p.add_argument(
         "--base-seed",
         type=int,
         default=20260425,
         help="RNG base seed (default: today's date).",
+    )
+    p.add_argument(
+        "--threads",
+        choices=("single", "multi-thread", "native"),
+        default="single",
+        help=(
+            "Thread policy for warm speed gate and parity subprocesses "
+            "(default: single). Use 'multi-thread' only for separate scaling "
+            "artifacts (allows both Rust Rayon and the legacy NumPy/JAX/BLAS "
+            "pools to scale across available cores). 'native' is accepted as "
+            "a deprecated alias for 'multi-thread'."
+        ),
     )
     p.add_argument(
         "--output",
@@ -88,9 +169,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
 
+    _threading.apply_thread_mode(args.threads)
+
+    from . import _inputs, parity_fuzz, parity_speed
+
+    if args.speed_refresh_legacy_cache and args.speed_legacy_cache is None:
+        parser.error("--speed-refresh-legacy-cache requires --speed-legacy-cache")
+
     api_ids = args.apis or list(_inputs.all_api_ids())
 
-    artifact: dict = {"api_ids": api_ids}
+    artifact: dict = {"api_ids": api_ids, "thread_mode": args.threads}
     fuzz_pass = True
     speed_pass = True
 
@@ -111,17 +199,40 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not args.skip_speed:
         print()
         print("=" * 72)
-        print("SPEEDUP GATE (>=1.2x Rust vs baseline main)")
+        print("SPEEDUP GATE (lane-specific Rust vs baseline-main thresholds)")
         print("=" * 72)
-        speed_results = parity_speed.measure_all(
-            api_ids,
+        legacy_cache = parity_speed.prepare_legacy_timing_cache(
+            args.speed_legacy_cache,
+            refresh=args.speed_refresh_legacy_cache,
+        )
+        speed_lanes = parity_speed.build_speed_lanes(
             n=args.speed_n,
             reps=args.speed_reps,
             warmup=args.speed_warmup,
-            seed=args.base_seed,
+            measure_cold=False,
+            include_tiny=args.speed_tiny,
+            tiny_reps=args.speed_tiny_reps,
+            tiny_warmup=args.speed_tiny_warmup,
+            include_large=args.speed_large,
+            large_n=args.speed_large_n,
+            large_reps=args.speed_large_reps,
+            large_warmup=args.speed_large_warmup,
+            large_cold=args.speed_large_cold,
+            large_enforced=args.speed_large_enforced or not args.speed_large_diagnostic,
         )
+        speed_results = parity_speed.measure_lanes(
+            api_ids,
+            speed_lanes,
+            seed=args.base_seed,
+            thread_mode=args.threads,
+            legacy_cache=legacy_cache,
+        )
+        parity_speed.write_legacy_timing_cache(legacy_cache)
         print(parity_speed.format_summary(speed_results))
-        artifact["parity_speed"] = parity_speed.to_json(speed_results)
+        artifact["parity_speed"] = parity_speed.to_json(
+            speed_results,
+            legacy_cache=legacy_cache,
+        )
         speed_pass = artifact["parity_speed"]["all_passed"]
 
     artifact["all_passed"] = fuzz_pass and speed_pass
