@@ -1436,7 +1436,7 @@ fn calculate_chi2_numpy<'py>(
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?;
     match calculate_chi2_flat(r_slice, c_slice, n, d) {
-        Ok(out) => Ok(ndarray::Array1::from_vec(out).into_pyarray_bound(py)),
+        Ok(out) => Ok(out.into_pyarray_bound(py)),
         Err(adam_core_rs_coords::chi2::Chi2Error::NanDiagonal { row, dim }) => {
             Err(PyValueError::new_err(format!(
                 "Covariance matrix has NaN on diagonal (row={row}, dim={dim})."

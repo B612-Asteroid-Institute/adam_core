@@ -40,7 +40,11 @@ pub fn calculate_chi2_flat(
         }
     }
 
-    let results: Result<Vec<f64>, Chi2Error> = (0..n)
+    if rayon::current_num_threads() == 1 {
+        return calculate_chi2_flat_serial(residuals_flat, covariances_flat, n, d);
+    }
+
+    (0..n)
         .into_par_iter()
         .map(|i| {
             let r_off = i * d;
@@ -52,8 +56,27 @@ pub fn calculate_chi2_flat(
                 i,
             )
         })
-        .collect();
-    results
+        .collect()
+}
+
+fn calculate_chi2_flat_serial(
+    residuals_flat: &[f64],
+    covariances_flat: &[f64],
+    n: usize,
+    d: usize,
+) -> Result<Vec<f64>, Chi2Error> {
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let r_off = i * d;
+        let cov_off = i * d * d;
+        out.push(chi2_one_row(
+            &residuals_flat[r_off..r_off + d],
+            &covariances_flat[cov_off..cov_off + d * d],
+            d,
+            i,
+        )?);
+    }
+    Ok(out)
 }
 
 #[inline]
