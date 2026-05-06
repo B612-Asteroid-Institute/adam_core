@@ -1242,29 +1242,34 @@ Verification:
   `migration/artifacts/parity_legacy_speed_baseline.json` and invalidated by
   API/shape/process/thread/legacy-checkout changes.
 
-### RM-P1-020: Resolve Remaining 1.2x Large-N Single-Thread Misses
+### RM-P1-020: Resolve Remaining 1.2x Single-Thread Speed Misses
 
 Status: open
 
 Reason: after enforcing the 1.2x p50/p95 threshold on every speed lane and
-removing large-n waivers, the current single-thread grid is red. The persistent
-large-n structural misses are `dynamics.generate_ephemeris_2body` and
-`photometry.predict_magnitudes`, while the latest canonical artifact also shows
-`dynamics.add_light_time` and fused photometry p95 as current red rows that must
-be triaged before any merge-readiness claim. Multi-thread scaling evidence is
-useful for production-throughput context, but it does not replace the default
-single-thread gate.
+removing large-n waivers, the current single-thread grid is red. The 2026-05-06
+canonical refresh on the committed source state shows reproducible failures in
+the large-n `dynamics.generate_ephemeris_2body` and photometry rows, plus a
+tiny-n `coordinates.residuals.calculate_chi2` p95 miss. `dynamics.add_light_time`
+passed in the latest `rust-parity-main` and `rust-parity-speed-cold` artifacts,
+so the earlier add-light-time row is treated as measurement/order noise unless
+it reproduces. The same `rust-parity-main` artifact also captured a borderline
+small-n `dynamics.generate_ephemeris_2body` p50 miss and a `calcGauss` p95
+outlier; both need targeted confirmation before code churn. Multi-thread scaling
+evidence is useful for production-throughput context, but it does not replace
+the default single-thread gate.
 
 Scope:
 
 - Keep each API/lane as its own measured implementation pass: plan, implement,
   rebuild, run component parity, run the component speed grid with cached legacy
   timings, then checkpoint only if the evidence supports keeping the change.
-- For `dynamics.add_light_time`, first determine whether the latest miss is a
-  measurement outlier or a real regression from the shared universal-Kepler /
-  light-time helper changes. Use targeted cached-legacy runs before editing
-  code; if the miss reproduces, handle it in the same disciplined pass style as
-  ephemeris rather than treating it as incidental noise.
+- For `coordinates.residuals.calculate_chi2`, confirm whether the tiny-n p95
+  miss reproduces outside the full-grid ordering. If it does, investigate
+  boundary/setup overhead before changing the Cholesky kernel; the small-n and
+  large-n lanes still clear strongly.
+- For `dynamics.add_light_time`, do not edit based on the stale full-grid miss
+  alone. Spot-check with targeted cached-legacy runs only if it reappears.
 - For `dynamics.generate_ephemeris_2body`, evaluate at most a small number of
   disciplined approaches before declaring the path structurally limited:
   - synchronous masked-convergence rewrite of the light-time/universal-Kepler
@@ -1274,17 +1279,20 @@ Scope:
     state without serializing the multi-thread Rayon path;
   - if those do not clear the gate, document the miss as structural with
     separate multi-thread production evidence rather than adding a waiver.
-- For fused photometry p95 misses, treat them as p95 variance unless repeated
-  targeted runs show a real kernel regression. Do not churn the already-tuned
-  vForce/NEON path without before/after evidence.
-- For `photometry.predict_magnitudes`, treat the current miss as the already
-  observed JAX/XLA bandpass-gather fusion advantage unless a low-risk
+- For large-n photometry, distinguish the borderline p50/p95 rows from the
+  structural `photometry.predict_magnitudes` miss. Treat phase/magnitude/fused
+  p95 misses as variance unless repeated targeted runs show a real kernel
+  regression. Treat `photometry.predict_magnitudes` as the already observed
+  JAX/XLA bandpass-gather fusion advantage unless a low-risk
   polynomial/transcendental plan with endpoint parity checks is approved first.
   If no such plan is approved, collect and label multi-thread scaling evidence
   as production context while keeping the single-thread gate result visible.
-- Do not add permanent large-n waivers. Any temporary local rerouting while an
-  optimization is actively underway must be dated, explicit, and removed before
-  claiming merge readiness.
+- For `orbit_determination.calcGauss`, treat isolated p95 failures as scheduler
+  outliers unless they reproduce in `rust-parity-speed-cold` or targeted cached
+  runs; this row passed in the latest cold/warm artifact.
+- Do not add permanent large-n or tiny-n waivers. Any temporary local rerouting
+  while an optimization is actively underway must be dated, explicit, and
+  removed before claiming merge readiness.
 
 Acceptance:
 
