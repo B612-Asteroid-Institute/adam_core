@@ -1,13 +1,12 @@
 # spicekit — Standalone Rust SPICE Kernel Toolkit Extraction Plan
 
-Status: Rust crate and Python package published as `spicekit = 0.1.0`;
-  CSpice parity oracle carved out into `crates/spicekit-bench`;
-  adam-core now consumes the public Rust crate directly through
-  `rust/adam_core_rs_spice`. The Python `spicekit` package remains
-  available for external users, but adam-core runtime SPICE no longer
-  imports it.
+Status: Rust crate and Python package published; CSpice parity oracle
+  carved out into `crates/spicekit-bench`; adam-core now consumes
+  `spicekit = 0.2.1` directly through `rust/adam_core_rs_spice`. The
+  Python `spicekit` package remains available for external users, but
+  adam-core runtime SPICE no longer imports it.
 Drafted: 2026-04-20
-Last updated: 2026-04-28
+Last updated: 2026-05-03
 
 ## Motivation
 
@@ -56,7 +55,7 @@ Rust dependencies. spicekit-py adds `pyo3`, `numpy`, `ndarray`.
 ## What stays in adam-core
 
 - `adam_core_rs_spice` — adam-core's Rust-side SPICE backend. Depends
-  directly on crates.io `spicekit = "0.1"` and owns adam-core-specific
+  directly on crates.io `spicekit = "0.2.1"` and owns adam-core-specific
   kernel registration, SPK/PCK reader dispatch, text-kernel bindings,
   last-loaded-wins semantics, and batched `spkez`/`pxform`/`sxform`/
   `bodn2c` operations.
@@ -167,14 +166,19 @@ Phase-in history:
 
 6. **Direct Rust-to-Rust consumption.** [DONE 2026-04-28] RM-P0-001
    reintroduced an adam-core-owned `rust/adam_core_rs_spice` crate, but
-   now as a downstream consumer of the public crates.io `spicekit =
-   "0.1"` library rather than as a fork of the NAIF reader. Python
-   adam-core calls the native `AdamCoreSpiceBackend` PyO3 wrapper; it no
-   longer imports the Python `spicekit` wheel for runtime SPICE behavior.
-   The Python runtime dependency on `spicekit>=0.1.0` was removed from
+   now as a downstream consumer of the public crates.io `spicekit`
+   library rather than as a fork of the NAIF reader. Python adam-core
+   calls the native `AdamCoreSpiceBackend` PyO3 wrapper; it no longer
+   imports the Python `spicekit` wheel for runtime SPICE behavior. The
+   Python runtime dependency on `spicekit>=0.1.0` was removed from
    `pyproject.toml`/`uv.lock`.
 
-7. **Regression policy.** Any future adam-core change that needs a new
+7. **Crates.io dependency bump.** [DONE 2026-05-03] adam-core updated
+   its direct Rust dependency from `spicekit = "0.1"` to
+   `spicekit = "0.2.1"`, regenerated Cargo lock state, rebuilt the PyO3
+   extension, and refreshed the adam-core parity/performance artifacts.
+
+8. **Regression policy.** Any future adam-core change that needs a new
    spicekit API first lands in spicekit (tagged release, git rev bump,
    or new maturin-built wheel), then adam-core upgrades. Prevents
    adam-core from accumulating local spicekit patches that drift the

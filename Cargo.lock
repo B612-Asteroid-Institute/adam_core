@@ -905,7 +905,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "pyo3",
- "rustc-hash",
+ "rustc-hash 1.1.0",
 ]
 
 [[package]]
@@ -1250,6 +1250,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "rustc-hash"
+version = "2.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
+
+[[package]]
 name = "rustix"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1371,12 +1377,14 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "spicekit"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "411d49c8154d1b8c1ad1ce40f278d1ac1f5c174d0b315f1ee9840f0091f28086"
+checksum = "f4f6792966b1b881a79633f578aada0f3ce3b197603ef0cdffc562facf92c01e"
 dependencies = [
+ "bytemuck",
  "memmap2",
  "rayon",
+ "rustc-hash 2.1.2",
  "thiserror 2.0.18",
 ]
 
