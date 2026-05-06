@@ -117,6 +117,18 @@ def _as_contiguous_f64(
     return np.ascontiguousarray(np.asarray(values, dtype=np.float64))
 
 
+def _as_contiguous_i32(
+    values: np.ndarray | list[int] | tuple[int, ...],
+) -> np.ndarray:
+    if (
+        isinstance(values, np.ndarray)
+        and values.dtype == np.int32
+        and values.flags.c_contiguous
+    ):
+        return values
+    return np.ascontiguousarray(np.asarray(values, dtype=np.int32))
+
+
 def cartesian_to_spherical_numpy(coords: np.ndarray) -> np.ndarray:
     return _native.cartesian_to_spherical_numpy(_as_contiguous_f64(coords))
 
@@ -757,7 +769,7 @@ def predict_magnitudes_bandpass_numpy(
         _as_contiguous_f64(object_pos),
         _as_contiguous_f64(observer_pos),
         _as_contiguous_f64(g),
-        np.ascontiguousarray(np.asarray(target_ids, dtype=np.int32)),
+        _as_contiguous_i32(target_ids),
         _as_contiguous_f64(delta_table),
     )
 

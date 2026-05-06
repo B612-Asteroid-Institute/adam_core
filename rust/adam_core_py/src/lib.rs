@@ -8,20 +8,18 @@ use adam_core_rs_coords::{
     add_light_time_batch_flat, apply_cosine_latitude_correction_flat, apply_lagrange_coefficients,
     apply_stellar_aberration_row, bound_longitude_residuals_flat, calc_apoapsis_distance, calc_chi,
     calc_lagrange_coefficients, calc_mean_anomaly, calc_mean_motion_batch, calc_periapsis_distance,
-    calc_period, calc_semi_latus_rectum, calc_semi_major_axis, calc_stumpff,
-    calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
-    calculate_chi2_flat, calculate_moid, calculate_moid_batch, calculate_phase_angle_flat,
-    cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
-    cartesian_to_spherical_flat6, cartesian_to_spherical_row, classify_orbits_flat,
-    cometary_to_cartesian_flat6, fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows,
-    generate_ephemeris_2body_flat6, generate_ephemeris_2body_with_covariance_flat6,
-    izzo_lambert_batch_flat, keplerian_to_cartesian_flat6, porkchop_grid_flat,
-    predict_magnitudes_bandpass_flat, propagate_2body_along_arc, propagate_2body_arc_batch_flat6,
-    propagate_2body_flat6, propagate_2body_with_covariance_flat6, rotate_cartesian_frame_flat6,
-    rotate_cartesian_time_varying_flat6, solve_barker, solve_kepler_true_anomaly,
-    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
-    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat, Frame,
-    Representation as CoordsRepresentation,
+    calc_period, calc_semi_latus_rectum, calc_semi_major_axis, calc_stumpff, calculate_chi2_flat,
+    calculate_moid, calculate_moid_batch, cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6,
+    cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
+    classify_orbits_flat, cometary_to_cartesian_flat6, fit_absolute_magnitude_grouped,
+    fit_absolute_magnitude_rows, generate_ephemeris_2body_flat6,
+    generate_ephemeris_2body_with_covariance_flat6, izzo_lambert_batch_flat,
+    keplerian_to_cartesian_flat6, porkchop_grid_flat, propagate_2body_along_arc,
+    propagate_2body_arc_batch_flat6, propagate_2body_flat6, propagate_2body_with_covariance_flat6,
+    rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6, solve_barker,
+    solve_kepler_true_anomaly, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
+    tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
+    weighted_mean_flat, Frame, Representation as CoordsRepresentation,
 };
 use adam_core_rs_orbit_determination::{
     calc_gauss_row, calc_gibbs_row, calc_herrick_gibbs_row, gauss_iod_fused,
@@ -1834,8 +1832,15 @@ fn calculate_phase_angle_numpy<'py>(
     let obs_slice = obs_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("observer_pos must be contiguous"))?;
-    let out = calculate_phase_angle_flat(obj_slice, obs_slice);
-    Ok(ndarray::Array1::from_vec(out).into_pyarray_bound(py))
+    let out = PyArray1::<f64>::zeros_bound(py, n, false);
+    {
+        let mut out_rw = numpy::PyArrayMethods::readwrite(&out);
+        let out_slice = out_rw
+            .as_slice_mut()
+            .map_err(|_| PyValueError::new_err("allocated phase output must be contiguous"))?;
+        adam_core_rs_coords::calculate_phase_angle_into(obj_slice, obs_slice, out_slice);
+    }
+    Ok(out)
 }
 
 #[pyfunction]
@@ -1876,8 +1881,17 @@ fn calculate_apparent_magnitude_v_numpy<'py>(
     let g_slice = g_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
-    let out = calculate_apparent_magnitude_v_flat(h_slice, obj_slice, obs_slice, g_slice);
-    Ok(ndarray::Array1::from_vec(out).into_pyarray_bound(py))
+    let out = PyArray1::<f64>::zeros_bound(py, n, false);
+    {
+        let mut out_rw = numpy::PyArrayMethods::readwrite(&out);
+        let out_slice = out_rw
+            .as_slice_mut()
+            .map_err(|_| PyValueError::new_err("allocated magnitude output must be contiguous"))?;
+        adam_core_rs_coords::calculate_apparent_magnitude_v_into(
+            h_slice, obj_slice, obs_slice, g_slice, out_slice,
+        );
+    }
+    Ok(out)
 }
 
 #[pyfunction]
@@ -1918,12 +1932,27 @@ fn calculate_apparent_magnitude_v_and_phase_angle_numpy<'py>(
     let g_slice = g_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
-    let (mag_out, alpha_out) =
-        calculate_apparent_magnitude_v_and_phase_angle_flat(h_slice, obj_slice, obs_slice, g_slice);
-    Ok((
-        ndarray::Array1::from_vec(mag_out).into_pyarray_bound(py),
-        ndarray::Array1::from_vec(alpha_out).into_pyarray_bound(py),
-    ))
+    let mag_out = PyArray1::<f64>::zeros_bound(py, n, false);
+    let alpha_out = PyArray1::<f64>::zeros_bound(py, n, false);
+    {
+        let mut mag_rw = numpy::PyArrayMethods::readwrite(&mag_out);
+        let mut alpha_rw = numpy::PyArrayMethods::readwrite(&alpha_out);
+        let mag_slice = mag_rw
+            .as_slice_mut()
+            .map_err(|_| PyValueError::new_err("allocated magnitude output must be contiguous"))?;
+        let alpha_slice = alpha_rw
+            .as_slice_mut()
+            .map_err(|_| PyValueError::new_err("allocated phase output must be contiguous"))?;
+        adam_core_rs_coords::calculate_apparent_magnitude_v_and_phase_angle_into(
+            h_slice,
+            obj_slice,
+            obs_slice,
+            g_slice,
+            mag_slice,
+            alpha_slice,
+        );
+    }
+    Ok((mag_out, alpha_out))
 }
 
 #[pyfunction]
@@ -1974,10 +2003,17 @@ fn predict_magnitudes_bandpass_numpy<'py>(
     let dt_slice = dt_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("delta_table must be contiguous"))?;
-    let out = predict_magnitudes_bandpass_flat(
-        h_slice, obj_slice, obs_slice, g_slice, tid_slice, dt_slice,
-    );
-    Ok(ndarray::Array1::from_vec(out).into_pyarray_bound(py))
+    let out = PyArray1::<f64>::zeros_bound(py, n, false);
+    {
+        let mut out_rw = numpy::PyArrayMethods::readwrite(&out);
+        let out_slice = out_rw
+            .as_slice_mut()
+            .map_err(|_| PyValueError::new_err("allocated predict output must be contiguous"))?;
+        adam_core_rs_coords::predict_magnitudes_bandpass_into(
+            h_slice, obj_slice, obs_slice, g_slice, tid_slice, dt_slice, out_slice,
+        );
+    }
+    Ok(out)
 }
 
 #[pyfunction]
