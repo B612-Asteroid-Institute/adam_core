@@ -9,7 +9,8 @@ use adam_core_rs_autodiff::Scalar;
 
 pub const TWO_PI_F64: f64 = std::f64::consts::PI * 2.0;
 pub const RAD2DEG_F64: f64 = 180.0 / std::f64::consts::PI;
-const OBLIQUITY_RAD_F64: f64 = 84381.448_f64 * std::f64::consts::PI / (180.0_f64 * 3600.0_f64);
+const OBLIQUITY_COS_F64: f64 = 0.9174820620691818_f64;
+const OBLIQUITY_SIN_F64: f64 = 0.39777715593191365_f64;
 
 #[inline]
 fn deg<T: Scalar>() -> T {
@@ -39,7 +40,8 @@ pub fn cartesian_to_spherical6<T: Scalar>(v: &[T; 6]) -> [T; 6] {
     let vz = v[5];
 
     let zero = T::from_f64(0.0);
-    let rho = (x * x + y * y + z * z).sqrt();
+    let xy2 = x * x + y * y;
+    let rho = (xy2 + z * z).sqrt();
     let lon = normalize_lon(y.atan2(x));
     let lat = if rho.re() == 0.0 {
         zero
@@ -52,16 +54,15 @@ pub fn cartesian_to_spherical6<T: Scalar>(v: &[T; 6]) -> [T; 6] {
     } else {
         (x * vx + y * vy + z * vz) / rho
     };
-    let r2xy = x * x + y * y;
-    let vlon = if x.re() == 0.0 && y.re() == 0.0 {
+    let vlon = if xy2.re() == 0.0 {
         zero
     } else {
-        (vy * x - vx * y) / r2xy
+        (vy * x - vx * y) / xy2
     };
-    let vlat = if (x.re() == 0.0 && y.re() == 0.0) || rho.re() == 0.0 {
+    let vlat = if xy2.re() == 0.0 || rho.re() == 0.0 {
         zero
     } else {
-        (vz - vrho * z / rho) / r2xy.sqrt()
+        (vz - vrho * z / rho) / xy2.sqrt()
     };
 
     let k = deg::<T>();
@@ -310,8 +311,9 @@ pub fn cartesian_to_keplerian6<T: Scalar>(v: &[T; 6], mu: T) -> [T; 6] {
     let vel = [v[3], v[4], v[5]];
 
     let r_mag = norm3(r);
-    let v_mag = norm3(vel);
-    let sme = v_mag * v_mag / two - mu / r_mag;
+    let v2 = dot3(vel, vel);
+    let mu_over_r = mu / r_mag;
+    let sme = v2 / two - mu_over_r;
 
     let h = cross3(r, vel);
     let h_mag = norm3(h);
@@ -319,7 +321,7 @@ pub fn cartesian_to_keplerian6<T: Scalar>(v: &[T; 6], mu: T) -> [T; 6] {
     let n_mag = norm3(n_vec);
 
     let rv = dot3(r, vel);
-    let scale = v_mag * v_mag - mu / r_mag;
+    let scale = v2 - mu_over_r;
     let e_vec = [
         (scale * r[0] - rv * vel[0]) / mu,
         (scale * r[1] - rv * vel[1]) / mu,
@@ -427,8 +429,8 @@ pub fn cometary_to_cartesian6<T: Scalar>(
 }
 
 pub fn rotate_equatorial_to_ecliptic6<T: Scalar>(v: &[T; 6]) -> [T; 6] {
-    let cos_o = T::from_f64(OBLIQUITY_RAD_F64.cos());
-    let sin_o = T::from_f64(OBLIQUITY_RAD_F64.sin());
+    let cos_o = T::from_f64(OBLIQUITY_COS_F64);
+    let sin_o = T::from_f64(OBLIQUITY_SIN_F64);
     [
         v[0],
         cos_o * v[1] + sin_o * v[2],
@@ -440,8 +442,8 @@ pub fn rotate_equatorial_to_ecliptic6<T: Scalar>(v: &[T; 6]) -> [T; 6] {
 }
 
 pub fn rotate_ecliptic_to_equatorial6<T: Scalar>(v: &[T; 6]) -> [T; 6] {
-    let cos_o = T::from_f64(OBLIQUITY_RAD_F64.cos());
-    let sin_o = T::from_f64(OBLIQUITY_RAD_F64.sin());
+    let cos_o = T::from_f64(OBLIQUITY_COS_F64);
+    let sin_o = T::from_f64(OBLIQUITY_SIN_F64);
     [
         v[0],
         cos_o * v[1] - sin_o * v[2],

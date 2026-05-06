@@ -70,22 +70,22 @@ fn compute_psi(x: f64, y: f64, ll: f64) -> f64 {
 /// branching: use the small-M analytic form for M==0 ∧ sqrt(0.6)<x<sqrt(1.4),
 /// otherwise the general form using psi.
 fn tof_equation_y(x: f64, y: f64, t0: f64, ll: f64, m: u32) -> f64 {
-    // Small-M analytic form: eta = y - ll·x, S_1 = (1 - ll - x·eta)/2,
-    // Q = (4/3)·hyp2f1b(S_1), T_ = (eta³·Q + 4·ll·eta) / 2.
-    let eta = y - ll * x;
-    let s_1 = (1.0 - ll - x * eta) * 0.5;
-    let q_h = 4.0 / 3.0 * hyp2f1b(s_1);
-    let small_m = (eta.powi(3) * q_h + 4.0 * ll * eta) * 0.5;
+    let use_small = m == 0 && x > 0.6_f64.sqrt() && x < 1.4_f64.sqrt();
+    if use_small {
+        // Small-M analytic form: eta = y - ll·x, S_1 = (1 - ll - x·eta)/2,
+        // Q = (4/3)·hyp2f1b(S_1), T_ = (eta³·Q + 4·ll·eta) / 2.
+        let eta = y - ll * x;
+        let s_1 = (1.0 - ll - x * eta) * 0.5;
+        let q_h = 4.0 / 3.0 * hyp2f1b(s_1);
+        let small_m = (eta * eta * eta * q_h + 4.0 * ll * eta) * 0.5;
+        return small_m - t0;
+    }
 
     // General form.
     let psi = compute_psi(x, y, ll);
     let sqrt_term = (1.0 - x * x).abs().sqrt();
     let general = (psi + (m as f64) * PI) / sqrt_term - x + ll * y;
-    let general = general / (1.0 - x * x);
-
-    let use_small = m == 0 && x > 0.6_f64.sqrt() && x < 1.4_f64.sqrt();
-    let t_ = if use_small { small_m } else { general };
-    t_ - t0
+    general / (1.0 - x * x) - t0
 }
 
 #[inline]
@@ -111,14 +111,17 @@ fn tof_equation_p3(x: f64, y: f64, dt: f64, ddt: f64, ll: f64) -> f64 {
 
 /// Initial guess for x, per Izzo Section 2.1.
 fn initial_guess(t: f64, ll: f64, m: u32, low_path: bool) -> f64 {
-    let t_0 = ll.acos() + ll * (1.0 - ll * ll).sqrt() + (m as f64) * PI;
-    let t_1 = 2.0 * (1.0 - ll.powi(3)) / 3.0;
+    let ll2 = ll * ll;
+    let ll3 = ll2 * ll;
+    let ll5 = ll3 * ll2;
+    let t_0 = ll.acos() + ll * (1.0 - ll2).sqrt() + (m as f64) * PI;
+    let t_1 = 2.0 * (1.0 - ll3) / 3.0;
 
     if m == 0 {
         if t >= t_0 {
             (t_0 / t).powf(2.0 / 3.0) - 1.0
         } else if t < t_1 {
-            5.0 / 2.0 * t_1 / t * (t_1 - t) / (1.0 - ll.powi(5)) + 1.0
+            5.0 / 2.0 * t_1 / t * (t_1 - t) / (1.0 - ll5) + 1.0
         } else {
             (2.0_f64.ln() * (t / t_0).ln() / (t_1 / t_0).ln()).exp() - 1.0
         }
@@ -212,8 +215,20 @@ fn find_xy(
     rtol: f64,
     low_path: bool,
 ) -> (f64, f64) {
+    if ll.abs() >= 1.0 {
+        return (f64::NAN, f64::NAN);
+    }
+
+    if m == 0 {
+        let x_0 = initial_guess(t, ll, 0, low_path);
+        let x = householder(x_0, t, ll, 0, atol, rtol, maxiter);
+        let y = compute_y(x, ll);
+        return (x, y);
+    }
+
     let mut m_max = (t / PI).floor() as u32;
-    let t_00 = ll.abs().acos() + ll.abs() * (1.0 - ll * ll).sqrt();
+    let ll_abs = ll.abs();
+    let t_00 = ll_abs.acos() + ll_abs * (1.0 - ll_abs * ll_abs).sqrt();
 
     let need_refine = t < t_00 + (m_max as f64) * PI && m_max > 0;
     if need_refine {
@@ -223,7 +238,7 @@ fn find_xy(
         }
     }
 
-    if ll.abs() >= 1.0 || m > m_max {
+    if m > m_max {
         return (f64::NAN, f64::NAN);
     }
 
