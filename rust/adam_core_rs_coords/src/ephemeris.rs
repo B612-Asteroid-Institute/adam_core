@@ -18,6 +18,8 @@ use adam_core_rs_autodiff::{Dual, Scalar};
 use rayon::prelude::*;
 
 use crate::generic::{cartesian_to_spherical6, rotate_ecliptic_to_equatorial6};
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+use crate::generic::{OBLIQUITY_COS_F64, OBLIQUITY_SIN_F64, RAD2DEG_F64, TWO_PI_F64};
 
 /// Speed of light in AU/day — bit-identical to `Constants.C` in Python:
 /// `299_792.458 / 149_597_870.700 * 86_400.0`.
@@ -348,6 +350,206 @@ fn generate_ephemeris_2body_row_from_consts<T: Scalar>(
     (spherical, lt_out, orbit_i, next_warm_start)
 }
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod vforce {
+    #[link(name = "Accelerate", kind = "framework")]
+    unsafe extern "C" {
+        fn vvsqrt(out: *mut f64, input: *const f64, n: *const i32);
+        fn vvasin(out: *mut f64, input: *const f64, n: *const i32);
+        fn vvatan2(out: *mut f64, y: *const f64, x: *const f64, n: *const i32);
+    }
+
+    #[inline]
+    fn len_i32(len: usize) -> i32 {
+        i32::try_from(len).expect("vForce slice length must fit in i32")
+    }
+
+    #[inline]
+    pub(super) fn sqrt_in_place(values: &mut [f64]) {
+        let n = len_i32(values.len());
+        // SAFETY: `values` is a unique mutable slice; vForce reads and writes
+        // exactly `n` doubles in place.
+        unsafe { vvsqrt(values.as_mut_ptr(), values.as_ptr(), &n) };
+    }
+
+    #[inline]
+    pub(super) fn asin_in_place(values: &mut [f64]) {
+        let n = len_i32(values.len());
+        // SAFETY: see `sqrt_in_place`.
+        unsafe { vvasin(values.as_mut_ptr(), values.as_ptr(), &n) };
+    }
+
+    #[inline]
+    pub(super) fn atan2_into(y: &[f64], x: &[f64], output: &mut [f64]) {
+        debug_assert_eq!(y.len(), x.len());
+        debug_assert_eq!(y.len(), output.len());
+        let n = len_i32(output.len());
+        // SAFETY: all slices are valid for `n` doubles; the output slice is
+        // distinct from the scratch input slices used by callers.
+        unsafe { vvatan2(output.as_mut_ptr(), y.as_ptr(), x.as_ptr(), &n) };
+    }
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn fill_spherical_from_topo_eq_flat_macos(topo_eq_sph_out: &mut [f64]) {
+    let n = topo_eq_sph_out.len() / 6;
+    let mut xs = vec![0.0_f64; n];
+    let mut ys = vec![0.0_f64; n];
+    let mut xy = vec![0.0_f64; n];
+    let mut rho = vec![0.0_f64; n];
+    let mut lat = vec![0.0_f64; n];
+    let mut lon = vec![0.0_f64; n];
+
+    for i in 0..n {
+        let base = i * 6;
+        let x = topo_eq_sph_out[base];
+        let y = topo_eq_sph_out[base + 1];
+        let z = topo_eq_sph_out[base + 2];
+        xs[i] = x;
+        ys[i] = y;
+        let xy2 = x * x + y * y;
+        xy[i] = xy2;
+        rho[i] = xy2 + z * z;
+    }
+
+    vforce::sqrt_in_place(&mut xy);
+    vforce::sqrt_in_place(&mut rho);
+
+    for i in 0..n {
+        let row_rho = rho[i];
+        lat[i] = if row_rho == 0.0 {
+            0.0
+        } else {
+            topo_eq_sph_out[i * 6 + 2] / row_rho
+        };
+    }
+
+    vforce::asin_in_place(&mut lat);
+    vforce::atan2_into(&ys, &xs, &mut lon);
+
+    for i in 0..n {
+        let base = i * 6;
+        let x = xs[i];
+        let y = ys[i];
+        let z = topo_eq_sph_out[base + 2];
+        let vx = topo_eq_sph_out[base + 3];
+        let vy = topo_eq_sph_out[base + 4];
+        let vz = topo_eq_sph_out[base + 5];
+        let row_rho = rho[i];
+        let row_xy = xy[i];
+        let xy2 = row_xy * row_xy;
+        let mut row_lon = lon[i];
+        if row_lon < 0.0 {
+            row_lon += TWO_PI_F64;
+        }
+        let vrho = if row_rho == 0.0 {
+            0.0
+        } else {
+            (x * vx + y * vy + z * vz) / row_rho
+        };
+        let vlon = if xy2 == 0.0 {
+            0.0
+        } else {
+            (vy * x - vx * y) / xy2
+        };
+        let vlat = if xy2 == 0.0 || row_rho == 0.0 {
+            0.0
+        } else {
+            (vz - vrho * z / row_rho) / row_xy
+        };
+        topo_eq_sph_out[base] = row_rho;
+        topo_eq_sph_out[base + 1] = row_lon * RAD2DEG_F64;
+        topo_eq_sph_out[base + 2] = lat[i] * RAD2DEG_F64;
+        topo_eq_sph_out[base + 3] = vrho;
+        topo_eq_sph_out[base + 4] = vlon * RAD2DEG_F64;
+        topo_eq_sph_out[base + 5] = vlat * RAD2DEG_F64;
+    }
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[allow(clippy::too_many_arguments)]
+fn generate_ephemeris_2body_row_topo_eq_no_stellar_f64(
+    orbit_consts: &OrbitConstants<f64>,
+    observer_state: [f64; 6],
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    max_lt_iter: usize,
+    warm_start: Option<([f64; 6], f64, f64, f64)>,
+) -> ([f64; 6], f64, [f64; 6], Option<([f64; 6], f64, f64, f64)>) {
+    let mut orbit_i = [
+        orbit_consts.r[0],
+        orbit_consts.r[1],
+        orbit_consts.r[2],
+        orbit_consts.v[0],
+        orbit_consts.v[1],
+        orbit_consts.v[2],
+    ];
+    let mut lt = 1.0e30_f64;
+    let mut dlt_val = 1.0e30_f64;
+    let mut iter = 0_usize;
+    let mut prev_dt = 0.0_f64;
+    let mut prev_chi = 0.0_f64;
+    let mut have_prev_chi = false;
+    let mut updated_prev_chi = false;
+    if let Some((warm_orbit, warm_lt, warm_dt, warm_chi)) = warm_start {
+        orbit_i = warm_orbit;
+        lt = warm_lt;
+        prev_dt = warm_dt;
+        prev_chi = warm_chi;
+        have_prev_chi = true;
+    }
+
+    while dlt_val > lt_tol && iter < max_lt_iter {
+        let dx = orbit_i[0] - observer_state[0];
+        let dy = orbit_i[1] - observer_state[1];
+        let dz = orbit_i[2] - observer_state[2];
+        let rho = (dx * dx + dy * dy + dz * dz).sqrt();
+        let lt_new = rho / C_AU_PER_DAY;
+        dlt_val = (lt_new - lt).abs();
+        let neg_lt = -lt_new;
+        let chi_init = if have_prev_chi {
+            prev_chi + orbit_consts.sqrt_mu * orbit_consts.alpha.abs() * (neg_lt - prev_dt)
+        } else {
+            orbit_consts.default_chi_init(neg_lt)
+        };
+        let (next_orbit, chi) =
+            propagate_2body_from_consts::<f64>(orbit_consts, neg_lt, chi_init, max_iter, tol);
+        orbit_i = next_orbit;
+        prev_dt = neg_lt;
+        prev_chi = chi;
+        have_prev_chi = true;
+        updated_prev_chi = true;
+        lt = lt_new;
+        iter += 1;
+    }
+
+    let topo_x = orbit_i[0] - observer_state[0];
+    let topo_y = orbit_i[1] - observer_state[1];
+    let topo_z = orbit_i[2] - observer_state[2];
+    let topo_vx = orbit_i[3] - observer_state[3];
+    let topo_vy = orbit_i[4] - observer_state[4];
+    let topo_vz = orbit_i[5] - observer_state[5];
+    let topo_eq = [
+        topo_x,
+        OBLIQUITY_COS_F64 * topo_y - OBLIQUITY_SIN_F64 * topo_z,
+        OBLIQUITY_SIN_F64 * topo_y + OBLIQUITY_COS_F64 * topo_z,
+        topo_vx,
+        OBLIQUITY_COS_F64 * topo_vy - OBLIQUITY_SIN_F64 * topo_vz,
+        OBLIQUITY_SIN_F64 * topo_vy + OBLIQUITY_COS_F64 * topo_vz,
+    ];
+
+    let converged = iter < max_lt_iter;
+    let lt_out = if converged { lt } else { f64::NAN };
+    let next_warm_start = if converged && updated_prev_chi {
+        Some((orbit_i, lt, prev_dt, prev_chi))
+    } else {
+        None
+    };
+
+    (topo_eq, lt_out, orbit_i, next_warm_start)
+}
+
 /// Single-row kernel that also returns the 6×6 Jacobian of the spherical
 /// output w.r.t. the input Cartesian orbit state. `observer_state`, `mu`,
 /// and the observation time are treated as constants (zero tangents).
@@ -407,6 +609,74 @@ fn has_consecutive_repeated_orbits(orbits_flat: &[f64], mus: &[f64], n: usize) -
     (1..n).any(|i| rows_share_orbit_and_mu(orbits_flat, mus, i - 1, i))
 }
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[allow(clippy::too_many_arguments)]
+fn generate_ephemeris_2body_grouped_single_thread_no_stellar_macos(
+    orbits_flat: &[f64],
+    observer_states_flat: &[f64],
+    mus: &[f64],
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    max_lt_iter: usize,
+    sph_out: &mut [f64],
+    lt_out: &mut [f64],
+    aberrated_out: &mut [f64],
+) {
+    let n = orbits_flat.len() / 6;
+    let mut start = 0_usize;
+    while start < n {
+        let mut end = start + 1;
+        while end < n && rows_share_orbit_and_mu(orbits_flat, mus, start, end) {
+            end += 1;
+        }
+
+        let base = start * 6;
+        let orbit_consts = OrbitConstants::new(
+            [
+                orbits_flat[base],
+                orbits_flat[base + 1],
+                orbits_flat[base + 2],
+            ],
+            [
+                orbits_flat[base + 3],
+                orbits_flat[base + 4],
+                orbits_flat[base + 5],
+            ],
+            mus[start],
+        );
+        let mut warm_start: Option<([f64; 6], f64, f64, f64)> = None;
+        for i in start..end {
+            let row_base = i * 6;
+            let observer: [f64; 6] = [
+                observer_states_flat[row_base],
+                observer_states_flat[row_base + 1],
+                observer_states_flat[row_base + 2],
+                observer_states_flat[row_base + 3],
+                observer_states_flat[row_base + 4],
+                observer_states_flat[row_base + 5],
+            ];
+            let (topo_eq, lt, aberrated, next_warm_start) =
+                generate_ephemeris_2body_row_topo_eq_no_stellar_f64(
+                    &orbit_consts,
+                    observer,
+                    lt_tol,
+                    max_iter,
+                    tol,
+                    max_lt_iter,
+                    warm_start,
+                );
+            sph_out[row_base..row_base + 6].copy_from_slice(&topo_eq);
+            lt_out[i] = lt;
+            aberrated_out[row_base..row_base + 6].copy_from_slice(&aberrated);
+            warm_start = next_warm_start;
+        }
+        start = end;
+    }
+
+    fill_spherical_from_topo_eq_flat_macos(sph_out);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn generate_ephemeris_2body_grouped_single_thread(
     orbits_flat: &[f64],
@@ -421,6 +691,23 @@ fn generate_ephemeris_2body_grouped_single_thread(
     lt_out: &mut [f64],
     aberrated_out: &mut [f64],
 ) {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    if !stellar_aberration {
+        generate_ephemeris_2body_grouped_single_thread_no_stellar_macos(
+            orbits_flat,
+            observer_states_flat,
+            mus,
+            lt_tol,
+            max_iter,
+            tol,
+            max_lt_iter,
+            sph_out,
+            lt_out,
+            aberrated_out,
+        );
+        return;
+    }
+
     let n = orbits_flat.len() / 6;
     let mut start = 0_usize;
     while start < n {

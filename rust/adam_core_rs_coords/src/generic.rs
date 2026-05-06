@@ -9,8 +9,8 @@ use adam_core_rs_autodiff::Scalar;
 
 pub const TWO_PI_F64: f64 = std::f64::consts::PI * 2.0;
 pub const RAD2DEG_F64: f64 = 180.0 / std::f64::consts::PI;
-const OBLIQUITY_COS_F64: f64 = 0.9174820620691818_f64;
-const OBLIQUITY_SIN_F64: f64 = 0.39777715593191365_f64;
+pub(crate) const OBLIQUITY_COS_F64: f64 = 0.9174820620691818_f64;
+pub(crate) const OBLIQUITY_SIN_F64: f64 = 0.39777715593191365_f64;
 
 #[inline]
 fn deg<T: Scalar>() -> T {
