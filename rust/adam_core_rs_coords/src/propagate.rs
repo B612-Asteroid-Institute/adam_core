@@ -55,19 +55,19 @@ pub fn calc_stumpff<T: Scalar>(psi: T) -> StumpffCoeffs<T> {
         let one_oneeighty = T::from_f64(1.0 / 120.0);
         // Polynomials in psi — each truncation below 1e-16 relative error
         // at |psi| = 1; higher-order safe for Dual arithmetic.
-        let c0 = one - psi / two + psi * psi / twenty_four - psi * psi * psi / seven_twenty
-            + psi * psi * psi * psi / forty_k
-            - psi * psi * psi * psi * psi / three_six_two_eight_k;
-        let c1 = one - psi / six + psi * psi / one_twenty - psi * psi * psi / five_forty
-            + psi * psi * psi * psi / three_sixty_k;
-        let c2 = one_half - psi / twenty_four + psi * psi / seven_twenty
-            - psi * psi * psi / forty_k
-            + psi * psi * psi * psi / three_six_two_eight_k;
-        let c3 =
-            one_sixth - psi / one_twenty + psi * psi / five_forty - psi * psi * psi / three_sixty_k;
-        let c4 = one_twentyfour - psi / seven_twenty + psi * psi / forty_k
-            - psi * psi * psi / three_six_two_eight_k;
-        let c5 = one_oneeighty - psi / five_forty + psi * psi / three_sixty_k;
+        let psi2 = psi * psi;
+        let psi3 = psi2 * psi;
+        let psi4 = psi2 * psi2;
+        let psi5 = psi4 * psi;
+        let c0 = one - psi / two + psi2 / twenty_four - psi3 / seven_twenty + psi4 / forty_k
+            - psi5 / three_six_two_eight_k;
+        let c1 = one - psi / six + psi2 / one_twenty - psi3 / five_forty + psi4 / three_sixty_k;
+        let c2 = one_half - psi / twenty_four + psi2 / seven_twenty - psi3 / forty_k
+            + psi4 / three_six_two_eight_k;
+        let c3 = one_sixth - psi / one_twenty + psi2 / five_forty - psi3 / three_sixty_k;
+        let c4 =
+            one_twentyfour - psi / seven_twenty + psi2 / forty_k - psi3 / three_six_two_eight_k;
+        let c5 = one_oneeighty - psi / five_forty + psi2 / three_sixty_k;
         return [c0, c1, c2, c3, c4, c5];
     }
     if psi_re > 0.0 {
@@ -166,6 +166,32 @@ impl<T: Scalar> OrbitConstants<T> {
     }
 }
 
+fn calc_stumpff_c2_c3<T: Scalar>(psi: T) -> (T, T) {
+    let psi_re = psi.re();
+    if psi_re.abs() < 1e-4 {
+        let psi2 = psi * psi;
+        let psi3 = psi2 * psi;
+        let psi4 = psi2 * psi2;
+        let c2 = T::from_f64(0.5) - psi / T::from_f64(24.0) + psi2 / T::from_f64(720.0)
+            - psi3 / T::from_f64(40320.0)
+            + psi4 / T::from_f64(3628800.0);
+        let c3 = T::from_f64(1.0 / 6.0) - psi / T::from_f64(120.0) + psi2 / T::from_f64(5040.0)
+            - psi3 / T::from_f64(362880.0);
+        return (c2, c3);
+    }
+    if psi_re > 0.0 {
+        let sqrt_psi = psi.sqrt();
+        let c0 = sqrt_psi.cos();
+        let c1 = sqrt_psi.sin() / sqrt_psi;
+        ((T::from_f64(1.0) - c0) / psi, (T::from_f64(1.0) - c1) / psi)
+    } else {
+        let sqrt_npsi = (-psi).sqrt();
+        let c0 = sqrt_npsi.cosh();
+        let c1 = sqrt_npsi.sinh() / sqrt_npsi;
+        ((T::from_f64(1.0) - c0) / psi, (T::from_f64(1.0) - c1) / psi)
+    }
+}
+
 /// Newton-Raphson chi solver with a caller-supplied initial guess. The
 /// orbit-only constants are passed in via `consts` so they are NOT
 /// recomputed per call — the win for OD inner loops where one orbit is
@@ -212,6 +238,48 @@ pub fn calc_chi_with_init<T: Scalar>(
     }
 
     (chi, stumpff)
+}
+
+fn calc_chi_c2_c3_with_init<T: Scalar>(
+    consts: &OrbitConstants<T>,
+    dt: T,
+    chi_init: T,
+    max_iter: usize,
+    tol: f64,
+) -> (T, T, T) {
+    let r_mag = consts.r_mag;
+    let rv = consts.rv;
+    let sqrt_mu = consts.sqrt_mu;
+    let alpha = consts.alpha;
+    let mut chi = chi_init;
+    let one = T::from_f64(1.0);
+    let mut c2 = T::from_f64(0.0);
+    let mut c3 = T::from_f64(0.0);
+
+    for _ in 0..=max_iter {
+        let chi2 = chi * chi;
+        let chi3 = chi2 * chi;
+        let psi = alpha * chi2;
+        (c2, c3) = calc_stumpff_c2_c3::<T>(psi);
+
+        let f_val =
+            r_mag * rv / sqrt_mu * chi2 * c2 + (one - alpha * r_mag) * chi3 * c3 + r_mag * chi
+                - sqrt_mu * dt;
+        let f_prime = r_mag * rv / sqrt_mu * chi * (one - alpha * chi2 * c3)
+            + (one - alpha * r_mag) * chi2 * c2
+            + r_mag;
+
+        if f_prime.re() == 0.0 {
+            break;
+        }
+        let ratio = f_val / f_prime;
+        chi -= ratio;
+        if ratio.re().abs() <= tol {
+            break;
+        }
+    }
+
+    (chi, c2, c3)
 }
 
 /// Lagrange f, g, f_dot, g_dot coefficients for propagating (r, v) by `dt`.
@@ -272,6 +340,50 @@ pub fn apply_lagrange_coefficients<T: Scalar>(
     )
 }
 
+/// Propagate a single state using precomputed orbit constants and a caller-
+/// supplied initial chi guess.
+///
+/// This is the hot-path form for callers that repeatedly propagate the same
+/// orbit (light-time iteration, sorted arcs). It avoids recomputing orbit-only
+/// constants inside every universal-Kepler solve.
+pub fn propagate_2body_from_consts<T: Scalar>(
+    consts: &OrbitConstants<T>,
+    dt: T,
+    chi_init: T,
+    max_iter: usize,
+    tol: f64,
+) -> ([T; 6], T) {
+    let (chi, c2, c3) = calc_chi_c2_c3_with_init::<T>(consts, dt, chi_init, max_iter, tol);
+    let chi2 = chi * chi;
+    let chi3 = chi2 * chi;
+    let one = T::from_f64(1.0);
+
+    let f = one - chi2 / consts.r_mag * c2;
+    let g = dt - chi3 / consts.sqrt_mu * c3;
+
+    let r_new = [
+        f * consts.r[0] + g * consts.v[0],
+        f * consts.r[1] + g * consts.v[1],
+        f * consts.r[2] + g * consts.v[2],
+    ];
+    let r_new_mag = (r_new[0] * r_new[0] + r_new[1] * r_new[1] + r_new[2] * r_new[2]).sqrt();
+
+    let f_dot = consts.sqrt_mu / (consts.r_mag * r_new_mag) * (consts.alpha * chi3 * c3 - chi);
+    let g_dot = one - chi2 / r_new_mag * c2;
+
+    (
+        [
+            r_new[0],
+            r_new[1],
+            r_new[2],
+            f_dot * consts.r[0] + g_dot * consts.v[0],
+            f_dot * consts.r[1] + g_dot * consts.v[1],
+            f_dot * consts.r[2] + g_dot * consts.v[2],
+        ],
+        chi,
+    )
+}
+
 /// Propagate a single 6-element Cartesian state by `dt` under a point-mass
 /// Kepler orbit with gravitational parameter `mu`.
 pub fn propagate_2body_row<T: Scalar>(
@@ -283,9 +395,10 @@ pub fn propagate_2body_row<T: Scalar>(
 ) -> [T; 6] {
     let r = [orbit[0], orbit[1], orbit[2]];
     let v = [orbit[3], orbit[4], orbit[5]];
-    let (coeffs, _, _) = calc_lagrange_coefficients::<T>(r, v, dt, mu, max_iter, tol);
-    let (r_new, v_new) = apply_lagrange_coefficients::<T>(r, v, coeffs);
-    [r_new[0], r_new[1], r_new[2], v_new[0], v_new[1], v_new[2]]
+    let consts = OrbitConstants::new(r, v, mu);
+    let chi_init = consts.default_chi_init(dt);
+    let (propagated, _) = propagate_2body_from_consts::<T>(&consts, dt, chi_init, max_iter, tol);
+    propagated
 }
 
 /// Propagate a single orbit to many dt values.
@@ -333,9 +446,7 @@ pub fn propagate_2body_along_arc(
         } else {
             consts.default_chi_init(dt)
         };
-        let (chi, stumpff) = calc_chi_with_init(&consts, dt, chi_init, max_iter, tol);
-        let c2 = stumpff[2];
-        let c3 = stumpff[3];
+        let (chi, c2, c3) = calc_chi_c2_c3_with_init(&consts, dt, chi_init, max_iter, tol);
         let chi2 = chi * chi;
         let chi3 = chi2 * chi;
 

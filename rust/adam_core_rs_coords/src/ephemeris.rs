@@ -13,7 +13,7 @@
 //! Speed of light: `C = 299_792.458 km/s / KM_P_AU * S_P_DAY` au/day, matching
 //! `adam_core.constants.Constants.C`.
 
-use crate::propagate::propagate_2body_row;
+use crate::propagate::{propagate_2body_from_consts, OrbitConstants};
 use adam_core_rs_autodiff::{Dual, Scalar};
 use rayon::prelude::*;
 
@@ -26,6 +26,11 @@ pub const C_AU_PER_DAY: f64 = 299_792.458_f64 / 149_597_870.700_f64 * 86_400.0_f
 /// Default maximum iterations for the outer light-time Newton loop, matching
 /// the JAX default (`_add_light_time` uses `max_lt_iter=10`).
 pub const DEFAULT_MAX_LT_ITER: usize = 10;
+
+#[inline]
+fn rayon_is_single_threaded() -> bool {
+    rayon::current_num_threads() == 1
+}
 
 #[inline]
 fn stellar_aberrate<T: Scalar>(topo: &mut [T; 6], observer_state: &[T; 6]) {
@@ -85,10 +90,18 @@ pub fn add_light_time_row<T: Scalar>(
     tol: f64,
     max_lt_iter: usize,
 ) -> ([T; 6], T) {
+    let orbit_consts = OrbitConstants::new(
+        [orbit[0], orbit[1], orbit[2]],
+        [orbit[3], orbit[4], orbit[5]],
+        mu,
+    );
     let mut orbit_i = orbit;
     let mut lt = T::from_f64(1.0e30);
     let mut dlt_val = 1.0e30_f64;
     let mut iter = 0_usize;
+    let mut prev_dt = T::from_f64(0.0);
+    let mut prev_chi = T::from_f64(0.0);
+    let mut have_prev_chi = false;
     while dlt_val > lt_tol && iter < max_lt_iter {
         let dx = orbit_i[0] - observer_pos[0];
         let dy = orbit_i[1] - observer_pos[1];
@@ -97,7 +110,17 @@ pub fn add_light_time_row<T: Scalar>(
         let lt_new = rho / T::from_f64(C_AU_PER_DAY);
         dlt_val = (lt_new.re() - lt.re()).abs();
         let neg_lt = T::from_f64(0.0) - lt_new;
-        orbit_i = propagate_2body_row::<T>(orbit, neg_lt, mu, max_iter, tol);
+        let chi_init = if have_prev_chi {
+            prev_chi + orbit_consts.sqrt_mu * orbit_consts.alpha.abs() * (neg_lt - prev_dt)
+        } else {
+            orbit_consts.default_chi_init(neg_lt)
+        };
+        let (next_orbit, chi) =
+            propagate_2body_from_consts::<T>(&orbit_consts, neg_lt, chi_init, max_iter, tol);
+        orbit_i = next_orbit;
+        prev_dt = neg_lt;
+        prev_chi = chi;
+        have_prev_chi = true;
         lt = lt_new;
         iter += 1;
     }
@@ -132,6 +155,30 @@ pub fn add_light_time_batch_flat(
 
     let mut aberrated_flat = vec![0.0_f64; n * 6];
     let mut lts = vec![0.0_f64; n];
+    if rayon_is_single_threaded() {
+        for i in 0..n {
+            let mut orbit = [0.0_f64; 6];
+            orbit.copy_from_slice(&orbits_flat[i * 6..(i + 1) * 6]);
+            let observer_pos = [
+                observer_pos_flat[i * 3],
+                observer_pos_flat[i * 3 + 1],
+                observer_pos_flat[i * 3 + 2],
+            ];
+            let (ab, lt) = add_light_time_row::<f64>(
+                orbit,
+                observer_pos,
+                mus[i],
+                lt_tol,
+                max_iter,
+                tol,
+                max_lt_iter,
+            );
+            aberrated_flat[i * 6..(i + 1) * 6].copy_from_slice(&ab);
+            lts[i] = lt;
+        }
+        return (aberrated_flat, lts);
+    }
+
     aberrated_flat
         .par_chunks_mut(6)
         .zip(lts.par_iter_mut())
@@ -179,6 +226,35 @@ pub fn generate_ephemeris_2body_row<T: Scalar>(
     stellar_aberration: bool,
     max_lt_iter: usize,
 ) -> ([T; 6], T, [T; 6]) {
+    let orbit_consts = OrbitConstants::new(
+        [orbit[0], orbit[1], orbit[2]],
+        [orbit[3], orbit[4], orbit[5]],
+        mu,
+    );
+    let (spherical, lt, aberrated, _) = generate_ephemeris_2body_row_from_consts(
+        &orbit_consts,
+        observer_state,
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+        max_lt_iter,
+        None,
+    );
+    (spherical, lt, aberrated)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn generate_ephemeris_2body_row_from_consts<T: Scalar>(
+    orbit_consts: &OrbitConstants<T>,
+    observer_state: [T; 6],
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    stellar_aberration: bool,
+    max_lt_iter: usize,
+    warm_start: Option<([T; 6], T, T, T)>,
+) -> ([T; 6], T, [T; 6], Option<([T; 6], T, T, T)>) {
     // Light-time Newton fixed point — mirrors `_add_light_time` exactly:
     //   p = [orbit_i, t_bookkeep, lt0=1e30, dlt=1e30, iter=0]
     //   while dlt > lt_tol and iter < max_lt_iter:
@@ -188,10 +264,28 @@ pub fn generate_ephemeris_2body_row<T: Scalar>(
     //       orbit_i = propagate_2body(orbit_original, dt = -lt)   # always ORIGINAL orbit
     //       lt0 = lt;  iter += 1
     // Convergence is tested on `lt.re()` so `Dual` tangents ride the final iterate.
-    let mut orbit_i = orbit;
+    let mut orbit_i = [
+        orbit_consts.r[0],
+        orbit_consts.r[1],
+        orbit_consts.r[2],
+        orbit_consts.v[0],
+        orbit_consts.v[1],
+        orbit_consts.v[2],
+    ];
     let mut lt = T::from_f64(1.0e30);
     let mut dlt_val = 1.0e30_f64;
     let mut iter = 0_usize;
+    let mut prev_dt = T::from_f64(0.0);
+    let mut prev_chi = T::from_f64(0.0);
+    let mut have_prev_chi = false;
+    let mut updated_prev_chi = false;
+    if let Some((warm_orbit, warm_lt, warm_dt, warm_chi)) = warm_start {
+        orbit_i = warm_orbit;
+        lt = warm_lt;
+        prev_dt = warm_dt;
+        prev_chi = warm_chi;
+        have_prev_chi = true;
+    }
 
     while dlt_val > lt_tol && iter < max_lt_iter {
         let dx = orbit_i[0] - observer_state[0];
@@ -205,7 +299,18 @@ pub fn generate_ephemeris_2body_row<T: Scalar>(
         // variable holding the original state, and the propagator uses only
         // `dt = t1 - t0 = -lt` as its time argument.
         let neg_lt = T::from_f64(0.0) - lt_new;
-        orbit_i = propagate_2body_row::<T>(orbit, neg_lt, mu, max_iter, tol);
+        let chi_init = if have_prev_chi {
+            prev_chi + orbit_consts.sqrt_mu * orbit_consts.alpha.abs() * (neg_lt - prev_dt)
+        } else {
+            orbit_consts.default_chi_init(neg_lt)
+        };
+        let (next_orbit, chi) =
+            propagate_2body_from_consts::<T>(orbit_consts, neg_lt, chi_init, max_iter, tol);
+        orbit_i = next_orbit;
+        prev_dt = neg_lt;
+        prev_chi = chi;
+        have_prev_chi = true;
+        updated_prev_chi = true;
         lt = lt_new;
         iter += 1;
     }
@@ -232,13 +337,15 @@ pub fn generate_ephemeris_2body_row<T: Scalar>(
     // With the loop exit condition `!(dlt > tol && iter < max)`, the only way
     // iter reaches max is via the second clause, so `iter >= max_lt_iter` is
     // the single test that captures both JAX branches.
-    let lt_out = if iter >= max_lt_iter {
-        T::from_f64(f64::NAN)
+    let converged = iter < max_lt_iter;
+    let lt_out = if converged { lt } else { T::from_f64(f64::NAN) };
+    let next_warm_start = if converged && updated_prev_chi {
+        Some((orbit_i, lt, prev_dt, prev_chi))
     } else {
-        lt
+        None
     };
 
-    (spherical, lt_out, orbit_i)
+    (spherical, lt_out, orbit_i, next_warm_start)
 }
 
 /// Single-row kernel that also returns the 6×6 Jacobian of the spherical
@@ -287,6 +394,86 @@ fn generate_ephemeris_2body_with_jacobian_row(
     (sph, lt_d.re, aberrated, jac)
 }
 
+fn rows_share_orbit_and_mu(orbits_flat: &[f64], mus: &[f64], left: usize, right: usize) -> bool {
+    if mus[left].to_bits() != mus[right].to_bits() {
+        return false;
+    }
+    let left_base = left * 6;
+    let right_base = right * 6;
+    (0..6).all(|k| orbits_flat[left_base + k].to_bits() == orbits_flat[right_base + k].to_bits())
+}
+
+fn has_consecutive_repeated_orbits(orbits_flat: &[f64], mus: &[f64], n: usize) -> bool {
+    (1..n).any(|i| rows_share_orbit_and_mu(orbits_flat, mus, i - 1, i))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn generate_ephemeris_2body_grouped_single_thread(
+    orbits_flat: &[f64],
+    observer_states_flat: &[f64],
+    mus: &[f64],
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    stellar_aberration: bool,
+    max_lt_iter: usize,
+    sph_out: &mut [f64],
+    lt_out: &mut [f64],
+    aberrated_out: &mut [f64],
+) {
+    let n = orbits_flat.len() / 6;
+    let mut start = 0_usize;
+    while start < n {
+        let mut end = start + 1;
+        while end < n && rows_share_orbit_and_mu(orbits_flat, mus, start, end) {
+            end += 1;
+        }
+
+        let base = start * 6;
+        let orbit_consts = OrbitConstants::new(
+            [
+                orbits_flat[base],
+                orbits_flat[base + 1],
+                orbits_flat[base + 2],
+            ],
+            [
+                orbits_flat[base + 3],
+                orbits_flat[base + 4],
+                orbits_flat[base + 5],
+            ],
+            mus[start],
+        );
+        let mut warm_start: Option<([f64; 6], f64, f64, f64)> = None;
+        for i in start..end {
+            let row_base = i * 6;
+            let observer: [f64; 6] = [
+                observer_states_flat[row_base],
+                observer_states_flat[row_base + 1],
+                observer_states_flat[row_base + 2],
+                observer_states_flat[row_base + 3],
+                observer_states_flat[row_base + 4],
+                observer_states_flat[row_base + 5],
+            ];
+            let (sph, lt, aberrated, next_warm_start) =
+                generate_ephemeris_2body_row_from_consts::<f64>(
+                    &orbit_consts,
+                    observer,
+                    lt_tol,
+                    max_iter,
+                    tol,
+                    stellar_aberration,
+                    max_lt_iter,
+                    warm_start,
+                );
+            sph_out[row_base..row_base + 6].copy_from_slice(&sph);
+            lt_out[i] = lt;
+            aberrated_out[row_base..row_base + 6].copy_from_slice(&aberrated);
+            warm_start = next_warm_start;
+        }
+        start = end;
+    }
+}
+
 /// Batched state-only ephemeris. Rayon-parallel over rows.
 ///
 /// Returns `(spherical_flat [N*6], light_time [N], aberrated_flat [N*6])`.
@@ -320,6 +507,58 @@ pub fn generate_ephemeris_2body_flat6(
     let mut sph_out = vec![0.0_f64; n * 6];
     let mut lt_out = vec![0.0_f64; n];
     let mut aberrated_out = vec![0.0_f64; n * 6];
+
+    if rayon_is_single_threaded() {
+        if has_consecutive_repeated_orbits(orbits_flat, mus, n) {
+            generate_ephemeris_2body_grouped_single_thread(
+                orbits_flat,
+                observer_states_flat,
+                mus,
+                lt_tol,
+                max_iter,
+                tol,
+                stellar_aberration,
+                max_lt_iter,
+                &mut sph_out,
+                &mut lt_out,
+                &mut aberrated_out,
+            );
+        } else {
+            for i in 0..n {
+                let base = i * 6;
+                let orbit: [f64; 6] = [
+                    orbits_flat[base],
+                    orbits_flat[base + 1],
+                    orbits_flat[base + 2],
+                    orbits_flat[base + 3],
+                    orbits_flat[base + 4],
+                    orbits_flat[base + 5],
+                ];
+                let observer: [f64; 6] = [
+                    observer_states_flat[base],
+                    observer_states_flat[base + 1],
+                    observer_states_flat[base + 2],
+                    observer_states_flat[base + 3],
+                    observer_states_flat[base + 4],
+                    observer_states_flat[base + 5],
+                ];
+                let (sph, lt, aberrated) = generate_ephemeris_2body_row::<f64>(
+                    orbit,
+                    observer,
+                    mus[i],
+                    lt_tol,
+                    max_iter,
+                    tol,
+                    stellar_aberration,
+                    max_lt_iter,
+                );
+                sph_out[base..base + 6].copy_from_slice(&sph);
+                lt_out[i] = lt;
+                aberrated_out[base..base + 6].copy_from_slice(&aberrated);
+            }
+        }
+        return (sph_out, lt_out, aberrated_out);
+    }
 
     sph_out
         .par_chunks_mut(6)
@@ -649,6 +888,62 @@ mod tests {
         }
         assert!((lt_b[0] - lt_r).abs() < 1e-15);
         assert!((lt_b[1] - lt_r).abs() < 1e-15);
+    }
+
+    #[test]
+    fn grouped_single_thread_matches_per_row_for_repeated_orbits() {
+        let orbit = sample_orbit();
+        let observers = [
+            sample_observer(),
+            [0.91, -0.31, 0.04, 0.004, 0.016, -0.0002],
+            [1.04, 0.22, -0.03, -0.003, 0.017, 0.0001],
+        ];
+        let orbits = [orbit, orbit, orbit].concat();
+        let observers_flat = observers.concat();
+        let mus = [MU_SUN, MU_SUN, MU_SUN];
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("single-thread rayon pool should build");
+
+        pool.install(|| {
+            assert!(rayon_is_single_threaded());
+            let (sph_b, lt_b, aberrated_b) = generate_ephemeris_2body_flat6(
+                &orbits,
+                &observers_flat,
+                &mus,
+                1e-14,
+                1000,
+                1e-15,
+                false,
+                10,
+            );
+
+            for (row, observer) in observers.iter().enumerate() {
+                let (sph_r, lt_r, aberrated_r) = generate_ephemeris_2body_row::<f64>(
+                    orbit, *observer, MU_SUN, 1e-14, 1000, 1e-15, false, 10,
+                );
+                for i in 0..6 {
+                    let got = sph_b[row * 6 + i];
+                    let expected = sph_r[i];
+                    assert!(
+                        (got - expected).abs() < 1e-11,
+                        "sph row {row} col {i}: {got} vs {expected}"
+                    );
+                    let got = aberrated_b[row * 6 + i];
+                    let expected = aberrated_r[i];
+                    assert!(
+                        (got - expected).abs() < 1e-11,
+                        "aberrated row {row} col {i}: {got} vs {expected}"
+                    );
+                }
+                assert!(
+                    (lt_b[row] - lt_r).abs() < 1e-14,
+                    "lt row {row}: {} vs {lt_r}",
+                    lt_b[row]
+                );
+            }
+        });
     }
 
     #[test]
