@@ -35,8 +35,12 @@ STALE_REFERENCES = (
 )
 
 REQUIRED_SCRIPT_OUTPUTS = {
+    "rust-parity-main": "migration/artifacts/parity_gate.json",
+    "rust-parity-speed-cold": "migration/artifacts/parity_speed_cold_warm.json",
     "rust-latency-gate": "migration/artifacts/rust_latency_current.json",
 }
+
+LEGACY_SPEED_CACHE = "migration/artifacts/parity_legacy_speed_baseline.json"
 
 REQUIRED_WORKFLOW_ARTIFACTS = {
     "rust-latency-current": "migration/artifacts/rust_latency_current.json",
@@ -177,6 +181,105 @@ def _workflow_pdm_run_failures(
     return failures
 
 
+def _option_value(tokens: list[str], option: str) -> str | None:
+    prefix = option + "="
+    for idx, token in enumerate(tokens):
+        if token == option and idx + 1 < len(tokens):
+            return tokens[idx + 1]
+        if token.startswith(prefix):
+            return token.split("=", 1)[1]
+    return None
+
+
+def _int_option(tokens: list[str], option: str) -> int | None:
+    value = _option_value(tokens, option)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _speed_script_policy_failures(scripts: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    main_tokens = _tokens(" ".join(_script_commands(scripts.get("rust-parity-main"))))
+    if "--speed-large" not in main_tokens:
+        failures.append("pyproject.toml: `rust-parity-main` must include large-n lane")
+    else:
+        if "--speed-large-diagnostic" in main_tokens:
+            failures.append("pyproject.toml: `rust-parity-main` must enforce large-n")
+        large_reps = _int_option(main_tokens, "--speed-large-reps")
+        if large_reps is None or large_reps < 5:
+            failures.append(
+                "pyproject.toml: `rust-parity-main` large-n lane must use >=5 reps"
+            )
+    if "--speed-tiny" not in main_tokens:
+        failures.append("pyproject.toml: `rust-parity-main` must include tiny-n lane")
+    tiny_reps = _int_option(main_tokens, "--speed-tiny-reps")
+    if tiny_reps is None or tiny_reps < 51:
+        failures.append(
+            "pyproject.toml: `rust-parity-main` tiny-n lane must use >=51 reps"
+        )
+    if _option_value(main_tokens, "--speed-legacy-cache") != LEGACY_SPEED_CACHE:
+        failures.append(
+            "pyproject.toml: `rust-parity-main` must use the legacy speed cache"
+        )
+
+    refresh_tokens = _tokens(
+        " ".join(_script_commands(scripts.get("rust-parity-legacy-cache-refresh")))
+    )
+    if not refresh_tokens:
+        failures.append(
+            "pyproject.toml: `rust-parity-legacy-cache-refresh` script is required"
+        )
+    elif _option_value(refresh_tokens, "--legacy-cache") != LEGACY_SPEED_CACHE:
+        failures.append(
+            "pyproject.toml: `rust-parity-legacy-cache-refresh` must write the legacy speed cache"
+        )
+    elif "--refresh-legacy-cache" not in refresh_tokens:
+        failures.append(
+            "pyproject.toml: `rust-parity-legacy-cache-refresh` must refresh the cache"
+        )
+    refresh_tiny_reps = _int_option(refresh_tokens, "--tiny-reps")
+    if refresh_tiny_reps is None or refresh_tiny_reps < 51:
+        failures.append(
+            "pyproject.toml: `rust-parity-legacy-cache-refresh` tiny-n lane must use >=51 reps"
+        )
+
+    cold_tokens = _tokens(
+        " ".join(_script_commands(scripts.get("rust-parity-speed-cold")))
+    )
+    if "--large" not in cold_tokens:
+        failures.append(
+            "pyproject.toml: `rust-parity-speed-cold` must include large-n lane"
+        )
+    else:
+        if "--large-cold" not in cold_tokens:
+            failures.append(
+                "pyproject.toml: `rust-parity-speed-cold` must collect large-n cold timing"
+            )
+        large_reps = _int_option(cold_tokens, "--large-reps")
+        if large_reps is None or large_reps < 5:
+            failures.append(
+                "pyproject.toml: `rust-parity-speed-cold` large-n lane must use >=5 reps"
+            )
+    if "--tiny" not in cold_tokens:
+        failures.append(
+            "pyproject.toml: `rust-parity-speed-cold` must include tiny-n lane"
+        )
+    cold_tiny_reps = _int_option(cold_tokens, "--tiny-reps")
+    if cold_tiny_reps is None or cold_tiny_reps < 51:
+        failures.append(
+            "pyproject.toml: `rust-parity-speed-cold` tiny-n lane must use >=51 reps"
+        )
+    if _option_value(cold_tokens, "--legacy-cache") != LEGACY_SPEED_CACHE:
+        failures.append(
+            "pyproject.toml: `rust-parity-speed-cold` must use the legacy speed cache"
+        )
+    return failures
+
+
 def _required_script_output_failures(scripts: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     for script, expected_output in REQUIRED_SCRIPT_OUTPUTS.items():
@@ -189,6 +292,7 @@ def _required_script_output_failures(scripts: dict[str, Any]) -> list[str]:
             failures.append(
                 f"pyproject.toml: `{script}` must write `{expected_output}`"
             )
+    failures.extend(_speed_script_policy_failures(scripts))
     return failures
 
 

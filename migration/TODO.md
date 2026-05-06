@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-01 (RM-P1-014 review-framing clarification)
+Last updated: 2026-05-05 (RM-P1-020 last-mile large-N miss plan)
 
 ## Current Review-Derived Backlog
 
@@ -22,7 +22,11 @@ Last updated: 2026-05-01 (RM-P1-014 review-framing clarification)
 - [x] RM-P1-012 restored independent propagation oracle coverage with fixed CSPICE `sp.prop2b` vectors.
 - [x] RM-P1-013 documented and tested the `coordinates.residuals.calculate_chi2` symmetric-positive-definite covariance contract.
 - [x] RM-WE2-001 added `coordinates.residuals.calculate_chi2` to baseline-main parity/speed governance for representative 2-D SPD covariance rows.
-- [ ] Next review-derived task: RM-P1-014/RM-P1-014A warm-performance waiver resolution before 2026-05-12. Current artifacts show `coordinates.cartesian_to_spherical` raw-passing, while photometry waiver rows remain unstable (`calculate_phase_angle` and `predict_magnitudes` missed p95 in the latest cold/warm run; prior run had magnitude-style misses). Decide whether to narrow/remove waivers after repeated raw passes, invest in SIMD/transcendental work, or encode a permanent workload policy.
+- [x] RM-P1-014/RM-P1-014A warm-performance waivers resolved on 2026-05-03. Current canonical artifacts raw-pass `coordinates.cartesian_to_spherical` and all four photometry APIs at the n=2000 warm p50/p95 gate; the temporary photometry and cartesian-to-spherical waiver IDs are marked resolved and removed from `API_MIGRATIONS`.
+- [x] RM-P1-018 latency-gate statistical policy resolved on 2026-05-03: default pass/fail is single-thread, latency artifacts preserve raw trial samples, and native/multithread measurements are diagnostic-only unless separately labeled.
+- [x] RM-P1-019/RM-P1-019A added shaped baseline speed governance: Rust-vs-baseline artifacts and tables expose enforced `tiny-n`, historical `small-n`/`n=2000`, and API-shaped `large-n` lanes with structured workload axes, lane status, explicit cold/thread metadata, and serialized baseline-main legacy timing cache. Large-n misses remain red under RM-P1-020; no active large-n waivers are acceptable without an explicit user structural-acceptance decision.
+- [ ] RM-P1-020: resolve the remaining no-waiver 1.2x single-thread speed rows, now including `dynamics.add_light_time` triage plus the persistent large-n misses for `dynamics.generate_ephemeris_2body` and `photometry.predict_magnitudes`; use component-level passes and separate labeled multi-thread evidence only as production context.
+- [ ] RM-SPICE-LSK-001 (blocked on spicekit SK-TEXT-001): once spicekit exposes parsed LSK/DELTET content, update `rust/adam_core_rs_spice` furnsh handling so `naif_leapseconds` is retained as explicit LSK content rather than classified as ignored; unsupported text kernels must fail or be represented explicitly. Keep `Timestamp.rescale()` on its current ERFA policy unless a separate time-scale API decision changes it.
 
 ## Active Sprint (Milestone 1 hardening)
 
@@ -109,8 +113,5 @@ Last updated: 2026-05-01 (RM-P1-014 review-framing clarification)
 - Promotion decision: `coordinates.cartesian_to_geodetic` benchmarked and set to `rust-default`.
 - Promotion decision: `coordinates.cartesian_to_keplerian` benchmarked and set to `rust-default`.
 - Promotion decision: `coordinates.keplerian.to_cartesian` benchmarked and set to `rust-default`.
-- Active waiver: `waiver-20260414-calc-mean-motion-perf`.
-- Active waiver: `waiver-20260415-gaussiod-perf`.
-- Active temporary waiver: `waiver-20260428-photometry-warm-performance-temporary` for known photometry n=2000 warm speed-gate misses; review by 2026-05-12.
-- Active temporary waiver: `waiver-20260428-cartesian-to-spherical-warm-performance-temporary` for known `coordinates.cartesian_to_spherical` n=2000 warm p95 speed-gate misses; review by 2026-05-12.
+- No active performance waivers are currently acceptable for merge-readiness; resolved historical waivers remain in `migration/waivers.yaml` for provenance.
 - Promotion decision: `dynamics.propagate_2body` (and `…_with_covariance`) benchmarked and set to `rust-default` (87x/414x p50).

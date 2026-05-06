@@ -22,7 +22,8 @@ regime once the kernel fix lands.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -46,6 +47,60 @@ class Sample:
 
     rust_kwargs: dict[str, Any]
     legacy_kwargs: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class WorkloadShape:
+    """Structured workload shape used by parity/speed governance.
+
+    ``rows`` is the flattened number of kernel rows passed to the current
+    NumPy-boundary runners. Optional axes record the production shape that
+    produced those rows, so the benchmark can distinguish a flat vector from
+    multi-axis cases such as orbits × epochs or objects × observers.
+    """
+
+    rows: int
+    n_orbits: int | None = None
+    n_epochs: int | None = None
+    n_observers: int | None = None
+    extra: Mapping[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.rows <= 0:
+            raise ValueError("rows must be positive")
+        axes = self.axes()
+        if not axes:
+            return
+        product = 1
+        for value in axes.values():
+            if value <= 0:
+                raise ValueError("workload axes must be positive")
+            product *= value
+        if product != self.rows:
+            raise ValueError(
+                f"workload axes product {product} does not match rows={self.rows}"
+            )
+
+    def axes(self) -> dict[str, int]:
+        axes: dict[str, int] = {}
+        if self.n_orbits is not None:
+            axes["orbits"] = self.n_orbits
+        if self.n_epochs is not None:
+            axes["epochs"] = self.n_epochs
+        if self.n_observers is not None:
+            axes["observers"] = self.n_observers
+        axes.update(dict(self.extra))
+        return axes
+
+    def label(self) -> str:
+        axes = self.axes()
+        if not axes:
+            return f"rows={self.rows}"
+        axis_label = " × ".join(f"{key}={value}" for key, value in axes.items())
+        return f"{axis_label} ({self.rows} rows)"
+
+    def to_json(self) -> dict[str, object]:
+        return {"rows": self.rows, "axes": self.axes(), "label": self.label()}
 
 
 def _sample_keplerian_elements(rng: np.random.Generator, n: int) -> np.ndarray:
@@ -527,6 +582,170 @@ def make_gauss_iod(rng: np.random.Generator, n: int) -> Sample:
 
 
 # ---------------------------------------------------------------------------
+# Structured workload helpers for speed-governance lanes
+# ---------------------------------------------------------------------------
+
+
+def _sample_observer_states(rng: np.random.Generator, n: int) -> np.ndarray:
+    obs_r = 1.0 + rng.normal(scale=0.02, size=n)
+    obs_theta = rng.uniform(0.0, 2 * np.pi, size=n)
+    obs = np.zeros((n, 6), dtype=np.float64)
+    obs[:, 0] = obs_r * np.cos(obs_theta)
+    obs[:, 1] = obs_r * np.sin(obs_theta)
+    obs[:, 3] = -2 * np.pi / 365.25 * obs_r * np.sin(obs_theta)
+    obs[:, 4] = 2 * np.pi / 365.25 * obs_r * np.cos(obs_theta)
+    return obs
+
+
+def _sample_observer_positions(rng: np.random.Generator, n: int) -> np.ndarray:
+    obs_r = 1.0 + rng.normal(scale=0.02, size=n)
+    obs_theta = rng.uniform(0.0, 2 * np.pi, size=n)
+    obs = np.zeros((n, 3), dtype=np.float64)
+    obs[:, 0] = obs_r * np.cos(obs_theta)
+    obs[:, 1] = obs_r * np.sin(obs_theta)
+    return obs
+
+
+def _orbit_epoch_grid(shape: WorkloadShape) -> tuple[int, int]:
+    n_orbits = shape.n_orbits or shape.rows
+    n_epochs = shape.n_epochs or max(1, shape.rows // n_orbits)
+    if n_orbits * n_epochs != shape.rows:
+        raise ValueError(f"{shape.label()} does not form an orbits × epochs grid")
+    return n_orbits, n_epochs
+
+
+def _orbit_observer_grid(shape: WorkloadShape) -> tuple[int, int]:
+    n_orbits = shape.n_orbits or shape.rows
+    n_observers = shape.n_observers or max(1, shape.rows // n_orbits)
+    if n_orbits * n_observers != shape.rows:
+        raise ValueError(f"{shape.label()} does not form an orbits × observers grid")
+    return n_orbits, n_observers
+
+
+def make_propagate_2body_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    n_orbits, n_epochs = _orbit_epoch_grid(shape)
+    orbit_rows = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))
+    coords = np.repeat(orbit_rows, n_epochs, axis=0)
+    dts = np.tile(_sample_dts(rng, n_epochs), n_orbits)
+    mus = np.full(shape.rows, MU_SUN, dtype=np.float64)
+    kw = {"orbits": coords, "dts": dts, "mus": mus, "max_iter": 100, "tol": 1e-15}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_propagate_2body_with_covariance_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    base = make_propagate_2body_shape(rng, shape).rust_kwargs
+    sigmas = np.array([1e-8, 1e-8, 1e-8, 1e-10, 1e-10, 1e-10])
+    diag = np.diag(sigmas**2)
+    cov_3d = np.broadcast_to(diag, (shape.rows, 6, 6)).copy()
+    rust_kw = dict(base)
+    rust_kw["covariances"] = np.ascontiguousarray(cov_3d.reshape(shape.rows, 36))
+    legacy_kw = dict(base)
+    legacy_kw["covariances"] = cov_3d
+    return Sample(rust_kwargs=rust_kw, legacy_kwargs=legacy_kw)
+
+
+def make_generate_ephemeris_2body_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    n_orbits, n_epochs = _orbit_epoch_grid(shape)
+    orbit_rows = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))
+    coords = np.repeat(orbit_rows, n_epochs, axis=0)
+    obs = np.tile(_sample_observer_states(rng, n_epochs), (n_orbits, 1))
+    mus = np.full(shape.rows, MU_SUN, dtype=np.float64)
+    kw = {
+        "orbits": coords,
+        "observer_states": obs,
+        "mus": mus,
+        "lt_tol": 1e-10,
+        "max_iter": 1000,
+        "tol": 1e-15,
+        "stellar_aberration": False,
+        "max_lt_iter": 10,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_generate_ephemeris_2body_with_covariance_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    base = make_generate_ephemeris_2body_shape(rng, shape).rust_kwargs
+    sigmas = np.array([1e-8, 1e-8, 1e-8, 1e-10, 1e-10, 1e-10])
+    diag = np.diag(sigmas**2)
+    cov_3d = np.broadcast_to(diag, (shape.rows, 6, 6)).copy()
+    rust_kw = dict(base)
+    rust_kw["covariances"] = np.ascontiguousarray(cov_3d.reshape(shape.rows, 36))
+    legacy_kw = dict(base)
+    legacy_kw["covariances"] = cov_3d
+    return Sample(rust_kwargs=rust_kw, legacy_kwargs=legacy_kw)
+
+
+def make_add_light_time_shape(rng: np.random.Generator, shape: WorkloadShape) -> Sample:
+    n_orbits, n_observers = _orbit_observer_grid(shape)
+    orbit_rows = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))
+    coords = np.repeat(orbit_rows, n_observers, axis=0)
+    obs_pos = np.tile(_sample_observer_positions(rng, n_observers), (n_orbits, 1))
+    mus = np.full(shape.rows, MU_SUN, dtype=np.float64)
+    kw = {
+        "orbits": coords,
+        "observer_positions": obs_pos,
+        "mus": mus,
+        "lt_tol": 1e-10,
+        "max_iter": 1000,
+        "tol": 1e-15,
+        "max_lt_iter": 10,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_calculate_phase_angle_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    n_orbits, n_observers = _orbit_observer_grid(shape)
+    object_rows = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))[:, :3]
+    obj = np.repeat(object_rows, n_observers, axis=0)
+    obs = np.tile(_sample_observer_positions(rng, n_observers), (n_orbits, 1))
+    kw = {"object_pos": obj, "observer_pos": obs}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_calculate_apparent_magnitude_v_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    base = make_calculate_phase_angle_shape(rng, shape).rust_kwargs
+    h_v = rng.uniform(15.0, 25.0, size=shape.rows).astype(np.float64)
+    g = rng.uniform(0.0, 0.5, size=shape.rows).astype(np.float64)
+    kw = {
+        "h_v": h_v,
+        "object_pos": base["object_pos"],
+        "observer_pos": base["observer_pos"],
+        "g": g,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_calculate_apparent_magnitude_v_and_phase_angle_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    return make_calculate_apparent_magnitude_v_shape(rng, shape)
+
+
+def make_predict_magnitudes_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    base = make_calculate_apparent_magnitude_v_shape(rng, shape).rust_kwargs
+    delta = np.array([0.0, -0.05, 0.12, 0.30], dtype=np.float64)
+    target_ids = rng.integers(0, len(delta), size=shape.rows).astype(np.int32)
+    kw = dict(base)
+    kw["target_ids"] = target_ids
+    kw["delta_table"] = delta
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+# ---------------------------------------------------------------------------
 # Registry: api_id → generator function
 # ---------------------------------------------------------------------------
 
@@ -573,11 +792,98 @@ GENERATORS = {
 }
 
 
+SHAPED_GENERATORS = {
+    "dynamics.propagate_2body": make_propagate_2body_shape,
+    "dynamics.propagate_2body_with_covariance": (
+        make_propagate_2body_with_covariance_shape
+    ),
+    "dynamics.generate_ephemeris_2body": make_generate_ephemeris_2body_shape,
+    "dynamics.generate_ephemeris_2body_with_covariance": (
+        make_generate_ephemeris_2body_with_covariance_shape
+    ),
+    "dynamics.add_light_time": make_add_light_time_shape,
+    "photometry.calculate_phase_angle": make_calculate_phase_angle_shape,
+    "photometry.calculate_apparent_magnitude_v": (
+        make_calculate_apparent_magnitude_v_shape
+    ),
+    "photometry.calculate_apparent_magnitude_v_and_phase_angle": (
+        make_calculate_apparent_magnitude_v_and_phase_angle_shape
+    ),
+    "photometry.predict_magnitudes": make_predict_magnitudes_shape,
+}
+
+
+LARGE_WORKLOADS: dict[str, WorkloadShape] = {
+    "coordinates.cartesian_to_spherical": WorkloadShape(20_000),
+    "coordinates.transform_coordinates": WorkloadShape(12_000),
+    "coordinates.cartesian_to_geodetic": WorkloadShape(20_000),
+    "coordinates.cartesian_to_keplerian": WorkloadShape(20_000),
+    "coordinates.keplerian.to_cartesian": WorkloadShape(20_000),
+    "coordinates.cartesian_to_cometary": WorkloadShape(20_000),
+    "coordinates.cometary.to_cartesian": WorkloadShape(20_000),
+    "coordinates.spherical.to_cartesian": WorkloadShape(20_000),
+    "coordinates.residuals.calculate_chi2": WorkloadShape(50_000),
+    "dynamics.calc_mean_motion": WorkloadShape(50_000),
+    "dynamics.propagate_2body": WorkloadShape(20_000, n_orbits=1_000, n_epochs=20),
+    "dynamics.propagate_2body_with_covariance": WorkloadShape(
+        4_000, n_orbits=200, n_epochs=20
+    ),
+    "dynamics.generate_ephemeris_2body": WorkloadShape(
+        20_000, n_orbits=400, n_epochs=50
+    ),
+    "dynamics.generate_ephemeris_2body_with_covariance": WorkloadShape(
+        4_000, n_orbits=200, n_epochs=20
+    ),
+    "dynamics.solve_lambert": WorkloadShape(12_000),
+    "dynamics.add_light_time": WorkloadShape(20_000, n_orbits=400, n_observers=50),
+    "photometry.calculate_phase_angle": WorkloadShape(
+        50_000, n_orbits=1_000, n_observers=50
+    ),
+    "photometry.calculate_apparent_magnitude_v": WorkloadShape(
+        50_000, n_orbits=1_000, n_observers=50
+    ),
+    "photometry.calculate_apparent_magnitude_v_and_phase_angle": WorkloadShape(
+        50_000, n_orbits=1_000, n_observers=50
+    ),
+    "photometry.predict_magnitudes": WorkloadShape(
+        50_000, n_orbits=1_000, n_observers=50
+    ),
+    "orbit_determination.calcGibbs": WorkloadShape(5_000, extra={"triplets": 5_000}),
+    "orbit_determination.calcHerrickGibbs": WorkloadShape(
+        5_000, extra={"triplets": 5_000}
+    ),
+    "orbit_determination.calcGauss": WorkloadShape(5_000, extra={"triplets": 5_000}),
+}
+
+
 def all_api_ids() -> tuple[str, ...]:
     return tuple(GENERATORS.keys())
 
 
-def make(api_id: str, rng: np.random.Generator, n: int) -> Sample:
+def lane_workloads(
+    *, tiny_n: int = 10, small_n: int = 2_000
+) -> dict[str, dict[str, WorkloadShape]]:
+    api_ids = all_api_ids()
+    missing_large = sorted(set(api_ids) - set(LARGE_WORKLOADS))
+    if missing_large:
+        raise KeyError("Missing large-n workloads: " + ", ".join(missing_large))
+    return {
+        "tiny-n": {api_id: WorkloadShape(tiny_n) for api_id in api_ids},
+        "small-n": {api_id: WorkloadShape(small_n) for api_id in api_ids},
+        "large-n": {api_id: LARGE_WORKLOADS[api_id] for api_id in api_ids},
+    }
+
+
+def make(
+    api_id: str,
+    rng: np.random.Generator,
+    workload: int | WorkloadShape,
+) -> Sample:
     if api_id not in GENERATORS:
         raise KeyError(f"No input generator for {api_id!r}")
-    return GENERATORS[api_id](rng, n)
+    if isinstance(workload, WorkloadShape):
+        shaped_generator = SHAPED_GENERATORS.get(api_id)
+        if shaped_generator is not None and workload.axes():
+            return shaped_generator(rng, workload)
+        return GENERATORS[api_id](rng, workload.rows)
+    return GENERATORS[api_id](rng, workload)

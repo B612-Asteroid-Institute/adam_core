@@ -26,6 +26,7 @@ from typing import Any
 
 import numpy as np
 
+from . import _threading
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_VENV_PYTHON = REPO_ROOT / ".legacy-venv" / "bin" / "python"
@@ -45,15 +46,21 @@ def _ensure_legacy_venv() -> None:
         )
 
 
-def _run_subprocess(request: dict[str, Any]) -> dict[str, Any]:
-    _ensure_legacy_venv()
-
-    payload = pickle.dumps(request, protocol=pickle.HIGHEST_PROTOCOL)
-
-    env = os.environ.copy()
+def _subprocess_env(thread_mode: str | None = None) -> dict[str, str]:
+    env = _threading.env_for_thread_mode(thread_mode, os.environ)
     # Make sure the legacy venv's site-packages take precedence; clear any
     # PYTHONPATH that might leak the migration repo's adam_core.
     env.pop("PYTHONPATH", None)
+    return env
+
+
+def _run_subprocess(
+    request: dict[str, Any], *, thread_mode: str | None = None
+) -> dict[str, Any]:
+    _ensure_legacy_venv()
+
+    payload = pickle.dumps(request, protocol=pickle.HIGHEST_PROTOCOL)
+    env = _subprocess_env(thread_mode)
 
     proc = subprocess.run(
         [
@@ -98,14 +105,17 @@ def _run_subprocess(request: dict[str, Any]) -> dict[str, Any]:
 
 def parity(api_id: str, **kwargs: Any) -> dict[str, np.ndarray]:
     """Invoke the legacy implementation once and return its outputs."""
-    response = _run_subprocess(
-        {"api": api_id, "mode": "parity", "kwargs": kwargs}
-    )
+    response = _run_subprocess({"api": api_id, "mode": "parity", "kwargs": kwargs})
     return response["outputs"]
 
 
 def time_legacy(
-    api_id: str, *, reps: int = 7, warmup: int = 1, **kwargs: Any
+    api_id: str,
+    *,
+    reps: int = 7,
+    warmup: int = 1,
+    thread_mode: str | None = None,
+    **kwargs: Any,
 ) -> list[float]:
     """Time the legacy implementation (warm). Returns per-rep elapsed seconds."""
     response = _run_subprocess(
@@ -115,12 +125,15 @@ def time_legacy(
             "warmup": warmup,
             "reps": reps,
             "kwargs": kwargs,
-        }
+        },
+        thread_mode=thread_mode,
     )
     return response["elapsed"]
 
 
-def time_legacy_cold(api_id: str, **kwargs: Any) -> float:
+def time_legacy_cold(
+    api_id: str, *, thread_mode: str | None = None, **kwargs: Any
+) -> float:
     """End-to-end cold latency for legacy: wall-clock from fresh Python
     subprocess spawn → JAX import → JIT compile → first call → result.
 
@@ -128,14 +141,13 @@ def time_legacy_cold(api_id: str, **kwargs: Any) -> float:
     INCLUDED on purpose — that is what users pay in a one-shot CLI invocation.
     """
     import time as _time
-    import os as _os
+
     _ensure_legacy_venv()
     payload = pickle.dumps(
         {"api": api_id, "mode": "parity", "kwargs": kwargs},
         protocol=pickle.HIGHEST_PROTOCOL,
     )
-    env = _os.environ.copy()
-    env.pop("PYTHONPATH", None)
+    env = _subprocess_env(thread_mode)
     t0 = _time.perf_counter()
     proc = subprocess.run(
         [
@@ -162,7 +174,9 @@ def time_legacy_cold(api_id: str, **kwargs: Any) -> float:
     return elapsed
 
 
-def time_rust_cold(api_id: str, **kwargs: Any) -> float:
+def time_rust_cold(
+    api_id: str, *, thread_mode: str | None = None, **kwargs: Any
+) -> float:
     """End-to-end cold latency for rust: wall-clock from fresh Python
     subprocess spawn → adam_core._rust import → first call → result.
 
@@ -170,7 +184,7 @@ def time_rust_cold(api_id: str, **kwargs: Any) -> float:
     directly comparable.
     """
     import time as _time
-    import os as _os
+
     payload = pickle.dumps(
         {"api": api_id, "kwargs": kwargs},
         protocol=pickle.HIGHEST_PROTOCOL,
@@ -178,8 +192,7 @@ def time_rust_cold(api_id: str, **kwargs: Any) -> float:
     main_python = REPO_ROOT / ".venv" / "bin" / "python"
     if not main_python.exists():
         raise LegacyOracleError(f"rust venv python not found at {main_python}")
-    env = _os.environ.copy()
-    env.pop("PYTHONPATH", None)
+    env = _subprocess_env(thread_mode)
     t0 = _time.perf_counter()
     proc = subprocess.run(
         [

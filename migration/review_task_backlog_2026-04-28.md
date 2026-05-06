@@ -1007,7 +1007,7 @@ Acceptance:
 
 ### RM-P1-014: Resolve Photometry Warm Performance Gate Policy
 
-Status: temporary waiver active; permanent resolution still open; phase-angle now raw-passes but magnitude-style warm misses remain
+Status: complete (2026-05-03)
 
 Scope:
 
@@ -1033,6 +1033,10 @@ Acceptance:
 
 - Do not close RM-P1-014 from a single green warm rerun. The earlier canonical cold/warm artifact had three magnitude-style photometry APIs under `waiver-20260428-photometry-warm-performance-temporary`: `calculate_apparent_magnitude_v` (`1.19x` p50 / `1.24x` p95), `calculate_apparent_magnitude_v_and_phase_angle` (`1.21x` / `1.01x`), and `predict_magnitudes` (`1.17x` / `0.99x`). A later governance-only rerun after adding `calculate_chi2` to the parity manifest raw-passed `calculate_apparent_magnitude_v` and fused mag+phase, but still waived `calculate_phase_angle` (`1.34x` / `0.98x`) and `predict_magnitudes` (`1.14x` / `0.96x`). The active waiver therefore remains unresolved: the decision before 2026-05-12 is still whether to invest in SIMD/transcendental work, narrow/remove waivers based on repeated raw passes, or encode a permanent cold-start/workload policy.
 
+2026-05-03 resolution note:
+
+- Resolved `waiver-20260428-photometry-warm-performance-temporary` after repeated diagnostics and low-risk optimizations. Accepted reviewer feedback to hoist valid `target_ids` detection for `predict_magnitudes`, use a guarded unchecked lookup only on the all-valid fast path, retain the checked NaN-preserving slow path for direct invalid Rust callers, and avoid the Python wrapper's redundant int32 contiguous conversion for already-contiguous `target_ids`. The final canonical artifacts raw-pass all four photometry APIs: cold/warm artifact shows phase_angle 1.45x/1.68x, apparent_magnitude_v 1.61x/1.65x, fused mag+phase 1.23x/1.27x, and predict_magnitudes 1.43x/2.16x, with ~27-31x cold speedups; rust-parity-main passes all photometry rows including predict_magnitudes 1.42x/1.66x. The waiver is marked resolved in `migration/waivers.yaml` and removed from the photometry registry rows.
+
 ### RM-P1-015: Make `gaussIOD` Randomized Parity Exclusion Visible
 
 Status: complete (2026-04-29); folded into RM-P1-008
@@ -1049,7 +1053,7 @@ Acceptance:
 
 ### RM-P1-014A: Resolve Cartesian-To-Spherical Warm Performance Policy
 
-Status: temporary waiver active; permanent resolution still open
+Status: complete (2026-05-03)
 
 Reason: RM-P0-005 validation exposed a repeated p95-only warm speed miss for
 `coordinates.cartesian_to_spherical` in the full n=2000 cold/warm artifact.
@@ -1087,6 +1091,10 @@ Acceptance:
 
 - Added an n≤4096 serial path for `cartesian_to_spherical_flat6`, hoisted `xy2`, and removed the dead post-`asin` latitude normalization branch. The full cold/warm artifact raw-passed at `1.97x` p50 / `2.57x` p95 / `18.02x` cold. The waiver is intentionally left attached until RM-P1-014A is closed explicitly rather than removed mid-review; if future artifacts keep raw-passing, close RM-P1-014A by updating waiver/status governance rather than treating this note as closure.
 
+2026-05-03 resolution note:
+
+- Resolved `waiver-20260428-cartesian-to-spherical-warm-performance-temporary` after subsequent canonical artifacts continued to raw-pass. Final cold/warm artifact shows `coordinates.cartesian_to_spherical` at 1.74x p50 / 1.81x p95 / 19.10x cold, and `rust-parity-main` shows 1.73x / 2.03x with parity fuzz 8/8. The waiver is marked resolved in `migration/waivers.yaml` and removed from the registry row.
+
 ### RM-P1-016: Split Large PyO3 Binding File After Stabilization
 
 Status: open
@@ -1120,7 +1128,7 @@ Acceptance:
 
 ### RM-P1-018: Harden Rust-Only Latency Gate Statistical Policy
 
-Status: open
+Status: complete (2026-05-03)
 
 Reason: RM-P0-007 validation accepted `rust-latency-gate` after one rerun
 cleared a transient p95 microbenchmark outlier. That is defensible for a
@@ -1141,6 +1149,164 @@ Acceptance:
 - A reviewer can reproduce the latency-gate decision policy without relying on
   chat-time judgment.
 - CI/local artifacts expose enough raw data to audit pass-after-rerun cases.
+
+2026-05-03 resolution note:
+
+- Hardened the Rust-only latency gate by using three independent timing trials
+  by default and comparing the median of per-trial p50/p95 estimates while
+  preserving every raw sample and per-trial percentile in the artifact. The
+  default pass/fail thread policy is now single-process/single-thread, with the
+  committed `rust_latency_baseline.json` recaptured under `thread_mode: single`
+  and per-entry thread metadata. Native/multithread measurements remain allowed
+  only as separately labeled diagnostics with separate baseline/output paths.
+  `pdm run rust-latency-gate` passes under the final single-thread policy.
+
+### RM-P1-019: Add Dual-Size Baseline Speed Governance
+
+Status: complete (2026-05-04)
+
+Reason: current baseline-main Rust-vs-legacy speed governance measures one
+canonical small/medium lane (`n=2000`). The Rust-only latency gate covers larger
+post-legacy workloads, but it is not an apples-to-apples Rust-vs-baseline
+comparison. The user expects speed governance to expose both a small-N lane and
+a large-N lane (greater than 10k rows or API-appropriate equivalent shapes) for
+wired Rust-default APIs.
+
+Scope:
+
+- Extend the parity speed harness to support named size lanes while preserving
+  the existing `n=2000` comparison for historical continuity.
+- Define canonical large-lane shapes per API family instead of assuming one
+  scalar `n` fits every surface: simple vector kernels, propagation/ephemeris
+  `n_orbits × k_times` workloads, OD triplet counts, and public dispatch
+  orchestration where applicable.
+- Keep baseline-main comparisons single-process/single-thread by default, with
+  any native/multithread diagnostic lane separately labeled and excluded from
+  default pass/fail unless explicitly approved.
+- Update `parity_main`, PDM scripts, CI/preflight checks, artifact schema, and
+  `migration/scripts/parity_table.py` so tables show the lane name, size/shape,
+  p50/p95 speedups, cold timing where collected, waiver status, and thread
+  metadata.
+- Decide and document enforcement policy before turning the large lane into a
+  hard gate. Resolved 2026-05-04: all speed lanes, including large-n, are
+  enforced at the 1.2× p50/p95 threshold. Large-n misses are not hidden as
+  diagnostic-only rows; unresolved misses are tracked under RM-P1-020 unless the
+  user makes an explicit structural-acceptance decision outside routine waivers.
+- Regenerate the canonical parity/performance artifacts after implementation,
+  using the current direct Rust `spicekit` dependency state.
+
+Acceptance:
+
+- Review tables make it obvious which Rust-vs-baseline measurements are
+  small-N and which are large-N; no row can be mistaken for the current single
+  `n=2000` gate.
+- Artifacts preserve exact sizes/shapes and thread metadata for every speed
+  lane and reject unlabeled or mismatched thread-mode comparisons when used for
+  pass/fail.
+- The governance docs explain how the dual-size lanes relate to the Rust-only
+  latency regression gate.
+- Waivers, if any, identify the failing lane rather than waiving an API
+  wholesale without size context.
+
+Verification:
+
+- `pdm run rust-parity-main`
+- `pdm run rust-parity-speed-cold`
+- Dual-size parity table regeneration through `migration.scripts.parity_table`
+- `pdm run script-preflight`
+- `git diff --check`
+
+2026-05-04 resolution note:
+
+- Added named `tiny-n`, `small-n`, and `large-n` speed lanes to the baseline-main
+  parity speed harness and artifacts. The `tiny-n` lane records quick one-off
+  call behavior. The `small-n` lane preserves the historical `n=2000` promotion
+  gate at the standard 1.2× p50/p95 threshold. The `large-n` lane records
+  API-shaped larger workloads with structured axes and is enforced by default
+  with an initial no-regression threshold.
+- Moved canonical large workload shapes next to the input generators via
+  `WorkloadShape`, including multi-axis labels such as orbits × epochs and
+  orbits × observers. The JSON artifact now carries structured shape metadata,
+  per-lane thresholds, and a single `all_passed` result plus `lane_status`, so a
+  large-workload miss cannot be mistaken for an overall pass.
+- Initial lane-scoped waiver plumbing was added so size-specific misses cannot
+  be confused with API-wide passes, then the 2026-05-04 no-large-waiver user
+  decision removed active large-n waivers. Current unresolved misses must remain
+  red and are tracked in RM-P1-020 until optimized or explicitly accepted by the
+  user outside the routine waiver mechanism.
+- Updated `parity_main`, `parity_speed`, PDM scripts, script preflight,
+  `parity_table`, benchmark-governance docs, parity README, and status tests.
+  The review table now pivots speed results to one row per API with lane column
+  groups; the old lane-per-row form remains available with `--speed-long` for
+  debugging. Baseline-main legacy warm/cold timings are serialized in
+  `migration/artifacts/parity_legacy_speed_baseline.json` and invalidated by
+  API/shape/process/thread/legacy-checkout changes.
+
+### RM-P1-020: Resolve Remaining 1.2x Large-N Single-Thread Misses
+
+Status: open
+
+Reason: after enforcing the 1.2x p50/p95 threshold on every speed lane and
+removing large-n waivers, the current single-thread grid is red. The persistent
+large-n structural misses are `dynamics.generate_ephemeris_2body` and
+`photometry.predict_magnitudes`, while the latest canonical artifact also shows
+`dynamics.add_light_time` and fused photometry p95 as current red rows that must
+be triaged before any merge-readiness claim. Multi-thread scaling evidence is
+useful for production-throughput context, but it does not replace the default
+single-thread gate.
+
+Scope:
+
+- Keep each API/lane as its own measured implementation pass: plan, implement,
+  rebuild, run component parity, run the component speed grid with cached legacy
+  timings, then checkpoint only if the evidence supports keeping the change.
+- For `dynamics.add_light_time`, first determine whether the latest miss is a
+  measurement outlier or a real regression from the shared universal-Kepler /
+  light-time helper changes. Use targeted cached-legacy runs before editing
+  code; if the miss reproduces, handle it in the same disciplined pass style as
+  ephemeris rather than treating it as incidental noise.
+- For `dynamics.generate_ephemeris_2body`, evaluate at most a small number of
+  disciplined approaches before declaring the path structurally limited:
+  - synchronous masked-convergence rewrite of the light-time/universal-Kepler
+    iteration over an orbit×epoch block, so rows advance through the Newton
+    tail together instead of each row running a divergent scalar loop;
+  - orbit×epoch block processing that reuses `OrbitConstants` and light-time
+    state without serializing the multi-thread Rayon path;
+  - if those do not clear the gate, document the miss as structural with
+    separate multi-thread production evidence rather than adding a waiver.
+- For fused photometry p95 misses, treat them as p95 variance unless repeated
+  targeted runs show a real kernel regression. Do not churn the already-tuned
+  vForce/NEON path without before/after evidence.
+- For `photometry.predict_magnitudes`, treat the current miss as the already
+  observed JAX/XLA bandpass-gather fusion advantage unless a low-risk
+  polynomial/transcendental plan with endpoint parity checks is approved first.
+  If no such plan is approved, collect and label multi-thread scaling evidence
+  as production context while keeping the single-thread gate result visible.
+- Do not add permanent large-n waivers. Any temporary local rerouting while an
+  optimization is actively underway must be dated, explicit, and removed before
+  claiming merge readiness.
+
+Acceptance:
+
+- All current red single-thread speed rows meet 1.2x p50/p95, or there is an
+  explicit user decision recorded outside the waiver mechanism explaining why a
+  structural single-thread miss is accepted for merge.
+- `migration/artifacts/parity_gate.json`,
+  `migration/artifacts/parity_speed_cold_warm.json`, and
+  `migration/artifacts/parity_report.md` reflect the current policy and contain
+  no stale resolved waiver IDs.
+- Separate multi-thread artifacts, if collected, are labeled scaling evidence
+  only and are not used as pass/fail evidence for the default gate.
+
+Verification:
+
+```bash
+pdm run rust-develop
+pdm run python -m migration.parity.parity_main --apis <api> --threads single \
+  --speed-large --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
+pdm run rust-parity-main
+pdm run rust-parity-speed-cold
+```
 
 ## Other Agent Backlog And Wave Status
 

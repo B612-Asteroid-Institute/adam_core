@@ -1,5 +1,5 @@
 version: 1
-updated: 2026-04-28
+updated: 2026-05-04
 schema:
   required_fields:
     - id
@@ -10,6 +10,10 @@ schema:
     - review_by
     - exit_criteria
     - status
+  optional_fields:
+    - lane
+    - observed_speedup_p50
+    - observed_speedup_p95
 waivers:
   - id: waiver-20260414-calc-mean-motion-perf
     api: dynamics.calc_mean_motion
@@ -119,7 +123,19 @@ waivers:
     created: 2026-04-28
     review_by: 2026-05-12
     exit_criteria: Either clear the n=2000 warm p50/p95 >=1.2x gate for all four photometry APIs, implement an approved SIMD/transcendental strategy with ULP validation, or replace this temporary waiver with a permanent policy decision covering cold-start-prioritized workloads or selective dispatch.
-    status: active
+    status: resolved
+    resolved: 2026-05-03
+    resolution: >-
+      Warm single-thread n=2000 parity gates now raw-pass all four photometry
+      APIs after low-risk kernel and wrapper optimizations. Evidence: final
+      `pdm run rust-parity-speed-cold` on 2026-05-03 wrote
+      `migration/artifacts/parity_speed_cold_warm.json` with phase_angle 1.45x
+      p50 / 1.68x p95, apparent_magnitude_v 1.61x / 1.65x, fused mag+phase
+      1.23x / 1.27x, and predict_magnitudes 1.43x / 2.16x, plus ~27-31x
+      cold speedups. Final `pdm run rust-parity-main` passed all 23 parity
+      fuzz APIs at 8/8 and raw-passed photometry warm rows, including
+      predict_magnitudes 1.42x / 1.66x. Removed waiver IDs from the photometry
+      API_MIGRATIONS rows.
   - id: waiver-20260428-cartesian-to-spherical-warm-performance-temporary
     api: coordinates.cartesian_to_spherical
     owner: core-coordinates
@@ -127,7 +143,17 @@ waivers:
     created: 2026-04-28
     review_by: 2026-05-12
     exit_criteria: Either clear the n=2000 warm p50/p95 >=1.2x gate for `coordinates.cartesian_to_spherical`, implement an approved SIMD/transcendental strategy with ULP validation, or replace this temporary waiver with a permanent policy decision covering cold-start-prioritized workloads or selective dispatch.
-    status: active
+    status: resolved
+    resolved: 2026-05-03
+    resolution: >-
+      Warm single-thread n=2000 parity gates now raw-pass
+      coordinates.cartesian_to_spherical repeatedly after serial-threshold and
+      common-subexpression cleanup. Evidence: final `pdm run rust-parity-speed-cold`
+      on 2026-05-03 wrote `migration/artifacts/parity_speed_cold_warm.json`
+      with 1.74x p50 / 1.81x p95 and 19.10x cold speedup; final
+      `pdm run rust-parity-main` passed parity fuzz 8/8 and raw-passed warm speed
+      at 1.73x / 2.03x. Removed the waiver ID from the
+      coordinates.cartesian_to_spherical API_MIGRATIONS row.
   - id: waiver-20260422-lambert-perf-pending
     api: dynamics.solve_lambert
     owner: core-dynamics
@@ -137,4 +163,14 @@ waivers:
     exit_criteria: p50 and p95 speedup >= 1.2x vs legacy JAX `_izzo_lambert_vmap` on a representative (N, r1, r2, tof) batch, with parity tests green. Promote `dynamics.solve_lambert` to default="rust" once gate clears.
     status: resolved
     resolved: 2026-04-22
-    resolution: Rust port complete — all Izzo helpers (hyp2f1b, TOF eq + 3 derivs, Householder, Halley, find_xy, izzo_lambert) ported to rust/adam_core_rs_coords/src/lambert.rs (~320 LoC). Parity vs JAX at machine epsilon (max diff 2e-17 on random batches of 256 rows, NaN locations align exactly); 9/9 parity tests green. Benchmark size sweep N={100, 1k, 10k, 100k} shows consistent ~2x speedup (1.85-2.34x p50), clearing the 1.2x gate at every size. Promoted `dynamics.solve_lambert` to default="rust"; legacy JAX path retained as fallback via `rust_out is None` branch. No Dual<N> support needed (Lambert isn't in covariance tracking).
+    resolution: >-
+      Rust port complete — all Izzo helpers (hyp2f1b, TOF eq + 3 derivs,
+      Householder, Halley, find_xy, izzo_lambert) ported to
+      rust/adam_core_rs_coords/src/lambert.rs (~320 LoC). Parity vs JAX at
+      machine epsilon (max diff 2e-17 on random batches of 256 rows, NaN
+      locations align exactly); 9/9 parity tests green. Benchmark size sweep
+      N={100, 1k, 10k, 100k} shows consistent ~2x speedup (1.85-2.34x p50),
+      clearing the 1.2x gate at every size. Promoted `dynamics.solve_lambert`
+      to default="rust"; legacy JAX path retained as fallback via
+      `rust_out is None` branch. No Dual<N> support needed (Lambert isn't in
+      covariance tracking).

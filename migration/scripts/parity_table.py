@@ -210,39 +210,144 @@ def _format_speed(value: float | None) -> str:
     return f"{value:.2f}x"
 
 
-def _load_speed_rows(path: Path | None) -> list[dict[str, Any]]:
+def _load_speed_artifact(
+    path: Path | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if path is None or not path.exists():
-        return []
+        return [], {}
     data = json.loads(path.read_text())
     if "parity_speed" in data:
-        return list(data["parity_speed"].get("apis", []))
-    return list(data.get("apis", []))
+        speed = data["parity_speed"]
+        return list(speed.get("apis", [])), dict(speed)
+    return list(data.get("apis", [])), data
 
 
-def _format_speed_markdown(rows: list[dict[str, Any]]) -> str:
+def _format_speed_metadata(metadata: dict[str, Any]) -> str:
+    if not metadata:
+        return ""
+    warm = metadata.get("thread_mode", "unknown")
+    cold = metadata.get("cold_thread_mode", "unknown")
+    thread_policy = metadata.get("thread_policy")
+    lane_policy = metadata.get("lane_policy")
     lines = [
-        "| API | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
-        "|---|---:|---:|---:|---|---|",
+        f"**Thread mode**: warm p50/p95 `{warm}`; cold `{cold}`.",
+        "Single-thread mode caps thread pools only; SIMD/ILP remain enabled within each CPU core.",
+    ]
+    if thread_policy:
+        lines.append(f"Thread policy: {thread_policy}")
+    if lane_policy:
+        lines.append(f"Lane policy: {lane_policy}")
+    legacy_cache = metadata.get("legacy_timing_cache")
+    if isinstance(legacy_cache, dict):
+        hits = legacy_cache.get("hits") or {}
+        writes = legacy_cache.get("writes") or {}
+        lines.append(
+            "Legacy timing cache: "
+            f"`{legacy_cache.get('path', 'unknown')}`; "
+            f"refresh={legacy_cache.get('refresh', False)}; "
+            f"hits={hits}; writes={writes}."
+        )
+
+    lanes = metadata.get("lanes") or []
+    if lanes:
+        lines.append("")
+        lines.append("**Speed lanes**:")
+        for lane in lanes:
+            name = lane.get("name", "unknown")
+            enforced = "enforced" if lane.get("enforced") else "diagnostic"
+            n_values = lane.get("n_values") or []
+            if n_values:
+                size = ", ".join(str(n) for n in n_values)
+            else:
+                size = str(lane.get("n", "unknown"))
+            lines.append(
+                f"- `{name}` ({enforced}): n={size}; {lane.get('description', '')}"
+            )
+    return "\n".join(lines)
+
+
+def _speed_gate_label(row: dict[str, Any]) -> str:
+    raw_passed = bool(row.get("raw_passed", row.get("passed", False)))
+    waived = bool(row.get("waived", False))
+    if waived:
+        gate = "WAIVED"
+    elif raw_passed:
+        gate = "PASS"
+    elif row.get("passed"):
+        gate = "PASS"
+    else:
+        gate = "FAIL"
+    if not bool(row.get("lane_enforced", True)):
+        return f"DIAG {gate}"
+    return gate
+
+
+def _workload_label(row: dict[str, Any]) -> str:
+    label = row.get("workload_label")
+    if label:
+        return str(label)
+    shape = row.get("workload_shape")
+    if isinstance(shape, dict):
+        label = shape.get("label")
+        if label:
+            return str(label)
+        rows = shape.get("rows", row.get("n", "—"))
+        return f"rows={rows}"
+    if shape:
+        return str(shape)
+    return f"rows={row.get('n', '—')}"
+
+
+def _format_lane_cell(row: dict[str, Any] | None) -> str:
+    if row is None:
+        return "—"
+    waiver = row.get("waiver") or "—"
+    return (
+        f"{_workload_label(row)}<br>"
+        f"p50 {_format_speed(row.get('speedup_p50'))}; "
+        f"p95 {_format_speed(row.get('speedup_p95'))}; "
+        f"cold {_format_speed(row.get('speedup_cold'))}<br>"
+        f"{_speed_gate_label(row)}; waiver {waiver}"
+    )
+
+
+def _format_speed_long_markdown(rows: list[dict[str, Any]]) -> str:
+    lines = [
+        "| Lane | API | Size/shape | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
+        "|---|---|---|---:|---:|---:|---|---|",
     ]
     for r in rows:
-        raw_passed = bool(r.get("raw_passed", r.get("passed", False)))
-        waived = bool(r.get("waived", False))
-        if waived:
-            gate = "WAIVED"
-        elif raw_passed:
-            gate = "PASS"
-        elif r.get("passed"):
-            gate = "PASS"
-        else:
-            gate = "FAIL"
+        gate = _speed_gate_label(r)
         waiver = r.get("waiver") or "—"
+        lane = r.get("lane", "small-n")
         lines.append(
+            f"| `{lane}` "
             f"| `{r['api_id']}` "
+            f"| {_workload_label(r)} "
             f"| {_format_speed(r.get('speedup_p50'))} "
             f"| {_format_speed(r.get('speedup_p95'))} "
             f"| {_format_speed(r.get('speedup_cold'))} "
             f"| {gate} | {waiver} |"
         )
+    return "\n".join(lines)
+
+
+def _format_speed_markdown(rows: list[dict[str, Any]], *, long: bool = False) -> str:
+    if long:
+        return _format_speed_long_markdown(rows)
+
+    lane_order = list(dict.fromkeys(row.get("lane", "small-n") for row in rows))
+    by_api: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in rows:
+        by_api.setdefault(row["api_id"], {})[row.get("lane", "small-n")] = row
+
+    lines = [
+        "| API | " + " | ".join(f"{lane} speed" for lane in lane_order) + " |",
+        "|---" + "|---" * len(lane_order) + "|",
+    ]
+    for api_id in sorted(by_api):
+        cells = [_format_lane_cell(by_api[api_id].get(lane)) for lane in lane_order]
+        lines.append(f"| `{api_id}` | " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
 
@@ -389,6 +494,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Only print parity tolerance/RCA table.",
     )
     p.add_argument(
+        "--speed-long",
+        action="store_true",
+        help="Render speed rows in long lane-per-row form instead of pivoting by API.",
+    )
+    p.add_argument(
         "--refresh",
         action="store_true",
         help="Run parity_fuzz instead of reading --parity-artifact.",
@@ -439,7 +549,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
 
     rows = _build_rows(fuzz_results)
-    speed_rows = [] if args.no_speed else _load_speed_rows(args.speed_artifact)
+    speed_rows, speed_metadata = (
+        ([], {}) if args.no_speed else _load_speed_artifact(args.speed_artifact)
+    )
 
     max_text = None if args.max_text == 0 else args.max_text
     sections = [
@@ -452,14 +564,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         _format_parity_markdown(rows, max_text=max_text),
     ]
     if speed_rows:
-        sections.extend(
-            [
-                "",
-                "## Performance",
-                "",
-                _format_speed_markdown(speed_rows),
-            ]
-        )
+        speed_metadata_md = _format_speed_metadata(speed_metadata)
+        sections.extend(["", "## Performance", ""])
+        if speed_metadata_md:
+            sections.extend([speed_metadata_md, ""])
+        sections.append(_format_speed_markdown(speed_rows, long=args.speed_long))
     report = "\n".join(sections)
 
     print(report)

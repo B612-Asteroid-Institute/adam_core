@@ -53,10 +53,10 @@ Full baseline-main gate (writes `migration/artifacts/parity_gate.json`):
     --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
 ```
 
-The `tiny-n`, `small-n`, and `large-n` speed lanes are enforced by default.
-Known large-workload misses must be recorded as lane-scoped waivers in
-`migration/waivers.yaml`; `--speed-large-diagnostic` is only for ad-hoc local
-probes.
+The `tiny-n`, `small-n`, and `large-n` speed lanes are enforced by default at
+1.2× p50/p95. Large-workload misses stay red under RM-P1-020 unless the user
+makes an explicit structural-acceptance decision; `--speed-large-diagnostic` is
+only for ad-hoc local probes.
 
 Refresh the serialized baseline-main timing cache once after adding benchmark
 APIs, changing workload shapes, changing reps/warmup/thread policy, or updating
@@ -95,10 +95,11 @@ Just the speedup half (warm only — default, small lane only):
 ```
 
 Active performance waivers are read from `migration/waivers.yaml` and legacy
-registry waiver fields. Current waivers must include the failing lane (for
-example `lane: large-n`) so a tiny/small pass cannot hide a large-workload miss.
-Waived rows still record their raw p50/p95 miss in the JSON artifact, but the
-gate reports them as `WAIVED` and exits successfully until the review date.
+registry waiver fields. Current waivers, if explicitly approved, must include
+the failing lane (for example `lane: large-n`) so a tiny/small pass cannot hide
+a large-workload miss. Waived rows still record their raw p50/p95 miss in the
+JSON artifact, but no active large-n waiver should be used for merge-readiness
+without a fresh user decision.
 
 Add `--cold` to additionally measure cold-call latency. Cold timing
 spawns a fresh Python subprocess per measurement (so each call pays
