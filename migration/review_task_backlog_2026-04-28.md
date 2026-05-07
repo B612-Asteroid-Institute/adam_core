@@ -1320,7 +1320,7 @@ pdm run rust-parity-speed-cold
 
 ### RM-P1-021: Add Direct `classify_orbits` And `calculate_moid` Fuzz/Speed Coverage
 
-Status: open
+Status: completed 2026-05-07
 
 Reason: `orbits.classify_orbits` and `dynamics.calculate_moid` are already Rust-backed, but current registry coverage marks them as targeted-test-only. The historical Wave E1 classification artifact and the direct MOID/batch MOID speed notes prove useful implementation work, but they are not enough for final coverage accounting because they do not place these public surfaces in the canonical baseline-main randomized parity and shaped speed tables.
 
@@ -1337,6 +1337,11 @@ Acceptance:
 - `orbits.classify_orbits` and `dynamics.calculate_moid` appear in canonical random-fuzz artifacts with passing seed counts and meaningful tolerance rationales.
 - Both APIs appear in canonical speed artifacts with p50/p95 single-thread lane results, or any misses are explicitly tracked under the same no-waiver policy as RM-P1-020.
 - The registry/report distinguish direct MOID coverage from `calculate_perturber_moids` orchestration coverage.
+
+Completion evidence:
+
+- Source/cache commit `e5017a3f` wires the generators, rust/legacy dispatchers, tolerances, status rows, serial tiny/single-thread classification path, upstream-like MOID oracle tolerances, and additive source-hash-only legacy-cache refresh handling.
+- Regenerated `migration/artifacts/parity_gate.json`, `migration/artifacts/parity_speed_cold_warm.json`, `migration/artifacts/parity_table_rca.json`, and `migration/artifacts/parity_report.md` from committed HEAD. Both new APIs pass 8/8 fuzz seeds and all tiny/small/large speed lanes; remaining red performance rows are unrelated and tracked under RM-P1-020.
 
 Verification:
 
