@@ -1099,7 +1099,7 @@ Acceptance:
 
 ### RM-P1-016: Split Large PyO3 Binding File After Stabilization
 
-Status: open
+Status: complete (2026-05-07)
 
 Scope:
 
@@ -1110,6 +1110,19 @@ Scope:
 Acceptance:
 
 - Binding layer is maintainable and reviewable before the next large wave.
+
+Completion notes (2026-05-07):
+
+- `rust/adam_core_py/src/lib.rs` is now a 23-line `#[pymodule]` registry that calls `coordinates::register`, `dynamics::register`, `photometry::register`, `orbit_determination::register`, and `spice::register`.
+- 53 `#[pyfunction]`s redistributed by domain:
+  - `coordinates.rs` (915 lines, 17 fns): coord conversions, frame transforms, residuals/chi2, weighted stats, classification, Tisserand. Owns the `Representation`/`parse_representation`/`to_coords_rep`/`parse_frame` helpers used only by `transform_coordinates*_numpy`.
+  - `dynamics.rs` (1124 lines, 25 fns): orbital-element scalar helpers, Kepler/Lambert/Stumpff helpers, propagate, propagate-with-cov, ephemeris, ephemeris-with-cov, light-time, MOID single + batch, Lambert batch, porkchop grid.
+  - `photometry.rs` (290 lines, 6 fns): phase angle, apparent V magnitude (standalone + fused with phase), bandpass-delta predict, absolute-magnitude row + grouped fits.
+  - `orbit_determination.rs` (258 lines, 5 fns): calcGibbs, calcHerrickGibbs, calcGauss, gaussIOD orbits-from-roots, gaussIOD fused.
+  - `spice.rs` (441 lines): unchanged from the prior session; exports `AdamCoreSpiceBackend` PyO3 wrapper plus parsed-text-kernel and SPK-writer bindings.
+- Per-module imports list only the symbols each domain uses; shape validation stays at the PyO3 boundary as before; no Python-side wrapper changes were needed.
+- Validation against the new layout: `cargo fmt --all --check`, `pdm run rust-quality` (clippy `-D warnings`, full workspace tests), `pdm run rust-develop`, `pdm run test-rust-full` (754 passed / 144 skipped / 2 deselected), `pdm run rust-parity-main` exit 0, `pdm run rust-parity-speed-cold` exit 0; canonical artifacts regenerated.
+
 
 ### RM-P1-017: Final Clean Validation Pass
 

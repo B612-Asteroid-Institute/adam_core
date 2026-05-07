@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-07 (RM-SPICE-LSK-001 closed; spicekit 0.2.2; RM-P1-020 + RM-P1-017 green)
+Last updated: 2026-05-07 (RM-P1-016 PyO3 binding split complete; RM-SPICE-LSK-001 + RM-P1-020 + RM-P1-017 done)
 
 ## Current Review-Derived Backlog
 
