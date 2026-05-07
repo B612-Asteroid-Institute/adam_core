@@ -759,14 +759,102 @@ fn calculate_chi2_numpy<'py>(
     match calculate_chi2_flat(r_slice, c_slice, n, d) {
         Ok(out) => Ok(out.into_pyarray_bound(py)),
         Err(adam_core_rs_coords::chi2::Chi2Error::NanDiagonal { row, dim }) => {
-            Err(PyValueError::new_err(format!(
-                "Covariance matrix has NaN on diagonal (row={row}, dim={dim})."
-            )))
+            let _ = (row, dim);
+            Err(PyValueError::new_err(
+                "Covariance matrix has NaNs on the diagonal.",
+            ))
         }
         Err(adam_core_rs_coords::chi2::Chi2Error::NotPositiveDefinite { row }) => {
             Err(PyValueError::new_err(format!(
                 "Covariance matrix at row {row} is not positive definite."
             )))
+        }
+    }
+}
+
+#[pyfunction]
+fn compute_residuals_chi2_numpy<'py>(
+    py: Python<'py>,
+    observed: PyReadonlyArray2<'py, f64>,
+    predicted: PyReadonlyArray2<'py, f64>,
+    observed_cov: PyReadonlyArray3<'py, f64>,
+    predicted_cov: PyReadonlyArray3<'py, f64>,
+    is_spherical: bool,
+) -> PyResult<(
+    Bound<'py, PyArray2<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<i64>>,
+    bool,
+)> {
+    let obs = observed.as_array();
+    let pred = predicted.as_array();
+    let obs_c = observed_cov.as_array();
+    let pred_c = predicted_cov.as_array();
+    let n = obs.nrows();
+    let d = obs.ncols();
+    if pred.shape() != [n, d] {
+        return Err(PyValueError::new_err(
+            "predicted shape must match observed (N, D)",
+        ));
+    }
+    if obs_c.shape() != [n, d, d] {
+        return Err(PyValueError::new_err(format!(
+            "observed_cov shape {:?} must be (N={n}, D={d}, D={d})",
+            obs_c.shape()
+        )));
+    }
+    if pred_c.shape() != [n, d, d] {
+        return Err(PyValueError::new_err(format!(
+            "predicted_cov shape {:?} must be (N={n}, D={d}, D={d})",
+            pred_c.shape()
+        )));
+    }
+    let obs_slice = obs
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observed must be contiguous"))?;
+    let pred_slice = pred
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("predicted must be contiguous"))?;
+    let obs_cov_slice = obs_c
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observed_cov must be contiguous"))?;
+    let pred_cov_slice = pred_c
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("predicted_cov must be contiguous"))?;
+
+    match adam_core_rs_coords::compute_residuals_chi2_flat(
+        obs_slice,
+        pred_slice,
+        obs_cov_slice,
+        pred_cov_slice,
+        n,
+        d,
+        is_spherical,
+    ) {
+        Ok(out) => {
+            let res_arr = ndarray::Array2::from_shape_vec((n, d), out.residuals)
+                .map_err(|e| PyValueError::new_err(format!("shape: {e}")))?;
+            let chi2_arr = ndarray::Array1::from_vec(out.chi2);
+            let dof_arr = ndarray::Array1::from_vec(out.dof);
+            Ok((
+                res_arr.into_pyarray_bound(py),
+                chi2_arr.into_pyarray_bound(py),
+                dof_arr.into_pyarray_bound(py),
+                out.had_off_diagonal_nan,
+            ))
+        }
+        Err(adam_core_rs_coords::ResidualsError::Chi2(
+            adam_core_rs_coords::chi2::Chi2Error::NanDiagonal { .. },
+        )) => Err(PyValueError::new_err(
+            "Covariance matrix has NaNs on the diagonal.",
+        )),
+        Err(adam_core_rs_coords::ResidualsError::Chi2(
+            adam_core_rs_coords::chi2::Chi2Error::NotPositiveDefinite { row },
+        )) => Err(PyValueError::new_err(format!(
+            "Covariance matrix at row {row} is not positive definite."
+        ))),
+        Err(adam_core_rs_coords::ResidualsError::InvalidShape(msg)) => {
+            Err(PyValueError::new_err(msg))
         }
     }
 }
@@ -907,6 +995,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bound_longitude_residuals_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(apply_cosine_latitude_correction_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_chi2_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_residuals_chi2_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(weighted_mean_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(weighted_covariance_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(classify_orbits_numpy, m)?)?;

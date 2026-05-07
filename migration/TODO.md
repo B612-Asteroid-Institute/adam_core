@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-07 (RM-WD3-001 dynamics-only step 2/3 closed: structural argument + profile artifact recorded; ASSIST-touching surfaces deferred until RM-FUTURE-002 lands the n-body Rust port)
+Last updated: 2026-05-07 (RM-WE2-002 complete: fused Residuals.calculate into one PyO3 crossing via new compute_residuals_chi2_flat kernel; algorithmic content unchanged)
 
 ## Current Review-Derived Backlog
 

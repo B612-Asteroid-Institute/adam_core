@@ -266,78 +266,36 @@ class Residuals(qv.Table):
         else:
             predicted_covariances = np.zeros_like(observed_covariances)
 
-        # Create the output arrays
+        # Single PyO3 crossing: longitude wrap (spherical) + cos(lat) on
+        # residuals and both covariance buffers (spherical) + total cov
+        # sum + per-row Cholesky chi2, with internal grouping by NaN
+        # mask of the observed values so each Cholesky solve runs against
+        # a uniform-D batch.
+        from .._rust.api import compute_residuals_chi2_numpy as _rust_fused
+
+        is_spherical = isinstance(observed, SphericalCoordinates)
+        residuals, chi2s, dof, had_off_diagonal_nan = _rust_fused(
+            np.ascontiguousarray(observed_values, dtype=np.float64),
+            np.ascontiguousarray(np.asarray(predicted_values), dtype=np.float64),
+            np.ascontiguousarray(observed_covariances, dtype=np.float64),
+            np.ascontiguousarray(np.asarray(predicted_covariances), dtype=np.float64),
+            is_spherical,
+        )
+
+        if had_off_diagonal_nan:
+            warnings.warn(
+                "Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).",
+                UserWarning,
+            )
+
+        # Probability via scipy chi2 CDF; NaN chi2 (all-NaN batch cov) maps
+        # to NaN probability (matches the legacy per-batch skip).
         p = np.empty(N, dtype=np.float64)
-        chi2s = np.empty(N, dtype=np.float64)
-
-        # Calculate the degrees of freedom for every coordinate
-        dof = D - np.sum(np.isnan(observed_values), axis=1)
-
-        # Calculate the array of residuals
-        residuals = observed_values - predicted_values
-
-        # If the coordinates are spherical then we do some extra work:
-        # 1. Bound residuals in longitude to the range [-180, 180] degrees and
-        #    adjust the signs of the residuals that cross the 0/360 degree boundary.
-        # 2. Apply the cos(latitude) factor to the residuals in longitude and longitudinal
-        #    velocity. Apply the same scaling to covariances.
-        if isinstance(observed, SphericalCoordinates):
-            # Bound the longitude residuals to the range [-180, 180] degrees
-            residuals = bound_longitude_residuals(observed_values, residuals)
-
-            # Apply the cos(latitude) factor to the residuals and observed covariance
-            residuals, observed_covariances = apply_cosine_latitude_correction(
-                observed_values[:, 2], residuals, observed_covariances
-            )
-
-            # Apply the same scaling to the predicted covariances (without touching residuals again)
-            _, predicted_covariances = apply_cosine_latitude_correction(
-                observed_values[:, 2], np.zeros_like(residuals), predicted_covariances
-            )
-
-        # Total covariance = observed + predicted (predicted may be zeros if disabled)
-        total_covariances = observed_covariances + predicted_covariances
-
-        # Batch the coordinates and covariances into groups that have the same
-        # number of dimensions that have missing values (represented by NaNs)
-        (
-            batch_indices,
-            batch_dimensions,
-            batch_coords,
-            batch_covariances,
-        ) = _batch_coords_and_covariances(observed_values, total_covariances)
-
-        for indices, dimensions, coords, covariances in zip(
-            batch_indices, batch_dimensions, batch_coords, batch_covariances
-        ):
-            if not np.all(np.isnan(covariances)):
-                # Filter residuals by dimensions that have values
-                residuals_i = residuals[:, dimensions]
-
-                # Then filter by rows that belong to this batch
-                residuals_i = residuals_i[indices, :]
-
-                # Calculate the chi2 for each coordinate (this is actually
-                # calculating mahalanobis distance squared -- both are equivalent
-                # when the covariance matrix is diagonal, mahalanobis distance is more
-                # general as it allows for covariates between dimensions)
-                chi2_values = calculate_chi2(residuals_i, covariances)
-
-                # For a normally distributed random variable, the mahalanobis distance
-                # squared in D dimesions follows a chi2 distribution with D degrees of freedom.
-                # So for each coordinate, calculate the probability that you would
-                # get a chi2 value greater than or equal to that coordinate's chi2 value.
-                # At a residual of zero this probability is 1.0, and at a residual of
-                # 1 sigma (for 1 degree of freedom) this probability is ~0.3173.
-                p[indices] = 1 - stats.chi2.cdf(chi2_values, dof[indices])
-
-                # Set the chi2 for each coordinate
-                chi2s[indices] = chi2_values
-
-            else:
-                # If the covariance matrix is all NaNs, then the chi2 is NaN
-                chi2s[indices] = np.nan
-                p[indices] = np.nan
+        chi2_nan_mask = np.isnan(chi2s)
+        p[chi2_nan_mask] = np.nan
+        if not chi2_nan_mask.all():
+            valid = ~chi2_nan_mask
+            p[valid] = 1 - stats.chi2.cdf(chi2s[valid], dof[valid])
 
         return cls.from_kwargs(
             values=residuals.tolist(),

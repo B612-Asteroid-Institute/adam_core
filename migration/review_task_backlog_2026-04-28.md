@@ -1507,21 +1507,30 @@ Completed:
 
 ### RM-WE2-002: Fuse `Residuals.calculate`
 
-Status: open
+Status: complete (2026-05-07)
 
-Reason: small-N PyO3 overhead dominates because `Residuals.calculate` currently composes multiple Rust kernels and Python/quivr steps. OD inner loops care about N around 10-100, not only large-N throughput.
+Reason: small-N PyO3 overhead dominated because `Residuals.calculate` previously composed four Rust kernels (`bound_longitude_residuals`, `apply_cosine_latitude_correction` × 2, `calculate_chi2`) plus a Python-side per-batch loop. OD inner loops care about N around 10-100, not only large-N throughput.
 
-Scope:
+Delivered:
 
-- Design a fused Rust/PyO3 call that performs observed-predicted residuals, longitude wrapping, cosine-latitude correction, chi2, and any required probability fields in one crossing where practical.
-- Keep quivr table assembly in Python only if it is not performance-critical or cannot be cleanly represented.
-- Preserve current `compute_residuals_ndarray` fast path for OD callers that only need residual columns.
+- New Rust kernel `compute_residuals_chi2_flat` in `rust/adam_core_rs_coords/src/residuals.rs`. Composition only (no algorithmic change): calls the existing `bound_longitude_residuals_flat`, `apply_cosine_latitude_correction_flat`, and `calculate_chi2_flat` in sequence and groups rows by NaN mask before the Cholesky-solve so each chi² sees a uniform-D batch. Returns `(residuals[N,D], chi2[N], dof[N], had_off_diagonal_nan)`.
+- New PyO3 binding `compute_residuals_chi2_numpy` in `rust/adam_core_py/src/coordinates.rs`, exposed in `_rust/api.py`.
+- `Residuals.calculate` rewritten to a single PyO3 crossing: validation + broadcast + NaN-replacement-in-predicted-cov are still in Python, then one fused Rust call, then `1 - scipy.stats.chi2.cdf` (preserved for numerical-equivalence), then the quivr table assembly. The legacy off-diagonal NaN `UserWarning` and diagonal NaN `ValueError` semantics are preserved (the warning is bubbled back via the `had_off_diagonal_nan` flag; the error message is unchanged).
+- `compute_residuals_ndarray` fast path preserved as-is (it already only used `bound_longitude_residuals` + inline cos-lat).
+- 5 new Rust unit tests in `residuals.rs` covering Cartesian unit-cov, multi-batch dof matching the Python fixture, off-diagonal-NaN warning flag, diagonal-NaN error path, and the spherical wrap+cos-lat composition.
+- `calculate_chi2_numpy` PyO3 binding's diagonal-NaN error message harmonized with the fused path so both surface `"Covariance matrix has NaNs on the diagonal."` (the existing test regex already required that exact wording; the rust message previously diverged into a more verbose form that was never actually surfaced because the Python wrapper short-circuited). The behavioral test continues to pass.
 
 Verification:
 
-- Parity against baseline `Residuals.calculate`.
-- OD least-squares test coverage.
-- Bench both small-N OD workloads and large-N batch workloads.
+- `cargo test -p adam_core_rs_coords --release residuals` — 5/5 passed.
+- `pdm run pytest src/adam_core/coordinates/tests/test_residuals.py -q` — 17/17 passed.
+- `pdm run rust-quality` — clean after `cargo fmt`.
+- `pdm run test-rust-full` — 761 passed / 144 skipped / 2 deselected (unchanged from baseline).
+- `pdm run rust-parity-main` — exit 0; SPEEDUP GATE + PARITY FUZZ GATE pass.
+- `pdm run rust-parity-speed-cold` — exit 0; canonical artifacts both `all_passed=True` with 0 fails.
+- Microbench (M3 Pro) of `Residuals.calculate(SphericalCoordinates)` warm: n=10 → 340 µs, n=50 → 367 µs, n=100 → 412 µs, n=500 → 712 µs, n=5000 → 6.3 ms. Per-call cost at small n is now dominated by quivr `from_kwargs(values=residuals.tolist(), ...)` table assembly; the PyO3-crossing savings of ~30-60 µs per call have been collected. Further small-n wins on this surface require either skipping the quivr table assembly (already covered by the `compute_residuals_ndarray` fast path) or attacking the quivr table-construction path itself (RM-WE3-002 territory).
+
+Callers that bypass `Residuals.calculate` for hot loops should keep using `compute_residuals_ndarray`. The fused path is the right choice when the quivr table fields (chi2, dof, probability) are actually consumed.
 
 ### RM-WE2-003: Variants And Covariance Sampling Linear Algebra
 

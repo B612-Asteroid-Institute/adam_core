@@ -51,6 +51,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "calculate_apparent_magnitude_v_and_phase_angle_numpy",
     "calculate_apparent_magnitude_v_numpy",
     "calculate_chi2_numpy",
+    "compute_residuals_chi2_numpy",
     "calculate_moid_batch_numpy",
     "calculate_moid_numpy",
     "calculate_phase_angle_numpy",
@@ -556,6 +557,55 @@ def calculate_chi2_numpy(
     return _native.calculate_chi2_numpy(
         _as_contiguous_f64(residuals),
         _as_contiguous_f64(covariances),
+    )
+
+
+def compute_residuals_chi2_numpy(
+    observed: np.ndarray,
+    predicted: np.ndarray,
+    observed_cov: np.ndarray,
+    predicted_cov: np.ndarray,
+    is_spherical: bool,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
+    """Fused residual + chi² pipeline (one PyO3 crossing).
+
+    Replaces the legacy chain of
+    ``bound_longitude_residuals_numpy`` + ``apply_cosine_latitude_correction_numpy`` (×2)
+    + ``calculate_chi2_numpy`` (per batch) plus a Python-side per-batch loop.
+
+    Parameters
+    ----------
+    observed : (N, D) float64 array
+        Observed coordinate values.
+    predicted : (N, D) float64 array
+        Predicted coordinate values, already broadcast to N rows.
+    observed_cov : (N, D, D) float64 array
+        Observed covariance matrices.
+    predicted_cov : (N, D, D) float64 array
+        Predicted covariance matrices, with NaN entries already replaced
+        with 0 by the caller when ``use_predicted_covariance=False`` is
+        in effect.
+    is_spherical : bool
+        When True, applies longitude wrapping to ``residuals[:, 1]`` and
+        the cos(latitude) correction to residuals (cols 1 and 4) and to
+        rows/cols 1 and 4 of both covariance buffers.
+
+    Returns
+    -------
+    residuals : (N, D) float64 array
+    chi2 : (N,) float64 array — NaN where the active-dim covariance is
+        entirely NaN for that row's NaN-pattern batch.
+    dof : (N,) int64 array — ``D - count(NaN in observed[i, :])``.
+    had_off_diagonal_nan : bool — True iff at least one batch had NaN
+        within its active-dim covariance (caller surfaces the legacy
+        UserWarning).
+    """
+    return _native.compute_residuals_chi2_numpy(
+        _as_contiguous_f64(observed),
+        _as_contiguous_f64(predicted),
+        _as_contiguous_f64(observed_cov),
+        _as_contiguous_f64(predicted_cov),
+        bool(is_spherical),
     )
 
 
