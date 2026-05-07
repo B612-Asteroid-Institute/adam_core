@@ -1416,7 +1416,7 @@ pdm run rust-parity-speed-cold
 
 ### RM-WD3-001: Wave D3 Parallel Backend Abstraction
 
-Status: step 1 complete (2026-05-07); profiling + per-callsite Ray retirement pending
+Status: step 1 complete + dynamics-only step 2/3 closed (2026-05-07); ASSIST-touching surfaces deferred until n-body line is migrated to Rust (see RM-FUTURE-002)
 
 Source task: #134 from transcript.
 
@@ -1452,12 +1452,47 @@ Step 1 completion notes (2026-05-07):
 - `import multiprocessing as mp` and `from ..ray_cluster import initialize_use_ray` removed from the dynamics callsites; `propagator.py`, `iod.py`, `od.py`, and `impacts.py` retain `import ray` only for the `ObjectRef` isinstance compatibility check on caller-provided refs.
 - Added `src/adam_core/tests/test_parallel.py` (7 tests). Full validation: `pdm run black --check`, `pdm run ruff check`, `pdm run python -m py_compile`, `pdm run rust-quality`, `pdm run pytest src/adam_core/dynamics src/adam_core/propagator src/adam_core/orbit_determination -q` (74 + 43 + 9 passed plus skips), `pdm run test-rust-full` (761 passed / 144 skipped / 2 deselected, up from 754 with the new parallel tests), `pdm run rust-parity-main` exit 0, `pdm run rust-parity-speed-cold` exit 0 (initial post-test-rust-full sweep captured a single multi-thread p95 thermal-variance dip on `coordinates.cartesian_to_spherical` large-n; cleared on standalone rerun and 3 isolated targeted reps).
 
-Verification (next steps):
+Step 2/3 dynamics-only closeout (2026-05-07):
 
-- Profile each callsite at `max_processes ∈ {1, 4, 8}` on representative production input.
-- Decide per-callsite whether to default to `SequentialBackend` based on the data; surface decisions for sign-off.
-- Compare wall-time and behavior against baseline main for representative OD/IOD/propagator workloads.
-- Run full rust-required tests and targeted OD/IOD/propagator tests after each per-callsite change.
+Framing correction. The original profiling-first plan treated this as a Ray-vs-Sequential horse race. That was the wrong test. Ray exists for large parallel workloads where each per-task chunk is seconds-to-minutes of real compute, or for distributed multi-machine setups. Microsecond-to-millisecond Rust kernels are not Ray's target audience and a benchmark there does not disqualify Ray on its own merit.
+
+The operative decision driver for the dynamics-direct surfaces is structural, not benchmark-driven:
+
+- `dynamics.propagation.propagate_2body` and `dynamics.ephemeris.generate_ephemeris_2body` delegate to Rust kernels that are already Rayon-parallel internally. A single call saturates all cores at the kernel level.
+- Sharding those calls across N Ray workers means N Python processes each launching a Rust kernel that itself wants every core. That is parallelism on parallelism (core contention), not speedup, and the structural picture does not improve at larger n because the Rust kernel scales to fill cores at every n.
+- These two functions already default to `max_processes=1` in their public signatures, so the `SequentialBackend` is in fact the production default. No code change is needed; explicit `max_processes>1` opt-in still routes through `RayBackend`.
+
+The profile harness at `migration/scripts/parallel_profile.py` measures only the four surfaces that do *not* touch the n-body line, using a tiny `_HarnessPropagator` backed by `propagate_2body`. The artifact at `migration/artifacts/parallel_profile.json` / `.md` is evidence for the structural argument; it is not driving any default change. Headline numbers (warm median, M3 Pro, 2026-05-07):
+
+| surface | seq (mp=1) | ray-4 | ray-8 | seq vs ray-4 |
+|---|---|---|---|---|
+| `propagate_2body` (999×100) | 36 ms | 104 ms | 107 ms | 2.9× faster sequential |
+| `generate_ephemeris_2body` (12,960 paired) | 14 ms | 571 ms | 530 ms | 41× faster sequential |
+| `propagator.propagate_orbits` (999×100, 2body) | 80 ms | 152 ms | 156 ms | 1.9× faster sequential |
+| `propagator.generate_ephemeris` (216×60, 2body) | 58 ms | 54 ms | 84 ms | tied at 4, slower at 8 |
+
+Plus 1.7–2.4 s of cold Ray cluster init on every fresh process. Wrapper-Propagator surfaces only show this profile when delegating to a 2-body (Rust-parallel) kernel; with ASSIST underneath, the cost shape is entirely different, which is why those defaults are explicitly deferred.
+
+Deferred until RM-FUTURE-002 lands (n-body propagation in Rust):
+
+- `Propagator.propagate_orbits` and `Propagator.generate_ephemeris` Ray default — dependent on whether the underlying propagator is Rust-parallel (no Ray needed) or Python-bound (Ray helps).
+- `dynamics/impacts.py` `detect_collisions` Ray default — today wraps an ASSIST/n-body propagator.
+- `orbit_determination/od.py` `differential_correction` Ray default — today shards heavy ASSIST-bound per-orbit fits.
+- `orbit_determination/iod.py` `iod` Ray default — today shards heavy ASSIST-bound per-cluster Gauss IOD.
+
+Step 1 abstraction continues to serve those deferred surfaces unchanged: same Ray plumbing, just centralized in `parallel.py`.
+
+Verification recorded:
+
+- `pdm run black --check` + `ruff` + `py_compile` on the harness — clean.
+- `pdm run python migration/scripts/parallel_profile.py` — exit 0; artifact written.
+- No production code changes from step 2/3 closeout; step 1 validation (test-rust-full 761 passed, parity-main exit 0, parity-speed-cold exit 0) still stands.
+
+Verification when ASSIST-touching surfaces are unblocked (RM-FUTURE-002):
+
+- Profile `differential_correction`, `iod`, `Propagator.propagate_orbits` at production scale (hundreds-thousands of orbits, real ASSIST per-orbit cost).
+- Decide per-callsite default based on the post-Rust-port shape, not the current Python-ASSIST shape.
+- Run full rust-required tests and targeted OD/IOD/propagator tests after each default change.
 
 ### RM-WE2-001: Wave E2 `calculate_chi2` Follow-Up
 
@@ -1593,6 +1628,31 @@ Scope:
 - SPICE-backed perturber lookup.
 - Integration with existing `Propagator` abstraction.
 - This is a multi-day or multi-week project and should not be mixed into stabilization work.
+
+### RM-FUTURE-002: Trait-Based N-Body Propagator Backed By assist-rs
+
+Status: future major project (proposed 2026-05-07)
+
+Reason: The current Python `Propagator` class lets users plug in ASSIST or other n-body backends via subclassing, with parallelism dispatched at the Python level via Ray. Once `assist-rs` (https://github.com/B612-Asteroid-Institute/assist-rs) is integrated, the entire propagator interface can move down into Rust, with parallelism handled by Rayon over chunks instead of Ray over Python processes. That collapses an entire layer of dispatch and removes the GIL-bound per-task pickling that motivates Ray today.
+
+Scope:
+
+- Define a Rust `Propagator` trait covering `propagate_orbits`, `generate_ephemeris`, and impact-detection extension points.
+- Implement the trait for the 2-body kernel (already in Rust).
+- Implement the trait for n-body via `assist-rs`; pull SPICE perturber lookup through the existing `spicekit`-backed plumbing.
+- Re-expose the trait via PyO3 so the existing Python `Propagator` API stays intact.
+- Move per-orbit chunk dispatch into Rust (Rayon) for the n-body backend, mirroring how the 2-body kernel already parallelizes.
+- Revisit RM-WD3-001 step 3 for the deferred surfaces (`Propagator.propagate_orbits`, `Propagator.generate_ephemeris`, `dynamics.impacts`, `orbit_determination.od`, `orbit_determination.iod`) once the underlying compute is Rust-parallel: the in-process Ray default likely becomes Sequential the same way it did for the dynamics-direct surfaces.
+- Keep `RayBackend` available for distributed multi-machine use; just stop defaulting to it for in-process work.
+
+Verification:
+
+- Parity against baseline ASSIST output for representative orbits, including covariance.
+- Performance comparison vs current Python `ASSISTPropagator` on representative OD/IOD/impact workloads.
+- Full rust-required tests and full OD/IOD/impacts pytest sweep after the port.
+- Re-run `migration/scripts/parallel_profile.py` extended to include the deferred surfaces; replace deferred-default decisions with data-driven defaults.
+
+This depends on (or supersedes) RM-FUTURE-001.
 
 ## Final Agent Instruction
 

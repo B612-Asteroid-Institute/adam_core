@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-07 (RM-WD3-001 step 1 complete: parallel-backend abstraction landed; profiling + per-callsite Ray retirement next)
+Last updated: 2026-05-07 (RM-WD3-001 dynamics-only step 2/3 closed: structural argument + profile artifact recorded; ASSIST-touching surfaces deferred until RM-FUTURE-002 lands the n-body Rust port)
 
 ## Current Review-Derived Backlog
 
