@@ -35,7 +35,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "0dfb220cc09b53efb59de6d25dd9d57bffa8ee87ae927e7c59a83d90a27beadd": {
@@ -73,7 +73,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "1543edaf8e87e7b88fc3b4527449ab08746f55b7a9dc7abf9256aaa471d17cbc": {
@@ -111,7 +111,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "182ea48f9cb9346c0b12f9c26feb4802279df9d78af0c0f43b80489cb37beb0b": {
@@ -149,7 +149,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "1a49ccf6ce2e785f7d560b4e8079a57b90ba0da09a37e63b7ab6d097b26d8d6e": {
@@ -190,7 +190,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "1df6150900c50b628ea3478f7841648691500165354f2f710e0ab4f472baa53b": {
@@ -231,7 +231,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "2292f8960b23be9e7985b476db8975ad40e384af28775ed24570ad7fa34a737b": {
@@ -269,7 +269,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "2c1f21bed32d01147bf72f6a16a7144e2ecb270a39f35420907900fa4ca8aa50": {
@@ -307,7 +307,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "2d21e75f88e65181f5c9ca497c8e9756f6a3e1bfc244600621a1751ccab71d35": {
@@ -348,7 +348,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "2e4446b989355982b1a3d2463206a1e7ce7180af1b12efa2ed1bfbf42e416fdb": {
@@ -386,7 +386,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "357d7865c39043ea04fdaa7ce18ff705c804c45974ded7b440de8bc69147c224": {
@@ -427,7 +427,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "3b0822a5775c17e06015222a80b93fa4fcf3c1fb652055e4e2102568aca9f4f4": {
@@ -468,7 +468,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "3d70f855226ecdd9776267cdf5da0641cb790f18c249c158f6cba0323fef22a6": {
@@ -506,7 +506,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "3de3537d980f49471d0a47727e9a54576502e189e1919d367ed99c7bd49edfce": {
@@ -544,7 +544,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "3e1ad86a63bcc05d3f9deec7f64c76951157345a26fecf8f7eff708df08e26d3": {
@@ -582,7 +582,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "4918bf5958fcd29a32dafd0ddf86be64cb1c0a7953e6ded846104ba6edc1cbfd": {
@@ -620,7 +620,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "50cd2db58fa3e2123e118835843807745eb7a964c58fe9482e406f63c9e85ec3": {
@@ -658,7 +658,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "562fabd7c02bf55768dfcaa785cff9d1b8be0bd890b8550779a6a4d6cecc2ee1": {
@@ -699,7 +699,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "5c5fda349a5dd3014f0610baacbfb08f8a0c4c9aab8ef0051aa8fd1cb31310fb": {
@@ -737,7 +737,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "61ddf4da24ea4fe2a2c3eba73b9fba071dea14889d5b4bad0f96e09effe6ab55": {
@@ -775,7 +775,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "68f2736254cc0d56b980013854652e900d986a6c92ad620d6d90bb30aa48d68a": {
@@ -813,7 +813,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "82209739bd2abdcce43f4fb89f744e68bc508b2a957d1a62d93a1eb0a571d576": {
@@ -851,7 +851,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "872100fbc0bcfaed98728af81729dd5272362babe987cf6638d72e4a832e7c54": {
@@ -889,7 +889,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "94d189f76da9c6895ccc4e894f8524789952d5446845f3f93566d055f3574b50": {
@@ -927,7 +927,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "9c9b355c8e86282e2b6ab97655b0f0cc072a26a6ef496b818e0d93adaf9519ab": {
@@ -965,7 +965,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "9fec8cd47b7e30c10465a9b2e2918d2ae614a8f777e3eb96bd2222fd97121dbf": {
@@ -1005,7 +1005,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "a003d8ada7803ff0438eb80989766ba8c4225f470c904bc208d323f0fcfd2075": {
@@ -1046,7 +1046,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "a0c64dc5a7b2b6a59bd1af25ea3503d41990fd88cc6ef3fd7c5c5fed73fcf209": {
@@ -1086,7 +1086,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "a824ffde7d153cf2dd7b0def528bf86f77fc1c836d10f3361a536d3d78b46b81": {
@@ -1126,7 +1126,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "ab2c1338b266bd0ea6b771ea281a9e4a7e2b46b560125e26268f2aa14df769d8": {
@@ -1164,7 +1164,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "b02201f3074c7f1a9149d6f3f7265cf9f235eb013fa224633fdc051b373bdccf": {
@@ -1202,7 +1202,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "b0f7747b8802e887ed6acfa1f3aecd7361c22f165e39710e0482307faf987756": {
@@ -1240,7 +1240,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "c1cba94b938941ee9b3662740aa23485f07a77ac57166b28ec9aa71a39e290bc": {
@@ -1278,7 +1278,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "ca7b7d91840d396fbf347c52479a97e07bb02fe0c2a5d8617b5af1ff09af184b": {
@@ -1316,7 +1316,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "caed04ae5ecd1653189e50ca5864dbe8b8736c06afc660857c0a100b14ee11b8": {
@@ -1357,7 +1357,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "cd34d4946ff747f918792576b034d7dfce5a5da2c4db93187a4ddbd974bb36ac": {
@@ -1395,7 +1395,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "d6930b62c6498932576d0a975950198fb718808561459eb79985c7e524118fbf": {
@@ -1436,7 +1436,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "d8e56dc1309d8bc3930c4173fb0f2fbfd2bc105fb24c99968fdf65763971b63d": {
@@ -1474,7 +1474,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "e5db4b20284cd26ddf4a21a4d0f0ac10a0890f39859b38d5614277259bb4ae45": {
@@ -1512,7 +1512,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "e72a5e0c811b6842e7ed7aadf4675a3d6d71130861275ff9af12f734e4007155": {
@@ -1550,7 +1550,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "ee0ffb2b72efaa1a1d8e782a1c5fab97496b0524148baa8867d479edf2cdb42d": {
@@ -1588,7 +1588,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f0f2d5cb348d6eb688e189656fdf6865aeddeca18dceb60c31b0d2b60a4ff960": {
@@ -1626,7 +1626,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f1293663d64ca5b0fd09543b9f654e61b4621f69e4afc585aa086a8205306c93": {
@@ -1664,7 +1664,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f2401737a54f23735c32863a738191dbec04cb826cb085c95a829aaa542a25d8": {
@@ -1702,7 +1702,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f67111bd807d3549c92a651b4e8114e44c027ec2ed340a812cd4a6294f1f7d14": {
@@ -1740,7 +1740,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f6fcfc0ab8baf61d19c17ee109232d2479dcd93be1b1d74df0943b1862196a84": {
@@ -1778,7 +1778,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f81667dd816f8e79f01dc5975a9ea3c0f2d469269aa938d4be18fbb8148329aa": {
@@ -1816,7 +1816,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f85a24ab279fc2fdb94a310d5f6eb178ae8e7e6c86aa1db779d91616afe1237e": {
@@ -1854,7 +1854,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "f85ac931461e39e7581f2e767c8f20ae2520e3d22a6440822dc0ac081fe928d5": {
@@ -1892,7 +1892,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
     "fa1834dd92548cc7f9036e6f20dee46ea08ead8afd13e23dcd93ec3c035da843": {
@@ -1930,7 +1930,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     }
   },
@@ -1954,11 +1954,11 @@
     "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
     "python_version": "Python 3.13.3",
     "repo_root": "/Users/aleck/Code/adam-core",
-    "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+    "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
   },
   "process_version": "rm-p1-019a-shaped-lanes-v1",
   "schema_version": 1,
-  "updated_at": "2026-05-07T16:01:45+00:00",
+  "updated_at": "2026-05-07T17:00:26+00:00",
   "warm": {
     "083f1747550d35cbbee866a876bd69b98738a30c3cc685cea1855b44d01e32e9": {
       "captured_at": "2026-05-07T15:56:54+00:00",
@@ -1996,7 +1996,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.018760334234684706,
       "p95_s": 0.02003664164803922,
@@ -2046,7 +2046,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0014225421473383904,
       "p95_s": 0.001564733777195215,
@@ -2096,7 +2096,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.2584030628204346e-05,
       "p95_s": 1.333281397819519e-05,
@@ -2240,7 +2240,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00884604174643755,
       "p95_s": 0.009098665788769722,
@@ -2304,7 +2304,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0038160840049386024,
       "p95_s": 0.004184999968856573,
@@ -2368,7 +2368,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00012124981731176376,
       "p95_s": 0.0001261672005057335,
@@ -2435,7 +2435,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00023779179900884628,
       "p95_s": 0.0002963876351714134,
@@ -2485,7 +2485,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.013029458001255989,
       "p95_s": 0.013483792077749968,
@@ -2549,7 +2549,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0005929996259510517,
       "p95_s": 0.0007778746075928211,
@@ -2613,7 +2613,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 5.920790135860443e-05,
       "p95_s": 0.00010870862752199173,
@@ -2757,7 +2757,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.116609200835228e-05,
       "p95_s": 1.3667158782482147e-05,
@@ -2901,7 +2901,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 7.316609844565392e-05,
       "p95_s": 8.99159349501133e-05,
@@ -3045,7 +3045,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 3.5416800528764725e-05,
       "p95_s": 3.7250109016895294e-05,
@@ -3192,7 +3192,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.005350582767277956,
       "p95_s": 0.005696521000936627,
@@ -3244,7 +3244,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.2859349576756358,
       "p95_s": 0.28719871677458286,
@@ -3294,7 +3294,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.000705791637301445,
       "p95_s": 0.0007363753393292427,
@@ -3358,7 +3358,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.9416678696870804e-05,
       "p95_s": 1.9875355064868927e-05,
@@ -3502,7 +3502,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.010825958102941513,
       "p95_s": 0.011391695821657777,
@@ -3555,7 +3555,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0005782921798527241,
       "p95_s": 0.0006675953976809978,
@@ -3605,7 +3605,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 6.087496876716614e-05,
       "p95_s": 6.470782682299614e-05,
@@ -3669,7 +3669,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0044030421413481236,
       "p95_s": 0.004714541137218475,
@@ -3733,7 +3733,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.6670674085617065e-06,
       "p95_s": 1.7499551177024841e-06,
@@ -3877,7 +3877,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.011378957889974117,
       "p95_s": 0.01164049981161952,
@@ -3941,7 +3941,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.050666500348597765,
       "p95_s": 0.05092497509904206,
@@ -3994,7 +3994,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0006857495754957199,
       "p95_s": 0.0008118125144392251,
@@ -4044,7 +4044,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00010870909318327904,
       "p95_s": 0.00017699971795082092,
@@ -4108,7 +4108,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 7.145805284380913e-05,
       "p95_s": 9.825034067034721e-05,
@@ -4172,7 +4172,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00014645792543888092,
       "p95_s": 0.0001876247115433216,
@@ -4238,7 +4238,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.02862108265981078,
       "p95_s": 0.02911986676044762,
@@ -4288,7 +4288,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.005141374655067921,
       "p95_s": 0.0052385409362614155,
@@ -4355,7 +4355,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 11.587435042019933,
       "p95_s": 11.657168628508225,
@@ -4408,7 +4408,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0008434168994426727,
       "p95_s": 0.0009245251305401325,
@@ -4458,7 +4458,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.001421458087861538,
       "p95_s": 0.0015651248395442963,
@@ -4602,7 +4602,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.8874648958444595e-05,
       "p95_s": 1.9459053874015808e-05,
@@ -4666,7 +4666,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0034864582121372223,
       "p95_s": 0.0040641422383487225,
@@ -4716,7 +4716,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0001721666194498539,
       "p95_s": 0.00022237515076994896,
@@ -4780,7 +4780,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.001121416687965393,
       "p95_s": 0.0012306205928325654,
@@ -4830,7 +4830,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 2.462463453412056e-05,
       "p95_s": 2.5916844606399536e-05,
@@ -4974,7 +4974,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0005691251717507839,
       "p95_s": 0.0006414172239601612,
@@ -5118,7 +5118,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 9.208265691995621e-05,
       "p95_s": 0.0001310417428612709,
@@ -5262,7 +5262,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 6.1141315419226885,
       "p95_s": 6.409854708705097,
@@ -5326,7 +5326,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 9.424984455108643e-05,
       "p95_s": 0.00013295793905854225,
@@ -5470,7 +5470,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 3.554066643118858e-05,
       "p95_s": 5.079200491309166e-05,
@@ -5614,7 +5614,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.013445875141769648,
       "p95_s": 0.016703915782272816,
@@ -5758,7 +5758,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0006459997966885567,
       "p95_s": 0.0007147081196308136,
@@ -5822,7 +5822,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.11964466609060764,
       "p95_s": 0.12078977948985994,
@@ -5875,7 +5875,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 11.997342583257705,
       "p95_s": 12.619061621371657,
@@ -5925,7 +5925,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0008293748833239079,
       "p95_s": 0.0010780827142298222,
@@ -6069,7 +6069,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.006619832944124937,
       "p95_s": 0.00697376667521894,
@@ -6119,7 +6119,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0006475420668721199,
       "p95_s": 0.0007378747686743736,
@@ -6183,7 +6183,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00019833305850625038,
       "p95_s": 0.00024041719734668732,
@@ -6247,7 +6247,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 6.0253204591572285,
       "p95_s": 6.114235499873757,
@@ -6311,7 +6311,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0004352498799562454,
       "p95_s": 0.0004647080786526203,
@@ -6375,7 +6375,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 3.2292213290929794e-05,
       "p95_s": 5.88330440223217e-05,
@@ -6519,7 +6519,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.862458884716034e-05,
       "p95_s": 1.954101026058197e-05,
@@ -6663,7 +6663,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 5.8749690651893616e-05,
       "p95_s": 6.120791658759117e-05,
@@ -6807,7 +6807,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.11382470792159438,
       "p95_s": 0.1145200002938509,
@@ -6874,7 +6874,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.04157058335840702,
       "p95_s": 0.04256094195879996,
@@ -6924,7 +6924,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00712320813909173,
       "p95_s": 0.0072582499124109745,
@@ -6988,7 +6988,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 4.9625057727098465e-05,
       "p95_s": 6.324984133243561e-05,
@@ -7132,7 +7132,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.1167023330926895e-05,
       "p95_s": 1.291697844862938e-05,
@@ -7276,7 +7276,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.0707881301641464e-05,
       "p95_s": 1.1458061635494232e-05,
@@ -7420,7 +7420,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.039525290951132774,
       "p95_s": 0.040969495521858336,
@@ -7470,7 +7470,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.000657291617244482,
       "p95_s": 0.0007530408911406994,
@@ -7534,7 +7534,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 5.966704338788986e-05,
       "p95_s": 0.00010991701856255531,
@@ -7680,7 +7680,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.01727516669780016,
       "p95_s": 0.017602779623121022,
@@ -7730,7 +7730,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.00040679192170500755,
       "p95_s": 0.0004087581764906645,
@@ -7780,7 +7780,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.0016216249205172062,
       "p95_s": 0.0017044784966856242,
@@ -7830,7 +7830,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.529185101389885e-05,
       "p95_s": 1.8625054508447647e-05,
@@ -7977,7 +7977,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.004430457949638367,
       "p95_s": 0.004741670610383153,
@@ -8027,7 +8027,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.004986834246665239,
       "p95_s": 0.005139166954904795,
@@ -8091,7 +8091,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 1.5832949429750443e-05,
       "p95_s": 1.6875099390745163e-05,
@@ -8235,7 +8235,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.040400666650384665,
       "p95_s": 0.041285312315449116,
@@ -8285,7 +8285,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.01297691697254777,
       "p95_s": 0.01577925030142069,
@@ -8429,7 +8429,7 @@
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
         "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "2e4a0cf0e6b7d81c7e669aa2a5014af8f570a42e56725e4073c83e6ae97cc1e8"
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       },
       "p50_s": 0.003960041794925928,
       "p95_s": 0.004640253726392984,

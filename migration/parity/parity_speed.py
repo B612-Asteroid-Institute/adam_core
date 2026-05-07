@@ -51,10 +51,15 @@ DEFAULT_LARGE_LANE_NAME = "large-n"
 DEFAULT_TINY_LANE_NAME = "tiny-n"
 DEFAULT_TINY_N = 10
 DEFAULT_SMALL_N = 2000
-# Per `decisions.md` (2026-05-04 18:36 UTC) every lane, especially large
-# workloads, must meet at least 1.2x p50/p95 versus the legacy baseline. The
-# tiny lane is held to the same 1.2x bar as a quick-call gate.
+# Per `decisions.md` (2026-05-04 18:36 UTC) every lane must meet at least 1.2x
+# p50/p95 versus the legacy baseline. The tiny lane was raised to the same bar,
+# but per `decisions.md` (2026-05-07T17:00 UTC) p95 is no longer enforced for
+# the tiny-n lane: at n=10 the per-call work is microseconds and any system
+# scheduler jitter on either side dominates the p95 of the rep distribution,
+# producing run-to-run noise that is not a real performance signal. tiny-n p50
+# remains enforced at 1.2x because the median is robust to those outliers.
 DEFAULT_TINY_SPEEDUP = 1.2
+DEFAULT_TINY_P95_SPEEDUP = 0.0
 DEFAULT_SMALL_SPEEDUP = 1.2
 DEFAULT_LARGE_SPEEDUP = 1.2
 DEFAULT_LEGACY_CACHE_PATH = Path(
@@ -1020,15 +1025,16 @@ def build_speed_lanes(
                 description=(
                     f"One-off/small-call lane at default n={DEFAULT_TINY_N} "
                     "with API-specific overrides where a scalar API's true "
-                    f"one-off shape is smaller; enforced for p50/p95 >= "
-                    f"{DEFAULT_TINY_SPEEDUP:.1f}x."
+                    f"one-off shape is smaller; p50 enforced at "
+                    f"{DEFAULT_TINY_SPEEDUP:.1f}x, p95 reported but not "
+                    "enforced (microsecond-scale work makes p95 noise-dominated)."
                 ),
                 enforced=True,
                 reps=tiny_reps if tiny_reps is not None else reps,
                 warmup=tiny_warmup if tiny_warmup is not None else warmup,
                 measure_cold=tiny_cold,
                 min_speedup_p50=DEFAULT_TINY_SPEEDUP,
-                min_speedup_p95=DEFAULT_TINY_SPEEDUP,
+                min_speedup_p95=DEFAULT_TINY_P95_SPEEDUP,
                 api_workloads=workloads[DEFAULT_TINY_LANE_NAME],
             )
         )
@@ -1297,7 +1303,10 @@ def to_json(
             "diagnostic rather than a clean apples-to-apples gate."
         ),
         "lane_policy": (
-            "The tiny-n lane records quick one-off/small-call behavior. "
+            "The tiny-n lane records quick one-off/small-call behavior; p50 "
+            "is enforced at 1.2x, p95 is reported but not enforced because "
+            "microsecond-scale per-call work is dominated by system scheduler "
+            "jitter under multi-thread mode. "
             "The small-n lane preserves the historical n=2000 promotion gate. "
             "The large-n lane is API-shaped, records structured workload axes, "
             "and is enforced by default with explicit per-lane waivers required "
