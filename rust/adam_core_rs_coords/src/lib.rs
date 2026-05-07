@@ -576,7 +576,21 @@ pub fn cartesian_to_geodetic_flat6(
         0,
         "flat_coords length must be a multiple of 6",
     );
+    let n = flat_coords.len() / 6;
     let mut out = vec![0.0_f64; flat_coords.len()];
+
+    // Per-row Bowring iteration costs ~1 us; Rayon spawn overhead is ~50 us,
+    // so a serial loop wins until n is well above ~50. Use a 64-row serial
+    // threshold to cover the tiny-n lane.
+    if n <= 64 || rayon::current_num_threads() == 1 {
+        for (dst, src) in out.chunks_mut(6).zip(flat_coords.chunks(6)) {
+            let row = [src[0], src[1], src[2], src[3], src[4], src[5]];
+            let converted = cartesian_to_geodetic_row(&row, a, f, max_iter, tol);
+            dst.copy_from_slice(&converted);
+        }
+        return out;
+    }
+
     out.par_chunks_mut(6)
         .zip(flat_coords.par_chunks(6))
         .for_each(|(dst, src)| {

@@ -40,7 +40,10 @@ pub fn calculate_chi2_flat(
         }
     }
 
-    if rayon::current_num_threads() == 1 {
+    // Per-row Cholesky on small D (typically D=2 for astrometric residuals)
+    // costs ~500 ns; Rayon spawn overhead is ~50 us, so the parallel path is
+    // a net loss until n is well above ~100. Use a 256-row serial threshold.
+    if n <= 256 || rayon::current_num_threads() == 1 {
         return calculate_chi2_flat_serial(residuals_flat, covariances_flat, n, d);
     }
 

@@ -544,6 +544,27 @@ pub fn propagate_2body_flat6(
     assert_eq!(mus.len(), n, "mus length must match orbits rows");
 
     let mut out = vec![0.0_f64; orbits_flat.len()];
+
+    // Per-row Newton iteration on the universal-Kepler equation costs ~5 us;
+    // Rayon spawn overhead is ~50 us, so a serial loop wins until n is well
+    // above ~10. Use a 64-row serial threshold to cover the tiny-n lane.
+    if n <= 64 || rayon::current_num_threads() == 1 {
+        for i in 0..n {
+            let base = i * 6;
+            let orbit: [f64; 6] = [
+                orbits_flat[base],
+                orbits_flat[base + 1],
+                orbits_flat[base + 2],
+                orbits_flat[base + 3],
+                orbits_flat[base + 4],
+                orbits_flat[base + 5],
+            ];
+            let propagated = propagate_2body_row::<f64>(orbit, dts[i], mus[i], max_iter, tol);
+            out[base..base + 6].copy_from_slice(&propagated);
+        }
+        return out;
+    }
+
     out.par_chunks_mut(6)
         .zip(orbits_flat.par_chunks(6))
         .zip(dts.par_iter())

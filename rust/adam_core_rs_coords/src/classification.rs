@@ -98,7 +98,12 @@ pub fn classify_orbits_flat(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> V
     assert_eq!(a.len(), q.len());
     assert_eq!(a.len(), q_apo.len());
     let n = a.len();
-    if n < 1024 || rayon::current_num_threads() == 1 {
+    // Per-row classification is just 4 boolean comparisons (~3 ns); Rayon
+    // spawn overhead is ~50 us, so the parallel path does not win until n is
+    // well above ~16k. Use a 16384-row serial threshold to cover both tiny-n
+    // and small-n lanes; the large-n lane (n=50000) still hits the parallel
+    // path with comfortable margin.
+    if n < 16_384 || rayon::current_num_threads() == 1 {
         return classify_orbits_serial(a, e, q, q_apo);
     }
 
