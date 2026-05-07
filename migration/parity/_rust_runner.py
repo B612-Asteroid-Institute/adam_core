@@ -145,6 +145,35 @@ def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.nd
     return {"out": _ensure(_rust_api.calc_mean_motion_numpy(a, mu), "calc_mean_motion")}
 
 
+def _orbits_classify_orbits(
+    a: np.ndarray, e: np.ndarray, q: np.ndarray, q_apo: np.ndarray
+) -> dict[str, np.ndarray]:
+    return {
+        "out": _ensure(
+            _rust_api.classify_orbits_numpy(a, e, q, q_apo), "classify_orbits"
+        )
+    }
+
+
+def _dynamics_calculate_moid(
+    primary_orbits: np.ndarray,
+    secondary_orbits: np.ndarray,
+    mus: np.ndarray,
+    max_iter: int,
+    xtol: float,
+) -> dict[str, np.ndarray]:
+    n = primary_orbits.shape[0]
+    moids = np.empty(n, dtype=np.float64)
+    dts = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        moid, dt = _rust_api.calculate_moid_numpy(
+            primary_orbits[i], secondary_orbits[i], float(mus[i]), max_iter, xtol
+        )
+        moids[i] = moid
+        dts[i] = dt
+    return {"moid": moids, "dt_at_min": dts}
+
+
 def _coordinates_residuals_calculate_chi2(
     residuals: np.ndarray, covariances: np.ndarray
 ) -> dict[str, np.ndarray]:
@@ -482,6 +511,8 @@ DISPATCH = {
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
     "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,
+    "orbits.classify_orbits": _orbits_classify_orbits,
+    "dynamics.calculate_moid": _dynamics_calculate_moid,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
     "dynamics.propagate_2body_with_covariance": _dynamics_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": _dynamics_generate_ephemeris_2body,

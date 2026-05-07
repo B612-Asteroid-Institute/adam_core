@@ -61,9 +61,11 @@ only for ad-hoc local probes.
 Refresh the serialized baseline-main timing cache once after adding benchmark
 APIs, changing workload shapes, changing reps/warmup/thread policy, or updating
 the baseline checkout. Refreshes merge newly captured entries into the existing
-cache by default, so API-scoped recaptures do not wipe unrelated rows. Use
-`--replace-legacy-cache` / `--speed-replace-legacy-cache` only for intentional
-full recapture after benchmark process or baseline-identity changes.
+cache by default, so API-scoped recaptures do not wipe unrelated rows. A
+benchmark-source hash change from adding adapters or workloads can be refreshed
+additively; use `--replace-legacy-cache` / `--speed-replace-legacy-cache` only
+for intentional full recapture after benchmark process or baseline-identity
+changes.
 
 ```bash
 pdm run rust-parity-legacy-cache-refresh
@@ -85,6 +87,11 @@ Just the parity-fuzz half:
 .venv/bin/python -m migration.parity.parity_fuzz \
     --seeds 8 --n 128 --output migration/artifacts/parity_fuzz.json
 ```
+
+The `--n` value is the default per-seed workload. Expensive scalar optimizer
+surfaces may declare smaller canonical per-seed overrides in `_inputs.py` so
+coverage remains direct and randomized without making every full fuzz run
+optimizer-bound.
 
 Just the speedup half (warm only — default, small lane only):
 
@@ -176,10 +183,11 @@ pretty-printer joins this registry to `tolerances.py` so reports distinguish
 direct randomized fuzz, orchestration-implied coverage, targeted-test-only
 coverage, and intentional exclusions.
 
-Currently wired directly in randomized fuzz (22):
-- 8 coordinates/transform surfaces
-- 7 dynamics primitives including LT-correction orchestration
+Currently wired directly in randomized fuzz (25):
+- 9 coordinates/transform/residual surfaces
+- 8 dynamics primitives including direct MOID and LT-correction orchestration
 - 4 photometry
+- 1 orbit-classification rule surface
 - 3 OD primitives
 
 Covered indirectly through underlying kernel parity:

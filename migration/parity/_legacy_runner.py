@@ -166,6 +166,134 @@ def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.nd
     return {"out": out}
 
 
+def _orbits_classify_orbits(
+    a: np.ndarray, e: np.ndarray, q: np.ndarray, q_apo: np.ndarray
+) -> dict[str, np.ndarray]:
+    out = np.zeros(len(a), dtype=np.float64)
+    rules = (
+        (1.0, (a > 1.0) & (q > 1.017) & (q < 1.3)),
+        (2.0, (a > 1.0) & (q < 1.017)),
+        (3.0, (a < 1.0) & (q_apo > 0.983)),
+        (4.0, (a > 5.5) & (a < 30.1)),
+        (5.0, q_apo < 0.983),
+        (6.0, (a < 2.0) & (q > 1.666)),
+        (7.0, (a > 2.0) & (a < 3.2) & (q > 1.666)),
+        (8.0, (a < 3.2) & (q > 1.3) & (q < 1.666)),
+        (9.0, (a > 3.2) & (a < 4.6)),
+        (10.0, (a > 4.6) & (a < 5.5) & (e < 0.3)),
+        (11.0, a > 30.1),
+        (12.0, e == 1.0),
+        (13.0, e > 1.0),
+    )
+    for code, mask in rules:
+        out[mask] = code
+    return {"out": out}
+
+
+def _moid_distance_to_ellipse(point: np.ndarray, a: float, e: float, u: float) -> float:
+    half_u = 0.5 * u
+    tan_half_u = np.tan(half_u)
+    ecc_anom = 2.0 * np.arctan(np.sqrt((1.0 - e) / (1.0 + e)) * tan_half_u)
+    true_anom = 2.0 * np.arctan(np.sqrt((1.0 + e) / (1.0 - e)) * tan_half_u)
+    radius = a * (1.0 - e * np.cos(ecc_anom))
+    ellipse_point = np.array(
+        [radius * np.cos(true_anom), radius * np.sin(true_anom), 0.0]
+    )
+    return float(np.linalg.norm(point - ellipse_point))
+
+
+def _keplerian13_from_cartesian(orbit: np.ndarray, mu: float) -> np.ndarray:
+    from adam_core.coordinates.transform import _cartesian_to_keplerian_vmap
+
+    kep = np.asarray(
+        _cartesian_to_keplerian_vmap(
+            orbit.reshape(1, 6),
+            np.array([0.0], dtype=np.float64),
+            np.array([mu], dtype=np.float64),
+        ),
+        dtype=np.float64,
+    )[0]
+    q_expected = kep[0] * (1.0 - kep[4])
+    if not np.isclose(kep[2], q_expected, rtol=1e-9, atol=1e-12):
+        raise RuntimeError("unexpected _cartesian_to_keplerian_vmap output layout")
+    if kep[4] < 1.0 and np.isfinite(kep[10]):
+        period_expected = 360.0 / kep[10]
+        if not np.isclose(kep[11], period_expected, rtol=1e-9, atol=1e-9):
+            raise RuntimeError("unexpected _cartesian_to_keplerian_vmap period layout")
+    return kep
+
+
+def _moid_one(
+    primary_orbit: np.ndarray,
+    secondary_orbit: np.ndarray,
+    mu: float,
+    max_iter: int,
+    xtol: float,
+) -> tuple[float, float]:
+    del max_iter, xtol  # legacy baseline uses upstream scipy/propagation defaults
+
+    from scipy.optimize import minimize_scalar
+
+    from adam_core.dynamics.propagation import _propagate_2body
+
+    primary_kep = _keplerian13_from_cartesian(primary_orbit, mu)
+    secondary_kep = _keplerian13_from_cartesian(secondary_orbit, mu)
+    period = float(primary_kep[11])
+    e_primary = float(primary_kep[4])
+    dt_upper = period if e_primary < 1.0 and np.isfinite(period) else 10_000.0
+    a_secondary = float(secondary_kep[0])
+    e_secondary = float(secondary_kep[4])
+
+    r_sec = secondary_orbit[:3]
+    v_sec = secondary_orbit[3:]
+    h_sec = np.cross(r_sec, v_sec)
+    h_mag = np.linalg.norm(h_sec)
+    n_hat = h_sec / h_mag if h_mag > 0 else np.array([0.0, 0.0, 1.0])
+
+    def distance_for_dt(dt: float) -> float:
+        propagated = np.asarray(
+            _propagate_2body(primary_orbit, 0.0, dt, mu, 1000, 1e-14),
+            dtype=np.float64,
+        )
+        p0 = propagated[:3]
+        projected = p0 - np.dot(p0, n_hat) * n_hat
+        inner = minimize_scalar(
+            lambda u: _moid_distance_to_ellipse(projected, a_secondary, e_secondary, u),
+            bounds=(0.0, 2.0 * np.pi),
+            method="bounded",
+            tol=1e-12,
+        )
+        d_perp = np.linalg.norm(projected - p0)
+        return float(np.sqrt(d_perp * d_perp + inner.fun * inner.fun))
+
+    result = minimize_scalar(
+        distance_for_dt,
+        bounds=(0.0, dt_upper),
+        method="bounded",
+        tol=1e-14,
+    )
+    if result.status != 0:
+        raise ValueError("MOID calculation did not converge")
+    return float(result.fun), float(result.x)
+
+
+def _dynamics_calculate_moid(
+    primary_orbits: np.ndarray,
+    secondary_orbits: np.ndarray,
+    mus: np.ndarray,
+    max_iter: int,
+    xtol: float,
+) -> dict[str, np.ndarray]:
+    n = primary_orbits.shape[0]
+    moids = np.empty(n, dtype=np.float64)
+    dts = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        moids[i], dts[i] = _moid_one(
+            primary_orbits[i], secondary_orbits[i], float(mus[i]), max_iter, xtol
+        )
+    return {"moid": moids, "dt_at_min": dts}
+
+
 def _coordinates_residuals_calculate_chi2(
     residuals: np.ndarray, covariances: np.ndarray
 ) -> dict[str, np.ndarray]:
@@ -577,6 +705,8 @@ DISPATCH = {
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
     "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,
+    "orbits.classify_orbits": _orbits_classify_orbits,
+    "dynamics.calculate_moid": _dynamics_calculate_moid,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
     "dynamics.propagate_2body_with_covariance": _dynamics_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": _dynamics_generate_ephemeris_2body,

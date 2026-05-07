@@ -272,6 +272,92 @@ def make_calc_mean_motion(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_classify_orbits(rng: np.random.Generator, n: int) -> Sample:
+    """Sample PDS SBN classification-rule inputs over all class regions.
+
+    The registered Rust surface is the NumPy rule core over ``(a, e, q, Q)``;
+    public coordinate-table extraction remains covered by classification tests.
+    """
+    codes = np.resize(np.arange(14, dtype=np.int32), n)
+    rng.shuffle(codes)
+    a = np.empty(n, dtype=np.float64)
+    e = np.empty(n, dtype=np.float64)
+
+    for i, code in enumerate(codes):
+        jitter = rng.uniform(-0.02, 0.02)
+        if code == 0:  # AST: gap between OMB/TJN/CEN rules.
+            a[i] = 4.9 + jitter
+            e[i] = 0.35
+        elif code == 1:  # AMO
+            a[i] = 1.50 + jitter
+            e[i] = 1.0 - 1.10 / a[i]
+        elif code == 2:  # APO
+            a[i] = 1.50 + jitter
+            e[i] = 0.50
+        elif code == 3:  # ATE
+            a[i] = 0.90 + jitter
+            e[i] = 0.10
+        elif code == 4:  # CEN
+            a[i] = 10.0 + 2.0 * jitter
+            e[i] = 0.20
+        elif code == 5:  # IEO
+            a[i] = 0.80 + jitter
+            e[i] = 0.10
+        elif code == 6:  # IMB
+            a[i] = 1.80 + jitter
+            e[i] = 0.04
+        elif code == 7:  # MBA
+            a[i] = 2.50 + jitter
+            e[i] = 0.10
+        elif code == 8:  # MCA
+            a[i] = 2.50 + jitter
+            e[i] = 0.40
+        elif code == 9:  # OMB
+            a[i] = 3.80 + jitter
+            e[i] = 0.10
+        elif code == 10:  # TJN
+            a[i] = 5.00 + jitter
+            e[i] = 0.10
+        elif code == 11:  # TNO
+            a[i] = 40.0 + 5.0 * jitter
+            e[i] = 0.20
+        elif code == 12:  # PAA
+            a[i] = 2.0 + jitter
+            e[i] = 1.0
+        else:  # HYA
+            a[i] = -1.5 + jitter
+            e[i] = 1.20
+
+    q = np.where(e == 1.0, 0.0, a * (1.0 - e))
+    q_apo = np.where(e >= 1.0, np.inf, a * (1.0 + e))
+    kw = {"a": a, "e": e, "q": q, "q_apo": q_apo}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def _sample_moid_keplerian_elements(rng: np.random.Generator, n: int) -> np.ndarray:
+    a = rng.uniform(0.8, 5.0, size=n)
+    e = rng.uniform(0.02, 0.55, size=n)
+    i_deg = rng.uniform(0.0, 40.0, size=n)
+    raan = rng.uniform(0.0, 360.0, size=n)
+    omega = rng.uniform(0.0, 360.0, size=n)
+    M = rng.uniform(0.0, 360.0, size=n)
+    return np.stack([a, e, i_deg, raan, omega, M], axis=1).astype(np.float64)
+
+
+def make_calculate_moid(rng: np.random.Generator, n: int) -> Sample:
+    primary = _kep_to_cart(_sample_moid_keplerian_elements(rng, n))
+    secondary = _kep_to_cart(_sample_moid_keplerian_elements(rng, n))
+    mus = np.full(n, MU_SUN, dtype=np.float64)
+    kw = {
+        "primary_orbits": primary,
+        "secondary_orbits": secondary,
+        "mus": mus,
+        "max_iter": 100,
+        "xtol": 1e-10,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def _sample_dts(rng: np.random.Generator, n: int) -> np.ndarray:
     return rng.uniform(-10000.0, 10000.0, size=n).astype(np.float64)
 
@@ -760,6 +846,8 @@ GENERATORS = {
     "coordinates.spherical.to_cartesian": make_spherical_to_cartesian,
     "coordinates.residuals.calculate_chi2": make_calculate_chi2,
     "dynamics.calc_mean_motion": make_calc_mean_motion,
+    "orbits.classify_orbits": make_classify_orbits,
+    "dynamics.calculate_moid": make_calculate_moid,
     "dynamics.propagate_2body": make_propagate_2body,
     "dynamics.propagate_2body_with_covariance": make_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": make_generate_ephemeris_2body,
@@ -813,6 +901,28 @@ SHAPED_GENERATORS = {
 }
 
 
+TINY_WORKLOADS: dict[str, WorkloadShape] = {
+    # `calculate_moid` is a scalar optimizer API; one pair is the true
+    # one-off call shape, unlike vector kernels where n=10 is the tiny lane.
+    "dynamics.calculate_moid": WorkloadShape(1),
+}
+
+
+SMALL_WORKLOADS: dict[str, WorkloadShape] = {
+    # Keep canonical MOID speed governance affordable: baseline-main uses
+    # scipy bounded minimization per pair, so n=2000 would be minutes per rep.
+    "dynamics.calculate_moid": WorkloadShape(8),
+}
+
+
+FUZZ_N_OVERRIDES: dict[str, int] = {
+    # `calculate_moid` performs nested scipy/JAX minimization in the legacy
+    # oracle. Eight pairs × eight seeds gives direct randomized coverage while
+    # keeping canonical fuzz runs within the existing time budget.
+    "dynamics.calculate_moid": 8,
+}
+
+
 LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.cartesian_to_spherical": WorkloadShape(20_000),
     "coordinates.transform_coordinates": WorkloadShape(12_000),
@@ -824,6 +934,8 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.spherical.to_cartesian": WorkloadShape(20_000),
     "coordinates.residuals.calculate_chi2": WorkloadShape(50_000),
     "dynamics.calc_mean_motion": WorkloadShape(50_000),
+    "orbits.classify_orbits": WorkloadShape(50_000),
+    "dynamics.calculate_moid": WorkloadShape(64),
     "dynamics.propagate_2body": WorkloadShape(20_000, n_orbits=1_000, n_epochs=20),
     "dynamics.propagate_2body_with_covariance": WorkloadShape(
         4_000, n_orbits=200, n_epochs=20
@@ -868,10 +980,20 @@ def lane_workloads(
     if missing_large:
         raise KeyError("Missing large-n workloads: " + ", ".join(missing_large))
     return {
-        "tiny-n": {api_id: WorkloadShape(tiny_n) for api_id in api_ids},
-        "small-n": {api_id: WorkloadShape(small_n) for api_id in api_ids},
+        "tiny-n": {
+            api_id: TINY_WORKLOADS.get(api_id, WorkloadShape(tiny_n))
+            for api_id in api_ids
+        },
+        "small-n": {
+            api_id: SMALL_WORKLOADS.get(api_id, WorkloadShape(small_n))
+            for api_id in api_ids
+        },
         "large-n": {api_id: LARGE_WORKLOADS[api_id] for api_id in api_ids},
     }
+
+
+def fuzz_n(api_id: str, default_n: int) -> int:
+    return FUZZ_N_OVERRIDES.get(api_id, default_n)
 
 
 def make(

@@ -252,6 +252,31 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         root_cause="Single sqrt — atomic op.",
         verdict="bit-parity.",
     ),
+    "dynamics.calculate_moid": ToleranceSpec(
+        outputs={
+            "moid": OutputTol(atol=1e-9, rtol=1e-8),
+            "dt_at_min": OutputTol(atol=1e-3, rtol=1e-8),
+        },
+        rationale=(
+            "Single-pair MOID over two Cartesian orbit states. Both sides use "
+            "the same nested bounded-minimization formulation: outer Brent "
+            "search over primary-orbit dt and inner bounded search over the "
+            "secondary ellipse anomaly."
+        ),
+        dominant_column="dt_at_min from the outer bounded minimizer",
+        physical_magnitude=(
+            "MOID atol 1e-9 AU ≈ 150 m. dt_at_min atol 1e-3 day ≈ 86 s; "
+            "the returned MOID is the science quantity and is much tighter."
+        ),
+        root_cause=(
+            "Rust carries a scipy-style bounded minimizer but not scipy's exact "
+            "floating-point branch history. The baseline oracle keeps upstream "
+            "tolerances (inner xatol via tol=1e-12, outer tol=1e-14, "
+            "propagation max_iter=1000/tol=1e-14). Very flat minima can shift "
+            "the reported argmin slightly while preserving the distance."
+        ),
+        verdict="algorithm-equivalent optimizer parity for the direct NumPy boundary.",
+    ),
     "dynamics.propagate_2body": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-11)},
         rationale=(
@@ -442,6 +467,21 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         physical_magnitude="2.8e-12 mag — same as standalone V-band.",
         root_cause="Same as calculate_apparent_magnitude_v + 1 fma for delta.",
         verdict="bit-parity.",
+    ),
+    # ---- orbits ----
+    "orbits.classify_orbits": ToleranceSpec(
+        outputs={"out": OutputTol(atol=0.0)},
+        rationale=(
+            "PDS Small Bodies Node rule table over (a, e, q, Q). The Rust "
+            "kernel returns integer class codes and the Python wrapper maps "
+            "them to class strings. Random fuzz covers the registered NumPy "
+            "rule core; public coordinate-table extraction stays covered by "
+            "classification tests."
+        ),
+        dominant_column="integer class code",
+        physical_magnitude="exact categorical equality required.",
+        root_cause="Pure ordered boolean rules; no floating-point tolerance is needed.",
+        verdict="exact rule parity.",
     ),
     # ---- orbit determination ----
     "orbit_determination.calcGibbs": ToleranceSpec(

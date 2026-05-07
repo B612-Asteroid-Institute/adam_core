@@ -249,8 +249,18 @@ def _empty_legacy_cache(identity: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def _legacy_identity_without_source_hash(
+    identity: Mapping[str, object],
+) -> dict[str, object]:
+    return {k: v for k, v in identity.items() if k != "benchmark_source_hash"}
+
+
 def _validate_legacy_cache(
-    data: Mapping[str, object], identity: Mapping[str, object], path: Path
+    data: Mapping[str, object],
+    identity: Mapping[str, object],
+    path: Path,
+    *,
+    allow_source_hash_mismatch: bool = False,
 ) -> None:
     if data.get("schema_version") != LEGACY_TIMING_CACHE_SCHEMA_VERSION:
         raise ValueError(
@@ -262,14 +272,23 @@ def _validate_legacy_cache(
         raise ValueError(
             f"Legacy timing cache {path} has process_version={data.get('process_version')}; "
             f"expected {LEGACY_TIMING_CACHE_PROCESS_VERSION}. Run with "
-            "--refresh-legacy-cache after benchmark process changes."
+            "--replace-legacy-cache after benchmark process changes."
         )
-    if data.get("legacy_identity") != dict(identity):
-        raise ValueError(
-            f"Legacy timing cache {path} was captured for a different legacy "
-            "checkout, Python, or benchmark source hash. Run with "
-            "--refresh-legacy-cache to recapture baseline timings."
-        )
+    cached_identity = data.get("legacy_identity")
+    if not isinstance(cached_identity, dict):
+        raise ValueError(f"Legacy timing cache {path} is missing legacy_identity")
+    if cached_identity == dict(identity):
+        return
+    if allow_source_hash_mismatch and _legacy_identity_without_source_hash(
+        cached_identity
+    ) == _legacy_identity_without_source_hash(identity):
+        return
+    raise ValueError(
+        f"Legacy timing cache {path} was captured for a different legacy "
+        "checkout, Python, or benchmark source hash. Run with "
+        "--refresh-legacy-cache to recapture source-hash-only drift, or "
+        "--replace-legacy-cache after baseline/process changes."
+    )
 
 
 def prepare_legacy_timing_cache(
@@ -281,9 +300,18 @@ def prepare_legacy_timing_cache(
     if path is None:
         return None
     identity = _legacy_identity()
-    if path.exists() and (not refresh or not replace):
+    if refresh and replace:
+        data = _empty_legacy_cache(identity)
+    elif path.exists():
         data = json.loads(path.read_text())
-        _validate_legacy_cache(data, identity, path)
+        _validate_legacy_cache(
+            data,
+            identity,
+            path,
+            allow_source_hash_mismatch=refresh,
+        )
+        if refresh:
+            data["legacy_identity"] = dict(identity)
     elif refresh:
         data = _empty_legacy_cache(identity)
     else:
@@ -833,8 +861,10 @@ def build_speed_lanes(
             SpeedLane(
                 name=DEFAULT_TINY_LANE_NAME,
                 description=(
-                    f"One-off/small-call lane at n={DEFAULT_TINY_N}; enforced "
-                    f"for p50/p95 >= {DEFAULT_TINY_SPEEDUP:.1f}x."
+                    f"One-off/small-call lane at default n={DEFAULT_TINY_N} "
+                    "with API-specific overrides where a scalar API's true "
+                    f"one-off shape is smaller; enforced for p50/p95 >= "
+                    f"{DEFAULT_TINY_SPEEDUP:.1f}x."
                 ),
                 enforced=True,
                 reps=tiny_reps if tiny_reps is not None else reps,
@@ -849,8 +879,9 @@ def build_speed_lanes(
         SpeedLane(
             name=DEFAULT_SMALL_LANE_NAME,
             description=(
-                f"Historical promotion gate at n={n}; enforced for p50/p95 "
-                f">= {DEFAULT_SMALL_SPEEDUP:.1f}x pass/fail."
+                f"Historical promotion gate at default n={n} with "
+                "API-specific overrides for expensive scalar optimizers; "
+                f"enforced for p50/p95 >= {DEFAULT_SMALL_SPEEDUP:.1f}x pass/fail."
             ),
             enforced=True,
             reps=reps,

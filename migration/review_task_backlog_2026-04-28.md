@@ -750,7 +750,9 @@ Recommended current order after RM-P1-010 completion:
 3. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
 4. RM-P1-013 / RM-WE2-001.
 5. RM-P1-018.
-6. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
+6. RM-P1-021 (user reprioritized canonical coverage before waiver/performance-blocker cleanup on 2026-05-06).
+7. RM-P1-020.
+8. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
 
 Reviewer-feedback disposition:
 
@@ -1311,6 +1313,37 @@ Verification:
 ```bash
 pdm run rust-develop
 pdm run python -m migration.parity.parity_main --apis <api> --threads single \
+  --speed-large --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
+pdm run rust-parity-main
+pdm run rust-parity-speed-cold
+```
+
+### RM-P1-021: Add Direct `classify_orbits` And `calculate_moid` Fuzz/Speed Coverage
+
+Status: open
+
+Reason: `orbits.classify_orbits` and `dynamics.calculate_moid` are already Rust-backed, but current registry coverage marks them as targeted-test-only. The historical Wave E1 classification artifact and the direct MOID/batch MOID speed notes prove useful implementation work, but they are not enough for final coverage accounting because they do not place these public surfaces in the canonical baseline-main randomized parity and shaped speed tables.
+
+Scope:
+
+- Add baseline-main randomized parity generators for `orbits.classify_orbits` and `dynamics.calculate_moid`.
+- Add matching Rust and legacy dispatch entries in the parity runners. For classification, prefer the public `calc_orbit_class`/coordinate-table boundary when practical; if the NumPy-core boundary is retained because that is the registered Rust surface, label it explicitly and do not overclaim quivr construction coverage. For MOID, compare the direct single-pair API and keep `dynamics.calculate_perturber_moids` orchestration coverage tracked separately under RM-WE3-002.
+- Add tolerance specs and status-registry updates so both rows move from `targeted-tests` to `random-fuzz` only after the harness is wired.
+- Add tiny/small/large workload lanes so both APIs enter canonical Rust-vs-baseline performance governance; include representative large shapes rather than relying only on historical ad-hoc timings.
+- Regenerate the full parity table/report artifacts from committed HEAD after this component lands.
+
+Acceptance:
+
+- `orbits.classify_orbits` and `dynamics.calculate_moid` appear in canonical random-fuzz artifacts with passing seed counts and meaningful tolerance rationales.
+- Both APIs appear in canonical speed artifacts with p50/p95 single-thread lane results, or any misses are explicitly tracked under the same no-waiver policy as RM-P1-020.
+- The registry/report distinguish direct MOID coverage from `calculate_perturber_moids` orchestration coverage.
+
+Verification:
+
+```bash
+pdm run rust-develop
+pdm run python -m migration.parity.parity_main \
+  --apis orbits.classify_orbits dynamics.calculate_moid --threads single \
   --speed-large --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
 pdm run rust-parity-main
 pdm run rust-parity-speed-cold

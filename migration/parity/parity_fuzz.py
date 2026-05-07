@@ -116,9 +116,7 @@ def _check_output(
     )
 
 
-def fuzz_one(
-    api_id: str, seeds: int, n: int, base_seed: int = 0
-) -> ApiResult:
+def fuzz_one(api_id: str, seeds: int, n: int, base_seed: int = 0) -> ApiResult:
     spec = tolerances.get(api_id)
     api = ApiResult(
         api_id=api_id,
@@ -129,10 +127,11 @@ def fuzz_one(
     for s in range(seeds):
         seed = base_seed + s
         rng = np.random.default_rng(seed)
-        seed_result = SeedResult(seed=seed, n=n)
+        workload_n = _inputs.fuzz_n(api_id, n)
+        seed_result = SeedResult(seed=seed, n=workload_n)
 
         try:
-            sample = _inputs.make(api_id, rng, n)
+            sample = _inputs.make(api_id, rng, workload_n)
             rust_out = _rust_runner.run(api_id, **sample.rust_kwargs)
             legacy_out = _oracle.parity(api_id, **sample.legacy_kwargs)
         except Exception as e:
@@ -167,7 +166,9 @@ def fuzz_all(
 
 def format_summary(results: list[ApiResult]) -> str:
     lines = []
-    lines.append(f"{'API':50s}  {'pass/total':>12s}  {'worst_abs':>12s}  {'worst_rel':>12s}  flag")
+    lines.append(
+        f"{'API':50s}  {'pass/total':>12s}  {'worst_abs':>12s}  {'worst_rel':>12s}  flag"
+    )
     lines.append("-" * 110)
     for r in results:
         passed = sum(1 for s in r.seeds if s.passed)
@@ -229,9 +230,7 @@ def to_json(results: list[ApiResult]) -> dict:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description="Randomized rust-vs-legacy parity gate."
-    )
+    p = argparse.ArgumentParser(description="Randomized rust-vs-legacy parity gate.")
     p.add_argument(
         "--seeds",
         type=int,
@@ -242,7 +241,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--n",
         type=int,
         default=128,
-        help="Workload size per seed (default: 128).",
+        help=(
+            "Default workload size per seed (default: 128). Expensive scalar "
+            "optimizer APIs may declare smaller canonical per-seed overrides."
+        ),
     )
     p.add_argument(
         "--apis",

@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-05 (RM-P1-020 last-mile large-N miss plan)
+Last updated: 2026-05-06 (RM-P1-021 canonical coverage first)
 
 ## Current Review-Derived Backlog
 
@@ -25,6 +25,7 @@ Last updated: 2026-05-05 (RM-P1-020 last-mile large-N miss plan)
 - [x] RM-P1-014/RM-P1-014A warm-performance waivers resolved on 2026-05-03. Current canonical artifacts raw-pass `coordinates.cartesian_to_spherical` and all four photometry APIs at the n=2000 warm p50/p95 gate; the temporary photometry and cartesian-to-spherical waiver IDs are marked resolved and removed from `API_MIGRATIONS`.
 - [x] RM-P1-018 latency-gate statistical policy resolved on 2026-05-03: default pass/fail is single-thread, latency artifacts preserve raw trial samples, and native/multithread measurements are diagnostic-only unless separately labeled.
 - [x] RM-P1-019/RM-P1-019A added shaped baseline speed governance: Rust-vs-baseline artifacts and tables expose enforced `tiny-n`, historical `small-n`/`n=2000`, and API-shaped `large-n` lanes with structured workload axes, lane status, explicit cold/thread metadata, and serialized baseline-main legacy timing cache. Large-n misses remain red under RM-P1-020; no active large-n waivers are acceptable without an explicit user structural-acceptance decision.
+- [ ] RM-P1-021: add direct randomized fuzz parity coverage and canonical Rust-vs-baseline speed lanes for `orbits.classify_orbits` and `dynamics.calculate_moid`; historical targeted tests/ad-hoc benchmarks are not sufficient for final coverage accounting. User reprioritized this canonical-coverage work ahead of finishing remaining waiver/performance-blocker cleanup.
 - [ ] RM-P1-020: resolve the remaining no-waiver 1.2x single-thread speed rows. Latest regenerated artifacts show a tiny-n `coordinates.residuals.calculate_chi2` p95 miss, a borderline/intermittent small-n `dynamics.generate_ephemeris_2body` p50 miss, persistent large-n `dynamics.generate_ephemeris_2body` misses, and large-n photometry misses; `dynamics.add_light_time` passed in the latest full artifacts but should be spot-checked if it reappears. Use component-level passes and separate labeled multi-thread evidence only as production context.
 - [ ] RM-SPICE-LSK-001 (blocked on spicekit SK-TEXT-001): once spicekit exposes parsed LSK/DELTET content, update `rust/adam_core_rs_spice` furnsh handling so `naif_leapseconds` is retained as explicit LSK content rather than classified as ignored; unsupported text kernels must fail or be represented explicitly. Keep `Timestamp.rescale()` on its current ERFA policy unless a separate time-scale API decision changes it.
 

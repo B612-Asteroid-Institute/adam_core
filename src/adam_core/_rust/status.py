@@ -297,10 +297,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.calculate_moid_numpy",
-        parity_coverage="targeted-tests",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Single-pair MOID kernel covered by dynamics MOID tests; "
-            "calculate_perturber_moids governs the public orchestration."
+            "Direct single-pair NumPy MOID boundary is covered by randomized "
+            "baseline-main parity and shaped speed lanes; "
+            "calculate_perturber_moids orchestration is tracked separately."
         ),
     ),
     ApiMigration(
@@ -480,8 +481,12 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.classify_orbits_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note="Wave E1 helper covered by classification tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Randomized parity and shaped speed lanes cover the NumPy rule "
+            "core over (a, e, q, Q); public coordinate-table extraction remains "
+            "covered by classification tests."
+        ),
     ),
     ApiMigration(
         api_id="statistics.weighted_mean",

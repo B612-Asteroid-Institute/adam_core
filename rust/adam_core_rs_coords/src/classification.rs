@@ -84,12 +84,24 @@ fn classify_row(a: f64, e: f64, q: f64, q_apo: f64) -> i32 {
     code
 }
 
+fn classify_orbits_serial(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> Vec<i32> {
+    let mut out = vec![0_i32; a.len()];
+    for i in 0..a.len() {
+        out[i] = classify_row(a[i], e[i], q[i], q_apo[i]);
+    }
+    out
+}
+
 /// Per-row classification. All input arrays must have equal length.
 pub fn classify_orbits_flat(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> Vec<i32> {
     assert_eq!(a.len(), e.len());
     assert_eq!(a.len(), q.len());
     assert_eq!(a.len(), q_apo.len());
     let n = a.len();
+    if n < 1024 || rayon::current_num_threads() == 1 {
+        return classify_orbits_serial(a, e, q, q_apo);
+    }
+
     let mut out = vec![0_i32; n];
     out.par_iter_mut()
         .zip(a.par_iter())

@@ -234,7 +234,11 @@ def test_parity_main_exposes_additive_legacy_cache_refresh_controls() -> None:
 
 
 def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> None:
-    identity = {"git_commit": "baseline", "process_version": "test"}
+    identity = {
+        "git_commit": "baseline",
+        "process_version": "test",
+        "benchmark_source_hash": "new-source",
+    }
     monkeypatch.setattr(parity_speed, "_legacy_identity", lambda: identity)
     cache_path = tmp_path / "legacy_cache.json"
     cache_path.write_text("""
@@ -243,11 +247,22 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
           "process_version": "rm-p1-019a-shaped-lanes-v1",
           "created_at": "2026-05-05T00:00:00+00:00",
           "updated_at": "2026-05-05T00:00:00+00:00",
-          "legacy_identity": {"git_commit": "baseline", "process_version": "test"},
+          "legacy_identity": {
+            "git_commit": "baseline",
+            "process_version": "test",
+            "benchmark_source_hash": "old-source"
+          },
           "warm": {"existing-warm": {"key_fields": {"kind": "warm"}}},
           "cold": {"existing-cold": {"key_fields": {"kind": "cold"}}}
         }
         """)
+
+    try:
+        parity_speed.prepare_legacy_timing_cache(cache_path)
+    except ValueError as exc:
+        assert "benchmark source hash" in str(exc)
+    else:
+        raise AssertionError("source-hash drift should fail without refresh")
 
     cache = parity_speed.prepare_legacy_timing_cache(cache_path, refresh=True)
     assert cache is not None
@@ -260,6 +275,7 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
     parity_speed.write_legacy_timing_cache(cache)
 
     merged = __import__("json").loads(cache_path.read_text())
+    assert merged["legacy_identity"] == identity
     assert set(merged["warm"]) == {"existing-warm", "new-warm"}
     assert set(merged["cold"]) == {"existing-cold"}
 
