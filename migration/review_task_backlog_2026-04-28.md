@@ -1249,14 +1249,29 @@ Verification:
 Status: open
 
 Reason: after enforcing the 1.2x p50/p95 threshold on every speed lane and
-removing large-n waivers, the current single-thread grid is still red. The
-2026-05-07 cache-hardening refresh shows `parity_fuzz.all_passed=true` for all
-25 direct random-fuzz APIs, with tiny-n and small-n speed lanes green. Large-n
-speed remains red only in photometry: the warm-only `parity_gate.json` is red on
-`photometry.predict_magnitudes`, while the cold/warm artifact is red on
-`photometry.calculate_apparent_magnitude_v` p95 and
-`photometry.predict_magnitudes` p50/p95. `dynamics.generate_ephemeris_2body`,
-`dynamics.add_light_time`, `coordinates.residuals.calculate_chi2`, and earlier
+removing large-n waivers, the current single-thread grid is still red on
+photometry. Repeated targeted cached-legacy runs and fresh full artifacts on
+2026-05-07 give:
+
+- `photometry.predict_magnitudes` large-n: p50 0.94-0.99, p95 0.98-1.11 across
+  4 independent runs. Confirmed structural — JAX/XLA fuses the bandpass-delta
+  gather into the magnitude tail more aggressively than per-call vForce.
+- `photometry.calculate_apparent_magnitude_v` large-n: p50 1.15-1.23, p95
+  1.22-1.36 across 4 runs. Borderline at the 1.2x gate; pass/fail depends on
+  scheduler variance.
+- `dynamics.generate_ephemeris_2body` small-n: p50 1.17-1.24 across recent
+  runs. Borderline; sometimes passes, sometimes misses by a few percent.
+- `dynamics.add_light_time`, `coordinates.residuals.calculate_chi2`,
+  `orbit_determination.calcGauss`, transform, and other earlier outliers pass
+  at gate in the latest committed artifacts.
+
+The multi-thread production-scaling artifact
+(`migration/artifacts/parity_speed_cold_warm_multithread.json`) shows large-n
+photometry beats the legacy baseline 1.85-3.27x p50 / 1.45-3.00x p95, including
+`predict_magnitudes` at 2.23x p50 / 1.69x p95. The single-thread gate remains
+pass/fail; multi-thread is production scaling evidence only.
+`parity_fuzz.all_passed=true` continues to hold for all 25 direct random-fuzz
+APIs. `dynamics.add_light_time`,
 coordinate/OD outliers pass in the latest committed artifacts and should be
 treated as stale unless reproduced by targeted cached-legacy runs. Multi-thread
 scaling evidence is useful for production-throughput context, but it does not
