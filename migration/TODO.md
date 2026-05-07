@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-07 (RM-P1-020 closed; RM-P1-017 final clean validation pass green)
+Last updated: 2026-05-07 (RM-SPICE-LSK-001 closed; spicekit 0.2.2; RM-P1-020 + RM-P1-017 green)
 
 ## Current Review-Derived Backlog
 
@@ -28,7 +28,7 @@ Last updated: 2026-05-07 (RM-P1-020 closed; RM-P1-017 final clean validation pas
 - [x] RM-P1-021: direct randomized fuzz parity coverage and canonical Rust-vs-baseline speed lanes for `orbits.classify_orbits` and `dynamics.calculate_moid` landed on 2026-05-07. The regenerated parity table/report artifacts show both APIs passing all fuzz seeds and tiny/small/large speed lanes; direct MOID remains distinct from `calculate_perturber_moids` orchestration coverage.
 - [x] RM-P1-020: closed 2026-05-07. Multi-thread canonical comparison (Rust Rayon + legacy JAX/XLA both uncapped) replaced the asymmetric single-thread gate; serial-dispatch thresholds (chi2 n<=256, propagate_2body n<=64, cartesian_to_geodetic n<=64, classify_orbits n<16384) eliminated Rayon-spawn-overhead misses on small workloads; tiny-n p95 enforcement dropped because microsecond-scale work is dominated by scheduler jitter (p50 stays enforced at 1.2x). All 25 APIs now PASS every lane (tiny/small/large) in the committed canonical artifacts.
 - [x] RM-P1-017: final clean validation pass completed 2026-05-07. test-rust-full (754 passed / 144 skipped / 2 deselected), rust-quality, script-preflight, rust-latency-gate (all APIs within regression tolerance), wheel-build + wheel-inspect (adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl), docs-check, rust-parity-main and rust-parity-speed-cold all pass. Public-import compatibility (`test_public_module_compatibility.py`) and runtime dep audit (`test_runtime_dependency_audit.py`) included in the rust-full suite.
-- [ ] RM-SPICE-LSK-001: spicekit upstream now has parsed `KPL/LSK` `DELTET/*` and Earth->ITRF93 FK content (commit `084edd6 Add LSK text-kernel support`, expected in v0.2.2 or later). Bump the adam-core spicekit dep, update `rust/adam_core_rs_spice` furnsh handling so `naif_leapseconds` is retained as explicit LSK content rather than classified as ignored, and keep `Timestamp.rescale()` on its current ERFA policy unless a separate time-scale API decision changes it. Verify whether v0.2.2 actually ships the LSK code or if a pending v0.2.3 is needed.
+- [x] RM-SPICE-LSK-001: completed 2026-05-07. Verified `spicekit v0.2.2` ships parsed `KPL/LSK` `DELTET/*` and Earth->ITRF93 FK content (tag points at commit after `084edd6 Add LSK text-kernel support`). Bumped `rust/adam_core_rs_spice` to spicekit 0.2.2, switched furnsh from `parse_body_bindings` to `parse_text_kernel`, replaced silent `Kernel::Ignored` classification with retained `Kernel::Text { content: TextKernelContent }` carrying bindings + leapseconds + frame_associations, exposed `AdamCoreSpiceBackend::leapseconds()` and `frame_associations()` accessors, and added `SpiceBackendError::UnsupportedTextKernel` so genuinely empty text kernels fail loudly. `Timestamp.rescale()` keeps its ERFA policy. Added cargo tests for both LSK retention and unsupported-text rejection. Targeted SPICE pytest 18/18, full test-rust-full 754 passed.
 
 ## Active Sprint (Milestone 1 hardening)
 

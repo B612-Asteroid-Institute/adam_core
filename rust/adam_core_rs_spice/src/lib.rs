@@ -15,8 +15,8 @@ use spicekit::frame::{
     sxform_from_rotation,
 };
 use spicekit::{
-    bodc2n as spicekit_bodc2n, bodn2c as spicekit_bodn2c, parse_body_bindings, BodyBinding,
-    NaifIdError, TextKernelError,
+    bodc2n as spicekit_bodc2n, bodn2c as spicekit_bodn2c, parse_text_kernel, BodyBinding,
+    FrameAssociation, LeapSecondsKernel, NaifIdError, TextKernelContent, TextKernelError,
 };
 use thiserror::Error;
 
@@ -53,6 +53,8 @@ pub enum SpiceBackendError {
         #[source]
         source: TextKernelError,
     },
+    #[error("text kernel {path} contains no supported content (no body bindings, no leapseconds, no Earth->ITRF93 frame association)")]
+    UnsupportedTextKernel { path: String },
     #[error("{0}")]
     NotCovered(String),
     #[error("unsupported NAIF frame: {0}")]
@@ -78,20 +80,14 @@ enum Kernel {
     },
     Text {
         path: String,
-        bindings: Vec<BodyBinding>,
-    },
-    Ignored {
-        path: String,
+        content: TextKernelContent,
     },
 }
 
 impl Kernel {
     fn path(&self) -> &str {
         match self {
-            Kernel::Spk { path, .. }
-            | Kernel::Pck { path, .. }
-            | Kernel::Text { path, .. }
-            | Kernel::Ignored { path } => path,
+            Kernel::Spk { path, .. } | Kernel::Pck { path, .. } | Kernel::Text { path, .. } => path,
         }
     }
 }
@@ -150,18 +146,20 @@ impl AdamCoreSpiceBackend {
                 });
             }
             _ => {
-                let bindings =
-                    parse_body_bindings(path).map_err(|source| SpiceBackendError::TextKernel {
+                let content =
+                    parse_text_kernel(path).map_err(|source| SpiceBackendError::TextKernel {
                         path: path_s.clone(),
                         source,
                     })?;
-                if bindings.is_empty() {
-                    self.kernels.push(Kernel::Ignored { path: path_s });
-                } else {
-                    self.kernels.push(Kernel::Text {
-                        path: path_s,
-                        bindings,
-                    });
+                if content.is_empty() {
+                    return Err(SpiceBackendError::UnsupportedTextKernel { path: path_s });
+                }
+                let has_bindings = !content.bindings.is_empty();
+                self.kernels.push(Kernel::Text {
+                    path: path_s,
+                    content,
+                });
+                if has_bindings {
                     self.rebuild_name_index();
                 }
             }
@@ -256,13 +254,37 @@ impl AdamCoreSpiceBackend {
     fn rebuild_name_index(&mut self) {
         self.custom_names.clear();
         for k in &self.kernels {
-            if let Kernel::Text { bindings, .. } = k {
-                for binding in bindings {
+            if let Kernel::Text { content, .. } = k {
+                for binding in &content.bindings {
                     self.custom_names
                         .insert(normalize_name(&binding.name), binding.code);
                 }
             }
         }
+    }
+
+    /// Most recently loaded structured `KPL/LSK` leapseconds-kernel content,
+    /// or `None` if no LSK has been loaded. adam-core's `Timestamp.rescale()`
+    /// uses ERFA for time-scale conversions, so this accessor is exposed for
+    /// downstream introspection rather than being consumed internally.
+    pub fn leapseconds(&self) -> Option<&LeapSecondsKernel> {
+        self.kernels.iter().rev().find_map(|k| match k {
+            Kernel::Text { content, .. } => content.leapseconds.as_ref(),
+            _ => None,
+        })
+    }
+
+    /// All Earth->ITRF93-style body-fixed frame associations parsed from
+    /// loaded text kernels, in load order.
+    pub fn frame_associations(&self) -> Vec<&FrameAssociation> {
+        self.kernels
+            .iter()
+            .filter_map(|k| match k {
+                Kernel::Text { content, .. } => Some(&content.frame_associations),
+                _ => None,
+            })
+            .flat_map(|v| v.iter())
+            .collect()
     }
 
     fn try_spk_state_batch(
@@ -398,7 +420,19 @@ pub fn parse_text_kernel_bindings<P: AsRef<Path>>(
     path: P,
 ) -> Result<Vec<BodyBinding>, SpiceBackendError> {
     let path_ref = path.as_ref();
-    parse_body_bindings(path_ref).map_err(|source| SpiceBackendError::TextKernel {
+    parse_text_kernel(path_ref)
+        .map(|content| content.bindings)
+        .map_err(|source| SpiceBackendError::TextKernel {
+            path: path_ref.display().to_string(),
+            source,
+        })
+}
+
+pub fn parse_text_kernel_content<P: AsRef<Path>>(
+    path: P,
+) -> Result<TextKernelContent, SpiceBackendError> {
+    let path_ref = path.as_ref();
+    parse_text_kernel(path_ref).map_err(|source| SpiceBackendError::TextKernel {
         path: path_ref.display().to_string(),
         source,
     })
@@ -562,6 +596,54 @@ mod tests {
         assert_eq!(backend.bodn2c("EARTH").unwrap(), 399);
         assert_eq!(backend.bodn2c("EARTH_MOON_BARYCENTER").unwrap(), 3);
         assert_eq!(backend.bodc2n(399).unwrap(), "EARTH");
+    }
+
+    const SAMPLE_LSK: &str = concat!(
+        "\\begindata\n",
+        "DELTET/DELTA_T_A = 32.184\n",
+        "DELTET/K = 1.657D-3\n",
+        "DELTET/EB = 1.671D-2\n",
+        "DELTET/M = ( 6.239996D0 1.99096871D-7 )\n",
+        "DELTET/DELTA_AT = ( 10, @1972-JAN-1, 11, @1972-JUL-1 )\n",
+        "\\begintext\n",
+    );
+
+    #[test]
+    fn furnsh_retains_leapseconds_kernel_content() {
+        let mut lsk_file = NamedTempFile::new().unwrap();
+        write!(lsk_file, "{SAMPLE_LSK}").unwrap();
+        lsk_file.flush().unwrap();
+
+        let mut backend = AdamCoreSpiceBackend::new();
+        backend.furnsh(lsk_file.path()).unwrap();
+
+        let lsk = backend
+            .leapseconds()
+            .expect("LSK content should be retained, not classified as ignored");
+        assert!((lsk.delta_t_a - 32.184).abs() < 1e-12);
+        assert_eq!(lsk.delta_at.len(), 2);
+        assert_eq!(lsk.delta_at[0].leap_seconds, 10);
+        assert_eq!(lsk.delta_at[1].leap_seconds, 11);
+    }
+
+    #[test]
+    fn furnsh_rejects_text_kernel_with_no_supported_content() {
+        let mut empty = NamedTempFile::new().unwrap();
+        write!(
+            empty,
+            "\\begintext\nThis text kernel has only commentary.\n\\begindata\n\\begintext\n"
+        )
+        .unwrap();
+        empty.flush().unwrap();
+
+        let mut backend = AdamCoreSpiceBackend::new();
+        let err = backend.furnsh(empty.path()).expect_err(
+            "empty text kernels must fail loudly so unsupported content cannot be silently dropped",
+        );
+        assert!(matches!(
+            err,
+            SpiceBackendError::UnsupportedTextKernel { .. }
+        ));
     }
 
     #[test]
