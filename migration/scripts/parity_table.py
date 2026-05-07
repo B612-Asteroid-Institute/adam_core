@@ -247,6 +247,21 @@ def _format_speed_metadata(metadata: dict[str, Any]) -> str:
             f"refresh={legacy_cache.get('refresh', False)}; "
             f"hits={hits}; writes={writes}."
         )
+        freshness = legacy_cache.get("entry_freshness")
+        if isinstance(freshness, dict):
+            parts = []
+            for section in ("warm", "cold"):
+                summary = freshness.get(section)
+                if not isinstance(summary, dict):
+                    continue
+                parts.append(
+                    f"{section}: {summary.get('entries', 0)} entries, "
+                    f"captured {summary.get('captured_at_min') or '—'} to "
+                    f"{summary.get('captured_at_max') or '—'}, "
+                    f"identities={summary.get('distinct_legacy_identities', 0)}"
+                )
+            if parts:
+                lines.append("Legacy cache freshness: " + "; ".join(parts) + ".")
 
     lanes = metadata.get("lanes") or []
     if lanes:

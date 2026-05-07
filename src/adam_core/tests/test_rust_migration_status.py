@@ -233,11 +233,37 @@ def test_parity_main_exposes_additive_legacy_cache_refresh_controls() -> None:
     assert "--speed-replace-legacy-cache" in help_text
 
 
+def test_legacy_relevant_untracked_status_filters_non_code(monkeypatch) -> None:
+    def fake_git_output(args: list[str], *, cwd: Path) -> str:
+        assert "--untracked-files=all" in args
+        return "\n".join(
+            [
+                "?? .pi/session.json",
+                "?? decisions.md",
+                "?? src/adam_core/new_module.py",
+                "?? adam_core/top_level.py",
+                " M src/adam_core/existing.py",
+            ]
+        )
+
+    monkeypatch.setattr(parity_speed, "_git_output", fake_git_output)
+
+    status = parity_speed._legacy_relevant_untracked_status()
+
+    assert "src/adam_core/new_module.py" in status
+    assert "adam_core/top_level.py" in status
+    assert ".pi/session.json" not in status
+    assert "decisions.md" not in status
+    assert "existing.py" not in status
+
+
 def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> None:
     identity = {
         "git_commit": "baseline",
         "process_version": "test",
         "benchmark_source_hash": "new-source",
+        "timing_process_hash": "process-source",
+        "legacy_packages_hash": "packages",
     }
     monkeypatch.setattr(parity_speed, "_legacy_identity", lambda: identity)
     cache_path = tmp_path / "legacy_cache.json"
@@ -250,7 +276,9 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
           "legacy_identity": {
             "git_commit": "baseline",
             "process_version": "test",
-            "benchmark_source_hash": "old-source"
+            "benchmark_source_hash": "old-source",
+            "timing_process_hash": "process-source",
+            "legacy_packages_hash": "packages"
           },
           "warm": {"existing-warm": {"key_fields": {"kind": "warm"}}},
           "cold": {"existing-cold": {"key_fields": {"kind": "cold"}}}
@@ -263,6 +291,12 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
         assert "benchmark source hash" in str(exc)
     else:
         raise AssertionError("source-hash drift should fail without refresh")
+
+    untouched_cache = parity_speed.prepare_legacy_timing_cache(cache_path, refresh=True)
+    assert untouched_cache is not None
+    parity_speed.write_legacy_timing_cache(untouched_cache)
+    untouched = __import__("json").loads(cache_path.read_text())
+    assert untouched["legacy_identity"]["benchmark_source_hash"] == "old-source"
 
     cache = parity_speed.prepare_legacy_timing_cache(cache_path, refresh=True)
     assert cache is not None
@@ -278,6 +312,7 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
     assert merged["legacy_identity"] == identity
     assert set(merged["warm"]) == {"existing-warm", "new-warm"}
     assert set(merged["cold"]) == {"existing-cold"}
+    assert merged["warm"]["new-warm"]["legacy_identity"] == identity
 
     replaced = parity_speed.prepare_legacy_timing_cache(
         cache_path,
@@ -287,6 +322,57 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
     assert replaced is not None
     assert parity_speed._cache_section(replaced, "warm") == {}
     assert parity_speed._cache_section(replaced, "cold") == {}
+
+
+def test_legacy_cache_entry_identity_allows_source_hash_only_drift() -> None:
+    identity = {
+        "git_commit": "baseline",
+        "process_version": "test",
+        "benchmark_source_hash": "new-source",
+        "timing_process_hash": "process-source",
+        "legacy_packages_hash": "packages",
+    }
+    fields = {"kind": "warm", "api_id": "api", "process_version": "test"}
+    old_source_identity = dict(identity)
+    old_source_identity["benchmark_source_hash"] = "old-source"
+    context = {
+        "data": {
+            "legacy_identity": identity,
+            "warm": {
+                "key": {
+                    "key_fields": fields,
+                    "samples_s": [1.0],
+                    "legacy_identity": old_source_identity,
+                }
+            },
+        },
+        "refresh": False,
+        "hits": {"warm": 0, "cold": 0},
+        "misses": {"warm": 0, "cold": 0},
+        "writes": {"warm": 0, "cold": 0},
+    }
+
+    assert parity_speed._cached_entry(context, "warm", "key", fields) is not None
+    assert context["hits"] == {"warm": 1, "cold": 0}
+
+    del context["data"]["warm"]["key"]["legacy_identity"]
+    try:
+        parity_speed._cached_entry(context, "warm", "key", fields)
+    except ValueError as exc:
+        assert "missing legacy_identity" in str(exc)
+    else:
+        raise AssertionError("missing per-entry identity should fail cache lookup")
+
+    context["data"]["warm"]["key"]["legacy_identity"] = old_source_identity
+    stale_identity = dict(old_source_identity)
+    stale_identity["legacy_packages_hash"] = "other-packages"
+    context["data"]["warm"]["key"]["legacy_identity"] = stale_identity
+    try:
+        parity_speed._cached_entry(context, "warm", "key", fields)
+    except ValueError as exc:
+        assert "different legacy checkout" in str(exc)
+    else:
+        raise AssertionError("non-source identity drift should fail cache lookup")
 
 
 def test_speed_artifact_records_legacy_cache_metadata() -> None:
@@ -310,6 +396,16 @@ def test_speed_artifact_records_legacy_cache_metadata() -> None:
             "schema_version": parity_speed.LEGACY_TIMING_CACHE_SCHEMA_VERSION,
             "process_version": parity_speed.LEGACY_TIMING_CACHE_PROCESS_VERSION,
             "legacy_identity": {"git_commit": "baseline"},
+            "warm": {
+                "warm-key": {
+                    "captured_at": "2026-05-05T00:00:00+00:00",
+                    "legacy_identity": {
+                        "git_commit": "baseline",
+                        "benchmark_source_hash": "source",
+                    },
+                }
+            },
+            "cold": {},
         },
         "refresh": False,
         "dirty": False,
@@ -321,6 +417,14 @@ def test_speed_artifact_records_legacy_cache_metadata() -> None:
     artifact = parity_speed.to_json([result], legacy_cache=cache_context)
 
     assert artifact["legacy_timing_cache"]["hits"] == {"warm": 1, "cold": 0}
+    assert artifact["legacy_timing_cache"]["entry_freshness"]["warm"] == {
+        "entries": 1,
+        "captured_at_min": "2026-05-05T00:00:00+00:00",
+        "captured_at_max": "2026-05-05T00:00:00+00:00",
+        "missing_legacy_identity": 0,
+        "distinct_legacy_identities": 1,
+        "benchmark_source_hashes": ["source"],
+    }
     assert artifact["apis"][0]["legacy_source"] == "cache"
     assert artifact["apis"][0]["legacy_cache_key"] == "warm-key"
 

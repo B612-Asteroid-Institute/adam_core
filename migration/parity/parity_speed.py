@@ -26,6 +26,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
+import socket
 import subprocess
 import sys
 import time
@@ -54,6 +56,14 @@ DEFAULT_LEGACY_CACHE_PATH = Path(
 LEGACY_TIMING_CACHE_SCHEMA_VERSION = 1
 LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-019a-shaped-lanes-v1"
 LEGACY_REPO_ROOT = Path("/Users/aleck/Code/adam-core")
+LEGACY_RELEVANT_UNTRACKED_PREFIXES = (
+    "src/",
+    "adam_core/",
+    "pyproject.toml",
+    "pdm.lock",
+    "setup.py",
+    "setup.cfg",
+)
 
 
 @dataclass(frozen=True)
@@ -183,13 +193,11 @@ def _hash_json(value: object) -> str:
     return hashlib.sha256(_stable_json(value).encode("utf-8")).hexdigest()
 
 
-def _benchmark_source_hash() -> str:
-    parity_dir = Path(__file__).resolve().parent
-    paths = [
-        parity_dir / "_inputs.py",
-        parity_dir / "_legacy_runner.py",
-        parity_dir / "_oracle.py",
-    ]
+def _hash_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _hash_files(paths: Sequence[Path]) -> str:
     digest = hashlib.sha256()
     for path in paths:
         digest.update(path.name.encode("utf-8"))
@@ -197,6 +205,22 @@ def _benchmark_source_hash() -> str:
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def _benchmark_source_hash() -> str:
+    parity_dir = Path(__file__).resolve().parent
+    return _hash_files(
+        [
+            parity_dir / "_inputs.py",
+            parity_dir / "_legacy_runner.py",
+            parity_dir / "_oracle.py",
+        ]
+    )
+
+
+def _timing_process_hash() -> str:
+    parity_dir = Path(__file__).resolve().parent
+    return _hash_files([parity_dir / "parity_speed.py", parity_dir / "_threading.py"])
 
 
 def _subprocess_output(args: Sequence[str], *, cwd: Path | None = None) -> str:
@@ -215,23 +239,60 @@ def _git_output(args: Sequence[str], *, cwd: Path) -> str:
     return _subprocess_output(["git", *args], cwd=cwd)
 
 
+def _machine_identity() -> dict[str, str]:
+    try:
+        cpu_brand = _subprocess_output(["sysctl", "-n", "machdep.cpu.brand_string"])
+    except Exception:
+        cpu_brand = platform.processor()
+    return {
+        "hostname": socket.gethostname(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "processor": platform.processor(),
+        "cpu_brand": cpu_brand,
+    }
+
+
+def _legacy_packages_hash(python: Path) -> str:
+    freeze = _subprocess_output([str(python), "-m", "pip", "freeze", "--all"])
+    return _hash_text(freeze)
+
+
+def _legacy_relevant_untracked_status() -> str:
+    status = _git_output(
+        ["status", "--porcelain", "--untracked-files=all"], cwd=LEGACY_REPO_ROOT
+    )
+    relevant_lines = []
+    for line in status.splitlines():
+        if not line.startswith("?? "):
+            continue
+        path = line[3:]
+        if path.startswith(LEGACY_RELEVANT_UNTRACKED_PREFIXES):
+            relevant_lines.append(line)
+    return "\n".join(sorted(relevant_lines))
+
+
 def _legacy_identity() -> dict[str, object]:
     from . import _oracle
 
-    dirty = bool(
-        _git_output(
-            ["status", "--porcelain", "--untracked-files=no"], cwd=LEGACY_REPO_ROOT
-        )
+    tracked_status = _git_output(
+        ["status", "--porcelain", "--untracked-files=no"], cwd=LEGACY_REPO_ROOT
     )
+    relevant_untracked_status = _legacy_relevant_untracked_status()
+    legacy_python = _oracle.LEGACY_VENV_PYTHON
     return {
         "repo_root": str(LEGACY_REPO_ROOT),
         "git_commit": _git_output(["rev-parse", "HEAD"], cwd=LEGACY_REPO_ROOT),
-        "git_dirty": dirty,
-        "python": str(_oracle.LEGACY_VENV_PYTHON),
-        "python_version": _subprocess_output(
-            [str(_oracle.LEGACY_VENV_PYTHON), "--version"]
-        ),
+        "git_dirty": bool(tracked_status),
+        "git_tracked_status_hash": _hash_text(tracked_status),
+        "git_relevant_untracked_dirty": bool(relevant_untracked_status),
+        "git_relevant_untracked_status_hash": _hash_text(relevant_untracked_status),
+        "python": str(legacy_python),
+        "python_version": _subprocess_output([str(legacy_python), "--version"]),
+        "legacy_packages_hash": _legacy_packages_hash(legacy_python),
+        "machine": _machine_identity(),
         "benchmark_source_hash": _benchmark_source_hash(),
+        "timing_process_hash": _timing_process_hash(),
         "process_version": LEGACY_TIMING_CACHE_PROCESS_VERSION,
     }
 
@@ -372,6 +433,44 @@ def _cache_section(context: Mapping[str, object], section: str) -> dict[str, obj
     return entries
 
 
+def _cache_identity(context: Mapping[str, object]) -> dict[str, object]:
+    identity = _cache_data(context).get("legacy_identity")
+    if not isinstance(identity, dict):
+        raise TypeError("legacy timing cache is missing legacy_identity")
+    return dict(identity)
+
+
+def _entry_identity_matches_current(
+    entry_identity: Mapping[str, object], current_identity: Mapping[str, object]
+) -> bool:
+    # Adding unrelated adapters/workloads changes the benchmark source hash.
+    # Keep the additive frozen-legacy workflow for that source-hash-only drift,
+    # but still fail loudly on baseline checkout, Python/env, machine, timing
+    # process, or process-version drift.
+    return _legacy_identity_without_source_hash(
+        entry_identity
+    ) == _legacy_identity_without_source_hash(current_identity)
+
+
+def _validate_cache_entry_identity(
+    context: Mapping[str, object], section: str, key: str, entry: Mapping[str, object]
+) -> None:
+    entry_identity = entry.get("legacy_identity")
+    if not isinstance(entry_identity, dict):
+        raise ValueError(
+            f"legacy timing cache {section} entry {key} is missing legacy_identity. "
+            "Run with --refresh-legacy-cache for requested rows or "
+            "--replace-legacy-cache to recapture the full baseline."
+        )
+    if not _entry_identity_matches_current(entry_identity, _cache_identity(context)):
+        raise ValueError(
+            f"legacy timing cache {section} entry {key} was captured for a "
+            "different legacy checkout, Python/environment, machine, or timing "
+            "process. Run with --refresh-legacy-cache for requested rows, or "
+            "--replace-legacy-cache after baseline/process changes."
+        )
+
+
 def _stats_dict(context: Mapping[str, object], name: str) -> dict[str, int]:
     stats = context[name]
     if not isinstance(stats, dict):
@@ -393,6 +492,7 @@ def _cached_entry(
         raise TypeError(f"legacy timing cache entry {key} is invalid")
     if entry.get("key_fields") != dict(fields):
         raise ValueError(f"legacy timing cache key collision for {key}")
+    _validate_cache_entry_identity(context, section, key, entry)
     _stats_dict(context, "hits")[section] += 1
     return entry
 
@@ -400,7 +500,9 @@ def _cached_entry(
 def _write_cache_entry(
     context: dict[str, object], section: str, key: str, entry: Mapping[str, object]
 ) -> None:
-    _cache_section(context, section)[key] = dict(entry)
+    entry_data = dict(entry)
+    entry_data["legacy_identity"] = _cache_identity(context)
+    _cache_section(context, section)[key] = entry_data
     context["dirty"] = True
     _stats_dict(context, "writes")[section] += 1
 
@@ -537,6 +639,50 @@ def write_legacy_timing_cache(context: Mapping[str, object] | None) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True))
 
 
+def _legacy_cache_section_metadata(
+    data: Mapping[str, object], section: str
+) -> dict[str, object]:
+    entries = data.get(section)
+    if not isinstance(entries, dict):
+        return {
+            "entries": 0,
+            "captured_at_min": None,
+            "captured_at_max": None,
+            "missing_legacy_identity": 0,
+            "distinct_legacy_identities": 0,
+            "benchmark_source_hashes": [],
+        }
+
+    captured_at: list[str] = []
+    identity_hashes: set[str] = set()
+    source_hashes: set[str] = set()
+    missing_identity = 0
+    for entry in entries.values():
+        if not isinstance(entry, dict):
+            continue
+        captured = entry.get("captured_at")
+        if isinstance(captured, str):
+            captured_at.append(captured)
+        entry_identity = entry.get("legacy_identity")
+        if isinstance(entry_identity, dict):
+            identity_hashes.add(_hash_json(entry_identity))
+            source_hash = entry_identity.get("benchmark_source_hash")
+            if isinstance(source_hash, str):
+                source_hashes.add(source_hash)
+        else:
+            missing_identity += 1
+
+    captured_at.sort()
+    return {
+        "entries": len(entries),
+        "captured_at_min": captured_at[0] if captured_at else None,
+        "captured_at_max": captured_at[-1] if captured_at else None,
+        "missing_legacy_identity": missing_identity,
+        "distinct_legacy_identities": len(identity_hashes),
+        "benchmark_source_hashes": sorted(source_hashes),
+    }
+
+
 def _legacy_cache_metadata(
     context: Mapping[str, object] | None,
 ) -> dict[str, object] | None:
@@ -552,6 +698,10 @@ def _legacy_cache_metadata(
         "schema_version": data.get("schema_version"),
         "process_version": data.get("process_version"),
         "legacy_identity": data.get("legacy_identity"),
+        "entry_freshness": {
+            "warm": _legacy_cache_section_metadata(data, "warm"),
+            "cold": _legacy_cache_section_metadata(data, "cold"),
+        },
         "hits": dict(_stats_dict(context, "hits")),
         "misses": dict(_stats_dict(context, "misses")),
         "writes": dict(_stats_dict(context, "writes")),

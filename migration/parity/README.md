@@ -63,9 +63,13 @@ APIs, changing workload shapes, changing reps/warmup/thread policy, or updating
 the baseline checkout. Refreshes merge newly captured entries into the existing
 cache by default, so API-scoped recaptures do not wipe unrelated rows. A
 benchmark-source hash change from adding adapters or workloads can be refreshed
-additively; use `--replace-legacy-cache` / `--speed-replace-legacy-cache` only
-for intentional full recapture after benchmark process or baseline-identity
-changes.
+additively; each cache entry records the identity it was captured under, and
+normal cache lookups fail loudly on legacy checkout, tracked-code or relevant
+untracked-code status, Python/environment, machine, timing-process, or
+process-version drift while allowing benchmark-source-only drift from additive
+coverage updates. Use
+`--replace-legacy-cache` / `--speed-replace-legacy-cache` only for intentional
+full recapture after benchmark process or baseline-identity changes.
 
 ```bash
 pdm run rust-parity-legacy-cache-refresh
