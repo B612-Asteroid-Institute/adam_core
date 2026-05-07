@@ -375,6 +375,118 @@ def test_legacy_cache_entry_identity_allows_source_hash_only_drift() -> None:
         raise AssertionError("non-source identity drift should fail cache lookup")
 
 
+def test_time_legacy_warm_rejects_stale_entry_identity(monkeypatch) -> None:
+    identity = {
+        "git_commit": "baseline",
+        "process_version": "test",
+        "benchmark_source_hash": "source",
+        "timing_process_hash": "process-source",
+        "legacy_packages_hash": "packages",
+    }
+    stale_identity = dict(identity)
+    stale_identity["legacy_packages_hash"] = "other-packages"
+    workload_shape = {"rows": 1, "axes": {}, "label": "rows=1"}
+    fields = parity_speed._legacy_cache_fields(
+        kind="warm",
+        api_id="api",
+        lane="small-n",
+        workload_shape=workload_shape,
+        seed=123,
+        thread_mode="single",
+        reps=1,
+        warmup=0,
+    )
+    key = parity_speed._hash_json(fields)
+    context = {
+        "data": {
+            "legacy_identity": identity,
+            "warm": {
+                key: {
+                    "key_fields": fields,
+                    "samples_s": [1.0],
+                    "legacy_identity": stale_identity,
+                }
+            },
+            "cold": {},
+        },
+        "refresh": False,
+        "hits": {"warm": 0, "cold": 0},
+        "misses": {"warm": 0, "cold": 0},
+        "writes": {"warm": 0, "cold": 0},
+    }
+
+    def fail_time_legacy(*args: object, **kwargs: object) -> list[float]:
+        raise AssertionError("stale cache lookup should fail before measurement")
+
+    monkeypatch.setattr(_oracle, "time_legacy", fail_time_legacy)
+
+    try:
+        parity_speed._time_legacy_warm(
+            "api",
+            {},
+            reps=1,
+            warmup=0,
+            seed=123,
+            thread_mode="single",
+            lane="small-n",
+            workload_shape=workload_shape,
+            workload_label="rows=1",
+            legacy_cache=context,
+        )
+    except ValueError as exc:
+        assert "different legacy checkout" in str(exc)
+    else:
+        raise AssertionError("stale per-entry identity should fail warm lookup")
+    assert context["hits"] == {"warm": 0, "cold": 0}
+
+
+def test_time_legacy_warm_refresh_writes_entry_identity(monkeypatch) -> None:
+    identity = {
+        "git_commit": "baseline",
+        "process_version": "test",
+        "benchmark_source_hash": "source",
+        "timing_process_hash": "process-source",
+        "legacy_packages_hash": "packages",
+    }
+    workload_shape = {"rows": 1, "axes": {}, "label": "rows=1"}
+    context = {
+        "data": {"legacy_identity": identity, "warm": {}, "cold": {}},
+        "refresh": True,
+        "dirty": False,
+        "hits": {"warm": 0, "cold": 0},
+        "misses": {"warm": 0, "cold": 0},
+        "writes": {"warm": 0, "cold": 0},
+    }
+    samples = [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr(
+        _oracle,
+        "time_legacy",
+        lambda *args, **kwargs: samples,
+    )
+
+    measured, source, key = parity_speed._time_legacy_warm(
+        "api",
+        {},
+        reps=3,
+        warmup=0,
+        seed=123,
+        thread_mode="single",
+        lane="small-n",
+        workload_shape=workload_shape,
+        workload_label="rows=1",
+        legacy_cache=context,
+    )
+
+    assert measured == samples
+    assert source == "refreshed"
+    entry = context["data"]["warm"][key]
+    assert entry["legacy_identity"] == identity
+    assert entry["samples_s"] == samples
+    assert context["dirty"] is True
+    assert context["writes"] == {"warm": 1, "cold": 0}
+
+
 def test_speed_artifact_records_legacy_cache_metadata() -> None:
     result = parity_speed.SpeedResult(
         api_id="coordinates.cartesian_to_spherical",

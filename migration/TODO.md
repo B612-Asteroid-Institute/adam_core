@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-07 (RM-P1-021 canonical coverage complete; RM-P1-020 next)
+Last updated: 2026-05-07 (cache-hardening review addressed; RM-P1-020 large-n photometry next)
 
 ## Current Review-Derived Backlog
 
@@ -26,7 +26,7 @@ Last updated: 2026-05-07 (RM-P1-021 canonical coverage complete; RM-P1-020 next)
 - [x] RM-P1-018 latency-gate statistical policy resolved on 2026-05-03: default pass/fail is single-thread, latency artifacts preserve raw trial samples, and native/multithread measurements are diagnostic-only unless separately labeled.
 - [x] RM-P1-019/RM-P1-019A added shaped baseline speed governance: Rust-vs-baseline artifacts and tables expose enforced `tiny-n`, historical `small-n`/`n=2000`, and API-shaped `large-n` lanes with structured workload axes, lane status, explicit cold/thread metadata, and serialized baseline-main legacy timing cache. Large-n misses remain red under RM-P1-020; no active large-n waivers are acceptable without an explicit user structural-acceptance decision.
 - [x] RM-P1-021: direct randomized fuzz parity coverage and canonical Rust-vs-baseline speed lanes for `orbits.classify_orbits` and `dynamics.calculate_moid` landed on 2026-05-07. The regenerated parity table/report artifacts show both APIs passing all fuzz seeds and tiny/small/large speed lanes; direct MOID remains distinct from `calculate_perturber_moids` orchestration coverage.
-- [ ] RM-P1-020: resolve the remaining no-waiver 1.2x single-thread speed rows. Latest regenerated artifacts after RM-P1-021 show the new APIs passing, while unrelated red rows remain in coordinates/ephemeris/photometry lanes (including intermittent tiny/large coordinate p95 misses, small/large `dynamics.generate_ephemeris_2body`, and large-n photometry magnitude/fused/predict rows). Use component-level passes and separate labeled multi-thread evidence only as production context.
+- [ ] RM-P1-020: resolve the remaining no-waiver 1.2x single-thread speed rows. Latest regenerated artifacts after cache hardening show fuzz parity passing 25/25 direct APIs and tiny/small speed lanes green; large-n speed remains red only on photometry in the committed cold/warm report (`photometry.calculate_apparent_magnitude_v` p95 and `photometry.predict_magnitudes` p50/p95). `dynamics.generate_ephemeris_2body`, `dynamics.add_light_time`, and prior coordinate/chi2 outliers currently pass in committed artifacts and should not be re-opened without targeted reproduction. Use component-level passes and separate labeled multi-thread evidence only as production context.
 - [ ] RM-SPICE-LSK-001 (blocked on spicekit SK-TEXT-001): once spicekit exposes parsed LSK/DELTET content, update `rust/adam_core_rs_spice` furnsh handling so `naif_leapseconds` is retained as explicit LSK content rather than classified as ignored; unsupported text kernels must fail or be represented explicitly. Keep `Timestamp.rescale()` on its current ERFA policy unless a separate time-scale API decision changes it.
 
 ## Active Sprint (Milestone 1 hardening)

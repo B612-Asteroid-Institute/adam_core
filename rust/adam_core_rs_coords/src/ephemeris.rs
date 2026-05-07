@@ -29,6 +29,9 @@ pub const C_AU_PER_DAY: f64 = 299_792.458_f64 / 149_597_870.700_f64 * 86_400.0_f
 /// the JAX default (`_add_light_time` uses `max_lt_iter=10`).
 pub const DEFAULT_MAX_LT_ITER: usize = 10;
 
+type EphemerisWarmStart<T> = ([T; 6], T, T, T);
+type EphemerisRowResult<T> = ([T; 6], T, [T; 6], Option<EphemerisWarmStart<T>>);
+
 #[inline]
 fn rayon_is_single_threaded() -> bool {
     rayon::current_num_threads() == 1
@@ -255,8 +258,8 @@ fn generate_ephemeris_2body_row_from_consts<T: Scalar>(
     tol: f64,
     stellar_aberration: bool,
     max_lt_iter: usize,
-    warm_start: Option<([T; 6], T, T, T)>,
-) -> ([T; 6], T, [T; 6], Option<([T; 6], T, T, T)>) {
+    warm_start: Option<EphemerisWarmStart<T>>,
+) -> EphemerisRowResult<T> {
     // Light-time Newton fixed point — mirrors `_add_light_time` exactly:
     //   p = [orbit_i, t_bookkeep, lt0=1e30, dlt=1e30, iter=0]
     //   while dlt > lt_tol and iter < max_lt_iter:
@@ -475,8 +478,8 @@ fn generate_ephemeris_2body_row_topo_eq_no_stellar_f64(
     max_iter: usize,
     tol: f64,
     max_lt_iter: usize,
-    warm_start: Option<([f64; 6], f64, f64, f64)>,
-) -> ([f64; 6], f64, [f64; 6], Option<([f64; 6], f64, f64, f64)>) {
+    warm_start: Option<EphemerisWarmStart<f64>>,
+) -> EphemerisRowResult<f64> {
     let mut orbit_i = [
         orbit_consts.r[0],
         orbit_consts.r[1],
@@ -645,8 +648,9 @@ fn generate_ephemeris_2body_grouped_single_thread_no_stellar_macos(
             ],
             mus[start],
         );
-        let mut warm_start: Option<([f64; 6], f64, f64, f64)> = None;
-        for i in start..end {
+        let mut warm_start: Option<EphemerisWarmStart<f64>> = None;
+        for (offset, lt_slot) in lt_out[start..end].iter_mut().enumerate() {
+            let i = start + offset;
             let row_base = i * 6;
             let observer: [f64; 6] = [
                 observer_states_flat[row_base],
@@ -667,7 +671,7 @@ fn generate_ephemeris_2body_grouped_single_thread_no_stellar_macos(
                     warm_start,
                 );
             sph_out[row_base..row_base + 6].copy_from_slice(&topo_eq);
-            lt_out[i] = lt;
+            *lt_slot = lt;
             aberrated_out[row_base..row_base + 6].copy_from_slice(&aberrated);
             warm_start = next_warm_start;
         }
@@ -730,8 +734,9 @@ fn generate_ephemeris_2body_grouped_single_thread(
             ],
             mus[start],
         );
-        let mut warm_start: Option<([f64; 6], f64, f64, f64)> = None;
-        for i in start..end {
+        let mut warm_start: Option<EphemerisWarmStart<f64>> = None;
+        for (offset, lt_slot) in lt_out[start..end].iter_mut().enumerate() {
+            let i = start + offset;
             let row_base = i * 6;
             let observer: [f64; 6] = [
                 observer_states_flat[row_base],
@@ -753,7 +758,7 @@ fn generate_ephemeris_2body_grouped_single_thread(
                     warm_start,
                 );
             sph_out[row_base..row_base + 6].copy_from_slice(&sph);
-            lt_out[i] = lt;
+            *lt_slot = lt;
             aberrated_out[row_base..row_base + 6].copy_from_slice(&aberrated);
             warm_start = next_warm_start;
         }
