@@ -1113,7 +1113,7 @@ Acceptance:
 
 ### RM-P1-017: Final Clean Validation Pass
 
-Status: open
+Status: complete (2026-05-07)
 
 Scope:
 
@@ -1127,6 +1127,20 @@ Scope:
 Acceptance:
 
 - Final review can start from green, current artifacts rather than journal claims.
+
+Completion evidence (2026-05-07, against committed HEAD `a8ed274c`):
+
+- `pdm run rust-quality`: cargo fmt --all --check, cargo clippy --workspace --all-targets -D warnings, cargo test --workspace all green.
+- `pdm run test-rust-full`: 754 passed / 144 skipped / 2 deselected / 56 warnings in 206.95s. Includes `test_public_module_compatibility.py` (restored compatibility surfaces are documented and statically guarded) and `test_runtime_dependency_audit.py` (no unreferenced JAX/Numba imports).
+- `pdm run rust-parity-main`: all 25 direct fuzz APIs 8/8 seeds; speed gate `all_passed=True` across tiny/small/large lanes.
+- `pdm run rust-parity-speed-cold`: cold/warm artifact `all_passed=True`.
+- `pdm run rust-latency-gate`: all APIs within regression tolerance vs `migration/artifacts/rust_latency_baseline.json`.
+- `pdm run wheel-build`: built `dist/adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl`.
+- `pdm run wheel-inspect`: passed.
+- `pdm run docs-check`: Sphinx build succeeded; sitemap.xml generated.
+- `pdm run script-preflight`: 28 PDM scripts, 4 workflows, no stale references.
+- Canonical artifacts on HEAD: `migration/artifacts/parity_gate.json`, `parity_speed_cold_warm.json`, `parity_table_rca.json`, `parity_report.md`, `parity_legacy_speed_baseline.json`, `rust_latency_current.json` all green.
+
 
 ### RM-P1-018: Harden Rust-Only Latency Gate Statistical Policy
 
