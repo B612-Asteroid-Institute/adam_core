@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-07 (RM-P1-016 PyO3 binding split complete; RM-SPICE-LSK-001 + RM-P1-020 + RM-P1-017 done)
+Last updated: 2026-05-07 (RM-WD3-001 step 1 complete: parallel-backend abstraction landed; profiling + per-callsite Ray retirement next)
 
 ## Current Review-Derived Backlog
 

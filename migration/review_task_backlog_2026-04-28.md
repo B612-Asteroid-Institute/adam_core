@@ -1416,31 +1416,48 @@ pdm run rust-parity-speed-cold
 
 ### RM-WD3-001: Wave D3 Parallel Backend Abstraction
 
-Status: open
+Status: step 1 complete (2026-05-07); profiling + per-callsite Ray retirement pending
 
 Source task: #134 from transcript.
 
 Reason: Ray has been removed from MOID and porkchop but remains in propagator/OD paths where n-body ASSIST or propagator-bound work dominates. The code needs an explicit abstraction for choosing rayon, Ray, or sequential execution rather than ad hoc per-module choices.
 
-Known remaining Ray surfaces:
+Known remaining Ray surfaces (before step 1):
 
 - `src/adam_core/propagator/propagator.py`
 - `src/adam_core/orbit_determination/od.py`
 - `src/adam_core/orbit_determination/iod.py`
 - `src/adam_core/dynamics/impacts.py`
 - `src/adam_core/dynamics/ephemeris.py`
+- `src/adam_core/dynamics/propagation.py`
 
-Scope:
+Scope (option B, approved 2026-05-07):
 
-- Define a `parallel_backend` policy/abstraction.
-- Make Ray usage explicit and centralized.
-- Preserve behavior for ASSIST/n-body propagator-bound work.
-- Remove module-local Ray scaffolding where rayon or sequential execution is now sufficient.
+1. Land a centralized `parallel_backend` abstraction. Behavior unchanged: same Ray underneath, just one place to read/maintain.
+2. Profile per-callsite at `max_processes ∈ {1, 4, 8}` to compare Sequential vs Ray on representative production input now that the Rust kernels are Rayon-parallel internally.
+3. Default-drop Ray on callsites where the data shows it does not earn its keep (likely propagator/dynamics/impacts where Rust+Rayon already saturates cores). Keep Ray for OD/IOD where each per-orbit fit is heavy and the object-store sharing is a real win.
+4. Preserve the public `Propagator(max_processes=N)` signature; the implementation can stop sharding across Ray workers without changing any caller's code.
 
-Verification:
+Step 1 completion notes (2026-05-07):
 
+- Added `src/adam_core/parallel.py` exposing `ParallelBackend` Protocol, `SequentialBackend`, `RayBackend`, and `get_backend(max_processes, ...)`/`resolve_max_processes(...)` helpers. `RayBackend` lazily decorates plain Python workers with `ray.remote` (cached per fn+options), wraps `ray.put`/`ray.get`/`ray.wait`/`ray.internal.free`, and preserves the historical `len(pending) >= num_cpus * 1.5` throttle.
+- Refactored all six Ray callsites onto the abstraction:
+  - `dynamics/propagation.py` — `_propagate_2body_chunk_worker`
+  - `dynamics/ephemeris.py` — `_ephemeris_2body_chunk_worker`
+  - `dynamics/impacts.py` — `_impact_chunk_worker`
+  - `propagator/propagator.py` — `_propagation_chunk_worker`, `_ephemeris_chunk_worker`
+  - `orbit_determination/iod.py` — `_iod_chunk_worker`
+  - `orbit_determination/od.py` — `_od_chunk_worker`
+  Workers are now plain Python functions; the `@ray.remote` decoration happens once per fn inside `RayBackend._remote()`. Each callsite now reads as: pick backend by `max_processes`, `backend.put` shared inputs, build an `args_iter`, drain `backend.map_unordered(...)`. Public signatures unchanged.
+- `import multiprocessing as mp` and `from ..ray_cluster import initialize_use_ray` removed from the dynamics callsites; `propagator.py`, `iod.py`, `od.py`, and `impacts.py` retain `import ray` only for the `ObjectRef` isinstance compatibility check on caller-provided refs.
+- Added `src/adam_core/tests/test_parallel.py` (7 tests). Full validation: `pdm run black --check`, `pdm run ruff check`, `pdm run python -m py_compile`, `pdm run rust-quality`, `pdm run pytest src/adam_core/dynamics src/adam_core/propagator src/adam_core/orbit_determination -q` (74 + 43 + 9 passed plus skips), `pdm run test-rust-full` (761 passed / 144 skipped / 2 deselected, up from 754 with the new parallel tests), `pdm run rust-parity-main` exit 0, `pdm run rust-parity-speed-cold` exit 0 (initial post-test-rust-full sweep captured a single multi-thread p95 thermal-variance dip on `coordinates.cartesian_to_spherical` large-n; cleared on standalone rerun and 3 isolated targeted reps).
+
+Verification (next steps):
+
+- Profile each callsite at `max_processes ∈ {1, 4, 8}` on representative production input.
+- Decide per-callsite whether to default to `SequentialBackend` based on the data; surface decisions for sign-off.
 - Compare wall-time and behavior against baseline main for representative OD/IOD/propagator workloads.
-- Run full rust-required tests and targeted OD/IOD/propagator tests.
+- Run full rust-required tests and targeted OD/IOD/propagator tests after each per-callsite change.
 
 ### RM-WE2-001: Wave E2 `calculate_chi2` Follow-Up
 

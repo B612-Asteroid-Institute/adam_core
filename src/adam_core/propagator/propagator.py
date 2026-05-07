@@ -1,5 +1,4 @@
 import logging
-import multiprocessing as mp
 from abc import ABC, abstractmethod
 from typing import List, Literal, Optional, Type, Union
 
@@ -20,12 +19,12 @@ from .._rust.api import add_light_time_numpy
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits
+from ..parallel import get_backend, resolve_max_processes
 from ..photometry.magnitude import (
     calculate_apparent_magnitude_v,
     calculate_apparent_magnitude_v_and_phase_angle,
     calculate_phase_angle,
 )
-from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
 from .types import EphemerisType, ObserverType, OrbitType, TimestampType
@@ -293,8 +292,7 @@ def _uses_default_ephemeris_mixin(propagator: "Propagator") -> bool:
     return func is EphemerisMixin._generate_ephemeris
 
 
-@ray.remote
-def propagation_worker_ray(
+def _propagation_chunk_worker(
     idx: npt.NDArray[np.int64],
     orbits: OrbitType,
     times: OrbitType,
@@ -305,8 +303,7 @@ def propagation_worker_ray(
     return propagated
 
 
-@ray.remote
-def ephemeris_worker_ray(
+def _ephemeris_chunk_worker(
     idx: npt.NDArray[np.int64],
     orbits: OrbitType,
     observers: ObserverType,
@@ -591,37 +588,32 @@ class EphemerisMixin:
                 seed=seed,
             )
 
-        if max_processes is None:
-            max_processes = mp.cpu_count()
+        max_processes = resolve_max_processes(max_processes)
 
         uses_default_ephemeris = _uses_default_ephemeris_mixin(self)
         needs_attach = max_processes <= 1 and not uses_default_ephemeris
 
         if max_processes > 1:
-            initialize_use_ray(num_cpus=max_processes)
+            backend = get_backend(max_processes)
 
-            # Add orbits and observers to object store if
-            # they haven't already been added
-            if not isinstance(observers, ObjectRef):
-                observers_ref = ray.put(observers)
-            else:
+            # Place orbits and observers in shared store, dereferencing if the
+            # caller already passed a Ray ObjectRef so chunking can size to len.
+            if backend.is_ref(observers):
                 observers_ref = observers
-
-            if not isinstance(orbits, ObjectRef):
-                orbits_ref = ray.put(orbits)
             else:
-                orbits_ref = orbits
-                # We need to dereference the orbits ObjectRef so we can
-                # check its length for chunking and determine
-                # if we need to propagate variants
-                orbits = ray.get(orbits_ref)
+                observers_ref = backend.put(observers)
 
-            # Create futures
+            if backend.is_ref(orbits):
+                orbits_ref = orbits
+                orbits = backend.get(orbits_ref)
+            else:
+                orbits_ref = backend.put(orbits)
+
             futures_inputs = []
             idx = np.arange(0, len(orbits))
             # Use at least max_processes chunks so all workers get work.
             effective_chunk_size = chunk_size
-            if max_processes > 1 and len(orbits) > 0:
+            if len(orbits) > 0:
                 effective_chunk_size = min(
                     chunk_size, max(1, len(orbits) // max_processes)
                 )
@@ -637,16 +629,11 @@ class EphemerisMixin:
                     )
                 )
 
-            # Add variants to propagate to futures inputs
             if covariance is True and len(variants) > 0:
-                variants_ref = ray.put(variants)
+                variants_ref = backend.put(variants)
 
                 idx = np.arange(0, len(variants))
-                var_chunk_size = (
-                    min(chunk_size, max(1, len(variants) // max_processes))
-                    if max_processes > 1
-                    else chunk_size
-                )
+                var_chunk_size = min(chunk_size, max(1, len(variants) // max_processes))
                 for variant_chunk_idx in _iterate_chunks(idx, var_chunk_size):
                     futures_inputs.append(
                         (
@@ -659,28 +646,11 @@ class EphemerisMixin:
                         )
                     )
 
-            # Get results as they finish (we sort later)
-            futures = []
             ephemeris_parts: list[Ephemeris] = []
             variant_ephemeris_parts: list[VariantEphemeris] = []
-            for future_input in futures_inputs:
-                futures.append(ephemeris_worker_ray.remote(*future_input))
-
-                if len(futures) >= max_processes * 1.5:
-                    finished, futures = ray.wait(futures, num_returns=1)
-                    result = ray.get(finished[0])
-                    if isinstance(result, Ephemeris):
-                        ephemeris_parts.append(result)
-                    elif isinstance(result, VariantEphemeris):
-                        variant_ephemeris_parts.append(result)
-                    else:
-                        raise ValueError(
-                            f"Unexpected result type from ephemeris worker: {type(result)}"
-                        )
-
-            while futures:
-                finished, futures = ray.wait(futures, num_returns=1)
-                result = ray.get(finished[0])
+            for result in backend.map_unordered(
+                _ephemeris_chunk_worker, futures_inputs
+            ):
                 if isinstance(result, Ephemeris):
                     ephemeris_parts.append(result)
                 elif isinstance(result, VariantEphemeris):
@@ -923,8 +893,7 @@ class Propagator(ABC, EphemerisMixin):
         if covariance is True and isinstance(orbits, VariantOrbits):
             raise AssertionError("Covariance is not supported for VariantOrbits")
 
-        if max_processes is None:
-            max_processes = mp.cpu_count()
+        max_processes = resolve_max_processes(max_processes)
 
         # Resolve times and sort chronologically so backends (ASSIST, REBOUND, etc.)
         # receive time-ordered epochs for efficient integration.
@@ -939,25 +908,21 @@ class Propagator(ABC, EphemerisMixin):
             propagated_variants_input_list: List[VariantOrbits] = []
             input_is_variants: Optional[bool] = None
 
-            initialize_use_ray(num_cpus=max_processes)
+            backend = get_backend(max_processes)
 
-            times_ref = ray.put(times)
+            times_ref = backend.put(times)
 
-            if not isinstance(orbits, ObjectRef):
-                input_is_variants = isinstance(orbits, VariantOrbits)
-                orbits_ref = ray.put(orbits)
-            else:
+            if backend.is_ref(orbits):
                 orbits_ref = orbits
-                # We need to dereference the orbits ObjectRef so we can
-                # check its length for chunking and determine
-                # if we need to propagate variants
-                orbits = ray.get(orbits_ref)
+                orbits = backend.get(orbits_ref)
                 input_is_variants = isinstance(orbits, VariantOrbits)
+            else:
+                input_is_variants = isinstance(orbits, VariantOrbits)
+                orbits_ref = backend.put(orbits)
 
             if covariance is True and input_is_variants:
                 raise AssertionError("Covariance is not supported for VariantOrbits")
 
-            # Create futures inputs
             futures_inputs = []
             idx = np.arange(0, len(orbits))
             for idx_chunk in _iterate_chunks(idx, chunk_size):
@@ -970,7 +935,6 @@ class Propagator(ABC, EphemerisMixin):
                     )
                 )
 
-            # Add variants to propagate to futures inputs
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
                 variants = VariantOrbits.create(
                     orbits,
@@ -979,7 +943,7 @@ class Propagator(ABC, EphemerisMixin):
                     seed=seed,
                 )
 
-                variants_ref = ray.put(variants)
+                variants_ref = backend.put(variants)
 
                 idx = np.arange(0, len(variants))
                 for variant_chunk_idx in _iterate_chunks(idx, chunk_size):
@@ -992,30 +956,9 @@ class Propagator(ABC, EphemerisMixin):
                         )
                     )
 
-            # Submit and process jobs with queuing
-            futures = []
-            for future_input in futures_inputs:
-                futures.append(propagation_worker_ray.remote(*future_input))
-
-                if len(futures) >= max_processes * 1.5:
-                    finished, futures = ray.wait(futures, num_returns=1)
-                    result = ray.get(finished[0])
-                    if isinstance(result, Orbits):
-                        propagated_list.append(result)
-                    elif isinstance(result, VariantOrbits):
-                        if input_is_variants:
-                            propagated_variants_input_list.append(result)
-                        else:
-                            covariance_variants_list.append(result)
-                    else:
-                        raise ValueError(
-                            f"Unexpected result type from propagation worker: {type(result)}"
-                        )
-
-            # Process remaining futures
-            while futures:
-                finished, futures = ray.wait(futures, num_returns=1)
-                result = ray.get(finished[0])
+            for result in backend.map_unordered(
+                _propagation_chunk_worker, futures_inputs
+            ):
                 if isinstance(result, Orbits):
                     propagated_list.append(result)
                 elif isinstance(result, VariantOrbits):

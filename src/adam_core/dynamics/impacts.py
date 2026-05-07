@@ -10,7 +10,7 @@ import quivr as qv
 from adam_core.constants import KM_P_AU
 from adam_core.constants import Constants as c
 from adam_core.coordinates import CartesianCoordinates, Origin
-from adam_core.ray_cluster import initialize_use_ray
+from adam_core.parallel import get_backend, resolve_max_processes
 
 from ..coordinates.residuals import Residuals
 from ..coordinates.spherical import SphericalCoordinates
@@ -30,24 +30,12 @@ C = c.C
 # adam_core defines it in au but we need it in km
 EARTH_RADIUS_KM = c.R_EARTH_EQUATORIAL * KM_P_AU
 
-RAY_INSTALLED = False
-try:
-    import ray
-    from ray import ObjectRef
 
-    RAY_INSTALLED = True
-except ImportError:
-    pass
-
-
-if RAY_INSTALLED:
-
-    @ray.remote
-    def impact_worker_ray(idx_chunk, orbits, propagator_class, num_days, conditions):
-        prop = propagator_class()
-        orbits_chunk = orbits.take(idx_chunk)
-        variants, impacts = prop._detect_collisions(orbits_chunk, num_days, conditions)
-        return variants, impacts
+def _impact_chunk_worker(idx_chunk, orbits, propagator_class, num_days, conditions):
+    prop = propagator_class()
+    orbits_chunk = orbits.take(idx_chunk)
+    variants, impacts = prop._detect_collisions(orbits_chunk, num_days, conditions)
+    return variants, impacts
 
 
 class ImpactProbabilities(qv.Table):
@@ -177,43 +165,28 @@ class ImpactMixin:
                 stopping_condition=[True],
             )
 
-        if max_processes is None or max_processes > 1:
+        if resolve_max_processes(max_processes) > 1:
             impact_list: List[CollisionConditions] = []
             propagated_list: List[OrbitType] = []
 
-            if RAY_INSTALLED is False:
-                raise ImportError(
-                    "Ray must be installed to use the ray parallel backend"
-                )
+            backend = get_backend(max_processes)
 
-            initialize_use_ray(num_cpus=max_processes)
-
-            # Add orbits to object store if
-            # they haven't already been added
-            if not isinstance(orbits, ObjectRef):
-                orbits_ref = ray.put(orbits)
-            else:
+            # Place orbits in shared store, dereferencing if the caller already
+            # passed a Ray ObjectRef so we can size chunks correctly.
+            if backend.is_ref(orbits):
                 orbits_ref = orbits
-                # We need to dereference the orbits ObjectRef so we can
-                # check its length for chunking and determine
-                # if we need to propagate variants
-                orbits = ray.get(orbits_ref)
+                orbits = backend.get(orbits_ref)
+            else:
+                orbits_ref = backend.put(orbits)
 
-            # Create futures
-            futures = []
             idx = np.arange(0, len(orbits))
-            for idx_chunk in _iterate_chunks(idx, chunk_size):
-                futures.append(
-                    impact_worker_ray.remote(
-                        idx_chunk, orbits_ref, self.__class__, num_days, conditions
-                    )
-                )
-
-            # Get results as they finish (we sort later)
-            unfinished = futures
-            while unfinished:
-                finished, unfinished = ray.wait(unfinished, num_returns=1)
-                propagated, impacts = ray.get(finished[0])
+            args_iter = (
+                (idx_chunk, orbits_ref, self.__class__, num_days, conditions)
+                for idx_chunk in _iterate_chunks(idx, chunk_size)
+            )
+            for propagated, impacts in backend.map_unordered(
+                _impact_chunk_worker, args_iter
+            ):
                 propagated_list.append(propagated)
                 impact_list.append(impacts)
 

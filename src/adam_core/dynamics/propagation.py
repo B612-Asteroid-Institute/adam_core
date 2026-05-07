@@ -1,11 +1,8 @@
-import multiprocessing as mp
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import quivr as qv
-import ray
-from ray import ObjectRef
 
 from .._rust import (
     propagate_2body_arc_batch_numpy as rust_propagate_2body_arc_batch_numpy,
@@ -16,7 +13,7 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin
 from ..orbits.orbits import Orbits
-from ..ray_cluster import initialize_use_ray
+from ..parallel import get_backend, resolve_max_processes
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
 from .exceptions import DynamicsNumericalError
@@ -53,11 +50,7 @@ def _calc_chi_diagnostics(
     r_norm = float(np.linalg.norm(r_arr))
     v_norm = float(np.linalg.norm(v_arr))
     alpha = float(-(v_norm**2) / mu + 2.0 / r_norm) if r_norm > 0 else float("nan")
-    finite = bool(
-        np.isfinite(r_norm)
-        and np.isfinite(v_norm)
-        and np.isfinite(alpha)
-    )
+    finite = bool(np.isfinite(r_norm) and np.isfinite(v_norm) and np.isfinite(alpha))
     return ChiDiagnostics(
         dt=float(dt),
         mu=float(mu),
@@ -206,9 +199,7 @@ def _run_2body_propagate(
         )
         orbits_propagated = np.ascontiguousarray(arc_out, dtype=np.float64)
     else:
-        rust_result = rust_propagate_2body_numpy(
-            orbits_array_, dt_, mu_, max_iter, tol
-        )
+        rust_result = rust_propagate_2body_numpy(orbits_array_, dt_, mu_, max_iter, tol)
         orbits_propagated = np.ascontiguousarray(rust_result, dtype=np.float64)
 
     bad_output = _first_non_finite_row(orbits_propagated)
@@ -318,8 +309,7 @@ def _propagate_2body_serial(
     )
 
 
-@ray.remote
-def propagate_2body_worker_ray(
+def _propagate_2body_chunk_worker(
     start: int,
     idx_chunk: np.ndarray,
     orbits: Orbits,
@@ -368,10 +358,7 @@ def propagate_2body(
     orbits : `~adam_core.orbits.orbits.Orbits` (N*M)
         Orbits propagated to each MJD.
     """
-    if max_processes is None:
-        max_processes = mp.cpu_count()
-
-    if max_processes <= 1:
+    if resolve_max_processes(max_processes) <= 1:
         return _propagate_2body_serial(
             orbits,
             times,
@@ -379,32 +366,27 @@ def propagate_2body(
             tol=tol,
         )
 
-    initialize_use_ray(num_cpus=max_processes)
-
-    # Put large inputs in object store once.
-    orbits_ref = ray.put(orbits)  # type: ignore[name-defined]
-    times_ref = ray.put(times)  # type: ignore[name-defined]
+    backend = get_backend(max_processes)
+    orbits_ref = backend.put(orbits)
+    times_ref = backend.put(times)
 
     idx = np.arange(0, len(orbits), dtype=np.int64)
-    pending: List["ObjectRef"] = []  # type: ignore[name-defined]
-    results: Dict[int, Orbits] = {}
-
-    for idx_chunk in _iterate_chunks(idx, chunk_size):
-        start = int(idx_chunk[0]) if len(idx_chunk) else 0
-        pending.append(
-            propagate_2body_worker_ray.remote(  # type: ignore[name-defined]
-                start, idx_chunk, orbits_ref, times_ref, max_iter, tol
-            )
+    args_iter = (
+        (
+            int(idx_chunk[0]) if len(idx_chunk) else 0,
+            idx_chunk,
+            orbits_ref,
+            times_ref,
+            max_iter,
+            tol,
         )
+        for idx_chunk in _iterate_chunks(idx, chunk_size)
+    )
 
-        if len(pending) >= max_processes * 1.5:
-            finished, pending = ray.wait(pending, num_returns=1)  # type: ignore[name-defined]
-            start_i, propagated_i = ray.get(finished[0])  # type: ignore[name-defined]
-            results[int(start_i)] = propagated_i
-
-    while pending:
-        finished, pending = ray.wait(pending, num_returns=1)  # type: ignore[name-defined]
-        start_i, propagated_i = ray.get(finished[0])  # type: ignore[name-defined]
+    results: Dict[int, Orbits] = {}
+    for start_i, propagated_i in backend.map_unordered(
+        _propagate_2body_chunk_worker, args_iter
+    ):
         results[int(start_i)] = propagated_i
 
     chunks = [results[k] for k in sorted(results.keys())]

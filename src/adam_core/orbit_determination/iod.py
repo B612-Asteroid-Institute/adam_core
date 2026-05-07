@@ -1,5 +1,4 @@
 import logging
-import multiprocessing as mp
 import time
 from itertools import combinations
 from typing import Literal, Optional, Tuple, Type, Union
@@ -11,8 +10,8 @@ import quivr as qv
 import ray
 
 from ..coordinates.residuals import Residuals
+from ..parallel import get_backend, resolve_max_processes
 from ..propagator import Propagator
-from ..ray_cluster import initialize_use_ray
 from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
 from . import (
     FittedOrbitMembers,
@@ -273,8 +272,7 @@ def iod_worker(
     return iod_orbits, iod_orbit_members
 
 
-@ray.remote
-def iod_worker_remote(
+def _iod_chunk_worker(
     linkage_ids: Union[npt.NDArray[np.str_], ray.ObjectRef],
     linkage_members_indices: Tuple[int, int],
     observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
@@ -311,9 +309,6 @@ def iod_worker_remote(
         propagator=propagator,
         propagator_kwargs=propagator_kwargs,
     )
-
-
-iod_worker_remote.options(num_returns=1, num_cpus=1)
 
 
 def iod(
@@ -631,64 +626,57 @@ def initial_orbit_determination(
         # Extract linkage IDs
         linkage_ids = linkage_members.column(linkage_id_col).unique()
 
-        if max_processes is None:
-            max_processes = mp.cpu_count()
+        max_processes = resolve_max_processes(max_processes)
 
-        use_ray = initialize_use_ray(num_cpus=max_processes)
-        if use_ray:
+        if max_processes > 1:
+            backend = get_backend(max_processes)
             refs_to_free = []
 
-            linkage_ids_ref = ray.put(linkage_ids)
+            linkage_ids_ref = backend.put(linkage_ids)
             refs_to_free.append(linkage_ids_ref)
             logger.info("Placed linkage IDs in the object store.")
 
             if linkage_members_ref is None:
-                linkage_members_ref = ray.put(linkage_members)
+                linkage_members_ref = backend.put(linkage_members)
                 refs_to_free.append(linkage_members_ref)
                 logger.info("Placed linkage members in the object store.")
 
             if observations_ref is None:
-                observations_ref = ray.put(observations)
+                observations_ref = backend.put(observations)
                 refs_to_free.append(observations_ref)
                 logger.info("Placed observations in the object store.")
 
-            futures = []
-            for linkage_id_chunk_indices in _iterate_chunk_indices(
-                linkage_ids, chunk_size
-            ):
-                futures.append(
-                    iod_worker_remote.remote(
-                        linkage_ids_ref,
-                        linkage_id_chunk_indices,
-                        observations_ref,
-                        linkage_members_ref,
-                        min_obs=min_obs,
-                        min_arc_length=min_arc_length,
-                        contamination_percentage=contamination_percentage,
-                        rchi2_threshold=rchi2_threshold,
-                        observation_selection_method=observation_selection_method,
-                        iterate=iterate,
-                        light_time=light_time,
-                        linkage_id_col=linkage_id_col,
-                        propagator=propagator,
-                        propagator_kwargs=propagator_kwargs,
-                    )
+            args_iter = (
+                (
+                    linkage_ids_ref,
+                    linkage_id_chunk_indices,
+                    observations_ref,
+                    linkage_members_ref,
+                    propagator,
+                    min_obs,
+                    min_arc_length,
+                    contamination_percentage,
+                    rchi2_threshold,
+                    observation_selection_method,
+                    linkage_id_col,
+                    iterate,
+                    light_time,
+                    propagator_kwargs,
                 )
-
-                if len(futures) >= max_processes * 1.5:
-                    finished, futures = ray.wait(futures, num_returns=1)
-                    iod_orbits_chunk, iod_orbit_members_chunk = ray.get(finished[0])
-                    iod_orbits_chunks.append(iod_orbits_chunk)
-                    iod_orbit_members_chunks.append(iod_orbit_members_chunk)
-
-            while futures:
-                finished, futures = ray.wait(futures, num_returns=1)
-                iod_orbits_chunk, iod_orbit_members_chunk = ray.get(finished[0])
+                for linkage_id_chunk_indices in _iterate_chunk_indices(
+                    linkage_ids, chunk_size
+                )
+            )
+            for iod_orbits_chunk, iod_orbit_members_chunk in backend.map_unordered(
+                _iod_chunk_worker,
+                args_iter,
+                worker_options={"num_returns": 1, "num_cpus": 1},
+            ):
                 iod_orbits_chunks.append(iod_orbits_chunk)
                 iod_orbit_members_chunks.append(iod_orbit_members_chunk)
 
-            if len(refs_to_free) > 0:
-                ray.internal.free(refs_to_free)
+            backend.free(refs_to_free)
+            if refs_to_free:
                 logger.info(
                     f"Removed {len(refs_to_free)} references from the object store."
                 )
