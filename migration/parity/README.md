@@ -46,12 +46,24 @@ Full baseline-main gate (writes `migration/artifacts/parity_gate.json`):
 
 ```bash
 .venv/bin/python -m migration.parity.parity_main \
-    --threads single \
+    --threads multi-thread \
     --speed-tiny --speed-tiny-reps 101 --speed-tiny-warmup 3 \
     --speed-n 2000 --speed-reps 21 --speed-warmup 3 \
     --speed-large --speed-large-reps 7 --speed-large-warmup 1 \
     --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
 ```
+
+The canonical thread mode is **multi-thread**: both Rust Rayon and the legacy
+NumPy/JAX/XLA/BLAS pools run uncapped, giving a production-realistic
+best-effort comparison. The historical `--threads single` mode is retained as
+an ad-hoc diagnostic flag on `parity_speed`/`parity_main`, but it is no longer
+used in canonical scripts because legacy JAX/XLA on macOS Apple Silicon does
+not honor known thread-cap env vars (verified 2026-05-07: cpu/wall ~3.6 cores
+in legacy JAX photometry kernels even with all known caps applied), so the
+single-thread comparison is asymmetric Rust-1-core vs legacy-uncapped on
+macOS. Rust-only single-thread regression detection lives in
+`pdm run rust-latency-gate`, where there is no legacy comparison and capped
+Rayon gives a stable baseline.
 
 The `tiny-n`, `small-n`, and `large-n` speed lanes are enforced by default at
 1.2× p50/p95. Large-workload misses stay red under RM-P1-020 unless the user

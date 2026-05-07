@@ -1,20 +1,24 @@
 """Thread-pool policy helpers for parity/performance governance.
 
-The Rust-vs-baseline warm speed gate is a port-quality comparison: both sides
-should be measured as single process / single thread by default. Multi-thread
-scaling is still useful and must be measured for both Rust and the legacy
-baseline (NumPy/JAX) in production-realistic conditions, but it must be
-requested explicitly and labeled separately from the pass/fail artifact.
+The Rust-vs-baseline warm speed gate measures production-realistic
+best-effort throughput by default: both sides run with their thread pools
+uncapped (Rust Rayon and legacy NumPy/JAX/XLA/BLAS) so a real-world caller
+sees the same comparison the gate enforces.
 
 Thread-mode terminology:
 
+- ``multi-thread`` (default) removes harness-imposed thread caps so both
+  Rust Rayon and the legacy NumPy/JAX/XLA/BLAS pools scale across available
+  cores like a real production process.
 - ``single`` caps every known thread-pool knob to 1 (Rayon, OpenMP, BLAS,
-  JAX/XLA, NumExpr, vecLib). This applies symmetrically to both Rust and
-  legacy subprocesses, so warm-speed gate comparisons are apples-to-apples.
-- ``multi-thread`` removes the harness's single-thread caps so that BOTH
-  sides (Rust Rayon and legacy NumPy/JAX/BLAS) can scale across available
-  CPU cores like a real production process. This is the throughput-realism
-  mode, used for explicitly labeled scaling artifacts.
+  JAX/XLA, NumExpr, vecLib) and forwards those env vars to the legacy
+  subprocess. On macOS Apple Silicon, JAX/XLA's CPU thread pool cannot be
+  reliably constrained from those env vars (verified 2026-05-07: legacy
+  JAX/XLA photometry kernels show cpu/wall ~3.6 cores even with all known
+  caps applied), so ``single`` there is an asymmetric Rust-1-core vs
+  legacy-uncapped diagnostic rather than a clean apples-to-apples gate. On
+  Linux it is closer to symmetric but still depends on whether libomp/BLAS
+  honors the env caps in a particular wheel build.
 
 ``native`` is accepted as a deprecated backward-compatibility alias for
 ``multi-thread`` and is normalized on entry to the canonical name.

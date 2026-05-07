@@ -9,10 +9,17 @@ large-n are enforced at the same 1.2x threshold.
 Each timing loop runs ``reps`` repetitions inside its respective process so
 subprocess invocation overhead is excluded from the legacy measurements.
 
-Warm p50/p95 comparisons default to single process / single thread on both
-sides. This is a port-quality gate, not a "Rust used more cores" gate.
-Cold-call timings remain process-realistic by default and are labeled with a
-separate thread mode in the emitted artifact.
+Warm p50/p95 comparisons default to ``multi-thread`` mode on both sides:
+Rust Rayon and the legacy NumPy/JAX/XLA/BLAS pools both run uncapped, so the
+gate measures production-realistic best-effort throughput. The historical
+``single`` mode caps Rust to one Rayon thread and tries to cap legacy thread
+pools too, but on macOS Apple Silicon JAX/XLA's CPU thread pool cannot be
+reliably constrained from Python (verified 2026-05-07: cpu/wall ~3.6 cores
+for JAX photometry kernels even with --xla_cpu_multi_thread_eigen=false +
+intra_op_parallelism_threads=1 + OMP/OPENBLAS/MKL/VECLIB caps), so on macOS
+``single`` is an asymmetric Rust-1-core vs legacy-uncapped diagnostic, not a
+clean apples-to-apples gate. Cold-call timings remain process-realistic by
+default and are labeled with a separate thread mode in the emitted artifact.
 
 RM-P1-019 adds named size lanes. The historical ``small-n`` lane keeps the
 canonical ``n=2000`` pass/fail promotion gate. RM-P1-019A makes the large
@@ -734,7 +741,7 @@ class SpeedResult:
     reps: int = 7
     warmup: int = 1
     # Warm p50/p95 thread metadata.
-    thread_mode: str = "single"
+    thread_mode: str = "multi-thread"
     thread_env: dict[str, str | None] = field(default_factory=dict)
     legacy_source: str = "measured"
     legacy_cache_key: str = ""
@@ -823,7 +830,7 @@ def measure(
     warmup: int = 1,
     seed: int = 20260425,
     measure_cold: bool = False,
-    thread_mode: str = "single",
+    thread_mode: str = "multi-thread",
     cold_thread_mode: str = "multi-thread",
     lane: str = DEFAULT_SMALL_LANE_NAME,
     lane_description: str = "historical n=2000 promotion gate",
@@ -1085,7 +1092,7 @@ def measure_all(
     warmup: int = 1,
     seed: int = 20260425,
     measure_cold: bool = False,
-    thread_mode: str = "single",
+    thread_mode: str = "multi-thread",
     cold_thread_mode: str = "multi-thread",
     legacy_cache: dict[str, object] | None = None,
 ) -> list[SpeedResult]:
@@ -1110,7 +1117,7 @@ def measure_lanes(
     lanes: Sequence[SpeedLane],
     *,
     seed: int = 20260425,
-    thread_mode: str = "single",
+    thread_mode: str = "multi-thread",
     cold_thread_mode: str = "multi-thread",
     legacy_cache: dict[str, object] | None = None,
 ) -> list[SpeedResult]:
@@ -1179,11 +1186,11 @@ def _flag(r: SpeedResult) -> str:
 
 def format_summary(results: list[SpeedResult]) -> str:
     has_cold = any(r.rust_cold is not None for r in results)
-    warm_mode = _result_mode(results, "thread_mode", "single")
+    warm_mode = _result_mode(results, "thread_mode", "multi-thread")
     cold_mode = _result_mode(results, "cold_thread_mode", "multi-thread")
     lines = [
         f"Thread mode: warm={warm_mode}; cold={cold_mode if has_cold else 'not measured'}",
-        "Note: single-thread caps thread pools only; SIMD/ILP remain enabled within each CPU core.",
+        "Note: multi-thread mode lets both Rust Rayon and legacy NumPy/JAX/XLA/BLAS scale across cores; single-thread is a diagnostic and is asymmetric on macOS Apple Silicon (legacy JAX/XLA cannot be reliably capped).",
     ]
     if has_cold:
         lines.append(
@@ -1273,16 +1280,21 @@ def to_json(
         "default_small_speedup": DEFAULT_SMALL_SPEEDUP,
         "default_large_speedup": DEFAULT_LARGE_SPEEDUP,
         "default_tiny_speedup": DEFAULT_TINY_SPEEDUP,
-        "thread_mode": _result_mode(results, "thread_mode", "single"),
+        "thread_mode": _result_mode(results, "thread_mode", "multi-thread"),
         "thread_env": _result_env(results, "thread_env"),
         "cold_thread_mode": _result_mode(results, "cold_thread_mode", "multi-thread"),
         "cold_thread_env": _result_env(results, "cold_thread_env"),
         "thread_policy": (
-            "Warm p50/p95 timings use thread_mode for apples-to-apples "
-            "single-process/single-thread governance by default. Cold timings "
-            "use cold_thread_mode and remain process-realistic by default. "
-            "Thread caps do not disable SIMD or per-core instruction-level "
-            "parallelism."
+            "Warm p50/p95 timings default to multi-thread on both sides so "
+            "Rust Rayon and the legacy NumPy/JAX/XLA/BLAS pools both run "
+            "uncapped, giving a production-realistic best-effort comparison. "
+            "single-thread mode caps Rust Rayon to 1 thread and forwards "
+            "OMP/OPENBLAS/MKL/VECLIB/NUMEXPR/JAX_NUM_THREADS=1 plus "
+            "--xla_cpu_multi_thread_eigen=false to the legacy subprocess; "
+            "on macOS Apple Silicon JAX/XLA's CPU thread pool cannot be "
+            "reliably constrained from those env vars, so single-thread "
+            "there is an asymmetric Rust-1-core vs legacy-uncapped "
+            "diagnostic rather than a clean apples-to-apples gate."
         ),
         "lane_policy": (
             "The tiny-n lane records quick one-off/small-call behavior. "
@@ -1430,13 +1442,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--threads",
         choices=("single", "multi-thread", "native"),
-        default="single",
+        default="multi-thread",
         help=(
-            "Warm p50/p95 thread policy (default: single). Use 'multi-thread' "
-            "only for separately labeled scaling artifacts that allow both "
-            "Rust Rayon and the legacy NumPy/JAX/BLAS pools to scale across "
-            "available cores. 'native' is accepted as a deprecated alias "
-            "for 'multi-thread'."
+            "Warm p50/p95 thread policy (default: multi-thread for "
+            "production-realistic comparison: both Rust Rayon and legacy "
+            "NumPy/JAX/XLA/BLAS pools run uncapped). 'single' caps Rust "
+            "Rayon to 1 thread and forwards single-thread env vars to the "
+            "legacy subprocess; on macOS Apple Silicon JAX/XLA cannot be "
+            "reliably capped, so 'single' there is asymmetric. 'native' is "
+            "a deprecated alias for 'multi-thread'."
         ),
     )
     p.add_argument(

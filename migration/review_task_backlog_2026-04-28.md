@@ -1248,10 +1248,23 @@ Verification:
 
 Status: open
 
-Reason: after enforcing the 1.2x p50/p95 threshold on every speed lane and
-removing large-n waivers, the current single-thread grid is still red on
-photometry. Repeated targeted cached-legacy runs and fresh full artifacts on
-2026-05-07 give:
+Reason: 2026-05-07 experimental finding showed the single-thread gate is not
+apples-to-apples on macOS Apple Silicon: legacy JAX/XLA cpu/wall measures ~3.6
+cores during photometry kernels even with --xla_cpu_multi_thread_eigen=false +
+intra_op_parallelism_threads=1 + OMP/OPENBLAS/MKL/VECLIB/NUMEXPR/JAX_NUM_THREADS=1
+applied to the legacy subprocess. We tried --xla_cpu_thunk_runtime_thread_pool_size=1
+(rejected as unknown flag) and --xla_cpu_use_thunk_runtime=false (deprecated;
+no wall-time change). The harness therefore switches the canonical Rust-vs-
+legacy parity speed comparison to multi-thread on both sides; Rust Rayon and
+the legacy NumPy/JAX/XLA/BLAS pools both run uncapped. Single-thread mode is
+retained as a labeled diagnostic via `pdm run rust-parity-speed-singlethread`.
+
+Under the new multi-thread gate, the prior single-thread photometry red rows
+clear: `predict_magnitudes` 2.23x p50 / 1.69x p95, `calculate_apparent_magnitude_v`
+3.27x / 2.16x, fused mag+phase 3.00 / 3.00, phase angle 1.85 / 1.45.
+
+Historical single-thread numbers prior to the policy switch (cached-legacy
+runs; preserved here for traceability):
 
 - `photometry.predict_magnitudes` large-n: p50 0.94-0.99, p95 0.98-1.11 across
   4 independent runs. Confirmed structural — JAX/XLA fuses the bandpass-delta
@@ -1265,11 +1278,12 @@ photometry. Repeated targeted cached-legacy runs and fresh full artifacts on
   `orbit_determination.calcGauss`, transform, and other earlier outliers pass
   at gate in the latest committed artifacts.
 
-The multi-thread production-scaling artifact
-(`migration/artifacts/parity_speed_cold_warm_multithread.json`) shows large-n
-photometry beats the legacy baseline 1.85-3.27x p50 / 1.45-3.00x p95, including
-`predict_magnitudes` at 2.23x p50 / 1.69x p95. The single-thread gate remains
-pass/fail; multi-thread is production scaling evidence only.
+The historical multi-thread artifact
+(`migration/artifacts/parity_speed_cold_warm_multithread.json`) provided the
+production scaling evidence that justified the policy switch. Going forward,
+the canonical artifact `migration/artifacts/parity_speed_cold_warm.json` is
+multi-thread; `migration/artifacts/parity_speed_cold_warm_singlethread.json`
+becomes the labeled diagnostic.
 `parity_fuzz.all_passed=true` continues to hold for all 25 direct random-fuzz
 APIs. `dynamics.add_light_time`,
 coordinate/OD outliers pass in the latest committed artifacts and should be

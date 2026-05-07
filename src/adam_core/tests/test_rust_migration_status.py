@@ -95,11 +95,27 @@ def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
 
 
 def test_latency_gate_defaults_to_single_thread_policy() -> None:
+    # rust-latency-gate is Rust-only regression detection; single-thread Rayon
+    # gives a stable measurement that does not depend on Rust-vs-JAX core
+    # asymmetry. This is intentionally separate from parity_speed which now
+    # defaults to multi-thread for production-realistic comparison.
     assert _thread_mode_from_argv([]) == "single"
     assert _thread_mode_from_argv(["--threads", "multi-thread"]) == "multi-thread"
     # 'native' is accepted as a deprecated alias for 'multi-thread'.
     assert _thread_mode_from_argv(["--threads", "native"]) == "native"
     assert _thread_mode_from_argv(["--threads=single"]) == "single"
+
+
+def test_parity_speed_default_thread_mode_is_multi_thread() -> None:
+    parser = parity_speed._build_arg_parser()
+    args = parser.parse_args([])
+    assert args.threads == "multi-thread"
+
+
+def test_parity_main_default_thread_mode_is_multi_thread() -> None:
+    parser = parity_main._build_arg_parser()
+    args = parser.parse_args([])
+    assert args.threads == "multi-thread"
 
 
 def test_thread_mode_native_is_deprecated_alias_for_multi_thread() -> None:
@@ -212,7 +228,7 @@ def test_speed_artifact_records_thread_metadata() -> None:
     assert artifact["lanes"][0]["name"] == "small-n"
     assert artifact["lanes"][0]["enforced"] is True
     assert "large-n" in artifact["lane_policy"]
-    assert "SIMD" in artifact["thread_policy"]
+    assert "multi-thread" in artifact["thread_policy"]
 
 
 def test_parity_main_exposes_additive_legacy_cache_refresh_controls() -> None:

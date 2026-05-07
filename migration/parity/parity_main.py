@@ -149,13 +149,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--threads",
         choices=("single", "multi-thread", "native"),
-        default="single",
+        default="multi-thread",
         help=(
             "Thread policy for warm speed gate and parity subprocesses "
-            "(default: single). Use 'multi-thread' only for separate scaling "
-            "artifacts (allows both Rust Rayon and the legacy NumPy/JAX/BLAS "
-            "pools to scale across available cores). 'native' is accepted as "
-            "a deprecated alias for 'multi-thread'."
+            "(default: multi-thread for production-realistic comparison: "
+            "both Rust Rayon and legacy NumPy/JAX/XLA/BLAS pools run "
+            "uncapped). 'single' caps Rust Rayon to 1 thread and forwards "
+            "single-thread env vars to the legacy subprocess; on macOS "
+            "Apple Silicon JAX/XLA cannot be reliably capped, so 'single' "
+            "there is asymmetric. 'native' is a deprecated alias for "
+            "'multi-thread'."
         ),
     )
     p.add_argument(
