@@ -1528,7 +1528,17 @@ Verification:
 - `pdm run test-rust-full` — 761 passed / 144 skipped / 2 deselected (unchanged from baseline).
 - `pdm run rust-parity-main` — exit 0; SPEEDUP GATE + PARITY FUZZ GATE pass.
 - `pdm run rust-parity-speed-cold` — exit 0; canonical artifacts both `all_passed=True` with 0 fails.
-- Microbench (M3 Pro) of `Residuals.calculate(SphericalCoordinates)` warm: n=10 → 340 µs, n=50 → 367 µs, n=100 → 412 µs, n=500 → 712 µs, n=5000 → 6.3 ms. Per-call cost at small n is now dominated by quivr `from_kwargs(values=residuals.tolist(), ...)` table assembly; the PyO3-crossing savings of ~30-60 µs per call have been collected. Further small-n wins on this surface require either skipping the quivr table assembly (already covered by the `compute_residuals_ndarray` fast path) or attacking the quivr table-construction path itself (RM-WE3-002 territory).
+- A/B microbench (M3 Pro warm, median of 5 trials, pre-fusion checkout via `git checkout abb0a616~1 -- src/adam_core/coordinates/residuals.py`):
+
+  | n | spherical before | spherical after | speedup | cartesian before | cartesian after | speedup |
+  |---|---|---|---|---|---|---|
+  | 10 | 419 µs | 319 µs | 1.31× | 228 µs | 159 µs | 1.43× |
+  | 50 | 484 µs | 369 µs | 1.31× | 259 µs | 179 µs | 1.45× |
+  | 100 | 570 µs | 425 µs | 1.34× | 316 µs | 205 µs | 1.54× |
+  | 500 | 1235 µs | 704 µs | 1.75× | 970 µs | 571 µs | 1.70× |
+  | 5000 | 9058 µs | 4100 µs | 2.21× | 8377 µs | 3242 µs | 2.58× |
+
+  At small n the gain is ~70-100 µs per call (collapsing 4 PyO3 crossings into 1). At large n the gain grows to 5 ms per call because the per-batch Python loop and the multiple covariance-buffer copies through Python were also eating real time — not just the PyO3 boundary. Per-call cost at small n is now dominated by quivr `from_kwargs(values=residuals.tolist(), ...)` table assembly; further small-n wins on this surface require either skipping the quivr table assembly (already covered by the `compute_residuals_ndarray` fast path used in OD inner loops) or attacking the quivr table-construction path itself (RM-WE3-002 territory).
 
 Callers that bypass `Residuals.calculate` for hot loops should keep using `compute_residuals_ndarray`. The fused path is the right choice when the quivr table fields (chi2, dof, probability) are actually consumed.
 
