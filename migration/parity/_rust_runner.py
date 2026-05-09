@@ -184,6 +184,69 @@ def _coordinates_residuals_calculate_chi2(
     }
 
 
+def _coordinates_residuals_Residuals_calculate(
+    observed_values: np.ndarray,
+    predicted_values: np.ndarray,
+    observed_covariance_matrices: np.ndarray,
+    origin_codes: np.ndarray,
+    frame: str,
+) -> dict[str, np.ndarray]:
+    """End-to-end ``Residuals.calculate`` over the OD-inner-loop shape.
+
+    Builds ``SphericalCoordinates`` from kwargs, calls ``Residuals.calculate``,
+    extracts the four quivr columns as ndarrays. Suppresses the legacy
+    off-diagonal NaN ``UserWarning`` so parity runs are quiet (the warning
+    semantics are exercised by targeted tests).
+    """
+    import warnings
+
+    from adam_core.coordinates import CoordinateCovariances, SphericalCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.coordinates.residuals import Residuals
+
+    obs = SphericalCoordinates.from_kwargs(
+        rho=observed_values[:, 0],
+        lon=observed_values[:, 1],
+        lat=observed_values[:, 2],
+        vrho=observed_values[:, 3],
+        vlon=observed_values[:, 4],
+        vlat=observed_values[:, 5],
+        covariance=CoordinateCovariances.from_matrix(observed_covariance_matrices),
+        origin=Origin.from_kwargs(code=origin_codes),
+        frame=frame,
+    )
+    pred = SphericalCoordinates.from_kwargs(
+        rho=predicted_values[:, 0],
+        lon=predicted_values[:, 1],
+        lat=predicted_values[:, 2],
+        vrho=predicted_values[:, 3],
+        vlon=predicted_values[:, 4],
+        vlat=predicted_values[:, 5],
+        origin=Origin.from_kwargs(code=origin_codes),
+        frame=frame,
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        residuals = Residuals.calculate(obs, pred)
+
+    values_arr = np.stack(
+        residuals.values.to_numpy(zero_copy_only=False)
+    ).astype(np.float64)
+    return {
+        "values": values_arr,
+        "chi2": np.asarray(
+            residuals.chi2.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        "dof": np.asarray(
+            residuals.dof.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        "probability": np.asarray(
+            residuals.probability.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+    }
+
+
 def _dynamics_propagate_2body(
     orbits: np.ndarray, dts: np.ndarray, mus: np.ndarray, max_iter: int, tol: float
 ) -> dict[str, np.ndarray]:
@@ -509,6 +572,7 @@ DISPATCH = {
     "coordinates.cartesian_to_cometary": _coordinates_cartesian_to_cometary,
     "coordinates.cometary.to_cartesian": _coordinates_cometary_to_cartesian,
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
+    "coordinates.residuals.Residuals.calculate": _coordinates_residuals_Residuals_calculate,
     "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,
     "orbits.classify_orbits": _orbits_classify_orbits,

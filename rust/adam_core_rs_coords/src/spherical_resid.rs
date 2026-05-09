@@ -14,6 +14,30 @@ use rayon::prelude::*;
 
 const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 
+/// Per-row work in these kernels is trivial (a few flops + a branch) so
+/// Rayon's work-stealing overhead dominates until well past 1k rows. The
+/// canonical OD inner-loop case uses tens of rows; the speed gates feed
+/// either tiny (n=10), small (n=2000), or large (n=20_000). Keep these
+/// kernels serial up to 4096 rows to avoid the per-call Rayon spawn tax.
+const RAYON_SERIAL_THRESHOLD_ROWS: usize = 4096;
+
+#[inline]
+fn bound_longitude_one_row(row: &mut [f64], obs: &[f64]) {
+    let lon_obs = obs[1];
+    let mut lr = row[1];
+    let lr_g180 = lr > 180.0;
+    let lr_l180 = lr < -180.0;
+    if lr_g180 {
+        lr -= 360.0;
+    } else if lr_l180 {
+        lr += 360.0;
+    }
+    if (lr_g180 && lon_obs > 180.0) || (lr_l180 && lon_obs < 180.0) {
+        lr = -lr;
+    }
+    row[1] = lr;
+}
+
 /// Wrap `residuals[:, 1]` (longitude residuals, degrees) to [-180, 180]
 /// and flip sign on the 0°/360° boundary crossing per the convention:
 /// 355 − 5 = +10, 5 − 355 = −10. Operates IN PLACE on `residuals_flat`.
@@ -29,24 +53,17 @@ pub fn bound_longitude_residuals_flat(
     assert_eq!(observed_flat.len(), n * d);
     assert_eq!(residuals_flat.len(), n * d);
     assert!(d >= 2, "spherical residuals require at least 2 dimensions");
+    if n <= RAYON_SERIAL_THRESHOLD_ROWS || rayon::current_num_threads() == 1 {
+        for (row, obs) in residuals_flat.chunks_mut(d).zip(observed_flat.chunks(d)) {
+            bound_longitude_one_row(row, obs);
+        }
+        return;
+    }
     residuals_flat
         .par_chunks_mut(d)
         .zip(observed_flat.par_chunks(d))
         .for_each(|(row, obs)| {
-            let lon_obs = obs[1];
-            let mut lr = row[1];
-            let lr_g180 = lr > 180.0;
-            let lr_l180 = lr < -180.0;
-            if lr_g180 {
-                lr -= 360.0;
-            } else if lr_l180 {
-                lr += 360.0;
-            }
-            // Sign flip on boundary crossings (matches legacy logic).
-            if (lr_g180 && lon_obs > 180.0) || (lr_l180 && lon_obs < 180.0) {
-                lr = -lr;
-            }
-            row[1] = lr;
+            bound_longitude_one_row(row, obs);
         });
 }
 
@@ -68,32 +85,45 @@ pub fn apply_cosine_latitude_correction_flat(
     assert!(d >= 5, "cos-lat correction requires D >= 5 (col 4 used)");
 
     // Per-row scale: D[i] = 1 except D[1] = D[4] = cos(lat).
+    if n <= RAYON_SERIAL_THRESHOLD_ROWS || rayon::current_num_threads() == 1 {
+        for ((row, cov), &lat) in residuals_flat
+            .chunks_mut(d)
+            .zip(covariances_flat.chunks_mut(d * d))
+            .zip(lat_deg.iter())
+        {
+            apply_cos_lat_one_row(row, cov, lat, d);
+        }
+        return;
+    }
     residuals_flat
         .par_chunks_mut(d)
         .zip(covariances_flat.par_chunks_mut(d * d))
         .zip(lat_deg.par_iter())
         .for_each(|((row, cov), &lat)| {
-            let c = (lat * DEG2RAD).cos();
-            // Scale residuals
-            row[1] *= c;
-            row[4] *= c;
-            // Build per-dim D diagonal (size d). Only indices 1 and 4 are c.
-            let scale = |i: usize| if i == 1 || i == 4 { c } else { 1.0 };
-            // For each (i, j): cov_out[i, j] = D[i] · cov[i, j] · D[j].
-            // NaN preserved (NaN * finite = NaN).
-            for i in 0..d {
-                let si = scale(i);
-                for j in 0..d {
-                    let sj = scale(j);
-                    if si != 1.0 || sj != 1.0 {
-                        let v = cov[i * d + j];
-                        if !v.is_nan() {
-                            cov[i * d + j] = si * v * sj;
-                        }
-                    }
+            apply_cos_lat_one_row(row, cov, lat, d);
+        });
+}
+
+#[inline]
+fn apply_cos_lat_one_row(row: &mut [f64], cov: &mut [f64], lat: f64, d: usize) {
+    let c = (lat * DEG2RAD).cos();
+    row[1] *= c;
+    row[4] *= c;
+    let scale = |i: usize| if i == 1 || i == 4 { c } else { 1.0 };
+    // For each (i, j): cov_out[i, j] = D[i] · cov[i, j] · D[j].
+    // NaN preserved (NaN * finite = NaN).
+    for i in 0..d {
+        let si = scale(i);
+        for j in 0..d {
+            let sj = scale(j);
+            if si != 1.0 || sj != 1.0 {
+                let v = cov[i * d + j];
+                if !v.is_nan() {
+                    cov[i * d + j] = si * v * sj;
                 }
             }
-        });
+        }
+    }
 }
 
 #[cfg(test)]

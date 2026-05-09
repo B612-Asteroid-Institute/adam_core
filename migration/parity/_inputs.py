@@ -242,6 +242,58 @@ def make_spherical_to_cartesian(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_residuals_calculate(rng: np.random.Generator, n: int) -> Sample:
+    """OD-inner-loop shape: spherical 6-D coords with lon/lat observed only.
+
+    Mirrors the production OrbitDeterminationObservations layout: only
+    columns 1 (lon) and 2 (lat) are non-NaN in ``observed``; rho, vrho,
+    vlon, vlat are NaN. The covariance is an SPD 2x2 astrometric block
+    on (lon, lat), padded to 6x6 with NaN entries on the inactive dims.
+    Predicted has all 6 dims populated (the propagator output), with
+    small offsets from observed.
+    """
+    nan = np.nan
+
+    # Astrometric (lon, lat) for observed; the other four columns are NaN.
+    lon_obs = rng.uniform(0.0, 360.0, size=n)
+    lat_obs = rng.uniform(-80.0, 80.0, size=n)
+    observed_values = np.full((n, 6), nan, dtype=np.float64)
+    observed_values[:, 1] = lon_obs
+    observed_values[:, 2] = lat_obs
+
+    # Predicted is fully-populated (propagator output), perturbed slightly.
+    rho = rng.uniform(0.5, 5.0, size=n)
+    lon_pred = lon_obs + rng.normal(scale=0.01, size=n)
+    lat_pred = lat_obs + rng.normal(scale=0.01, size=n)
+    vrho = rng.normal(scale=1e-3, size=n)
+    vlon = rng.normal(scale=1e-3, size=n)
+    vlat = rng.normal(scale=1e-3, size=n)
+    predicted_values = np.stack(
+        [rho, lon_pred, lat_pred, vrho, vlon, vlat], axis=1
+    ).astype(np.float64)
+
+    # SPD 2x2 astrometric covariance on (lon, lat), lifted into 6x6.
+    sigma_lon = rng.uniform(0.05, 1.0, size=n)
+    sigma_lat = rng.uniform(0.05, 1.0, size=n)
+    rho_corr = rng.uniform(-0.8, 0.8, size=n)
+    observed_covariance_matrices = np.full((n, 6, 6), nan, dtype=np.float64)
+    observed_covariance_matrices[:, 1, 1] = sigma_lon * sigma_lon
+    observed_covariance_matrices[:, 2, 2] = sigma_lat * sigma_lat
+    observed_covariance_matrices[:, 1, 2] = rho_corr * sigma_lon * sigma_lat
+    observed_covariance_matrices[:, 2, 1] = observed_covariance_matrices[:, 1, 2]
+
+    origin_codes = np.array(["X05"] * n, dtype=object)
+
+    kw = {
+        "observed_values": observed_values,
+        "predicted_values": predicted_values,
+        "observed_covariance_matrices": observed_covariance_matrices,
+        "origin_codes": origin_codes,
+        "frame": "equatorial",
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def make_calculate_chi2(rng: np.random.Generator, n: int) -> Sample:
     # Representative OD astrometry residual rows: 2-D residuals with positive
     # sigmas and bounded correlations, yielding symmetric-positive-definite
@@ -844,6 +896,7 @@ GENERATORS = {
     "coordinates.cartesian_to_cometary": make_cartesian_to_cometary,
     "coordinates.cometary.to_cartesian": make_cometary_to_cartesian,
     "coordinates.spherical.to_cartesian": make_spherical_to_cartesian,
+    "coordinates.residuals.Residuals.calculate": make_residuals_calculate,
     "coordinates.residuals.calculate_chi2": make_calculate_chi2,
     "dynamics.calc_mean_motion": make_calc_mean_motion,
     "orbits.classify_orbits": make_classify_orbits,
@@ -932,6 +985,7 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.cartesian_to_cometary": WorkloadShape(20_000),
     "coordinates.cometary.to_cartesian": WorkloadShape(20_000),
     "coordinates.spherical.to_cartesian": WorkloadShape(20_000),
+    "coordinates.residuals.Residuals.calculate": WorkloadShape(20_000),
     "coordinates.residuals.calculate_chi2": WorkloadShape(50_000),
     "dynamics.calc_mean_motion": WorkloadShape(50_000),
     "orbits.classify_orbits": WorkloadShape(50_000),

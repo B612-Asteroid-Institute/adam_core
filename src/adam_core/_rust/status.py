@@ -196,6 +196,23 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note="Wave E2 residual helper; covered by residuals tests.",
     ),
     ApiMigration(
+        api_id="coordinates.residuals.Residuals.calculate",
+        status=PUBLIC_RUST_DEFAULT,
+        boundary="numpy",
+        default="rust",
+        rust_module="adam_core._rust_native.compute_residuals_chi2_numpy",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "End-to-end Residuals.calculate fused path (RM-WE2-002). Inputs are "
+            "the OD-inner-loop shape: spherical 6-D coordinates with only "
+            "lon/lat observed (rho/vrho/vlon/vlat NaN), SPD 2x2 astrometric "
+            "covariance lifted into a 6x6 with NaN-padded inactive dims. Outputs "
+            "are the four quivr columns (values, chi2, dof, probability) compared "
+            "as ndarrays. Underlying chi2 numpy kernel parity remains gated by "
+            "coordinates.residuals.calculate_chi2."
+        ),
+    ),
+    ApiMigration(
         api_id="coordinates.residuals.calculate_chi2",
         status=PUBLIC_RUST_DEFAULT,
         boundary="numpy",

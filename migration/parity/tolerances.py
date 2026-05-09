@@ -227,6 +227,31 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict="public-dispatch parity for this supported subcase.",
     ),
+    "coordinates.residuals.Residuals.calculate": ToleranceSpec(
+        outputs={
+            "values": OutputTol(atol=1e-12, rtol=1e-12),
+            "chi2": OutputTol(atol=1e-12, rtol=1e-12),
+            "dof": OutputTol(atol=0.0, rtol=0.0),
+            "probability": OutputTol(atol=1e-12, rtol=1e-12),
+        },
+        rationale=(
+            "End-to-end Residuals.calculate over OD-inner-loop spherical inputs "
+            "(only lon/lat observed; SPD 2x2 astrometric covariance on the "
+            "(lon, lat) sub-block; predicted is the full 6-D propagator output). "
+            "`values` matches bit-for-bit modulo the same Cholesky/explicit-inverse "
+            "drift as `coordinates.residuals.calculate_chi2`. `dof` is an integer "
+            "count and must match exactly. `probability = 1 - scipy.stats.chi2.cdf` "
+            "is identical between paths because the chi2 CDF call stays in Python."
+        ),
+        dominant_column="chi2 scalar",
+        physical_magnitude="≤1e-13 absolute on unit-scale chi² values; dof is exact.",
+        root_cause=(
+            "Same as the underlying chi2 kernel: Cholesky triangular solve and "
+            "explicit matrix inverse accumulate floating-point products in "
+            "different orders."
+        ),
+        verdict="end-to-end parity for valid SPD covariance matrices.",
+    ),
     "coordinates.residuals.calculate_chi2": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-12, rtol=1e-12)},
         rationale=(
