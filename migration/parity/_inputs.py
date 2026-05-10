@@ -434,6 +434,78 @@ def make_calculate_perturber_moids(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def _porkchop_counts_for_rows(rows: int) -> tuple[int, int]:
+    n_departures = max(1, int(np.sqrt(rows)))
+    n_arrivals = max(1, rows // n_departures)
+    return n_departures, n_arrivals
+
+
+def _sample_porkchop_keplerian_elements(
+    rng: np.random.Generator,
+    n: int,
+    *,
+    a_min: float,
+    a_max: float,
+) -> np.ndarray:
+    a = rng.uniform(a_min, a_max, size=n)
+    e = rng.uniform(0.01, 0.30, size=n)
+    i_deg = rng.uniform(0.0, 15.0, size=n)
+    raan = rng.uniform(0.0, 360.0, size=n)
+    omega = rng.uniform(0.0, 360.0, size=n)
+    m_anom = rng.uniform(0.0, 360.0, size=n)
+    return np.stack([a, e, i_deg, raan, omega, m_anom], axis=1).astype(np.float64)
+
+
+def _make_porkchop_sample(
+    rng: np.random.Generator,
+    *,
+    n_departures: int,
+    n_arrivals: int,
+) -> Sample:
+    departure_coords = _kep_to_cart(
+        _sample_porkchop_keplerian_elements(
+            rng, n_departures, a_min=0.85, a_max=1.35
+        )
+    )
+    arrival_coords = _kep_to_cart(
+        _sample_porkchop_keplerian_elements(
+            rng, n_arrivals, a_min=1.25, a_max=2.40
+        )
+    )
+    departure_time_mjd = 60000.0 + 4.0 * np.arange(n_departures, dtype=np.float64)
+    arrival_time_mjd = (
+        60000.0
+        + max(8.0, 2.0 * float(n_departures))
+        + 5.0 * np.arange(n_arrivals, dtype=np.float64)
+    )
+    kw = {
+        "departure_coords": departure_coords,
+        "arrival_coords": arrival_coords,
+        "departure_time_mjd": departure_time_mjd,
+        "arrival_time_mjd": arrival_time_mjd,
+        "departure_orbit_ids": np.array(
+            [f"d{i:05d}" for i in range(n_departures)], dtype=object
+        ),
+        "arrival_orbit_ids": np.array(
+            [f"a{i:05d}" for i in range(n_arrivals)], dtype=object
+        ),
+        "propagation_origin": "SUN",
+        "frame": "ecliptic",
+        "prograde": True,
+        "max_iter": 35,
+        "tol": 1e-10,
+        "max_processes": 1,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_generate_porkchop_data(rng: np.random.Generator, n: int) -> Sample:
+    n_departures, n_arrivals = _porkchop_counts_for_rows(n)
+    return _make_porkchop_sample(
+        rng, n_departures=n_departures, n_arrivals=n_arrivals
+    )
+
+
 def _sample_dts(rng: np.random.Generator, n: int) -> np.ndarray:
     return rng.uniform(-10000.0, 10000.0, size=n).astype(np.float64)
 
@@ -784,6 +856,26 @@ def _orbit_observer_grid(shape: WorkloadShape) -> tuple[int, int]:
     return n_orbits, n_observers
 
 
+def _porkchop_grid(shape: WorkloadShape) -> tuple[int, int]:
+    axes = shape.axes()
+    n_departures = axes.get("departures")
+    n_arrivals = axes.get("arrivals")
+    if n_departures is None or n_arrivals is None:
+        n_departures, n_arrivals = _porkchop_counts_for_rows(shape.rows)
+    if n_departures * n_arrivals != shape.rows:
+        raise ValueError(f"{shape.label()} does not form a departures × arrivals grid")
+    return n_departures, n_arrivals
+
+
+def make_generate_porkchop_data_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    n_departures, n_arrivals = _porkchop_grid(shape)
+    return _make_porkchop_sample(
+        rng, n_departures=n_departures, n_arrivals=n_arrivals
+    )
+
+
 def make_propagate_2body_shape(
     rng: np.random.Generator, shape: WorkloadShape
 ) -> Sample:
@@ -926,6 +1018,7 @@ GENERATORS = {
     "orbits.classify_orbits": make_classify_orbits,
     "dynamics.calculate_moid": make_calculate_moid,
     "dynamics.calculate_perturber_moids": make_calculate_perturber_moids,
+    "dynamics.generate_porkchop_data": make_generate_porkchop_data,
     "dynamics.propagate_2body": make_propagate_2body,
     "dynamics.propagate_2body_with_covariance": make_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": make_generate_ephemeris_2body,
@@ -967,6 +1060,7 @@ SHAPED_GENERATORS = {
     "dynamics.generate_ephemeris_2body_with_covariance": (
         make_generate_ephemeris_2body_with_covariance_shape
     ),
+    "dynamics.generate_porkchop_data": make_generate_porkchop_data_shape,
     "dynamics.add_light_time": make_add_light_time_shape,
     "photometry.calculate_phase_angle": make_calculate_phase_angle_shape,
     "photometry.calculate_apparent_magnitude_v": (
@@ -984,6 +1078,9 @@ TINY_WORKLOADS: dict[str, WorkloadShape] = {
     # one-off call shape, unlike vector kernels where n=10 is the tiny lane.
     "dynamics.calculate_moid": WorkloadShape(1),
     "dynamics.calculate_perturber_moids": WorkloadShape(1),
+    "dynamics.generate_porkchop_data": WorkloadShape(
+        4, extra={"departures": 2, "arrivals": 2}
+    ),
 }
 
 
@@ -992,6 +1089,12 @@ SMALL_WORKLOADS: dict[str, WorkloadShape] = {
     # scipy bounded minimization per pair, so n=2000 would be minutes per rep.
     "dynamics.calculate_moid": WorkloadShape(8),
     "dynamics.calculate_perturber_moids": WorkloadShape(8),
+    # Public porkchop calls are grid-orchestration/table-assembly workloads;
+    # 44×44 stays near the canonical n=2000 small lane while preserving a
+    # square departure/arrival grid.
+    "dynamics.generate_porkchop_data": WorkloadShape(
+        1_936, extra={"departures": 44, "arrivals": 44}
+    ),
 }
 
 
@@ -1001,6 +1104,7 @@ FUZZ_N_OVERRIDES: dict[str, int] = {
     # keeping canonical fuzz runs within the existing time budget.
     "dynamics.calculate_moid": 8,
     "dynamics.calculate_perturber_moids": 8,
+    "dynamics.generate_porkchop_data": 16,
 }
 
 
@@ -1019,6 +1123,9 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "orbits.classify_orbits": WorkloadShape(50_000),
     "dynamics.calculate_moid": WorkloadShape(64),
     "dynamics.calculate_perturber_moids": WorkloadShape(64),
+    "dynamics.generate_porkchop_data": WorkloadShape(
+        4_096, extra={"departures": 64, "arrivals": 64}
+    ),
     "dynamics.propagate_2body": WorkloadShape(20_000, n_orbits=1_000, n_epochs=20),
     "dynamics.propagate_2body_with_covariance": WorkloadShape(
         4_000, n_orbits=200, n_epochs=20

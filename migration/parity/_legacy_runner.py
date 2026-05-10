@@ -37,6 +37,10 @@ from typing import Any
 
 import numpy as np
 
+from migration.parity._porkchop_runner import (
+    run_generate_porkchop_data as _dynamics_generate_porkchop_data,
+)
+
 # ---------------------------------------------------------------------------
 # Dispatch table — one entry per API id we expose to the gate.
 # Each entry is a callable f(**kwargs) -> dict[str, np.ndarray] (the
@@ -835,6 +839,7 @@ DISPATCH = {
     "orbits.classify_orbits": _orbits_classify_orbits,
     "dynamics.calculate_moid": _dynamics_calculate_moid,
     "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
+    "dynamics.generate_porkchop_data": _dynamics_generate_porkchop_data,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
     "dynamics.propagate_2body_with_covariance": _dynamics_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": _dynamics_generate_ephemeris_2body,

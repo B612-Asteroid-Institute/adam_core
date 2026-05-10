@@ -586,19 +586,33 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     ),
     # ---- orchestration (compose multiple rust-default APIs) ----
     #
-    # `generate_porkchop_data` remains unwired from randomized fuzz because it
-    # composes meshgrid + time-order filter + batched Lambert per (dep, arr)
-    # pair; `solve_lambert` is the governed kernel boundary. `gaussIOD` has a
-    # dedicated entry above documenting its intrinsic Laguerre-vs-LAPACK
-    # randomized-root divergence.
+    # `gaussIOD` has a dedicated entry above documenting its intrinsic
+    # Laguerre-vs-LAPACK randomized-root divergence.
     "dynamics.generate_porkchop_data": ToleranceSpec(
-        outputs={"out": OutputTol(atol=1e-13)},
+        outputs={
+            "departure_index": OutputTol(atol=0.0, rtol=0.0),
+            "arrival_index": OutputTol(atol=0.0, rtol=0.0),
+            "departure_time_mjd": OutputTol(atol=0.0, rtol=0.0),
+            "arrival_time_mjd": OutputTol(atol=0.0, rtol=0.0),
+            "solution_departure_velocity": OutputTol(atol=1e-13, rtol=1e-12),
+            "solution_arrival_velocity": OutputTol(atol=1e-13, rtol=1e-12),
+            "c3_departure": OutputTol(atol=1e-12, rtol=1e-10),
+            "vinf_arrival": OutputTol(atol=1e-12, rtol=1e-10),
+            "time_of_flight": OutputTol(atol=0.0, rtol=0.0),
+        },
         rationale=(
-            "ORCHESTRATION (covered indirectly). Meshgrid + time-order "
-            "filter + batched Lambert per (dep, arr) pair. Bounded by "
-            "`solve_lambert` kernel parity (atol=1e-13). Direct wiring "
-            "would require Orbits-quivr round-trip; deferred."
+            "Public LambertSolutions orchestration over Orbits inputs. The gate "
+            "compares stable numeric encodings of departure/arrival row identity, "
+            "time-order filtering, solution velocities, and derived C3/v∞ values "
+            "from the same Izzo Lambert solver covered by dynamics.solve_lambert."
         ),
+        dominant_column="solution_departure_velocity / solution_arrival_velocity",
+        physical_magnitude="1e-13 AU/day ≈ 0.00017 mm/s; identity/time columns exact.",
+        root_cause=(
+            "Same Householder iteration floating-point branch history as the "
+            "direct solve_lambert boundary plus quivr table round-trip."
+        ),
+        verdict="public quivr orchestration parity for Lambert porkchop grids.",
     ),
 }
 

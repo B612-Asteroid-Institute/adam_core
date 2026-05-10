@@ -383,11 +383,12 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="python+quivr",
         default="rust",
         rust_module="adam_core._rust_native.porkchop_grid_numpy",
-        parity_coverage="orchestration-implied",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Public quivr orchestration over Rust Lambert/grid kernels. "
-            "Baseline-main random fuzz is deferred because it needs an "
-            "Orbits-quivr subprocess adapter."
+            "Public quivr orchestration over Rust Lambert/grid kernels is "
+            "fuzzed end-to-end against the baseline-main oracle, including "
+            "Orbits construction, time-order filtering, Rust porkchop grid "
+            "dispatch, and LambertSolutions table assembly."
         ),
     ),
     ApiMigration(

@@ -19,6 +19,8 @@
 use rayon::prelude::*;
 use std::f64::consts::PI;
 
+const PORKCHOP_SERIAL_THRESHOLD_ROWS: usize = 512;
+
 #[inline]
 fn norm3(v: [f64; 3]) -> f64 {
     (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
@@ -437,13 +439,8 @@ pub fn porkchop_grid_flat(
     let mut v1_out = vec![0.0_f64; v * 3];
     let mut v2_out = vec![0.0_f64; v * 3];
 
-    v1_out
-        .par_chunks_mut(3)
-        .zip(v2_out.par_chunks_mut(3))
-        .zip(dep_idx_out.par_iter_mut())
-        .zip(arr_idx_out.par_iter_mut())
-        .enumerate()
-        .for_each(|(k, (((v1_dst, v2_dst), dep_dst), arr_dst))| {
+    let solve_pair =
+        |k: usize, v1_dst: &mut [f64], v2_dst: &mut [f64], dep_dst: &mut u32, arr_dst: &mut u32| {
             let (i, j) = valid_pairs[k];
             let i_us = i as usize;
             let j_us = j as usize;
@@ -463,6 +460,29 @@ pub fn porkchop_grid_flat(
             v2_dst.copy_from_slice(&v2);
             *dep_dst = i;
             *arr_dst = j;
+        };
+
+    if v <= PORKCHOP_SERIAL_THRESHOLD_ROWS || rayon::current_num_threads() == 1 {
+        for k in 0..v {
+            solve_pair(
+                k,
+                &mut v1_out[k * 3..k * 3 + 3],
+                &mut v2_out[k * 3..k * 3 + 3],
+                &mut dep_idx_out[k],
+                &mut arr_idx_out[k],
+            );
+        }
+        return (dep_idx_out, arr_idx_out, v1_out, v2_out);
+    }
+
+    v1_out
+        .par_chunks_mut(3)
+        .zip(v2_out.par_chunks_mut(3))
+        .zip(dep_idx_out.par_iter_mut())
+        .zip(arr_idx_out.par_iter_mut())
+        .enumerate()
+        .for_each(|(k, (((v1_dst, v2_dst), dep_dst), arr_dst))| {
+            solve_pair(k, v1_dst, v2_dst, dep_dst, arr_dst);
         });
 
     (dep_idx_out, arr_idx_out, v1_out, v2_out)

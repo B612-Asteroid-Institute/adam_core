@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-10 (public `dynamics.calculate_perturber_moids` orchestration parity/speed governance added after `coordinates.residuals.Residuals.calculate` landed in regular governance)
+Last updated: 2026-05-10 (public `dynamics.generate_porkchop_data` orchestration parity/speed governance added; `calculate_perturber_moids` and `Residuals.calculate` remain in regular governance)
 
 ## Current Review-Derived Backlog
 
@@ -26,6 +26,7 @@ Last updated: 2026-05-10 (public `dynamics.calculate_perturber_moids` orchestrat
 - [x] RM-WE2-002A added end-to-end `coordinates.residuals.Residuals.calculate` to regular randomized parity and tiny/small/large speed governance (commit `df97fb1e`).
 - [x] RM-WD3-001 centralized dynamics Ray usage behind `ParallelBackend`, closed the dynamics-only steps, and deferred ASSIST/n-body surfaces until the Rust n-body line moves via `assist-rs`/traits.
 - [x] RM-WE2-003 added public quivr orchestration parity/speed governance for `dynamics.calculate_perturber_moids`, including `Orbits` construction, SPICE perturber-state lookup, batched MOID dispatch, and `PerturberMOIDs` table assembly.
+- [x] RM-WE2-004 added public quivr orchestration parity/speed governance for `dynamics.generate_porkchop_data`, including departure/arrival `Orbits` construction, time-order filtering, Rust porkchop grid dispatch, and `LambertSolutions` table assembly.
 - [x] RM-P1-014/RM-P1-014A warm-performance waivers resolved on 2026-05-03. Current canonical artifacts raw-pass `coordinates.cartesian_to_spherical` and all four photometry APIs at the n=2000 warm p50/p95 gate; the temporary photometry and cartesian-to-spherical waiver IDs are marked resolved and removed from `API_MIGRATIONS`.
 - [x] RM-P1-018 latency-gate statistical policy resolved on 2026-05-03: default pass/fail is single-thread, latency artifacts preserve raw trial samples, and native/multithread measurements are diagnostic-only unless separately labeled.
 - [x] RM-P1-019/RM-P1-019A added shaped baseline speed governance: Rust-vs-baseline artifacts and tables expose enforced `tiny-n`, historical `small-n`/`n=2000`, and API-shaped `large-n` lanes with structured workload axes, lane status, explicit cold/thread metadata, and serialized baseline-main legacy timing cache. Large-n misses remain red under RM-P1-020; no active large-n waivers are acceptable without an explicit user structural-acceptance decision.

@@ -32,53 +32,55 @@
     "schema_version": 1,
     "process_version": "rm-p1-019a-shaped-lanes-v1",
     "legacy_identity": {
-      "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+      "repo_root": "/Users/aleck/Code/adam-core",
       "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
       "git_dirty": false,
+      "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "git_relevant_untracked_dirty": false,
       "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
-      "machine": {
-        "cpu_brand": "Apple M1 Max",
-        "hostname": "MacBook-Pro-5.local",
-        "machine": "arm64",
-        "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
-        "processor": "arm"
-      },
-      "process_version": "rm-p1-019a-shaped-lanes-v1",
       "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
       "python_version": "Python 3.13.3",
-      "repo_root": "/Users/aleck/Code/adam-core",
-      "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+      "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+      "machine": {
+        "hostname": "MacBook-Pro-5.local",
+        "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+        "machine": "arm64",
+        "processor": "arm",
+        "cpu_brand": "Apple M1 Max"
+      },
+      "benchmark_source_hash": "403f5a20f709746393b7d468ac797796bde2e4f3b34d107aef8254f41cee9588",
+      "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a",
+      "process_version": "rm-p1-019a-shaped-lanes-v1"
     },
     "entry_freshness": {
       "warm": {
-        "entries": 81,
+        "entries": 84,
         "captured_at_min": "2026-05-08T12:15:29+00:00",
-        "captured_at_max": "2026-05-10T13:34:28+00:00",
+        "captured_at_max": "2026-05-10T17:21:34+00:00",
         "missing_legacy_identity": 0,
-        "distinct_legacy_identities": 2,
+        "distinct_legacy_identities": 3,
         "benchmark_source_hashes": [
+          "403f5a20f709746393b7d468ac797796bde2e4f3b34d107aef8254f41cee9588",
           "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
           "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8"
         ]
       },
       "cold": {
-        "entries": 54,
+        "entries": 56,
         "captured_at_min": "2026-05-08T12:16:25+00:00",
-        "captured_at_max": "2026-05-10T13:34:36+00:00",
+        "captured_at_max": "2026-05-10T17:21:38+00:00",
         "missing_legacy_identity": 0,
-        "distinct_legacy_identities": 2,
+        "distinct_legacy_identities": 3,
         "benchmark_source_hashes": [
+          "403f5a20f709746393b7d468ac797796bde2e4f3b34d107aef8254f41cee9588",
           "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
           "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8"
         ]
       }
     },
     "hits": {
-      "warm": 81,
-      "cold": 54
+      "warm": 84,
+      "cold": 56
     },
     "misses": {
       "warm": 0,
@@ -106,9 +108,10 @@
       "n": null,
       "n_values": [
         1,
+        4,
         10
       ],
-      "api_count": 27
+      "api_count": 28
     },
     {
       "name": "small-n",
@@ -126,9 +129,10 @@
       "n": null,
       "n_values": [
         8,
+        1936,
         2000
       ],
-      "api_count": 27
+      "api_count": 28
     },
     {
       "name": "large-n",
@@ -147,12 +151,13 @@
       "n_values": [
         64,
         4000,
+        4096,
         5000,
         12000,
         20000,
         50000
       ],
-      "api_count": 27
+      "api_count": 28
     }
   ],
   "lane_status": {
@@ -656,6 +661,44 @@
       "legacy_cache_key": "0a9823e4fbbe7c9b1630389a4f74a1ae61a050867ae0bc53f2a00f6554cc26aa",
       "speedup_p50": 60.30020652323232,
       "speedup_p95": 52.232740060840655,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 0.0,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": null,
+      "legacy_cold_s": null,
+      "legacy_cold_source": "not-measured",
+      "legacy_cold_cache_key": "",
+      "speedup_cold": null
+    },
+    {
+      "api_id": "dynamics.generate_porkchop_data",
+      "lane": "tiny-n",
+      "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 4,
+        "axes": {
+          "departures": 2,
+          "arrivals": 2
+        },
+        "label": "departures=2 \u00d7 arrivals=2 (4 rows)"
+      },
+      "workload_label": "departures=2 \u00d7 arrivals=2 (4 rows)",
+      "n": 4,
+      "reps": 101,
+      "warmup": 3,
+      "rust_p50_s": 0.002045250032097101,
+      "rust_p95_s": 0.0023272912949323654,
+      "legacy_p50_s": 0.002594666089862585,
+      "legacy_p95_s": 0.0035664159804582596,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "4c030a9db970c22fbfd9c4405a444b533922dcbe62af90b8b75f6531265e8294",
+      "speedup_p50": 1.2686302648298404,
+      "speedup_p95": 1.5324321404132202,
       "min_speedup_p50": 1.2,
       "min_speedup_p95": 0.0,
       "raw_passed": true,
@@ -1615,6 +1658,44 @@
       "speedup_cold": 1.397061947883571
     },
     {
+      "api_id": "dynamics.generate_porkchop_data",
+      "lane": "small-n",
+      "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 1936,
+        "axes": {
+          "departures": 44,
+          "arrivals": 44
+        },
+        "label": "departures=44 \u00d7 arrivals=44 (1936 rows)"
+      },
+      "workload_label": "departures=44 \u00d7 arrivals=44 (1936 rows)",
+      "n": 1936,
+      "reps": 21,
+      "warmup": 3,
+      "rust_p50_s": 0.005546458065509796,
+      "rust_p95_s": 0.005951832979917526,
+      "legacy_p50_s": 0.007468790747225285,
+      "legacy_p95_s": 0.008231249637901783,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "6d05894b4638f03e3e795aaa514861740f1913a2073eca0f9be049decc5956b5",
+      "speedup_p50": 1.3465874363441708,
+      "speedup_p95": 1.3829772551876687,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 1.9528689589351416,
+      "legacy_cold_s": 2.4282770408317447,
+      "legacy_cold_source": "refreshed",
+      "legacy_cold_cache_key": "1c6a947dc23f6de76d28178d382539b2bee6725827631b740d8f96a213fb9088",
+      "speedup_cold": 1.2434408513287205
+    },
+    {
       "api_id": "dynamics.propagate_2body",
       "lane": "small-n",
       "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
@@ -2558,6 +2639,44 @@
       "legacy_cold_source": "cache",
       "legacy_cold_cache_key": "a236108093640d64ec4e4ef14674ac76b6ec52c65948f03059f0eb3821ade7ba",
       "speedup_cold": 2.9880077747564084
+    },
+    {
+      "api_id": "dynamics.generate_porkchop_data",
+      "lane": "large-n",
+      "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 4096,
+        "axes": {
+          "departures": 64,
+          "arrivals": 64
+        },
+        "label": "departures=64 \u00d7 arrivals=64 (4096 rows)"
+      },
+      "workload_label": "departures=64 \u00d7 arrivals=64 (4096 rows)",
+      "n": 4096,
+      "reps": 7,
+      "warmup": 1,
+      "rust_p50_s": 0.009261667262762785,
+      "rust_p95_s": 0.009682321222499013,
+      "legacy_p50_s": 0.013171958271414042,
+      "legacy_p95_s": 0.01391422892920673,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "3a95e31478a4b7a05caeef6ec8083332d4808608a6349482fc1727bd339dc40e",
+      "speedup_p50": 1.4222016293300526,
+      "speedup_p95": 1.4370757393251883,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 1.9718242082744837,
+      "legacy_cold_s": 2.426896874792874,
+      "legacy_cold_source": "refreshed",
+      "legacy_cold_cache_key": "93e82f069319f8e375304ecaf9d9a8a578f699091adc88a98e3e262fd0cd702f",
+      "speedup_cold": 1.230787645576488
     },
     {
       "api_id": "dynamics.propagate_2body",
