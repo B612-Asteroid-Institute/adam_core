@@ -174,6 +174,70 @@ def _dynamics_calculate_moid(
     return {"moid": moids, "dt_at_min": dts}
 
 
+def _pack_perturber_moids(moids: Any) -> dict[str, np.ndarray]:
+    from adam_core.coordinates.origin import OriginCodes
+
+    orbit_ids = np.asarray(moids.orbit_id.to_pylist(), dtype=object)
+    perturber_codes = np.asarray(moids.perturber.code.to_pylist(), dtype=object)
+    order = np.lexsort((perturber_codes.astype(str), orbit_ids.astype(str)))
+    orbit_index = np.asarray(
+        [float(str(value)[1:]) for value in orbit_ids[order]], dtype=np.float64
+    )
+    perturber_code = np.asarray(
+        [float(OriginCodes[str(value)].value) for value in perturber_codes[order]],
+        dtype=np.float64,
+    )
+    return {
+        "orbit_index": orbit_index,
+        "perturber_code": perturber_code,
+        "moid": np.asarray(moids.moid.to_numpy(zero_copy_only=False), dtype=np.float64)[
+            order
+        ],
+        "time_mjd": np.asarray(moids.time.mjd().to_numpy(False), dtype=np.float64)[
+            order
+        ],
+    }
+
+
+def _dynamics_calculate_perturber_moids(
+    coords: np.ndarray,
+    time_mjd: np.ndarray,
+    orbit_ids: np.ndarray,
+    perturber_codes: np.ndarray,
+    origin_code: str,
+    frame: str,
+    chunk_size: int,
+    max_processes: int,
+) -> dict[str, np.ndarray]:
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.origin import Origin, OriginCodes
+    from adam_core.dynamics.moid import calculate_perturber_moids
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    n = coords.shape[0]
+    coordinate_rows = CartesianCoordinates.from_kwargs(
+        x=coords[:, 0],
+        y=coords[:, 1],
+        z=coords[:, 2],
+        vx=coords[:, 3],
+        vy=coords[:, 4],
+        vz=coords[:, 5],
+        time=Timestamp.from_mjd(time_mjd, scale="tdb"),
+        origin=Origin.from_kwargs(code=np.full(n, origin_code, dtype=object)),
+        frame=frame,
+    )
+    orbits = Orbits.from_kwargs(orbit_id=orbit_ids, coordinates=coordinate_rows)
+    perturbers = [OriginCodes[str(code)] for code in perturber_codes]
+    moids = calculate_perturber_moids(
+        orbits,
+        perturbers,
+        chunk_size=chunk_size,
+        max_processes=max_processes,
+    )
+    return _pack_perturber_moids(moids)
+
+
 def _coordinates_residuals_calculate_chi2(
     residuals: np.ndarray, covariances: np.ndarray
 ) -> dict[str, np.ndarray]:
@@ -577,6 +641,7 @@ DISPATCH = {
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,
     "orbits.classify_orbits": _orbits_classify_orbits,
     "dynamics.calculate_moid": _dynamics_calculate_moid,
+    "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
     "dynamics.propagate_2body_with_covariance": _dynamics_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": _dynamics_generate_ephemeris_2body,

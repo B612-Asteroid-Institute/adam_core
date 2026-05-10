@@ -1127,6 +1127,44 @@
         "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
       }
     },
+    "a236108093640d64ec4e4ef14674ac76b6ec52c65948f03059f0eb3821ade7ba": {
+      "captured_at": "2026-05-10T13:34:36+00:00",
+      "elapsed_s": 5.836528250016272,
+      "key_fields": {
+        "api_id": "dynamics.calculate_perturber_moids",
+        "kind": "cold",
+        "lane": "large-n",
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=64",
+          "rows": 64
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+        "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+      }
+    },
     "a824ffde7d153cf2dd7b0def528bf86f77fc1c836d10f3361a536d3d78b46b81": {
       "captured_at": "2026-05-08T18:18:52+00:00",
       "elapsed_s": 2.3405601251870394,
@@ -1533,6 +1571,44 @@
       },
       "legacy_identity": {
         "benchmark_source_hash": "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8",
+        "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+      }
+    },
+    "e169a02e160efe03532f9142a76f8f88423f1b43dc915827ce7738de1ca4126f": {
+      "captured_at": "2026-05-10T13:34:01+00:00",
+      "elapsed_s": 2.752844207920134,
+      "key_fields": {
+        "api_id": "dynamics.calculate_perturber_moids",
+        "kind": "cold",
+        "lane": "small-n",
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=8",
+          "rows": 8
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
         "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
         "git_dirty": false,
         "git_relevant_untracked_dirty": false,
@@ -2012,7 +2088,7 @@
   },
   "created_at": "2026-05-07T15:49:27+00:00",
   "legacy_identity": {
-    "benchmark_source_hash": "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8",
+    "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
     "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
     "git_dirty": false,
     "git_relevant_untracked_dirty": false,
@@ -2034,7 +2110,7 @@
   },
   "process_version": "rm-p1-019a-shaped-lanes-v1",
   "schema_version": 1,
-  "updated_at": "2026-05-08T18:33:47+00:00",
+  "updated_at": "2026-05-10T13:34:36+00:00",
   "warm": {
     "083f1747550d35cbbee866a876bd69b98738a30c3cc685cea1855b44d01e32e9": {
       "captured_at": "2026-05-08T12:23:34+00:00",
@@ -2084,6 +2160,150 @@
         0.018486499786376953,
         0.020208958070725203,
         0.02021195786073804
+      ]
+    },
+    "0a9823e4fbbe7c9b1630389a4f74a1ae61a050867ae0bc53f2a00f6554cc26aa": {
+      "captured_at": "2026-05-10T13:33:45+00:00",
+      "key_fields": {
+        "api_id": "dynamics.calculate_perturber_moids",
+        "kind": "warm",
+        "lane": "tiny-n",
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "reps": 101,
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "warmup": 3,
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=1",
+          "rows": 1
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+        "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+      },
+      "p50_s": 0.10915091587230563,
+      "p95_s": 0.1129293330013752,
+      "samples_s": [
+        0.11852208292111754,
+        0.10973875038325787,
+        0.10837062494829297,
+        0.11039458308368921,
+        0.10876895766705275,
+        0.10837254114449024,
+        0.10844645835459232,
+        0.10650150012224913,
+        0.10820954199880362,
+        0.11080387514084578,
+        0.10976154170930386,
+        0.10952450009062886,
+        0.10791570832952857,
+        0.11280979169532657,
+        0.11011154158040881,
+        0.11007100017741323,
+        0.11061566695570946,
+        0.11139999981969595,
+        0.11135620763525367,
+        0.11136258393526077,
+        0.11147412518039346,
+        0.11239608284085989,
+        0.11149654118344188,
+        0.11361933266744018,
+        0.11129391612485051,
+        0.10682758409529924,
+        0.1076078750193119,
+        0.10521133290603757,
+        0.10741966590285301,
+        0.10797820845618844,
+        0.11026245774701238,
+        0.11007358273491263,
+        0.1103231250308454,
+        0.1073473752476275,
+        0.10963008273392916,
+        0.11015437496826053,
+        0.11132304091006517,
+        0.11126229213550687,
+        0.11331470916047692,
+        0.11155970906838775,
+        0.10604254109784961,
+        0.10689166560769081,
+        0.1086609996855259,
+        0.11097004218026996,
+        0.10749549977481365,
+        0.11141250003129244,
+        0.10836583375930786,
+        0.10511524975299835,
+        0.1099305828101933,
+        0.10930379200726748,
+        0.10848975041881204,
+        0.10828379075974226,
+        0.11108454084023833,
+        0.10915091587230563,
+        0.11013516690582037,
+        0.10768124973401427,
+        0.1096842079423368,
+        0.1129293330013752,
+        0.11116595938801765,
+        0.11262929113581777,
+        0.11035491712391376,
+        0.11224333383142948,
+        0.11147637525573373,
+        0.11029795929789543,
+        0.111800791695714,
+        0.11247833259403706,
+        0.10989187518134713,
+        0.10820170817896724,
+        0.1102604172192514,
+        0.10406049992889166,
+        0.10700145782902837,
+        0.11102504236623645,
+        0.11399333411827683,
+        0.11574333300814033,
+        0.1051745000295341,
+        0.10175733361393213,
+        0.10187891591340303,
+        0.10335483402013779,
+        0.10013716667890549,
+        0.09926320891827345,
+        0.10039233323186636,
+        0.10050158342346549,
+        0.10148062510415912,
+        0.1022490831092,
+        0.1038637082092464,
+        0.10350666707381606,
+        0.10077679203823209,
+        0.10342445923015475,
+        0.10504320822656155,
+        0.10258900001645088,
+        0.10096483305096626,
+        0.10131783410906792,
+        0.10069454228505492,
+        0.1111042913980782,
+        0.11288633337244391,
+        0.1071302080526948,
+        0.10201549995690584,
+        0.10041154222562909,
+        0.09901391621679068,
+        0.10217970795929432,
+        0.1009874171577394
       ]
     },
     "104887754e295a0712aee69eb64fef3feb4ea561cbf3cbcfad26bfafba872443": {
@@ -5352,6 +5572,56 @@
         0.0005381670780479908
       ]
     },
+    "7c7307fac826e295347ef6a2b54c4927bfff5c4928116a8bb9543f20d3648965": {
+      "captured_at": "2026-05-10T13:34:28+00:00",
+      "key_fields": {
+        "api_id": "dynamics.calculate_perturber_moids",
+        "kind": "warm",
+        "lane": "large-n",
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "reps": 7,
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "warmup": 1,
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=64",
+          "rows": 64
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+        "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+      },
+      "p50_s": 3.167987875174731,
+      "p95_s": 3.200469158682972,
+      "samples_s": [
+        3.201713458634913,
+        3.1388147082179785,
+        3.167987875174731,
+        3.1511021670885384,
+        3.1361936246976256,
+        3.1684287916868925,
+        3.1975657921284437
+      ]
+    },
     "7e22f01d5d3941d83bf479089290bf456b27f6f7bf081cda24b68ca80346eeae": {
       "captured_at": "2026-05-08T12:15:42+00:00",
       "key_fields": {
@@ -7220,6 +7490,70 @@
         0.040804542135447264,
         0.04100541723892093,
         0.04068341664969921
+      ]
+    },
+    "c2a12087876cb95a58506d7423fa847e607298a9ae3d8174cda0eceb664c45ab": {
+      "captured_at": "2026-05-10T13:33:56+00:00",
+      "key_fields": {
+        "api_id": "dynamics.calculate_perturber_moids",
+        "kind": "warm",
+        "lane": "small-n",
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "reps": 21,
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "warmup": 3,
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=8",
+          "rows": 8
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+        "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-019a-shaped-lanes-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+      },
+      "p50_s": 0.3163085002452135,
+      "p95_s": 0.3394327498972416,
+      "samples_s": [
+        0.33484254125505686,
+        0.33155995793640614,
+        0.3321357499808073,
+        0.3394327498972416,
+        0.3272323342971504,
+        0.3235072083771229,
+        0.3349022497422993,
+        0.3171654171310365,
+        0.33825454115867615,
+        0.3159789168275893,
+        0.3092842921614647,
+        0.3406180408783257,
+        0.31309120869264007,
+        0.3101729997433722,
+        0.31239133374765515,
+        0.3124607498757541,
+        0.308723459020257,
+        0.31517629185691476,
+        0.31550362473353744,
+        0.3072116249240935,
+        0.3163085002452135
       ]
     },
     "cbe42355436b53b6f74f52a10bf809db63efade72e3e1c8596dbd860b985122f": {

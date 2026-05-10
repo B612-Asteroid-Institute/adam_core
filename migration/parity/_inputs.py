@@ -410,6 +410,30 @@ def make_calculate_moid(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_calculate_perturber_moids(rng: np.random.Generator, n: int) -> Sample:
+    """Public quivr orchestration over the batched MOID kernel.
+
+    ``n`` is the number of primary orbit rows. Each row is paired against a
+    small fixed perturber set inside ``calculate_perturber_moids`` so the
+    runner validates Orbits construction, SPICE perturber-state lookup,
+    batched Rust MOID dispatch, and PerturberMOIDs table assembly.
+    """
+    coords = _kep_to_cart(_sample_moid_keplerian_elements(rng, n))
+    time_mjd = rng.uniform(59000.0, 60500.0, size=n).astype(np.float64)
+    orbit_ids = np.array([f"o{i:05d}" for i in range(n)], dtype=object)
+    kw = {
+        "coords": coords,
+        "time_mjd": time_mjd,
+        "orbit_ids": orbit_ids,
+        "perturber_codes": np.array(["EARTH", "MARS_BARYCENTER"], dtype=object),
+        "origin_code": "SUN",
+        "frame": "ecliptic",
+        "chunk_size": 8,
+        "max_processes": 1,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def _sample_dts(rng: np.random.Generator, n: int) -> np.ndarray:
     return rng.uniform(-10000.0, 10000.0, size=n).astype(np.float64)
 
@@ -901,6 +925,7 @@ GENERATORS = {
     "dynamics.calc_mean_motion": make_calc_mean_motion,
     "orbits.classify_orbits": make_classify_orbits,
     "dynamics.calculate_moid": make_calculate_moid,
+    "dynamics.calculate_perturber_moids": make_calculate_perturber_moids,
     "dynamics.propagate_2body": make_propagate_2body,
     "dynamics.propagate_2body_with_covariance": make_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": make_generate_ephemeris_2body,
@@ -958,6 +983,7 @@ TINY_WORKLOADS: dict[str, WorkloadShape] = {
     # `calculate_moid` is a scalar optimizer API; one pair is the true
     # one-off call shape, unlike vector kernels where n=10 is the tiny lane.
     "dynamics.calculate_moid": WorkloadShape(1),
+    "dynamics.calculate_perturber_moids": WorkloadShape(1),
 }
 
 
@@ -965,6 +991,7 @@ SMALL_WORKLOADS: dict[str, WorkloadShape] = {
     # Keep canonical MOID speed governance affordable: baseline-main uses
     # scipy bounded minimization per pair, so n=2000 would be minutes per rep.
     "dynamics.calculate_moid": WorkloadShape(8),
+    "dynamics.calculate_perturber_moids": WorkloadShape(8),
 }
 
 
@@ -973,6 +1000,7 @@ FUZZ_N_OVERRIDES: dict[str, int] = {
     # oracle. Eight pairs × eight seeds gives direct randomized coverage while
     # keeping canonical fuzz runs within the existing time budget.
     "dynamics.calculate_moid": 8,
+    "dynamics.calculate_perturber_moids": 8,
 }
 
 
@@ -990,6 +1018,7 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "dynamics.calc_mean_motion": WorkloadShape(50_000),
     "orbits.classify_orbits": WorkloadShape(50_000),
     "dynamics.calculate_moid": WorkloadShape(64),
+    "dynamics.calculate_perturber_moids": WorkloadShape(64),
     "dynamics.propagate_2body": WorkloadShape(20_000, n_orbits=1_000, n_epochs=20),
     "dynamics.propagate_2body_with_covariance": WorkloadShape(
         4_000, n_orbits=200, n_epochs=20

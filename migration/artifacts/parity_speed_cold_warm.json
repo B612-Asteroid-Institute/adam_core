@@ -32,7 +32,7 @@
     "schema_version": 1,
     "process_version": "rm-p1-019a-shaped-lanes-v1",
     "legacy_identity": {
-      "benchmark_source_hash": "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8",
+      "benchmark_source_hash": "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
       "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
       "git_dirty": false,
       "git_relevant_untracked_dirty": false,
@@ -54,29 +54,31 @@
     },
     "entry_freshness": {
       "warm": {
-        "entries": 78,
+        "entries": 81,
         "captured_at_min": "2026-05-08T12:15:29+00:00",
-        "captured_at_max": "2026-05-08T18:33:45+00:00",
+        "captured_at_max": "2026-05-10T13:34:28+00:00",
         "missing_legacy_identity": 0,
-        "distinct_legacy_identities": 1,
+        "distinct_legacy_identities": 2,
         "benchmark_source_hashes": [
+          "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
           "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8"
         ]
       },
       "cold": {
-        "entries": 52,
+        "entries": 54,
         "captured_at_min": "2026-05-08T12:16:25+00:00",
-        "captured_at_max": "2026-05-08T18:33:47+00:00",
+        "captured_at_max": "2026-05-10T13:34:36+00:00",
         "missing_legacy_identity": 0,
-        "distinct_legacy_identities": 1,
+        "distinct_legacy_identities": 2,
         "benchmark_source_hashes": [
+          "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
           "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8"
         ]
       }
     },
     "hits": {
-      "warm": 78,
-      "cold": 52
+      "warm": 81,
+      "cold": 54
     },
     "misses": {
       "warm": 0,
@@ -106,7 +108,7 @@
         1,
         10
       ],
-      "api_count": 26
+      "api_count": 27
     },
     {
       "name": "small-n",
@@ -126,7 +128,7 @@
         8,
         2000
       ],
-      "api_count": 26
+      "api_count": 27
     },
     {
       "name": "large-n",
@@ -150,7 +152,7 @@
         20000,
         50000
       ],
-      "api_count": 26
+      "api_count": 27
     }
   ],
   "lane_status": {
@@ -619,6 +621,41 @@
       "legacy_cache_key": "65cef3e80b85998b7fb00db6494e59099f21b70a813e203f4dc18fb4bec79bdf",
       "speedup_p50": 94.50962674414892,
       "speedup_p95": 105.7352254072484,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 0.0,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": null,
+      "legacy_cold_s": null,
+      "legacy_cold_source": "not-measured",
+      "legacy_cold_cache_key": "",
+      "speedup_cold": null
+    },
+    {
+      "api_id": "dynamics.calculate_perturber_moids",
+      "lane": "tiny-n",
+      "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 1,
+        "axes": {},
+        "label": "rows=1"
+      },
+      "workload_label": "rows=1",
+      "n": 1,
+      "reps": 101,
+      "warmup": 3,
+      "rust_p50_s": 0.0018101250752806664,
+      "rust_p95_s": 0.0021620411425828934,
+      "legacy_p50_s": 0.10915091587230563,
+      "legacy_p95_s": 0.1129293330013752,
+      "legacy_source": "cache",
+      "legacy_cache_key": "0a9823e4fbbe7c9b1630389a4f74a1ae61a050867ae0bc53f2a00f6554cc26aa",
+      "speedup_p50": 60.30020652323232,
+      "speedup_p95": 52.232740060840655,
       "min_speedup_p50": 1.2,
       "min_speedup_p95": 0.0,
       "raw_passed": true,
@@ -1543,6 +1580,41 @@
       "speedup_cold": 36.300976273787555
     },
     {
+      "api_id": "dynamics.calculate_perturber_moids",
+      "lane": "small-n",
+      "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 8,
+        "axes": {},
+        "label": "rows=8"
+      },
+      "workload_label": "rows=8",
+      "n": 8,
+      "reps": 21,
+      "warmup": 3,
+      "rust_p50_s": 0.0021109171211719513,
+      "rust_p95_s": 0.0023652082309126854,
+      "legacy_p50_s": 0.3163085002452135,
+      "legacy_p95_s": 0.3394327498972416,
+      "legacy_source": "cache",
+      "legacy_cache_key": "c2a12087876cb95a58506d7423fa847e607298a9ae3d8174cda0eceb664c45ab",
+      "speedup_p50": 149.84411139249443,
+      "speedup_p95": 143.51072580457807,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 1.9704525000415742,
+      "legacy_cold_s": 2.752844207920134,
+      "legacy_cold_source": "cache",
+      "legacy_cold_cache_key": "e169a02e160efe03532f9142a76f8f88423f1b43dc915827ce7738de1ca4126f",
+      "speedup_cold": 1.397061947883571
+    },
+    {
       "api_id": "dynamics.propagate_2body",
       "lane": "small-n",
       "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
@@ -2451,6 +2523,41 @@
       "legacy_cold_source": "cache",
       "legacy_cold_cache_key": "2e4446b989355982b1a3d2463206a1e7ce7180af1b12efa2ed1bfbf42e416fdb",
       "speedup_cold": 36.85093438047308
+    },
+    {
+      "api_id": "dynamics.calculate_perturber_moids",
+      "lane": "large-n",
+      "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 64,
+        "axes": {},
+        "label": "rows=64"
+      },
+      "workload_label": "rows=64",
+      "n": 64,
+      "reps": 7,
+      "warmup": 1,
+      "rust_p50_s": 0.0028930408880114555,
+      "rust_p95_s": 0.0032617711927741765,
+      "legacy_p50_s": 3.167987875174731,
+      "legacy_p95_s": 3.200469158682972,
+      "legacy_source": "cache",
+      "legacy_cache_key": "7c7307fac826e295347ef6a2b54c4927bfff5c4928116a8bb9543f20d3648965",
+      "speedup_p50": 1095.03736649649,
+      "speedup_p95": 981.205906095741,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 1.9533176249824464,
+      "legacy_cold_s": 5.836528250016272,
+      "legacy_cold_source": "cache",
+      "legacy_cold_cache_key": "a236108093640d64ec4e4ef14674ac76b6ec52c65948f03059f0eb3821ade7ba",
+      "speedup_cold": 2.9880077747564084
     },
     {
       "api_id": "dynamics.propagate_2body",

@@ -302,6 +302,31 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict="algorithm-equivalent optimizer parity for the direct NumPy boundary.",
     ),
+    "dynamics.calculate_perturber_moids": ToleranceSpec(
+        outputs={
+            "orbit_index": OutputTol(atol=0.0, rtol=0.0),
+            "perturber_code": OutputTol(atol=0.0, rtol=0.0),
+            "moid": OutputTol(atol=1e-9, rtol=1e-8),
+            "time_mjd": OutputTol(atol=1e-3, rtol=1e-8),
+        },
+        rationale=(
+            "Public PerturberMOIDs orchestration over Orbits inputs. The gate "
+            "compares stable numeric encodings of orbit_id/perturber ordering "
+            "plus the science outputs from the same nested MOID optimizer used "
+            "by dynamics.calculate_moid."
+        ),
+        dominant_column="time_mjd / dt_at_min from the outer bounded minimizer",
+        physical_magnitude=(
+            "MOID atol 1e-9 AU ≈ 150 m. time_mjd atol 1e-3 day ≈ 86 s; "
+            "row identity columns are exact."
+        ),
+        root_cause=(
+            "Same optimizer branch-history drift as the direct MOID boundary, "
+            "plus last-ulp SPICE state differences between baseline-main and "
+            "migration SPICE backends."
+        ),
+        verdict="public quivr orchestration parity for DE440 perturber rows.",
+    ),
     "dynamics.propagate_2body": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-11)},
         rationale=(
@@ -561,40 +586,11 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     ),
     # ---- orchestration (compose multiple rust-default APIs) ----
     #
-    # NOTE on coverage: these three orchestration APIs are NOT directly
-    # wired in random-fuzz GENERATORS because their parity is structurally
-    # implied by the underlying kernel parity entries. They consist of
-    # meshgrid + filter + per-pair calls to kernels that ARE wired:
-    #
-    #   `calculate_perturber_moids` → loops `calculate_moid_batch` (in
-    #     turn `calculate_moid` per pair, which iterates 2-body
-    #     propagate + Brent root-finding — bounded by `propagate_2body`
-    #     parity at atol=1e-11).
-    #   `generate_porkchop_data` → meshgrid over dep×arr times + filter
-    #     + per-pair `solve_lambert` — bounded by `solve_lambert` parity
-    #     at atol=1e-13.
-    #   `gaussIOD` → 8th-order poly root-find + per-root construction
-    #     via `calcGibbs`/`calcGauss` — see its entry below for the
-    #     intrinsic Laguerre-vs-LAPACK divergence.
-    #
-    # Independent random-fuzz parity of the orchestration would require
-    # quivr-Orbits round-trip in the legacy subprocess (heavy adapter
-    # work) and would only re-test the underlying kernels we already
-    # gate. The tolerance specs are retained as a coverage manifest;
-    # `state="orchestration-implied"` is reported in the parity table.
-    "dynamics.calculate_perturber_moids": ToleranceSpec(
-        outputs={
-            "moid": OutputTol(atol=1e-10),
-            "dt_at_min": OutputTol(atol=1e-6),
-        },
-        rationale=(
-            "ORCHESTRATION (covered indirectly). MOID = min |r1(t) - "
-            "r2(t+dt)| over analytical 2-body grid + Brent refinement. "
-            "Bounded by `propagate_2body` kernel parity (atol=1e-11) "
-            "plus optimizer xtol. Direct random-fuzz wiring would require "
-            "SPK kernels in subprocess; deferred."
-        ),
-    ),
+    # `generate_porkchop_data` remains unwired from randomized fuzz because it
+    # composes meshgrid + time-order filter + batched Lambert per (dep, arr)
+    # pair; `solve_lambert` is the governed kernel boundary. `gaussIOD` has a
+    # dedicated entry above documenting its intrinsic Laguerre-vs-LAPACK
+    # randomized-root divergence.
     "dynamics.generate_porkchop_data": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-13)},
         rationale=(

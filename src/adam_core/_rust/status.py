@@ -339,11 +339,12 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="python+quivr",
         default="rust",
         rust_module="adam_core._rust_native.calculate_moid_batch_numpy",
-        parity_coverage="orchestration-implied",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Public quivr orchestration over the Rust MOID batch kernel. "
-            "Baseline-main random fuzz is deferred because it needs a "
-            "heavier Orbits/SPK subprocess adapter."
+            "Public quivr orchestration over the Rust MOID batch kernel is "
+            "fuzzed end-to-end against the baseline-main oracle, including "
+            "Orbits construction, SPICE perturber-state lookup, batched MOID "
+            "dispatch, and PerturberMOIDs table assembly."
         ),
     ),
     ApiMigration(
