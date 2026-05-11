@@ -31,6 +31,7 @@
     "orbit_determination.gaussIOD"
   ],
   "fixed_fixture_api_ids": [
+    "dynamics.calculate_moid",
     "orbit_determination.gaussIOD"
   ],
   "thread_mode": "multi-thread",
@@ -6953,6 +6954,32 @@
   },
   "fixed_fixtures": {
     "apis": [
+      {
+        "api_id": "dynamics.calculate_moid",
+        "passed": true,
+        "investigate": false,
+        "investigate_task": "",
+        "fixtures": [
+          {
+            "name": "identical_circular_flat_minimum",
+            "description": "Identical circular heliocentric orbits: the MOID distance is zero, but the argmin time is non-unique across the whole orbital period.",
+            "n": 1,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "moid",
+                "max_abs": 2.290476031189253e-16,
+                "max_rel": 0.6795509673760874,
+                "atol": 1e-12,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          }
+        ]
+      },
       {
         "api_id": "orbit_determination.gaussIOD",
         "passed": true,

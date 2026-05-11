@@ -225,6 +225,10 @@ Currently wired directly in randomized fuzz (29):
 - 4 OD primitives, including constrained shared-root `gaussIOD` fuzz
 
 Supplemental fixed-fixture parity:
+- `dynamics.calculate_moid` — randomized fuzz covers non-degenerate optimizer
+  rows; a deterministic identical-circular fixture covers the flat-minimum
+  regime where the MOID distance is unique but the returned argmin time is only
+  an optimizer witness within the orbital period.
 - `orbit_determination.gaussIOD` — constrained randomized fuzz covers
   well-conditioned low-e, main-belt-like, multi-day triplets where Rust
   Laguerre+deflation and legacy `np.roots`/LAPACK share a physical best root.

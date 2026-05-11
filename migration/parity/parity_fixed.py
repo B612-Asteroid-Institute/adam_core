@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -28,6 +28,7 @@ class FixedFixtureSpec:
     name: str
     description: str
     make_sample: Callable[[], _inputs.Sample]
+    output_tolerances: Mapping[str, tolerances.OutputTol] | None = None
 
 
 @dataclass
@@ -53,6 +54,26 @@ class ApiResult:
     @property
     def passed(self) -> bool:
         return all(fixture.passed for fixture in self.fixtures)
+
+
+def _moid_identical_circular_flat_minimum_sample() -> _inputs.Sample:
+    """Identical circular orbits have a flat zero-distance MOID minimum.
+
+    The returned argmin time is an optimizer witness, not a unique science
+    quantity: every point on the primary circle lies on the secondary circle.
+    The fixed fixture therefore compares the MOID distance only; runtime tests
+    assert the returned witness time is finite and inside one primary period.
+    """
+    kep = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
+    cart = _inputs._kep_to_cart(kep)
+    kwargs: dict[str, Any] = {
+        "primary_orbits": cart,
+        "secondary_orbits": cart.copy(),
+        "mus": np.full(1, _inputs.MU_SUN, dtype=np.float64),
+        "max_iter": 100,
+        "xtol": 1e-10,
+    }
+    return _inputs.Sample(rust_kwargs=kwargs, legacy_kwargs=kwargs)
 
 
 def _gauss_iod_well_conditioned_sample() -> _inputs.Sample:
@@ -121,6 +142,16 @@ def _gauss_iod_well_conditioned_sample() -> _inputs.Sample:
 
 FIXTURES: tuple[FixedFixtureSpec, ...] = (
     FixedFixtureSpec(
+        api_id="dynamics.calculate_moid",
+        name="identical_circular_flat_minimum",
+        description=(
+            "Identical circular heliocentric orbits: the MOID distance is zero, "
+            "but the argmin time is non-unique across the whole orbital period."
+        ),
+        make_sample=_moid_identical_circular_flat_minimum_sample,
+        output_tolerances={"moid": tolerances.OutputTol(atol=1e-12, rtol=0.0)},
+    ),
+    FixedFixtureSpec(
         api_id="orbit_determination.gaussIOD",
         name="well_conditioned_seed_20260425",
         description=(
@@ -173,7 +204,8 @@ def fixed_one(api_id: str) -> ApiResult:
             api.fixtures.append(result)
             continue
 
-        for out_name, tol in spec.outputs.items():
+        output_tolerances = fixture.output_tolerances or spec.outputs
+        for out_name, tol in output_tolerances.items():
             if out_name not in rust_out:
                 result.error = f"missing rust output {out_name!r}"
                 break

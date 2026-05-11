@@ -325,19 +325,25 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "Single-pair MOID over two Cartesian orbit states. Both sides use "
             "the same nested bounded-minimization formulation: outer Brent "
             "search over primary-orbit dt and inner bounded search over the "
-            "secondary ellipse anomaly."
+            "secondary ellipse anomaly. A supplemental fixed fixture covers "
+            "the identical-circular flat-minimum case and compares only the "
+            "unique distance; the argmin time is non-unique there."
         ),
         dominant_column="dt_at_min from the outer bounded minimizer",
         physical_magnitude=(
-            "MOID atol 1e-9 AU ≈ 150 m. dt_at_min atol 1e-3 day ≈ 86 s; "
-            "the returned MOID is the science quantity and is much tighter."
+            "MOID atol 1e-9 AU ≈ 150 m in random fuzz; the flat-minimum "
+            "fixed fixture tightens the distance to 1e-12 AU. dt_at_min atol "
+            "1e-3 day ≈ 86 s for non-degenerate fuzz rows; degenerate flat "
+            "minima treat the returned time as a finite witness, not a unique "
+            "science output."
         ),
         root_cause=(
             "Rust carries a scipy-style bounded minimizer but not scipy's exact "
             "floating-point branch history. The baseline oracle keeps upstream "
             "tolerances (inner xatol via tol=1e-12, outer tol=1e-14, "
             "propagation max_iter=1000/tol=1e-14). Very flat minima can shift "
-            "the reported argmin slightly while preserving the distance."
+            "the reported argmin substantially while preserving the distance; "
+            "identical circular orbits make this non-uniqueness explicit."
         ),
         verdict="algorithm-equivalent optimizer parity for the direct NumPy boundary.",
     ),

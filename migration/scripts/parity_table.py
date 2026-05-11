@@ -106,21 +106,39 @@ def _build_rows(
         spec = tolerances.get(api_id)
         api_result = fixed_by_api[api_id]
         migration = API_MIGRATIONS_BY_ID[api_id]
-        for out_name, tol in spec.outputs.items():
-            worst_abs = 0.0
-            worst_rel = 0.0
-            for fixture in api_result.fixtures:
-                for output in fixture.outputs:
-                    if output.name == out_name:
-                        worst_abs = max(worst_abs, output.max_abs)
-                        worst_rel = max(worst_rel, output.max_rel)
-            margin = (tol.atol / worst_abs) if worst_abs > 0 else float("inf")
+        output_names = sorted(
+            {
+                output.name
+                for fixture in api_result.fixtures
+                for output in fixture.outputs
+            }
+        )
+        for out_name in output_names:
+            output_results = [
+                output
+                for fixture in api_result.fixtures
+                for output in fixture.outputs
+                if output.name == out_name
+            ]
+            worst_abs = max((output.max_abs for output in output_results), default=0.0)
+            worst_rel = max((output.max_rel for output in output_results), default=0.0)
+            atol = (
+                output_results[0].atol
+                if output_results
+                else spec.outputs[out_name].atol
+            )
+            rtol = (
+                output_results[0].rtol
+                if output_results
+                else spec.outputs[out_name].rtol
+            )
+            margin = (atol / worst_abs) if worst_abs > 0 else float("inf")
             rows.append(
                 {
                     "api_id": api_id,
                     "output": out_name,
-                    "atol": tol.atol,
-                    "rtol": tol.rtol,
+                    "atol": atol,
+                    "rtol": rtol,
                     "worst_abs": worst_abs,
                     "worst_rel": worst_rel,
                     "margin": margin,

@@ -331,7 +331,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         parity_coverage="random-fuzz",
         coverage_note=(
             "Direct single-pair NumPy MOID boundary is covered by randomized "
-            "baseline-main parity and shaped speed lanes; "
+            "baseline-main parity and shaped speed lanes; a supplemental fixed "
+            "fixture covers the identical-circular flat-minimum case where the "
+            "distance is unique but the argmin time is only an optimizer witness. "
             "calculate_perturber_moids orchestration is tracked separately."
         ),
     ),

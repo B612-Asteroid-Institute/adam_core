@@ -10,6 +10,31 @@ from ...utils.spice import get_perturber_state
 from ..moid import calculate_moid, calculate_perturber_moids
 
 
+def test_calculate_moid_identical_circular_flat_minimum_time_is_witness():
+    epoch_mjd = 59000.0
+    circular = Orbits.from_kwargs(
+        orbit_id=["a"],
+        coordinates=KeplerianCoordinates.from_kwargs(
+            a=[1.0],
+            e=[0.0],
+            i=[0.0],
+            ap=[0.0],
+            raan=[0.0],
+            M=[0.0],
+            time=Timestamp.from_mjd([epoch_mjd], scale="tdb"),
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"]),
+        ).to_cartesian(),
+    )
+
+    moid, moid_time = calculate_moid(circular, circular)
+
+    np.testing.assert_allclose(moid, 0.0, rtol=0, atol=1e-12)
+    dt_at_min = moid_time.mjd().to_numpy(zero_copy_only=False)[0] - epoch_mjd
+    period = 2.0 * np.pi * np.sqrt(1.0 / circular.coordinates.origin.mu()[0])
+    assert 0.0 <= dt_at_min <= period
+
+
 def test_calculate_moid_circular_orbits():
     # Test for two coplanar circular orbits that their MOID
     # is equal to the difference of their semi-major axes
