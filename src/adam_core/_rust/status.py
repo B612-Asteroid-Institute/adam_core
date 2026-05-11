@@ -126,19 +126,30 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         parity_coverage="random-fuzz",
         covered_subcases=(
             "Public dispatcher CartesianCoordinates ecliptic->equatorial "
+            "and equatorial->ecliptic to SphericalCoordinates",
+            "Public dispatcher SphericalCoordinates ecliptic->equatorial "
+            "to CartesianCoordinates",
+            "Public dispatcher KeplerianCoordinates ecliptic->equatorial "
             "to SphericalCoordinates",
+            "Public dispatcher CometaryCoordinates equatorial->ecliptic "
+            "to KeplerianCoordinates",
+            "Public dispatcher SUN->EARTH and EARTH->SUN origin translations "
+            "to SphericalCoordinates",
+            "Public dispatcher Earth-centered ecliptic->ITRF93 and "
+            "ITRF93->equatorial time-varying rotations to SphericalCoordinates",
         ),
         excluded_subcases=(
             "Cartesian->Cartesian frame-only public dispatcher fallthrough "
             "(intentional: cached cartesian_to_frame path is faster)",
-            "time-varying ITRF93 rotations",
-            "origin translation and user-kernel SPICE body coverage",
-            "remaining non-Cartesian representation conversions",
+            "covariance-bearing public dispatcher subcases",
+            "mixed-origin arrays, observatory origins, and user-furnished "
+            "SPICE body coverage beyond the SUN/EARTH origin-translation matrix",
         ),
         coverage_note=(
-            "Random fuzz now exercises the public quivr-object dispatcher for "
-            "a supported Cartesian->Spherical frame-change workload. The "
-            "remaining excluded subcases are explicit and should not be "
+            "Random fuzz exercises a public quivr-object dispatcher subcase "
+            "matrix spanning constant-frame inverse directions, non-Cartesian "
+            "inputs, SUN/EARTH origin translations, and ITRF93 time-varying "
+            "rotations. Remaining exclusions are explicit and should not be "
             "inferred as fuzz-covered."
         ),
         latency_gate=True,

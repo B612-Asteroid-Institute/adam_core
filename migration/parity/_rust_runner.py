@@ -32,17 +32,13 @@ def _ensure(arr: Any, name: str) -> np.ndarray:
 
 
 def _coordinates_transform_coordinates(
-    coords: np.ndarray,
-    time_mjd: np.ndarray,
-    representation_out: str,
-    frame_in: str,
-    frame_out: str,
+    cases: list[dict[str, Any]],
 ) -> dict[str, np.ndarray]:
     """Public ``transform_coordinates`` dispatcher on the migration checkout."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.cometary import CometaryCoordinates
     from adam_core.coordinates.keplerian import KeplerianCoordinates
-    from adam_core.coordinates.origin import Origin
+    from adam_core.coordinates.origin import Origin, OriginCodes
     from adam_core.coordinates.spherical import SphericalCoordinates
     from adam_core.coordinates.transform import transform_coordinates
     from adam_core.time import Timestamp
@@ -53,24 +49,79 @@ def _coordinates_transform_coordinates(
         "keplerian": KeplerianCoordinates,
         "cometary": CometaryCoordinates,
     }
-    n = coords.shape[0]
-    cc = CartesianCoordinates.from_kwargs(
-        x=coords[:, 0],
-        y=coords[:, 1],
-        z=coords[:, 2],
-        vx=coords[:, 3],
-        vy=coords[:, 4],
-        vz=coords[:, 5],
-        time=Timestamp.from_mjd(time_mjd, scale="tdb"),
-        origin=Origin.from_kwargs(code=np.full(n, "SUN", dtype="object")),
-        frame=frame_in,
-    )
-    transformed = transform_coordinates(
-        cc,
-        representation_out=representations[representation_out],
-        frame_out=frame_out,
-    )
-    return {"out": np.asarray(transformed.values, dtype=np.float64)}
+
+    def build_coords(case: dict[str, Any]) -> Any:
+        coords = np.asarray(case["coords"], dtype=np.float64)
+        time = Timestamp.from_mjd(
+            np.asarray(case["time_mjd"], dtype=np.float64), scale="tdb"
+        )
+        origin = Origin.from_kwargs(
+            code=np.full(coords.shape[0], str(case["origin_in"]), dtype="object")
+        )
+        frame = str(case["frame_in"])
+        representation_in = str(case["representation_in"])
+        if representation_in == "cartesian":
+            return CartesianCoordinates.from_kwargs(
+                x=coords[:, 0],
+                y=coords[:, 1],
+                z=coords[:, 2],
+                vx=coords[:, 3],
+                vy=coords[:, 4],
+                vz=coords[:, 5],
+                time=time,
+                origin=origin,
+                frame=frame,
+            )
+        if representation_in == "spherical":
+            return SphericalCoordinates.from_kwargs(
+                rho=coords[:, 0],
+                lon=coords[:, 1],
+                lat=coords[:, 2],
+                vrho=coords[:, 3],
+                vlon=coords[:, 4],
+                vlat=coords[:, 5],
+                time=time,
+                origin=origin,
+                frame=frame,
+            )
+        if representation_in == "keplerian":
+            return KeplerianCoordinates.from_kwargs(
+                a=coords[:, 0],
+                e=coords[:, 1],
+                i=coords[:, 2],
+                raan=coords[:, 3],
+                ap=coords[:, 4],
+                M=coords[:, 5],
+                time=time,
+                origin=origin,
+                frame=frame,
+            )
+        if representation_in == "cometary":
+            return CometaryCoordinates.from_kwargs(
+                q=coords[:, 0],
+                e=coords[:, 1],
+                i=coords[:, 2],
+                raan=coords[:, 3],
+                ap=coords[:, 4],
+                tp=coords[:, 5],
+                time=time,
+                origin=origin,
+                frame=frame,
+            )
+        raise ValueError(f"Unsupported representation_in: {representation_in}")
+
+    outputs: dict[str, np.ndarray] = {}
+    for case in cases:
+        kwargs: dict[str, Any] = {
+            "representation_out": representations[str(case["representation_out"])],
+            "frame_out": str(case["frame_out"]),
+        }
+        origin_out = case.get("origin_out")
+        if origin_out is not None:
+            kwargs["origin_out"] = OriginCodes[str(origin_out)]
+        transformed = transform_coordinates(build_coords(case), **kwargs)
+        outputs[str(case["name"])] = np.asarray(transformed.values, dtype=np.float64)
+    return outputs
 
 
 def _coordinates_cartesian_to_spherical(coords: np.ndarray) -> dict[str, np.ndarray]:
@@ -297,9 +348,9 @@ def _coordinates_residuals_Residuals_calculate(
         warnings.simplefilter("ignore", UserWarning)
         residuals = Residuals.calculate(obs, pred)
 
-    values_arr = np.stack(
-        residuals.values.to_numpy(zero_copy_only=False)
-    ).astype(np.float64)
+    values_arr = np.stack(residuals.values.to_numpy(zero_copy_only=False)).astype(
+        np.float64
+    )
     return {
         "values": values_arr,
         "chi2": np.asarray(

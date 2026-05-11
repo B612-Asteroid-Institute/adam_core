@@ -231,15 +231,18 @@ Fixed-fixture parity outside randomized fuzz:
   enforces eight deterministic well-conditioned triplets while keeping random
   fuzz excluded.
 
-`coordinates.transform_coordinates` is marked partial in the registry: direct
-randomized fuzz now covers a public quivr-object dispatcher case
-(`CartesianCoordinates` ecliptic -> equatorial into `SphericalCoordinates`).
-The intentionally excluded subcases remain explicit: Cartesian-to-Cartesian
-frame-only fallthrough, ITRF93/time-varying rotations, origin translation, and
-remaining non-Cartesian representation combinations.
+`coordinates.transform_coordinates` is marked partial in the registry, but
+direct randomized fuzz now covers a public quivr-object dispatcher subcase
+matrix: Cartesian constant-frame inverse directions, Spherical/Keplerian/
+Cometary non-Cartesian inputs, SUN↔EARTH origin translations, and
+Earth-centered ITRF93 time-varying rotations. The intentionally excluded
+subcases remain explicit: Cartesian-to-Cartesian frame-only fallthrough,
+covariance-bearing public dispatcher cases, mixed-origin arrays, observatory
+origins, and user-furnished SPICE body coverage beyond the SUN/EARTH matrix.
 
-These excluded/indirect cases need a different harness style, fixed fixtures,
-or quivr round-trips rather than numpy-boundary random subprocess hand-off.
+These remaining excluded/indirect cases need a different harness style, fixed
+fixtures, or quivr round-trips rather than numpy-boundary random subprocess
+hand-off.
 
 ## Files
 

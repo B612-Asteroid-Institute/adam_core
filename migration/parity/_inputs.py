@@ -135,23 +135,240 @@ def _kep_to_cart(coords_kep: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
-    """Public dispatcher Cart→Spherical, ecliptic → equatorial, no origin shift.
+_TRANSFORM_SUBCASE_NAMES: tuple[str, ...] = (
+    "cart_ec_to_sph_eq",
+    "cart_eq_to_sph_ec",
+    "sph_ec_to_cart_eq",
+    "kep_ec_to_sph_eq",
+    "com_eq_to_kep_ec",
+    "cart_ec_sun_to_sph_ec_earth",
+    "cart_ec_earth_to_sph_ec_sun",
+    "cart_ec_earth_to_sph_itrf93",
+    "cart_itrf93_earth_to_sph_eq",
+)
 
-    This deliberately goes through the public ``transform_coordinates`` quivr
-    object boundary on both sides. The migration side should fuse the frame
-    change and representation conversion into one Rust dispatcher call; the
-    baseline-main side exercises the upstream public dispatcher.
-    """
-    coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
-    time_mjd = rng.uniform(58000.0, 63000.0, size=n).astype(np.float64)
-    kw = {
-        "coords": coords,
-        "time_mjd": time_mjd,
-        "representation_out": "spherical",
-        "frame_in": "ecliptic",
-        "frame_out": "equatorial",
+
+def _split_transform_rows(n: int) -> list[int]:
+    case_count = len(_TRANSFORM_SUBCASE_NAMES)
+    if n < case_count:
+        raise ValueError(
+            f"coordinates.transform_coordinates needs at least {case_count} rows "
+            "to exercise every public-dispatch subcase"
+        )
+    rows_per_case, remainder = divmod(n, case_count)
+    return [rows_per_case + (1 if i < remainder else 0) for i in range(case_count)]
+
+
+def _sample_transform_time(
+    rng: np.random.Generator, n: int, *, itrf93: bool = False
+) -> np.ndarray:
+    if itrf93:
+        return rng.uniform(59000.0, 60500.0, size=n).astype(np.float64)
+    return rng.uniform(58000.0, 63000.0, size=n).astype(np.float64)
+
+
+def _sample_geocentric_cartesian(rng: np.random.Generator, n: int) -> np.ndarray:
+    # ITRF93/geodetic-style public dispatcher cases should stay near Earth so
+    # small CSPICE-vs-spicekit rotation-matrix ULP differences do not get
+    # artificially amplified by outer-solar-system lever arms.
+    radius = rng.uniform(0.8, 1.3, size=n) * R_EARTH_EQ
+    lon = rng.uniform(0.0, 2.0 * np.pi, size=n)
+    lat = rng.uniform(-0.9, 0.9, size=n)
+    cos_lat = np.cos(lat)
+    x = radius * cos_lat * np.cos(lon)
+    y = radius * cos_lat * np.sin(lon)
+    z = radius * np.sin(lat)
+    velocity = rng.normal(scale=1e-6, size=(n, 3))
+    return np.stack([x, y, z, velocity[:, 0], velocity[:, 1], velocity[:, 2]], axis=1)
+
+
+def _cart_to_spherical(coords: np.ndarray) -> np.ndarray:
+    from adam_core._rust import api as _rust_api
+
+    out = _rust_api.cartesian_to_spherical_numpy(coords)
+    if out is None:
+        raise RuntimeError("rust backend unavailable")
+    return np.ascontiguousarray(out, dtype=np.float64)
+
+
+def _cart_to_cometary(coords: np.ndarray, t0: np.ndarray) -> np.ndarray:
+    from adam_core._rust import api as _rust_api
+
+    out = _rust_api.cartesian_to_cometary_numpy(
+        coords,
+        t0,
+        np.full(coords.shape[0], MU_SUN, dtype=np.float64),
+    )
+    if out is None:
+        raise RuntimeError("rust backend unavailable")
+    return np.ascontiguousarray(out, dtype=np.float64)
+
+
+def _transform_case(
+    name: str,
+    coords: np.ndarray,
+    time_mjd: np.ndarray,
+    representation_in: str,
+    representation_out: str,
+    frame_in: str,
+    frame_out: str,
+    *,
+    origin_in: str = "SUN",
+    origin_out: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "name": name,
+        "coords": np.ascontiguousarray(coords, dtype=np.float64),
+        "time_mjd": np.ascontiguousarray(time_mjd, dtype=np.float64),
+        "representation_in": representation_in,
+        "representation_out": representation_out,
+        "frame_in": frame_in,
+        "frame_out": frame_out,
+        "origin_in": origin_in,
+        "origin_out": origin_out,
     }
+
+
+def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
+    """Public ``transform_coordinates`` dispatcher subcase matrix.
+
+    Each case deliberately goes through the public quivr object boundary on
+    both sides. The matrix covers constant-frame inverse directions,
+    non-Cartesian inputs, SUN↔EARTH origin translations, and Earth-centered
+    ITRF93 time-varying rotations while keeping the total row count near ``n``.
+    """
+    sizes = iter(_split_transform_rows(n))
+    cases: list[dict[str, Any]] = []
+
+    size = next(sizes)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_case(
+            "cart_ec_to_sph_eq",
+            coords,
+            _sample_transform_time(rng, size),
+            "cartesian",
+            "spherical",
+            "ecliptic",
+            "equatorial",
+        )
+    )
+
+    size = next(sizes)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_case(
+            "cart_eq_to_sph_ec",
+            coords,
+            _sample_transform_time(rng, size),
+            "cartesian",
+            "spherical",
+            "equatorial",
+            "ecliptic",
+        )
+    )
+
+    size = next(sizes)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_case(
+            "sph_ec_to_cart_eq",
+            _cart_to_spherical(coords),
+            _sample_transform_time(rng, size),
+            "spherical",
+            "cartesian",
+            "ecliptic",
+            "equatorial",
+        )
+    )
+
+    size = next(sizes)
+    cases.append(
+        _transform_case(
+            "kep_ec_to_sph_eq",
+            _sample_keplerian_elements(rng, size),
+            _sample_transform_time(rng, size),
+            "keplerian",
+            "spherical",
+            "ecliptic",
+            "equatorial",
+        )
+    )
+
+    size = next(sizes)
+    time_mjd = _sample_transform_time(rng, size)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_case(
+            "com_eq_to_kep_ec",
+            _cart_to_cometary(coords, time_mjd),
+            time_mjd,
+            "cometary",
+            "keplerian",
+            "equatorial",
+            "ecliptic",
+        )
+    )
+
+    size = next(sizes)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_case(
+            "cart_ec_sun_to_sph_ec_earth",
+            coords,
+            _sample_transform_time(rng, size, itrf93=True),
+            "cartesian",
+            "spherical",
+            "ecliptic",
+            "ecliptic",
+            origin_out="EARTH",
+        )
+    )
+
+    size = next(sizes)
+    cases.append(
+        _transform_case(
+            "cart_ec_earth_to_sph_ec_sun",
+            _sample_geocentric_cartesian(rng, size),
+            _sample_transform_time(rng, size, itrf93=True),
+            "cartesian",
+            "spherical",
+            "ecliptic",
+            "ecliptic",
+            origin_in="EARTH",
+            origin_out="SUN",
+        )
+    )
+
+    size = next(sizes)
+    cases.append(
+        _transform_case(
+            "cart_ec_earth_to_sph_itrf93",
+            _sample_geocentric_cartesian(rng, size),
+            _sample_transform_time(rng, size, itrf93=True),
+            "cartesian",
+            "spherical",
+            "ecliptic",
+            "itrf93",
+            origin_in="EARTH",
+        )
+    )
+
+    size = next(sizes)
+    cases.append(
+        _transform_case(
+            "cart_itrf93_earth_to_sph_eq",
+            _sample_geocentric_cartesian(rng, size),
+            _sample_transform_time(rng, size, itrf93=True),
+            "cartesian",
+            "spherical",
+            "itrf93",
+            "equatorial",
+            origin_in="EARTH",
+        )
+    )
+
+    kw = {"cases": cases}
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
@@ -463,14 +680,10 @@ def _make_porkchop_sample(
     n_arrivals: int,
 ) -> Sample:
     departure_coords = _kep_to_cart(
-        _sample_porkchop_keplerian_elements(
-            rng, n_departures, a_min=0.85, a_max=1.35
-        )
+        _sample_porkchop_keplerian_elements(rng, n_departures, a_min=0.85, a_max=1.35)
     )
     arrival_coords = _kep_to_cart(
-        _sample_porkchop_keplerian_elements(
-            rng, n_arrivals, a_min=1.25, a_max=2.40
-        )
+        _sample_porkchop_keplerian_elements(rng, n_arrivals, a_min=1.25, a_max=2.40)
     )
     departure_time_mjd = 60000.0 + 4.0 * np.arange(n_departures, dtype=np.float64)
     arrival_time_mjd = (
@@ -501,9 +714,7 @@ def _make_porkchop_sample(
 
 def make_generate_porkchop_data(rng: np.random.Generator, n: int) -> Sample:
     n_departures, n_arrivals = _porkchop_counts_for_rows(n)
-    return _make_porkchop_sample(
-        rng, n_departures=n_departures, n_arrivals=n_arrivals
-    )
+    return _make_porkchop_sample(rng, n_departures=n_departures, n_arrivals=n_arrivals)
 
 
 def _sample_dts(rng: np.random.Generator, n: int) -> np.ndarray:
@@ -871,9 +1082,7 @@ def make_generate_porkchop_data_shape(
     rng: np.random.Generator, shape: WorkloadShape
 ) -> Sample:
     n_departures, n_arrivals = _porkchop_grid(shape)
-    return _make_porkchop_sample(
-        rng, n_departures=n_departures, n_arrivals=n_arrivals
-    )
+    return _make_porkchop_sample(rng, n_departures=n_departures, n_arrivals=n_arrivals)
 
 
 def make_propagate_2body_shape(

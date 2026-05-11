@@ -209,24 +209,44 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         verdict="bit-parity.",
     ),
     "coordinates.transform_coordinates": ToleranceSpec(
-        outputs={"out": OutputTol(atol=1e-10, rtol=1e-12)},
+        outputs={
+            "cart_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
+            "cart_eq_to_sph_ec": OutputTol(atol=1e-10, rtol=1e-12),
+            "sph_ec_to_cart_eq": OutputTol(atol=1e-10, rtol=1e-12),
+            "kep_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
+            "com_eq_to_kep_ec": OutputTol(atol=1e-9, rtol=1e-12),
+            "cart_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-9, rtol=1e-12),
+            "cart_ec_earth_to_sph_ec_sun": OutputTol(atol=1e-9, rtol=1e-12),
+            "cart_ec_earth_to_sph_itrf93": OutputTol(atol=1e-7, rtol=1e-12),
+            "cart_itrf93_earth_to_sph_eq": OutputTol(atol=1e-7, rtol=1e-12),
+        },
         rationale=(
-            "Public dispatcher Cart→Spherical with ecliptic→equatorial frame "
-            "rotation. Exercises quivr object construction, public "
-            "transform_coordinates dispatch, Rust fused frame+representation "
-            "path on the migration side, and baseline-main public dispatch."
+            "Public dispatcher matrix covering Cartesian constant-frame "
+            "directions, Spherical/Keplerian/Cometary non-Cartesian inputs, "
+            "SUN↔EARTH origin translations, and Earth-centered ITRF93 "
+            "time-varying rotations. Exercises quivr object construction, "
+            "public transform_coordinates dispatch, Rust fused dispatch where "
+            "supported, and baseline-main public dispatch."
         ),
-        dominant_column="rho/lon/lat output",
+        dominant_column="spherical angle / Keplerian epoch-like output",
         physical_magnitude=(
-            "Atol 1e-10 deg is 0.36 microarcsec for angular columns; AU "
-            "radial drift at observed levels is picometer-scale."
+            "1e-10 deg is 0.36 microarcsec for constant-frame angular columns; "
+            "1e-9 days is 86 microseconds for cometary/Keplerian epoch-like "
+            "columns; 1e-7 deg/day on ITRF93 spherical velocity-angle columns "
+            "is 0.36 mas/day and remains well below the Earth-rotation ULP noise "
+            "time-varying rotation path."
         ),
         root_cause=(
-            "Constant 6×6 frame rotation followed by sqrt/atan2/asin spherical "
-            "conversion. Rust stdlib and baseline JAX/XLA transcendentals can "
-            "differ by last-ulp rounding."
+            "Constant 6×6 frame rotations and representation conversions compose "
+            "sqrt/atan2/asin/sin/cos last-ulp differences between Rust stdlib "
+            "and baseline JAX/XLA. Origin translations compare spicekit state "
+            "lookups to baseline CSPICE. ITRF93 subcases additionally include "
+            "the accepted CSPICE-vs-pure-Rust PCK 1-ULP rotation divergence."
         ),
-        verdict="public-dispatch parity for this supported subcase.",
+        verdict=(
+            "public-dispatch parity across the covered subcase matrix; remaining "
+            "exclusions are explicit in the migration registry."
+        ),
     ),
     "coordinates.residuals.Residuals.calculate": ToleranceSpec(
         outputs={
