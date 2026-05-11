@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-10 (public `dynamics.generate_porkchop_data` orchestration parity/speed governance added; `calculate_perturber_moids` and `Residuals.calculate` remain in regular governance)
+Last updated: 2026-05-10 (public `dynamics.generate_porkchop_data`, `dynamics.calculate_perturber_moids`, and `coordinates.residuals.Residuals.calculate` all remain in regular parity/speed governance)
 
 ## Current Review-Derived Backlog
 

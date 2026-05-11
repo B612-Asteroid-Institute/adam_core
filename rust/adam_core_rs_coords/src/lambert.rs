@@ -546,4 +546,63 @@ mod tests {
         // Either NaN or Infinity is acceptable for degenerate tof.
         assert!(!v1[0].is_finite() || v1[0].is_nan());
     }
+
+    fn porkchop_boundary_inputs(valid_pairs: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+        let dep_states = vec![1.0, 0.0, 0.0, 0.0, 0.017, 0.0];
+        let dep_mjds = vec![0.0];
+        let mut arr_states = Vec::with_capacity(valid_pairs * 6);
+        let mut arr_mjds = Vec::with_capacity(valid_pairs);
+        for j in 0..valid_pairs {
+            let theta = 0.2 + (j as f64) * 0.001;
+            let radius = 1.3 + (j as f64) * 1.0e-5;
+            arr_states.extend_from_slice(&[
+                radius * theta.cos(),
+                radius * theta.sin(),
+                0.01 * theta.sin(),
+                -0.014 * theta.sin(),
+                0.014 * theta.cos(),
+                0.0,
+            ]);
+            arr_mjds.push(20.0 + (j as f64) * 0.25);
+        }
+        (dep_states, dep_mjds, arr_states, arr_mjds)
+    }
+
+    fn run_porkchop_boundary(
+        valid_pairs: usize,
+        threads: usize,
+    ) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
+        let (dep_states, dep_mjds, arr_states, arr_mjds) = porkchop_boundary_inputs(valid_pairs);
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .expect("test thread pool builds");
+        pool.install(|| {
+            porkchop_grid_flat(
+                &dep_states,
+                &dep_mjds,
+                &arr_states,
+                &arr_mjds,
+                2.95912208284120e-4,
+                true,
+                35,
+                1e-10,
+                1e-10,
+            )
+        })
+    }
+
+    #[test]
+    fn porkchop_serial_threshold_boundary_matches_parallel() {
+        for valid_pairs in [511, 512, 513] {
+            let serial = run_porkchop_boundary(valid_pairs, 1);
+            let threaded = run_porkchop_boundary(valid_pairs, 2);
+            assert_eq!(serial.0, threaded.0);
+            assert_eq!(serial.1, threaded.1);
+            assert_eq!(serial.2, threaded.2);
+            assert_eq!(serial.3, threaded.3);
+            assert!(serial.2.iter().all(|value| value.is_finite()));
+            assert!(serial.3.iter().all(|value| value.is_finite()));
+        }
+    }
 }

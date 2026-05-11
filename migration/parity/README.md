@@ -83,6 +83,13 @@ coverage updates. Use
 `--replace-legacy-cache` / `--speed-replace-legacy-cache` only for intentional
 full recapture after benchmark process or baseline-identity changes.
 
+For harness experiments that touch timing-process files such as
+`parity_speed.py` or `_threading.py`, use a throwaway branch or an output/cache
+path outside the committed artifacts. Timing-process hash mismatches are
+intentional red flags; revert experimental harness edits before reusing the
+canonical cache, or explicitly replace the cache after an intentional benchmark
+process change.
+
 ```bash
 pdm run rust-parity-legacy-cache-refresh
 ```
@@ -199,16 +206,13 @@ pretty-printer joins this registry to `tolerances.py` so reports distinguish
 direct randomized fuzz, orchestration-implied coverage, targeted-test-only
 coverage, and intentional exclusions.
 
-Currently wired directly in randomized fuzz (25):
-- 9 coordinates/transform/residual surfaces
-- 8 dynamics primitives including direct MOID and LT-correction orchestration
+Currently wired directly in randomized fuzz (28):
+- 10 coordinates/transform/residual surfaces
+- 10 dynamics primitives and public orchestration surfaces, including direct
+  MOID, perturber MOIDs, LT-correction, and porkchop grids
 - 4 photometry
 - 1 orbit-classification rule surface
 - 3 OD primitives
-
-Covered indirectly through underlying kernel parity:
-- `dynamics.calculate_perturber_moids` — orchestration over Orbits quivr table
-- `dynamics.generate_porkchop_data` — orchestration over Orbits quivr table
 
 Declared but intentionally unwired in randomized fuzz:
 - `orbit_determination.gaussIOD` — variable-length output (0-3 orbits) and
