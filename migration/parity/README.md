@@ -1,12 +1,15 @@
 # Parity + Baseline Speed Gate
 
-Baseline-main enforcement for the Rust migration. Two gates run side-by-side
+Baseline-main enforcement for the Rust migration. Three gates run side-by-side
 for APIs wired into this harness:
 
 1. **Parity-fuzz** — randomized inputs, current Rust output must match the
    upstream `main` implementation within the per-API tolerance defined in
    `tolerances.py`.
-2. **Speedup** — current Rust must meet lane-specific p50/p95 thresholds
+2. **Fixed-fixture parity** — deterministic baseline-main fixtures for APIs
+   where randomized fuzz is intentionally misleading (currently
+   `orbit_determination.gaussIOD`).
+3. **Speedup** — current Rust must meet lane-specific p50/p95 thresholds
    versus the upstream `main` implementation on identical workloads, unless an
    explicit lane-scoped waiver is attached. Speed artifacts include `tiny-n`
    for quick one-off calls, `small-n` for the historical `n=2000` promotion
@@ -111,6 +114,13 @@ Just the parity-fuzz half:
     --seeds 8 --n 128 --output migration/artifacts/parity_fuzz.json
 ```
 
+Just fixed fixtures:
+
+```bash
+.venv/bin/python -m migration.parity.parity_fixed \
+    --output migration/artifacts/parity_fixed_fixtures.json
+```
+
 The `--n` value is the default per-seed workload. Expensive scalar optimizer
 surfaces may declare smaller canonical per-seed overrides in `_inputs.py` so
 coverage remains direct and randomized without making every full fuzz run
@@ -203,8 +213,8 @@ rust-default kernels; their parity follows from the wired primitives.
 
 `src/adam_core/_rust/status.py` is the source of truth for coverage state. The
 pretty-printer joins this registry to `tolerances.py` so reports distinguish
-direct randomized fuzz, orchestration-implied coverage, targeted-test-only
-coverage, and intentional exclusions.
+direct randomized fuzz, fixed-fixture coverage, orchestration-implied coverage,
+targeted-test-only coverage, and intentional exclusions.
 
 Currently wired directly in randomized fuzz (28):
 - 10 coordinates/transform/residual surfaces
@@ -214,10 +224,12 @@ Currently wired directly in randomized fuzz (28):
 - 1 orbit-classification rule surface
 - 3 OD primitives
 
-Declared but intentionally unwired in randomized fuzz:
+Fixed-fixture parity outside randomized fuzz:
 - `orbit_determination.gaussIOD` — variable-length output (0-3 orbits) and
   root-subset differences between Rust Laguerre+deflation and legacy
-  `np.roots` make random byte-by-byte parity misleading.
+  `np.roots` make random byte-by-byte parity misleading, so the canonical gate
+  enforces eight deterministic well-conditioned triplets while keeping random
+  fuzz excluded.
 
 `coordinates.transform_coordinates` is marked partial in the registry: direct
 randomized fuzz now covers a public quivr-object dispatcher case
@@ -239,5 +251,6 @@ or quivr round-trips rather than numpy-boundary random subprocess hand-off.
 | `_legacy_runner.py` | legacy dispatch — runs inside `.legacy-venv` via subprocess |
 | `_oracle.py` | subprocess helper that talks to `_legacy_runner` |
 | `parity_fuzz.py` | randomized parity gate (rust vs legacy outputs) |
+| `parity_fixed.py` | deterministic fixed-fixture parity gate |
 | `parity_speed.py` | 1.2× speedup gate against baseline-main timing |
-| `parity_main.py` | orchestrator running both gates → JSON artifact |
+| `parity_main.py` | orchestrator running parity + speed gates → JSON artifact |

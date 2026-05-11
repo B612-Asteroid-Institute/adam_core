@@ -29,6 +29,9 @@
     "orbit_determination.calcHerrickGibbs",
     "orbit_determination.calcGauss"
   ],
+  "fixed_fixture_api_ids": [
+    "orbit_determination.gaussIOD"
+  ],
   "thread_mode": "multi-thread",
   "parity_fuzz": {
     "apis": [
@@ -5713,6 +5716,46 @@
                 "max_rel": 0.0,
                 "atol": 1e-12,
                 "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "all_passed": true
+  },
+  "fixed_fixtures": {
+    "apis": [
+      {
+        "api_id": "orbit_determination.gaussIOD",
+        "passed": true,
+        "investigate": false,
+        "investigate_task": "",
+        "fixtures": [
+          {
+            "name": "well_conditioned_seed_20260425",
+            "description": "Eight deterministic Gauss-IOD triplets with shared physical best roots on Rust Laguerre+deflation and legacy np.roots/LAPACK.",
+            "n": 8,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 2.1827872842550278e-11,
+                "max_rel": 3.6811911615406585e-16,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 2.9286004732398396e-09,
+                "max_rel": 4.3827002725644855e-07,
+                "atol": 1e-08,
+                "rtol": 1e-06,
                 "nan_disagreement": 0,
                 "passed": true
               }

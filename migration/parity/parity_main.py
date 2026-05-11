@@ -170,12 +170,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--skip-fuzz",
         action="store_true",
-        help="Skip the parity-fuzz gate (speed only).",
+        help="Skip the randomized and fixed-fixture parity gates (speed only).",
     )
     p.add_argument(
         "--skip-speed",
         action="store_true",
-        help="Skip the speedup gate (parity-fuzz only).",
+        help="Skip the speedup gate (parity gates only).",
     )
     return p
 
@@ -186,7 +186,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     _threading.apply_thread_mode(args.threads)
 
-    from . import _inputs, parity_fuzz, parity_speed
+    from . import _inputs, parity_fixed, parity_fuzz, parity_speed
 
     if args.speed_refresh_legacy_cache and args.speed_legacy_cache is None:
         parser.error("--speed-refresh-legacy-cache requires --speed-legacy-cache")
@@ -195,10 +195,28 @@ def main(argv: Optional[list[str]] = None) -> int:
             "--speed-replace-legacy-cache requires --speed-refresh-legacy-cache"
         )
 
-    api_ids = args.apis or list(_inputs.all_api_ids())
+    random_api_ids = list(_inputs.all_api_ids())
+    fixed_api_ids = list(parity_fixed.all_api_ids())
+    if args.apis is None:
+        api_ids = random_api_ids
+        requested_fixed_api_ids = fixed_api_ids
+    else:
+        supported = set(random_api_ids) | set(fixed_api_ids)
+        unknown = sorted(set(args.apis) - supported)
+        if unknown:
+            parser.error("No parity fixture or generator for: " + ", ".join(unknown))
+        api_ids = [api_id for api_id in args.apis if api_id in random_api_ids]
+        requested_fixed_api_ids = [
+            api_id for api_id in args.apis if api_id in fixed_api_ids
+        ]
 
-    artifact: dict = {"api_ids": api_ids, "thread_mode": args.threads}
+    artifact: dict = {
+        "api_ids": api_ids,
+        "fixed_fixture_api_ids": requested_fixed_api_ids,
+        "thread_mode": args.threads,
+    }
     fuzz_pass = True
+    fixed_pass = True
     speed_pass = True
 
     if not args.skip_fuzz:
@@ -214,6 +232,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(parity_fuzz.format_summary(fuzz_results))
         artifact["parity_fuzz"] = parity_fuzz.to_json(fuzz_results)
         fuzz_pass = artifact["parity_fuzz"]["all_passed"]
+
+        if requested_fixed_api_ids:
+            print()
+            print("=" * 72)
+            print("FIXED-FIXTURE PARITY GATE")
+            print("=" * 72)
+            fixed_results = parity_fixed.fixed_all(requested_fixed_api_ids)
+            print(parity_fixed.format_summary(fixed_results))
+            artifact["fixed_fixtures"] = parity_fixed.to_json(fixed_results)
+            fixed_pass = artifact["fixed_fixtures"]["all_passed"]
 
     if not args.skip_speed:
         print()
@@ -255,7 +283,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         speed_pass = artifact["parity_speed"]["all_passed"]
 
-    artifact["all_passed"] = fuzz_pass and speed_pass
+    artifact["all_passed"] = fuzz_pass and fixed_pass and speed_pass
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(artifact, indent=2))

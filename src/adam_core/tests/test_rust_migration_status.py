@@ -11,6 +11,7 @@ from migration.parity import (
     _inputs,
     _oracle,
     _threading,
+    parity_fixed,
     parity_main,
     parity_speed,
     tolerances,
@@ -43,6 +44,7 @@ def test_tolerance_manifest_entries_are_registered() -> None:
 
     expected_coverage = {
         "random-fuzz",
+        "fixed-fixture",
         "random-fuzz-excluded",
         "orchestration-implied",
     }
@@ -59,12 +61,25 @@ def test_no_dual_rows_without_current_legacy_implementation() -> None:
     ]
 
 
+def test_fixed_fixture_registry_matches_fixture_manifest() -> None:
+    fixed_fixture_ids = {
+        migration.api_id
+        for migration in API_MIGRATIONS
+        if migration.parity_coverage == "fixed-fixture"
+    }
+
+    assert fixed_fixture_ids == set(parity_fixed.all_api_ids())
+
+
 def test_gauss_iod_randomized_exclusion_is_visible() -> None:
     migration = API_MIGRATIONS_BY_ID["orbit_determination.gaussIOD"]
 
-    assert migration.parity_coverage == "random-fuzz-excluded"
+    assert migration.parity_coverage == "fixed-fixture"
     assert migration.coverage_note
+    assert "Randomized fuzz remains intentionally disabled" in migration.coverage_note
+    assert migration.covered_subcases
     assert migration.excluded_subcases
+    assert "orbit_determination.gaussIOD" not in _inputs.all_api_ids()
 
 
 def test_transform_coordinates_partial_coverage_is_visible() -> None:

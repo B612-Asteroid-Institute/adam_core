@@ -1,8 +1,9 @@
 """Per-API baseline-main randomized parity tolerance table.
 
 Every registry row in ``src/adam_core/_rust/status.py`` with
-``parity_coverage`` set to ``"random-fuzz"``, ``"random-fuzz-excluded"``, or
-``"orchestration-implied"`` must have an entry here. Targeted-test-only and
+``parity_coverage`` set to ``"random-fuzz"``, ``"fixed-fixture"``,
+``"random-fuzz-excluded"``, or ``"orchestration-implied"`` must have an entry
+here. Targeted-test-only and
 raw-kernel-only rows are intentionally tracked in the registry instead of this
 baseline-main random-fuzz manifest.
 
@@ -564,25 +565,31 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     ),
     "orbit_determination.gaussIOD": ToleranceSpec(
         outputs={
-            "epoch": OutputTol(atol=1e-6),
-            "orbit": OutputTol(atol=1e-5, rtol=1e-6),
+            "epoch": OutputTol(atol=1e-9),
+            "orbit": OutputTol(atol=1e-8, rtol=1e-6),
         },
         rationale=(
-            "Full Gauss IOD: equatorial→ecliptic rotation, 8th-order poly "
-            "root finding (Laguerre+deflation), per-root orbit "
-            "construction. INTENTIONALLY UNWIRED FROM RANDOMIZED FUZZ "
-            "(see comment in _inputs.GENERATORS): rust Laguerre+deflation "
-            "and legacy np.roots/LAPACK find different SUBSETS of the "
-            "8th-order polynomial's roots on a non-trivial fraction of "
-            "random triplets — intrinsic to the algorithms, not a kernel "
-            "bug. Best-root parity holds at ~1e-10 AU when both sides "
-            "find any |r2|≥1.5 AU root, but ~15% of random triplets show "
-            "NaN-mismatch (one side rejects the root the other accepts). "
-            "Tolerances retained for fixed-fixture / manual parity. "
-            "Epoch atol=1e-6 day = 0.1 s; orbit atol=1e-5 AU = 1500 m."
+            "Full Gauss IOD fixed fixture: equatorial→ecliptic rotation, "
+            "8th-order polynomial root finding, and per-root orbit "
+            "construction on eight deterministic well-conditioned triplets. "
+            "Randomized fuzz remains intentionally disabled because Rust "
+            "Laguerre+deflation and legacy np.roots/LAPACK find different "
+            "physical-root subsets on a non-trivial fraction of random "
+            "triplets; the fixed fixture covers the shared-root regime that "
+            "downstream IOD uses after filtering near-observer roots."
         ),
-        investigate=True,
-        investigate_task="randomized-parity unwired by design",
+        dominant_column="epoch and 6-D Cartesian orbit",
+        physical_magnitude=(
+            "Epoch atol 1e-9 day = 86 microseconds; orbit atol 1e-8 AU ≈ "
+            "1.5 km with 1 ppm relative tolerance for small components."
+        ),
+        root_cause=(
+            "Both sides solve the same 8th-order Gauss-IOD polynomial, but "
+            "Laguerre+deflation and LAPACK root finding have different last-bit "
+            "branch histories. The fixture only includes triplets where both "
+            "sides accept the same physical best root."
+        ),
+        verdict="fixed-fixture parity; randomized fuzz excluded by design.",
     ),
     # ---- orchestration (compose multiple rust-default APIs) ----
     #

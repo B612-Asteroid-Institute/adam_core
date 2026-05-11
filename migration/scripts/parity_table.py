@@ -1,7 +1,7 @@
 """Pretty-print parity tolerance/RCA and performance tables.
 
-Reads the current parity artifacts (or runs parity_fuzz when requested),
-then joins each result with the configured per-API tolerance from
+Reads the current parity artifacts (or runs parity_fuzz/fixed fixtures when
+requested), then joins each result with the configured per-API tolerance from
 `migration/parity/tolerances.py`. Emits markdown tables suitable for
 handoffs and reviews.
 
@@ -27,7 +27,7 @@ if __package__ in {None, ""}:
 
 from adam_core._rust.status import API_MIGRATIONS_BY_ID, validate_api_migrations
 
-from migration.parity import _inputs, parity_fuzz, tolerances
+from migration.parity import _inputs, parity_fixed, parity_fuzz, tolerances
 
 DEFAULT_PARITY_ARTIFACT = Path("migration/artifacts/parity_gate.json")
 DEFAULT_SPEED_ARTIFACT = Path("migration/artifacts/parity_speed_cold_warm.json")
@@ -44,12 +44,15 @@ def _truncate(text: str, n: int | None) -> str:
 
 def _build_rows(
     fuzz_results: list[parity_fuzz.ApiResult],
+    fixed_results: list[parity_fixed.ApiResult] | None = None,
 ) -> list[dict]:
     validate_api_migrations()
     rows = []
     by_api = {r.api_id: r for r in fuzz_results}
+    fixed_by_api = {r.api_id: r for r in fixed_results or []}
 
     measured_ids = set(by_api.keys())
+    fixed_ids = set(fixed_by_api.keys())
     wired_ids = set(_inputs.all_api_ids())
     declared_ids = set(tolerances.all_api_ids())
     missing_registry = sorted(declared_ids - set(API_MIGRATIONS_BY_ID))
@@ -99,11 +102,55 @@ def _build_rows(
                 }
             )
 
-    for api_id in sorted(declared_ids - measured_ids):
+    for api_id in sorted(fixed_ids - measured_ids):
+        spec = tolerances.get(api_id)
+        api_result = fixed_by_api[api_id]
+        migration = API_MIGRATIONS_BY_ID[api_id]
+        for out_name, tol in spec.outputs.items():
+            worst_abs = 0.0
+            worst_rel = 0.0
+            for fixture in api_result.fixtures:
+                for output in fixture.outputs:
+                    if output.name == out_name:
+                        worst_abs = max(worst_abs, output.max_abs)
+                        worst_rel = max(worst_rel, output.max_rel)
+            margin = (tol.atol / worst_abs) if worst_abs > 0 else float("inf")
+            rows.append(
+                {
+                    "api_id": api_id,
+                    "output": out_name,
+                    "atol": tol.atol,
+                    "rtol": tol.rtol,
+                    "worst_abs": worst_abs,
+                    "worst_rel": worst_rel,
+                    "margin": margin,
+                    "passed": api_result.passed,
+                    "investigate": spec.investigate,
+                    "investigate_task": spec.investigate_task,
+                    "rationale": spec.rationale,
+                    "dominant_column": spec.dominant_column,
+                    "physical_magnitude": spec.physical_magnitude,
+                    "root_cause": spec.root_cause,
+                    "verdict": spec.verdict,
+                    "state": "fixed-fixture",
+                    "registry_status": migration.status,
+                    "parity_coverage": migration.parity_coverage,
+                    "coverage_note": migration.coverage_note,
+                    "covered_subcases": migration.covered_subcases,
+                    "excluded_subcases": migration.excluded_subcases,
+                    "fixture_names": tuple(
+                        fixture.name for fixture in api_result.fixtures
+                    ),
+                }
+            )
+
+    for api_id in sorted(declared_ids - measured_ids - fixed_ids):
         spec = tolerances.get(api_id)
         migration = API_MIGRATIONS_BY_ID[api_id]
         if migration.parity_coverage == "orchestration-implied":
             state = "orchestration-implied"
+        elif migration.parity_coverage == "fixed-fixture":
+            state = "fixed-fixture-missing"
         elif migration.parity_coverage == "random-fuzz-excluded":
             state = "random-fuzz-excluded"
         elif migration.parity_coverage == "targeted-tests":
@@ -150,7 +197,8 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
     )
     lines.append("|---|---|---:|---:|---:|---:|---|---|---|---|---|")
     for r in rows:
-        if r["state"] != "measured":
+        observed = r["state"] in {"measured", "fixed-fixture"}
+        if not observed:
             wa = "—"
             wr = "—"
             result = "—"
@@ -181,6 +229,10 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
             flag = " (skipped)"
         elif r["state"] == "orchestration-implied":
             flag = " (orchestration)"
+        elif r["state"] == "fixed-fixture":
+            flag = " (fixed fixture)"
+        elif r["state"] == "fixed-fixture-missing":
+            flag = " (fixed fixture missing)"
         elif r["state"] == "random-fuzz-excluded":
             flag = " (random-fuzz excluded)"
         elif r["state"] == "targeted-tests":
@@ -375,6 +427,10 @@ def _coverage_summary(rows: list[dict]) -> str:
     orchestration = sorted(
         {r["api_id"] for r in rows if r["state"] == "orchestration-implied"}
     )
+    fixed = sorted({r["api_id"] for r in rows if r["state"] == "fixed-fixture"})
+    fixed_missing = sorted(
+        {r["api_id"] for r in rows if r["state"] == "fixed-fixture-missing"}
+    )
     random_excluded = sorted(
         {r["api_id"] for r in rows if r["state"] == "random-fuzz-excluded"}
     )
@@ -382,7 +438,11 @@ def _coverage_summary(rows: list[dict]) -> str:
     manual = sorted({r["api_id"] for r in rows if r["state"] == "manual-only"})
     unwired = sorted({r["api_id"] for r in rows if r["state"] == "unwired"})
     flagged = sorted(
-        {r["api_id"] for r in rows if r["state"] == "measured" and r["investigate"]}
+        {
+            r["api_id"]
+            for r in rows
+            if r["state"] in {"measured", "fixed-fixture"} and r["investigate"]
+        }
     )
     direct = len(measured_apis) + len(wired_not_measured)
     indirect = len(orchestration)
@@ -392,8 +452,10 @@ def _coverage_summary(rows: list[dict]) -> str:
         f"wired directly in random-fuzz GENERATORS; "
         f"{indirect} additional orchestration APIs covered indirectly via "
         f"underlying kernel parity. "
-        f"{len(random_excluded)} intentionally excluded from randomized fuzz. "
-        f"{len(measured_apis)} measured this run."
+        f"{len(fixed)} fixed-fixture APIs governed outside randomized fuzz. "
+        f"{len(random_excluded)} intentionally excluded from randomized fuzz "
+        f"with no fixed fixture in this artifact. "
+        f"{len(measured_apis)} random-fuzz APIs measured this run."
     )
     if wired_not_measured:
         lines.append("")
@@ -414,6 +476,20 @@ def _coverage_summary(rows: list[dict]) -> str:
         )
         for a in unwired:
             lines.append(f"- `{a}`")
+    if fixed:
+        lines.append("")
+        lines.append("**Fixed-fixture parity (not randomized fuzz)**:")
+        for a in fixed:
+            note = API_MIGRATIONS_BY_ID[a].coverage_note
+            suffix = f" — {note}" if note else ""
+            lines.append(f"- `{a}`{suffix}")
+    if fixed_missing:
+        lines.append("")
+        lines.append("**Fixed-fixture parity missing from this artifact**:")
+        for a in fixed_missing:
+            note = API_MIGRATIONS_BY_ID[a].coverage_note
+            suffix = f" — {note}" if note else ""
+            lines.append(f"- `{a}`{suffix}")
     if random_excluded:
         lines.append("")
         lines.append("**Declared but intentionally excluded from randomized fuzz**:")
@@ -474,7 +550,52 @@ def _load_fuzz_results(path: Path) -> list[parity_fuzz.ApiResult]:
     cached = json.loads(path.read_text())
     if "parity_fuzz" in cached:
         cached = cached["parity_fuzz"]
-    return [_api_result_from_json(entry) for entry in cached.get("apis", [])]
+    entries = cached.get("apis", [])
+    if entries and "seeds" not in entries[0]:
+        return []
+    return [_api_result_from_json(entry) for entry in entries]
+
+
+def _fixed_result_from_json(entry: dict[str, Any]) -> parity_fixed.ApiResult:
+    fixtures = []
+    for fixture in entry["fixtures"]:
+        outputs = [
+            parity_fuzz.OutputResult(
+                name=output["name"],
+                max_abs=output["max_abs"],
+                max_rel=output["max_rel"],
+                atol=output["atol"],
+                rtol=output["rtol"],
+                passed=output["passed"],
+                nan_disagreement=output.get("nan_disagreement", 0),
+            )
+            for output in fixture["outputs"]
+        ]
+        fixtures.append(
+            parity_fixed.FixtureResult(
+                name=fixture["name"],
+                description=fixture.get("description", ""),
+                n=fixture["n"],
+                outputs=outputs,
+                error=fixture["error"],
+            )
+        )
+    return parity_fixed.ApiResult(
+        api_id=entry["api_id"],
+        fixtures=fixtures,
+        investigate=entry.get("investigate", False),
+        investigate_task=entry.get("investigate_task", ""),
+    )
+
+
+def _load_fixed_results(path: Path) -> list[parity_fixed.ApiResult]:
+    cached = json.loads(path.read_text())
+    if "fixed_fixtures" in cached:
+        cached = cached["fixed_fixtures"]
+    entries = cached.get("apis", [])
+    if entries and "fixtures" not in entries[0]:
+        return []
+    return [_fixed_result_from_json(entry) for entry in entries]
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -516,7 +637,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--refresh",
         action="store_true",
-        help="Run parity_fuzz instead of reading --parity-artifact.",
+        help="Run parity_fuzz and fixed fixtures instead of reading --parity-artifact.",
     )
     p.add_argument(
         "--max-text",
@@ -550,11 +671,27 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = _build_arg_parser().parse_args(argv)
-    api_ids = args.apis or list(_inputs.all_api_ids())
+    random_api_ids = list(_inputs.all_api_ids())
+    fixed_api_ids = list(parity_fixed.all_api_ids())
+    if args.apis is None:
+        api_ids = random_api_ids
+        requested_fixed_api_ids = fixed_api_ids
+    else:
+        supported = set(random_api_ids) | set(fixed_api_ids)
+        unknown = sorted(set(args.apis) - supported)
+        if unknown:
+            raise SystemExit(
+                "No parity fixture or generator for: " + ", ".join(unknown)
+            )
+        api_ids = [api_id for api_id in args.apis if api_id in random_api_ids]
+        requested_fixed_api_ids = [
+            api_id for api_id in args.apis if api_id in fixed_api_ids
+        ]
     parity_artifact = args.use_cache or args.parity_artifact
 
     if not args.refresh and parity_artifact and parity_artifact.exists():
         fuzz_results = _load_fuzz_results(parity_artifact)
+        fixed_results = _load_fixed_results(parity_artifact)
     else:
         fuzz_results = parity_fuzz.fuzz_all(
             api_ids,
@@ -562,8 +699,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             n=args.n,
             base_seed=args.base_seed,
         )
+        fixed_results = parity_fixed.fixed_all(requested_fixed_api_ids)
 
-    rows = _build_rows(fuzz_results)
+    rows = _build_rows(fuzz_results, fixed_results)
     speed_rows, speed_metadata = (
         ([], {}) if args.no_speed else _load_speed_artifact(args.speed_artifact)
     )

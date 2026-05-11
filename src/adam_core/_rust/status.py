@@ -22,6 +22,7 @@ Boundary = Literal["numpy", "arrow", "python+numpy", "python+quivr", "rust"]
 DefaultBackend = Literal["legacy", "rust"]
 ParityCoverage = Literal[
     "random-fuzz",
+    "fixed-fixture",
     "random-fuzz-excluded",
     "orchestration-implied",
     "targeted-tests",
@@ -480,14 +481,17 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.gauss_iod_fused_numpy",
-        parity_coverage="random-fuzz-excluded",
+        parity_coverage="fixed-fixture",
         coverage_note=(
-            "Runner adapters are retained for fixed-fixture/manual parity, "
-            "but randomized fuzz is intentionally disabled because Rust "
+            "Fixed-fixture parity is enforced for well-conditioned triplets. "
+            "Randomized fuzz remains intentionally disabled because Rust "
             "Laguerre+deflation and legacy np.roots/LAPACK accept different "
             "physical root subsets on some random triplets."
         ),
-        covered_subcases=("well-conditioned fixed fixtures/manual triplets",),
+        covered_subcases=(
+            "eight deterministic well-conditioned triplets with shared "
+            "|r2|>=1.5 AU best roots",
+        ),
         excluded_subcases=(
             "random triplets with root-subset disagreement between "
             "Laguerre+deflation and np.roots/LAPACK",
@@ -581,9 +585,21 @@ def validate_api_migrations(
             errors.append(
                 f"{migration.api_id}: random-fuzz-excluded requires excluded_subcases"
             )
+        if migration.parity_coverage == "fixed-fixture" and not (
+            migration.covered_subcases and migration.excluded_subcases
+        ):
+            errors.append(
+                f"{migration.api_id}: fixed-fixture requires covered_subcases "
+                "and excluded_subcases"
+            )
         if (
             migration.parity_coverage
-            in {"random-fuzz-excluded", "orchestration-implied", "not-covered"}
+            in {
+                "fixed-fixture",
+                "random-fuzz-excluded",
+                "orchestration-implied",
+                "not-covered",
+            }
             and not migration.coverage_note
         ):
             errors.append(
