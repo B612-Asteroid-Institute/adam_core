@@ -145,6 +145,9 @@ _TRANSFORM_SUBCASE_NAMES: tuple[str, ...] = (
     "cart_ec_earth_to_sph_ec_sun",
     "cart_ec_earth_to_sph_itrf93",
     "cart_itrf93_earth_to_sph_eq",
+    "cart_cov_ec_to_sph_eq",
+    "cart_cov_ec_sun_to_sph_ec_earth",
+    "kep_cov_ec_to_sph_eq",
 )
 
 
@@ -204,6 +207,27 @@ def _cart_to_cometary(coords: np.ndarray, t0: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(out, dtype=np.float64)
 
 
+def _sample_covariance(
+    rng: np.random.Generator, n: int, scales: np.ndarray
+) -> np.ndarray:
+    """Sample symmetric positive-definite 6x6 covariances with fixed scales."""
+    raw = rng.normal(size=(n, 6, 6))
+    spd = raw @ np.swapaxes(raw, 1, 2)
+    diag = np.sqrt(np.diagonal(spd, axis1=1, axis2=2))
+    corr = spd / diag[:, :, None] / diag[:, None, :]
+    return np.ascontiguousarray(corr * scales[None, :, None] * scales[None, None, :])
+
+
+def _sample_cartesian_covariance(rng: np.random.Generator, n: int) -> np.ndarray:
+    scales = np.array([1e-7, 1e-7, 1e-7, 1e-9, 1e-9, 1e-9], dtype=np.float64)
+    return _sample_covariance(rng, n, scales)
+
+
+def _sample_keplerian_covariance(rng: np.random.Generator, n: int) -> np.ndarray:
+    scales = np.array([1e-6, 1e-8, 1e-6, 1e-6, 1e-6, 1e-6], dtype=np.float64)
+    return _sample_covariance(rng, n, scales)
+
+
 def _transform_case(
     name: str,
     coords: np.ndarray,
@@ -215,8 +239,9 @@ def _transform_case(
     *,
     origin_in: str = "SUN",
     origin_out: str | None = None,
+    covariance: np.ndarray | None = None,
 ) -> dict[str, Any]:
-    return {
+    case = {
         "name": name,
         "coords": np.ascontiguousarray(coords, dtype=np.float64),
         "time_mjd": np.ascontiguousarray(time_mjd, dtype=np.float64),
@@ -227,6 +252,9 @@ def _transform_case(
         "origin_in": origin_in,
         "origin_out": origin_out,
     }
+    if covariance is not None:
+        case["covariance"] = np.ascontiguousarray(covariance, dtype=np.float64)
+    return case
 
 
 def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
@@ -234,8 +262,9 @@ def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
 
     Each case deliberately goes through the public quivr object boundary on
     both sides. The matrix covers constant-frame inverse directions,
-    non-Cartesian inputs, SUN↔EARTH origin translations, and Earth-centered
-    ITRF93 time-varying rotations while keeping the total row count near ``n``.
+    non-Cartesian inputs, representative covariance-bearing paths, SUN↔EARTH
+    origin translations, and Earth-centered ITRF93 time-varying rotations while
+    keeping the total row count near ``n``.
     """
     sizes = iter(_split_transform_rows(n))
     cases: list[dict[str, Any]] = []
@@ -365,6 +394,51 @@ def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
             "itrf93",
             "equatorial",
             origin_in="EARTH",
+        )
+    )
+
+    size = next(sizes)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_case(
+            "cart_cov_ec_to_sph_eq",
+            coords,
+            _sample_transform_time(rng, size),
+            "cartesian",
+            "spherical",
+            "ecliptic",
+            "equatorial",
+            covariance=_sample_cartesian_covariance(rng, size),
+        )
+    )
+
+    size = next(sizes)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_case(
+            "cart_cov_ec_sun_to_sph_ec_earth",
+            coords,
+            _sample_transform_time(rng, size, itrf93=True),
+            "cartesian",
+            "spherical",
+            "ecliptic",
+            "ecliptic",
+            origin_out="EARTH",
+            covariance=_sample_cartesian_covariance(rng, size),
+        )
+    )
+
+    size = next(sizes)
+    cases.append(
+        _transform_case(
+            "kep_cov_ec_to_sph_eq",
+            _sample_keplerian_elements(rng, size),
+            _sample_transform_time(rng, size),
+            "keplerian",
+            "spherical",
+            "ecliptic",
+            "equatorial",
+            covariance=_sample_keplerian_covariance(rng, size),
         )
     )
 
@@ -1279,6 +1353,7 @@ SHAPED_GENERATORS = {
 
 
 TINY_WORKLOADS: dict[str, WorkloadShape] = {
+    "coordinates.transform_coordinates": WorkloadShape(len(_TRANSFORM_SUBCASE_NAMES)),
     # `calculate_moid` is a scalar optimizer API; one pair is the true
     # one-off call shape, unlike vector kernels where n=10 is the tiny lane.
     "dynamics.calculate_moid": WorkloadShape(1),

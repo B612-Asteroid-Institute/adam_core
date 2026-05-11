@@ -37,6 +37,7 @@ def _coordinates_transform_coordinates(
     """Public ``transform_coordinates`` dispatcher on the migration checkout."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.cometary import CometaryCoordinates
+    from adam_core.coordinates.covariances import CoordinateCovariances
     from adam_core.coordinates.keplerian import KeplerianCoordinates
     from adam_core.coordinates.origin import Origin, OriginCodes
     from adam_core.coordinates.spherical import SphericalCoordinates
@@ -60,6 +61,12 @@ def _coordinates_transform_coordinates(
         )
         frame = str(case["frame_in"])
         representation_in = str(case["representation_in"])
+        covariance = case.get("covariance")
+        covariance_kw = {}
+        if covariance is not None:
+            covariance_kw["covariance"] = CoordinateCovariances.from_matrix(
+                np.asarray(covariance, dtype=np.float64)
+            )
         if representation_in == "cartesian":
             return CartesianCoordinates.from_kwargs(
                 x=coords[:, 0],
@@ -71,6 +78,7 @@ def _coordinates_transform_coordinates(
                 time=time,
                 origin=origin,
                 frame=frame,
+                **covariance_kw,
             )
         if representation_in == "spherical":
             return SphericalCoordinates.from_kwargs(
@@ -83,6 +91,7 @@ def _coordinates_transform_coordinates(
                 time=time,
                 origin=origin,
                 frame=frame,
+                **covariance_kw,
             )
         if representation_in == "keplerian":
             return KeplerianCoordinates.from_kwargs(
@@ -95,6 +104,7 @@ def _coordinates_transform_coordinates(
                 time=time,
                 origin=origin,
                 frame=frame,
+                **covariance_kw,
             )
         if representation_in == "cometary":
             return CometaryCoordinates.from_kwargs(
@@ -107,6 +117,7 @@ def _coordinates_transform_coordinates(
                 time=time,
                 origin=origin,
                 frame=frame,
+                **covariance_kw,
             )
         raise ValueError(f"Unsupported representation_in: {representation_in}")
 
@@ -120,7 +131,12 @@ def _coordinates_transform_coordinates(
         if origin_out is not None:
             kwargs["origin_out"] = OriginCodes[str(origin_out)]
         transformed = transform_coordinates(build_coords(case), **kwargs)
-        outputs[str(case["name"])] = np.asarray(transformed.values, dtype=np.float64)
+        name = str(case["name"])
+        outputs[name] = np.asarray(transformed.values, dtype=np.float64)
+        if case.get("covariance") is not None:
+            outputs[f"{name}_covariance"] = np.asarray(
+                transformed.covariance.to_matrix(), dtype=np.float64
+            )
     return outputs
 
 

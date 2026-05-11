@@ -137,20 +137,22 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "to SphericalCoordinates",
             "Public dispatcher Earth-centered ecliptic->ITRF93 and "
             "ITRF93->equatorial time-varying rotations to SphericalCoordinates",
+            "Public dispatcher covariance-bearing Cartesian/Keplerian inputs "
+            "through constant-frame and SUN->EARTH origin-translation outputs",
         ),
         excluded_subcases=(
             "Cartesian->Cartesian frame-only public dispatcher fallthrough "
             "(intentional: cached cartesian_to_frame path is faster)",
-            "covariance-bearing public dispatcher subcases",
+            "covariance-bearing ITRF93 public dispatcher subcases",
             "mixed-origin arrays, observatory origins, and user-furnished "
             "SPICE body coverage beyond the SUN/EARTH origin-translation matrix",
         ),
         coverage_note=(
             "Random fuzz exercises a public quivr-object dispatcher subcase "
             "matrix spanning constant-frame inverse directions, non-Cartesian "
-            "inputs, SUN/EARTH origin translations, and ITRF93 time-varying "
-            "rotations. Remaining exclusions are explicit and should not be "
-            "inferred as fuzz-covered."
+            "inputs, representative covariance-bearing paths, SUN/EARTH origin "
+            "translations, and ITRF93 time-varying rotations. Remaining exclusions "
+            "are explicit and should not be inferred as fuzz-covered."
         ),
         latency_gate=True,
     ),

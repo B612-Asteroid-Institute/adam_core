@@ -219,11 +219,20 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "cart_ec_earth_to_sph_ec_sun": OutputTol(atol=1e-11, rtol=1e-12),
             "cart_ec_earth_to_sph_itrf93": OutputTol(atol=1e-7, rtol=1e-12),
             "cart_itrf93_earth_to_sph_eq": OutputTol(atol=1e-7, rtol=1e-12),
+            "cart_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
+            "cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "cart_cov_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-11, rtol=1e-12),
+            "cart_cov_ec_sun_to_sph_ec_earth_covariance": OutputTol(
+                atol=1e-21, rtol=1e-8
+            ),
+            "kep_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
+            "kep_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
         },
         rationale=(
             "Public dispatcher matrix covering Cartesian constant-frame "
             "directions, Spherical/Keplerian/Cometary non-Cartesian inputs, "
-            "SUN↔EARTH origin translations, and Earth-centered ITRF93 "
+            "representative covariance-bearing Cartesian/Keplerian dispatcher "
+            "paths, SUN↔EARTH origin translations, and Earth-centered ITRF93 "
             "time-varying rotations. Exercises quivr object construction, "
             "public transform_coordinates dispatch, Rust fused dispatch where "
             "supported, and baseline-main public dispatch."
@@ -232,7 +241,9 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         physical_magnitude=(
             "1e-10 deg is 0.36 microarcsec for constant-frame angular columns; "
             "1e-9 days is 86 microseconds for the Cometary→Keplerian epoch-like "
-            "column. SUN↔EARTH origin translations are held to 1e-11 in mixed "
+            "column. Covariance rows use 1e-21 absolute for near-zero covariance "
+            "cells plus 1e-8 relative for finite propagated covariance terms. "
+            "SUN↔EARTH origin translations are held to 1e-11 in mixed "
             "spherical units, i.e. 1.5 m in range or 0.036 microarcsec in angular "
             "columns. The ITRF93 rows keep 1e-7 deg/day only for spherical "
             "velocity-angle columns: 0.36 mas/day, with observed drift near "
@@ -241,7 +252,9 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         root_cause=(
             "Constant 6×6 frame rotations and representation conversions compose "
             "sqrt/atan2/asin/sin/cos last-ulp differences between Rust stdlib "
-            "and baseline JAX/XLA. SUN↔EARTH origin translations use the same "
+            "and baseline JAX/XLA; covariance subcases additionally compare "
+            "Rust forward-mode AD Jacobian propagation against baseline-main's "
+            "public covariance transform path. SUN↔EARTH origin translations use the same "
             "DE440 state semantics and show only final representation-conversion "
             "plus last-ulp SPK evaluation drift, not a broad SPICE slack. ITRF93 "
             "subcases additionally compare baseline CSPICE/spiceypy PCK evaluation "

@@ -96,8 +96,11 @@ def test_transform_coordinates_partial_coverage_is_visible() -> None:
     assert any("CometaryCoordinates" in case for case in migration.covered_subcases)
     assert any("origin translations" in case for case in migration.covered_subcases)
     assert any("ITRF93" in case for case in migration.covered_subcases)
+    assert any("covariance-bearing" in case for case in migration.covered_subcases)
     assert any("Cartesian->Cartesian" in case for case in migration.excluded_subcases)
-    assert any("covariance" in case for case in migration.excluded_subcases)
+    assert any(
+        "covariance-bearing ITRF93" in case for case in migration.excluded_subcases
+    )
 
 
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:

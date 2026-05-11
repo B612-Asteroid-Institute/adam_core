@@ -195,7 +195,7 @@
               {
                 "name": "cart_ec_to_sph_eq",
                 "max_abs": 7.105427357601002e-15,
-                "max_rel": 4.849950254082235e-15,
+                "max_rel": 2.4446650961121385e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -203,8 +203,8 @@
               },
               {
                 "name": "cart_eq_to_sph_ec",
-                "max_abs": 1.7763568394002505e-15,
-                "max_rel": 7.99127601096219e-16,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 5.981373743336014e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -212,8 +212,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 3.907985046680551e-14,
-                "max_rel": 8.656580593756926e-15,
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 4.500850571616906e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -221,8 +221,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 1.1368683772161603e-13,
-                "max_rel": 2.5072862071461218e-14,
+                "max_abs": 1.0658141036401503e-13,
+                "max_rel": 2.362698575076464e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -231,7 +231,7 @@
               {
                 "name": "com_eq_to_kep_ec",
                 "max_abs": 1.7053025658242404e-13,
-                "max_rel": 2.585650340409887e-14,
+                "max_rel": 1.7199792548295608e-15,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -239,8 +239,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 1.7716750077071752e-14,
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 1.2230349810039777e-13,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -248,8 +248,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
-                "max_abs": 8.17344781266216e-15,
-                "max_rel": 4.276095841839199e-11,
+                "max_abs": 2.842170943040401e-14,
+                "max_rel": 1.7643038084388565e-11,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -257,8 +257,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 1.5329646885220427e-08,
-                "max_rel": 4.23181575339855e-11,
+                "max_abs": 1.9487060853862204e-08,
+                "max_rel": 5.400823138496467e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -266,10 +266,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 2.213050720456522e-08,
-                "max_rel": 9.575315888073887e-11,
+                "max_abs": 1.4877571175020421e-08,
+                "max_rel": 7.160702463518693e-09,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 5.558986306987595e-16,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 8.077935669463161e-28,
+                "max_rel": 4.3760705779645275e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 2.220446049250313e-16,
+                "max_rel": 1.2645990058436977e-14,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 8.077935669463161e-28,
+                "max_rel": 5.359525848148884e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 1.6144187252043788e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 1.2924697071141057e-26,
+                "max_rel": 1.358473317769136e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -283,8 +337,8 @@
             "outputs": [
               {
                 "name": "cart_ec_to_sph_eq",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 5.646717232243655e-16,
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 2.6669545103684237e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -293,7 +347,7 @@
               {
                 "name": "cart_eq_to_sph_ec",
                 "max_abs": 7.105427357601002e-15,
-                "max_rel": 4.367557783469722e-16,
+                "max_rel": 1.1106390237632386e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -301,8 +355,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 2.1316282072803006e-14,
-                "max_rel": 1.0484498693534448e-14,
+                "max_abs": 1.8318679906315083e-14,
+                "max_rel": 2.664415254049708e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -310,8 +364,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 5.684341886080802e-14,
-                "max_rel": 1.9960692500938087e-14,
+                "max_abs": 2.842170943040401e-14,
+                "max_rel": 3.4231098297798224e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -319,8 +373,8 @@
               },
               {
                 "name": "com_eq_to_kep_ec",
-                "max_abs": 1.1368683772161603e-13,
-                "max_rel": 6.575477234093298e-15,
+                "max_abs": 1.7053025658242404e-13,
+                "max_rel": 1.974369850857504e-15,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -328,8 +382,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 5.684341886080802e-14,
-                "max_rel": 1.9350848343709646e-14,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 1.4791070251136534e-15,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -337,8 +391,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 2.8113323645105864e-11,
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 9.929242508532717e-12,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -346,8 +400,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 2.2182348402566276e-08,
-                "max_rel": 2.6751916353119666e-10,
+                "max_abs": 2.919210828622454e-08,
+                "max_rel": 8.071106841221168e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -355,10 +409,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 1.566615992487641e-08,
-                "max_rel": 9.154841414672054e-11,
+                "max_abs": 1.241033942278591e-08,
+                "max_rel": 7.77226546856107e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 2.928542971410721e-16,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 3.0292258760486853e-28,
+                "max_rel": 2.7485757891435853e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 1.7763568394002505e-15,
+                "max_rel": 1.1476648386879069e-15,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 8.077935669463161e-28,
+                "max_rel": 2.2465165627196927e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 2.8946678208356378e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 1.655976812239948e-26,
+                "max_rel": 2.005932508282872e-12,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -372,8 +480,8 @@
             "outputs": [
               {
                 "name": "cart_ec_to_sph_eq",
-                "max_abs": 1.4210854715202004e-14,
-                "max_rel": 1.9059529624352763e-15,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 8.94444041322394e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -381,8 +489,8 @@
               },
               {
                 "name": "cart_eq_to_sph_ec",
-                "max_abs": 1.4210854715202004e-14,
-                "max_rel": 3.606634154164968e-14,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 2.643803296031626e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -390,8 +498,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 2.842170943040401e-14,
-                "max_rel": 9.765079234703042e-15,
+                "max_abs": 1.7763568394002505e-14,
+                "max_rel": 4.6429053743610585e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -399,8 +507,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 1.4210854715202004e-13,
-                "max_rel": 7.117129733470093e-15,
+                "max_abs": 4.263256414560601e-14,
+                "max_rel": 8.515940745393167e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -408,8 +516,8 @@
               },
               {
                 "name": "com_eq_to_kep_ec",
-                "max_abs": 5.684341886080801e-13,
-                "max_rel": 1.2956078597881236e-14,
+                "max_abs": 1.7053025658242404e-13,
+                "max_rel": 1.9212785119175477e-14,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -417,8 +525,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 2.028764066039005e-15,
+                "max_abs": 8.881784197001252e-16,
+                "max_rel": 8.031934486756706e-15,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -426,8 +534,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
-                "max_abs": 2.842170943040401e-14,
-                "max_rel": 1.2532945528189638e-11,
+                "max_abs": 7.399246146344574e-15,
+                "max_rel": 5.6705754683883705e-12,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -435,8 +543,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 5.4496581469720695e-08,
-                "max_rel": 6.529711295719173e-10,
+                "max_abs": 4.214342652630876e-08,
+                "max_rel": 1.1628623816908325e-10,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -444,10 +552,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 2.236470209027175e-08,
-                "max_rel": 4.0998557919106276e-10,
+                "max_abs": 1.6975093330984237e-08,
+                "max_rel": 7.032203493954121e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 2.1600864861808063e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 1.2116903504194741e-27,
+                "max_rel": 3.481878618167895e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 3.439078856319784e-14,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 6.058451752097371e-28,
+                "max_rel": 1.0263654350665112e-12,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 9.273928418596758e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 2.5364718002114325e-25,
+                "max_rel": 3.859008606065182e-11,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -461,8 +623,8 @@
             "outputs": [
               {
                 "name": "cart_ec_to_sph_eq",
-                "max_abs": 1.4210854715202004e-14,
-                "max_rel": 3.892419958947048e-15,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 1.589461649002136e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -471,7 +633,7 @@
               {
                 "name": "cart_eq_to_sph_ec",
                 "max_abs": 1.4210854715202004e-14,
-                "max_rel": 5.565977641624954e-14,
+                "max_rel": 9.4225414683053e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -479,8 +641,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 2.800762929923667e-15,
+                "max_abs": 8.881784197001252e-16,
+                "max_rel": 6.224249967061512e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -488,8 +650,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 5.684341886080802e-14,
-                "max_rel": 2.1754069980232295e-15,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 3.959820742523968e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -497,8 +659,8 @@
               },
               {
                 "name": "com_eq_to_kep_ec",
-                "max_abs": 6.536993168992922e-13,
-                "max_rel": 7.877119556242271e-13,
+                "max_abs": 3.410605131648481e-13,
+                "max_rel": 9.869046542113607e-15,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -506,8 +668,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 3.552713678800501e-15,
-                "max_rel": 5.423852631035153e-15,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 4.305743985849617e-15,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -515,8 +677,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
-                "max_abs": 2.842170943040401e-14,
-                "max_rel": 3.0121928385970813e-11,
+                "max_abs": 1.0658141036401503e-14,
+                "max_rel": 1.3180419430165826e-11,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -524,8 +686,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 3.2502441627002554e-08,
-                "max_rel": 1.374760010783552e-10,
+                "max_abs": 2.7463443075248506e-08,
+                "max_rel": 7.658992575614593e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -533,10 +695,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 2.540735977163422e-08,
-                "max_rel": 3.375593711070663e-10,
+                "max_abs": 3.943495130442898e-08,
+                "max_rel": 1.940197264407608e-10,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 9.626405836237695e-16,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 4.0389678347315804e-28,
+                "max_rel": 1.0486109719864327e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 2.4868995751603507e-14,
+                "max_rel": 2.28277257506208e-14,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 2.5849394142282115e-25,
+                "max_rel": 3.568195625055893e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 5.684341886080802e-14,
+                "max_rel": 2.8522083529117343e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 5.4526065768876336e-27,
+                "max_rel": 2.2060024599549007e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -550,8 +766,8 @@
             "outputs": [
               {
                 "name": "cart_ec_to_sph_eq",
-                "max_abs": 3.552713678800501e-15,
-                "max_rel": 9.434035299202809e-15,
+                "max_abs": 1.7763568394002505e-15,
+                "max_rel": 3.2321442872402846e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -560,7 +776,7 @@
               {
                 "name": "cart_eq_to_sph_ec",
                 "max_abs": 7.105427357601002e-15,
-                "max_rel": 5.745111085917233e-16,
+                "max_rel": 1.1387024420884462e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -568,8 +784,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 7.327471962526033e-15,
-                "max_rel": 4.9551950277493434e-15,
+                "max_abs": 8.673617379884035e-19,
+                "max_rel": 2.094017153847759e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -577,8 +793,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 4.263256414560601e-14,
-                "max_rel": 1.2175629080273398e-14,
+                "max_abs": 6.039613253960852e-14,
+                "max_rel": 1.2842423067179601e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -586,8 +802,8 @@
               },
               {
                 "name": "com_eq_to_kep_ec",
-                "max_abs": 1.4210854715202004e-13,
-                "max_rel": 3.636383636170732e-15,
+                "max_abs": 4.241051954068098e-13,
+                "max_rel": 1.1826034782628988e-12,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -595,8 +811,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 1.4210854715202004e-14,
-                "max_rel": 2.116204552101461e-15,
+                "max_abs": 5.684341886080802e-14,
+                "max_rel": 4.820688123298001e-15,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -605,7 +821,7 @@
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 2.842170943040401e-14,
-                "max_rel": 9.728582771218966e-12,
+                "max_rel": 1.2151062059162231e-11,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -613,8 +829,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 3.142321247651125e-08,
-                "max_rel": 8.689802654071537e-11,
+                "max_abs": 2.3469851839763578e-08,
+                "max_rel": 6.493566913638758e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -622,10 +838,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 3.252057467761915e-08,
-                "max_rel": 1.6269542185339794e-09,
+                "max_abs": 6.431150723074097e-09,
+                "max_rel": 1.3523518971124055e-10,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 6.195729190854007e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 4.8467614016778965e-27,
+                "max_rel": 1.698518125835971e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 4.8125369515699685e-15,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 6.462348535570529e-27,
+                "max_rel": 5.35970534062512e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 5.684341886080802e-14,
+                "max_rel": 1.2562814146132312e-14,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 1.5085544862722453e-25,
+                "max_rel": 3.016600346768545e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -640,7 +910,7 @@
               {
                 "name": "cart_ec_to_sph_eq",
                 "max_abs": 7.105427357601002e-15,
-                "max_rel": 5.64095293566247e-15,
+                "max_rel": 1.040598332278076e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -649,7 +919,7 @@
               {
                 "name": "cart_eq_to_sph_ec",
                 "max_abs": 7.105427357601002e-15,
-                "max_rel": 2.95706185554135e-15,
+                "max_rel": 6.557161206454477e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -657,8 +927,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 2.3092638912203256e-14,
-                "max_rel": 4.283126519018397e-15,
+                "max_abs": 3.197442310920451e-14,
+                "max_rel": 6.100390209720367e-13,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -666,8 +936,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 9.947598300641403e-14,
-                "max_rel": 9.323888731941627e-15,
+                "max_abs": 1.3500311979441904e-13,
+                "max_rel": 1.0622924800741742e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -675,8 +945,8 @@
               },
               {
                 "name": "com_eq_to_kep_ec",
-                "max_abs": 6.536993168992922e-13,
-                "max_rel": 3.920982853468642e-15,
+                "max_abs": 4.547473508864641e-13,
+                "max_rel": 3.700521149706615e-15,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -684,8 +954,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 5.684341886080802e-14,
-                "max_rel": 5.096030024492845e-15,
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.6728566585976073e-15,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -693,8 +963,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
-                "max_abs": 2.842170943040401e-14,
-                "max_rel": 4.43101903298071e-09,
+                "max_abs": 9.806608650131388e-15,
+                "max_rel": 9.960875116847388e-12,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -702,8 +972,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 2.2565075141756097e-08,
-                "max_rel": 1.6663702653143804e-10,
+                "max_abs": 1.923575609907857e-08,
+                "max_rel": 5.299033168959972e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -711,10 +981,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 3.889880417773384e-08,
-                "max_rel": 1.0728108128043162e-10,
+                "max_abs": 9.855853022600058e-09,
+                "max_rel": 1.2301630562828517e-10,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 4.77492253546087e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 3.2311742677852644e-27,
+                "max_rel": 2.6934767177452344e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 2.8421709430404007e-13,
+                "max_rel": 7.099514962259077e-15,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 1.3234889800848443e-23,
+                "max_rel": 3.069282721116225e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 3.019806626980426e-14,
+                "max_rel": 2.95644465939034e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 9.693522803355793e-27,
+                "max_rel": 2.2131948891266363e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -728,8 +1052,8 @@
             "outputs": [
               {
                 "name": "cart_ec_to_sph_eq",
-                "max_abs": 1.4210854715202004e-14,
-                "max_rel": 4.304182248995567e-16,
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 1.2595520096892698e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -738,7 +1062,7 @@
               {
                 "name": "cart_eq_to_sph_ec",
                 "max_abs": 3.552713678800501e-15,
-                "max_rel": 1.2534585840324796e-15,
+                "max_rel": 2.1747909573310392e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -746,8 +1070,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 2.998706211991339e-13,
+                "max_abs": 1.509903313490213e-14,
+                "max_rel": 1.894040214685102e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -755,8 +1079,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 2.842170943040401e-14,
-                "max_rel": 1.4683536810308283e-14,
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 4.3355978590158125e-15,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -764,8 +1088,8 @@
               },
               {
                 "name": "com_eq_to_kep_ec",
-                "max_abs": 4.547473508864641e-13,
-                "max_rel": 1.6779015243127764e-14,
+                "max_abs": 3.126388037344441e-13,
+                "max_rel": 2.93724200642404e-15,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -773,8 +1097,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 2.842170943040401e-14,
-                "max_rel": 3.2900714379003248e-15,
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.3520394421244635e-14,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -782,8 +1106,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 3.005059072347813e-11,
+                "max_abs": 2.842170943040401e-14,
+                "max_rel": 2.056113487124103e-10,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -791,8 +1115,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 3.967704742535716e-08,
-                "max_rel": 1.1065034023733035e-10,
+                "max_abs": 1.921097236845526e-08,
+                "max_rel": 6.561185268675386e-11,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -800,10 +1124,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 5.563509830608382e-08,
-                "max_rel": 6.147622806754728e-10,
+                "max_abs": 1.6487263110320782e-08,
+                "max_rel": 2.302580373109558e-09,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 5.636354312890484e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 5.427363027920561e-28,
+                "max_rel": 1.0414646161748749e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 8.881784197001252e-16,
+                "max_rel": 9.496567077987245e-15,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 8.077935669463161e-28,
+                "max_rel": 1.305263998213125e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 2.8442505334273036e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 6.462348535570529e-27,
+                "max_rel": 4.3736055721660775e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -817,8 +1195,8 @@
             "outputs": [
               {
                 "name": "cart_ec_to_sph_eq",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 1.4497998932928188e-15,
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 4.1803479305907044e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -826,8 +1204,8 @@
               },
               {
                 "name": "cart_eq_to_sph_ec",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 1.0409083643486905e-15,
+                "max_abs": 1.7763568394002505e-15,
+                "max_rel": 5.124733029489205e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -835,8 +1213,8 @@
               },
               {
                 "name": "sph_ec_to_cart_eq",
-                "max_abs": 1.4210854715202004e-14,
-                "max_rel": 5.438422598045625e-15,
+                "max_abs": 1.7763568394002505e-15,
+                "max_rel": 7.85736797861921e-16,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -844,8 +1222,8 @@
               },
               {
                 "name": "kep_ec_to_sph_eq",
-                "max_abs": 5.684341886080802e-14,
-                "max_rel": 1.5688038244009597e-14,
+                "max_abs": 1.1368683772161603e-13,
+                "max_rel": 1.046366946293382e-14,
                 "atol": 1e-10,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -853,8 +1231,8 @@
               },
               {
                 "name": "com_eq_to_kep_ec",
-                "max_abs": 1.0800249583553523e-12,
-                "max_rel": 1.5442537663337455e-14,
+                "max_abs": 1.8002266344296913e-12,
+                "max_rel": 4.445746074080956e-12,
                 "atol": 1e-09,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -862,8 +1240,8 @@
               },
               {
                 "name": "cart_ec_sun_to_sph_ec_earth",
-                "max_abs": 7.105427357601002e-15,
-                "max_rel": 8.823950680031585e-15,
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 1.6519749960646029e-15,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -871,8 +1249,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_ec_sun",
-                "max_abs": 2.842170943040401e-14,
-                "max_rel": 7.880528535690835e-12,
+                "max_abs": 1.4210854715202004e-14,
+                "max_rel": 1.2256011210250735e-11,
                 "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -880,8 +1258,8 @@
               },
               {
                 "name": "cart_ec_earth_to_sph_itrf93",
-                "max_abs": 1.6868114016688196e-08,
-                "max_rel": 5.890313785584607e-10,
+                "max_abs": 9.02948045222729e-08,
+                "max_rel": 2.494961492703676e-10,
                 "atol": 1e-07,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
@@ -889,10 +1267,64 @@
               },
               {
                 "name": "cart_itrf93_earth_to_sph_eq",
-                "max_abs": 2.7904320631932933e-08,
-                "max_rel": 9.881139171778466e-10,
+                "max_abs": 2.789909103739774e-08,
+                "max_rel": 1.0890137734242306e-09,
                 "atol": 1e-07,
                 "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq",
+                "max_abs": 1.7763568394002505e-15,
+                "max_rel": 1.0196165673308195e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_to_sph_eq_covariance",
+                "max_abs": 1.262177448353619e-28,
+                "max_rel": 5.695830761871503e-13,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 3.884347866637822e-14,
+                "atol": 1e-11,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "cart_cov_ec_sun_to_sph_ec_earth_covariance",
+                "max_abs": 1.6155871338926322e-27,
+                "max_rel": 6.185224142450187e-14,
+                "atol": 1e-21,
+                "rtol": 1e-08,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq",
+                "max_abs": 2.1316282072803006e-14,
+                "max_rel": 2.2490737040489436e-15,
+                "atol": 1e-10,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "kep_cov_ec_to_sph_eq_covariance",
+                "max_abs": 2.812131354931863e-25,
+                "max_rel": 1.0253749853396728e-12,
+                "atol": 1e-21,
+                "rtol": 1e-08,
                 "nan_disagreement": 0,
                 "passed": true
               }
@@ -6789,22 +7221,22 @@
         "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
         "lane_enforced": true,
         "workload_shape": {
-          "rows": 10,
+          "rows": 12,
           "axes": {},
-          "label": "rows=10"
+          "label": "rows=12"
         },
-        "workload_label": "rows=10",
-        "n": 10,
-        "reps": 101,
-        "warmup": 3,
-        "rust_p50_s": 0.0061953747645020485,
-        "rust_p95_s": 0.006748291198164225,
-        "legacy_p50_s": 0.01229225005954504,
-        "legacy_p95_s": 0.014182290993630886,
-        "legacy_source": "cache",
-        "legacy_cache_key": "903bf7fa0d579ce3b91a80c525aba3c1f838625c8ddddb56aadcb3e2f5e3c5ef",
-        "speedup_p50": 1.9841011281474958,
-        "speedup_p95": 2.1016121825757867,
+        "workload_label": "rows=12",
+        "n": 12,
+        "reps": 7,
+        "warmup": 1,
+        "rust_p50_s": 0.0090485829859972,
+        "rust_p95_s": 0.009868803434073925,
+        "legacy_p50_s": 0.026590459048748016,
+        "legacy_p95_s": 0.03739919648505746,
+        "legacy_source": "measured",
+        "legacy_cache_key": "",
+        "speedup_p50": 2.9386323902755933,
+        "speedup_p95": 3.789638402962775,
         "min_speedup_p50": 1.2,
         "min_speedup_p95": 0.0,
         "raw_passed": true,
@@ -6812,11 +7244,11 @@
         "waived": false,
         "waiver": "",
         "error": null,
-        "rust_cold_s": null,
-        "legacy_cold_s": null,
-        "legacy_cold_source": "not-measured",
+        "rust_cold_s": 1.689094416797161,
+        "legacy_cold_s": 3.9006096250377595,
+        "legacy_cold_source": "measured",
         "legacy_cold_cache_key": "",
-        "speedup_cold": null
+        "speedup_cold": 2.3092904613550527
       },
       {
         "api_id": "coordinates.cartesian_to_geodetic",
@@ -7815,16 +8247,16 @@
         },
         "workload_label": "rows=2000",
         "n": 2000,
-        "reps": 21,
-        "warmup": 3,
-        "rust_p50_s": 0.010758375283330679,
-        "rust_p95_s": 0.011292874813079834,
-        "legacy_p50_s": 0.27827124996110797,
-        "legacy_p95_s": 0.2945302501320839,
-        "legacy_source": "cache",
-        "legacy_cache_key": "190445453194771ee6a29bebcdb87e33f25701de65ad0d602e2813beb18c79b8",
-        "speedup_p50": 25.865545924231615,
-        "speedup_p95": 26.081069258905433,
+        "reps": 7,
+        "warmup": 1,
+        "rust_p50_s": 0.01697220792993903,
+        "rust_p95_s": 0.018344558076933026,
+        "legacy_p50_s": 0.2838287502527237,
+        "legacy_p95_s": 0.28740238775499166,
+        "legacy_source": "measured",
+        "legacy_cache_key": "",
+        "speedup_p50": 16.723148303648156,
+        "speedup_p95": 15.666901680034455,
         "min_speedup_p50": 1.2,
         "min_speedup_p95": 1.2,
         "raw_passed": true,
@@ -7832,11 +8264,11 @@
         "waived": false,
         "waiver": "",
         "error": null,
-        "rust_cold_s": null,
-        "legacy_cold_s": null,
-        "legacy_cold_source": "not-measured",
+        "rust_cold_s": 1.6995444167405367,
+        "legacy_cold_s": 4.176263708155602,
+        "legacy_cold_source": "measured",
         "legacy_cold_cache_key": "",
-        "speedup_cold": null
+        "speedup_cold": 2.457284238657928
       },
       {
         "api_id": "coordinates.cartesian_to_geodetic",
@@ -8837,14 +9269,14 @@
         "n": 12000,
         "reps": 7,
         "warmup": 1,
-        "rust_p50_s": 0.028509083203971386,
-        "rust_p95_s": 0.028727266332134606,
-        "legacy_p50_s": 1.7963912077248096,
-        "legacy_p95_s": 1.820936845941469,
-        "legacy_source": "cache",
-        "legacy_cache_key": "083f1747550d35cbbee866a876bd69b98738a30c3cc685cea1855b44d01e32e9",
-        "speedup_p50": 63.011188219288925,
-        "speedup_p95": 63.387056216502955,
+        "rust_p50_s": 0.033091749995946884,
+        "rust_p95_s": 0.033792762318626046,
+        "legacy_p50_s": 1.5384367499500513,
+        "legacy_p95_s": 1.5599413206800818,
+        "legacy_source": "measured",
+        "legacy_cache_key": "",
+        "speedup_p50": 46.49003906225814,
+        "speedup_p95": 46.1619948665832,
         "min_speedup_p50": 1.2,
         "min_speedup_p95": 1.2,
         "raw_passed": true,
@@ -8852,11 +9284,11 @@
         "waived": false,
         "waiver": "",
         "error": null,
-        "rust_cold_s": null,
-        "legacy_cold_s": null,
-        "legacy_cold_source": "not-measured",
+        "rust_cold_s": 1.8300551660358906,
+        "legacy_cold_s": 6.2586206663399935,
+        "legacy_cold_source": "measured",
         "legacy_cold_cache_key": "",
-        "speedup_cold": null
+        "speedup_cold": 3.419908198667521
       },
       {
         "api_id": "coordinates.cartesian_to_geodetic",

@@ -235,11 +235,13 @@ Supplemental fixed-fixture parity:
 `coordinates.transform_coordinates` is marked partial in the registry, but
 direct randomized fuzz now covers a public quivr-object dispatcher subcase
 matrix: Cartesian constant-frame inverse directions, Spherical/Keplerian/
-Cometary non-Cartesian inputs, SUN↔EARTH origin translations, and
+Cometary non-Cartesian inputs, representative covariance-bearing
+Cartesian/Keplerian dispatcher paths, SUN↔EARTH origin translations, and
 Earth-centered ITRF93 time-varying rotations. The intentionally excluded
 subcases remain explicit: Cartesian-to-Cartesian frame-only fallthrough,
-covariance-bearing public dispatcher cases, mixed-origin arrays, observatory
-origins, and user-furnished SPICE body coverage beyond the SUN/EARTH matrix.
+covariance-bearing ITRF93 public dispatcher cases, mixed-origin arrays,
+observatory origins, and user-furnished SPICE body coverage beyond the
+SUN/EARTH matrix.
 
 The ITRF93 rows intentionally compare asymmetric implementations: the
 baseline-main oracle uses the legacy CSPICE/spiceypy PCK path, while the
