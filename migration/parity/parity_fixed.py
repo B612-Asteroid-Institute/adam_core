@@ -1,12 +1,10 @@
 """Deterministic fixed-fixture parity gate.
 
-Randomized fuzz is the default parity mechanism, but some Rust/default APIs are
-not good random-fuzz candidates.  ``orbit_determination.gaussIOD`` is the first
-case: Rust uses Laguerre+deflation for the 8th-order Gauss-IOD polynomial while
-baseline-main uses ``np.roots``/LAPACK, and those algorithms accept different
-physical-root subsets on some random triplets.  This module keeps that random
-exclusion intact while still governing well-conditioned deterministic triplets
-against the baseline-main oracle.
+Randomized fuzz is the default parity mechanism. Some Rust/default APIs also
+need deterministic fixtures for known boundary regimes. ``orbit_determination.gaussIOD``
+now has constrained shared-root random fuzz, while this module keeps a stable
+well-conditioned fixture for the same production best-root regime and documents
+that unconstrained multi-root subset parity is intentionally out of scope.
 """
 
 from __future__ import annotations
@@ -60,11 +58,11 @@ class ApiResult:
 def _gauss_iod_well_conditioned_sample() -> _inputs.Sample:
     """Eight fixed triplets where Rust and legacy both accept a physical root.
 
-    These values are frozen from ``_inputs.make_gauss_iod`` with seed
+    These values are frozen from an earlier ``_inputs.make_gauss_iod`` seed
     ``20260425`` after confirming every triplet has a shared best |r2| ≥ 1.5 AU
-    solution.  Do not replace this with live RNG generation: the point of this
-    gate is a stable fixture for the well-conditioned subset while randomized
-    Gauss-IOD fuzz remains excluded.
+    solution. Do not replace this with live RNG generation: the point of this
+    gate is a stable fixture supplementing the constrained randomized Gauss-IOD
+    fuzz gate.
     """
 
     ra_deg_per_triplet = np.array(

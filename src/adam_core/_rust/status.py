@@ -492,20 +492,21 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.gauss_iod_fused_numpy",
-        parity_coverage="fixed-fixture",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Fixed-fixture parity is enforced for well-conditioned triplets. "
-            "Randomized fuzz remains intentionally disabled because Rust "
-            "Laguerre+deflation and legacy np.roots/LAPACK accept different "
-            "physical root subsets on some random triplets."
+            "Random fuzz is constrained to well-conditioned low-e, "
+            "main-belt-like, multi-day triplets where Rust Laguerre+deflation "
+            "and legacy np.roots/LAPACK share a physical best root. A "
+            "deterministic fixed fixture is retained as supplemental governance."
         ),
         covered_subcases=(
-            "eight deterministic well-conditioned triplets with shared "
-            "|r2|>=1.5 AU best roots",
+            "randomized low-e main-belt-like triplets with shared |r2|>=1.5 AU "
+            "best roots",
+            "eight deterministic well-conditioned fixed-fixture triplets",
         ),
         excluded_subcases=(
-            "random triplets with root-subset disagreement between "
-            "Laguerre+deflation and np.roots/LAPACK",
+            "ill-conditioned or multi-root random triplets with root-subset "
+            "disagreement between Laguerre+deflation and np.roots/LAPACK",
         ),
         latency_gate=True,
     ),

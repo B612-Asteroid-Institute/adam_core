@@ -1320,6 +1320,62 @@
     "excluded_subcases": []
   },
   {
+    "api_id": "orbit_determination.gaussIOD",
+    "output": "epoch",
+    "atol": 1e-09,
+    "rtol": 0.0,
+    "worst_abs": 0.0,
+    "worst_rel": 0.0,
+    "margin": Infinity,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "Full Gauss IOD: equatorial\u2192ecliptic rotation, 8th-order polynomial root finding, and per-root orbit construction. Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root; deterministic fixed fixtures retain coverage for the same shared-root regime. Unconstrained random triplets remain excluded because the two root solvers can accept different physical-root subsets.",
+    "dominant_column": "epoch and 6-D Cartesian orbit",
+    "physical_magnitude": "Epoch atol 1e-9 day = 86 microseconds; orbit atol 1e-8 AU \u2248 1.5 km with 1 ppm relative tolerance for small components.",
+    "root_cause": "Both sides solve the same 8th-order Gauss-IOD polynomial, but Laguerre+deflation and LAPACK root finding have different last-bit branch histories and can disagree on marginal root acceptance. The randomized gate and fixed fixture therefore cover the shared best-root regime used downstream after near-observer roots are filtered.",
+    "verdict": "randomized shared-root parity plus supplemental fixed-fixture parity; unconstrained multi-root subset parity remains excluded by design.",
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root. A deterministic fixed fixture is retained as supplemental governance.",
+    "covered_subcases": [
+      "randomized low-e main-belt-like triplets with shared |r2|>=1.5 AU best roots",
+      "eight deterministic well-conditioned fixed-fixture triplets"
+    ],
+    "excluded_subcases": [
+      "ill-conditioned or multi-root random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
+    ]
+  },
+  {
+    "api_id": "orbit_determination.gaussIOD",
+    "output": "orbit",
+    "atol": 1e-08,
+    "rtol": 1e-06,
+    "worst_abs": 1.787014980436652e-12,
+    "worst_rel": 2.9955847752111124e-10,
+    "margin": 5595.923990271491,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "Full Gauss IOD: equatorial\u2192ecliptic rotation, 8th-order polynomial root finding, and per-root orbit construction. Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root; deterministic fixed fixtures retain coverage for the same shared-root regime. Unconstrained random triplets remain excluded because the two root solvers can accept different physical-root subsets.",
+    "dominant_column": "epoch and 6-D Cartesian orbit",
+    "physical_magnitude": "Epoch atol 1e-9 day = 86 microseconds; orbit atol 1e-8 AU \u2248 1.5 km with 1 ppm relative tolerance for small components.",
+    "root_cause": "Both sides solve the same 8th-order Gauss-IOD polynomial, but Laguerre+deflation and LAPACK root finding have different last-bit branch histories and can disagree on marginal root acceptance. The randomized gate and fixed fixture therefore cover the shared best-root regime used downstream after near-observer roots are filtered.",
+    "verdict": "randomized shared-root parity plus supplemental fixed-fixture parity; unconstrained multi-root subset parity remains excluded by design.",
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root. A deterministic fixed fixture is retained as supplemental governance.",
+    "covered_subcases": [
+      "randomized low-e main-belt-like triplets with shared |r2|>=1.5 AU best roots",
+      "eight deterministic well-conditioned fixed-fixture triplets"
+    ],
+    "excluded_subcases": [
+      "ill-conditioned or multi-root random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
+    ]
+  },
+  {
     "api_id": "orbits.classify_orbits",
     "output": "out",
     "atol": 0.0,
@@ -1468,20 +1524,21 @@
     "passed": true,
     "investigate": false,
     "investigate_task": "",
-    "rationale": "Full Gauss IOD fixed fixture: equatorial\u2192ecliptic rotation, 8th-order polynomial root finding, and per-root orbit construction on eight deterministic well-conditioned triplets. Randomized fuzz remains intentionally disabled because Rust Laguerre+deflation and legacy np.roots/LAPACK find different physical-root subsets on a non-trivial fraction of random triplets; the fixed fixture covers the shared-root regime that downstream IOD uses after filtering near-observer roots.",
+    "rationale": "Full Gauss IOD: equatorial\u2192ecliptic rotation, 8th-order polynomial root finding, and per-root orbit construction. Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root; deterministic fixed fixtures retain coverage for the same shared-root regime. Unconstrained random triplets remain excluded because the two root solvers can accept different physical-root subsets.",
     "dominant_column": "epoch and 6-D Cartesian orbit",
     "physical_magnitude": "Epoch atol 1e-9 day = 86 microseconds; orbit atol 1e-8 AU \u2248 1.5 km with 1 ppm relative tolerance for small components.",
-    "root_cause": "Both sides solve the same 8th-order Gauss-IOD polynomial, but Laguerre+deflation and LAPACK root finding have different last-bit branch histories. The fixture only includes triplets where both sides accept the same physical best root.",
-    "verdict": "fixed-fixture parity; randomized fuzz excluded by design.",
-    "state": "fixed-fixture",
+    "root_cause": "Both sides solve the same 8th-order Gauss-IOD polynomial, but Laguerre+deflation and LAPACK root finding have different last-bit branch histories and can disagree on marginal root acceptance. The randomized gate and fixed fixture therefore cover the shared best-root regime used downstream after near-observer roots are filtered.",
+    "verdict": "randomized shared-root parity plus supplemental fixed-fixture parity; unconstrained multi-root subset parity remains excluded by design.",
+    "state": "fixed-fixture-supplemental",
     "registry_status": "public-rust-default",
-    "parity_coverage": "fixed-fixture",
-    "coverage_note": "Fixed-fixture parity is enforced for well-conditioned triplets. Randomized fuzz remains intentionally disabled because Rust Laguerre+deflation and legacy np.roots/LAPACK accept different physical root subsets on some random triplets.",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root. A deterministic fixed fixture is retained as supplemental governance.",
     "covered_subcases": [
-      "eight deterministic well-conditioned triplets with shared |r2|>=1.5 AU best roots"
+      "randomized low-e main-belt-like triplets with shared |r2|>=1.5 AU best roots",
+      "eight deterministic well-conditioned fixed-fixture triplets"
     ],
     "excluded_subcases": [
-      "random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
+      "ill-conditioned or multi-root random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
     ],
     "fixture_names": [
       "well_conditioned_seed_20260425"
@@ -1498,20 +1555,21 @@
     "passed": true,
     "investigate": false,
     "investigate_task": "",
-    "rationale": "Full Gauss IOD fixed fixture: equatorial\u2192ecliptic rotation, 8th-order polynomial root finding, and per-root orbit construction on eight deterministic well-conditioned triplets. Randomized fuzz remains intentionally disabled because Rust Laguerre+deflation and legacy np.roots/LAPACK find different physical-root subsets on a non-trivial fraction of random triplets; the fixed fixture covers the shared-root regime that downstream IOD uses after filtering near-observer roots.",
+    "rationale": "Full Gauss IOD: equatorial\u2192ecliptic rotation, 8th-order polynomial root finding, and per-root orbit construction. Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root; deterministic fixed fixtures retain coverage for the same shared-root regime. Unconstrained random triplets remain excluded because the two root solvers can accept different physical-root subsets.",
     "dominant_column": "epoch and 6-D Cartesian orbit",
     "physical_magnitude": "Epoch atol 1e-9 day = 86 microseconds; orbit atol 1e-8 AU \u2248 1.5 km with 1 ppm relative tolerance for small components.",
-    "root_cause": "Both sides solve the same 8th-order Gauss-IOD polynomial, but Laguerre+deflation and LAPACK root finding have different last-bit branch histories. The fixture only includes triplets where both sides accept the same physical best root.",
-    "verdict": "fixed-fixture parity; randomized fuzz excluded by design.",
-    "state": "fixed-fixture",
+    "root_cause": "Both sides solve the same 8th-order Gauss-IOD polynomial, but Laguerre+deflation and LAPACK root finding have different last-bit branch histories and can disagree on marginal root acceptance. The randomized gate and fixed fixture therefore cover the shared best-root regime used downstream after near-observer roots are filtered.",
+    "verdict": "randomized shared-root parity plus supplemental fixed-fixture parity; unconstrained multi-root subset parity remains excluded by design.",
+    "state": "fixed-fixture-supplemental",
     "registry_status": "public-rust-default",
-    "parity_coverage": "fixed-fixture",
-    "coverage_note": "Fixed-fixture parity is enforced for well-conditioned triplets. Randomized fuzz remains intentionally disabled because Rust Laguerre+deflation and legacy np.roots/LAPACK accept different physical root subsets on some random triplets.",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Random fuzz is constrained to well-conditioned low-e, main-belt-like, multi-day triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK share a physical best root. A deterministic fixed fixture is retained as supplemental governance.",
     "covered_subcases": [
-      "eight deterministic well-conditioned triplets with shared |r2|>=1.5 AU best roots"
+      "randomized low-e main-belt-like triplets with shared |r2|>=1.5 AU best roots",
+      "eight deterministic well-conditioned fixed-fixture triplets"
     ],
     "excluded_subcases": [
-      "random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
+      "ill-conditioned or multi-root random triplets with root-subset disagreement between Laguerre+deflation and np.roots/LAPACK"
     ],
     "fixture_names": [
       "well_conditioned_seed_20260425"

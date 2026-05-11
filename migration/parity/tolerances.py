@@ -594,14 +594,14 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "orbit": OutputTol(atol=1e-8, rtol=1e-6),
         },
         rationale=(
-            "Full Gauss IOD fixed fixture: equatorial→ecliptic rotation, "
-            "8th-order polynomial root finding, and per-root orbit "
-            "construction on eight deterministic well-conditioned triplets. "
-            "Randomized fuzz remains intentionally disabled because Rust "
-            "Laguerre+deflation and legacy np.roots/LAPACK find different "
-            "physical-root subsets on a non-trivial fraction of random "
-            "triplets; the fixed fixture covers the shared-root regime that "
-            "downstream IOD uses after filtering near-observer roots."
+            "Full Gauss IOD: equatorial→ecliptic rotation, 8th-order polynomial "
+            "root finding, and per-root orbit construction. Random fuzz is "
+            "constrained to well-conditioned low-e, main-belt-like, multi-day "
+            "triplets where Rust Laguerre+deflation and legacy np.roots/LAPACK "
+            "share a physical best root; deterministic fixed fixtures retain "
+            "coverage for the same shared-root regime. Unconstrained random "
+            "triplets remain excluded because the two root solvers can accept "
+            "different physical-root subsets."
         ),
         dominant_column="epoch and 6-D Cartesian orbit",
         physical_magnitude=(
@@ -611,10 +611,14 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         root_cause=(
             "Both sides solve the same 8th-order Gauss-IOD polynomial, but "
             "Laguerre+deflation and LAPACK root finding have different last-bit "
-            "branch histories. The fixture only includes triplets where both "
-            "sides accept the same physical best root."
+            "branch histories and can disagree on marginal root acceptance. The "
+            "randomized gate and fixed fixture therefore cover the shared best-root "
+            "regime used downstream after near-observer roots are filtered."
         ),
-        verdict="fixed-fixture parity; randomized fuzz excluded by design.",
+        verdict=(
+            "randomized shared-root parity plus supplemental fixed-fixture parity; "
+            "unconstrained multi-root subset parity remains excluded by design."
+        ),
     ),
     # ---- orchestration (compose multiple rust-default APIs) ----
     #

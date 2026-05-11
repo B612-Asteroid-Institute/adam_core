@@ -27,7 +27,8 @@
     "photometry.predict_magnitudes",
     "orbit_determination.calcGibbs",
     "orbit_determination.calcHerrickGibbs",
-    "orbit_determination.calcGauss"
+    "orbit_determination.calcGauss",
+    "orbit_determination.gaussIOD"
   ],
   "fixed_fixture_api_ids": [
     "orbit_determination.gaussIOD"
@@ -6298,6 +6299,222 @@
             ]
           }
         ]
+      },
+      {
+        "api_id": "orbit_determination.gaussIOD",
+        "passed": true,
+        "investigate": false,
+        "investigate_task": "",
+        "seeds": [
+          {
+            "seed": 20260425,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 1.787014980436652e-12,
+                "max_rel": 1.1435767519769201e-10,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260426,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 9.57456336436735e-13,
+                "max_rel": 2.9955847752111124e-10,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260427,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 1.5556445021047693e-12,
+                "max_rel": 2.3410846540763483e-10,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260428,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 1.7834622667578515e-12,
+                "max_rel": 4.569840093768936e-11,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260429,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 6.616929226765933e-13,
+                "max_rel": 1.1190152345879474e-11,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260430,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 8.704148513061227e-13,
+                "max_rel": 2.771399135114043e-11,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260431,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 7.949196856316121e-13,
+                "max_rel": 6.759096875703785e-11,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260432,
+            "n": 16,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "epoch",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-09,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "orbit",
+                "max_abs": 1.4779288903810084e-12,
+                "max_rel": 5.409386745293459e-11,
+                "atol": 1e-08,
+                "rtol": 1e-06,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          }
+        ]
       }
     ],
     "all_passed": true
@@ -6342,6 +6559,7 @@
     ],
     "all_passed": true
   },
+  "all_passed": true,
   "parity_speed": {
     "default_small_speedup": 1.2,
     "default_large_speedup": 1.2,
@@ -7514,6 +7732,43 @@
         "speedup_cold": null
       },
       {
+        "api_id": "orbit_determination.gaussIOD",
+        "lane": "tiny-n",
+        "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 1,
+          "axes": {
+            "triplets": 1
+          },
+          "label": "triplets=1 (1 rows)"
+        },
+        "workload_label": "triplets=1 (1 rows)",
+        "n": 1,
+        "reps": 7,
+        "warmup": 1,
+        "rust_p50_s": 1.8875114619731903e-05,
+        "rust_p95_s": 2.8758449479937548e-05,
+        "legacy_p50_s": 0.001606125384569168,
+        "legacy_p95_s": 0.001859191060066223,
+        "legacy_source": "measured",
+        "legacy_cache_key": "",
+        "speedup_p50": 85.09221887797898,
+        "speedup_p95": 64.648515260297,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 0.0,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": 0.0690480419434607,
+        "legacy_cold_s": 2.057535541243851,
+        "legacy_cold_source": "measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": 29.798608089837558
+      },
+      {
         "api_id": "coordinates.cartesian_to_spherical",
         "lane": "small-n",
         "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
@@ -8495,6 +8750,43 @@
         "legacy_cold_source": "not-measured",
         "legacy_cold_cache_key": "",
         "speedup_cold": null
+      },
+      {
+        "api_id": "orbit_determination.gaussIOD",
+        "lane": "small-n",
+        "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 16,
+          "axes": {
+            "triplets": 16
+          },
+          "label": "triplets=16 (16 rows)"
+        },
+        "workload_label": "triplets=16 (16 rows)",
+        "n": 16,
+        "reps": 7,
+        "warmup": 1,
+        "rust_p50_s": 0.00020958296954631805,
+        "rust_p95_s": 0.00021552490070462227,
+        "legacy_p50_s": 0.025845333002507687,
+        "legacy_p95_s": 0.027087837224826217,
+        "legacy_source": "measured",
+        "legacy_cache_key": "",
+        "speedup_p50": 123.31790630915667,
+        "speedup_p95": 125.68309803770751,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 1.2,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": 0.06978020817041397,
+        "legacy_cold_s": 2.0851722499355674,
+        "legacy_cold_source": "measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": 29.88200099436873
       },
       {
         "api_id": "coordinates.cartesian_to_spherical",
@@ -9511,9 +9803,45 @@
         "legacy_cold_source": "not-measured",
         "legacy_cold_cache_key": "",
         "speedup_cold": null
+      },
+      {
+        "api_id": "orbit_determination.gaussIOD",
+        "lane": "large-n",
+        "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 128,
+          "axes": {
+            "triplets": 128
+          },
+          "label": "triplets=128 (128 rows)"
+        },
+        "workload_label": "triplets=128 (128 rows)",
+        "n": 128,
+        "reps": 7,
+        "warmup": 1,
+        "rust_p50_s": 0.001691583078354597,
+        "rust_p95_s": 0.0019027169793844221,
+        "legacy_p50_s": 0.1919335830025375,
+        "legacy_p95_s": 0.19771417928859591,
+        "legacy_source": "measured",
+        "legacy_cache_key": "",
+        "speedup_p50": 113.46388212232017,
+        "speedup_p95": 103.91150204197028,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 1.2,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": 0.07072183303534985,
+        "legacy_cold_s": 2.2595139583572745,
+        "legacy_cold_source": "measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": 31.94931269991081
       }
     ],
     "all_passed": true
-  },
-  "all_passed": true
+  }
 }

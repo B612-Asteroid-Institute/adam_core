@@ -1170,6 +1170,43 @@
       "speedup_cold": null
     },
     {
+      "api_id": "orbit_determination.gaussIOD",
+      "lane": "tiny-n",
+      "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 1,
+        "axes": {
+          "triplets": 1
+        },
+        "label": "triplets=1 (1 rows)"
+      },
+      "workload_label": "triplets=1 (1 rows)",
+      "n": 1,
+      "reps": 7,
+      "warmup": 1,
+      "rust_p50_s": 1.8875114619731903e-05,
+      "rust_p95_s": 2.8758449479937548e-05,
+      "legacy_p50_s": 0.001606125384569168,
+      "legacy_p95_s": 0.001859191060066223,
+      "legacy_source": "measured",
+      "legacy_cache_key": "",
+      "speedup_p50": 85.09221887797898,
+      "speedup_p95": 64.648515260297,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 0.0,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 0.0690480419434607,
+      "legacy_cold_s": 2.057535541243851,
+      "legacy_cold_source": "measured",
+      "legacy_cold_cache_key": "",
+      "speedup_cold": 29.798608089837558
+    },
+    {
       "api_id": "coordinates.cartesian_to_spherical",
       "lane": "small-n",
       "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
@@ -2151,6 +2188,43 @@
       "legacy_cold_source": "cache",
       "legacy_cold_cache_key": "68f2736254cc0d56b980013854652e900d986a6c92ad620d6d90bb30aa48d68a",
       "speedup_cold": 28.619821224915395
+    },
+    {
+      "api_id": "orbit_determination.gaussIOD",
+      "lane": "small-n",
+      "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 16,
+        "axes": {
+          "triplets": 16
+        },
+        "label": "triplets=16 (16 rows)"
+      },
+      "workload_label": "triplets=16 (16 rows)",
+      "n": 16,
+      "reps": 7,
+      "warmup": 1,
+      "rust_p50_s": 0.00020958296954631805,
+      "rust_p95_s": 0.00021552490070462227,
+      "legacy_p50_s": 0.025845333002507687,
+      "legacy_p95_s": 0.027087837224826217,
+      "legacy_source": "measured",
+      "legacy_cache_key": "",
+      "speedup_p50": 123.31790630915667,
+      "speedup_p95": 125.68309803770751,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 0.06978020817041397,
+      "legacy_cold_s": 2.0851722499355674,
+      "legacy_cold_source": "measured",
+      "legacy_cold_cache_key": "",
+      "speedup_cold": 29.88200099436873
     },
     {
       "api_id": "coordinates.cartesian_to_spherical",
@@ -3167,6 +3241,43 @@
       "legacy_cold_source": "cache",
       "legacy_cold_cache_key": "9fec8cd47b7e30c10465a9b2e2918d2ae614a8f777e3eb96bd2222fd97121dbf",
       "speedup_cold": 23.147706280506263
+    },
+    {
+      "api_id": "orbit_determination.gaussIOD",
+      "lane": "large-n",
+      "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 128,
+        "axes": {
+          "triplets": 128
+        },
+        "label": "triplets=128 (128 rows)"
+      },
+      "workload_label": "triplets=128 (128 rows)",
+      "n": 128,
+      "reps": 7,
+      "warmup": 1,
+      "rust_p50_s": 0.001691583078354597,
+      "rust_p95_s": 0.0019027169793844221,
+      "legacy_p50_s": 0.1919335830025375,
+      "legacy_p95_s": 0.19771417928859591,
+      "legacy_source": "measured",
+      "legacy_cache_key": "",
+      "speedup_p50": 113.46388212232017,
+      "speedup_p95": 103.91150204197028,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 0.07072183303534985,
+      "legacy_cold_s": 2.2595139583572745,
+      "legacy_cold_source": "measured",
+      "legacy_cold_cache_key": "",
+      "speedup_cold": 31.94931269991081
     }
   ],
   "all_passed": true

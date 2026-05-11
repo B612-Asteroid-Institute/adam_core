@@ -952,15 +952,22 @@ def _make_iod_observation(
     """
     from adam_core._rust import api as _rust_api
 
-    # Sample orbits (drop near-Earth and very high-e ones — IOD is unstable)
+    # Keep the randomized gate in the well-conditioned, shared-root regime.
+    # Unconstrained random Gauss-IOD triplets can make Laguerre+deflation and
+    # np.roots/LAPACK accept different physical-root subsets; that behavior is
+    # intrinsic to the polynomial solvers rather than a Rust bug. Low-e,
+    # main-belt-like triplets with multi-day spacing still provide true random
+    # fuzz coverage for the production best-root path while avoiding
+    # root-subset-policy noise.
     kep = _sample_keplerian_elements(rng, n_triplets)
-    kep[:, 0] = np.clip(kep[:, 0], 1.5, 5.0)  # main-belt-ish
-    kep[:, 1] = np.clip(kep[:, 1], 0.0, 0.4)
+    kep[:, 0] = rng.uniform(2.0, 3.0, size=n_triplets)
+    kep[:, 1] = rng.uniform(0.0, 0.1, size=n_triplets)
+    kep[:, 2] = rng.uniform(0.0, 15.0, size=n_triplets)
     cart = _kep_to_cart(kep)
 
     base_t = rng.uniform(59000.0, 60000.0, size=n_triplets).astype(np.float64)
-    dt12 = rng.uniform(1.0, 3.0, size=n_triplets).astype(np.float64)
-    dt23 = rng.uniform(1.0, 3.0, size=n_triplets).astype(np.float64)
+    dt12 = rng.uniform(3.0, 7.0, size=n_triplets).astype(np.float64)
+    dt23 = rng.uniform(3.0, 7.0, size=n_triplets).astype(np.float64)
     times = np.stack(
         [
             base_t,
@@ -1245,18 +1252,7 @@ GENERATORS = {
     "orbit_determination.calcGibbs": make_calc_gibbs,
     "orbit_determination.calcHerrickGibbs": make_calc_herrick_gibbs,
     "orbit_determination.calcGauss": make_calc_gauss,
-    # NOTE: gaussIOD intentionally absent from random-fuzz GENERATORS.
-    # Rust (Laguerre+deflation) and legacy (np.roots/LAPACK) find
-    # DIFFERENT subsets of the 8th-order polynomial's roots on a
-    # non-trivial fraction of random triplets — the polynomial-conditioning
-    # difference is intrinsic to the algorithms, not a kernel bug. Best-
-    # root parity holds at ~1e-10 AU when both sides return any root ≥
-    # 1.5 AU but ~5/32 random triplets show NaN-mismatch where rust and
-    # legacy disagree on whether a root is "physical." A fixed-fixture
-    # pytest covers the well-conditioned cases; random fuzz is unreliable
-    # without per-root matching that adds significant harness complexity.
-    # `make_gauss_iod` and the dispatch entries in _rust_runner /
-    # _legacy_runner are retained for ad-hoc / manual parity checks.
+    "orbit_determination.gaussIOD": make_gauss_iod,
 }
 
 
@@ -1290,6 +1286,7 @@ TINY_WORKLOADS: dict[str, WorkloadShape] = {
     "dynamics.generate_porkchop_data": WorkloadShape(
         4, extra={"departures": 2, "arrivals": 2}
     ),
+    "orbit_determination.gaussIOD": WorkloadShape(1, extra={"triplets": 1}),
 }
 
 
@@ -1304,6 +1301,10 @@ SMALL_WORKLOADS: dict[str, WorkloadShape] = {
     "dynamics.generate_porkchop_data": WorkloadShape(
         1_936, extra={"departures": 44, "arrivals": 44}
     ),
+    # Full Gauss-IOD is scalar/root-finder heavy in the legacy oracle. Sixteen
+    # triplets matches the fuzz governance size and keeps the historical small
+    # speed lane affordable.
+    "orbit_determination.gaussIOD": WorkloadShape(16, extra={"triplets": 16}),
 }
 
 
@@ -1314,6 +1315,10 @@ FUZZ_N_OVERRIDES: dict[str, int] = {
     "dynamics.calculate_moid": 8,
     "dynamics.calculate_perturber_moids": 8,
     "dynamics.generate_porkchop_data": 16,
+    # Full Gauss-IOD calls are scalar/root-finder heavy in the legacy oracle.
+    # Sixteen randomized, well-conditioned triplets per seed gives direct fuzz
+    # coverage without making every full parity run polynomial-bound.
+    "orbit_determination.gaussIOD": 16,
 }
 
 
@@ -1364,6 +1369,7 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
         5_000, extra={"triplets": 5_000}
     ),
     "orbit_determination.calcGauss": WorkloadShape(5_000, extra={"triplets": 5_000}),
+    "orbit_determination.gaussIOD": WorkloadShape(128, extra={"triplets": 128}),
 }
 
 

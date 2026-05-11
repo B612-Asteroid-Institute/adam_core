@@ -61,25 +61,26 @@ def test_no_dual_rows_without_current_legacy_implementation() -> None:
     ]
 
 
-def test_fixed_fixture_registry_matches_fixture_manifest() -> None:
-    fixed_fixture_ids = {
-        migration.api_id
-        for migration in API_MIGRATIONS
-        if migration.parity_coverage == "fixed-fixture"
-    }
+def test_fixed_fixture_manifest_entries_are_registered() -> None:
+    fixed_fixture_ids = set(parity_fixed.all_api_ids())
 
-    assert fixed_fixture_ids == set(parity_fixed.all_api_ids())
+    assert fixed_fixture_ids <= set(API_MIGRATIONS_BY_ID)
+    assert all(
+        API_MIGRATIONS_BY_ID[api_id].parity_coverage in {"fixed-fixture", "random-fuzz"}
+        for api_id in fixed_fixture_ids
+    )
 
 
-def test_gauss_iod_randomized_exclusion_is_visible() -> None:
+def test_gauss_iod_constrained_random_fuzz_is_visible() -> None:
     migration = API_MIGRATIONS_BY_ID["orbit_determination.gaussIOD"]
 
-    assert migration.parity_coverage == "fixed-fixture"
+    assert migration.parity_coverage == "random-fuzz"
     assert migration.coverage_note
-    assert "Randomized fuzz remains intentionally disabled" in migration.coverage_note
+    assert "Random fuzz is constrained" in migration.coverage_note
     assert migration.covered_subcases
     assert migration.excluded_subcases
-    assert "orbit_determination.gaussIOD" not in _inputs.all_api_ids()
+    assert "orbit_determination.gaussIOD" in _inputs.all_api_ids()
+    assert "orbit_determination.gaussIOD" in parity_fixed.all_api_ids()
 
 
 def test_transform_coordinates_partial_coverage_is_visible() -> None:

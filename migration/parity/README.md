@@ -216,20 +216,21 @@ pretty-printer joins this registry to `tolerances.py` so reports distinguish
 direct randomized fuzz, fixed-fixture coverage, orchestration-implied coverage,
 targeted-test-only coverage, and intentional exclusions.
 
-Currently wired directly in randomized fuzz (28):
+Currently wired directly in randomized fuzz (29):
 - 10 coordinates/transform/residual surfaces
 - 10 dynamics primitives and public orchestration surfaces, including direct
   MOID, perturber MOIDs, LT-correction, and porkchop grids
 - 4 photometry
 - 1 orbit-classification rule surface
-- 3 OD primitives
+- 4 OD primitives, including constrained shared-root `gaussIOD` fuzz
 
-Fixed-fixture parity outside randomized fuzz:
-- `orbit_determination.gaussIOD` — variable-length output (0-3 orbits) and
-  root-subset differences between Rust Laguerre+deflation and legacy
-  `np.roots` make random byte-by-byte parity misleading, so the canonical gate
-  enforces eight deterministic well-conditioned triplets while keeping random
-  fuzz excluded.
+Supplemental fixed-fixture parity:
+- `orbit_determination.gaussIOD` — constrained randomized fuzz covers
+  well-conditioned low-e, main-belt-like, multi-day triplets where Rust
+  Laguerre+deflation and legacy `np.roots`/LAPACK share a physical best root.
+  The canonical gate also enforces eight deterministic well-conditioned
+  triplets as a stable supplement; unconstrained ill-conditioned/multi-root
+  triplets remain excluded because solver root-subset policy can differ.
 
 `coordinates.transform_coordinates` is marked partial in the registry, but
 direct randomized fuzz now covers a public quivr-object dispatcher subcase

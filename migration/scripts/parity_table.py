@@ -102,7 +102,7 @@ def _build_rows(
                 }
             )
 
-    for api_id in sorted(fixed_ids - measured_ids):
+    for api_id in sorted(fixed_ids):
         spec = tolerances.get(api_id)
         api_result = fixed_by_api[api_id]
         migration = API_MIGRATIONS_BY_ID[api_id]
@@ -132,7 +132,11 @@ def _build_rows(
                     "physical_magnitude": spec.physical_magnitude,
                     "root_cause": spec.root_cause,
                     "verdict": spec.verdict,
-                    "state": "fixed-fixture",
+                    "state": (
+                        "fixed-fixture-supplemental"
+                        if api_id in measured_ids
+                        else "fixed-fixture"
+                    ),
                     "registry_status": migration.status,
                     "parity_coverage": migration.parity_coverage,
                     "coverage_note": migration.coverage_note,
@@ -197,7 +201,11 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
     )
     lines.append("|---|---|---:|---:|---:|---:|---|---|---|---|---|")
     for r in rows:
-        observed = r["state"] in {"measured", "fixed-fixture"}
+        observed = r["state"] in {
+            "measured",
+            "fixed-fixture",
+            "fixed-fixture-supplemental",
+        }
         if not observed:
             wa = "—"
             wr = "—"
@@ -231,6 +239,8 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
             flag = " (orchestration)"
         elif r["state"] == "fixed-fixture":
             flag = " (fixed fixture)"
+        elif r["state"] == "fixed-fixture-supplemental":
+            flag = " (supplemental fixed fixture)"
         elif r["state"] == "fixed-fixture-missing":
             flag = " (fixed fixture missing)"
         elif r["state"] == "random-fuzz-excluded":
@@ -427,7 +437,10 @@ def _coverage_summary(rows: list[dict]) -> str:
     orchestration = sorted(
         {r["api_id"] for r in rows if r["state"] == "orchestration-implied"}
     )
-    fixed = sorted({r["api_id"] for r in rows if r["state"] == "fixed-fixture"})
+    fixed_only = sorted({r["api_id"] for r in rows if r["state"] == "fixed-fixture"})
+    fixed_supplemental = sorted(
+        {r["api_id"] for r in rows if r["state"] == "fixed-fixture-supplemental"}
+    )
     fixed_missing = sorted(
         {r["api_id"] for r in rows if r["state"] == "fixed-fixture-missing"}
     )
@@ -441,21 +454,29 @@ def _coverage_summary(rows: list[dict]) -> str:
         {
             r["api_id"]
             for r in rows
-            if r["state"] in {"measured", "fixed-fixture"} and r["investigate"]
+            if r["state"] in {"measured", "fixed-fixture", "fixed-fixture-supplemental"}
+            and r["investigate"]
         }
     )
     direct = len(measured_apis) + len(wired_not_measured)
     indirect = len(orchestration)
+    fixed_only_word = "API" if len(fixed_only) == 1 else "APIs"
+    fixed_supplemental_word = "API" if len(fixed_supplemental) == 1 else "APIs"
+    random_excluded_word = "API" if len(random_excluded) == 1 else "APIs"
+    measured_word = "API" if len(measured_apis) == 1 else "APIs"
     lines = []
     lines.append(
         f"**Coverage**: {direct} of {len(declared_apis)} declared APIs "
         f"wired directly in random-fuzz GENERATORS; "
         f"{indirect} additional orchestration APIs covered indirectly via "
         f"underlying kernel parity. "
-        f"{len(fixed)} fixed-fixture APIs governed outside randomized fuzz. "
-        f"{len(random_excluded)} intentionally excluded from randomized fuzz "
-        f"with no fixed fixture in this artifact. "
-        f"{len(measured_apis)} random-fuzz APIs measured this run."
+        f"{len(fixed_only)} fixed-fixture {fixed_only_word} governed outside "
+        f"randomized fuzz. "
+        f"{len(fixed_supplemental)} supplemental fixed-fixture "
+        f"{fixed_supplemental_word} also covered by randomized fuzz. "
+        f"{len(random_excluded)} {random_excluded_word} intentionally excluded "
+        f"from randomized fuzz with no fixed fixture in this artifact. "
+        f"{len(measured_apis)} random-fuzz {measured_word} measured this run."
     )
     if wired_not_measured:
         lines.append("")
@@ -476,10 +497,17 @@ def _coverage_summary(rows: list[dict]) -> str:
         )
         for a in unwired:
             lines.append(f"- `{a}`")
-    if fixed:
+    if fixed_only:
         lines.append("")
         lines.append("**Fixed-fixture parity (not randomized fuzz)**:")
-        for a in fixed:
+        for a in fixed_only:
+            note = API_MIGRATIONS_BY_ID[a].coverage_note
+            suffix = f" — {note}" if note else ""
+            lines.append(f"- `{a}`{suffix}")
+    if fixed_supplemental:
+        lines.append("")
+        lines.append("**Supplemental fixed-fixture parity (also randomized fuzz)**:")
+        for a in fixed_supplemental:
             note = API_MIGRATIONS_BY_ID[a].coverage_note
             suffix = f" — {note}" if note else ""
             lines.append(f"- `{a}`{suffix}")
