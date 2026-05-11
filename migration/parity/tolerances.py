@@ -215,8 +215,8 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "sph_ec_to_cart_eq": OutputTol(atol=1e-10, rtol=1e-12),
             "kep_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
             "com_eq_to_kep_ec": OutputTol(atol=1e-9, rtol=1e-12),
-            "cart_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-9, rtol=1e-12),
-            "cart_ec_earth_to_sph_ec_sun": OutputTol(atol=1e-9, rtol=1e-12),
+            "cart_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-11, rtol=1e-12),
+            "cart_ec_earth_to_sph_ec_sun": OutputTol(atol=1e-11, rtol=1e-12),
             "cart_ec_earth_to_sph_itrf93": OutputTol(atol=1e-7, rtol=1e-12),
             "cart_itrf93_earth_to_sph_eq": OutputTol(atol=1e-7, rtol=1e-12),
         },
@@ -231,17 +231,22 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         dominant_column="spherical angle / Keplerian epoch-like output",
         physical_magnitude=(
             "1e-10 deg is 0.36 microarcsec for constant-frame angular columns; "
-            "1e-9 days is 86 microseconds for cometary/Keplerian epoch-like "
-            "columns; 1e-7 deg/day on ITRF93 spherical velocity-angle columns "
-            "is 0.36 mas/day and remains well below the Earth-rotation ULP noise "
-            "time-varying rotation path."
+            "1e-9 days is 86 microseconds for the Cometary→Keplerian epoch-like "
+            "column. SUN↔EARTH origin translations are held to 1e-11 in mixed "
+            "spherical units, i.e. 1.5 m in range or 0.036 microarcsec in angular "
+            "columns. The ITRF93 rows keep 1e-7 deg/day only for spherical "
+            "velocity-angle columns: 0.36 mas/day, with observed drift near "
+            "5.6e-8 deg/day from the accepted Earth-rotation ULP noise floor."
         ),
         root_cause=(
             "Constant 6×6 frame rotations and representation conversions compose "
             "sqrt/atan2/asin/sin/cos last-ulp differences between Rust stdlib "
-            "and baseline JAX/XLA. Origin translations compare spicekit state "
-            "lookups to baseline CSPICE. ITRF93 subcases additionally include "
-            "the accepted CSPICE-vs-pure-Rust PCK 1-ULP rotation divergence."
+            "and baseline JAX/XLA. SUN↔EARTH origin translations use the same "
+            "DE440 state semantics and show only final representation-conversion "
+            "plus last-ulp SPK evaluation drift, not a broad SPICE slack. ITRF93 "
+            "subcases additionally compare baseline CSPICE/spiceypy PCK evaluation "
+            "against spicekit's pure-Rust PCK path, which has an independently "
+            "validated accepted 1-ULP rotation divergence."
         ),
         verdict=(
             "public-dispatch parity across the covered subcase matrix; remaining "

@@ -240,7 +240,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 7.105427357601002e-15,
                 "max_rel": 1.7716750077071752e-14,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -249,7 +249,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 8.17344781266216e-15,
                 "max_rel": 4.276095841839199e-11,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -329,7 +329,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 5.684341886080802e-14,
                 "max_rel": 1.9350848343709646e-14,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -338,7 +338,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 7.105427357601002e-15,
                 "max_rel": 2.8113323645105864e-11,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -418,7 +418,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 7.105427357601002e-15,
                 "max_rel": 2.028764066039005e-15,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -427,7 +427,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 2.842170943040401e-14,
                 "max_rel": 1.2532945528189638e-11,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -507,7 +507,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 3.552713678800501e-15,
                 "max_rel": 5.423852631035153e-15,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -516,7 +516,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 2.842170943040401e-14,
                 "max_rel": 3.0121928385970813e-11,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -596,7 +596,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 1.4210854715202004e-14,
                 "max_rel": 2.116204552101461e-15,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -605,7 +605,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 2.842170943040401e-14,
                 "max_rel": 9.728582771218966e-12,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -685,7 +685,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 5.684341886080802e-14,
                 "max_rel": 5.096030024492845e-15,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -694,7 +694,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 2.842170943040401e-14,
                 "max_rel": 4.43101903298071e-09,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -774,7 +774,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 2.842170943040401e-14,
                 "max_rel": 3.2900714379003248e-15,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -783,7 +783,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 7.105427357601002e-15,
                 "max_rel": 3.005059072347813e-11,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -863,7 +863,7 @@
                 "name": "cart_ec_sun_to_sph_ec_earth",
                 "max_abs": 7.105427357601002e-15,
                 "max_rel": 8.823950680031585e-15,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true
@@ -872,7 +872,7 @@
                 "name": "cart_ec_earth_to_sph_ec_sun",
                 "max_abs": 2.842170943040401e-14,
                 "max_rel": 7.880528535690835e-12,
-                "atol": 1e-09,
+                "atol": 1e-11,
                 "rtol": 1e-12,
                 "nan_disagreement": 0,
                 "passed": true

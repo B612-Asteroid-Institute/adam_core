@@ -240,6 +240,14 @@ subcases remain explicit: Cartesian-to-Cartesian frame-only fallthrough,
 covariance-bearing public dispatcher cases, mixed-origin arrays, observatory
 origins, and user-furnished SPICE body coverage beyond the SUN/EARTH matrix.
 
+The ITRF93 rows intentionally compare asymmetric implementations: the
+baseline-main oracle uses the legacy CSPICE/spiceypy PCK path, while the
+migration path uses spicekit's pure-Rust PCK evaluator. The `1e-7` tolerance is
+therefore scoped only to the known 1-ULP Earth-rotation divergence documented
+and independently spec-validated in the SPICE/spicekit tests; it is not a
+blanket SPICE tolerance. SUN↔EARTH origin-translation rows do not use that
+budget and are held to `1e-11` in the transform matrix.
+
 These remaining excluded/indirect cases need a different harness style, fixed
 fixtures, or quivr round-trips rather than numpy-boundary random subprocess
 hand-off.
