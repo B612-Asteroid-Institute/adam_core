@@ -218,8 +218,8 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "com_eq_to_kep_ec": OutputTol(atol=1e-9, rtol=1e-12),
             "cart_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-11, rtol=1e-12),
             "cart_ec_earth_to_sph_ec_sun": OutputTol(atol=1e-11, rtol=1e-12),
-            "cart_ec_earth_to_sph_itrf93": OutputTol(atol=1e-7, rtol=1e-12),
-            "cart_itrf93_earth_to_sph_eq": OutputTol(atol=1e-7, rtol=1e-12),
+            "cart_ec_earth_to_sph_itrf93": OutputTol(atol=3e-8, rtol=1e-12),
+            "cart_itrf93_earth_to_sph_eq": OutputTol(atol=3e-8, rtol=1e-12),
             "cart_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
             "cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
             "cart_cov_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-11, rtol=1e-12),
@@ -246,9 +246,10 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "cells plus 1e-8 relative for finite propagated covariance terms. "
             "SUN↔EARTH origin translations are held to 1e-11 in mixed "
             "spherical units, i.e. 1.5 m in range or 0.036 microarcsec in angular "
-            "columns. The ITRF93 rows keep 1e-7 deg/day only for spherical "
-            "velocity-angle columns: 0.36 mas/day, with observed drift near "
-            "5.6e-8 deg/day from the accepted Earth-rotation ULP noise floor."
+            "columns. The ITRF93 rows keep 3e-8 deg/day only for spherical "
+            "velocity-angle columns: 0.108 mas/day, with deterministic PCK "
+            "epochs chosen to keep accepted CSPICE-vs-spicekit Earth-rotation "
+            "drift below the gate with >3x headroom."
         ),
         root_cause=(
             "Constant 6×6 frame rotations and representation conversions compose "
@@ -259,8 +260,11 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "DE440 state semantics and show only final representation-conversion "
             "plus last-ulp SPK evaluation drift, not a broad SPICE slack. ITRF93 "
             "subcases additionally compare baseline CSPICE/spiceypy PCK evaluation "
-            "against spicekit's pure-Rust PCK path, which has an independently "
-            "validated accepted 1-ULP rotation divergence."
+            "against spicekit's pure-Rust PCK path. The underlying accepted "
+            "rotation-matrix difference is at the last-ulp level, but applying "
+            "the time-varying rotation differentiates through r×ω and the "
+            "spherical velocity-angle Jacobian, amplifying that backend "
+            "difference to ~1e-8 deg/day in vlon/vlat."
         ),
         verdict=(
             "public-dispatch parity across the covered subcase matrix; remaining "
@@ -361,15 +365,18 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "search over primary-orbit dt and inner bounded search over the "
             "secondary ellipse anomaly. A supplemental fixed fixture covers "
             "the identical-circular flat-minimum case and compares only the "
-            "unique distance; the argmin time is non-unique there."
+            "unique distance; a second non-degenerate fixture pins dt_at_min at "
+            "1e-6 day so optimizer time regressions cannot hide behind the "
+            "randomized flat-minimum slack."
         ),
         dominant_column="dt_at_min from the outer bounded minimizer",
         physical_magnitude=(
             "MOID atol 1e-9 AU ≈ 150 m in random fuzz; the flat-minimum "
-            "fixed fixture tightens the distance to 1e-12 AU. dt_at_min atol "
-            "1e-3 day ≈ 86 s for non-degenerate fuzz rows; degenerate flat "
-            "minima treat the returned time as a finite witness, not a unique "
-            "science output."
+            "fixed fixtures tighten the distance to 1e-12 AU and pin a "
+            "well-conditioned unique argmin to 1e-6 day ≈ 86 ms. dt_at_min "
+            "atol 1e-3 day ≈ 86 s remains only as the randomized optimizer "
+            "envelope; degenerate flat minima treat the returned time as a "
+            "finite witness, not a unique science output."
         ),
         root_cause=(
             "Rust carries a scipy-style bounded minimizer but not scipy's exact "
@@ -437,7 +444,8 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         dominant_column="covariance off-diagonal",
         physical_magnitude=(
             "State worst 8.9e-14 AU; covariance worst 1.7e-14 (AU,AU/d)² "
-            "with worst-rel 5.2e-9 — ~6 sig figs accurate."
+            "with worst-rel 5.2e-9 in random fuzz. The supplemental finite-"
+            "difference fixture is held to rtol=1e-8."
         ),
         root_cause=(
             "Σ_out = J Σ_in J^T = 6×6×6 matmul. Each multiplication "
@@ -490,7 +498,9 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         dominant_column="covariance",
         physical_magnitude=(
             "Same as generate_ephemeris_2body for state outputs; "
-            "covariance worst-rel 6.7e-5 (driven by atan2 jacobian)."
+            "covariance worst-rel 6.7e-5 in random fuzz, driven by near-zero "
+            "covariance cells in the atan2 Jacobian. The supplemental finite-"
+            "difference fixture is held to rtol=1e-6."
         ),
         root_cause=(
             "Same Dual<6> AD pass as propagate_2body_with_covariance "
@@ -567,26 +577,39 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         outputs={"out": OutputTol(atol=1e-12, rtol=1e-12)},
         rationale="H-G phase function in V band. Pure element-wise.",
         dominant_column="magnitude",
-        physical_magnitude="2.8e-12 mag ≈ 1 ulp at H-G mag scale.",
-        root_cause="log10 + powf chain composes ~1-2 ulps.",
-        verdict="bit-parity.",
+        physical_magnitude=(
+            "3.6e-12 mag ≈ ~500 ulps at magnitude ~30, but >1e8× below "
+            "0.01 mag survey photometric noise."
+        ),
+        root_cause="log10 + powf chain composes hundreds of output ulps at mag scale.",
+        verdict=(
+            "science-grade parity: log10/powf composition differs by ~500 ulps "
+            "but remains many orders below photometric noise."
+        ),
     ),
     "photometry.calculate_apparent_magnitude_v_and_phase_angle": ToleranceSpec(
         outputs={
             "magnitude": OutputTol(atol=1e-12, rtol=1e-12),
             "phase_angle": OutputTol(atol=1e-10),
         },
-        rationale=("Fused mag+alpha — same kernels as standalone; same ulp ceiling."),
+        rationale=(
+            "Fused mag+alpha — same kernels as standalone; same physical "
+            "tolerance envelope."
+        ),
         dominant_column="phase_angle (deg)",
         physical_magnitude=(
-            "magnitude 2.1e-12 mag (bit-parity); phase_angle 7.9e-12 deg "
-            "= 28 picoarcsec (same as standalone calculate_phase_angle)."
+            "magnitude drift is a few 1e-12 mag (~hundreds of ulps at mag scale); "
+            "phase_angle 7.9e-12 deg = 28 picoarcsec (same as standalone "
+            "calculate_phase_angle)."
         ),
         root_cause=(
             "Same composed atan2 + small-angle ceiling as standalone "
             "phase_angle. 1 picoarcsec scale is far below any noise."
         ),
-        verdict="equally accurate (see calculate_phase_angle entry).",
+        verdict=(
+            "science-grade parity for magnitude plus equally accurate phase-angle "
+            "parity (see calculate_phase_angle entry)."
+        ),
     ),
     "photometry.predict_magnitudes": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-12, rtol=1e-12)},
@@ -595,9 +618,18 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "at most 1 fma over standalone V-band kernel."
         ),
         dominant_column="magnitude",
-        physical_magnitude="2.8e-12 mag — same as standalone V-band.",
-        root_cause="Same as calculate_apparent_magnitude_v + 1 fma for delta.",
-        verdict="bit-parity.",
+        physical_magnitude=(
+            "3.6e-12 mag — same order as standalone V-band and >1e8× below "
+            "0.01 mag survey photometric noise."
+        ),
+        root_cause=(
+            "Same log10/powf composition as calculate_apparent_magnitude_v + "
+            "1 fma for delta."
+        ),
+        verdict=(
+            "science-grade parity: magnitude drift is hundreds of ulps at mag "
+            "scale but many orders below photometric noise."
+        ),
     ),
     "photometry.fit_absolute_magnitude_rows": ToleranceSpec(
         outputs={
@@ -688,8 +720,8 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     ),
     "orbit_determination.gaussIOD": ToleranceSpec(
         outputs={
-            "epoch": OutputTol(atol=1e-9),
-            "orbit": OutputTol(atol=1e-8, rtol=1e-6),
+            "epoch": OutputTol(atol=1e-10),
+            "orbit": OutputTol(atol=1e-11, rtol=1e-9),
         },
         rationale=(
             "Full Gauss IOD: equatorial→ecliptic rotation, 8th-order polynomial "
@@ -703,8 +735,10 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         dominant_column="epoch and 6-D Cartesian orbit",
         physical_magnitude=(
-            "Epoch atol 1e-9 day = 86 microseconds; orbit atol 1e-8 AU ≈ "
-            "1.5 km with 1 ppm relative tolerance for small components."
+            "Random shared-root fuzz holds epoch to 1e-10 day = 8.6 microseconds "
+            "and orbit to 1e-11 AU ≈ 1.5 m with 1 ppb relative tolerance. The "
+            "supplemental fixed fixture keeps its own looser eight-triplet branch-"
+            "history tolerance while remaining below kilometre-scale orbit drift."
         ),
         root_cause=(
             "Both sides solve the same 8th-order Gauss-IOD polynomial, but "

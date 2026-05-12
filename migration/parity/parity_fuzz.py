@@ -34,6 +34,8 @@ class OutputResult:
     rtol: float
     passed: bool
     nan_disagreement: int = 0
+    max_rel_above_atol_floor: float = 0.0
+    max_tolerance_ratio: float = 0.0
 
 
 @dataclass
@@ -94,17 +96,38 @@ def _check_output(
     abs_max, rel_max, nan_mismatch = _max_abs_rel(rust, legacy)
     # Pass condition: |abs_diff| ≤ atol + rtol * |legacy|.
     # We use `np.allclose` semantics: pass if (abs ≤ atol + rtol·|legacy|).
+    # NaN positions must match exactly: one rust-NaN/legacy-finite cell or the
+    # reverse fails the gate even if all finite cells pass.
     rust_arr = np.asarray(rust, dtype=np.float64)
     legacy_arr = np.asarray(legacy, dtype=np.float64)
     finite = np.isfinite(rust_arr) & np.isfinite(legacy_arr)
     nan_match = (~np.isfinite(rust_arr)) == (~np.isfinite(legacy_arr))
-    finite_pass = bool(
-        np.all(
-            np.abs(rust_arr[finite] - legacy_arr[finite])
-            <= tol.atol + tol.rtol * np.abs(legacy_arr[finite])
-        )
-    )
+    diff_abs = np.abs(rust_arr[finite] - legacy_arr[finite])
+    legacy_abs = np.abs(legacy_arr[finite])
+    budget = tol.atol + tol.rtol * legacy_abs
+    finite_pass = bool(np.all(diff_abs <= budget))
     passed = finite_pass and bool(np.all(nan_match))
+
+    rel_floor = tol.atol if tol.atol > 0.0 else np.finfo(np.float64).tiny
+    rel_mask = legacy_abs >= rel_floor
+    if np.any(rel_mask):
+        max_rel_above_floor = float(np.max(diff_abs[rel_mask] / legacy_abs[rel_mask]))
+    else:
+        max_rel_above_floor = 0.0
+
+    if diff_abs.size == 0:
+        max_tolerance_ratio = 0.0
+    else:
+        ratio = np.zeros_like(diff_abs)
+        positive_budget = budget > 0.0
+        ratio[positive_budget] = diff_abs[positive_budget] / budget[positive_budget]
+        ratio[~positive_budget] = np.where(
+            diff_abs[~positive_budget] == 0.0, 0.0, np.inf
+        )
+        max_tolerance_ratio = float(np.max(ratio))
+    if nan_mismatch:
+        max_tolerance_ratio = float("inf")
+
     return OutputResult(
         name=name,
         max_abs=abs_max,
@@ -113,6 +136,8 @@ def _check_output(
         rtol=tol.rtol,
         passed=passed,
         nan_disagreement=nan_mismatch,
+        max_rel_above_atol_floor=max_rel_above_floor,
+        max_tolerance_ratio=max_tolerance_ratio,
     )
 
 
@@ -215,6 +240,8 @@ def to_json(results: list[ApiResult]) -> dict:
                                 "atol": o.atol,
                                 "rtol": o.rtol,
                                 "nan_disagreement": o.nan_disagreement,
+                                "max_rel_above_atol_floor": o.max_rel_above_atol_floor,
+                                "max_tolerance_ratio": o.max_tolerance_ratio,
                                 "passed": o.passed,
                             }
                             for o in s.outputs

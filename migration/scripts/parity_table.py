@@ -7,7 +7,7 @@ handoffs and reviews.
 
 The parity table includes the tolerance/RCA fields:
 
-    | API | output | atol | rtol | worst_abs | worst_rel | result |
+    | API | output | atol | rtol | worst_abs | worst_rel | nan_mismatch | result |
     | rationale | physical magnitude | root cause | verdict |
 
 The performance table includes warm/cold speedup and waiver state when a
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -40,6 +41,14 @@ def _truncate(text: str, n: int | None) -> str:
     if len(text) <= n:
         return text
     return text[: n - 1] + "…"
+
+
+def _headroom_from_ratio(max_tolerance_ratio: float) -> float:
+    if max_tolerance_ratio == 0.0:
+        return float("inf")
+    if math.isinf(max_tolerance_ratio):
+        return 0.0
+    return 1.0 / max_tolerance_ratio
 
 
 def _build_rows(
@@ -70,12 +79,22 @@ def _build_rows(
         for out_name, tol in spec.outputs.items():
             worst_abs = 0.0
             worst_rel = 0.0
+            worst_rel_above_floor = 0.0
+            max_tolerance_ratio = 0.0
+            nan_disagreement = 0
             for s in api_result.seeds:
                 for o in s.outputs:
                     if o.name == out_name:
                         worst_abs = max(worst_abs, o.max_abs)
                         worst_rel = max(worst_rel, o.max_rel)
-            margin = (tol.atol / worst_abs) if worst_abs > 0 else float("inf")
+                        worst_rel_above_floor = max(
+                            worst_rel_above_floor, o.max_rel_above_atol_floor
+                        )
+                        max_tolerance_ratio = max(
+                            max_tolerance_ratio, o.max_tolerance_ratio
+                        )
+                        nan_disagreement += o.nan_disagreement
+            margin = _headroom_from_ratio(max_tolerance_ratio)
             rows.append(
                 {
                     "api_id": api_id,
@@ -84,6 +103,9 @@ def _build_rows(
                     "rtol": tol.rtol,
                     "worst_abs": worst_abs,
                     "worst_rel": worst_rel,
+                    "worst_rel_above_atol_floor": worst_rel_above_floor,
+                    "max_tolerance_ratio": max_tolerance_ratio,
+                    "nan_disagreement": nan_disagreement,
                     "margin": margin,
                     "passed": api_result.passed,
                     "investigate": spec.investigate,
@@ -122,6 +144,15 @@ def _build_rows(
             ]
             worst_abs = max((output.max_abs for output in output_results), default=0.0)
             worst_rel = max((output.max_rel for output in output_results), default=0.0)
+            worst_rel_above_floor = max(
+                (output.max_rel_above_atol_floor for output in output_results),
+                default=0.0,
+            )
+            max_tolerance_ratio = max(
+                (output.max_tolerance_ratio for output in output_results),
+                default=0.0,
+            )
+            nan_disagreement = sum(output.nan_disagreement for output in output_results)
             atol = (
                 output_results[0].atol
                 if output_results
@@ -132,7 +163,7 @@ def _build_rows(
                 if output_results
                 else spec.outputs[out_name].rtol
             )
-            margin = (atol / worst_abs) if worst_abs > 0 else float("inf")
+            margin = _headroom_from_ratio(max_tolerance_ratio)
             rows.append(
                 {
                     "api_id": api_id,
@@ -141,6 +172,9 @@ def _build_rows(
                     "rtol": rtol,
                     "worst_abs": worst_abs,
                     "worst_rel": worst_rel,
+                    "worst_rel_above_atol_floor": worst_rel_above_floor,
+                    "max_tolerance_ratio": max_tolerance_ratio,
+                    "nan_disagreement": nan_disagreement,
                     "margin": margin,
                     "passed": api_result.passed,
                     "investigate": spec.investigate,
@@ -192,6 +226,9 @@ def _build_rows(
                     "rtol": tol.rtol,
                     "worst_abs": None,
                     "worst_rel": None,
+                    "worst_rel_above_atol_floor": None,
+                    "max_tolerance_ratio": None,
+                    "nan_disagreement": None,
                     "margin": None,
                     "passed": None,
                     "investigate": spec.investigate,
@@ -215,9 +252,9 @@ def _build_rows(
 def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
     lines = []
     lines.append(
-        "| API | output | atol | rtol | worst_abs | worst_rel | result | rationale | physical | root cause | verdict |"
+        "| API | output | atol | rtol | worst_abs | worst_rel | rel_above_floor | nan_mismatch | result | rationale | physical | root cause | verdict |"
     )
-    lines.append("|---|---|---:|---:|---:|---:|---|---|---|---|---|")
+    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|")
     for r in rows:
         observed = r["state"] in {
             "measured",
@@ -227,23 +264,29 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
         if not observed:
             wa = "—"
             wr = "—"
+            wr_floor = "—"
+            nan_mismatch = "—"
             result = "—"
         else:
             wa = f"{r['worst_abs']:.2e}" if r["worst_abs"] > 0 else "0"
             wr = f"{r['worst_rel']:.2e}" if r["worst_rel"] > 0 else "0"
-            # The margin column now shows pass/fail derived from the actual
-            # parity check (worst_abs ≤ atol + rtol·|val|). For atol-only
-            # outputs (rtol=0) we also show the bare margin atol/worst_abs.
+            wr_floor_value = r.get("worst_rel_above_atol_floor")
+            wr_floor = (
+                f"{wr_floor_value:.2e}"
+                if wr_floor_value and wr_floor_value > 0
+                else "0"
+            )
+            nan_mismatch = str(r.get("nan_disagreement") or 0)
+            # The result column reports pass/fail from the actual allclose budget
+            # and, when passing, the minimum budget headroom over all finite cells.
             if r.get("passed") is True:
-                if r["rtol"] == 0:
-                    if r["worst_abs"] == 0:
-                        result = "PASS (∞×)"
-                    else:
-                        margin_val = r["atol"] / r["worst_abs"]
-                        result = f"PASS ({margin_val:.1f}×)"
+                ratio = r.get("max_tolerance_ratio")
+                if ratio == 0:
+                    result = "PASS (∞×)"
+                elif ratio is not None and ratio > 0:
+                    result = f"PASS ({1.0 / ratio:.1f}×)"
                 else:
-                    # rtol-bound — atol/worst_abs alone is misleading.
-                    result = "PASS (rtol)"
+                    result = "PASS"
             elif r.get("passed") is False:
                 result = "FAIL"
             else:
@@ -278,7 +321,7 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
             f"| `{r['api_id']}`{flag} "
             f"| {r['output']} "
             f"| {r['atol']:.0e} | {rtol_s} "
-            f"| {wa} | {wr} | {result} "
+            f"| {wa} | {wr} | {wr_floor} | {nan_mismatch} | {result} "
             f"| {rationale} | {phys} | {rc} | {verdict} |"
         )
     return "\n".join(lines)
@@ -582,6 +625,8 @@ def _api_result_from_json(entry: dict[str, Any]) -> parity_fuzz.ApiResult:
                 rtol=o["rtol"],
                 passed=o["passed"],
                 nan_disagreement=o.get("nan_disagreement", 0),
+                max_rel_above_atol_floor=o.get("max_rel_above_atol_floor", 0.0),
+                max_tolerance_ratio=o.get("max_tolerance_ratio", 0.0),
             )
             for o in s["outputs"]
         ]
@@ -623,6 +668,8 @@ def _fixed_result_from_json(entry: dict[str, Any]) -> parity_fixed.ApiResult:
                 rtol=output["rtol"],
                 passed=output["passed"],
                 nan_disagreement=output.get("nan_disagreement", 0),
+                max_rel_above_atol_floor=output.get("max_rel_above_atol_floor", 0.0),
+                max_tolerance_ratio=output.get("max_tolerance_ratio", 0.0),
             )
             for output in fixture["outputs"]
         ]

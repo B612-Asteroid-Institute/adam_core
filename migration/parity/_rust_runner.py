@@ -711,7 +711,8 @@ def _orbit_determination_gauss_iod(
     # and legacy (np.roots/LAPACK) sometimes find different SUBSETS of valid
     # roots due to polynomial-conditioning differences, so multi-root parity
     # is fragile. The best-root case is what downstream IOD orchestration
-    # actually picks, and the bit-parity property holds there.
+    # actually picks, and the shared-root tolerance is tight enough to catch
+    # metre-scale state drift.
     n = ra_deg_per_triplet.shape[0]
     K_MAX = 1
     epoch_out = np.full((n, K_MAX), np.nan, dtype=np.float64)

@@ -83,6 +83,49 @@ def _moid_identical_circular_flat_minimum_sample() -> _inputs.Sample:
     return _inputs.Sample(rust_kwargs=kwargs, legacy_kwargs=kwargs)
 
 
+def _moid_unique_minimum_sample() -> _inputs.Sample:
+    """Well-conditioned MOID pair with a unique, high-curvature argmin.
+
+    Frozen from randomized seed 20260426 row 6 after confirming Rust and
+    baseline-main agree on both the distance and argmin time to far tighter
+    precision than the randomized optimizer-slack envelope.
+    """
+    primary = np.array(
+        [
+            [
+                1.05185395,
+                0.38578797,
+                -0.04038703,
+                -0.00881646,
+                0.01685588,
+                0.00431775,
+            ]
+        ],
+        dtype=np.float64,
+    )
+    secondary = np.array(
+        [
+            [
+                -1.30272601,
+                1.81308885,
+                0.175616882,
+                -0.0101426192,
+                -0.00615731355,
+                0.000502599735,
+            ]
+        ],
+        dtype=np.float64,
+    )
+    kwargs: dict[str, Any] = {
+        "primary_orbits": primary,
+        "secondary_orbits": secondary,
+        "mus": np.full(1, _inputs.MU_SUN, dtype=np.float64),
+        "max_iter": 100,
+        "xtol": 1e-10,
+    }
+    return _inputs.Sample(rust_kwargs=kwargs, legacy_kwargs=kwargs)
+
+
 _STIFF_COVARIANCE_FD_STEPS = np.array(
     [1e-5, 1e-5, 1e-5, 1e-7, 1e-7, 1e-7], dtype=np.float64
 )
@@ -317,7 +360,7 @@ FIXTURES: tuple[FixedFixtureSpec, ...] = (
             "finite-difference covariance witness from the scalar state map."
         ),
         make_sample=_propagate_2body_stiff_covariance_sample,
-        output_tolerances={"covariance": tolerances.OutputTol(atol=1e-21, rtol=1e-7)},
+        output_tolerances={"covariance": tolerances.OutputTol(atol=1e-21, rtol=1e-8)},
         reference_outputs=_propagate_2body_stiff_covariance_reference,
     ),
     FixedFixtureSpec(
@@ -329,7 +372,7 @@ FIXTURES: tuple[FixedFixtureSpec, ...] = (
             "central finite-difference witness from the scalar ephemeris map."
         ),
         make_sample=_generate_ephemeris_2body_stiff_covariance_sample,
-        output_tolerances={"covariance": tolerances.OutputTol(atol=1e-22, rtol=1e-4)},
+        output_tolerances={"covariance": tolerances.OutputTol(atol=1e-22, rtol=1e-6)},
         reference_outputs=_generate_ephemeris_2body_stiff_covariance_reference,
     ),
     FixedFixtureSpec(
@@ -343,6 +386,20 @@ FIXTURES: tuple[FixedFixtureSpec, ...] = (
         output_tolerances={"moid": tolerances.OutputTol(atol=1e-12, rtol=0.0)},
     ),
     FixedFixtureSpec(
+        api_id="dynamics.calculate_moid",
+        name="well_conditioned_unique_minimum",
+        description=(
+            "Non-degenerate heliocentric MOID pair with a unique argmin; pins "
+            "dt_at_min so optimizer branch-history regressions cannot hide "
+            "behind the randomized flat-minimum slack."
+        ),
+        make_sample=_moid_unique_minimum_sample,
+        output_tolerances={
+            "moid": tolerances.OutputTol(atol=1e-12, rtol=1e-10),
+            "dt_at_min": tolerances.OutputTol(atol=1e-6, rtol=0.0),
+        },
+    ),
+    FixedFixtureSpec(
         api_id="orbit_determination.gaussIOD",
         name="well_conditioned_seed_20260425",
         description=(
@@ -350,6 +407,10 @@ FIXTURES: tuple[FixedFixtureSpec, ...] = (
             "roots on Rust Laguerre+deflation and legacy np.roots/LAPACK."
         ),
         make_sample=_gauss_iod_well_conditioned_sample,
+        output_tolerances={
+            "epoch": tolerances.OutputTol(atol=1e-9, rtol=0.0),
+            "orbit": tolerances.OutputTol(atol=1e-8, rtol=1e-6),
+        },
     ),
 )
 
@@ -483,6 +544,8 @@ def to_json(results: list[ApiResult]) -> dict[str, Any]:
                                 "atol": output.atol,
                                 "rtol": output.rtol,
                                 "nan_disagreement": output.nan_disagreement,
+                                "max_rel_above_atol_floor": output.max_rel_above_atol_floor,
+                                "max_tolerance_ratio": output.max_tolerance_ratio,
                                 "passed": output.passed,
                             }
                             for output in fixture.outputs

@@ -127,7 +127,26 @@ Just fixed fixtures:
 The `--n` value is the default per-seed workload. Expensive scalar optimizer
 surfaces may declare smaller canonical per-seed overrides in `_inputs.py` so
 coverage remains direct and randomized without making every full fuzz run
-optimizer-bound.
+optimizer-bound. NaN positions are part of the parity contract: one mismatched
+NaN cell (`rust` NaN / legacy finite, or the reverse) fails the gate even when
+all finite cells satisfy the numeric tolerance.
+
+Broader tolerance-envelope sweeps can be run outside the deterministic review
+gate with larger and rotating seeds, for example:
+
+```bash
+pdm run python -m migration.parity.parity_main \
+    --skip-speed --threads multi-thread \
+    --fuzz-seeds 64 --fuzz-n 1024 \
+    --base-seed $(date +%Y%m%d) \
+    --output /tmp/parity_gate_large_sweep.json
+```
+
+Use these large sweeps as periodic/nightly evidence for future tolerance
+tightening; keep the canonical CI/review seed fixed for reproducibility. Do not
+automatically rewrite tolerances from a single green artifact: proposed
+tightening should be reviewed with physical-unit rationale, headroom, and
+large-sweep evidence so validity policy does not drift silently.
 
 Just the speedup half (warm only — default, small lane only):
 
@@ -233,7 +252,9 @@ Supplemental fixed-fixture parity:
 - `dynamics.calculate_moid` — randomized fuzz covers non-degenerate optimizer
   rows; a deterministic identical-circular fixture covers the flat-minimum
   regime where the MOID distance is unique but the returned argmin time is only
-  an optimizer witness within the orbital period.
+  an optimizer witness within the orbital period. A second non-degenerate
+  fixture pins a unique-minimum `dt_at_min` to `1e-6` day so optimizer time
+  regressions cannot hide behind the randomized slack.
 - `dynamics.propagate_2body_with_covariance` — randomized fuzz covers typical
   covariance propagation against baseline-main Jacobian covariance propagation;
   a deterministic high-a, 2516-day fixture compares Rust Dual covariance output
@@ -254,19 +275,23 @@ direct randomized fuzz now covers a public quivr-object dispatcher subcase
 matrix: Cartesian constant-frame inverse directions, Spherical/Keplerian/
 Cometary non-Cartesian inputs, representative covariance-bearing
 Cartesian/Keplerian dispatcher paths, SUN↔EARTH origin translations, and
-Earth-centered ITRF93 time-varying rotations. The intentionally excluded
-subcases remain explicit: Cartesian-to-Cartesian frame-only fallthrough,
+Earth-centered ITRF93 time-varying rotations at vetted PCK epochs. The
+intentionally excluded subcases remain explicit: Cartesian-to-Cartesian
+frame-only fallthrough,
 covariance-bearing ITRF93 public dispatcher cases, mixed-origin arrays,
 observatory origins, and user-furnished SPICE body coverage beyond the
 SUN/EARTH matrix.
 
 The ITRF93 rows intentionally compare asymmetric implementations: the
 baseline-main oracle uses the legacy CSPICE/spiceypy PCK path, while the
-migration path uses spicekit's pure-Rust PCK evaluator. The `1e-7` tolerance is
-therefore scoped only to the known 1-ULP Earth-rotation divergence documented
-and independently spec-validated in the SPICE/spicekit tests; it is not a
-blanket SPICE tolerance. SUN↔EARTH origin-translation rows do not use that
-budget and are held to `1e-11` in the transform matrix.
+migration path uses spicekit's pure-Rust PCK evaluator. The `3e-8` tolerance is
+therefore scoped only to the known Earth-rotation backend divergence documented
+and independently spec-validated in the SPICE/spicekit tests. The underlying
+rotation-matrix disagreement is last-ULP scale, but the time-varying rotation
+feeds r×ω and the spherical velocity-angle Jacobian, amplifying it into
+~1e-8 deg/day vlon/vlat drift. It is not a blanket SPICE tolerance. SUN↔EARTH
+origin-translation rows do not use that budget and are held to `1e-11` in the
+transform matrix.
 
 These remaining excluded/indirect cases need a different harness style, fixed
 fixtures, or quivr round-trips rather than numpy-boundary random subprocess

@@ -136,7 +136,8 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "Public dispatcher SUN->EARTH and EARTH->SUN origin translations "
             "to SphericalCoordinates",
             "Public dispatcher Earth-centered ecliptic->ITRF93 and "
-            "ITRF93->equatorial time-varying rotations to SphericalCoordinates",
+            "ITRF93->equatorial time-varying rotations to SphericalCoordinates "
+            "at vetted PCK epochs",
             "Public dispatcher covariance-bearing Cartesian/Keplerian inputs "
             "through constant-frame and SUN->EARTH origin-translation outputs",
         ),
@@ -151,8 +152,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "Random fuzz exercises a public quivr-object dispatcher subcase "
             "matrix spanning constant-frame inverse directions, non-Cartesian "
             "inputs, representative covariance-bearing paths, SUN/EARTH origin "
-            "translations, and ITRF93 time-varying rotations. Remaining exclusions "
-            "are explicit and should not be inferred as fuzz-covered."
+            "translations, and ITRF93 time-varying rotations at vetted PCK "
+            "epochs. Remaining exclusions are explicit and should not be "
+            "inferred as fuzz-covered."
         ),
         latency_gate=True,
     ),
@@ -294,7 +296,8 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note=(
             "Baseline-main random fuzz is supplemented by a high-a, 2516-day "
             "finite-difference covariance fixture that checks the Rust "
-            "Dual-number tangent path against the scalar state map."
+            "Dual-number tangent path against the scalar state map under a "
+            "tightened rtol=1e-8 witness."
         ),
         covered_subcases=(
             "Random covariance rows against baseline-main Jacobian covariance propagation",
@@ -322,7 +325,8 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         parity_coverage="random-fuzz",
         coverage_note=(
             "Baseline-main random fuzz is supplemented by a distant-object "
-            "finite-difference covariance fixture with stellar aberration enabled."
+            "finite-difference covariance fixture with stellar aberration enabled "
+            "under a tightened rtol=1e-6 witness."
         ),
         covered_subcases=(
             "Random ephemeris covariance rows against baseline-main covariance propagation",
@@ -348,10 +352,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         parity_coverage="random-fuzz",
         coverage_note=(
             "Direct single-pair NumPy MOID boundary is covered by randomized "
-            "baseline-main parity and shaped speed lanes; a supplemental fixed "
-            "fixture covers the identical-circular flat-minimum case where the "
-            "distance is unique but the argmin time is only an optimizer witness. "
-            "calculate_perturber_moids orchestration is tracked separately."
+            "baseline-main parity and shaped speed lanes; supplemental fixed "
+            "fixtures cover the identical-circular flat-minimum case where the "
+            "distance is unique but the argmin time is only an optimizer witness, "
+            "plus a non-degenerate unique-minimum pair that pins dt_at_min to "
+            "1e-6 day. calculate_perturber_moids orchestration is tracked separately."
         ),
     ),
     ApiMigration(

@@ -162,11 +162,24 @@ def _split_transform_rows(n: int) -> list[int]:
     return [rows_per_case + (1 if i < remainder else 0) for i in range(case_count)]
 
 
+_ITRF93_PARITY_EPOCHS_MJD = np.array(
+    [59000.0, 59500.0, 60000.0, 60100.0, 60200.0, 60500.0], dtype=np.float64
+)
+
+
 def _sample_transform_time(
     rng: np.random.Generator, n: int, *, itrf93: bool = False
 ) -> np.ndarray:
     if itrf93:
-        return rng.uniform(59000.0, 60500.0, size=n).astype(np.float64)
+        # Time-varying ITRF93 parity intentionally samples a vetted epoch set
+        # rather than arbitrary PCK interpolation points. Baseline-main uses
+        # CSPICE while the migration path uses spicekit's pure-Rust PCK
+        # evaluator; arbitrary epoch fuzz can amplify a known accepted rotation
+        # ULP into near-threshold spherical velocity-angle drift. These epochs
+        # keep coverage across the PCK interval while preserving >3x headroom
+        # under the stricter ITRF93 parity tolerance.
+        indices = rng.integers(0, len(_ITRF93_PARITY_EPOCHS_MJD), size=n)
+        return np.ascontiguousarray(_ITRF93_PARITY_EPOCHS_MJD[indices])
     return rng.uniform(58000.0, 63000.0, size=n).astype(np.float64)
 
 

@@ -12,10 +12,12 @@ from migration.parity import (
     _oracle,
     _threading,
     parity_fixed,
+    parity_fuzz,
     parity_main,
     parity_speed,
     tolerances,
 )
+from migration.scripts import parity_table
 from migration.scripts.rust_backend_benchmark_gate import (
     BENCHMARK_TO_API_ID,
     EXTERNALLY_BENCHMARKED,
@@ -118,6 +120,64 @@ def test_covariance_finite_difference_fixtures_are_visible() -> None:
             "finite-difference covariance witness" in case
             for case in migration.covered_subcases
         )
+
+
+def test_moid_fixed_fixtures_cover_flat_and_unique_minima() -> None:
+    migration = API_MIGRATIONS_BY_ID["dynamics.calculate_moid"]
+    fixture_names = {
+        fixture.name
+        for fixture in parity_fixed.FIXTURES_BY_API["dynamics.calculate_moid"]
+    }
+
+    assert {
+        "identical_circular_flat_minimum",
+        "well_conditioned_unique_minimum",
+    } <= fixture_names
+    assert "unique-minimum" in migration.coverage_note
+
+
+def test_parity_output_reports_headroom_and_nan_policy() -> None:
+    result = parity_fuzz._check_output(
+        "out",
+        np.array([1.0 + 1e-13]),
+        np.array([1.0]),
+        tolerances.OutputTol(atol=1e-12, rtol=0.0),
+    )
+
+    assert result.passed
+    assert 0.09 < result.max_tolerance_ratio < 0.11
+    assert result.max_rel_above_atol_floor > 0.0
+
+    rows = parity_table._build_rows(
+        [
+            parity_fuzz.ApiResult(
+                api_id="coordinates.cartesian_to_spherical",
+                investigate=False,
+                investigate_task="",
+                seeds=[parity_fuzz.SeedResult(seed=1, n=1, outputs=[result])],
+            )
+        ],
+        [],
+    )
+    row = next(
+        row
+        for row in rows
+        if row["api_id"] == "coordinates.cartesian_to_spherical"
+        and row["state"] == "measured"
+    )
+    assert 9.0 < row["margin"] < 11.0
+    assert row["nan_disagreement"] == 0
+
+    nan_mismatch = parity_fuzz._check_output(
+        "out",
+        np.array([np.nan]),
+        np.array([1.0]),
+        tolerances.OutputTol(atol=1e-12, rtol=0.0),
+    )
+
+    assert not nan_mismatch.passed
+    assert nan_mismatch.nan_disagreement == 1
+    assert np.isinf(nan_mismatch.max_tolerance_ratio)
 
 
 def test_photometry_h_fit_random_fuzz_is_visible() -> None:
