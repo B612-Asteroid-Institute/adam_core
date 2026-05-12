@@ -556,8 +556,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.weighted_mean_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note="Raw statistics helper used by migration/Wave E tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Raw statistics helper: randomized fuzz compares the Rust kernel "
+            "directly with the baseline-main NumPy/BLAS formula. Public "
+            "coordinate covariance wrappers remain BLAS-backed for performance, "
+            "so speed rows are diagnostic raw-kernel comparisons rather than "
+            "public-dispatch promotion gates."
+        ),
+        covered_subcases=("normalized finite weights over 6-D sample matrices",),
     ),
     ApiMigration(
         api_id="statistics.weighted_covariance",
@@ -565,8 +572,18 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.weighted_covariance_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note="Raw statistics helper used by migration/Wave E tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Raw statistics helper: randomized fuzz compares the Rust kernel "
+            "directly with the baseline-main NumPy/BLAS formula. Public "
+            "coordinate covariance wrappers remain BLAS-backed for performance, "
+            "so speed rows are diagnostic raw-kernel comparisons rather than "
+            "public-dispatch promotion gates."
+        ),
+        covered_subcases=(
+            "normalized finite weights over 6-D sample matrices and 6x6 "
+            "covariance output",
+        ),
     ),
 )
 

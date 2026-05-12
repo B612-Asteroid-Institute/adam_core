@@ -69,9 +69,12 @@ macOS. Rust-only single-thread regression detection lives in
 Rayon gives a stable baseline.
 
 The `tiny-n`, `small-n`, and `large-n` speed lanes are enforced by default at
-1.2× p50/p95. Large-workload misses stay red under RM-P1-020 unless the user
-makes an explicit structural-acceptance decision; `--speed-large-diagnostic` is
-only for ad-hoc local probes.
+1.2× p50/p95 for public/orchestration Rust-default APIs. Raw-kernel-only APIs
+are still timed in the same artifacts, but their speed rows are labeled `DIAG`
+and do not affect gate pass/fail because they are not public-dispatch promotion
+gates. Large-workload misses stay red under RM-P1-020 unless the user makes an
+explicit structural-acceptance decision; `--speed-large-diagnostic` is only for
+ad-hoc local probes.
 
 Refresh the serialized baseline-main timing cache once after adding benchmark
 APIs, changing workload shapes, changing reps/warmup/thread policy, or updating
@@ -216,13 +219,15 @@ pretty-printer joins this registry to `tolerances.py` so reports distinguish
 direct randomized fuzz, fixed-fixture coverage, orchestration-implied coverage,
 targeted-test-only coverage, and intentional exclusions.
 
-Currently wired directly in randomized fuzz (31):
+Currently wired directly in randomized fuzz (33):
 - 10 coordinates/transform/residual surfaces
 - 10 dynamics primitives and public orchestration surfaces, including direct
   MOID, perturber MOIDs, LT-correction, and porkchop grids
 - 6 photometry surfaces, including H-fit row and grouped kernels
 - 1 orbit-classification rule surface
 - 4 OD primitives, including constrained shared-root `gaussIOD` fuzz
+- 2 raw statistics kernels, with speed tracked as diagnostic Rust-vs-BLAS
+  comparisons because public wrappers remain NumPy/BLAS-backed
 
 Supplemental fixed-fixture parity:
 - `dynamics.calculate_moid` — randomized fuzz covers non-degenerate optimizer

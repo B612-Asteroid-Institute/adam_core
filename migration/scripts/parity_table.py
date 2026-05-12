@@ -349,7 +349,16 @@ def _format_speed_metadata(metadata: dict[str, Any]) -> str:
         lines.append("**Speed lanes**:")
         for lane in lanes:
             name = lane.get("name", "unknown")
-            enforced = "enforced" if lane.get("enforced") else "diagnostic"
+            enforcement = lane.get("enforcement")
+            if enforcement == "mixed":
+                enforced = (
+                    f"mixed: {lane.get('enforced_api_count', '—')} enforced, "
+                    f"{lane.get('diagnostic_api_count', '—')} diagnostic"
+                )
+            elif enforcement:
+                enforced = str(enforcement)
+            else:
+                enforced = "enforced" if lane.get("enforced") else "diagnostic"
             n_values = lane.get("n_values") or []
             if n_values:
                 size = ", ".join(str(n) for n in n_values)

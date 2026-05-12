@@ -178,6 +178,14 @@ def _shape_json(workload: Any) -> dict[str, object]:
     return {"rows": rows, "axes": {}, "label": f"rows={rows}"}
 
 
+def _is_diagnostic_speed_api(api_id: str) -> bool:
+    """Return True for raw kernels whose speed is tracked but not promoted."""
+    from adam_core._rust.status import API_MIGRATIONS_BY_ID
+
+    migration = API_MIGRATIONS_BY_ID.get(api_id)
+    return migration is not None and migration.status == "raw-kernel-only"
+
+
 def _time_rust(api_id: str, kwargs: dict, *, reps: int, warmup: int) -> list[float]:
     # Import after thread caps are applied so Rayon sees RAYON_NUM_THREADS=1 in
     # the default gate before any parallel iterator initializes its pool.
@@ -1131,6 +1139,7 @@ def measure_lanes(
     for lane in lanes:
         for api_id in api_ids:
             workload = lane.workload_for(api_id)
+            lane_enforced = lane.enforced and not _is_diagnostic_speed_api(api_id)
             results.append(
                 measure(
                     api_id,
@@ -1143,7 +1152,7 @@ def measure_lanes(
                     cold_thread_mode=cold_thread_mode,
                     lane=lane.name,
                     lane_description=lane.description,
-                    lane_enforced=lane.enforced,
+                    lane_enforced=lane_enforced,
                     workload=workload,
                     min_speedup_p50=lane.min_speedup_p50,
                     min_speedup_p95=lane.min_speedup_p95,
@@ -1236,17 +1245,30 @@ def format_summary(results: list[SpeedResult]) -> str:
     return "\n".join(lines)
 
 
+def _enforcement_label(enforced_count: int, total_count: int) -> str:
+    if enforced_count == total_count:
+        return "enforced"
+    if enforced_count == 0:
+        return "diagnostic"
+    return "mixed"
+
+
 def _lane_metadata(results: list[SpeedResult]) -> list[dict[str, object]]:
     lanes: list[dict[str, object]] = []
     for name in _lane_names(results):
         lane_results = [r for r in results if r.lane == name]
         n_values = sorted({r.n for r in lane_results})
         lane = lane_results[0]
+        enforced_count = sum(1 for r in lane_results if r.lane_enforced)
+        diagnostic_count = len(lane_results) - enforced_count
         lanes.append(
             {
                 "name": name,
                 "description": lane.lane_description,
-                "enforced": all(r.lane_enforced for r in lane_results),
+                "enforced": enforced_count == len(lane_results),
+                "enforcement": _enforcement_label(enforced_count, len(lane_results)),
+                "enforced_api_count": enforced_count,
+                "diagnostic_api_count": diagnostic_count,
                 "reps": sorted({r.reps for r in lane_results}),
                 "warmup": sorted({r.warmup for r in lane_results}),
                 "measure_cold": any(r.rust_cold is not None for r in lane_results),
@@ -1268,10 +1290,14 @@ def _lane_status(results: list[SpeedResult]) -> dict[str, dict[str, object]]:
     status: dict[str, dict[str, object]] = {}
     for name in _lane_names(results):
         lane_results = [r for r in results if r.lane == name]
+        enforced_count = sum(1 for r in lane_results if r.lane_enforced)
         status[name] = {
             "passed": all(_governance_passed(r) for r in lane_results),
             "raw_passed": all(r.raw_passed for r in lane_results),
-            "enforced": all(r.lane_enforced for r in lane_results),
+            "enforced": enforced_count == len(lane_results),
+            "enforcement": _enforcement_label(enforced_count, len(lane_results)),
+            "enforced_api_count": enforced_count,
+            "diagnostic_api_count": len(lane_results) - enforced_count,
             "waived": [r.api_id for r in lane_results if r.waived],
             "failed": [r.api_id for r in lane_results if not _governance_passed(r)],
         }
@@ -1310,7 +1336,9 @@ def to_json(
             "The small-n lane preserves the historical n=2000 promotion gate. "
             "The large-n lane is API-shaped, records structured workload axes, "
             "and is enforced by default with explicit per-lane waivers required "
-            "for known large-workload regressions."
+            "for known large-workload regressions. Raw-kernel-only APIs are "
+            "timed and reported as diagnostic comparisons because they are not "
+            "public-dispatch Rust-default promotion gates."
         ),
         "legacy_timing_cache": _legacy_cache_metadata(legacy_cache),
         "lanes": _lane_metadata(results),

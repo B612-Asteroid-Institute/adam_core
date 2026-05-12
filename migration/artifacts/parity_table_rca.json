@@ -1981,6 +1981,56 @@
     "excluded_subcases": []
   },
   {
+    "api_id": "statistics.weighted_covariance",
+    "output": "out",
+    "atol": 1e-12,
+    "rtol": 1e-12,
+    "worst_abs": 7.105427357601002e-14,
+    "worst_rel": 5.437513810913038e-14,
+    "margin": 14.0737488355328,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "Raw Rust weighted-covariance kernel compared directly against the baseline-main NumPy/BLAS formula (weights * residual.T) @ residual. Public coordinate covariance wrappers intentionally stay BLAS-backed for performance; this entry governs raw-kernel correctness.",
+    "dominant_column": "6x6 covariance cell",
+    "physical_magnitude": "\u22641e-12 absolute on O(100) covariance cells.",
+    "root_cause": "Rust loops and BLAS GEMM use different accumulation trees; drift is bounded by last-ulp reduction-order noise for finite normalized weights.",
+    "verdict": "raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    "state": "measured",
+    "registry_status": "raw-kernel-only",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Raw statistics helper: randomized fuzz compares the Rust kernel directly with the baseline-main NumPy/BLAS formula. Public coordinate covariance wrappers remain BLAS-backed for performance, so speed rows are diagnostic raw-kernel comparisons rather than public-dispatch promotion gates.",
+    "covered_subcases": [
+      "normalized finite weights over 6-D sample matrices and 6x6 covariance output"
+    ],
+    "excluded_subcases": []
+  },
+  {
+    "api_id": "statistics.weighted_mean",
+    "output": "out",
+    "atol": 1e-12,
+    "rtol": 1e-12,
+    "worst_abs": 1.1102230246251565e-15,
+    "worst_rel": 4.044183909654931e-14,
+    "margin": 900.7199254740992,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "Raw Rust weighted-mean kernel compared directly against the baseline-main NumPy/BLAS formula np.dot(weights, samples). Public coordinate covariance wrappers intentionally stay BLAS-backed for performance; this entry governs raw-kernel correctness.",
+    "dominant_column": "weighted sample component",
+    "physical_magnitude": "\u22641e-13 absolute on O(1-10) sample means.",
+    "root_cause": "Rust's serial accumulation and BLAS GEMV reduce terms in different orders, yielding only last-ulp reduction noise for normalized weights.",
+    "verdict": "raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    "state": "measured",
+    "registry_status": "raw-kernel-only",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Raw statistics helper: randomized fuzz compares the Rust kernel directly with the baseline-main NumPy/BLAS formula. Public coordinate covariance wrappers remain BLAS-backed for performance, so speed rows are diagnostic raw-kernel comparisons rather than public-dispatch promotion gates.",
+    "covered_subcases": [
+      "normalized finite weights over 6-D sample matrices"
+    ],
+    "excluded_subcases": []
+  },
+  {
     "api_id": "dynamics.calculate_moid",
     "output": "moid",
     "atol": 1e-12,

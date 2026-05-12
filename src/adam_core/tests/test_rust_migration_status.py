@@ -133,6 +133,21 @@ def test_photometry_h_fit_random_fuzz_is_visible() -> None:
         assert "Randomized parity" in migration.coverage_note
 
 
+def test_raw_statistics_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
+    api_ids = {
+        "statistics.weighted_mean",
+        "statistics.weighted_covariance",
+    }
+
+    assert api_ids <= set(_inputs.all_api_ids())
+    for api_id in api_ids:
+        migration = API_MIGRATIONS_BY_ID[api_id]
+        assert migration.status == "raw-kernel-only"
+        assert migration.parity_coverage == "random-fuzz"
+        assert "diagnostic raw-kernel comparisons" in migration.coverage_note
+        assert parity_speed._is_diagnostic_speed_api(api_id)
+
+
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
     latency_ids = {
         migration.api_id

@@ -608,6 +608,30 @@ def make_calculate_chi2(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def _sample_normalized_weights(rng: np.random.Generator, n: int) -> np.ndarray:
+    weights = rng.random(n).astype(np.float64)
+    return np.ascontiguousarray(weights / np.sum(weights), dtype=np.float64)
+
+
+def make_weighted_mean(rng: np.random.Generator, n: int) -> Sample:
+    samples = rng.normal(loc=0.0, scale=10.0, size=(n, 6)).astype(np.float64)
+    weights = _sample_normalized_weights(rng, n)
+    kw = {"samples": np.ascontiguousarray(samples), "weights": weights}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_weighted_covariance(rng: np.random.Generator, n: int) -> Sample:
+    samples = rng.normal(loc=0.0, scale=10.0, size=(n, 6)).astype(np.float64)
+    weights = _sample_normalized_weights(rng, n)
+    mean = np.dot(weights, samples).astype(np.float64)
+    kw = {
+        "mean": np.ascontiguousarray(mean),
+        "samples": np.ascontiguousarray(samples),
+        "weights": weights,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def make_calc_mean_motion(rng: np.random.Generator, n: int) -> Sample:
     a = rng.uniform(0.5, 50.0, size=n).astype(np.float64)
     mu = np.full(n, MU_SUN, dtype=np.float64)
@@ -1334,6 +1358,8 @@ GENERATORS = {
     "coordinates.spherical.to_cartesian": make_spherical_to_cartesian,
     "coordinates.residuals.Residuals.calculate": make_residuals_calculate,
     "coordinates.residuals.calculate_chi2": make_calculate_chi2,
+    "statistics.weighted_mean": make_weighted_mean,
+    "statistics.weighted_covariance": make_weighted_covariance,
     "dynamics.calc_mean_motion": make_calc_mean_motion,
     "orbits.classify_orbits": make_classify_orbits,
     "dynamics.calculate_moid": make_calculate_moid,
@@ -1440,6 +1466,8 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.spherical.to_cartesian": WorkloadShape(20_000),
     "coordinates.residuals.Residuals.calculate": WorkloadShape(20_000),
     "coordinates.residuals.calculate_chi2": WorkloadShape(50_000),
+    "statistics.weighted_mean": WorkloadShape(50_000),
+    "statistics.weighted_covariance": WorkloadShape(50_000),
     "dynamics.calc_mean_motion": WorkloadShape(50_000),
     "orbits.classify_orbits": WorkloadShape(50_000),
     "dynamics.calculate_moid": WorkloadShape(64),

@@ -3,9 +3,10 @@
 Every registry row in ``src/adam_core/_rust/status.py`` with
 ``parity_coverage`` set to ``"random-fuzz"``, ``"fixed-fixture"``,
 ``"random-fuzz-excluded"``, or ``"orchestration-implied"`` must have an entry
-here. Targeted-test-only and
-raw-kernel-only rows are intentionally tracked in the registry instead of this
-baseline-main random-fuzz manifest.
+here. Targeted-test-only rows are intentionally tracked in the registry instead
+of this baseline-main random-fuzz manifest. Raw-kernel-only rows may appear here
+when they have explicit fuzz/performance governance; their speed rows remain
+diagnostic rather than public-promotion gates.
 
 `atol`/`rtol` apply via ``np.testing.assert_allclose(rust, legacy, atol=atol, rtol=rtol)``.
 For tuple outputs (e.g. ephemeris emits ``(spherical, lt, cart)``) we
@@ -306,6 +307,39 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "the last few ulps for 2×2 SPD matrices."
         ),
         verdict="equally accurate for valid SPD covariance matrices.",
+    ),
+    # ---- raw statistics kernels ----
+    "statistics.weighted_mean": ToleranceSpec(
+        outputs={"out": OutputTol(atol=1e-12, rtol=1e-12)},
+        rationale=(
+            "Raw Rust weighted-mean kernel compared directly against the "
+            "baseline-main NumPy/BLAS formula np.dot(weights, samples). Public "
+            "coordinate covariance wrappers intentionally stay BLAS-backed for "
+            "performance; this entry governs raw-kernel correctness."
+        ),
+        dominant_column="weighted sample component",
+        physical_magnitude="≤1e-13 absolute on O(1-10) sample means.",
+        root_cause=(
+            "Rust's serial accumulation and BLAS GEMV reduce terms in different "
+            "orders, yielding only last-ulp reduction noise for normalized weights."
+        ),
+        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    ),
+    "statistics.weighted_covariance": ToleranceSpec(
+        outputs={"out": OutputTol(atol=1e-12, rtol=1e-12)},
+        rationale=(
+            "Raw Rust weighted-covariance kernel compared directly against the "
+            "baseline-main NumPy/BLAS formula (weights * residual.T) @ residual. "
+            "Public coordinate covariance wrappers intentionally stay BLAS-backed "
+            "for performance; this entry governs raw-kernel correctness."
+        ),
+        dominant_column="6x6 covariance cell",
+        physical_magnitude="≤1e-12 absolute on O(100) covariance cells.",
+        root_cause=(
+            "Rust loops and BLAS GEMM use different accumulation trees; drift is "
+            "bounded by last-ulp reduction-order noise for finite normalized weights."
+        ),
+        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
     ),
     # ---- dynamics ----
     "dynamics.calc_mean_motion": ToleranceSpec(

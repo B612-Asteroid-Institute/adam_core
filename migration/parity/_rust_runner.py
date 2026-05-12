@@ -318,6 +318,25 @@ def _coordinates_residuals_calculate_chi2(
     }
 
 
+def _statistics_weighted_mean(
+    samples: np.ndarray, weights: np.ndarray
+) -> dict[str, np.ndarray]:
+    return {
+        "out": _ensure(_rust_api.weighted_mean_numpy(samples, weights), "weighted_mean")
+    }
+
+
+def _statistics_weighted_covariance(
+    mean: np.ndarray, samples: np.ndarray, weights: np.ndarray
+) -> dict[str, np.ndarray]:
+    return {
+        "out": _ensure(
+            _rust_api.weighted_covariance_numpy(mean, samples, weights),
+            "weighted_covariance",
+        )
+    }
+
+
 def _coordinates_residuals_Residuals_calculate(
     observed_values: np.ndarray,
     predicted_values: np.ndarray,
@@ -737,6 +756,8 @@ DISPATCH = {
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
     "coordinates.residuals.Residuals.calculate": _coordinates_residuals_Residuals_calculate,
     "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
+    "statistics.weighted_mean": _statistics_weighted_mean,
+    "statistics.weighted_covariance": _statistics_weighted_covariance,
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,
     "orbits.classify_orbits": _orbits_classify_orbits,
     "dynamics.calculate_moid": _dynamics_calculate_moid,
