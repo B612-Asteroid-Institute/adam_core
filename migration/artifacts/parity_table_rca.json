@@ -1093,12 +1093,15 @@
     "dominant_column": "covariance",
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
-    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
+    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does. Supplemental fixed-fixture governance now codifies a distant-object finite-difference covariance witness with stellar aberration enabled.",
     "state": "measured",
     "registry_status": "public-rust-default",
     "parity_coverage": "random-fuzz",
-    "coverage_note": "",
-    "covered_subcases": [],
+    "coverage_note": "Baseline-main random fuzz is supplemented by a distant-object finite-difference covariance fixture with stellar aberration enabled.",
+    "covered_subcases": [
+      "Random ephemeris covariance rows against baseline-main covariance propagation",
+      "Distant slow-moving stellar-aberration finite-difference covariance witness"
+    ],
     "excluded_subcases": []
   },
   {
@@ -1116,12 +1119,15 @@
     "dominant_column": "covariance",
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
-    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
+    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does. Supplemental fixed-fixture governance now codifies a distant-object finite-difference covariance witness with stellar aberration enabled.",
     "state": "measured",
     "registry_status": "public-rust-default",
     "parity_coverage": "random-fuzz",
-    "coverage_note": "",
-    "covered_subcases": [],
+    "coverage_note": "Baseline-main random fuzz is supplemented by a distant-object finite-difference covariance fixture with stellar aberration enabled.",
+    "covered_subcases": [
+      "Random ephemeris covariance rows against baseline-main covariance propagation",
+      "Distant slow-moving stellar-aberration finite-difference covariance witness"
+    ],
     "excluded_subcases": []
   },
   {
@@ -1139,12 +1145,15 @@
     "dominant_column": "covariance",
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
-    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
+    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does. Supplemental fixed-fixture governance now codifies a distant-object finite-difference covariance witness with stellar aberration enabled.",
     "state": "measured",
     "registry_status": "public-rust-default",
     "parity_coverage": "random-fuzz",
-    "coverage_note": "",
-    "covered_subcases": [],
+    "coverage_note": "Baseline-main random fuzz is supplemented by a distant-object finite-difference covariance fixture with stellar aberration enabled.",
+    "covered_subcases": [
+      "Random ephemeris covariance rows against baseline-main covariance propagation",
+      "Distant slow-moving stellar-aberration finite-difference covariance witness"
+    ],
     "excluded_subcases": []
   },
   {
@@ -1162,12 +1171,15 @@
     "dominant_column": "covariance",
     "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
     "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
-    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does.",
+    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does. Supplemental fixed-fixture governance now codifies a distant-object finite-difference covariance witness with stellar aberration enabled.",
     "state": "measured",
     "registry_status": "public-rust-default",
     "parity_coverage": "random-fuzz",
-    "coverage_note": "",
-    "covered_subcases": [],
+    "coverage_note": "Baseline-main random fuzz is supplemented by a distant-object finite-difference covariance fixture with stellar aberration enabled.",
+    "covered_subcases": [
+      "Random ephemeris covariance rows against baseline-main covariance propagation",
+      "Distant slow-moving stellar-aberration finite-difference covariance witness"
+    ],
     "excluded_subcases": []
   },
   {
@@ -1415,12 +1427,15 @@
     "dominant_column": "covariance off-diagonal",
     "physical_magnitude": "State worst 8.9e-14 AU; covariance worst 1.7e-14 (AU,AU/d)\u00b2 with worst-rel 5.2e-9 \u2014 ~6 sig figs accurate.",
     "root_cause": "\u03a3_out = J \u03a3_in J^T = 6\u00d76\u00d76 matmul. Each multiplication accumulates ~6 sig figs of fp drift relative to JAX's jacfwd path; rtol=1e-6 captures this without rejecting bit-clean cells.",
-    "verdict": "more accurate than legacy on stiff inputs. Per journal 2026-04-22: rust Dual<6> AD produces non-NaN tangents on 2/2000 chaotic inputs where JAX's jacfwd overflows to ~1e47 magnitude. Verified rust matches finite-difference Jacobian where JAX diverges.",
+    "verdict": "more accurate than legacy on stiff inputs. Per journal 2026-04-22: rust Dual<6> AD produces non-NaN tangents on 2/2000 chaotic inputs where JAX's jacfwd overflows to ~1e47 magnitude. Supplemental fixed-fixture governance now codifies a high-a finite-difference covariance witness.",
     "state": "measured",
     "registry_status": "public-rust-default",
     "parity_coverage": "random-fuzz",
-    "coverage_note": "",
-    "covered_subcases": [],
+    "coverage_note": "Baseline-main random fuzz is supplemented by a high-a, 2516-day finite-difference covariance fixture that checks the Rust Dual-number tangent path against the scalar state map.",
+    "covered_subcases": [
+      "Random covariance rows against baseline-main Jacobian covariance propagation",
+      "High-a slow-moving 2516-day finite-difference covariance witness"
+    ],
     "excluded_subcases": []
   },
   {
@@ -1438,12 +1453,15 @@
     "dominant_column": "covariance off-diagonal",
     "physical_magnitude": "State worst 8.9e-14 AU; covariance worst 1.7e-14 (AU,AU/d)\u00b2 with worst-rel 5.2e-9 \u2014 ~6 sig figs accurate.",
     "root_cause": "\u03a3_out = J \u03a3_in J^T = 6\u00d76\u00d76 matmul. Each multiplication accumulates ~6 sig figs of fp drift relative to JAX's jacfwd path; rtol=1e-6 captures this without rejecting bit-clean cells.",
-    "verdict": "more accurate than legacy on stiff inputs. Per journal 2026-04-22: rust Dual<6> AD produces non-NaN tangents on 2/2000 chaotic inputs where JAX's jacfwd overflows to ~1e47 magnitude. Verified rust matches finite-difference Jacobian where JAX diverges.",
+    "verdict": "more accurate than legacy on stiff inputs. Per journal 2026-04-22: rust Dual<6> AD produces non-NaN tangents on 2/2000 chaotic inputs where JAX's jacfwd overflows to ~1e47 magnitude. Supplemental fixed-fixture governance now codifies a high-a finite-difference covariance witness.",
     "state": "measured",
     "registry_status": "public-rust-default",
     "parity_coverage": "random-fuzz",
-    "coverage_note": "",
-    "covered_subcases": [],
+    "coverage_note": "Baseline-main random fuzz is supplemented by a high-a, 2516-day finite-difference covariance fixture that checks the Rust Dual-number tangent path against the scalar state map.",
+    "covered_subcases": [
+      "Random covariance rows against baseline-main Jacobian covariance propagation",
+      "High-a slow-moving 2516-day finite-difference covariance witness"
+    ],
     "excluded_subcases": []
   },
   {
@@ -1756,6 +1774,64 @@
     "excluded_subcases": [],
     "fixture_names": [
       "identical_circular_flat_minimum"
+    ]
+  },
+  {
+    "api_id": "dynamics.generate_ephemeris_2body_with_covariance",
+    "output": "covariance",
+    "atol": 1e-22,
+    "rtol": 0.0001,
+    "worst_abs": 4.291064607251125e-25,
+    "worst_rel": 1.3660359597838582e-07,
+    "margin": 233.04240125170347,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "Mirrors generate_ephemeris_2body + covariance.",
+    "dominant_column": "covariance",
+    "physical_magnitude": "Same as generate_ephemeris_2body for state outputs; covariance worst-rel 6.7e-5 (driven by atan2 jacobian).",
+    "root_cause": "Same Dual<6> AD pass as propagate_2body_with_covariance but composed through more transcendentals.",
+    "verdict": "more accurate on stiff inputs (same as propagate covariance) \u2014 rust Dual AD doesn't blow up where JAX jacfwd does. Supplemental fixed-fixture governance now codifies a distant-object finite-difference covariance witness with stellar aberration enabled.",
+    "state": "fixed-fixture-supplemental",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Baseline-main random fuzz is supplemented by a distant-object finite-difference covariance fixture with stellar aberration enabled.",
+    "covered_subcases": [
+      "Random ephemeris covariance rows against baseline-main covariance propagation",
+      "Distant slow-moving stellar-aberration finite-difference covariance witness"
+    ],
+    "excluded_subcases": [],
+    "fixture_names": [
+      "distant_stellar_aberration_covariance_finite_difference"
+    ]
+  },
+  {
+    "api_id": "dynamics.propagate_2body_with_covariance",
+    "output": "covariance",
+    "atol": 1e-21,
+    "rtol": 1e-07,
+    "worst_abs": 3.598732962520322e-24,
+    "worst_rel": 1.8947476018398893e-10,
+    "margin": 277.875577436472,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "State mirrors propagate_2body. Covariance path uses Rust Dual<6> autodiff to compute \u03a3_out = J \u03a3_in J^T per row.",
+    "dominant_column": "covariance off-diagonal",
+    "physical_magnitude": "State worst 8.9e-14 AU; covariance worst 1.7e-14 (AU,AU/d)\u00b2 with worst-rel 5.2e-9 \u2014 ~6 sig figs accurate.",
+    "root_cause": "\u03a3_out = J \u03a3_in J^T = 6\u00d76\u00d76 matmul. Each multiplication accumulates ~6 sig figs of fp drift relative to JAX's jacfwd path; rtol=1e-6 captures this without rejecting bit-clean cells.",
+    "verdict": "more accurate than legacy on stiff inputs. Per journal 2026-04-22: rust Dual<6> AD produces non-NaN tangents on 2/2000 chaotic inputs where JAX's jacfwd overflows to ~1e47 magnitude. Supplemental fixed-fixture governance now codifies a high-a finite-difference covariance witness.",
+    "state": "fixed-fixture-supplemental",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Baseline-main random fuzz is supplemented by a high-a, 2516-day finite-difference covariance fixture that checks the Rust Dual-number tangent path against the scalar state map.",
+    "covered_subcases": [
+      "Random covariance rows against baseline-main Jacobian covariance propagation",
+      "High-a slow-moving 2516-day finite-difference covariance witness"
+    ],
+    "excluded_subcases": [],
+    "fixture_names": [
+      "stiff_high_a_covariance_finite_difference"
     ]
   },
   {

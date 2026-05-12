@@ -291,6 +291,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         default="rust",
         rust_module="adam_core._rust_native.propagate_2body_with_covariance_numpy",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Baseline-main random fuzz is supplemented by a high-a, 2516-day "
+            "finite-difference covariance fixture that checks the Rust "
+            "Dual-number tangent path against the scalar state map."
+        ),
+        covered_subcases=(
+            "Random covariance rows against baseline-main Jacobian covariance propagation",
+            "High-a slow-moving 2516-day finite-difference covariance witness",
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -311,6 +320,14 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "adam_core._rust_native.generate_ephemeris_2body_with_covariance_numpy"
         ),
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Baseline-main random fuzz is supplemented by a distant-object "
+            "finite-difference covariance fixture with stellar aberration enabled."
+        ),
+        covered_subcases=(
+            "Random ephemeris covariance rows against baseline-main covariance propagation",
+            "Distant slow-moving stellar-aberration finite-difference covariance witness",
+        ),
         latency_gate=True,
     ),
     ApiMigration(

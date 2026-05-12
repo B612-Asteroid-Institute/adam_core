@@ -415,8 +415,8 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "more accurate than legacy on stiff inputs. Per journal "
             "2026-04-22: rust Dual<6> AD produces non-NaN tangents on "
             "2/2000 chaotic inputs where JAX's jacfwd overflows to "
-            "~1e47 magnitude. Verified rust matches finite-difference "
-            "Jacobian where JAX diverges."
+            "~1e47 magnitude. Supplemental fixed-fixture governance now "
+            "codifies a high-a finite-difference covariance witness."
         ),
     ),
     "dynamics.generate_ephemeris_2body": ToleranceSpec(
@@ -465,7 +465,9 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         verdict=(
             "more accurate on stiff inputs (same as propagate "
             "covariance) — rust Dual AD doesn't blow up where JAX "
-            "jacfwd does."
+            "jacfwd does. Supplemental fixed-fixture governance now "
+            "codifies a distant-object finite-difference covariance witness "
+            "with stellar aberration enabled."
         ),
     ),
     "dynamics.solve_lambert": ToleranceSpec(

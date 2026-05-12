@@ -5,6 +5,10 @@ need deterministic fixtures for known boundary regimes. ``orbit_determination.ga
 now has constrained shared-root random fuzz, while this module keeps a stable
 well-conditioned fixture for the same production best-root regime and documents
 that unconstrained multi-root subset parity is intentionally out of scope.
+Covariance fixtures may also compare Rust forward-mode covariance propagation
+against a deterministic finite-difference reference built from the scalar Rust
+state map, giving a supplemental check independent of the Dual-number tangent
+implementation.
 """
 
 from __future__ import annotations
@@ -29,6 +33,9 @@ class FixedFixtureSpec:
     description: str
     make_sample: Callable[[], _inputs.Sample]
     output_tolerances: Mapping[str, tolerances.OutputTol] | None = None
+    reference_outputs: Callable[[_inputs.Sample], Mapping[str, np.ndarray]] | None = (
+        None
+    )
 
 
 @dataclass
@@ -74,6 +81,166 @@ def _moid_identical_circular_flat_minimum_sample() -> _inputs.Sample:
         "xtol": 1e-10,
     }
     return _inputs.Sample(rust_kwargs=kwargs, legacy_kwargs=kwargs)
+
+
+_STIFF_COVARIANCE_FD_STEPS = np.array(
+    [1e-5, 1e-5, 1e-5, 1e-7, 1e-7, 1e-7], dtype=np.float64
+)
+
+
+def _stiff_covariance_orbit() -> np.ndarray:
+    """Large-a, slow-moving heliocentric state for covariance tangent checks."""
+    kep = np.array([[68.0, 0.62, 23.0, 40.0, 75.0, 110.0]], dtype=np.float64)
+    return _inputs._kep_to_cart(kep)[0]
+
+
+def _stiff_covariance_matrix() -> np.ndarray:
+    """Small correlated SPD covariance used by both covariance fixtures."""
+    sigmas = np.array([2e-8, 1e-8, 1.5e-8, 2e-10, 1e-10, 1.5e-10], dtype=np.float64)
+    lower = np.diag(sigmas)
+    lower[1, 0] = 0.25 * sigmas[1]
+    lower[2, 0] = -0.15 * sigmas[2]
+    lower[2, 1] = 0.20 * sigmas[2]
+    lower[3, 0] = 0.05 * sigmas[3]
+    lower[4, 1] = -0.04 * sigmas[4]
+    lower[4, 3] = 0.30 * sigmas[4]
+    lower[5, 2] = 0.03 * sigmas[5]
+    lower[5, 3] = -0.10 * sigmas[5]
+    lower[5, 4] = 0.25 * sigmas[5]
+    return lower @ lower.T
+
+
+def _stiff_observer_state() -> np.ndarray:
+    """Earth-like observer state away from angular singularities."""
+    theta = 1.1
+    state = np.zeros(6, dtype=np.float64)
+    state[0] = np.cos(theta)
+    state[1] = np.sin(theta)
+    state[3] = -(2 * np.pi / 365.25) * np.sin(theta)
+    state[4] = (2 * np.pi / 365.25) * np.cos(theta)
+    return state
+
+
+def _finite_difference_jacobian(
+    func: Callable[[np.ndarray], np.ndarray],
+    x: np.ndarray,
+    steps: np.ndarray,
+) -> np.ndarray:
+    """Central finite-difference Jacobian for one 6-D state map."""
+    if x.shape != steps.shape:
+        raise ValueError(
+            f"finite-difference steps {steps.shape} do not match {x.shape}"
+        )
+    y0 = np.asarray(func(x), dtype=np.float64)
+    jacobian = np.empty((y0.size, x.size), dtype=np.float64)
+    for column, step in enumerate(steps):
+        plus = x.copy()
+        minus = x.copy()
+        plus[column] += step
+        minus[column] -= step
+        jacobian[:, column] = (
+            np.asarray(func(plus), dtype=np.float64)
+            - np.asarray(func(minus), dtype=np.float64)
+        ) / (2.0 * step)
+    return jacobian
+
+
+def _covariance_from_sample(sample: _inputs.Sample) -> np.ndarray:
+    covariances = np.asarray(sample.rust_kwargs["covariances"], dtype=np.float64)
+    return covariances.reshape(-1, 6, 6)[0]
+
+
+def _propagate_2body_stiff_covariance_sample() -> _inputs.Sample:
+    orbit = _stiff_covariance_orbit()[None, :]
+    covariance = _stiff_covariance_matrix()
+    rust_kwargs: dict[str, Any] = {
+        "orbits": orbit,
+        "covariances": np.ascontiguousarray(covariance.reshape(1, 36)),
+        "dts": np.array([2516.0], dtype=np.float64),
+        "mus": np.array([_inputs.MU_SUN], dtype=np.float64),
+        "max_iter": 1000,
+        "tol": 1e-15,
+    }
+    legacy_kwargs = dict(rust_kwargs)
+    legacy_kwargs["covariances"] = covariance[None, :, :]
+    return _inputs.Sample(rust_kwargs=rust_kwargs, legacy_kwargs=legacy_kwargs)
+
+
+def _propagate_2body_stiff_covariance_reference(
+    sample: _inputs.Sample,
+) -> Mapping[str, np.ndarray]:
+    kwargs = sample.rust_kwargs
+    orbit = np.asarray(kwargs["orbits"], dtype=np.float64)[0]
+    covariance = _covariance_from_sample(sample)
+    dts = np.asarray(kwargs["dts"], dtype=np.float64)
+    mus = np.asarray(kwargs["mus"], dtype=np.float64)
+    max_iter = int(kwargs["max_iter"])
+    tol = float(kwargs["tol"])
+
+    def state_map(row: np.ndarray) -> np.ndarray:
+        output = _rust_runner.run(
+            "dynamics.propagate_2body",
+            orbits=row[None, :],
+            dts=dts,
+            mus=mus,
+            max_iter=max_iter,
+            tol=tol,
+        )
+        return np.asarray(output["out"], dtype=np.float64)[0]
+
+    jacobian = _finite_difference_jacobian(state_map, orbit, _STIFF_COVARIANCE_FD_STEPS)
+    return {"covariance": (jacobian @ covariance @ jacobian.T)[None, :, :]}
+
+
+def _generate_ephemeris_2body_stiff_covariance_sample() -> _inputs.Sample:
+    orbit = _stiff_covariance_orbit()[None, :]
+    covariance = _stiff_covariance_matrix()
+    rust_kwargs: dict[str, Any] = {
+        "orbits": orbit,
+        "covariances": np.ascontiguousarray(covariance.reshape(1, 36)),
+        "observer_states": _stiff_observer_state()[None, :],
+        "mus": np.array([_inputs.MU_SUN], dtype=np.float64),
+        "lt_tol": 1e-10,
+        "max_iter": 1000,
+        "tol": 1e-15,
+        "stellar_aberration": True,
+        "max_lt_iter": 10,
+    }
+    legacy_kwargs = dict(rust_kwargs)
+    legacy_kwargs["covariances"] = covariance[None, :, :]
+    return _inputs.Sample(rust_kwargs=rust_kwargs, legacy_kwargs=legacy_kwargs)
+
+
+def _generate_ephemeris_2body_stiff_covariance_reference(
+    sample: _inputs.Sample,
+) -> Mapping[str, np.ndarray]:
+    kwargs = sample.rust_kwargs
+    orbit = np.asarray(kwargs["orbits"], dtype=np.float64)[0]
+    covariance = _covariance_from_sample(sample)
+    observer_states = np.asarray(kwargs["observer_states"], dtype=np.float64)
+    mus = np.asarray(kwargs["mus"], dtype=np.float64)
+    lt_tol = float(kwargs["lt_tol"])
+    max_iter = int(kwargs["max_iter"])
+    tol = float(kwargs["tol"])
+    stellar_aberration = bool(kwargs["stellar_aberration"])
+    max_lt_iter = int(kwargs["max_lt_iter"])
+
+    def state_map(row: np.ndarray) -> np.ndarray:
+        output = _rust_runner.run(
+            "dynamics.generate_ephemeris_2body",
+            orbits=row[None, :],
+            observer_states=observer_states,
+            mus=mus,
+            lt_tol=lt_tol,
+            max_iter=max_iter,
+            tol=tol,
+            stellar_aberration=stellar_aberration,
+            max_lt_iter=max_lt_iter,
+        )
+        return np.asarray(output["spherical"], dtype=np.float64)[0]
+
+    jacobian = _finite_difference_jacobian(state_map, orbit, _STIFF_COVARIANCE_FD_STEPS)
+    return {"covariance": (jacobian @ covariance @ jacobian.T)[None, :, :]}
 
 
 def _gauss_iod_well_conditioned_sample() -> _inputs.Sample:
@@ -142,6 +309,30 @@ def _gauss_iod_well_conditioned_sample() -> _inputs.Sample:
 
 FIXTURES: tuple[FixedFixtureSpec, ...] = (
     FixedFixtureSpec(
+        api_id="dynamics.propagate_2body_with_covariance",
+        name="stiff_high_a_covariance_finite_difference",
+        description=(
+            "High-a slow-moving heliocentric covariance case over a 2516-day "
+            "propagation; compares Rust covariance propagation to a central "
+            "finite-difference covariance witness from the scalar state map."
+        ),
+        make_sample=_propagate_2body_stiff_covariance_sample,
+        output_tolerances={"covariance": tolerances.OutputTol(atol=1e-21, rtol=1e-7)},
+        reference_outputs=_propagate_2body_stiff_covariance_reference,
+    ),
+    FixedFixtureSpec(
+        api_id="dynamics.generate_ephemeris_2body_with_covariance",
+        name="distant_stellar_aberration_covariance_finite_difference",
+        description=(
+            "Distant slow-moving heliocentric covariance case with stellar "
+            "aberration enabled; compares Rust ephemeris covariance to a "
+            "central finite-difference witness from the scalar ephemeris map."
+        ),
+        make_sample=_generate_ephemeris_2body_stiff_covariance_sample,
+        output_tolerances={"covariance": tolerances.OutputTol(atol=1e-22, rtol=1e-4)},
+        reference_outputs=_generate_ephemeris_2body_stiff_covariance_reference,
+    ),
+    FixedFixtureSpec(
         api_id="dynamics.calculate_moid",
         name="identical_circular_flat_minimum",
         description=(
@@ -198,7 +389,12 @@ def fixed_one(api_id: str) -> ApiResult:
         )
         try:
             rust_out = _rust_runner.run(api_id, **sample.rust_kwargs)
-            legacy_out = _oracle.parity(api_id, **sample.legacy_kwargs)
+            if fixture.reference_outputs is None:
+                reference_out = _oracle.parity(api_id, **sample.legacy_kwargs)
+                reference_label = "legacy"
+            else:
+                reference_out = dict(fixture.reference_outputs(sample))
+                reference_label = "reference"
         except Exception as exc:
             result.error = f"{type(exc).__name__}: {exc}"
             api.fixtures.append(result)
@@ -209,14 +405,14 @@ def fixed_one(api_id: str) -> ApiResult:
             if out_name not in rust_out:
                 result.error = f"missing rust output {out_name!r}"
                 break
-            if out_name not in legacy_out:
-                result.error = f"missing legacy output {out_name!r}"
+            if out_name not in reference_out:
+                result.error = f"missing {reference_label} output {out_name!r}"
                 break
             result.outputs.append(
                 parity_fuzz._check_output(  # noqa: SLF001 - shared gate semantics.
                     out_name,
                     rust_out[out_name],
-                    legacy_out[out_name],
+                    reference_out[out_name],
                     tol,
                 )
             )
@@ -303,7 +499,7 @@ def to_json(results: list[ApiResult]) -> dict[str, Any]:
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Deterministic fixed-fixture rust-vs-legacy parity gate."
+        description="Deterministic fixed-fixture rust-vs-reference parity gate."
     )
     parser.add_argument(
         "--apis",

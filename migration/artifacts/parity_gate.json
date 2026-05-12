@@ -31,6 +31,8 @@
     "orbit_determination.gaussIOD"
   ],
   "fixed_fixture_api_ids": [
+    "dynamics.propagate_2body_with_covariance",
+    "dynamics.generate_ephemeris_2body_with_covariance",
     "dynamics.calculate_moid",
     "orbit_determination.gaussIOD"
   ],
@@ -6954,6 +6956,58 @@
   },
   "fixed_fixtures": {
     "apis": [
+      {
+        "api_id": "dynamics.propagate_2body_with_covariance",
+        "passed": true,
+        "investigate": false,
+        "investigate_task": "",
+        "fixtures": [
+          {
+            "name": "stiff_high_a_covariance_finite_difference",
+            "description": "High-a slow-moving heliocentric covariance case over a 2516-day propagation; compares Rust covariance propagation to a central finite-difference covariance witness from the scalar state map.",
+            "n": 1,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "covariance",
+                "max_abs": 3.598732962520322e-24,
+                "max_rel": 1.8947476018398893e-10,
+                "atol": 1e-21,
+                "rtol": 1e-07,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "api_id": "dynamics.generate_ephemeris_2body_with_covariance",
+        "passed": true,
+        "investigate": false,
+        "investigate_task": "",
+        "fixtures": [
+          {
+            "name": "distant_stellar_aberration_covariance_finite_difference",
+            "description": "Distant slow-moving heliocentric covariance case with stellar aberration enabled; compares Rust ephemeris covariance to a central finite-difference witness from the scalar ephemeris map.",
+            "n": 1,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "covariance",
+                "max_abs": 4.291064607251125e-25,
+                "max_rel": 1.3660359597838582e-07,
+                "atol": 1e-22,
+                "rtol": 0.0001,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          }
+        ]
+      },
       {
         "api_id": "dynamics.calculate_moid",
         "passed": true,

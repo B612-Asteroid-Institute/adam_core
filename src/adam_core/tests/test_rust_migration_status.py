@@ -103,6 +103,23 @@ def test_transform_coordinates_partial_coverage_is_visible() -> None:
     )
 
 
+def test_covariance_finite_difference_fixtures_are_visible() -> None:
+    api_ids = {
+        "dynamics.propagate_2body_with_covariance",
+        "dynamics.generate_ephemeris_2body_with_covariance",
+    }
+
+    assert api_ids <= set(parity_fixed.all_api_ids())
+    for api_id in api_ids:
+        migration = API_MIGRATIONS_BY_ID[api_id]
+        assert migration.parity_coverage == "random-fuzz"
+        assert "finite-difference covariance fixture" in migration.coverage_note
+        assert any(
+            "finite-difference covariance witness" in case
+            for case in migration.covered_subcases
+        )
+
+
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
     latency_ids = {
         migration.api_id
