@@ -587,6 +587,35 @@ def _photometry_predict_magnitudes(
     }
 
 
+def _pack_absolute_magnitude_fit(result: tuple[Any, ...]) -> dict[str, np.ndarray]:
+    h_hat, h_sigma, sigma_eff, chi2_red, n_used = result
+    return {
+        "h_hat": np.asarray(h_hat, dtype=np.float64).reshape(-1),
+        "h_sigma": np.asarray(h_sigma, dtype=np.float64).reshape(-1),
+        "sigma_eff": np.asarray(sigma_eff, dtype=np.float64).reshape(-1),
+        "chi2_red": np.asarray(chi2_red, dtype=np.float64).reshape(-1),
+        "n_used": np.asarray(n_used, dtype=np.float64).reshape(-1),
+    }
+
+
+def _photometry_fit_absolute_magnitude_rows(
+    h_rows: np.ndarray, sigma_rows: np.ndarray
+) -> dict[str, np.ndarray]:
+    return _pack_absolute_magnitude_fit(
+        _rust_api.fit_absolute_magnitude_rows_numpy(h_rows, sigma_rows)
+    )
+
+
+def _photometry_fit_absolute_magnitude_grouped(
+    h_rows: np.ndarray, sigma_rows: np.ndarray, group_offsets: np.ndarray
+) -> dict[str, np.ndarray]:
+    return _pack_absolute_magnitude_fit(
+        _rust_api.fit_absolute_magnitude_grouped_numpy(
+            h_rows, sigma_rows, group_offsets
+        )
+    )
+
+
 def _orbit_determination_calc_gibbs(
     r1: np.ndarray, r2: np.ndarray, r3: np.ndarray, mu: float
 ) -> dict[str, np.ndarray]:
@@ -727,6 +756,10 @@ DISPATCH = {
         _photometry_calculate_apparent_magnitude_v_and_phase_angle
     ),
     "photometry.predict_magnitudes": _photometry_predict_magnitudes,
+    "photometry.fit_absolute_magnitude_rows": _photometry_fit_absolute_magnitude_rows,
+    "photometry.fit_absolute_magnitude_grouped": (
+        _photometry_fit_absolute_magnitude_grouped
+    ),
     "orbit_determination.calcGibbs": _orbit_determination_calc_gibbs,
     "orbit_determination.calcHerrickGibbs": _orbit_determination_calc_herrick_gibbs,
     "orbit_determination.calcGauss": _orbit_determination_calc_gauss,

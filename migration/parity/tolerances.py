@@ -565,6 +565,49 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         root_cause="Same as calculate_apparent_magnitude_v + 1 fma for delta.",
         verdict="bit-parity.",
     ),
+    "photometry.fit_absolute_magnitude_rows": ToleranceSpec(
+        outputs={
+            "h_hat": OutputTol(atol=1e-12, rtol=1e-12),
+            "h_sigma": OutputTol(atol=1e-12, rtol=1e-12),
+            "sigma_eff": OutputTol(atol=1e-12, rtol=1e-12),
+            "chi2_red": OutputTol(atol=1e-12, rtol=1e-12),
+            "n_used": OutputTol(atol=0.0),
+        },
+        rationale=(
+            "Single-group H-fit statistics over finite H rows with either "
+            "all finite magnitude sigmas (inverse-variance weighted mean, "
+            "H_sigma, chi2_red) or missing sigmas (arithmetic mean plus MAD "
+            "scatter estimate)."
+        ),
+        dominant_column="H_hat / H_sigma statistics",
+        physical_magnitude="1e-12 mag-level agreement on H statistics; n_used exact.",
+        root_cause=(
+            "Rust and legacy evaluate the same weighted sums and MAD median. "
+            "Remaining differences are last-ulp reduction-order noise."
+        ),
+        verdict="bit-parity for finite, non-degenerate H-fit rows.",
+    ),
+    "photometry.fit_absolute_magnitude_grouped": ToleranceSpec(
+        outputs={
+            "h_hat": OutputTol(atol=1e-12, rtol=1e-12),
+            "h_sigma": OutputTol(atol=1e-12, rtol=1e-12),
+            "sigma_eff": OutputTol(atol=1e-12, rtol=1e-12),
+            "chi2_red": OutputTol(atol=1e-12, rtol=1e-12),
+            "n_used": OutputTol(atol=0.0),
+        },
+        rationale=(
+            "Grouped H-fit wrapper over contiguous per-object row groups. "
+            "Random fuzz covers mixed group sizes plus finite-sigma and "
+            "missing-sigma groups."
+        ),
+        dominant_column="per-group H statistics",
+        physical_magnitude="1e-12 mag-level agreement per group; n_used exact.",
+        root_cause=(
+            "Same single-group formula as fit_absolute_magnitude_rows; grouped "
+            "Rust only changes orchestration/parallelization over offsets."
+        ),
+        verdict="bit-parity for finite, non-degenerate grouped H-fit rows.",
+    ),
     # ---- orbits ----
     "orbits.classify_orbits": ToleranceSpec(
         outputs={"out": OutputTol(atol=0.0)},

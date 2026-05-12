@@ -468,8 +468,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.fit_absolute_magnitude_rows_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note="Grouped H-fit production path covered by photometry tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Randomized parity covers single-group H-fit rows with finite-sigma "
+            "and missing-sigma branches; grouped production path is tracked separately."
+        ),
     ),
     ApiMigration(
         api_id="photometry.fit_absolute_magnitude_grouped",
@@ -477,8 +480,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.fit_absolute_magnitude_grouped_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note="Grouped H-fit production path covered by photometry tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Randomized parity covers grouped H-fit offsets with mixed group sizes "
+            "and finite-/missing-sigma row groups."
+        ),
     ),
     ApiMigration(
         api_id="orbit_determination.calcGibbs",

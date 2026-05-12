@@ -751,6 +751,97 @@ def _photometry_predict_magnitudes(
     return {"out": out}
 
 
+def _absolute_magnitude_mad_sigma(values: np.ndarray) -> float:
+    median = float(np.nanmedian(values))
+    mad = float(np.nanmedian(np.abs(values - median)))
+    return 1.4826 * mad
+
+
+def _absolute_magnitude_fit_one(
+    h_rows: np.ndarray, sigma_rows: np.ndarray
+) -> tuple[float, float, float, float, float]:
+    n_used = int(h_rows.size)
+    if n_used == 0:
+        return (np.nan, np.nan, np.nan, np.nan, 0.0)
+
+    have_all_sigma = bool(np.all(np.isfinite(sigma_rows)))
+    if have_all_sigma:
+        weights = 1.0 / (sigma_rows * sigma_rows)
+        weight_sum = float(np.sum(weights))
+        weighted_sum = float(np.sum(weights * h_rows))
+        if not np.isfinite(weight_sum) or weight_sum <= 0.0:
+            return (np.nan, np.nan, np.nan, np.nan, float(n_used))
+        h_hat = weighted_sum / weight_sum
+    else:
+        finite_h = h_rows[np.isfinite(h_rows)]
+        if finite_h.size == 0:
+            return (np.nan, np.nan, np.nan, np.nan, float(n_used))
+        h_hat = float(np.mean(finite_h))
+
+    residual = h_rows - h_hat
+    sigma_eff = _absolute_magnitude_mad_sigma(residual) if n_used >= 2 else np.nan
+
+    if have_all_sigma and n_used >= 2:
+        weights = 1.0 / (sigma_rows * sigma_rows)
+        weight_sum = float(np.sum(weights))
+        chi2_red = float(np.sum(weights * residual * residual) / (n_used - 1))
+        h_sigma = float(np.sqrt(1.0 / weight_sum))
+        if np.isfinite(chi2_red) and chi2_red > 1.0:
+            h_sigma *= float(np.sqrt(chi2_red))
+    elif np.isfinite(sigma_eff) and n_used >= 2:
+        h_sigma = float(sigma_eff / np.sqrt(n_used))
+        chi2_red = np.nan
+    else:
+        h_sigma = np.nan
+        chi2_red = np.nan
+
+    return (
+        float(h_hat),
+        float(h_sigma),
+        float(sigma_eff),
+        float(chi2_red),
+        float(n_used),
+    )
+
+
+def _pack_absolute_magnitude_fit(
+    result: tuple[np.ndarray, ...],
+) -> dict[str, np.ndarray]:
+    h_hat, h_sigma, sigma_eff, chi2_red, n_used = result
+    return {
+        "h_hat": np.asarray(h_hat, dtype=np.float64),
+        "h_sigma": np.asarray(h_sigma, dtype=np.float64),
+        "sigma_eff": np.asarray(sigma_eff, dtype=np.float64),
+        "chi2_red": np.asarray(chi2_red, dtype=np.float64),
+        "n_used": np.asarray(n_used, dtype=np.float64),
+    }
+
+
+def _photometry_fit_absolute_magnitude_rows(
+    h_rows: np.ndarray, sigma_rows: np.ndarray
+) -> dict[str, np.ndarray]:
+    return _pack_absolute_magnitude_fit(
+        tuple(
+            np.asarray([value], dtype=np.float64)
+            for value in _absolute_magnitude_fit_one(h_rows, sigma_rows)
+        )
+    )
+
+
+def _photometry_fit_absolute_magnitude_grouped(
+    h_rows: np.ndarray, sigma_rows: np.ndarray, group_offsets: np.ndarray
+) -> dict[str, np.ndarray]:
+    group_count = int(group_offsets.size - 1)
+    outputs = [np.empty(group_count, dtype=np.float64) for _ in range(5)]
+    for group_index in range(group_count):
+        start = int(group_offsets[group_index])
+        end = int(group_offsets[group_index + 1])
+        fit = _absolute_magnitude_fit_one(h_rows[start:end], sigma_rows[start:end])
+        for output, value in zip(outputs, fit):
+            output[group_index] = value
+    return _pack_absolute_magnitude_fit(tuple(outputs))
+
+
 def _orbit_determination_calc_gibbs(
     r1: np.ndarray, r2: np.ndarray, r3: np.ndarray, mu: float
 ) -> dict[str, np.ndarray]:
@@ -921,6 +1012,10 @@ DISPATCH = {
         _photometry_calculate_apparent_magnitude_v_and_phase_angle
     ),
     "photometry.predict_magnitudes": _photometry_predict_magnitudes,
+    "photometry.fit_absolute_magnitude_rows": _photometry_fit_absolute_magnitude_rows,
+    "photometry.fit_absolute_magnitude_grouped": (
+        _photometry_fit_absolute_magnitude_grouped
+    ),
     "orbit_determination.calcGibbs": _orbit_determination_calc_gibbs,
     "orbit_determination.calcHerrickGibbs": _orbit_determination_calc_herrick_gibbs,
     "orbit_determination.calcGauss": _orbit_determination_calc_gauss,

@@ -25,6 +25,8 @@
     "photometry.calculate_apparent_magnitude_v",
     "photometry.calculate_apparent_magnitude_v_and_phase_angle",
     "photometry.predict_magnitudes",
+    "photometry.fit_absolute_magnitude_rows",
+    "photometry.fit_absolute_magnitude_grouped",
     "orbit_determination.calcGibbs",
     "orbit_determination.calcHerrickGibbs",
     "orbit_determination.calcGauss",
@@ -6304,6 +6306,870 @@
         ]
       },
       {
+        "api_id": "photometry.fit_absolute_magnitude_rows",
+        "passed": true,
+        "investigate": false,
+        "investigate_task": "",
+        "seeds": [
+          {
+            "seed": 20260425,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 1.8215706303978221e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 6.938893903907228e-18,
+                "max_rel": 2.2022785177817607e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.6049040221183216e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260426,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 3.6789704963222384e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260427,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 1.8642580819588676e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260428,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 1.7176708314033426e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260429,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.0840305175524257e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260430,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 3.699908327769611e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260431,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 8.881784197001252e-15,
+                "max_rel": 6.213481636187173e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260432,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 3.2168288146838136e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 1.734723475976807e-17,
+                "max_rel": 5.72836948215523e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 1.0658141036401503e-14,
+                "max_rel": 1.0702744758284536e-15,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "api_id": "photometry.fit_absolute_magnitude_grouped",
+        "passed": true,
+        "investigate": false,
+        "investigate_task": "",
+        "seeds": [
+          {
+            "seed": 20260425,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 5.329070518200751e-15,
+                "max_rel": 3.5446277375868175e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 2.7755575615628914e-17,
+                "max_rel": 2.827468205794783e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 2.9717435647851517e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260426,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 3.332636393861622e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 2.7755575615628914e-17,
+                "max_rel": 2.21007122438412e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 1.776876783179355e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260427,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.4465730055861667e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 2.7755575615628914e-17,
+                "max_rel": 2.6367383056778935e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 8.881784197001252e-16,
+                "max_rel": 1.3877092407452743e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260428,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 7.105427357601002e-15,
+                "max_rel": 3.863559554050504e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 2.7755575615628914e-17,
+                "max_rel": 2.768860890136263e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 3.5875212884046447e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260429,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 1.9365695469430203e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 1.3877787807814457e-17,
+                "max_rel": 1.4831468674944375e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.0058503216586897e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260430,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 5.329070518200751e-15,
+                "max_rel": 3.3885702931454573e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 1.3877787807814457e-17,
+                "max_rel": 2.110659241446971e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260431,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.047038047444546e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 1.3877787807814457e-17,
+                "max_rel": 2.156544896856529e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 4.440892098500626e-16,
+                "max_rel": 1.425139288494059e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          },
+          {
+            "seed": 20260432,
+            "n": 128,
+            "passed": true,
+            "error": null,
+            "outputs": [
+              {
+                "name": "h_hat",
+                "max_abs": 3.552713678800501e-15,
+                "max_rel": 2.2885886626515327e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "h_sigma",
+                "max_abs": 2.7755575615628914e-17,
+                "max_rel": 3.5478950684488423e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "sigma_eff",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "chi2_red",
+                "max_abs": 1.7763568394002505e-15,
+                "max_rel": 2.5883903056170235e-16,
+                "atol": 1e-12,
+                "rtol": 1e-12,
+                "nan_disagreement": 0,
+                "passed": true
+              },
+              {
+                "name": "n_used",
+                "max_abs": 0.0,
+                "max_rel": 0.0,
+                "atol": 0.0,
+                "rtol": 0.0,
+                "nan_disagreement": 0,
+                "passed": true
+              }
+            ]
+          }
+        ]
+      },
+      {
         "api_id": "orbit_determination.calcGibbs",
         "passed": true,
         "investigate": false,
@@ -7103,40 +7969,41 @@
     "lane_policy": "The tiny-n lane records quick one-off/small-call behavior; p50 is enforced at 1.2x, p95 is reported but not enforced because microsecond-scale per-call work is dominated by system scheduler jitter under multi-thread mode. The small-n lane preserves the historical n=2000 promotion gate. The large-n lane is API-shaped, records structured workload axes, and is enforced by default with explicit per-lane waivers required for known large-workload regressions.",
     "legacy_timing_cache": {
       "path": "migration/artifacts/parity_legacy_speed_baseline.json",
-      "refresh": false,
+      "refresh": true,
       "schema_version": 1,
       "process_version": "rm-p1-019a-shaped-lanes-v1",
       "legacy_identity": {
-        "benchmark_source_hash": "baeeb7fb7e10dea721d745a0dc0ca6a6559440b9952ef7b26f07bcc28889ed7f",
+        "repo_root": "/Users/aleck/Code/adam-core",
         "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
         "git_dirty": false,
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "git_relevant_untracked_dirty": false,
         "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
-        "machine": {
-          "cpu_brand": "Apple M1 Max",
-          "hostname": "MacBook-Pro-5.local",
-          "machine": "arm64",
-          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
-          "processor": "arm"
-        },
-        "process_version": "rm-p1-019a-shaped-lanes-v1",
         "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
         "python_version": "Python 3.13.3",
-        "repo_root": "/Users/aleck/Code/adam-core",
-        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+        "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+        "machine": {
+          "hostname": "MacBook-Pro-5.local",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "machine": "arm64",
+          "processor": "arm",
+          "cpu_brand": "Apple M1 Max"
+        },
+        "benchmark_source_hash": "8db49e3b14a85385d8b05c375ad3b3f970921042e8ba81247b74b46db769686b",
+        "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a",
+        "process_version": "rm-p1-019a-shaped-lanes-v1"
       },
       "entry_freshness": {
         "warm": {
-          "entries": 84,
+          "entries": 90,
           "captured_at_min": "2026-05-08T12:15:29+00:00",
-          "captured_at_max": "2026-05-11T15:04:00+00:00",
+          "captured_at_max": "2026-05-12T11:23:23+00:00",
           "missing_legacy_identity": 0,
-          "distinct_legacy_identities": 4,
+          "distinct_legacy_identities": 5,
           "benchmark_source_hashes": [
             "403f5a20f709746393b7d468ac797796bde2e4f3b34d107aef8254f41cee9588",
             "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+            "8db49e3b14a85385d8b05c375ad3b3f970921042e8ba81247b74b46db769686b",
             "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8",
             "baeeb7fb7e10dea721d745a0dc0ca6a6559440b9952ef7b26f07bcc28889ed7f"
           ]
@@ -7156,15 +8023,15 @@
         }
       },
       "hits": {
-        "warm": 84,
+        "warm": 0,
         "cold": 0
       },
       "misses": {
-        "warm": 0,
+        "warm": 6,
         "cold": 0
       },
       "writes": {
-        "warm": 0,
+        "warm": 6,
         "cold": 0
       }
     },
@@ -7174,42 +8041,48 @@
         "description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
         "enforced": true,
         "reps": [
+          7,
           101
         ],
         "warmup": [
+          1,
           3
         ],
-        "measure_cold": false,
+        "measure_cold": true,
         "min_speedup_p50": 1.2,
         "min_speedup_p95": 0.0,
         "n": null,
         "n_values": [
           1,
           4,
-          10
+          10,
+          12
         ],
-        "api_count": 28
+        "api_count": 31
       },
       {
         "name": "small-n",
         "description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
         "enforced": true,
         "reps": [
+          7,
           21
         ],
         "warmup": [
+          1,
           3
         ],
-        "measure_cold": false,
+        "measure_cold": true,
         "min_speedup_p50": 1.2,
         "min_speedup_p95": 1.2,
         "n": null,
         "n_values": [
           8,
+          16,
           1936,
           2000
         ],
-        "api_count": 28
+        "api_count": 31
       },
       {
         "name": "large-n",
@@ -7221,12 +8094,13 @@
         "warmup": [
           1
         ],
-        "measure_cold": false,
+        "measure_cold": true,
         "min_speedup_p50": 1.2,
         "min_speedup_p95": 1.2,
         "n": null,
         "n_values": [
           64,
+          128,
           4000,
           4096,
           5000,
@@ -7234,7 +8108,7 @@
           20000,
           50000
         ],
-        "api_count": 28
+        "api_count": 31
       }
     ],
     "lane_status": {
@@ -10353,6 +11227,216 @@
         "legacy_cold_source": "measured",
         "legacy_cold_cache_key": "",
         "speedup_cold": 31.94931269991081
+      },
+      {
+        "api_id": "photometry.fit_absolute_magnitude_rows",
+        "lane": "tiny-n",
+        "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 10,
+          "axes": {},
+          "label": "rows=10"
+        },
+        "workload_label": "rows=10",
+        "n": 10,
+        "reps": 101,
+        "warmup": 3,
+        "rust_p50_s": 2.874992787837982e-06,
+        "rust_p95_s": 3.125052899122238e-06,
+        "legacy_p50_s": 3.4125056117773056e-05,
+        "legacy_p95_s": 3.9709266275167465e-05,
+        "legacy_source": "refreshed",
+        "legacy_cache_key": "261c49fd8919b743e3a2e5515eda98dde90840f9ca659d65302932f52fab68f5",
+        "speedup_p50": 11.869614512471655,
+        "speedup_p95": 12.706750111756817,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 0.0,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": null,
+        "legacy_cold_s": null,
+        "legacy_cold_source": "not-measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": null
+      },
+      {
+        "api_id": "photometry.fit_absolute_magnitude_grouped",
+        "lane": "tiny-n",
+        "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 10,
+          "axes": {},
+          "label": "rows=10"
+        },
+        "workload_label": "rows=10",
+        "n": 10,
+        "reps": 101,
+        "warmup": 3,
+        "rust_p50_s": 2.6124995201826096e-05,
+        "rust_p95_s": 7.379194721579552e-05,
+        "legacy_p50_s": 6.104214116930962e-05,
+        "legacy_p95_s": 7.045827805995941e-05,
+        "legacy_source": "refreshed",
+        "legacy_cache_key": "91cb6e8ed9c3828c97a1d23f04f7a5717fd5efce086d52722a3f300c5dc9805e",
+        "speedup_p50": 2.336541717911698,
+        "speedup_p95": 0.9548234017177077,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 0.0,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": null,
+        "legacy_cold_s": null,
+        "legacy_cold_source": "not-measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": null
+      },
+      {
+        "api_id": "photometry.fit_absolute_magnitude_rows",
+        "lane": "small-n",
+        "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 2000,
+          "axes": {},
+          "label": "rows=2000"
+        },
+        "workload_label": "rows=2000",
+        "n": 2000,
+        "reps": 21,
+        "warmup": 3,
+        "rust_p50_s": 2.037500962615013e-05,
+        "rust_p95_s": 3.854185342788696e-05,
+        "legacy_p50_s": 5.77499158680439e-05,
+        "legacy_p95_s": 0.00010858336463570595,
+        "legacy_source": "refreshed",
+        "legacy_cache_key": "651dd86d5e440643d1f57fc5ed075d9dd377849b0cc94c19b6e16180abbce96b",
+        "speedup_p50": 2.834350359958862,
+        "speedup_p95": 2.8172844577614535,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 1.2,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": null,
+        "legacy_cold_s": null,
+        "legacy_cold_source": "not-measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": null
+      },
+      {
+        "api_id": "photometry.fit_absolute_magnitude_grouped",
+        "lane": "small-n",
+        "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 2000,
+          "axes": {},
+          "label": "rows=2000"
+        },
+        "workload_label": "rows=2000",
+        "n": 2000,
+        "reps": 21,
+        "warmup": 3,
+        "rust_p50_s": 9.77921299636364e-05,
+        "rust_p95_s": 0.0001527089625597,
+        "legacy_p50_s": 0.007853082846850157,
+        "legacy_p95_s": 0.00802229205146432,
+        "legacy_source": "refreshed",
+        "legacy_cache_key": "7073d5595594d7eeb8e92604676ab0a459285138ba7fa704152ed7b83fcf8d65",
+        "speedup_p50": 80.3038327293852,
+        "speedup_p95": 52.53321034335549,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 1.2,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": null,
+        "legacy_cold_s": null,
+        "legacy_cold_source": "not-measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": null
+      },
+      {
+        "api_id": "photometry.fit_absolute_magnitude_rows",
+        "lane": "large-n",
+        "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 50000,
+          "axes": {},
+          "label": "rows=50000"
+        },
+        "workload_label": "rows=50000",
+        "n": 50000,
+        "reps": 7,
+        "warmup": 1,
+        "rust_p50_s": 0.0004960000514984131,
+        "rust_p95_s": 0.0005622749216854572,
+        "legacy_p50_s": 0.0010648751631379128,
+        "legacy_p95_s": 0.001185933407396078,
+        "legacy_source": "refreshed",
+        "legacy_cache_key": "dc604053bef04aea50ebcc8de6ac8025f882ff3b4dee4f9942e369df10116ff1",
+        "speedup_p50": 2.146925509223097,
+        "speedup_p95": 2.109170019251725,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 1.2,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": null,
+        "legacy_cold_s": null,
+        "legacy_cold_source": "not-measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": null
+      },
+      {
+        "api_id": "photometry.fit_absolute_magnitude_grouped",
+        "lane": "large-n",
+        "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+        "lane_enforced": true,
+        "workload_shape": {
+          "rows": 50000,
+          "axes": {},
+          "label": "rows=50000"
+        },
+        "workload_label": "rows=50000",
+        "n": 50000,
+        "reps": 7,
+        "warmup": 1,
+        "rust_p50_s": 0.000667292159050703,
+        "rust_p95_s": 0.0007446373347193003,
+        "legacy_p50_s": 0.19329275004565716,
+        "legacy_p95_s": 0.19594701267778875,
+        "legacy_source": "refreshed",
+        "legacy_cache_key": "d0ab2ee80991f33979d5e0cf90f32a59277cf03763bd48a648e891eb58952180",
+        "speedup_p50": 289.6673479883796,
+        "speedup_p95": 263.144222753286,
+        "min_speedup_p50": 1.2,
+        "min_speedup_p95": 1.2,
+        "raw_passed": true,
+        "passed": true,
+        "waived": false,
+        "waiver": "",
+        "error": null,
+        "rust_cold_s": null,
+        "legacy_cold_s": null,
+        "legacy_cold_source": "not-measured",
+        "legacy_cold_cache_key": "",
+        "speedup_cold": null
       }
     ],
     "all_passed": true

@@ -120,6 +120,19 @@ def test_covariance_finite_difference_fixtures_are_visible() -> None:
         )
 
 
+def test_photometry_h_fit_random_fuzz_is_visible() -> None:
+    api_ids = {
+        "photometry.fit_absolute_magnitude_rows",
+        "photometry.fit_absolute_magnitude_grouped",
+    }
+
+    assert api_ids <= set(_inputs.all_api_ids())
+    for api_id in api_ids:
+        migration = API_MIGRATIONS_BY_ID[api_id]
+        assert migration.parity_coverage == "random-fuzz"
+        assert "Randomized parity" in migration.coverage_note
+
+
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
     latency_ids = {
         migration.api_id

@@ -28,69 +28,71 @@
   "lane_policy": "The tiny-n lane records quick one-off/small-call behavior; p50 is enforced at 1.2x, p95 is reported but not enforced because microsecond-scale per-call work is dominated by system scheduler jitter under multi-thread mode. The small-n lane preserves the historical n=2000 promotion gate. The large-n lane is API-shaped, records structured workload axes, and is enforced by default with explicit per-lane waivers required for known large-workload regressions.",
   "legacy_timing_cache": {
     "path": "migration/artifacts/parity_legacy_speed_baseline.json",
-    "refresh": false,
+    "refresh": true,
     "schema_version": 1,
     "process_version": "rm-p1-019a-shaped-lanes-v1",
     "legacy_identity": {
-      "benchmark_source_hash": "baeeb7fb7e10dea721d745a0dc0ca6a6559440b9952ef7b26f07bcc28889ed7f",
+      "repo_root": "/Users/aleck/Code/adam-core",
       "git_commit": "22a1efa3979cad5651e3f0765b2536983be6ab99",
       "git_dirty": false,
+      "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "git_relevant_untracked_dirty": false,
       "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
-      "machine": {
-        "cpu_brand": "Apple M1 Max",
-        "hostname": "MacBook-Pro-5.local",
-        "machine": "arm64",
-        "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
-        "processor": "arm"
-      },
-      "process_version": "rm-p1-019a-shaped-lanes-v1",
       "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
       "python_version": "Python 3.13.3",
-      "repo_root": "/Users/aleck/Code/adam-core",
-      "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a"
+      "legacy_packages_hash": "20031b9af644e1062f6680456b840cbba105beee9d76597e5dba1666b25e2b3e",
+      "machine": {
+        "hostname": "MacBook-Pro-5.local",
+        "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+        "machine": "arm64",
+        "processor": "arm",
+        "cpu_brand": "Apple M1 Max"
+      },
+      "benchmark_source_hash": "8db49e3b14a85385d8b05c375ad3b3f970921042e8ba81247b74b46db769686b",
+      "timing_process_hash": "ea287fd54affae56ab1f20f17f13e9f60998b50445853463c5ba5f08686c049a",
+      "process_version": "rm-p1-019a-shaped-lanes-v1"
     },
     "entry_freshness": {
       "warm": {
-        "entries": 84,
+        "entries": 90,
         "captured_at_min": "2026-05-08T12:15:29+00:00",
-        "captured_at_max": "2026-05-11T15:04:00+00:00",
+        "captured_at_max": "2026-05-12T11:23:42+00:00",
         "missing_legacy_identity": 0,
-        "distinct_legacy_identities": 4,
+        "distinct_legacy_identities": 5,
         "benchmark_source_hashes": [
           "403f5a20f709746393b7d468ac797796bde2e4f3b34d107aef8254f41cee9588",
           "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+          "8db49e3b14a85385d8b05c375ad3b3f970921042e8ba81247b74b46db769686b",
           "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8",
           "baeeb7fb7e10dea721d745a0dc0ca6a6559440b9952ef7b26f07bcc28889ed7f"
         ]
       },
       "cold": {
-        "entries": 57,
+        "entries": 61,
         "captured_at_min": "2026-05-08T12:16:25+00:00",
-        "captured_at_max": "2026-05-11T15:04:07+00:00",
+        "captured_at_max": "2026-05-12T11:23:43+00:00",
         "missing_legacy_identity": 0,
-        "distinct_legacy_identities": 4,
+        "distinct_legacy_identities": 5,
         "benchmark_source_hashes": [
           "403f5a20f709746393b7d468ac797796bde2e4f3b34d107aef8254f41cee9588",
           "8a2da2cc4f478b1fc2a39495263cb3c909758f12a54e6ab19d8368405fef5f76",
+          "8db49e3b14a85385d8b05c375ad3b3f970921042e8ba81247b74b46db769686b",
           "9e2529e876479f44ecb69ff70286131af6c4c41d23ad9b2f8eb5838de06805c8",
           "baeeb7fb7e10dea721d745a0dc0ca6a6559440b9952ef7b26f07bcc28889ed7f"
         ]
       }
     },
     "hits": {
-      "warm": 84,
-      "cold": 56
+      "warm": 0,
+      "cold": 0
     },
     "misses": {
-      "warm": 0,
-      "cold": 0
+      "warm": 6,
+      "cold": 4
     },
     "writes": {
-      "warm": 0,
-      "cold": 0
+      "warm": 6,
+      "cold": 4
     }
   },
   "lanes": [
@@ -99,30 +101,35 @@
       "description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
       "enforced": true,
       "reps": [
+        7,
         101
       ],
       "warmup": [
+        1,
         3
       ],
-      "measure_cold": false,
+      "measure_cold": true,
       "min_speedup_p50": 1.2,
       "min_speedup_p95": 0.0,
       "n": null,
       "n_values": [
         1,
         4,
-        10
+        10,
+        12
       ],
-      "api_count": 28
+      "api_count": 31
     },
     {
       "name": "small-n",
       "description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
       "enforced": true,
       "reps": [
+        7,
         21
       ],
       "warmup": [
+        1,
         3
       ],
       "measure_cold": true,
@@ -131,10 +138,11 @@
       "n": null,
       "n_values": [
         8,
+        16,
         1936,
         2000
       ],
-      "api_count": 28
+      "api_count": 31
     },
     {
       "name": "large-n",
@@ -152,6 +160,7 @@
       "n": null,
       "n_values": [
         64,
+        128,
         4000,
         4096,
         5000,
@@ -159,7 +168,7 @@
         20000,
         50000
       ],
-      "api_count": 28
+      "api_count": 31
     }
   ],
   "lane_status": {
@@ -3278,6 +3287,216 @@
       "legacy_cold_source": "measured",
       "legacy_cold_cache_key": "",
       "speedup_cold": 31.94931269991081
+    },
+    {
+      "api_id": "photometry.fit_absolute_magnitude_rows",
+      "lane": "tiny-n",
+      "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 10,
+        "axes": {},
+        "label": "rows=10"
+      },
+      "workload_label": "rows=10",
+      "n": 10,
+      "reps": 101,
+      "warmup": 3,
+      "rust_p50_s": 2.9997900128364563e-06,
+      "rust_p95_s": 3.2498501241207123e-06,
+      "legacy_p50_s": 3.3458229154348373e-05,
+      "legacy_p95_s": 3.833277150988579e-05,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "261c49fd8919b743e3a2e5515eda98dde90840f9ca659d65302932f52fab68f5",
+      "speedup_p50": 11.153523750388079,
+      "speedup_p95": 11.795242871471558,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 0.0,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": null,
+      "legacy_cold_s": null,
+      "legacy_cold_source": "not-measured",
+      "legacy_cold_cache_key": "",
+      "speedup_cold": null
+    },
+    {
+      "api_id": "photometry.fit_absolute_magnitude_grouped",
+      "lane": "tiny-n",
+      "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.2x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 10,
+        "axes": {},
+        "label": "rows=10"
+      },
+      "workload_label": "rows=10",
+      "n": 10,
+      "reps": 101,
+      "warmup": 3,
+      "rust_p50_s": 2.437504008412361e-05,
+      "rust_p95_s": 5.300017073750496e-05,
+      "legacy_p50_s": 6.137508898973465e-05,
+      "legacy_p95_s": 6.83339312672615e-05,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "91cb6e8ed9c3828c97a1d23f04f7a5717fd5efce086d52722a3f300c5dc9805e",
+      "speedup_p50": 2.5179482281020156,
+      "speedup_p95": 1.2893153043921382,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 0.0,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": null,
+      "legacy_cold_s": null,
+      "legacy_cold_source": "not-measured",
+      "legacy_cold_cache_key": "",
+      "speedup_cold": null
+    },
+    {
+      "api_id": "photometry.fit_absolute_magnitude_rows",
+      "lane": "small-n",
+      "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 2000,
+        "axes": {},
+        "label": "rows=2000"
+      },
+      "workload_label": "rows=2000",
+      "n": 2000,
+      "reps": 21,
+      "warmup": 3,
+      "rust_p50_s": 2.008303999900818e-05,
+      "rust_p95_s": 5.483301356434822e-05,
+      "legacy_p50_s": 5.5999960750341415e-05,
+      "legacy_p95_s": 8.004205301404e-05,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "651dd86d5e440643d1f57fc5ed075d9dd377849b0cc94c19b6e16180abbce96b",
+      "speedup_p50": 2.788420515674272,
+      "speedup_p95": 1.4597420023269045,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 0.07063174992799759,
+      "legacy_cold_s": 0.07195404078811407,
+      "legacy_cold_source": "refreshed",
+      "legacy_cold_cache_key": "9757f9673c03117c71e833583c8c7d302c9e86d07b86c1f45ad84aaca29470c7",
+      "speedup_cold": 1.0187209132077917
+    },
+    {
+      "api_id": "photometry.fit_absolute_magnitude_grouped",
+      "lane": "small-n",
+      "lane_description": "Historical promotion gate at default n=2000 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.2x pass/fail.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 2000,
+        "axes": {},
+        "label": "rows=2000"
+      },
+      "workload_label": "rows=2000",
+      "n": 2000,
+      "reps": 21,
+      "warmup": 3,
+      "rust_p50_s": 7.195770740509033e-05,
+      "rust_p95_s": 8.758297190070152e-05,
+      "legacy_p50_s": 0.0077438331209123135,
+      "legacy_p95_s": 0.007896500173956156,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "7073d5595594d7eeb8e92604676ab0a459285138ba7fa704152ed7b83fcf8d65",
+      "speedup_p50": 107.61645138745082,
+      "speedup_p95": 90.16022181696378,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 0.07496108394116163,
+      "legacy_cold_s": 0.08131308434531093,
+      "legacy_cold_source": "refreshed",
+      "legacy_cold_cache_key": "1eef056d537d7bbc321fdc800cebbfbaaa2e0f30117e1d367b3c24536d9ef712",
+      "speedup_cold": 1.0847373072824706
+    },
+    {
+      "api_id": "photometry.fit_absolute_magnitude_rows",
+      "lane": "large-n",
+      "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 50000,
+        "axes": {},
+        "label": "rows=50000"
+      },
+      "workload_label": "rows=50000",
+      "n": 50000,
+      "reps": 7,
+      "warmup": 1,
+      "rust_p50_s": 0.0004444587975740433,
+      "rust_p95_s": 0.0005669708363711833,
+      "legacy_p50_s": 0.001028583850711584,
+      "legacy_p95_s": 0.0012548874597996472,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "dc604053bef04aea50ebcc8de6ac8025f882ff3b4dee4f9942e369df10116ff1",
+      "speedup_p50": 2.3142389268157757,
+      "speedup_p95": 2.2133192384839,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 0.07754520839080215,
+      "legacy_cold_s": 0.07721024984493852,
+      "legacy_cold_source": "refreshed",
+      "legacy_cold_cache_key": "c6f647e8c37d634091fef54cf69e4bb74a15fa0b5203d32e66ea7457a3ced26a",
+      "speedup_cold": 0.9956804739736393
+    },
+    {
+      "api_id": "photometry.fit_absolute_magnitude_grouped",
+      "lane": "large-n",
+      "lane_description": "API-shaped large workload lane with structured axes; enforced for p50/p95 >= 1.2x.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 50000,
+        "axes": {},
+        "label": "rows=50000"
+      },
+      "workload_label": "rows=50000",
+      "n": 50000,
+      "reps": 7,
+      "warmup": 1,
+      "rust_p50_s": 0.0006299172528088093,
+      "rust_p95_s": 0.0007126787677407264,
+      "legacy_p50_s": 0.19571816688403487,
+      "legacy_p95_s": 0.2125048127491027,
+      "legacy_source": "refreshed",
+      "legacy_cache_key": "d0ab2ee80991f33979d5e0cf90f32a59277cf03763bd48a648e891eb58952180",
+      "speedup_p50": 310.70456637173373,
+      "speedup_p95": 298.1775553981598,
+      "min_speedup_p50": 1.2,
+      "min_speedup_p95": 1.2,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": 0.08072283398360014,
+      "legacy_cold_s": 0.2745352918282151,
+      "legacy_cold_source": "refreshed",
+      "legacy_cold_cache_key": "020b9737aea4ffec3b88b0a429cb14d6a90e7778533b7a950c1366d41b791d55",
+      "speedup_cold": 3.4009620113683128
     }
   ],
   "all_passed": true

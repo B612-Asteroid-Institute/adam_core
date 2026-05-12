@@ -953,6 +953,36 @@ def make_predict_magnitudes(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_fit_absolute_magnitude_rows(rng: np.random.Generator, n: int) -> Sample:
+    h_center = rng.uniform(14.0, 23.0)
+    h_rows = rng.normal(loc=h_center, scale=0.35, size=n).astype(np.float64)
+    sigma_rows = rng.uniform(0.03, 0.30, size=n).astype(np.float64)
+    if rng.random() < 0.5 and n > 1:
+        sigma_rows[rng.random(n) < 0.25] = np.nan
+    kw = {"h_rows": h_rows, "sigma_rows": sigma_rows}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_fit_absolute_magnitude_grouped(rng: np.random.Generator, n: int) -> Sample:
+    group_count = max(1, min(n, max(2, n // 8)))
+    sizes = rng.multinomial(n - group_count, np.full(group_count, 1.0 / group_count))
+    sizes = sizes + 1
+    group_offsets = np.concatenate([[0], np.cumsum(sizes)]).astype(np.int64)
+    centers = rng.uniform(14.0, 23.0, size=group_count)
+    h_rows = np.empty(n, dtype=np.float64)
+    sigma_rows = np.empty(n, dtype=np.float64)
+    for group_index in range(group_count):
+        start = group_offsets[group_index]
+        end = group_offsets[group_index + 1]
+        rows = end - start
+        h_rows[start:end] = rng.normal(loc=centers[group_index], scale=0.35, size=rows)
+        sigma_rows[start:end] = rng.uniform(0.03, 0.30, size=rows)
+        if rows > 1 and group_index % 3 == 1:
+            sigma_rows[start:end][rng.random(rows) < 0.25] = np.nan
+    kw = {"h_rows": h_rows, "sigma_rows": sigma_rows, "group_offsets": group_offsets}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def _sample_iod_triplets(rng: np.random.Generator, n: int) -> tuple[np.ndarray, ...]:
     """Sample n (r1, r2, r3, t1, t2, t3) IOD triplets along propagated arcs.
 
@@ -1323,6 +1353,8 @@ GENERATORS = {
         make_calculate_apparent_magnitude_v_and_phase_angle
     ),
     "photometry.predict_magnitudes": make_predict_magnitudes,
+    "photometry.fit_absolute_magnitude_rows": make_fit_absolute_magnitude_rows,
+    "photometry.fit_absolute_magnitude_grouped": make_fit_absolute_magnitude_grouped,
     "orbit_determination.calcGibbs": make_calc_gibbs,
     "orbit_determination.calcHerrickGibbs": make_calc_herrick_gibbs,
     "orbit_determination.calcGauss": make_calc_gauss,
@@ -1439,6 +1471,8 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "photometry.predict_magnitudes": WorkloadShape(
         50_000, n_orbits=1_000, n_observers=50
     ),
+    "photometry.fit_absolute_magnitude_rows": WorkloadShape(50_000),
+    "photometry.fit_absolute_magnitude_grouped": WorkloadShape(50_000),
     "orbit_determination.calcGibbs": WorkloadShape(5_000, extra={"triplets": 5_000}),
     "orbit_determination.calcHerrickGibbs": WorkloadShape(
         5_000, extra={"triplets": 5_000}

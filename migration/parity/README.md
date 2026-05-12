@@ -216,11 +216,11 @@ pretty-printer joins this registry to `tolerances.py` so reports distinguish
 direct randomized fuzz, fixed-fixture coverage, orchestration-implied coverage,
 targeted-test-only coverage, and intentional exclusions.
 
-Currently wired directly in randomized fuzz (29):
+Currently wired directly in randomized fuzz (31):
 - 10 coordinates/transform/residual surfaces
 - 10 dynamics primitives and public orchestration surfaces, including direct
   MOID, perturber MOIDs, LT-correction, and porkchop grids
-- 4 photometry
+- 6 photometry surfaces, including H-fit row and grouped kernels
 - 1 orbit-classification rule surface
 - 4 OD primitives, including constrained shared-root `gaussIOD` fuzz
 
@@ -229,6 +229,14 @@ Supplemental fixed-fixture parity:
   rows; a deterministic identical-circular fixture covers the flat-minimum
   regime where the MOID distance is unique but the returned argmin time is only
   an optimizer witness within the orbital period.
+- `dynamics.propagate_2body_with_covariance` — randomized fuzz covers typical
+  covariance propagation against baseline-main Jacobian covariance propagation;
+  a deterministic high-a, 2516-day fixture compares Rust Dual covariance output
+  to a central finite-difference witness from the scalar state map.
+- `dynamics.generate_ephemeris_2body_with_covariance` — randomized fuzz covers
+  typical ephemeris covariance propagation; a deterministic distant-object,
+  stellar-aberration fixture compares Rust covariance output to a central
+  finite-difference witness from the scalar ephemeris map.
 - `orbit_determination.gaussIOD` — constrained randomized fuzz covers
   well-conditioned low-e, main-belt-like, multi-day triplets where Rust
   Laguerre+deflation and legacy `np.roots`/LAPACK share a physical best root.
