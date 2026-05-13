@@ -437,6 +437,29 @@ def _coordinates_residuals_calculate_chi2(
     return {"out": np.asarray(calculate_chi2(residuals, covariances), dtype=np.float64)}
 
 
+def _coordinates_residuals_bound_longitude_residuals(
+    observed: np.ndarray, residuals: np.ndarray
+) -> dict[str, np.ndarray]:
+    from adam_core.coordinates.residuals import bound_longitude_residuals
+
+    out = bound_longitude_residuals(observed, residuals.copy())
+    return {"out": np.asarray(out, dtype=np.float64)}
+
+
+def _coordinates_residuals_apply_cosine_latitude_correction(
+    lat: np.ndarray, residuals: np.ndarray, covariances: np.ndarray
+) -> dict[str, np.ndarray]:
+    from adam_core.coordinates.residuals import apply_cosine_latitude_correction
+
+    residuals_out, covariances_out = apply_cosine_latitude_correction(
+        lat, residuals.copy(), covariances.copy()
+    )
+    return {
+        "residuals": np.asarray(residuals_out, dtype=np.float64),
+        "covariances": np.asarray(covariances_out, dtype=np.float64),
+    }
+
+
 def _statistics_weighted_mean(
     samples: np.ndarray, weights: np.ndarray
 ) -> dict[str, np.ndarray]:
@@ -1006,6 +1029,12 @@ DISPATCH = {
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
     "coordinates.residuals.Residuals.calculate": _coordinates_residuals_Residuals_calculate,
     "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
+    "coordinates.residuals.bound_longitude_residuals": (
+        _coordinates_residuals_bound_longitude_residuals
+    ),
+    "coordinates.residuals.apply_cosine_latitude_correction": (
+        _coordinates_residuals_apply_cosine_latitude_correction
+    ),
     "statistics.weighted_mean": _statistics_weighted_mean,
     "statistics.weighted_covariance": _statistics_weighted_covariance,
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,

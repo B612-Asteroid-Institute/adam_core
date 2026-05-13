@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-10 (public `dynamics.generate_porkchop_data`, `dynamics.calculate_perturber_moids`, and `coordinates.residuals.Residuals.calculate` all remain in regular parity/speed governance)
+Last updated: 2026-05-13 (`coordinates.residuals.apply_cosine_latitude_correction` and `coordinates.residuals.bound_longitude_residuals` graduated from targeted tests into regular random-fuzz/speed governance)
 
 ## Current Review-Derived Backlog
 
@@ -24,6 +24,7 @@ Last updated: 2026-05-10 (public `dynamics.generate_porkchop_data`, `dynamics.ca
 - [x] RM-WE2-001 added `coordinates.residuals.calculate_chi2` to baseline-main parity/speed governance for representative 2-D SPD covariance rows.
 - [x] RM-WE2-002 fused `coordinates.residuals.Residuals.calculate` into one PyO3 crossing without changing the math; real A/B numbers were recorded before documenting the speedup.
 - [x] RM-WE2-002A added end-to-end `coordinates.residuals.Residuals.calculate` to regular randomized parity and tiny/small/large speed governance (commit `df97fb1e`).
+- [x] Residual helper targeted-test graduation added regular randomized parity and tiny/small/large speed governance for `coordinates.residuals.apply_cosine_latitude_correction` and `coordinates.residuals.bound_longitude_residuals`.
 - [x] RM-WD3-001 centralized dynamics Ray usage behind `ParallelBackend`, closed the dynamics-only steps, and deferred ASSIST/n-body surfaces until the Rust n-body line moves via `assist-rs`/traits.
 - [x] RM-WE2-003 added public quivr orchestration parity/speed governance for `dynamics.calculate_perturber_moids`, including `Orbits` construction, SPICE perturber-state lookup, batched MOID dispatch, and `PerturberMOIDs` table assembly.
 - [x] RM-WE2-004 added public quivr orchestration parity/speed governance for `dynamics.generate_porkchop_data`, including departure/arrival `Orbits` construction, time-order filtering, Rust porkchop grid dispatch, and `LambertSolutions` table assembly.

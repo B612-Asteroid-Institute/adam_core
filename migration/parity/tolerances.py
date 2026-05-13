@@ -312,6 +312,43 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict="equally accurate for valid SPD covariance matrices.",
     ),
+    "coordinates.residuals.bound_longitude_residuals": ToleranceSpec(
+        outputs={"out": OutputTol(atol=0.0, rtol=0.0)},
+        rationale=(
+            "Longitude residual wrapping over six-column spherical residual rows. "
+            "Random fuzz exercises no-wrap rows plus both >180° and <-180° wrap "
+            "branches with each side of the 0°/360° sign convention."
+        ),
+        dominant_column="longitude residual column",
+        physical_magnitude="exact categorical branch parity in degrees.",
+        root_cause=(
+            "Pure comparisons, ±360° shifts, and sign flips. No transcendental "
+            "or reduction-order drift is expected."
+        ),
+        verdict="bit-parity for every longitude-wrap branch.",
+    ),
+    "coordinates.residuals.apply_cosine_latitude_correction": ToleranceSpec(
+        outputs={
+            "residuals": OutputTol(atol=1e-12, rtol=1e-12),
+            "covariances": OutputTol(atol=1e-12, rtol=1e-12),
+        },
+        rationale=(
+            "Cos(latitude) correction for spherical residuals and covariance rows. "
+            "Random fuzz scales residual columns 1 and 4 plus covariance rows/cols "
+            "1 and 4 over representative latitudes, preserving NaN covariance cells."
+        ),
+        dominant_column="longitude/longitudinal-velocity residual and covariance cells",
+        physical_magnitude=(
+            "≤1e-12 absolute on degree-scale residuals and covariance cells; NaN "
+            "covariance locations must match exactly."
+        ),
+        root_cause=(
+            "Rust evaluates the reduced diagonal form D·Σ·Dᵀ directly while "
+            "baseline-main constructs D matrices and performs batched matmul; "
+            "any finite drift is last-ulp multiplication-order noise."
+        ),
+        verdict="algorithm-equivalent cos-lat residual/covariance parity.",
+    ),
     # ---- raw statistics kernels ----
     "statistics.weighted_mean": ToleranceSpec(
         outputs={"out": OutputTol(atol=1e-12, rtol=1e-12)},

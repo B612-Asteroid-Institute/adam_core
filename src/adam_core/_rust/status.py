@@ -199,8 +199,17 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module=("adam_core._rust_native.apply_cosine_latitude_correction_numpy"),
-        parity_coverage="targeted-tests",
-        coverage_note="Wave E2 residual helper; covered by residuals tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Randomized parity covers cos(latitude) scaling for six-column "
+            "spherical residual rows and covariance matrices, including NaN "
+            "covariance-cell preservation. End-to-end Residuals.calculate remains "
+            "separately governed."
+        ),
+        covered_subcases=(
+            "longitude and longitudinal-velocity residual scaling",
+            "D·Σ·Dᵀ covariance scaling with NaN preservation",
+        ),
     ),
     ApiMigration(
         api_id="coordinates.residuals.bound_longitude_residuals",
@@ -208,8 +217,17 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.bound_longitude_residuals_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note="Wave E2 residual helper; covered by residuals tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Randomized parity covers longitude residual no-wrap rows plus both "
+            ">180° and <-180° wrap branches on each side of the 0°/360° sign "
+            "convention. End-to-end Residuals.calculate remains separately governed."
+        ),
+        covered_subcases=(
+            "no-wrap longitude residual rows",
+            ">180° wrap rows with and without 0°/360° sign flip",
+            "<-180° wrap rows with and without 0°/360° sign flip",
+        ),
     ),
     ApiMigration(
         api_id="coordinates.residuals.Residuals.calculate",

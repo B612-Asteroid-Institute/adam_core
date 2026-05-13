@@ -621,6 +621,56 @@ def make_calculate_chi2(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_bound_longitude_residuals(rng: np.random.Generator, n: int) -> Sample:
+    """Sample production-like small residuals plus every wrap branch."""
+    observed = rng.normal(scale=1.0, size=(n, 6)).astype(np.float64)
+    residuals = rng.normal(scale=0.1, size=(n, 6)).astype(np.float64)
+
+    observed[:, 1] = rng.uniform(0.0, 360.0, size=n)
+    # In real OD residual scoring, most longitude residuals are small after the
+    # predicted-observed subtraction. Keep the bulk of the speed workload in
+    # that production-like shape, while pinning one row for each branch below so
+    # randomized parity still exercises the wrap/sign convention every seed.
+    residuals[:, 1] = rng.normal(scale=5.0, size=n)
+
+    branch_observed = np.array([100.0, 355.0, 5.0, 100.0, 250.0], dtype=np.float64)
+    branch_residuals = np.array([10.0, 350.0, -350.0, 350.0, -350.0], dtype=np.float64)
+    branch_rows = min(n, len(branch_observed))
+    observed[:branch_rows, 1] = branch_observed[:branch_rows]
+    residuals[:branch_rows, 1] = branch_residuals[:branch_rows]
+
+    kw = {
+        "observed": np.ascontiguousarray(observed),
+        "residuals": np.ascontiguousarray(residuals),
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_apply_cosine_latitude_correction(rng: np.random.Generator, n: int) -> Sample:
+    """Sample cos(latitude) residual and covariance scaling rows."""
+    lat = rng.uniform(-89.0, 89.0, size=n).astype(np.float64)
+    if n >= 5:
+        lat[:5] = np.array([0.0, 30.0, -30.0, 60.0, -80.0], dtype=np.float64)
+        rng.shuffle(lat)
+
+    residuals = rng.normal(scale=0.05, size=(n, 6)).astype(np.float64)
+    raw = rng.normal(scale=0.1, size=(n, 6, 6)).astype(np.float64)
+    covariances = np.matmul(raw, np.swapaxes(raw, 1, 2))
+
+    # Real observed/predicted spherical covariance blocks often carry NaNs in
+    # inactive dimensions. The helper promises to preserve those NaN cells while
+    # scaling finite longitude/longitudinal-velocity rows and columns.
+    nan_mask = rng.random(size=(n, 6, 6)) < 0.03
+    covariances[nan_mask] = np.nan
+
+    kw = {
+        "lat": np.ascontiguousarray(lat),
+        "residuals": np.ascontiguousarray(residuals),
+        "covariances": np.ascontiguousarray(covariances),
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def _sample_normalized_weights(rng: np.random.Generator, n: int) -> np.ndarray:
     weights = rng.random(n).astype(np.float64)
     return np.ascontiguousarray(weights / np.sum(weights), dtype=np.float64)
@@ -1371,6 +1421,10 @@ GENERATORS = {
     "coordinates.spherical.to_cartesian": make_spherical_to_cartesian,
     "coordinates.residuals.Residuals.calculate": make_residuals_calculate,
     "coordinates.residuals.calculate_chi2": make_calculate_chi2,
+    "coordinates.residuals.bound_longitude_residuals": make_bound_longitude_residuals,
+    "coordinates.residuals.apply_cosine_latitude_correction": (
+        make_apply_cosine_latitude_correction
+    ),
     "statistics.weighted_mean": make_weighted_mean,
     "statistics.weighted_covariance": make_weighted_covariance,
     "dynamics.calc_mean_motion": make_calc_mean_motion,
@@ -1479,6 +1533,11 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.spherical.to_cartesian": WorkloadShape(20_000),
     "coordinates.residuals.Residuals.calculate": WorkloadShape(20_000),
     "coordinates.residuals.calculate_chi2": WorkloadShape(50_000),
+    # Pure longitude wrapping is memory-bandwidth dominated; a 100k-row large
+    # lane gives a stable throughput signal beyond the scheduler-sensitive
+    # 50k transition region while remaining an API-shaped vector workload.
+    "coordinates.residuals.bound_longitude_residuals": WorkloadShape(100_000),
+    "coordinates.residuals.apply_cosine_latitude_correction": WorkloadShape(50_000),
     "statistics.weighted_mean": WorkloadShape(50_000),
     "statistics.weighted_covariance": WorkloadShape(50_000),
     "dynamics.calc_mean_motion": WorkloadShape(50_000),

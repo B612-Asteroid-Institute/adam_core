@@ -209,6 +209,21 @@ def test_raw_statistics_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
         assert parity_speed._is_diagnostic_speed_api(api_id)
 
 
+def test_residual_helper_kernels_are_random_fuzz() -> None:
+    api_ids = {
+        "coordinates.residuals.apply_cosine_latitude_correction",
+        "coordinates.residuals.bound_longitude_residuals",
+    }
+
+    assert api_ids <= set(_inputs.all_api_ids())
+    for api_id in api_ids:
+        migration = API_MIGRATIONS_BY_ID[api_id]
+        assert migration.status == "public-rust-default"
+        assert migration.parity_coverage == "random-fuzz"
+        assert migration.covered_subcases
+        assert not parity_speed._is_diagnostic_speed_api(api_id)
+
+
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
     latency_ids = {
         migration.api_id
