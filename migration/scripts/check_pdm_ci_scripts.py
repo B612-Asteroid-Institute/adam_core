@@ -29,6 +29,7 @@ STALE_REFERENCES = (
     "rust-parity-randomized",
     "rust-od-benchmark",
     "--max-rust-over-legacy",
+    "--trials",
     "migration/artifacts/rust_benchmark_gate.json",
     "migration/artifacts/ephemeris_wide_observer_bench.json",
     "migration/artifacts/rust_orbit_determination_benchmark.json",

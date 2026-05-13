@@ -21,6 +21,7 @@ from migration.scripts import parity_table
 from migration.scripts.rust_backend_benchmark_gate import (
     BENCHMARK_TO_API_ID,
     EXTERNALLY_BENCHMARKED,
+    _build_arg_parser as _build_latency_arg_parser,
     _latency_summary,
     _thread_mode_from_argv,
 )
@@ -248,6 +249,13 @@ def test_parity_main_default_thread_mode_is_multi_thread() -> None:
     assert args.threads == "multi-thread"
 
 
+def test_speed_trial_counts_are_source_governed() -> None:
+    assert parity_speed.CANONICAL_SPEED_TRIALS >= 3
+    assert "--trials" not in parity_speed._build_arg_parser().format_help()
+    assert "--speed-trials" not in parity_main._build_arg_parser().format_help()
+    assert "--trials" not in _build_latency_arg_parser().format_help()
+
+
 def test_thread_mode_native_is_deprecated_alias_for_multi_thread() -> None:
     assert _threading.validate_thread_mode("single") == "single"
     assert _threading.validate_thread_mode("multi-thread") == "multi-thread"
@@ -288,11 +296,29 @@ def test_latency_summary_uses_median_of_trial_percentiles() -> None:
 
     summary = _latency_summary(samples)
 
+    assert summary["latency_trials"] == 3
     assert summary["rust_seconds_p50"] == 1.0
     assert summary["rust_seconds_p95"] == 2.0
     assert summary["rust_seconds_p95_trials"][1] > 50.0
     assert summary["rust_sample_trials_seconds"] == samples.tolist()
     assert summary["latency_aggregation"] == "median-of-trial-percentiles"
+
+
+def test_parity_speed_summary_uses_median_of_trial_percentiles() -> None:
+    samples = [
+        [1.0, 1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0, 100.0],
+        [2.0, 2.0, 2.0, 2.0, 2.0],
+    ]
+
+    summary = parity_speed._timing_summary(samples)
+
+    assert summary["timing_trials"] == 3
+    assert summary["p50_s"] == 1.0
+    assert summary["p95_s"] == 2.0
+    assert summary["p95_trials_s"][1] > 50.0
+    assert summary["sample_trials_s"] == samples
+    assert summary["timing_aggregation"] == "median-of-trial-percentiles"
 
 
 def test_single_thread_policy_sets_and_forwards_caps(monkeypatch) -> None:
@@ -344,6 +370,15 @@ def test_speed_artifact_records_thread_metadata() -> None:
         speedup_p95=2.0,
         raw_passed=True,
         passed=True,
+        timing_trials=3,
+        rust_sample_trials_s=[[1.0], [1.0], [1.0]],
+        rust_p50_trials_s=[1.0, 1.0, 1.0],
+        rust_p95_trials_s=[1.0, 1.0, 1.0],
+        legacy_sample_trials_s=[[2.0], [2.0], [2.0]],
+        legacy_p50_trials_s=[2.0, 2.0, 2.0],
+        legacy_p95_trials_s=[2.0, 2.0, 2.0],
+        speedup_p50_trials=[2.0, 2.0, 2.0],
+        speedup_p95_trials=[2.0, 2.0, 2.0],
         thread_mode="single",
         thread_env=_threading.SINGLE_THREAD_ENV.copy(),
         cold_thread_mode="native",
@@ -352,11 +387,17 @@ def test_speed_artifact_records_thread_metadata() -> None:
 
     artifact = parity_speed.to_json([result])
 
+    assert artifact["canonical_speed_trials"] == parity_speed.CANONICAL_SPEED_TRIALS
+    assert artifact["timing_aggregation"] == "median-of-trial-percentiles"
     assert artifact["thread_mode"] == "single"
     assert artifact["thread_env"]["RAYON_NUM_THREADS"] == "1"
     assert artifact["cold_thread_mode"] == "native"
     assert artifact["lanes"][0]["name"] == "small-n"
     assert artifact["lanes"][0]["enforced"] is True
+    assert artifact["lanes"][0]["timing_trials"] == [3]
+    assert "single-trial" in artifact["timing_policy"]
+    assert artifact["apis"][0]["rust_sample_trials_s"] == [[1.0], [1.0], [1.0]]
+    assert artifact["apis"][0]["legacy_p95_trials_s"] == [2.0, 2.0, 2.0]
     assert "large-n" in artifact["lane_policy"]
     assert "multi-thread" in artifact["thread_policy"]
 
@@ -416,7 +457,7 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
     cache_path.write_text("""
         {
           "schema_version": 1,
-          "process_version": "rm-p1-019a-shaped-lanes-v1",
+          "process_version": "rm-p1-020-built-in-speed-trials-v1",
           "created_at": "2026-05-05T00:00:00+00:00",
           "updated_at": "2026-05-05T00:00:00+00:00",
           "legacy_identity": {

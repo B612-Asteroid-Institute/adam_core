@@ -68,13 +68,10 @@ macOS. Rust-only single-thread regression detection lives in
 `pdm run rust-latency-gate`, where there is no legacy comparison and capped
 Rayon gives a stable baseline.
 
-The `tiny-n`, `small-n`, and `large-n` speed lanes are enforced by default at
-1.2× p50/p95 for public/orchestration Rust-default APIs. Raw-kernel-only APIs
-are still timed in the same artifacts, but their speed rows are labeled `DIAG`
-and do not affect gate pass/fail because they are not public-dispatch promotion
-gates. Large-workload misses stay red under RM-P1-020 unless the user makes an
-explicit structural-acceptance decision; `--speed-large-diagnostic` is only for
-ad-hoc local probes.
+Detailed speed-lane enforcement, tiny-n p95 policy, raw-kernel diagnostic
+status, and built-in timing-trial aggregation are governed in
+[`migration/benchmark_governance.md`](../benchmark_governance.md). The speed
+artifacts repeat the active policy as machine-readable metadata.
 
 Refresh the serialized baseline-main timing cache once after adding benchmark
 APIs, changing workload shapes, changing reps/warmup/thread policy, or updating
@@ -188,6 +185,8 @@ The cold/warm review gate intentionally uses more warm timing samples than the
 quick warm-only command. The tiny lane uses 101 reps because microsecond-scale
 p95 is otherwise dominated by a single scheduler outlier; the historical small
 lane uses 21 reps, while large workloads are millisecond-scale and keep 7 reps.
+Those repetitions are per trial; the built-in serial trial aggregation is always
+applied on top of them for canonical pass/fail evidence.
 
 ## Pretty-Printing Review Tables
 

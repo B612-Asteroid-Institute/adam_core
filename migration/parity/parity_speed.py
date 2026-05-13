@@ -7,7 +7,11 @@ historical small-n lane keeps the standard 1.2x promotion threshold; tiny-n and
 large-n are enforced at the same 1.2x threshold.
 
 Each timing loop runs ``reps`` repetitions inside its respective process so
-subprocess invocation overhead is excluded from the legacy measurements.
+subprocess invocation overhead is excluded from the legacy measurements. The
+canonical gate repeats every warm timing loop across a fixed source-governed
+number of serial trials and gates on the median of the per-trial p50/p95 values;
+there is intentionally no CLI flag to downgrade the canonical command back to
+single-trial evidence.
 
 Warm p50/p95 comparisons default to ``multi-thread`` mode on both sides:
 Rust Rayon and the legacy NumPy/JAX/XLA/BLAS pools both run uncapped, so the
@@ -65,8 +69,10 @@ DEFAULT_LARGE_SPEEDUP = 1.2
 DEFAULT_LEGACY_CACHE_PATH = Path(
     "migration/artifacts/parity_legacy_speed_baseline.json"
 )
+CANONICAL_SPEED_TRIALS = 3
+SPEED_TIMING_AGGREGATION = "median-of-trial-percentiles"
 LEGACY_TIMING_CACHE_SCHEMA_VERSION = 1
-LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-019a-shaped-lanes-v1"
+LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-020-built-in-speed-trials-v1"
 LEGACY_REPO_ROOT = Path("/Users/aleck/Code/adam-core")
 LEGACY_RELEVANT_UNTRACKED_PREFIXES = (
     "src/",
@@ -199,6 +205,51 @@ def _time_rust(api_id: str, kwargs: dict, *, reps: int, warmup: int) -> list[flo
         _rust_runner.run(api_id, **kwargs)
         samples.append(time.perf_counter() - t0)
     return samples
+
+
+def _time_rust_trials(
+    api_id: str,
+    kwargs: dict,
+    *,
+    reps: int,
+    warmup: int,
+    trials: int = CANONICAL_SPEED_TRIALS,
+) -> list[list[float]]:
+    if trials < 1:
+        raise ValueError("trials must be >= 1")
+    return [_time_rust(api_id, kwargs, reps=reps, warmup=warmup) for _ in range(trials)]
+
+
+def _median(values: Sequence[float]) -> float:
+    if not values:
+        return float("inf")
+    import numpy as np
+
+    return float(np.median(np.asarray(values, dtype=np.float64)))
+
+
+def _timing_summary(sample_trials: Sequence[Sequence[float]]) -> dict[str, object]:
+    trials = [[float(value) for value in trial] for trial in sample_trials]
+    p50_trials = [_percentile(trial, 50) for trial in trials]
+    p95_trials = [_percentile(trial, 95) for trial in trials]
+    return {
+        "p50_s": _median(p50_trials),
+        "p95_s": _median(p95_trials),
+        "p50_trials_s": p50_trials,
+        "p95_trials_s": p95_trials,
+        "sample_trials_s": trials,
+        "timing_trials": len(trials),
+        "timing_aggregation": SPEED_TIMING_AGGREGATION,
+    }
+
+
+def _speedup_trials(
+    legacy_trials: Sequence[float], rust_trials: Sequence[float]
+) -> list[float]:
+    return [
+        legacy / rust if rust > 0 else float("inf")
+        for legacy, rust in zip(legacy_trials, rust_trials)
+    ]
 
 
 def _utc_now() -> str:
@@ -422,6 +473,7 @@ def _legacy_cache_fields(
     thread_mode: str,
     reps: int | None = None,
     warmup: int | None = None,
+    timing_trials: int | None = None,
 ) -> dict[str, object]:
     fields: dict[str, object] = {
         "kind": kind,
@@ -436,6 +488,8 @@ def _legacy_cache_fields(
         fields["reps"] = reps
     if warmup is not None:
         fields["warmup"] = warmup
+    if timing_trials is not None:
+        fields["timing_trials"] = timing_trials
     return fields
 
 
@@ -602,6 +656,92 @@ def _time_legacy_warm(
     return samples, "refreshed", key
 
 
+def _time_legacy_warm_trials(
+    api_id: str,
+    kwargs: dict[str, Any],
+    *,
+    reps: int,
+    warmup: int,
+    seed: int,
+    thread_mode: str,
+    lane: str,
+    workload_shape: Mapping[str, object],
+    workload_label: str,
+    legacy_cache: dict[str, object] | None,
+    trials: int = CANONICAL_SPEED_TRIALS,
+) -> tuple[list[list[float]], str, str]:
+    from . import _oracle
+
+    if trials < 1:
+        raise ValueError("trials must be >= 1")
+
+    if legacy_cache is None:
+        return (
+            [
+                _oracle.time_legacy(
+                    api_id,
+                    reps=reps,
+                    warmup=warmup,
+                    thread_mode=thread_mode,
+                    **kwargs,
+                )
+                for _ in range(trials)
+            ],
+            "measured",
+            "",
+        )
+
+    fields = _legacy_cache_fields(
+        kind="warm",
+        api_id=api_id,
+        lane=lane,
+        workload_shape=workload_shape,
+        seed=seed,
+        thread_mode=thread_mode,
+        reps=reps,
+        warmup=warmup,
+        timing_trials=trials,
+    )
+    key = _hash_json(fields)
+    entry = _cached_entry(legacy_cache, "warm", key, fields)
+    if entry is not None:
+        return (
+            [[float(value) for value in trial] for trial in entry["sample_trials_s"]],
+            "cache",
+            key,
+        )
+    if not bool(legacy_cache["refresh"]):
+        raise KeyError(_cache_miss_message(api_id, lane, workload_label, key))
+
+    sample_trials = [
+        _oracle.time_legacy(
+            api_id,
+            reps=reps,
+            warmup=warmup,
+            thread_mode=thread_mode,
+            **kwargs,
+        )
+        for _ in range(trials)
+    ]
+    summary = _timing_summary(sample_trials)
+    _write_cache_entry(
+        legacy_cache,
+        "warm",
+        key,
+        {
+            "key_fields": fields,
+            "sample_trials_s": summary["sample_trials_s"],
+            "p50_trials_s": summary["p50_trials_s"],
+            "p95_trials_s": summary["p95_trials_s"],
+            "p50_s": summary["p50_s"],
+            "p95_s": summary["p95_s"],
+            "timing_aggregation": summary["timing_aggregation"],
+            "captured_at": _utc_now(),
+        },
+    )
+    return sample_trials, "refreshed", key
+
+
 def _time_legacy_cold(
     api_id: str,
     kwargs: dict[str, Any],
@@ -645,6 +785,72 @@ def _time_legacy_cold(
         {"key_fields": fields, "elapsed_s": elapsed, "captured_at": _utc_now()},
     )
     return elapsed, "refreshed", key
+
+
+def _time_legacy_cold_trials(
+    api_id: str,
+    kwargs: dict[str, Any],
+    *,
+    seed: int,
+    cold_thread_mode: str,
+    lane: str,
+    workload_shape: Mapping[str, object],
+    workload_label: str,
+    legacy_cache: dict[str, object] | None,
+    trials: int = CANONICAL_SPEED_TRIALS,
+) -> tuple[list[float], str, str]:
+    from . import _oracle
+
+    if trials < 1:
+        raise ValueError("trials must be >= 1")
+
+    if legacy_cache is None:
+        return (
+            [
+                _oracle.time_legacy_cold(
+                    api_id,
+                    thread_mode=cold_thread_mode,
+                    **kwargs,
+                )
+                for _ in range(trials)
+            ],
+            "measured",
+            "",
+        )
+
+    fields = _legacy_cache_fields(
+        kind="cold",
+        api_id=api_id,
+        lane=lane,
+        workload_shape=workload_shape,
+        seed=seed,
+        thread_mode=cold_thread_mode,
+        timing_trials=trials,
+    )
+    key = _hash_json(fields)
+    entry = _cached_entry(legacy_cache, "cold", key, fields)
+    if entry is not None:
+        return [float(value) for value in entry["elapsed_trials_s"]], "cache", key
+    if not bool(legacy_cache["refresh"]):
+        raise KeyError(_cache_miss_message(api_id, lane, workload_label, key))
+
+    elapsed_trials = [
+        _oracle.time_legacy_cold(api_id, thread_mode=cold_thread_mode, **kwargs)
+        for _ in range(trials)
+    ]
+    _write_cache_entry(
+        legacy_cache,
+        "cold",
+        key,
+        {
+            "key_fields": fields,
+            "elapsed_trials_s": elapsed_trials,
+            "elapsed_s": _median(elapsed_trials),
+            "timing_aggregation": "median-of-cold-trials",
+            "captured_at": _utc_now(),
+        },
+    )
+    return elapsed_trials, "refreshed", key
 
 
 def write_legacy_timing_cache(context: Mapping[str, object] | None) -> None:
@@ -753,6 +959,16 @@ class SpeedResult:
     workload_label: str = ""
     reps: int = 7
     warmup: int = 1
+    timing_trials: int = CANONICAL_SPEED_TRIALS
+    timing_aggregation: str = SPEED_TIMING_AGGREGATION
+    rust_sample_trials_s: list[list[float]] = field(default_factory=list)
+    rust_p50_trials_s: list[float] = field(default_factory=list)
+    rust_p95_trials_s: list[float] = field(default_factory=list)
+    legacy_sample_trials_s: list[list[float]] = field(default_factory=list)
+    legacy_p50_trials_s: list[float] = field(default_factory=list)
+    legacy_p95_trials_s: list[float] = field(default_factory=list)
+    speedup_p50_trials: list[float] = field(default_factory=list)
+    speedup_p95_trials: list[float] = field(default_factory=list)
     # Warm p50/p95 thread metadata.
     thread_mode: str = "multi-thread"
     thread_env: dict[str, str | None] = field(default_factory=dict)
@@ -766,6 +982,8 @@ class SpeedResult:
     cold_thread_env: dict[str, str | None] = field(default_factory=dict)
     legacy_cold_source: str = "not-measured"
     legacy_cold_cache_key: str = ""
+    rust_cold_trials_s: list[float] = field(default_factory=list)
+    legacy_cold_trials_s: list[float] = field(default_factory=list)
 
 
 def _passes(
@@ -894,8 +1112,13 @@ def measure(
         )
 
     try:
-        rust_times = _time_rust(api_id, sample.rust_kwargs, reps=reps, warmup=warmup)
-        legacy_times, legacy_source, legacy_cache_key = _time_legacy_warm(
+        rust_trials = _time_rust_trials(
+            api_id,
+            sample.rust_kwargs,
+            reps=reps,
+            warmup=warmup,
+        )
+        legacy_trials, legacy_source, legacy_cache_key = _time_legacy_warm_trials(
             api_id,
             sample.legacy_kwargs,
             reps=reps,
@@ -927,10 +1150,12 @@ def measure(
             cold_thread_env=cold_thread_env,
         )
 
-    rust_p50 = _percentile(rust_times, 50)
-    rust_p95 = _percentile(rust_times, 95)
-    legacy_p50 = _percentile(legacy_times, 50)
-    legacy_p95 = _percentile(legacy_times, 95)
+    rust_summary = _timing_summary(rust_trials)
+    legacy_summary = _timing_summary(legacy_trials)
+    rust_p50 = float(rust_summary["p50_s"])
+    rust_p95 = float(rust_summary["p95_s"])
+    legacy_p50 = float(legacy_summary["p50_s"])
+    legacy_p95 = float(legacy_summary["p95_s"])
     raw_passed, s50, s95 = _passes(
         legacy_p50,
         legacy_p95,
@@ -939,33 +1164,50 @@ def measure(
         min_speedup_p50=min_speedup_p50,
         min_speedup_p95=min_speedup_p95,
     )
+    speedup_p50_trials = _speedup_trials(
+        legacy_summary["p50_trials_s"], rust_summary["p50_trials_s"]
+    )
+    speedup_p95_trials = _speedup_trials(
+        legacy_summary["p95_trials_s"], rust_summary["p95_trials_s"]
+    )
     waivers = _perf_waivers_by_api_lane()
     waiver = waivers.get((api_id, lane)) or waivers.get((api_id, "*"), "")
     waived = bool(waiver and not raw_passed)
     passed = raw_passed or waived
 
     rust_cold = legacy_cold = speedup_cold = None
+    rust_cold_trials: list[float] = []
+    legacy_cold_trials: list[float] = []
     legacy_cold_source = "not-measured"
     legacy_cold_cache_key = ""
     if measure_cold:
         try:
-            rust_cold = _oracle.time_rust_cold(
-                api_id, thread_mode=cold_thread_mode, **sample.rust_kwargs
+            rust_cold_trials = [
+                _oracle.time_rust_cold(
+                    api_id, thread_mode=cold_thread_mode, **sample.rust_kwargs
+                )
+                for _ in range(CANONICAL_SPEED_TRIALS)
+            ]
+            legacy_cold_trials, legacy_cold_source, legacy_cold_cache_key = (
+                _time_legacy_cold_trials(
+                    api_id,
+                    sample.legacy_kwargs,
+                    seed=seed,
+                    cold_thread_mode=cold_thread_mode,
+                    lane=lane,
+                    workload_shape=workload_shape,
+                    workload_label=workload_label,
+                    legacy_cache=legacy_cache,
+                )
             )
-            legacy_cold, legacy_cold_source, legacy_cold_cache_key = _time_legacy_cold(
-                api_id,
-                sample.legacy_kwargs,
-                seed=seed,
-                cold_thread_mode=cold_thread_mode,
-                lane=lane,
-                workload_shape=workload_shape,
-                workload_label=workload_label,
-                legacy_cache=legacy_cache,
-            )
+            rust_cold = _median(rust_cold_trials)
+            legacy_cold = _median(legacy_cold_trials)
             speedup_cold = legacy_cold / rust_cold if rust_cold > 0 else float("inf")
         except Exception as e:
             # Cold timing failure shouldn't fail the gate — record and move on.
             rust_cold = legacy_cold = speedup_cold = None
+            rust_cold_trials = []
+            legacy_cold_trials = []
             print(f"  [cold-time error for {api_id} ({lane}): {e}]", file=sys.stderr)
 
     return SpeedResult(
@@ -991,6 +1233,16 @@ def measure(
         workload_label=workload_label,
         reps=reps,
         warmup=warmup,
+        timing_trials=CANONICAL_SPEED_TRIALS,
+        timing_aggregation=SPEED_TIMING_AGGREGATION,
+        rust_sample_trials_s=rust_summary["sample_trials_s"],
+        rust_p50_trials_s=rust_summary["p50_trials_s"],
+        rust_p95_trials_s=rust_summary["p95_trials_s"],
+        legacy_sample_trials_s=legacy_summary["sample_trials_s"],
+        legacy_p50_trials_s=legacy_summary["p50_trials_s"],
+        legacy_p95_trials_s=legacy_summary["p95_trials_s"],
+        speedup_p50_trials=speedup_p50_trials,
+        speedup_p95_trials=speedup_p95_trials,
         thread_mode=thread_mode,
         thread_env=thread_env,
         legacy_source=legacy_source,
@@ -1002,6 +1254,8 @@ def measure(
         cold_thread_env=cold_thread_env,
         legacy_cold_source=legacy_cold_source,
         legacy_cold_cache_key=legacy_cold_cache_key,
+        rust_cold_trials_s=rust_cold_trials,
+        legacy_cold_trials_s=legacy_cold_trials,
     )
 
 
@@ -1203,8 +1457,17 @@ def format_summary(results: list[SpeedResult]) -> str:
     has_cold = any(r.rust_cold is not None for r in results)
     warm_mode = _result_mode(results, "thread_mode", "multi-thread")
     cold_mode = _result_mode(results, "cold_thread_mode", "multi-thread")
+    trial_counts = sorted({r.timing_trials for r in results}) or [
+        CANONICAL_SPEED_TRIALS
+    ]
+    trial_label = (
+        str(trial_counts[0])
+        if len(trial_counts) == 1
+        else "/".join(map(str, trial_counts))
+    )
     lines = [
         f"Thread mode: warm={warm_mode}; cold={cold_mode if has_cold else 'not measured'}",
+        f"Timing aggregation: {SPEED_TIMING_AGGREGATION} over {trial_label} built-in serial trial(s).",
         "Note: multi-thread mode lets both Rust Rayon and legacy NumPy/JAX/XLA/BLAS scale across cores; single-thread is a diagnostic and is asymmetric on macOS Apple Silicon (legacy JAX/XLA cannot be reliably capped).",
     ]
     if has_cold:
@@ -1271,6 +1534,8 @@ def _lane_metadata(results: list[SpeedResult]) -> list[dict[str, object]]:
                 "diagnostic_api_count": diagnostic_count,
                 "reps": sorted({r.reps for r in lane_results}),
                 "warmup": sorted({r.warmup for r in lane_results}),
+                "timing_trials": sorted({r.timing_trials for r in lane_results}),
+                "timing_aggregation": lane.timing_aggregation,
                 "measure_cold": any(r.rust_cold is not None for r in lane_results),
                 "min_speedup_p50": lane.min_speedup_p50,
                 "min_speedup_p95": lane.min_speedup_p95,
@@ -1312,10 +1577,20 @@ def to_json(
         "default_small_speedup": DEFAULT_SMALL_SPEEDUP,
         "default_large_speedup": DEFAULT_LARGE_SPEEDUP,
         "default_tiny_speedup": DEFAULT_TINY_SPEEDUP,
+        "canonical_speed_trials": CANONICAL_SPEED_TRIALS,
+        "timing_aggregation": SPEED_TIMING_AGGREGATION,
         "thread_mode": _result_mode(results, "thread_mode", "multi-thread"),
         "thread_env": _result_env(results, "thread_env"),
         "cold_thread_mode": _result_mode(results, "cold_thread_mode", "multi-thread"),
         "cold_thread_env": _result_env(results, "cold_thread_env"),
+        "timing_policy": (
+            f"Canonical parity speed timings run {CANONICAL_SPEED_TRIALS} "
+            "serial trials per API/lane and gate on the median of per-trial "
+            "p50/p95 estimates. Raw sample trials and per-trial percentiles "
+            "are preserved in each row. Trial count is source-governed rather "
+            "than a CLI flag so standard commands cannot silently downgrade to "
+            "single-trial evidence."
+        ),
         "thread_policy": (
             "Warm p50/p95 timings default to multi-thread on both sides so "
             "Rust Rayon and the legacy NumPy/JAX/XLA/BLAS pools both run "
@@ -1354,6 +1629,16 @@ def to_json(
                 "n": r.n,
                 "reps": r.reps,
                 "warmup": r.warmup,
+                "timing_trials": r.timing_trials,
+                "timing_aggregation": r.timing_aggregation,
+                "rust_sample_trials_s": r.rust_sample_trials_s,
+                "rust_p50_trials_s": r.rust_p50_trials_s,
+                "rust_p95_trials_s": r.rust_p95_trials_s,
+                "legacy_sample_trials_s": r.legacy_sample_trials_s,
+                "legacy_p50_trials_s": r.legacy_p50_trials_s,
+                "legacy_p95_trials_s": r.legacy_p95_trials_s,
+                "speedup_p50_trials": r.speedup_p50_trials,
+                "speedup_p95_trials": r.speedup_p95_trials,
                 "rust_p50_s": r.rust_p50,
                 "rust_p95_s": r.rust_p95,
                 "legacy_p50_s": r.legacy_p50,
@@ -1373,6 +1658,8 @@ def to_json(
                 "legacy_cold_s": r.legacy_cold,
                 "legacy_cold_source": r.legacy_cold_source,
                 "legacy_cold_cache_key": r.legacy_cold_cache_key,
+                "rust_cold_trials_s": r.rust_cold_trials_s,
+                "legacy_cold_trials_s": r.legacy_cold_trials_s,
                 "speedup_cold": r.speedup_cold,
             }
             for r in results

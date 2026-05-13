@@ -19,7 +19,9 @@ Modes
 
 Parity checks are intentionally NOT performed here. Use the dedicated
 parity tests (`src/adam_core/*/tests/test_rust_*_parity.py`) for
-correctness validation; this script is strictly a performance gate.
+correctness validation; this script is strictly a performance gate. The timing
+trial count is a source-governed constant, not a CLI flag, so canonical latency
+runs cannot silently downgrade to single-trial evidence.
 """
 
 from __future__ import annotations
@@ -36,8 +38,8 @@ if __package__ in {None, ""}:
 
 from migration.parity import _threading
 
-
 DEFAULT_THREAD_MODE = "single"
+CANONICAL_LATENCY_TRIALS = 3
 
 
 def _thread_mode_from_argv(argv: list[str]) -> str:
@@ -97,7 +99,7 @@ def _timed_once(fn: Callable[[], Any], repeats: int) -> tuple[np.ndarray, Any]:
 
 
 def _timed_runs(
-    fn: Callable[[], Any], repeats: int, trials: int = 1
+    fn: Callable[[], Any], repeats: int, trials: int = CANONICAL_LATENCY_TRIALS
 ) -> tuple[np.ndarray, Any]:
     if trials < 1:
         raise ValueError("trials must be >= 1.")
@@ -115,6 +117,7 @@ def _latency_summary(rust_times: np.ndarray) -> dict[str, Any]:
     trial_p50 = np.percentile(samples, 50, axis=1)
     trial_p95 = np.percentile(samples, 95, axis=1)
     return {
+        "latency_trials": int(samples.shape[0]),
         "rust_seconds_p50": float(np.median(trial_p50)),
         "rust_seconds_p95": float(np.median(trial_p95)),
         "rust_seconds_p50_trials": trial_p50.tolist(),
@@ -456,7 +459,9 @@ def _build_ephemeris_cov_inputs(n_orbits: int, n_times: int):
 # ---------- measurement orchestration ---------------------------------------
 
 
-def _run_measurements(repeats: int, trials: int = 1) -> dict[str, dict[str, Any]]:
+def _run_measurements(
+    repeats: int, trials: int = CANONICAL_LATENCY_TRIALS
+) -> dict[str, dict[str, Any]]:
     coords = _build_cartesian(120_000)
     geodetic_coords = _build_geodetic_cartesian(120_000, GEODETIC_A, GEODETIC_F)
     keplerian_t0 = np.ascontiguousarray(
@@ -807,18 +812,9 @@ def _compare_to_baseline(
     return failures
 
 
-def main() -> None:
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repeats", type=int, default=7)
-    parser.add_argument(
-        "--trials",
-        type=int,
-        default=3,
-        help=(
-            "Independent timing trials per API (default: 3). The gate compares "
-            "median-of-trial p50/p95 values while preserving every raw sample."
-        ),
-    )
     parser.add_argument(
         "--capture-baseline",
         action="store_true",
@@ -850,17 +846,24 @@ def main() -> None:
             "separate, explicitly labeled baseline/output path."
         ),
     )
+    return parser
+
+
+def main() -> None:
+    parser = _build_arg_parser()
     args = parser.parse_args()
 
     thread_env = _threading.apply_thread_mode(args.threads)
     _check_coverage()
 
     print(
-        f"Measuring Rust-only latency ({args.trials} trials × {args.repeats} repeats, "
-        f"threads={args.threads})..."
+        f"Measuring Rust-only latency ({CANONICAL_LATENCY_TRIALS} trials × "
+        f"{args.repeats} repeats, threads={args.threads})..."
     )
     current = _annotate_latency_summaries(
-        _run_measurements(args.repeats, args.trials), args.threads, thread_env
+        _run_measurements(args.repeats, CANONICAL_LATENCY_TRIALS),
+        args.threads,
+        thread_env,
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

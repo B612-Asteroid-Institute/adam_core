@@ -351,11 +351,21 @@ def _format_speed_metadata(metadata: dict[str, Any]) -> str:
     warm = metadata.get("thread_mode", "unknown")
     cold = metadata.get("cold_thread_mode", "unknown")
     thread_policy = metadata.get("thread_policy")
+    timing_policy = metadata.get("timing_policy")
     lane_policy = metadata.get("lane_policy")
+    trials = metadata.get("canonical_speed_trials")
+    aggregation = metadata.get("timing_aggregation")
+    trial_text = (
+        f" Built-in speed trials: `{trials}` using `{aggregation}`."
+        if trials and aggregation
+        else ""
+    )
     lines = [
-        f"**Thread mode**: warm p50/p95 `{warm}`; cold `{cold}`.",
+        f"**Thread mode**: warm p50/p95 `{warm}`; cold `{cold}`.{trial_text}",
         "Single-thread mode caps thread pools only; SIMD/ILP remain enabled within each CPU core.",
     ]
+    if timing_policy:
+        lines.append(f"Timing policy: {timing_policy}")
     if thread_policy:
         lines.append(f"Thread policy: {thread_policy}")
     if lane_policy:
@@ -407,8 +417,11 @@ def _format_speed_metadata(metadata: dict[str, Any]) -> str:
                 size = ", ".join(str(n) for n in n_values)
             else:
                 size = str(lane.get("n", "unknown"))
+            trials = lane.get("timing_trials") or "—"
+            aggregation = lane.get("timing_aggregation") or "—"
             lines.append(
-                f"- `{name}` ({enforced}): n={size}; {lane.get('description', '')}"
+                f"- `{name}` ({enforced}): n={size}; trials={trials}; "
+                f"aggregation={aggregation}; {lane.get('description', '')}"
             )
     return "\n".join(lines)
 
