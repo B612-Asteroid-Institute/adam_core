@@ -371,6 +371,7 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
@@ -414,14 +415,11 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.dynamics.ephemeris</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">ray</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObjectRef</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">generate_ephemeris_2body_numpy</span> <span class="k">as</span> <span class="n">rust_generate_ephemeris_2body_numpy</span><span class="p">,</span>
@@ -435,12 +433,12 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..observers.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..photometry.magnitude</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">calculate_apparent_magnitude_v</span><span class="p">,</span>
     <span class="n">calculate_apparent_magnitude_v_and_phase_angle</span><span class="p">,</span>
     <span class="n">calculate_phase_angle</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..ray_cluster</span><span class="w"> </span><span class="kn">import</span> <span class="n">initialize_use_ray</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsNumericalError</span>
 
@@ -503,8 +501,7 @@
     <span class="p">)</span>
 
 
-<span class="nd">@ray</span><span class="o">.</span><span class="n">remote</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">ephemeris_2body_worker_ray</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_ephemeris_2body_chunk_worker</span><span class="p">(</span>
     <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">idx_chunk</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">propagated_orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
@@ -593,47 +590,36 @@
 <span class="sd">    ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (N)</span>
 <span class="sd">        Topocentric ephemerides for each propagated orbit as observed by the given observers.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">max_processes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">max_processes</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span>
-
-    <span class="k">if</span> <span class="n">max_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">initialize_use_ray</span><span class="p">(</span><span class="n">num_cpus</span><span class="o">=</span><span class="n">max_processes</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
 
         <span class="n">num_entries</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">)</span> <span class="o">==</span> <span class="n">num_entries</span>
 
-        <span class="n">propagated_ref</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">)</span>  <span class="c1"># type: ignore[name-defined]</span>
-        <span class="n">observers_ref</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>  <span class="c1"># type: ignore[name-defined]</span>
+        <span class="n">propagated_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">)</span>
+        <span class="n">observers_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>
 
         <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_entries</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="n">pending</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="s2">&quot;ObjectRef&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># type: ignore[name-defined]</span>
-        <span class="n">results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Ephemeris</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-
-        <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-            <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
-            <span class="n">pending</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">ephemeris_2body_worker_ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>  <span class="c1"># type: ignore[name-defined]</span>
-                    <span class="n">start</span><span class="p">,</span>
-                    <span class="n">idx_chunk</span><span class="p">,</span>
-                    <span class="n">propagated_ref</span><span class="p">,</span>
-                    <span class="n">observers_ref</span><span class="p">,</span>
-                    <span class="n">lt_tol</span><span class="p">,</span>
-                    <span class="n">max_iter</span><span class="p">,</span>
-                    <span class="n">tol</span><span class="p">,</span>
-                    <span class="n">stellar_aberration</span><span class="p">,</span>
-                    <span class="n">predict_magnitudes</span><span class="p">,</span>
-                    <span class="n">predict_phase_angle</span><span class="p">,</span>
-                <span class="p">)</span>
+        <span class="n">args_iter</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span>
+                <span class="nb">int</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="n">idx_chunk</span><span class="p">,</span>
+                <span class="n">propagated_ref</span><span class="p">,</span>
+                <span class="n">observers_ref</span><span class="p">,</span>
+                <span class="n">lt_tol</span><span class="p">,</span>
+                <span class="n">max_iter</span><span class="p">,</span>
+                <span class="n">tol</span><span class="p">,</span>
+                <span class="n">stellar_aberration</span><span class="p">,</span>
+                <span class="n">predict_magnitudes</span><span class="p">,</span>
+                <span class="n">predict_phase_angle</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+        <span class="p">)</span>
 
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pending</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">max_processes</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">:</span>
-                <span class="n">finished</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">pending</span><span class="p">,</span> <span class="n">num_returns</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># type: ignore[name-defined]</span>
-                <span class="n">start_i</span><span class="p">,</span> <span class="n">eph_i</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">finished</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>  <span class="c1"># type: ignore[name-defined]</span>
-                <span class="n">results</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">start_i</span><span class="p">)]</span> <span class="o">=</span> <span class="n">eph_i</span>
-
-        <span class="k">while</span> <span class="n">pending</span><span class="p">:</span>
-            <span class="n">finished</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">pending</span><span class="p">,</span> <span class="n">num_returns</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># type: ignore[name-defined]</span>
-            <span class="n">start_i</span><span class="p">,</span> <span class="n">eph_i</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">finished</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>  <span class="c1"># type: ignore[name-defined]</span>
+        <span class="n">results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Ephemeris</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">start_i</span><span class="p">,</span> <span class="n">eph_i</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
+            <span class="n">_ephemeris_2body_chunk_worker</span><span class="p">,</span> <span class="n">args_iter</span>
+        <span class="p">):</span>
             <span class="n">results</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">start_i</span><span class="p">)]</span> <span class="o">=</span> <span class="n">eph_i</span>
 
         <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">results</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">keys</span><span class="p">())]</span>
@@ -948,7 +934,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-06</div>
+              Last updated on 2026-05-13</div>
           </div>
           <div class="right-details">
             

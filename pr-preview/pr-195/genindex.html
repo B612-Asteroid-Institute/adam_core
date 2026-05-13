@@ -370,6 +370,7 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
@@ -902,8 +903,6 @@
           <li><a href="reference/api/adam_core.orbits.orbits.html#module-adam_core.orbits.orbits">module</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li>
     adam_core.orbits.physical_parameters
 
@@ -911,6 +910,8 @@
           <li><a href="reference/api/adam_core.orbits.physical_parameters.html#module-adam_core.orbits.physical_parameters">module</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li>
     adam_core.orbits.plots
 
@@ -965,6 +966,13 @@
 
         <ul>
           <li><a href="reference/api/adam_core.orbits.variants.html#module-adam_core.orbits.variants">module</a>
+</li>
+        </ul></li>
+        <li>
+    adam_core.parallel
+
+        <ul>
+          <li><a href="reference/api/adam_core.parallel.html#module-adam_core.parallel">module</a>
 </li>
         </ul></li>
         <li>
@@ -2088,14 +2096,22 @@
         </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.TelescopeObsContext.fRatio">fRatio (adam_core.observations.ades.TelescopeObsContext attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.free">free() (adam_core.parallel.ParallelBackend method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.free">(adam_core.parallel.RayBackend method)</a>
+</li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.free">(adam_core.parallel.SequentialBackend method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.from_astropy">from_astropy() (adam_core.time.time.Timestamp class method)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.time.html#adam_core.time.Timestamp.from_astropy">(adam_core.time.Timestamp class method)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.coordinates.cometary.html#adam_core.coordinates.cometary.CometaryCoordinates.from_cartesian">from_cartesian() (adam_core.coordinates.cometary.CometaryCoordinates class method)</a>
 
         <ul>
@@ -2220,8 +2236,20 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.geoEcc">geoEcc (adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.get_backend">get_backend() (in module adam_core.utils.spice_backend)</a>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.get">get() (adam_core.parallel.ParallelBackend method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.get">(adam_core.parallel.RayBackend method)</a>
 </li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.get">(adam_core.parallel.SequentialBackend method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.get_backend">get_backend() (in module adam_core.parallel)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.get_backend">(in module adam_core.utils.spice_backend)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.get_integrals">get_integrals() (in module adam_core.photometry.bandpasses)</a>
 
         <ul>
@@ -2230,6 +2258,8 @@
         </ul></li>
         <li><a href="reference/api/adam_core.utils.plots.logos.html#adam_core.utils.plots.logos.get_logo_base64">get_logo_base64() (in module adam_core.utils.plots.logos)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observers.state.html#adam_core.observers.state.get_mpc_observer_state">get_mpc_observer_state() (in module adam_core.observers.state)</a>
 </li>
         <li><a href="reference/api/adam_core.observers.html#adam_core.observers.get_observer_state">get_observer_state() (in module adam_core.observers)</a>
@@ -2238,8 +2268,6 @@
           <li><a href="reference/api/adam_core.observers.state.html#adam_core.observers.state.get_observer_state">(in module adam_core.observers.state)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.utils.html#adam_core.utils.get_perturber_state">get_perturber_state() (in module adam_core.utils)</a>
 
         <ul>
@@ -2368,12 +2396,12 @@
 </li>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactProbabilities.impacts">impacts (adam_core.dynamics.impacts.ImpactProbabilities attribute)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.impFlag">impFlag (adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.inc">inc (adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.KeplerTranslation.inclination">inclination (adam_core.orbits.openspace.translation.KeplerTranslation attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.variants.html#adam_core.coordinates.variants.VariantCoordinatesTable.index">index (adam_core.coordinates.variants.VariantCoordinatesTable property)</a>
@@ -2400,6 +2428,14 @@
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.is_all_nan">is_all_nan() (adam_core.coordinates.covariances.CoordinateCovariances method)</a>
 </li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.is_ref">is_ref() (adam_core.parallel.ParallelBackend method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.is_ref">(adam_core.parallel.RayBackend method)</a>
+</li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.is_ref">(adam_core.parallel.SequentialBackend method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.observers.html#adam_core.observers.Observers.iterate_codes">iterate_codes() (adam_core.observers.Observers method)</a>
 
         <ul>
@@ -2660,6 +2696,14 @@
           <li><a href="reference/api/adam_core.photometry.bandpasses.api.html#adam_core.photometry.bandpasses.api.map_to_canonical_filter_bands">(in module adam_core.photometry.bandpasses.api)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.map_unordered">map_unordered() (adam_core.parallel.ParallelBackend method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.map_unordered">(adam_core.parallel.RayBackend method)</a>
+</li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.map_unordered">(adam_core.parallel.SequentialBackend method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginCodes.MARS">MARS (adam_core.coordinates.origin.OriginCodes attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginCodes.MARS_BARYCENTER">MARS_BARYCENTER (adam_core.coordinates.origin.OriginCodes attribute)</a>
@@ -2882,6 +2926,8 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#module-adam_core.orbits.variants">adam_core.orbits.variants</a>
 </li>
+          <li><a href="reference/api/adam_core.parallel.html#module-adam_core.parallel">adam_core.parallel</a>
+</li>
           <li><a href="reference/api/adam_core.photometry.html#module-adam_core.photometry">adam_core.photometry</a>
 </li>
           <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#module-adam_core.photometry.absolute_magnitude">adam_core.photometry.absolute_magnitude</a>
@@ -3002,15 +3048,21 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Gui.name">(adam_core.orbits.openspace.assets.Gui attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.name">(adam_core.parallel.ParallelBackend attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.name">(adam_core.parallel.RayBackend attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.name">(adam_core.parallel.SequentialBackend attribute)</a>
+</li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.nanos">nanos (adam_core.time.time.Timestamp attribute)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.time.html#adam_core.time.Timestamp.nanos">(adam_core.time.Timestamp attribute)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.neo1kmScore">neo1kmScore (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.neoScore">neoScore (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
@@ -3257,6 +3309,8 @@
 </li>
         <li><a href="reference/api/adam_core.utils.chunking.html#adam_core.utils.chunking.pad_to_fixed_size">pad_to_fixed_size() (in module adam_core.utils.chunking)</a>
 </li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend">ParallelBackend (class in adam_core.parallel)</a>
+</li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Asset.parent">parent (adam_core.orbits.openspace.assets.Asset attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Gui.path">path (adam_core.orbits.openspace.assets.Gui attribute)</a>
@@ -3315,10 +3369,10 @@
           <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters.physical_parameters">(adam_core.photometry.GroupedPhysicalParameters attribute)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.physical_parameters.html#adam_core.orbits.physical_parameters.PhysicalParameters">PhysicalParameters (class in adam_core.orbits.physical_parameters)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.TelescopeObsContext.pixelSize">pixelSize (adam_core.observations.ades.TelescopeObsContext attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.plots.html#adam_core.dynamics.plots.plot_impact_simulation">plot_impact_simulation() (in module adam_core.dynamics.plots)</a>
@@ -3403,6 +3457,14 @@
         </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.provID">provID (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.put">put() (adam_core.parallel.ParallelBackend method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.put">(adam_core.parallel.RayBackend method)</a>
+</li>
+          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.put">(adam_core.parallel.SequentialBackend method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.pxform_batch">pxform_batch() (adam_core.utils.spice_backend.RustBackend method)</a>
 </li>
     </ul></td>
@@ -3501,6 +3563,8 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.rating">rating (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend">RayBackend (class in adam_core.parallel)</a>
+</li>
         <li><a href="reference/api/adam_core.dynamics.exceptions.html#adam_core.dynamics.exceptions.DynamicsNumericalError.reason">reason (adam_core.dynamics.exceptions.DynamicsNumericalError attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits.reduced_chi2">reduced_chi2 (adam_core.orbit_determination.fitted_orbits.FittedOrbits attribute)</a>
@@ -3580,6 +3644,8 @@
         <li><a href="reference/api/adam_core.coordinates.residuals.html#adam_core.coordinates.residuals.Residuals">Residuals (class in adam_core.coordinates.residuals)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableTrailOrbit.resolution">resolution (adam_core.orbits.openspace.renderable.RenderableTrailOrbit attribute)</a>
+</li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.resolve_max_processes">resolve_max_processes() (in module adam_core.parallel)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.Resource">Resource (class in adam_core.orbits.openspace.renderable)</a>
 </li>
@@ -3778,6 +3844,8 @@
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKepler.segment_quality">segment_quality (adam_core.orbits.openspace.renderable.RenderableOrbitalKepler attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.KeplerTranslation.semi_major_axis">semi_major_axis (adam_core.orbits.openspace.translation.KeplerTranslation attribute)</a>
+</li>
+        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend">SequentialBackend (class in adam_core.parallel)</a>
 </li>
         <li><a href="reference/api/adam_core.utils.html#adam_core.utils.setup_SPICE">setup_SPICE() (in module adam_core.utils)</a>
 
@@ -4481,7 +4549,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-06</div>
+              Last updated on 2026-05-13</div>
           </div>
           <div class="right-details">
             

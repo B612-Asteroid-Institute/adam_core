@@ -371,6 +371,7 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
@@ -689,78 +690,36 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">predicted_covariances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">observed_covariances</span><span class="p">)</span>
 
-        <span class="c1"># Create the output arrays</span>
+        <span class="c1"># Single PyO3 crossing: longitude wrap (spherical) + cos(lat) on</span>
+        <span class="c1"># residuals and both covariance buffers (spherical) + total cov</span>
+        <span class="c1"># sum + per-row Cholesky chi2, with internal grouping by NaN</span>
+        <span class="c1"># mask of the observed values so each Cholesky solve runs against</span>
+        <span class="c1"># a uniform-D batch.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_residuals_chi2_numpy</span> <span class="k">as</span> <span class="n">_rust_fused</span>
+
+        <span class="n">is_spherical</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observed</span><span class="p">,</span> <span class="n">SphericalCoordinates</span><span class="p">)</span>
+        <span class="n">residuals</span><span class="p">,</span> <span class="n">chi2s</span><span class="p">,</span> <span class="n">dof</span><span class="p">,</span> <span class="n">had_off_diagonal_nan</span> <span class="o">=</span> <span class="n">_rust_fused</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">observed_values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">predicted_values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">observed_covariances</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">predicted_covariances</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">is_spherical</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">had_off_diagonal_nan</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Probability via scipy chi2 CDF; NaN chi2 (all-NaN batch cov) maps</span>
+        <span class="c1"># to NaN probability (matches the legacy per-batch skip).</span>
         <span class="n">p</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">chi2s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-        <span class="c1"># Calculate the degrees of freedom for every coordinate</span>
-        <span class="n">dof</span> <span class="o">=</span> <span class="n">D</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">observed_values</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-
-        <span class="c1"># Calculate the array of residuals</span>
-        <span class="n">residuals</span> <span class="o">=</span> <span class="n">observed_values</span> <span class="o">-</span> <span class="n">predicted_values</span>
-
-        <span class="c1"># If the coordinates are spherical then we do some extra work:</span>
-        <span class="c1"># 1. Bound residuals in longitude to the range [-180, 180] degrees and</span>
-        <span class="c1">#    adjust the signs of the residuals that cross the 0/360 degree boundary.</span>
-        <span class="c1"># 2. Apply the cos(latitude) factor to the residuals in longitude and longitudinal</span>
-        <span class="c1">#    velocity. Apply the same scaling to covariances.</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observed</span><span class="p">,</span> <span class="n">SphericalCoordinates</span><span class="p">):</span>
-            <span class="c1"># Bound the longitude residuals to the range [-180, 180] degrees</span>
-            <span class="n">residuals</span> <span class="o">=</span> <span class="n">bound_longitude_residuals</span><span class="p">(</span><span class="n">observed_values</span><span class="p">,</span> <span class="n">residuals</span><span class="p">)</span>
-
-            <span class="c1"># Apply the cos(latitude) factor to the residuals and observed covariance</span>
-            <span class="n">residuals</span><span class="p">,</span> <span class="n">observed_covariances</span> <span class="o">=</span> <span class="n">apply_cosine_latitude_correction</span><span class="p">(</span>
-                <span class="n">observed_values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">residuals</span><span class="p">,</span> <span class="n">observed_covariances</span>
-            <span class="p">)</span>
-
-            <span class="c1"># Apply the same scaling to the predicted covariances (without touching residuals again)</span>
-            <span class="n">_</span><span class="p">,</span> <span class="n">predicted_covariances</span> <span class="o">=</span> <span class="n">apply_cosine_latitude_correction</span><span class="p">(</span>
-                <span class="n">observed_values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">residuals</span><span class="p">),</span> <span class="n">predicted_covariances</span>
-            <span class="p">)</span>
-
-        <span class="c1"># Total covariance = observed + predicted (predicted may be zeros if disabled)</span>
-        <span class="n">total_covariances</span> <span class="o">=</span> <span class="n">observed_covariances</span> <span class="o">+</span> <span class="n">predicted_covariances</span>
-
-        <span class="c1"># Batch the coordinates and covariances into groups that have the same</span>
-        <span class="c1"># number of dimensions that have missing values (represented by NaNs)</span>
-        <span class="p">(</span>
-            <span class="n">batch_indices</span><span class="p">,</span>
-            <span class="n">batch_dimensions</span><span class="p">,</span>
-            <span class="n">batch_coords</span><span class="p">,</span>
-            <span class="n">batch_covariances</span><span class="p">,</span>
-        <span class="p">)</span> <span class="o">=</span> <span class="n">_batch_coords_and_covariances</span><span class="p">(</span><span class="n">observed_values</span><span class="p">,</span> <span class="n">total_covariances</span><span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">indices</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">covariances</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
-            <span class="n">batch_indices</span><span class="p">,</span> <span class="n">batch_dimensions</span><span class="p">,</span> <span class="n">batch_coords</span><span class="p">,</span> <span class="n">batch_covariances</span>
-        <span class="p">):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">covariances</span><span class="p">)):</span>
-                <span class="c1"># Filter residuals by dimensions that have values</span>
-                <span class="n">residuals_i</span> <span class="o">=</span> <span class="n">residuals</span><span class="p">[:,</span> <span class="n">dimensions</span><span class="p">]</span>
-
-                <span class="c1"># Then filter by rows that belong to this batch</span>
-                <span class="n">residuals_i</span> <span class="o">=</span> <span class="n">residuals_i</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="p">:]</span>
-
-                <span class="c1"># Calculate the chi2 for each coordinate (this is actually</span>
-                <span class="c1"># calculating mahalanobis distance squared -- both are equivalent</span>
-                <span class="c1"># when the covariance matrix is diagonal, mahalanobis distance is more</span>
-                <span class="c1"># general as it allows for covariates between dimensions)</span>
-                <span class="n">chi2_values</span> <span class="o">=</span> <span class="n">calculate_chi2</span><span class="p">(</span><span class="n">residuals_i</span><span class="p">,</span> <span class="n">covariances</span><span class="p">)</span>
-
-                <span class="c1"># For a normally distributed random variable, the mahalanobis distance</span>
-                <span class="c1"># squared in D dimesions follows a chi2 distribution with D degrees of freedom.</span>
-                <span class="c1"># So for each coordinate, calculate the probability that you would</span>
-                <span class="c1"># get a chi2 value greater than or equal to that coordinate&#39;s chi2 value.</span>
-                <span class="c1"># At a residual of zero this probability is 1.0, and at a residual of</span>
-                <span class="c1"># 1 sigma (for 1 degree of freedom) this probability is ~0.3173.</span>
-                <span class="n">p</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">stats</span><span class="o">.</span><span class="n">chi2</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">chi2_values</span><span class="p">,</span> <span class="n">dof</span><span class="p">[</span><span class="n">indices</span><span class="p">])</span>
-
-                <span class="c1"># Set the chi2 for each coordinate</span>
-                <span class="n">chi2s</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">chi2_values</span>
-
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># If the covariance matrix is all NaNs, then the chi2 is NaN</span>
-                <span class="n">chi2s</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
-                <span class="n">p</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="n">chi2_nan_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">chi2s</span><span class="p">)</span>
+        <span class="n">p</span><span class="p">[</span><span class="n">chi2_nan_mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">chi2_nan_mask</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="n">valid</span> <span class="o">=</span> <span class="o">~</span><span class="n">chi2_nan_mask</span>
+            <span class="n">p</span><span class="p">[</span><span class="n">valid</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">stats</span><span class="o">.</span><span class="n">chi2</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">chi2s</span><span class="p">[</span><span class="n">valid</span><span class="p">],</span> <span class="n">dof</span><span class="p">[</span><span class="n">valid</span><span class="p">])</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
             <span class="n">values</span><span class="o">=</span><span class="n">residuals</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
@@ -944,7 +903,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-06</div>
+              Last updated on 2026-05-13</div>
           </div>
           <div class="right-details">
             

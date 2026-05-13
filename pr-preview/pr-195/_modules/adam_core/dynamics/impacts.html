@@ -371,6 +371,7 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
@@ -426,7 +427,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">KM_P_AU</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">Constants</span> <span class="k">as</span> <span class="n">c</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">Origin</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.ray_cluster</span><span class="w"> </span><span class="kn">import</span> <span class="n">initialize_use_ray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
@@ -446,24 +447,12 @@
 <span class="c1"># adam_core defines it in au but we need it in km</span>
 <span class="n">EARTH_RADIUS_KM</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">R_EARTH_EQUATORIAL</span> <span class="o">*</span> <span class="n">KM_P_AU</span>
 
-<span class="n">RAY_INSTALLED</span> <span class="o">=</span> <span class="kc">False</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">ray</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObjectRef</span>
 
-    <span class="n">RAY_INSTALLED</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="k">pass</span>
-
-
-<span class="k">if</span> <span class="n">RAY_INSTALLED</span><span class="p">:</span>
-
-    <span class="nd">@ray</span><span class="o">.</span><span class="n">remote</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">impact_worker_ray</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">,</span> <span class="n">orbits</span><span class="p">,</span> <span class="n">propagator_class</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">):</span>
-        <span class="n">prop</span> <span class="o">=</span> <span class="n">propagator_class</span><span class="p">()</span>
-        <span class="n">orbits_chunk</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span>
-        <span class="n">variants</span><span class="p">,</span> <span class="n">impacts</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">_detect_collisions</span><span class="p">(</span><span class="n">orbits_chunk</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">variants</span><span class="p">,</span> <span class="n">impacts</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_impact_chunk_worker</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">,</span> <span class="n">orbits</span><span class="p">,</span> <span class="n">propagator_class</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">):</span>
+    <span class="n">prop</span> <span class="o">=</span> <span class="n">propagator_class</span><span class="p">()</span>
+    <span class="n">orbits_chunk</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span>
+    <span class="n">variants</span><span class="p">,</span> <span class="n">impacts</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">_detect_collisions</span><span class="p">(</span><span class="n">orbits_chunk</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">variants</span><span class="p">,</span> <span class="n">impacts</span>
 
 
 <div class="viewcode-block" id="ImpactProbabilities">
@@ -612,43 +601,28 @@
                 <span class="n">stopping_condition</span><span class="o">=</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">max_processes</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">max_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">impact_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CollisionConditions</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">propagated_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">OrbitType</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
-            <span class="k">if</span> <span class="n">RAY_INSTALLED</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                    <span class="s2">&quot;Ray must be installed to use the ray parallel backend&quot;</span>
-                <span class="p">)</span>
+            <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
 
-            <span class="n">initialize_use_ray</span><span class="p">(</span><span class="n">num_cpus</span><span class="o">=</span><span class="n">max_processes</span><span class="p">)</span>
-
-            <span class="c1"># Add orbits to object store if</span>
-            <span class="c1"># they haven&#39;t already been added</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">ObjectRef</span><span class="p">):</span>
-                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Place orbits in shared store, dereferencing if the caller already</span>
+            <span class="c1"># passed a Ray ObjectRef so we can size chunks correctly.</span>
+            <span class="k">if</span> <span class="n">backend</span><span class="o">.</span><span class="n">is_ref</span><span class="p">(</span><span class="n">orbits</span><span class="p">):</span>
                 <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">orbits</span>
-                <span class="c1"># We need to dereference the orbits ObjectRef so we can</span>
-                <span class="c1"># check its length for chunking and determine</span>
-                <span class="c1"># if we need to propagate variants</span>
-                <span class="n">orbits</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits_ref</span><span class="p">)</span>
+                <span class="n">orbits</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits_ref</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
 
-            <span class="c1"># Create futures</span>
-            <span class="n">futures</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">))</span>
-            <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-                <span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="n">impact_worker_ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-                        <span class="n">idx_chunk</span><span class="p">,</span> <span class="n">orbits_ref</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-
-            <span class="c1"># Get results as they finish (we sort later)</span>
-            <span class="n">unfinished</span> <span class="o">=</span> <span class="n">futures</span>
-            <span class="k">while</span> <span class="n">unfinished</span><span class="p">:</span>
-                <span class="n">finished</span><span class="p">,</span> <span class="n">unfinished</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">unfinished</span><span class="p">,</span> <span class="n">num_returns</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-                <span class="n">propagated</span><span class="p">,</span> <span class="n">impacts</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">finished</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">args_iter</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">(</span><span class="n">idx_chunk</span><span class="p">,</span> <span class="n">orbits_ref</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">propagated</span><span class="p">,</span> <span class="n">impacts</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
+                <span class="n">_impact_chunk_worker</span><span class="p">,</span> <span class="n">args_iter</span>
+            <span class="p">):</span>
                 <span class="n">propagated_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">propagated</span><span class="p">)</span>
                 <span class="n">impact_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">impacts</span><span class="p">)</span>
 
@@ -886,7 +860,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-06</div>
+              Last updated on 2026-05-13</div>
           </div>
           <div class="right-details">
             
