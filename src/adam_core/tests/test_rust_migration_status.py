@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import numpy as np
@@ -323,6 +324,26 @@ def test_latency_gate_defaults_to_single_thread_policy() -> None:
     # 'native' is accepted as a deprecated alias for 'multi-thread'.
     assert _thread_mode_from_argv(["--threads", "native"]) == "native"
     assert _thread_mode_from_argv(["--threads=single"]) == "single"
+
+
+def test_github_actions_latency_baseline_matches_benchmark_scope() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    baseline = json.loads(
+        (
+            repo_root
+            / "migration"
+            / "artifacts"
+            / "rust_latency_baseline_github_ubuntu.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    benchmark_keys = {key for key in baseline if not key.startswith("_")}
+    assert benchmark_keys == set(BENCHMARK_TO_API_ID)
+    assert baseline["_metadata"]["thread_mode"] == "single"
+    for name in benchmark_keys:
+        assert baseline[name]["thread_mode"] == "single"
+        assert baseline[name]["rust_seconds_p50"] > 0.0
+        assert baseline[name]["rust_seconds_p95"] > 0.0
 
 
 def test_parity_speed_default_thread_mode_is_multi_thread() -> None:

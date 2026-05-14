@@ -70,9 +70,12 @@ Artifacts:
 
 ### Rust-only latency regression
 
-Use `pdm run rust-latency-gate` for post-legacy APIs and active CI
-performance regression tracking. This gate measures current Rust latency only
-and compares it with the committed Rust-only baseline. The default harness runs
+Use `pdm run rust-latency-gate` for post-legacy APIs and local performance
+regression tracking. GitHub Actions uses `pdm run rust-latency-gate-ci`, which
+keeps the same measurement harness but compares against the Ubuntu runner
+baseline because latency baselines are machine/OS specific. Both gates measure
+current Rust latency only and compare it with a committed Rust-only baseline.
+The default harness runs
 a built-in source-governed number of independent timing trials per API and
 compares the median of the per-trial p50/p95 estimates, while preserving all raw
 samples in the current artifact. This absorbs isolated scheduler outliers
@@ -88,11 +91,14 @@ source edit and a clearly labeled artifact.
 
 Artifacts:
 
-- `migration/artifacts/rust_latency_baseline.json`
+- `migration/artifacts/rust_latency_baseline.json` — local/default reference baseline.
+- `migration/artifacts/rust_latency_baseline_github_ubuntu.json` — GitHub Actions Ubuntu reference baseline.
 - `migration/artifacts/rust_latency_current.json`
 
 The CI artifact name for the current run is `rust-latency-current`, and its
-path must stay `migration/artifacts/rust_latency_current.json`.
+path must stay `migration/artifacts/rust_latency_current.json`; the upload step
+runs with `always()` so failed latency gates still preserve the current-run
+artifact for triage.
 
 ## Not Allowed In Active CI
 

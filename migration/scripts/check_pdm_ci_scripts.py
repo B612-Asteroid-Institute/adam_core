@@ -39,6 +39,7 @@ REQUIRED_SCRIPT_OUTPUTS = {
     "rust-parity-main": "migration/artifacts/parity_gate.json",
     "rust-parity-speed-cold": "migration/artifacts/parity_speed_cold_warm.json",
     "rust-latency-gate": "migration/artifacts/rust_latency_current.json",
+    "rust-latency-gate-ci": "migration/artifacts/rust_latency_current.json",
 }
 
 LEGACY_SPEED_CACHE = "migration/artifacts/parity_legacy_speed_baseline.json"

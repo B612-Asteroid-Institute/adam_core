@@ -192,6 +192,7 @@ rust-parity-speed = "python -m migration.parity.parity_speed --threads multi-thr
 rust-parity-legacy-cache-refresh = "python -m migration.parity.parity_speed --threads multi-thread --tiny --tiny-reps 101 --tiny-warmup 3 --n 2000 --reps 21 --warmup 3 --cold --large --large-reps 7 --large-warmup 1 --large-cold --legacy-cache migration/artifacts/parity_legacy_speed_baseline.json --refresh-legacy-cache"
 rust-parity-speed-cold = "python -m migration.parity.parity_speed --threads multi-thread --tiny --tiny-reps 101 --tiny-warmup 3 --n 2000 --reps 21 --warmup 3 --cold --large --large-reps 7 --large-warmup 1 --large-cold --legacy-cache migration/artifacts/parity_legacy_speed_baseline.json --output migration/artifacts/parity_speed_cold_warm.json"
 rust-latency-gate = "python migration/scripts/rust_backend_benchmark_gate.py --threads single --repeats 7 --output migration/artifacts/rust_latency_current.json"
+rust-latency-gate-ci = "python migration/scripts/rust_backend_benchmark_gate.py --threads single --repeats 7 --baseline migration/artifacts/rust_latency_baseline_github_ubuntu.json --output migration/artifacts/rust_latency_current.json"
 rust-perf-gate = "pdm run rust-latency-gate"
 test-rust-full = { composite = [
   "pdm run rust-develop",
