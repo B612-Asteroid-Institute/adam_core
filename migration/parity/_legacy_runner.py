@@ -228,6 +228,32 @@ def _coordinates_spherical_to_cartesian(coords: np.ndarray) -> dict[str, np.ndar
     return {"out": out}
 
 
+def _coordinates_rotate_cartesian_time_varying(
+    coords: np.ndarray,
+    time_index: np.ndarray,
+    matrices: np.ndarray,
+    covariances: np.ndarray,
+) -> dict[str, np.ndarray]:
+    coords_arr = np.asarray(coords, dtype=np.float64)
+    matrices_arr = np.asarray(matrices, dtype=np.float64)
+    selected = matrices_arr[np.asarray(time_index, dtype=np.int64)]
+    coords_out = np.einsum("nij,nj->ni", selected, coords_arr)
+
+    cov_arr = np.asarray(covariances, dtype=np.float64).reshape(
+        coords_arr.shape[0], 6, 6
+    )
+    nan_mask = np.isnan(cov_arr)
+    cov_filled = np.where(nan_mask, 0.0, cov_arr)
+    cov_out = np.einsum("nij,njk,nlk->nil", selected, cov_filled, selected)
+    cov_out = np.where(nan_mask, np.nan, cov_out)
+    return {
+        "coords": np.asarray(coords_out, dtype=np.float64),
+        "covariances": np.asarray(
+            cov_out.reshape(coords_arr.shape[0], 36), dtype=np.float64
+        ),
+    }
+
+
 def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.ndarray]:
     # Legacy has no batched calc_mean_motion — it's a 1-line np expression.
     # The rust kernel mirrors `np.sqrt(mu / a**3)` element-wise.
@@ -1036,6 +1062,7 @@ DISPATCH = {
     "coordinates.cartesian_to_cometary": _coordinates_cartesian_to_cometary,
     "coordinates.cometary.to_cartesian": _coordinates_cometary_to_cartesian,
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
+    "coordinates.rotate_cartesian_time_varying": _coordinates_rotate_cartesian_time_varying,
     "coordinates.residuals.Residuals.calculate": _coordinates_residuals_Residuals_calculate,
     "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
     "coordinates.residuals.bound_longitude_residuals": (

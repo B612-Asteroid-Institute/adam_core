@@ -211,6 +211,21 @@ def _coordinates_spherical_to_cartesian(coords: np.ndarray) -> dict[str, np.ndar
     }
 
 
+def _coordinates_rotate_cartesian_time_varying(
+    coords: np.ndarray,
+    time_index: np.ndarray,
+    matrices: np.ndarray,
+    covariances: np.ndarray,
+) -> dict[str, np.ndarray]:
+    coords_out, cov_out = _rust_api.rotate_cartesian_time_varying_numpy(
+        coords, time_index, matrices, covariances
+    )
+    return {
+        "coords": _ensure(coords_out, "rotate_cartesian_time_varying.coords"),
+        "covariances": _ensure(cov_out, "rotate_cartesian_time_varying.covariances"),
+    }
+
+
 def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.ndarray]:
     return {"out": _ensure(_rust_api.calc_mean_motion_numpy(a, mu), "calc_mean_motion")}
 
@@ -790,6 +805,7 @@ DISPATCH = {
     "coordinates.cartesian_to_cometary": _coordinates_cartesian_to_cometary,
     "coordinates.cometary.to_cartesian": _coordinates_cometary_to_cartesian,
     "coordinates.spherical.to_cartesian": _coordinates_spherical_to_cartesian,
+    "coordinates.rotate_cartesian_time_varying": _coordinates_rotate_cartesian_time_varying,
     "coordinates.residuals.Residuals.calculate": _coordinates_residuals_Residuals_calculate,
     "coordinates.residuals.calculate_chi2": _coordinates_residuals_calculate_chi2,
     "coordinates.residuals.bound_longitude_residuals": (

@@ -546,6 +546,60 @@ def make_spherical_to_cartesian(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def _sample_sxform_like_matrices(
+    rng: np.random.Generator, n_matrices: int
+) -> np.ndarray:
+    matrices = np.zeros((n_matrices, 6, 6), dtype=np.float64)
+    for matrix_index in range(n_matrices):
+        q, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+        if np.linalg.det(q) < 0.0:
+            q[:, 0] *= -1.0
+        omega = rng.normal(scale=1e-4, size=3)
+        omega_cross = np.array(
+            [
+                [0.0, -omega[2], omega[1]],
+                [omega[2], 0.0, -omega[0]],
+                [-omega[1], omega[0], 0.0],
+            ],
+            dtype=np.float64,
+        )
+        matrices[matrix_index, :3, :3] = q
+        matrices[matrix_index, 3:, :3] = omega_cross @ q
+        matrices[matrix_index, 3:, 3:] = q
+    if n_matrices:
+        matrices[0] = np.eye(6, dtype=np.float64)
+    return matrices
+
+
+def make_rotate_cartesian_time_varying(rng: np.random.Generator, n: int) -> Sample:
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
+    n_matrices = min(16, max(1, int(np.sqrt(max(n, 1)))))
+    matrices = _sample_sxform_like_matrices(rng, n_matrices)
+    time_index = rng.integers(0, n_matrices, size=n, dtype=np.int64)
+    if n:
+        pinned = min(n, n_matrices)
+        time_index[:pinned] = np.arange(pinned, dtype=np.int64)
+
+    factors = rng.normal(scale=1e-4, size=(n, 6, 6))
+    covariances = np.einsum("nij,nkj->nik", factors, factors).astype(np.float64)
+    covariances += np.eye(6, dtype=np.float64)[None, :, :] * 1e-12
+    if n >= 1:
+        covariances[0, :, :] = np.nan
+    if n >= 2:
+        covariances[1, 0, 1] = np.nan
+        covariances[1, 1, 0] = np.nan
+
+    kw = {
+        "coords": np.ascontiguousarray(coords, dtype=np.float64),
+        "time_index": np.ascontiguousarray(time_index, dtype=np.int64),
+        "matrices": np.ascontiguousarray(matrices, dtype=np.float64),
+        "covariances": np.ascontiguousarray(
+            covariances.reshape(n, 36), dtype=np.float64
+        ),
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def make_residuals_calculate(rng: np.random.Generator, n: int) -> Sample:
     """OD-inner-loop shape: spherical 6-D coords with lon/lat observed only.
 
@@ -1454,6 +1508,7 @@ GENERATORS = {
     "coordinates.cartesian_to_cometary": make_cartesian_to_cometary,
     "coordinates.cometary.to_cartesian": make_cometary_to_cartesian,
     "coordinates.spherical.to_cartesian": make_spherical_to_cartesian,
+    "coordinates.rotate_cartesian_time_varying": make_rotate_cartesian_time_varying,
     "coordinates.residuals.Residuals.calculate": make_residuals_calculate,
     "coordinates.residuals.calculate_chi2": make_calculate_chi2,
     "coordinates.residuals.bound_longitude_residuals": make_bound_longitude_residuals,
@@ -1567,6 +1622,7 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.cartesian_to_cometary": WorkloadShape(20_000),
     "coordinates.cometary.to_cartesian": WorkloadShape(20_000),
     "coordinates.spherical.to_cartesian": WorkloadShape(20_000),
+    "coordinates.rotate_cartesian_time_varying": WorkloadShape(50_000),
     "coordinates.residuals.Residuals.calculate": WorkloadShape(20_000),
     "coordinates.residuals.calculate_chi2": WorkloadShape(50_000),
     # Pure longitude wrapping is memory-bandwidth dominated; a 100k-row large

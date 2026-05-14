@@ -187,10 +187,16 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.rotate_cartesian_time_varying_numpy",
-        parity_coverage="targeted-tests",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Raw rotation helper covered by SPICE/backend targeted tests; "
-            "not part of the baseline-main random-fuzz manifest."
+            "Raw time-varying rotation kernel is fuzzed directly against a "
+            "NumPy oracle with diagnostic raw-kernel comparisons; public "
+            "coordinate-dispatch coverage remains tracked separately."
+        ),
+        covered_subcases=(
+            "sxform-like 6x6 matrix tables with per-row matrix indices",
+            "Cartesian state rotation",
+            "covariance rotation with all-NaN and partial-NaN masks",
         ),
     ),
     ApiMigration(

@@ -271,6 +271,28 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "exclusions are explicit in the migration registry."
         ),
     ),
+    "coordinates.rotate_cartesian_time_varying": ToleranceSpec(
+        outputs={
+            "coords": OutputTol(atol=1e-12, rtol=1e-12),
+            "covariances": OutputTol(atol=1e-12, rtol=1e-12),
+        },
+        rationale=(
+            "Raw time-varying Cartesian rotation kernel over sxform-like 6×6 "
+            "matrix tables, per-row matrix indices, Cartesian states, and "
+            "covariance rows with all-NaN and partial-NaN masks."
+        ),
+        dominant_column="rotated Cartesian state and 6×6 covariance cells",
+        physical_magnitude=(
+            "≤1e-12 absolute on AU/AU-day states and covariance cells; NaN "
+            "covariance locations must match exactly."
+        ),
+        root_cause=(
+            "Rust evaluates explicit M·x and M·Σ·Mᵀ loops while the baseline "
+            "oracle uses vectorized NumPy contractions; finite drift is last-ulp "
+            "matrix multiplication order noise."
+        ),
+        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    ),
     "coordinates.residuals.Residuals.calculate": ToleranceSpec(
         outputs={
             "values": OutputTol(atol=1e-12, rtol=1e-12),

@@ -209,6 +209,18 @@ def test_raw_statistics_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
         assert parity_speed._is_diagnostic_speed_api(api_id)
 
 
+def test_raw_rotation_kernel_is_random_fuzz_with_diagnostic_speed() -> None:
+    api_id = "coordinates.rotate_cartesian_time_varying"
+
+    assert api_id in set(_inputs.all_api_ids())
+    migration = API_MIGRATIONS_BY_ID[api_id]
+    assert migration.status == "raw-kernel-only"
+    assert migration.parity_coverage == "random-fuzz"
+    assert "diagnostic raw-kernel comparisons" in migration.coverage_note
+    assert migration.covered_subcases
+    assert parity_speed._is_diagnostic_speed_api(api_id)
+
+
 def test_residual_helper_kernels_are_random_fuzz() -> None:
     api_ids = {
         "coordinates.residuals.apply_cosine_latitude_correction",
