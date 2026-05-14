@@ -1744,6 +1744,36 @@
     "excluded_subcases": []
   },
   {
+    "api_id": "dynamics.tisserand_parameter",
+    "output": "out",
+    "atol": 1e-12,
+    "rtol": 1e-13,
+    "worst_abs": 3.552713678800501e-15,
+    "worst_rel": 9.348265892896243e-13,
+    "worst_rel_above_atol_floor": 9.348265892896243e-13,
+    "max_tolerance_ratio": 0.0015902539117580233,
+    "nan_disagreement": 0,
+    "margin": 628.8303978416261,
+    "passed": true,
+    "investigate": false,
+    "investigate_task": "",
+    "rationale": "Public Tisserand helper over asteroid/comet orbital ranges and all supported perturbing-body semi-major axes.",
+    "dominant_column": "dimensionless Tisserand parameter",
+    "physical_magnitude": "1e-12 is twelve orders below the unit-scale classifier thresholds near Tp\u22482\u20133.",
+    "root_cause": "Equivalent cos/sqrt expression with vectorized transcendental libraries.",
+    "verdict": "science-grade parity for a dimensionless classification helper.",
+    "state": "measured",
+    "registry_status": "public-rust-default",
+    "parity_coverage": "random-fuzz",
+    "coverage_note": "Randomized parity covers the public helper over asteroid/comet semi-major axes, eccentricity/inclination edge cases, and valid perturbing-body lookup names.",
+    "covered_subcases": [
+      "public calc_tisserand_parameter array API",
+      "valid third_body lookup path across seeded fuzz runs",
+      "pinned near-circular, high-eccentricity, prograde, polar, and retrograde rows"
+    ],
+    "excluded_subcases": []
+  },
+  {
     "api_id": "orbit_determination.calcGauss",
     "output": "out",
     "atol": 1e-12,

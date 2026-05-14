@@ -391,6 +391,20 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         root_cause="Single sqrt — atomic op.",
         verdict="bit-parity.",
     ),
+    "dynamics.tisserand_parameter": ToleranceSpec(
+        outputs={"out": OutputTol(atol=1e-12, rtol=1e-13)},
+        rationale=(
+            "Public Tisserand helper over asteroid/comet orbital ranges and all "
+            "supported perturbing-body semi-major axes."
+        ),
+        dominant_column="dimensionless Tisserand parameter",
+        physical_magnitude=(
+            "1e-12 is twelve orders below the unit-scale classifier thresholds "
+            "near Tp≈2–3."
+        ),
+        root_cause="Equivalent cos/sqrt expression with vectorized transcendental libraries.",
+        verdict="science-grade parity for a dimensionless classification helper.",
+    ),
     "dynamics.calculate_moid": ToleranceSpec(
         outputs={
             "moid": OutputTol(atol=1e-9, rtol=1e-8),

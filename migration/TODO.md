@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-13 (`coordinates.residuals.apply_cosine_latitude_correction` and `coordinates.residuals.bound_longitude_residuals` graduated from targeted tests into regular random-fuzz/speed governance)
+Last updated: 2026-05-14 (`dynamics.tisserand_parameter` graduated from targeted tests into regular random-fuzz/speed governance)
 
 ## Current Review-Derived Backlog
 

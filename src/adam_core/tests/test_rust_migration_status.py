@@ -224,6 +224,17 @@ def test_residual_helper_kernels_are_random_fuzz() -> None:
         assert not parity_speed._is_diagnostic_speed_api(api_id)
 
 
+def test_tisserand_parameter_is_random_fuzz() -> None:
+    api_id = "dynamics.tisserand_parameter"
+
+    assert api_id in set(_inputs.all_api_ids())
+    migration = API_MIGRATIONS_BY_ID[api_id]
+    assert migration.status == "public-rust-default"
+    assert migration.parity_coverage == "random-fuzz"
+    assert migration.covered_subcases
+    assert not parity_speed._is_diagnostic_speed_api(api_id)
+
+
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
     latency_ids = {
         migration.api_id

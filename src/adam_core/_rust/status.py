@@ -418,8 +418,17 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.tisserand_parameter_numpy",
-        parity_coverage="targeted-tests",
-        coverage_note="Small public dynamics helper covered by unit tests.",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Randomized parity covers the public helper over asteroid/comet "
+            "semi-major axes, eccentricity/inclination edge cases, and valid "
+            "perturbing-body lookup names."
+        ),
+        covered_subcases=(
+            "public calc_tisserand_parameter array API",
+            "valid third_body lookup path across seeded fuzz runs",
+            "pinned near-circular, high-eccentricity, prograde, polar, and retrograde rows",
+        ),
     ),
     ApiMigration(
         api_id="missions.porkchop_grid",

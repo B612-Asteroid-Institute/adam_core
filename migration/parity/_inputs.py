@@ -702,6 +702,41 @@ def make_calc_mean_motion(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_tisserand_parameter(rng: np.random.Generator, n: int) -> Sample:
+    a = np.exp(rng.uniform(np.log(0.3), np.log(80.0), size=n)).astype(np.float64)
+    e = rng.beta(0.8, 2.5, size=n).astype(np.float64)
+    e = np.minimum(e, 0.999)
+    i = rng.uniform(0.0, 180.0, size=n).astype(np.float64)
+    if n:
+        pinned = min(n, 8)
+        a[:pinned] = np.array(
+            [0.387, 0.723, 1.0, 1.524, 5.204, 9.58, 19.2, 30.2], dtype=np.float64
+        )[:pinned]
+        e[:pinned] = np.array(
+            [0.0, 1e-12, 0.05, 0.3, 0.7, 0.95, 0.99, 0.999], dtype=np.float64
+        )[:pinned]
+        i[:pinned] = np.array(
+            [0.0, 1e-9, 5.0, 45.0, 90.0, 135.0, 179.999999, 180.0],
+            dtype=np.float64,
+        )[:pinned]
+    third_body = str(
+        rng.choice(
+            [
+                "mercury",
+                "venus",
+                "earth",
+                "mars",
+                "jupiter",
+                "saturn",
+                "uranus",
+                "neptune",
+            ]
+        )
+    )
+    kw = {"a": a, "e": e, "i": i, "third_body": third_body}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def make_classify_orbits(rng: np.random.Generator, n: int) -> Sample:
     """Sample PDS SBN classification-rule inputs over all class regions.
 
@@ -1428,6 +1463,7 @@ GENERATORS = {
     "statistics.weighted_mean": make_weighted_mean,
     "statistics.weighted_covariance": make_weighted_covariance,
     "dynamics.calc_mean_motion": make_calc_mean_motion,
+    "dynamics.tisserand_parameter": make_tisserand_parameter,
     "orbits.classify_orbits": make_classify_orbits,
     "dynamics.calculate_moid": make_calculate_moid,
     "dynamics.calculate_perturber_moids": make_calculate_perturber_moids,
@@ -1541,6 +1577,7 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "statistics.weighted_mean": WorkloadShape(50_000),
     "statistics.weighted_covariance": WorkloadShape(50_000),
     "dynamics.calc_mean_motion": WorkloadShape(50_000),
+    "dynamics.tisserand_parameter": WorkloadShape(100_000),
     "orbits.classify_orbits": WorkloadShape(50_000),
     "dynamics.calculate_moid": WorkloadShape(64),
     "dynamics.calculate_perturber_moids": WorkloadShape(64),

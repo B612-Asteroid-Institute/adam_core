@@ -237,6 +237,15 @@ def _dynamics_calc_mean_motion(a: np.ndarray, mu: np.ndarray) -> dict[str, np.nd
     return {"out": out}
 
 
+def _dynamics_tisserand_parameter(
+    a: np.ndarray, e: np.ndarray, i: np.ndarray, third_body: str
+) -> dict[str, np.ndarray]:
+    from adam_core.dynamics.tisserand import calc_tisserand_parameter
+
+    out = calc_tisserand_parameter(a, e, i, third_body=third_body)
+    return {"out": np.asarray(out, dtype=np.float64)}
+
+
 def _orbits_classify_orbits(
     a: np.ndarray, e: np.ndarray, q: np.ndarray, q_apo: np.ndarray
 ) -> dict[str, np.ndarray]:
@@ -1038,6 +1047,7 @@ DISPATCH = {
     "statistics.weighted_mean": _statistics_weighted_mean,
     "statistics.weighted_covariance": _statistics_weighted_covariance,
     "dynamics.calc_mean_motion": _dynamics_calc_mean_motion,
+    "dynamics.tisserand_parameter": _dynamics_tisserand_parameter,
     "orbits.classify_orbits": _orbits_classify_orbits,
     "dynamics.calculate_moid": _dynamics_calculate_moid,
     "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
