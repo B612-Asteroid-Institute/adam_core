@@ -102,9 +102,7 @@ def apply_cosine_latitude_correction(
     covariances : `~numpy.ndarray` (N, D, D)
         Covariance matrices for spherical residuals with the correction factor applied.
     """
-    from .._rust import (
-        apply_cosine_latitude_correction_numpy as _rust_cos_lat_correct,
-    )
+    from .._rust import apply_cosine_latitude_correction_numpy as _rust_cos_lat_correct
 
     out = _rust_cos_lat_correct(
         np.ascontiguousarray(lat, dtype=np.float64),

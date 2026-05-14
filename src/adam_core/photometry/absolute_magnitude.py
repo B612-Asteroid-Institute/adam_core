@@ -310,11 +310,13 @@ def estimate_absolute_magnitude_v_from_detections_grouped(
             physical_parameters=PhysicalParameters.empty(),
             n_fit_detections=[],
         )
-    breaks = np.concatenate([
-        [0],
-        np.flatnonzero(ids_v[1:] != ids_v[:-1]) + 1,
-        [n],
-    ]).astype(np.int64)
+    breaks = np.concatenate(
+        [
+            [0],
+            np.flatnonzero(ids_v[1:] != ids_v[:-1]) + 1,
+            [n],
+        ]
+    ).astype(np.int64)
 
     from .._rust import fit_absolute_magnitude_grouped_numpy as _rust_fit_grouped
 
@@ -330,15 +332,11 @@ def estimate_absolute_magnitude_v_from_detections_grouped(
     keep = np.isfinite(H_hat_arr)
     out_id = [str(ids_v[breaks[i]]) for i in range(len(breaks) - 1) if keep[i]]
     out_H = H_hat_arr[keep].tolist()
-    out_H_sigma = [
-        None if not np.isfinite(v) else float(v) for v in H_sig_arr[keep]
-    ]
+    out_H_sigma = [None if not np.isfinite(v) else float(v) for v in H_sig_arr[keep]]
     out_sigma_eff = [
         None if not np.isfinite(v) else float(v) for v in sig_eff_arr[keep]
     ]
-    out_chi2_red = [
-        None if not np.isfinite(v) else float(v) for v in chi2_arr[keep]
-    ]
+    out_chi2_red = [None if not np.isfinite(v) else float(v) for v in chi2_arr[keep]]
     out_n = [int(v) for v in n_used_arr[keep]]
 
     physical_parameters = PhysicalParameters.from_kwargs(

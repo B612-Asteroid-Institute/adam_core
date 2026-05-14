@@ -10,12 +10,12 @@ import quivr as qv
 import ray
 from ray import ObjectRef
 
+from .._rust.api import add_light_time_numpy
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from .._rust.api import add_light_time_numpy
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantEphemeris, VariantOrbits

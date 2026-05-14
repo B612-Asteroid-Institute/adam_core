@@ -21,7 +21,11 @@ from migration.scripts import parity_table
 from migration.scripts.rust_backend_benchmark_gate import (
     BENCHMARK_TO_API_ID,
     EXTERNALLY_BENCHMARKED,
+)
+from migration.scripts.rust_backend_benchmark_gate import (
     _build_arg_parser as _build_latency_arg_parser,
+)
+from migration.scripts.rust_backend_benchmark_gate import (
     _latency_summary,
     _thread_mode_from_argv,
 )

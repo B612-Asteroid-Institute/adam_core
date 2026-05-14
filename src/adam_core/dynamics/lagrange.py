@@ -7,6 +7,8 @@ import numpy.typing as npt
 
 from .._rust.api import (
     apply_lagrange_coefficients_numpy as _rust_apply_lagrange_coefficients_numpy,
+)
+from .._rust.api import (
     calc_lagrange_coefficients_numpy as _rust_calc_lagrange_coefficients_numpy,
 )
 from ..constants import Constants as C

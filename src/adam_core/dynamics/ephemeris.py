@@ -6,6 +6,8 @@ import quivr as qv
 
 from .._rust.api import (
     generate_ephemeris_2body_numpy as rust_generate_ephemeris_2body_numpy,
+)
+from .._rust.api import (
     generate_ephemeris_2body_with_covariance_numpy as rust_generate_ephemeris_2body_with_covariance_numpy,
 )
 from ..coordinates.cartesian import CartesianCoordinates

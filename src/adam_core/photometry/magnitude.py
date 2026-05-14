@@ -7,8 +7,12 @@ import pyarrow.compute as pc
 
 from .._rust.api import (
     calculate_apparent_magnitude_v_and_phase_angle_numpy as rust_calculate_apparent_magnitude_v_and_phase_angle_numpy,
+)
+from .._rust.api import (
     calculate_apparent_magnitude_v_numpy as rust_calculate_apparent_magnitude_v_numpy,
-    calculate_phase_angle_numpy as rust_calculate_phase_angle_numpy,
+)
+from .._rust.api import calculate_phase_angle_numpy as rust_calculate_phase_angle_numpy
+from .._rust.api import (
     predict_magnitudes_bandpass_numpy as rust_predict_magnitudes_bandpass_numpy,
 )
 from ..coordinates.cartesian import CartesianCoordinates
@@ -434,9 +438,7 @@ def predict_magnitudes(
             + missing.tolist().__repr__()
         )
 
-    delta_table_np = np.ascontiguousarray(
-        np.asarray(delta_table, dtype=np.float64)
-    )
+    delta_table_np = np.ascontiguousarray(np.asarray(delta_table, dtype=np.float64))
     rust_out = rust_predict_magnitudes_bandpass_numpy(
         H_v_arr, object_pos, observer_pos, G_arr, target_ids, delta_table_np
     )

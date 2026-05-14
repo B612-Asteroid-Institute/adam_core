@@ -1,9 +1,9 @@
 import numpy as np
 from adam_assist import ASSISTPropagator
 
+from ...constants import KM_P_AU, S_P_DAY
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
-from ...constants import KM_P_AU, S_P_DAY
 from ...time import Timestamp
 from ...utils.spice_backend import get_backend
 from ..orbits import Orbits

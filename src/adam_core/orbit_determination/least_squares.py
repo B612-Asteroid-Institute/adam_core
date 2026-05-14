@@ -4,16 +4,20 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
-from ..coordinates.origin import Origin
-from ..time import Timestamp
 from ..coordinates import (
     CartesianCoordinates,
     CoordinateCovariances,
     SphericalCoordinates,
 )
-from ..coordinates.residuals import Residuals, calculate_reduced_chi2, compute_residuals_ndarray
+from ..coordinates.origin import Origin
+from ..coordinates.residuals import (
+    Residuals,
+    calculate_reduced_chi2,
+    compute_residuals_ndarray,
+)
 from ..orbits.orbits import Orbits
 from ..propagator import Propagator
+from ..time import Timestamp
 from .evaluate import FittedOrbits, OrbitDeterminationObservations
 
 logger = logging.getLogger(__name__)
@@ -199,9 +203,9 @@ class LeastSquares(ABC):
             eph_p = ephemeris_all.select("orbit_id", f"_ls_p_{i}")
             if use_central_difference:
                 eph_m = ephemeris_all.select("orbit_id", f"_ls_m_{i}")
-                col = self._residual_columns(
-                    eph_p.coordinates, eph_m.coordinates
-                ) / (2 * d_per_param[i])
+                col = self._residual_columns(eph_p.coordinates, eph_m.coordinates) / (
+                    2 * d_per_param[i]
+                )
             else:
                 col = (
                     self._residual_columns(

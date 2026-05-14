@@ -5,8 +5,8 @@ from typing import Tuple
 import numpy as np
 import numpy.typing as npt
 
+from .._rust.api import add_light_time_numpy as _rust_add_light_time_numpy
 from .._rust.api import (
-    add_light_time_numpy as _rust_add_light_time_numpy,
     add_stellar_aberration_numpy as _rust_add_stellar_aberration_numpy,
 )
 from ..constants import Constants as c

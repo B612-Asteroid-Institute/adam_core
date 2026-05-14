@@ -208,9 +208,7 @@ def test_transform_coordinates_to_itrf93():
         nanos=[t.nanos[0].as_py() for t in row_times],
         scale="tdb",
     )
-    states_direct_itrf93 = _direct_backend_states(
-        row_target_ids, flat_times, "ITRF93"
-    )
+    states_direct_itrf93 = _direct_backend_states(row_target_ids, flat_times, "ITRF93")
 
     # The ecliptic → PCK-rotation path and the direct SPK ITRF93 query
     # agree to ~ULP on the rotation matrix accumulation; at outer-planet

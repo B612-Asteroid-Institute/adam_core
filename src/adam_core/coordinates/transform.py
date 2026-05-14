@@ -27,11 +27,10 @@ from . import types
 from .cartesian import COVARIANCE_ROTATION_TOLERANCE, CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .covariances import CoordinateCovariances
-from .geodetics import GeodeticCoordinates, WGS84
+from .geodetics import WGS84, GeodeticCoordinates
 from .keplerian import KeplerianCoordinates
 from .origin import Origin, OriginCodes
 from .spherical import SphericalCoordinates
-
 
 TRANSFORM_EQ2EC = np.zeros((6, 6))
 TRANSFORM_EQ2EC[0:3, 0:3] = c.TRANSFORM_EQ2EC
@@ -300,7 +299,9 @@ def _try_transform_coordinates_rust(
     if origin_differs:
         assert isinstance(origin_out, OriginCodes)
         if type(coords) is CartesianCoordinates:
-            translation_vectors = _resolve_origin_translation_vectors(coords, origin_out)
+            translation_vectors = _resolve_origin_translation_vectors(
+                coords, origin_out
+            )
         else:
             # SPICE resolves translation vectors in Cartesian space, so we
             # need the rep-in-as-Cartesian (same frame, same origin) to
@@ -319,7 +320,9 @@ def _try_transform_coordinates_rust(
                 origin=coords.origin,
                 frame=coords.frame,
             )
-            translation_vectors = _resolve_origin_translation_vectors(synthetic, origin_out)
+            translation_vectors = _resolve_origin_translation_vectors(
+                synthetic, origin_out
+            )
 
     # ITRF93 frame changes: do the time-varying rotation in Rust first, then
     # re-dispatch as an identity-frame representation conversion so the
@@ -991,10 +994,10 @@ def apply_time_varying_rotation(
     # shared times), so paying O(U) sxform computations over an O(N)
     # per-row apply is the right trade.
     unique_times = coords.time.unique()
-    unique_ets = (
-        unique_times.et().to_numpy(zero_copy_only=False).astype(np.float64)
+    unique_ets = unique_times.et().to_numpy(zero_copy_only=False).astype(np.float64)
+    batched_kms = _query_sxform_itrf93_batch(
+        frame_spice_in, frame_spice_out, unique_ets
     )
-    batched_kms = _query_sxform_itrf93_batch(frame_spice_in, frame_spice_out, unique_ets)
 
     # Unit conversion: sxform is km / km-s, our states are AU / AU-d.
     # Fold the scaling into the matrix table once so the Rust apply

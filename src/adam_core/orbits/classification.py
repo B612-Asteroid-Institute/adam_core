@@ -6,7 +6,6 @@ from .._rust import classify_orbits_numpy as _rust_classify_orbits_numpy
 from ..coordinates.cometary import CometaryCoordinates
 from ..coordinates.keplerian import KeplerianCoordinates
 
-
 # Maps the rust kernel's int32 class codes (see classification.rs) to the
 # PDS Small Bodies Node string labels.
 CLASS_CODE_TO_NAME: tuple[str, ...] = (

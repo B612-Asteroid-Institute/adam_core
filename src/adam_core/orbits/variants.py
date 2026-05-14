@@ -6,6 +6,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 
+from .._rust.api import add_light_time_numpy
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
@@ -13,7 +14,6 @@ from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
 from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
-from .._rust.api import add_light_time_numpy
 from ..observers.observers import Observers
 from ..time import Timestamp
 from .ephemeris import Ephemeris

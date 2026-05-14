@@ -4,14 +4,18 @@ import numpy.typing as npt
 
 from .._rust.api import (
     calc_apoapsis_distance_numpy as _rust_calc_apoapsis_distance_numpy,
-    calc_mean_anomaly_numpy as _rust_calc_mean_anomaly_numpy,
-    calc_mean_motion_numpy as _rust_calc_mean_motion_numpy,
-    calc_periapsis_distance_numpy as _rust_calc_periapsis_distance_numpy,
-    calc_period_numpy as _rust_calc_period_numpy,
-    calc_semi_latus_rectum_numpy as _rust_calc_semi_latus_rectum_numpy,
-    calc_semi_major_axis_numpy as _rust_calc_semi_major_axis_numpy,
-    solve_kepler_numpy as _rust_solve_kepler_numpy,
 )
+from .._rust.api import calc_mean_anomaly_numpy as _rust_calc_mean_anomaly_numpy
+from .._rust.api import calc_mean_motion_numpy as _rust_calc_mean_motion_numpy
+from .._rust.api import (
+    calc_periapsis_distance_numpy as _rust_calc_periapsis_distance_numpy,
+)
+from .._rust.api import calc_period_numpy as _rust_calc_period_numpy
+from .._rust.api import (
+    calc_semi_latus_rectum_numpy as _rust_calc_semi_latus_rectum_numpy,
+)
+from .._rust.api import calc_semi_major_axis_numpy as _rust_calc_semi_major_axis_numpy
+from .._rust.api import solve_kepler_numpy as _rust_solve_kepler_numpy
 from ._rust_compat import ScalarOrArray, broadcast_pair, require_rust, restore_shape
 
 

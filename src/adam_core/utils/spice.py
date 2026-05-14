@@ -262,8 +262,17 @@ def get_perturber_state(
             frame_spice,
             miss_ets,
         )
-        scale = np.array([KM_P_AU, KM_P_AU, KM_P_AU, KM_P_AU / S_P_DAY,
-                          KM_P_AU / S_P_DAY, KM_P_AU / S_P_DAY], dtype=np.float64)
+        scale = np.array(
+            [
+                KM_P_AU,
+                KM_P_AU,
+                KM_P_AU,
+                KM_P_AU / S_P_DAY,
+                KM_P_AU / S_P_DAY,
+                KM_P_AU / S_P_DAY,
+            ],
+            dtype=np.float64,
+        )
         miss_states = batched / scale
         for local_i, i_u in enumerate(miss_idx):
             i0 = int(rep_idx[i_u])
@@ -399,9 +408,7 @@ def get_spice_body_state(
             None, int(body_id), int(origin.value), frame_spice, unique_ets_np
         )
     except Exception as e:
-        raise ValueError(
-            f"Could not get state data for body ID {body_id}: {str(e)}"
-        )
+        raise ValueError(f"Could not get state data for body ID {body_id}: {str(e)}")
 
     for i, epoch in enumerate(unique_epochs_et):
         mask = pc.equal(epochs_et, epoch).to_numpy(False)

@@ -237,9 +237,7 @@ def test_cartesian_to_kepler_matches_jax(seed, monkeypatch):
         kep_jax = KeplerianCoordinates.from_cartesian(cart)
     kep_jax_cov = kep_jax.covariance.to_matrix()
 
-    np.testing.assert_allclose(
-        kep_rust.values, kep_jax.values, rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(kep_rust.values, kep_jax.values, rtol=1e-10, atol=1e-10)
     _assert_cov_close(kep_rust_cov, kep_jax_cov, "cartesian->kepler")
 
 
@@ -280,9 +278,7 @@ def test_cartesian_to_cometary_matches_jax(seed, monkeypatch):
         com_jax = CometaryCoordinates.from_cartesian(cart)
     com_jax_cov = com_jax.covariance.to_matrix()
 
-    np.testing.assert_allclose(
-        com_rust.values, com_jax.values, rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(com_rust.values, com_jax.values, rtol=1e-10, atol=1e-10)
     _assert_cov_close(com_rust_cov, com_jax_cov, "cartesian->cometary")
 
 
@@ -323,9 +319,7 @@ def test_cartesian_to_spherical_matches_jax(seed, monkeypatch):
         sph_jax = SphericalCoordinates.from_cartesian(cart)
     sph_jax_cov = sph_jax.covariance.to_matrix()
 
-    np.testing.assert_allclose(
-        sph_rust.values, sph_jax.values, rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(sph_rust.values, sph_jax.values, rtol=1e-10, atol=1e-10)
     _assert_cov_close(sph_rust_cov, sph_jax_cov, "cartesian->spherical")
 
 
@@ -344,9 +338,7 @@ def test_cartesian_to_geodetic_matches_jax(seed, monkeypatch):
         geo_jax = GeodeticCoordinates.from_cartesian(cart)
     geo_jax_cov = geo_jax.covariance.to_matrix()
 
-    np.testing.assert_allclose(
-        geo_rust.values, geo_jax.values, rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(geo_rust.values, geo_jax.values, rtol=1e-10, atol=1e-10)
     _assert_cov_close(geo_rust_cov, geo_jax_cov, "cartesian->geodetic")
 
 
@@ -367,7 +359,12 @@ def test_kepler_edges_all_paths(monkeypatch):
     cov = np.tile(np.eye(6) * 1e-6, (n, 1, 1))
     mjds = np.full(n, 60000.0)
     kep = KeplerianCoordinates.from_kwargs(
-        a=a, e=e, i=i, raan=raan, ap=ap, M=m,
+        a=a,
+        e=e,
+        i=i,
+        raan=raan,
+        ap=ap,
+        M=m,
         time=Timestamp.from_mjd(mjds, scale="tdb"),
         covariance=CoordinateCovariances.from_matrix(cov),
         origin=Origin.from_kwargs(code=["SUN"] * n),
@@ -395,8 +392,12 @@ def test_partial_nan_covariance_propagates_nan(monkeypatch):
     cov[1, 2, 2] = np.nan  # taint row 1
     cov[3, :, :] = np.nan  # row 3 all-NaN
     kep_nan = KeplerianCoordinates.from_kwargs(
-        a=kep.values[:, 0], e=kep.values[:, 1], i=kep.values[:, 2],
-        raan=kep.values[:, 3], ap=kep.values[:, 4], M=kep.values[:, 5],
+        a=kep.values[:, 0],
+        e=kep.values[:, 1],
+        i=kep.values[:, 2],
+        raan=kep.values[:, 3],
+        ap=kep.values[:, 4],
+        M=kep.values[:, 5],
         time=kep.time,
         covariance=CoordinateCovariances.from_matrix(cov),
         origin=kep.origin,
@@ -465,9 +466,7 @@ def test_real_orbits_cart_to_keplerian_matches_jax(monkeypatch):
         )
         kep_jax = KeplerianCoordinates.from_cartesian(cart)
 
-    np.testing.assert_allclose(
-        kep_rust.values, kep_jax.values, rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(kep_rust.values, kep_jax.values, rtol=1e-10, atol=1e-10)
     _assert_cov_close(
         kep_rust.covariance.to_matrix(),
         kep_jax.covariance.to_matrix(),
@@ -484,9 +483,7 @@ def test_real_orbits_cart_to_cometary_matches_jax(monkeypatch):
             cov_module, "rust_covariance_transform", lambda *a, **k: None, raising=True
         )
         com_jax = CometaryCoordinates.from_cartesian(cart)
-    np.testing.assert_allclose(
-        com_rust.values, com_jax.values, rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(com_rust.values, com_jax.values, rtol=1e-10, atol=1e-10)
     _assert_cov_close(
         com_rust.covariance.to_matrix(),
         com_jax.covariance.to_matrix(),
@@ -503,9 +500,7 @@ def test_real_orbits_cart_to_spherical_matches_jax(monkeypatch):
             cov_module, "rust_covariance_transform", lambda *a, **k: None, raising=True
         )
         sph_jax = SphericalCoordinates.from_cartesian(cart)
-    np.testing.assert_allclose(
-        sph_rust.values, sph_jax.values, rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(sph_rust.values, sph_jax.values, rtol=1e-10, atol=1e-10)
     _assert_cov_close(
         sph_rust.covariance.to_matrix(),
         sph_jax.covariance.to_matrix(),

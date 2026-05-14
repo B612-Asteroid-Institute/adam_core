@@ -130,9 +130,7 @@ def gaussIOD(
             vy=orbits[:, 4],
             vz=orbits[:, 5],
             time=Timestamp.from_mjd(epochs, scale="utc"),
-            origin=Origin.from_kwargs(
-                code=np.full(len(orbits), "SUN", dtype="object")
-            ),
+            origin=Origin.from_kwargs(code=np.full(len(orbits), "SUN", dtype="object")),
             frame="ecliptic",
         )
     )

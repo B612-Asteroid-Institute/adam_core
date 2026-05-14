@@ -6,7 +6,9 @@ import quivr as qv
 
 from .._rust import (
     propagate_2body_arc_batch_numpy as rust_propagate_2body_arc_batch_numpy,
-    propagate_2body_numpy as rust_propagate_2body_numpy,
+)
+from .._rust import propagate_2body_numpy as rust_propagate_2body_numpy
+from .._rust import (
     propagate_2body_with_covariance_numpy as rust_propagate_2body_with_covariance_numpy,
 )
 from ..coordinates.cartesian import CartesianCoordinates
