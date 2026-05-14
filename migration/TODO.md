@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-14 (merge-readiness housekeeping after final targeted-test graduation; canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, and 126 speed rows with raw-kernel-only speed rows labeled diagnostic)
+Last updated: 2026-05-14 (merge-readiness housekeeping after final targeted-test graduation; canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, and 126 speed rows with raw-kernel-only speed rows labeled diagnostic; added post-current-task benchmark-action surface audit follow-up)
 
 ## Current Review-Derived Backlog
 
@@ -42,6 +42,7 @@ Last updated: 2026-05-14 (merge-readiness housekeeping after final targeted-test
 - [ ] RM-WE2-003: variants and covariance-sampling linear algebra, only where measured data shows wins over current Python/BLAS paths.
 - [ ] RM-WE2-004: OD evaluation and outlier helper hot paths; avoid porting orchestration without measured benefit.
 - [ ] RM-WE3-001: least-squares inner-loop fusion with preserved diagnostics and deterministic OD-case parity.
+- [ ] RM-PERF-001: after the current RM-WE2/RM-WE3 tasks, audit PR #195 broad GitHub benchmark-action slower rows as clues for additional surface area (for example one-off observer/perturber SPICE wrappers, time rescale, covariance matrix conversion, bandpass conversion, and propagator helper benches). Treat this as surface discovery, not a merge-readiness blocker or replacement for the canonical parity/speed gates.
 - [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-rs` propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.
 
 ## Active Sprint (Milestone 1 hardening)

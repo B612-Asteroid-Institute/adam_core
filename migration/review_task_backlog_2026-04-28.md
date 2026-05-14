@@ -748,7 +748,7 @@ Current state as of 2026-05-14:
 - All P0/P1 stabilization tasks through RM-P1-021 are complete.
 - RM-P1-020 is closed under the canonical multi-thread Rust-vs-baseline gate; tiny-n p95 is diagnostic only, and tiny-n p50 remains enforced at 1.2x.
 - Final targeted-test graduation is complete: canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, 126 speed rows, and no active performance waivers.
-- Merge-readiness housekeeping should stay scoped to CI, current planning docs, and artifact cleanup. New implementation work should move to RM-WE2-003, RM-WE2-004, RM-WE3-001, or the future n-body/assist-rs line after merge-readiness is settled.
+- Merge-readiness housekeeping should stay scoped to CI, current planning docs, and artifact cleanup. New implementation work should move to RM-WE2-003, RM-WE2-004, RM-WE3-001, then RM-PERF-001 broad benchmark-action surface audit, or the future n-body/assist-rs line after merge-readiness is settled.
 
 Reviewer-feedback disposition:
 
@@ -1555,6 +1555,44 @@ Verification:
 - Baseline parity on deterministic OD cases.
 - Existing least-squares tests, including order-dependent flake awareness.
 - Performance comparison on representative OD fits.
+
+### RM-PERF-001: Audit PR #195 Broad Benchmark-Action Slow Rows
+
+Status: open; intentionally after RM-WE2-003, RM-WE2-004, and RM-WE3-001
+
+Reason: PR #195's GitHub `benchmark-action` report is a broad pytest-benchmark
+trend smoke rather than the canonical Rust migration gate. It still surfaced
+slower rows outside the main canonical migration artifacts, especially one-off
+observer/perturber SPICE wrappers, time rescale benches, covariance matrix
+conversion helpers, large-n bandpass conversion, and propagator helper benches.
+The user wants those rows investigated as clues for additional surface area,
+not ignored just because the canonical parity/speed gates are green.
+
+Scope:
+
+- Reproduce the PR #195 benchmark-action slow clusters with a controlled
+  back-to-back baseline-main vs migration run before making code changes.
+- Classify each slow cluster as measurement noise, fixed Python/quivr overhead,
+  intentional semantics/architecture tradeoff, or a real optimization candidate.
+- For real candidates, decide whether they deserve a new canonical parity/speed
+  row, a dedicated future migration task, or no action because the surface is
+  cold or dominated by external libraries.
+- Preserve the existing no-semantics-change policy: do not alter time/ERFA,
+  SPICE validity, observer-state, or photometry behavior just to improve a broad
+  microbenchmark.
+
+Acceptance:
+
+- Produce a short triage table mapping each benchmark-action slow cluster to a
+  decision and follow-up task, if any.
+- Any implementation follow-up has its own baseline-main parity/performance
+  evidence and does not reuse the broad benchmark-action table as the sole gate.
+
+Verification:
+
+- `pytest --benchmark-only`/benchmark-action evidence is used for discovery.
+- Canonical `migration/parity` artifacts remain the promotion/merge gate for
+  Rust-replaced numerical surfaces.
 
 ### RM-WE3-002: Quivr-Bound Constitutional Gaps
 
