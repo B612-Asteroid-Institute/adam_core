@@ -179,7 +179,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note=(
             "Raw forward-mode AD covariance-transform kernel is fuzzed directly "
             "against baseline-main public covariance transforms with diagnostic "
-            "raw-kernel comparisons; public coordinate-dispatch coverage remains "
+            "raw-kernel comparisons. Any NaN in an input covariance row short-"
+            "circuits that entire output covariance row to NaN while state values "
+            "still transform normally, matching legacy JAX/NumPy covariance "
+            "propagation and differing intentionally from the rotation kernel's "
+            "legacy mask policy. Public coordinate-dispatch coverage remains "
             "tracked separately."
         ),
         covered_subcases=(
@@ -187,7 +191,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "Cartesian covariance transform to Keplerian with equatorial→ecliptic frame rotation",
             "Keplerian covariance transform to Cartesian with ecliptic→equatorial frame rotation",
             "Keplerian covariance transform to spherical with equatorial→ecliptic frame rotation",
-            "all-NaN covariance row pass-through policy",
+            "all-NaN covariance row exercising any-NaN row short-circuit policy",
         ),
     ),
     ApiMigration(
@@ -199,8 +203,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         parity_coverage="random-fuzz",
         coverage_note=(
             "Raw time-varying rotation kernel is fuzzed directly against a "
-            "NumPy oracle with diagnostic raw-kernel comparisons; public "
-            "coordinate-dispatch coverage remains tracked separately."
+            "NumPy oracle with diagnostic raw-kernel comparisons. It preserves "
+            "CartesianCoordinates.rotate's legacy zero-fill-then-restore NaN "
+            "covariance mask policy; partial-NaN rows are compatibility-covered "
+            "but are non-physical except as whole inactive-dimension masks. "
+            "Public coordinate-dispatch coverage remains tracked separately."
         ),
         covered_subcases=(
             "sxform-like 6x6 matrix tables with per-row matrix indices",

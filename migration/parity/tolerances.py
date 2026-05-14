@@ -221,13 +221,13 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "cart_ec_earth_to_sph_itrf93": OutputTol(atol=3e-8, rtol=1e-12),
             "cart_itrf93_earth_to_sph_eq": OutputTol(atol=3e-8, rtol=1e-12),
             "cart_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
-            "cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
+            "cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-10),
             "cart_cov_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-11, rtol=1e-12),
             "cart_cov_ec_sun_to_sph_ec_earth_covariance": OutputTol(
-                atol=1e-21, rtol=1e-9
+                atol=1e-21, rtol=1e-10
             ),
             "kep_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
-            "kep_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
+            "kep_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-10),
         },
         rationale=(
             "Public dispatcher matrix covering Cartesian constant-frame "
@@ -243,7 +243,7 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "1e-10 deg is 0.36 microarcsec for constant-frame angular columns; "
             "1e-9 days is 86 microseconds for the Cometary→Keplerian epoch-like "
             "column. Covariance rows use 1e-21 absolute for near-zero covariance "
-            "cells plus 1e-9 relative for finite propagated covariance terms. "
+            "cells plus 1e-10 relative for finite propagated covariance terms. "
             "SUN↔EARTH origin translations are held to 1e-11 in mixed "
             "spherical units, i.e. 1.5 m in range or 0.036 microarcsec in angular "
             "columns. The ITRF93 rows keep 3e-8 deg/day only for spherical "
@@ -274,25 +274,26 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     "coordinates.transform_coordinates_with_covariance": ToleranceSpec(
         outputs={
             "raw_cart_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
-            "raw_cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
+            "raw_cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-10),
             "raw_cart_cov_eq_to_kep_ec": OutputTol(atol=1e-9, rtol=1e-12),
-            "raw_cart_cov_eq_to_kep_ec_covariance": OutputTol(atol=1e-21, rtol=1e-9),
+            "raw_cart_cov_eq_to_kep_ec_covariance": OutputTol(atol=1e-21, rtol=1e-10),
             "raw_kep_cov_ec_to_cart_eq": OutputTol(atol=3e-12, rtol=1e-12),
-            "raw_kep_cov_ec_to_cart_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
+            "raw_kep_cov_ec_to_cart_eq_covariance": OutputTol(atol=1e-21, rtol=1e-10),
             "raw_kep_cov_eq_to_sph_ec": OutputTol(atol=1e-10, rtol=1e-12),
-            "raw_kep_cov_eq_to_sph_ec_covariance": OutputTol(atol=1e-21, rtol=1e-9),
+            "raw_kep_cov_eq_to_sph_ec_covariance": OutputTol(atol=1e-21, rtol=1e-10),
         },
         rationale=(
             "Raw forward-mode AD covariance transform kernel over representative "
             "constant-frame Cartesian and Keplerian representation chains, with "
-            "one all-NaN covariance row per subcase to pin row-level NaN policy."
+            "one all-NaN covariance row per subcase to pin the all-or-nothing "
+            "row-level NaN policy."
         ),
         dominant_column="Keplerian angular outputs and propagated 6×6 covariance cells",
         physical_magnitude=(
             "State outputs inherit the direct transform-coordinate scale: "
             "3e-12 AU for Keplerian→Cartesian, 1e-10 deg for spherical angles, "
             "and 1e-9 on Cartesian→Keplerian epoch/angle-like fields. "
-            "Covariance rows use 1e-21 absolute for near-zero cells plus 1e-9 "
+            "Covariance rows use 1e-21 absolute for near-zero cells plus 1e-10 "
             "relative for finite Jacobian-propagated covariance terms."
         ),
         root_cause=(
@@ -300,7 +301,9 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "row-major loops while the baseline-main oracle reaches the same "
             "public covariance transform through JAX jacfwd and NumPy matrix "
             "multiplication. Finite drift is last-ulp representation conversion "
-            "and matrix-product ordering noise."
+            "and matrix-product ordering noise. Any NaN in an input covariance "
+            "row intentionally produces an all-NaN output covariance row because "
+            "that is the legacy JAX/NumPy matrix-product behavior."
         ),
         verdict=(
             "raw-kernel parity; performance rows are diagnostic, not public "
@@ -315,19 +318,26 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         rationale=(
             "Raw time-varying Cartesian rotation kernel over sxform-like 6×6 "
             "matrix tables, per-row matrix indices, Cartesian states, and "
-            "covariance rows with all-NaN and partial-NaN masks."
+            "covariance rows with all-NaN and legacy partial-NaN masks."
         ),
         dominant_column="rotated Cartesian state and 6×6 covariance cells",
         physical_magnitude=(
             "≤1e-12 absolute on AU/AU-day states and covariance cells; NaN "
-            "covariance locations must match exactly."
+            "covariance locations must match exactly. Partial-NaN rows preserve "
+            "legacy compatibility, not a physically meaningful covariance model."
         ),
         root_cause=(
             "Rust evaluates explicit M·x and M·Σ·Mᵀ loops while the baseline "
             "oracle uses vectorized NumPy contractions; finite drift is last-ulp "
-            "matrix multiplication order noise."
+            "matrix multiplication order noise. The NaN mask behavior deliberately "
+            "matches CartesianCoordinates.rotate's zero-fill-then-restore legacy "
+            "policy."
         ),
-        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+        verdict=(
+            "raw-kernel parity for the legacy rotation semantics; partial-NaN "
+            "covariance rows are quarantined as compatibility behavior. "
+            "Performance rows are diagnostic, not promotion gates."
+        ),
     ),
     "coordinates.residuals.Residuals.calculate": ToleranceSpec(
         outputs={

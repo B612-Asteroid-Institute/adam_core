@@ -13,7 +13,7 @@ use numpy::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Representation {
     Cartesian,
     Spherical,
@@ -43,6 +43,22 @@ fn to_coords_rep(rep: Representation) -> CoordsRepresentation {
         Representation::Keplerian => CoordsRepresentation::Keplerian,
         Representation::Cometary => CoordsRepresentation::Cometary,
     }
+}
+
+fn covariance_transform_requires_mu(rep_in: Representation, rep_out: Representation) -> bool {
+    matches!(rep_in, Representation::Keplerian | Representation::Cometary)
+        || matches!(
+            rep_out,
+            Representation::Keplerian | Representation::Cometary
+        )
+}
+
+fn covariance_transform_requires_t0(rep_in: Representation, rep_out: Representation) -> bool {
+    matches!(rep_in, Representation::Cometary)
+        || matches!(
+            rep_out,
+            Representation::Keplerian | Representation::Cometary
+        )
 }
 
 fn parse_frame(value: &str) -> PyResult<Frame> {
@@ -490,8 +506,36 @@ fn transform_coordinates_with_covariance_numpy<'py>(
         ));
     }
 
-    let rep_in = to_coords_rep(parse_representation(representation_in)?);
-    let rep_out = to_coords_rep(parse_representation(representation_out)?);
+    let rep_in_parsed = parse_representation(representation_in)?;
+    let rep_out_parsed = parse_representation(representation_out)?;
+    if rep_in_parsed == Representation::Geodetic {
+        return Err(PyValueError::new_err(
+            "geodetic input is not supported by transform_coordinates_with_covariance_numpy",
+        ));
+    }
+    if covariance_transform_requires_t0(rep_in_parsed, rep_out_parsed) && t0.is_none() {
+        return Err(PyValueError::new_err(
+            "t0 is required for Keplerian/Cometary covariance transforms",
+        ));
+    }
+    if covariance_transform_requires_mu(rep_in_parsed, rep_out_parsed) && mu.is_none() {
+        return Err(PyValueError::new_err(
+            "mu is required for Keplerian/Cometary covariance transforms",
+        ));
+    }
+    if rep_out_parsed == Representation::Geodetic && a.is_none() {
+        return Err(PyValueError::new_err(
+            "a is required for geodetic covariance transforms",
+        ));
+    }
+    if rep_out_parsed == Representation::Geodetic && f.is_none() {
+        return Err(PyValueError::new_err(
+            "f is required for geodetic covariance transforms",
+        ));
+    }
+
+    let rep_in = to_coords_rep(rep_in_parsed);
+    let rep_out = to_coords_rep(rep_out_parsed);
     let frame_in_name = frame_in.unwrap_or("ecliptic");
     let frame_out_name = frame_out.unwrap_or(frame_in_name);
     let frame_in_value = parse_frame(frame_in_name)?;

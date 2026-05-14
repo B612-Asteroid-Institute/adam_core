@@ -224,6 +224,16 @@ def test_raw_coordinate_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
         assert migration.covered_subcases
         assert parity_speed._is_diagnostic_speed_api(api_id)
 
+    transform_covariance = API_MIGRATIONS_BY_ID[
+        "coordinates.transform_coordinates_with_covariance"
+    ]
+    assert "Any NaN" in transform_covariance.coverage_note
+    assert "short-circuits" in transform_covariance.coverage_note
+
+    rotation = API_MIGRATIONS_BY_ID["coordinates.rotate_cartesian_time_varying"]
+    assert "zero-fill-then-restore" in rotation.coverage_note
+    assert "non-physical" in rotation.coverage_note
+
 
 def test_residual_helper_kernels_are_random_fuzz() -> None:
     api_ids = {

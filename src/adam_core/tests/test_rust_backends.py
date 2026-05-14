@@ -204,6 +204,68 @@ def test_keplerian_to_cartesian_prefers_rust_when_available(monkeypatch):
     )
 
 
+def test_transform_coordinates_with_covariance_requires_rep_parameters() -> None:
+    coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.01, 0.0]], dtype=np.float64)
+    covariances = np.eye(6, dtype=np.float64).reshape(1, 36) * 1e-12
+    t0 = np.array([60000.0], dtype=np.float64)
+    mu = np.array([0.00029591220828411956], dtype=np.float64)
+
+    with pytest.raises(ValueError, match="mu is required"):
+        rust_api.transform_coordinates_with_covariance_numpy(
+            coords,
+            covariances,
+            "cartesian",
+            "keplerian",
+            t0=t0,
+            frame_in="ecliptic",
+            frame_out="ecliptic",
+        )
+
+    with pytest.raises(ValueError, match="t0 is required"):
+        rust_api.transform_coordinates_with_covariance_numpy(
+            coords,
+            covariances,
+            "cartesian",
+            "cometary",
+            mu=mu,
+            frame_in="ecliptic",
+            frame_out="ecliptic",
+        )
+
+    with pytest.raises(ValueError, match="a is required"):
+        rust_api.transform_coordinates_with_covariance_numpy(
+            coords,
+            covariances,
+            "cartesian",
+            "geodetic",
+            frame_in="itrf93",
+            frame_out="itrf93",
+        )
+
+    with pytest.raises(ValueError, match="f is required"):
+        rust_api.transform_coordinates_with_covariance_numpy(
+            coords,
+            covariances,
+            "cartesian",
+            "geodetic",
+            a=1.0,
+            frame_in="itrf93",
+            frame_out="itrf93",
+        )
+
+    with pytest.raises(ValueError, match="geodetic input is not supported"):
+        rust_api.transform_coordinates_with_covariance_numpy(
+            coords,
+            covariances,
+            "geodetic",
+            "cartesian",
+            a=1.0,
+            f=0.0,
+            frame_in="itrf93",
+            frame_out="itrf93",
+        )
+
+
 def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
     monkeypatch,
 ):

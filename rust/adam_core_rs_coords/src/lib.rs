@@ -355,8 +355,13 @@ pub fn transform_row_with_jacobian(
 /// Batch variant: compute propagated covariances `J @ Σ @ J^T` per row in parallel.
 ///
 /// `covariance_in` is a flattened `[N * 36]` buffer (row-major 6x6 per entry).
-/// Rows with any NaN in their input covariance propagate NaN through (no Jacobian
-/// evaluation is performed for those rows). Returns `(coords_out_flat, cov_out_flat)`.
+/// Rows with any NaN in their input covariance propagate NaN through the entire
+/// output covariance row (no Jacobian evaluation is performed for those rows).
+/// State values are still transformed normally. This mirrors the legacy
+/// JAX/NumPy `J @ Sigma @ J.T` behavior where a single NaN covariance cell
+/// contaminates the whole product, and intentionally differs from the
+/// Cartesian rotation kernel's legacy zero-fill/restore mask policy.
+/// Returns `(coords_out_flat, cov_out_flat)`.
 #[allow(clippy::too_many_arguments)]
 pub fn transform_with_covariance_flat6(
     coords_flat: &[f64],
@@ -421,6 +426,10 @@ pub fn transform_with_covariance_flat6(
             });
 
             if cov_has_nan {
+                // Preserve the legacy covariance-transform NaN contract:
+                // `J @ Sigma @ J.T` with any NaN in Sigma yields an all-NaN
+                // covariance row. The state transform itself is independent
+                // of Sigma, so compute values through the f64 fast path.
                 let values = match rep_in {
                     Representation::Cartesian
                     | Representation::Spherical
@@ -803,12 +812,13 @@ pub fn rotate_cartesian_time_varying_flat6(
             .zip(flat_cov.par_chunks(36))
             .zip(time_index.par_iter())
             .for_each(|((dst, src), &ti)| {
-                // Match CartesianCoordinates.rotate's NaN policy exactly:
+                // Match CartesianCoordinates.rotate's legacy NaN policy exactly:
                 // replace NaN with 0 for the rotation, then restore NaN
                 // at the same positions in the output. An all-NaN input
                 // yields an all-NaN output; a partial-NaN input yields
                 // a matrix whose non-NaN cells are the rotated values
-                // of the 0-filled input.
+                // of the 0-filled input. This is compatibility behavior,
+                // not a general partial-covariance uncertainty model.
                 let m = &matrices_flat[ti * 36..ti * 36 + 36];
                 let mut filled = [0.0_f64; 36];
                 let mut nan_mask = [false; 36];
