@@ -307,7 +307,12 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict=(
             "raw-kernel parity; performance rows are diagnostic, not public "
-            "dispatcher promotion gates."
+            "dispatcher promotion gates. The tightest finite-covariance budget "
+            "observed in the 2026-05-14 targeted fuzz was "
+            "raw_cart_cov_eq_to_kep_ec_covariance at ~10x headroom "
+            "(max tolerance ratio ≈0.095); treat that row as a canary before "
+            "any future covariance-rtol tightening rather than loosening "
+            "preemptively."
         ),
     ),
     "coordinates.rotate_cartesian_time_varying": ToleranceSpec(
