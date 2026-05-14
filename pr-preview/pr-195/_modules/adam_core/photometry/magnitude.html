@@ -424,8 +424,12 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">calculate_apparent_magnitude_v_and_phase_angle_numpy</span> <span class="k">as</span> <span class="n">rust_calculate_apparent_magnitude_v_and_phase_angle_numpy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">calculate_apparent_magnitude_v_numpy</span> <span class="k">as</span> <span class="n">rust_calculate_apparent_magnitude_v_numpy</span><span class="p">,</span>
-    <span class="n">calculate_phase_angle_numpy</span> <span class="k">as</span> <span class="n">rust_calculate_phase_angle_numpy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">calculate_phase_angle_numpy</span> <span class="k">as</span> <span class="n">rust_calculate_phase_angle_numpy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">predict_magnitudes_bandpass_numpy</span> <span class="k">as</span> <span class="n">rust_predict_magnitudes_bandpass_numpy</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
@@ -865,9 +869,7 @@
             <span class="o">+</span> <span class="n">missing</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span>
         <span class="p">)</span>
 
-    <span class="n">delta_table_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">delta_table</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="p">)</span>
+    <span class="n">delta_table_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">delta_table</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
     <span class="n">rust_out</span> <span class="o">=</span> <span class="n">rust_predict_magnitudes_bandpass_numpy</span><span class="p">(</span>
         <span class="n">H_v_arr</span><span class="p">,</span> <span class="n">object_pos</span><span class="p">,</span> <span class="n">observer_pos</span><span class="p">,</span> <span class="n">G_arr</span><span class="p">,</span> <span class="n">target_ids</span><span class="p">,</span> <span class="n">delta_table_np</span>
     <span class="p">)</span>

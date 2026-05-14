@@ -522,9 +522,7 @@
 <span class="sd">    covariances : `~numpy.ndarray` (N, D, D)</span>
 <span class="sd">        Covariance matrices for spherical residuals with the correction factor applied.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-        <span class="n">apply_cosine_latitude_correction_numpy</span> <span class="k">as</span> <span class="n">_rust_cos_lat_correct</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">apply_cosine_latitude_correction_numpy</span> <span class="k">as</span> <span class="n">_rust_cos_lat_correct</span>
 
     <span class="n">out</span> <span class="o">=</span> <span class="n">_rust_cos_lat_correct</span><span class="p">(</span>
         <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">lat</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
