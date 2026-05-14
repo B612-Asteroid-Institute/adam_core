@@ -1,17 +1,41 @@
 # adam-core Rust Migration Review Handoff
 
 Date: 2026-04-27
-Last updated: 2026-04-30
+Last updated: 2026-05-14
 Reviewer: Codex
 Migration checkout: `/Users/aleck/Code/adam-core-rust-migration`
 Baseline checkout: `/Users/aleck/Code/adam-core`
 
-## Read This First: Current Reviewer State On 2026-04-30
+## 2026-05-14 Supersession: Current Merge-Readiness Snapshot
+
+This file began as a 2026-04-27 critique and the 2026-04-30 section below is
+now historical. Current source-of-truth state is the committed branch plus:
+
+- Latest branch head when this note was added: `b775a4c1` (`Fix CI lint formatting`).
+- Final targeted-test cleanup is complete: canonical artifacts show 42
+  random-fuzz APIs, 0 targeted-test rows, and 126 speed rows.
+- `orbit_determination.gaussIOD` has constrained random-fuzz plus supplemental
+  fixed fixtures; raw-kernel-only helpers have direct parity and diagnostic
+  speed rows where feasible.
+- RM-P1-020 is closed under the canonical multi-thread Rust-vs-baseline speed
+  gate. Tiny-n p95 is diagnostic only; tiny-n p50 remains enforced at 1.2x.
+- Current canonical artifacts are `migration/artifacts/parity_gate.json`,
+  `migration/artifacts/parity_speed_cold_warm.json`,
+  `migration/artifacts/parity_report.md`, and
+  `migration/artifacts/parity_table_rca.json`. The stale non-RCA
+  `migration/artifacts/parity_table.json` predecessor was removed.
+- Remaining implementation backlog is post-merge-readiness work:
+  RM-WE2-003 variants/covariance sampling, RM-WE2-004 OD evaluation/outlier
+  helpers, RM-WE3-001 least-squares fusion, and the future n-body/assist-rs
+  line.
+
+## Read This First: Historical Reviewer State On 2026-04-30
 
 This document began as a 2026-04-27 static critique. The original critique is
 kept below for provenance, but several blockers listed there have since been
-closed. Reviewers should treat this section as the current state; dated addenda
-below are preserved for context.
+closed. Reviewers should treat the 2026-05-14 supersession section above as the
+current state; this 2026-04-30 snapshot and dated addenda below are preserved
+for context.
 
 Current migration checkout state:
 
@@ -864,7 +888,7 @@ The transcript records a large amount of implementation, validation, and governa
    - `migration/scripts/parity_table.py`
    - `migration/scripts/perf_scaling_table.py`
    - `migration/scripts/perf_e1_e2_kernels.py`
-   - `migration/artifacts/parity_table.json`
+   - `migration/artifacts/parity_table.json` (removed 2026-05-14 as a stale non-RCA predecessor)
    - `migration/artifacts/parity_table_rca.json`
    - `migration/artifacts/perf_scaling_table.json`
    - `migration/artifacts/perf_e1_e2_kernels.json`

@@ -743,16 +743,12 @@ Completion notes:
 
 ## P1 Stabilization Tasks
 
-Recommended current order after RM-P1-010 completion:
+Current state as of 2026-05-14:
 
-1. RM-P1-011.
-2. RM-P1-012.
-3. RM-P1-014 and RM-P1-014A before the 2026-05-12 waiver review date.
-4. RM-P1-013 / RM-WE2-001.
-5. RM-P1-018.
-6. RM-P1-021 (user reprioritized canonical coverage before waiver/performance-blocker cleanup on 2026-05-06).
-7. RM-P1-020.
-8. RM-P1-016 and RM-P1-017, then Wave D3/E2/E3 implementation work.
+- All P0/P1 stabilization tasks through RM-P1-021 are complete.
+- RM-P1-020 is closed under the canonical multi-thread Rust-vs-baseline gate; tiny-n p95 is diagnostic only, and tiny-n p50 remains enforced at 1.2x.
+- Final targeted-test graduation is complete: canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, 126 speed rows, and no active performance waivers.
+- Merge-readiness housekeeping should stay scoped to CI, current planning docs, and artifact cleanup. New implementation work should move to RM-WE2-003, RM-WE2-004, RM-WE3-001, or the future n-body/assist-rs line after merge-readiness is settled.
 
 Reviewer-feedback disposition:
 
@@ -793,18 +789,24 @@ Completion notes:
   `public-rust-default`, `raw-kernel-only`, `orchestration-rust-default`,
   `rust-only`, `dual`, and `legacy`, with typed boundary, default-backend, and
   parity-coverage metadata.
-- Registry rows encode direct randomized-fuzz coverage, targeted-test-only
-  coverage, orchestration-implied coverage, and randomized-fuzz exclusions.
-- `orbit_determination.gaussIOD` is explicitly
-  `random-fuzz-excluded`, with the root-subset divergence rationale recorded
-  in both registry metadata and the canonical parity table output.
+- Registry rows encode direct randomized-fuzz coverage, raw-kernel-only
+  diagnostic speed coverage, orchestration-implied coverage, fixed fixtures,
+  and randomized-fuzz exclusions.
+- `orbit_determination.gaussIOD` was originally
+  `random-fuzz-excluded` because unconstrained random triplets can expose
+  root-subset divergence between Rust Laguerre+deflation and legacy
+  `np.roots`. Follow-up coverage on 2026-05-11 added constrained shared-root
+  random fuzz plus supplemental fixed fixtures, so the registry no longer has
+  a targeted-test-only `gaussIOD` row.
 - `coordinates.transform_coordinates` is marked as partial randomized-fuzz
   coverage with supported and excluded subcases called out; RM-P1-009 later
-  moved the randomized parity case to the public dispatcher boundary.
-- Wave D3/E2/E3 helper surfaces such as `calculate_chi2`, residual helpers,
-  MOID/porkchop helpers, Tisserand, absolute-magnitude fits, weighted stats,
-  and transform/rotation raw kernels are represented as targeted-test coverage
-  instead of being overclaimed as randomized-fuzz coverage.
+  moved the randomized parity case to the public dispatcher boundary, and the
+  2026-05-11 expansion covered the broader public-dispatch subcase matrix.
+- Later targeted-test graduation moved the Wave D3/E2/E3 helper/raw surfaces
+  listed in this historical RM-P1-008 section into random-fuzz rows or
+  diagnostic raw-kernel speed rows. Current artifacts have 0 targeted-test
+  rows; use `src/adam_core/_rust/status.py` and the canonical artifacts for
+  live coverage accounting.
 - `dynamics.add_light_time` was added to the registry so the fuzzed API set and
   status registry agree.
 - `validate_api_migrations()` now fails import/report generation on duplicate
@@ -1271,98 +1273,60 @@ Verification:
   `migration/artifacts/parity_legacy_speed_baseline.json` and invalidated by
   API/shape/process/thread/legacy-checkout changes.
 
-### RM-P1-020: Resolve Remaining 1.2x Single-Thread Speed Misses
+### RM-P1-020: Resolve Remaining 1.2x Speed Misses
 
-Status: open
+Status: complete (2026-05-07); final artifact counts refreshed 2026-05-14
 
-Reason: 2026-05-07 experimental finding showed the single-thread gate is not
-apples-to-apples on macOS Apple Silicon: legacy JAX/XLA cpu/wall measures ~3.6
-cores during photometry kernels even with --xla_cpu_multi_thread_eigen=false +
-intra_op_parallelism_threads=1 + OMP/OPENBLAS/MKL/VECLIB/NUMEXPR/JAX_NUM_THREADS=1
-applied to the legacy subprocess. We tried --xla_cpu_thunk_runtime_thread_pool_size=1
-(rejected as unknown flag) and --xla_cpu_use_thunk_runtime=false (deprecated;
-no wall-time change). The harness therefore switches the canonical Rust-vs-
-legacy parity speed comparison to multi-thread on both sides; Rust Rayon and
-the legacy NumPy/JAX/XLA/BLAS pools both run uncapped. Single-thread mode is
-retained as a labeled diagnostic via `pdm run rust-parity-speed-singlethread`.
+Reason: 2026-05-07 experiments showed the earlier single-thread Rust-vs-legacy
+gate was not apples-to-apples on macOS Apple Silicon: legacy JAX/XLA continued
+using several cores for vectorized kernels despite the single-thread caps. The
+canonical parity speed comparison therefore uses `multi-thread` on both sides
+(Rust Rayon and legacy NumPy/JAX/XLA/BLAS uncapped). The Rust-only latency gate
+keeps single-thread policy for regression tracking, and
+`pdm run rust-parity-speed-singlethread` remains a labeled diagnostic.
 
-Under the new multi-thread gate, the prior single-thread photometry red rows
-clear: `predict_magnitudes` 2.23x p50 / 1.69x p95, `calculate_apparent_magnitude_v`
-3.27x / 2.16x, fused mag+phase 3.00 / 3.00, phase angle 1.85 / 1.45.
+Completion summary:
 
-Historical single-thread numbers prior to the policy switch (cached-legacy
-runs; preserved here for traceability):
+- Multi-thread canonical artifacts replaced the asymmetric single-thread pass/fail
+  evidence. The historical multi-thread artifact showed the previously red
+  photometry large-n rows clearing with production-realistic scaling.
+- Serial-dispatch thresholds eliminated small-workload Rayon-spawn overhead for
+  `coordinates.residuals.calculate_chi2` (n <= 256),
+  `dynamics.propagate_2body` (n <= 64),
+  `coordinates.cartesian_to_geodetic` (n <= 64), and
+  `orbits.classify_orbits` (n < 16384).
+- Tiny-n p95 enforcement is disabled because microsecond-scale rows are dominated
+  by scheduler jitter; tiny-n p50 remains enforced at the 1.2x policy floor.
+- No permanent large-n waivers were added. Historical photometry and
+  cartesian-to-spherical waivers remain resolved in `migration/waivers.yaml` for
+  provenance only.
+- The 2026-05-14 final targeted-test cleanup refreshed the broader counts: the
+  canonical artifacts now show 42 random-fuzz APIs, 0 targeted-test rows, and
+  126 speed rows. Enforced speed rows pass; raw-kernel-only rows such as
+  statistics, rotation, transform covariance, propagation arc helpers, MOID
+  batch, and porkchop grid are diagnostic speed rows rather than promotion gates.
 
-- `photometry.predict_magnitudes` large-n: p50 0.94-0.99, p95 0.98-1.11 across
-  4 independent runs. Confirmed structural — JAX/XLA fuses the bandpass-delta
-  gather into the magnitude tail more aggressively than per-call vForce.
-- `photometry.calculate_apparent_magnitude_v` large-n: p50 1.15-1.23, p95
-  1.22-1.36 across 4 runs. Borderline at the 1.2x gate; pass/fail depends on
-  scheduler variance.
-- `dynamics.generate_ephemeris_2body` small-n: p50 1.17-1.24 across recent
-  runs. Borderline; sometimes passes, sometimes misses by a few percent.
-- `dynamics.add_light_time`, `coordinates.residuals.calculate_chi2`,
-  `orbit_determination.calcGauss`, transform, and other earlier outliers pass
-  at gate in the latest committed artifacts.
+Acceptance evidence:
 
-The historical multi-thread artifact
-(`migration/artifacts/parity_speed_cold_warm_multithread.json`) provided the
-production scaling evidence that justified the policy switch. Going forward,
-the canonical artifact `migration/artifacts/parity_speed_cold_warm.json` is
-multi-thread; `migration/artifacts/parity_speed_cold_warm_singlethread.json`
-becomes the labeled diagnostic.
-`parity_fuzz.all_passed=true` continues to hold for all 25 direct random-fuzz
-APIs. `dynamics.add_light_time`,
-coordinate/OD outliers pass in the latest committed artifacts and should be
-treated as stale unless reproduced by targeted cached-legacy runs. Multi-thread
-scaling evidence is useful for production-throughput context, but it does not
-replace the default single-thread gate.
-
-Scope:
-
-- Keep each API/lane as its own measured implementation pass: plan, implement,
-  rebuild, run component parity, run the component speed grid with cached legacy
-  timings, then checkpoint only if the evidence supports keeping the change.
-- For `photometry.calculate_apparent_magnitude_v`, first confirm whether the
-  large-n p95 miss reproduces outside the full cold/warm ordering. The warm-only
-  artifact passed this row, so treat the current cold/warm p95 miss as variance
-  unless repeated targeted cached-legacy runs show a real kernel regression.
-- For `photometry.predict_magnitudes`, treat the large-n miss as the live
-  structural blocker caused by the observed JAX/XLA bandpass-gather fusion
-  advantage. Remaining changes must be low-risk, algorithmically equivalent
-  implementation work (batching, memory layout, scheduling, exact algebraic
-  reuse) unless the user explicitly approves an approximation or policy change.
-- For `dynamics.generate_ephemeris_2body`, do not restart optimization based on
-  stale TODO/backlog text. The row currently passes in committed artifacts;
-  reopen only if a targeted cached-legacy run or a future full artifact
-  reproduces a miss.
-- For `dynamics.add_light_time`, `coordinates.residuals.calculate_chi2`, and
-  `orbit_determination.calcGauss`, do not edit based on prior full-grid outliers
-  alone. Spot-check with targeted cached-legacy runs only if they reappear.
-- Do not add permanent large-n or tiny-n waivers. Any temporary local rerouting
-  while an optimization is actively underway must be dated, explicit, and
-  removed before claiming merge readiness.
-
-Acceptance:
-
-- All current red single-thread speed rows meet 1.2x p50/p95, or there is an
-  explicit user decision recorded outside the waiver mechanism explaining why a
-  structural single-thread miss is accepted for merge.
 - `migration/artifacts/parity_gate.json`,
   `migration/artifacts/parity_speed_cold_warm.json`, and
-  `migration/artifacts/parity_report.md` reflect the current policy and contain
-  no stale resolved waiver IDs.
-- Separate multi-thread artifacts, if collected, are labeled scaling evidence
-  only and are not used as pass/fail evidence for the default gate.
+  `migration/artifacts/parity_report.md` reflect the multi-thread policy, the
+  tiny-n p95 diagnostic policy, and no active waiver IDs.
+- The single-thread artifact/script is diagnostic-only and must not be used as
+  the merge-readiness pass/fail gate unless the policy is explicitly changed.
 
-Verification:
+Verification cadence for future changes:
 
 ```bash
 pdm run rust-develop
-pdm run python -m migration.parity.parity_main --apis <api> --threads single \
-  --speed-large --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
 pdm run rust-parity-main
 pdm run rust-parity-speed-cold
+pdm run python -m migration.scripts.parity_table \
+  --parity-artifact migration/artifacts/parity_gate.json \
+  --speed-artifact migration/artifacts/parity_speed_cold_warm.json \
+  --json-output migration/artifacts/parity_table_rca.json \
+  --markdown-output migration/artifacts/parity_report.md
+git diff --check
 ```
 
 ### RM-P1-021: Add Direct `classify_orbits` And `calculate_moid` Fuzz/Speed Coverage
@@ -1411,8 +1375,9 @@ pdm run rust-parity-speed-cold
 - Task #138: hyperbolic universal-Kepler divergence fixed by reverting to Newton after Laguerre regression.
 - Task #140: `propagate_2body_along_arc` consumed in `_run_2body_propagate` for OD inner-loop single-orbit/many-dt patterns.
 - Wave E1: tisserand, classification, and absolute-magnitude fitting kernels completed.
-- Wave E2 completed pieces: `calculate_chi2`, `bound_longitude_residuals`, `apply_cosine_latitude_correction`.
-- Weighted mean/covariance: attempted and reverted to NumPy/BLAS in production because BLAS wins; Rust kernels remain but should not be re-promoted without new SIMD evidence.
+- Wave E2 completed pieces: `calculate_chi2`, `bound_longitude_residuals`, `apply_cosine_latitude_correction`, and fused `Residuals.calculate` public governance.
+- Final targeted-test graduation (2026-05-14): constrained `gaussIOD` fuzz/fixed governance, transform covariance/rotation raw-kernel rows, propagation arc helpers, MOID batch, and porkchop grid all have canonical parity governance; no targeted-test rows remain.
+- Weighted mean/covariance: attempted and reverted to NumPy/BLAS in production because BLAS wins; Rust kernels remain under diagnostic raw-kernel governance and should not be re-promoted without new SIMD evidence.
 
 ### RM-WD3-001: Wave D3 Parallel Backend Abstraction
 
@@ -1593,22 +1558,33 @@ Verification:
 
 ### RM-WE3-002: Quivr-Bound Constitutional Gaps
 
-Status: open
+Status: complete (2026-05-14)
 
 Source task: #139.
 
-Scope:
+Completion:
 
-- Close or explicitly track remaining parity harness gaps that require Python+pyarrow/quivr round trips:
-  - `calculate_perturber_moids`
-  - `generate_porkchop_data`
-  - hard `transform_coordinates` cases such as ITRF93/origin-translation public dispatch
-  - `gaussIOD` fixed-fixture parity path versus randomized exclusion
-- Extend harness style where NumPy-boundary subprocess handoff is insufficient.
+- `dynamics.calculate_perturber_moids` has public quivr orchestration
+  random-fuzz and speed governance under RM-WE2-003.
+- `dynamics.generate_porkchop_data` has public quivr orchestration random-fuzz
+  and speed governance under RM-WE2-004.
+- `coordinates.transform_coordinates` now covers the broader public-dispatch
+  matrix, including inverse frame directions, non-Cartesian representations,
+  SUN/EARTH origin translations, and ITRF93 time-varying cases, with remaining
+  exclusions explicitly labeled.
+- `orbit_determination.gaussIOD` has constrained shared-root random-fuzz
+  governance and supplemental fixed fixtures instead of a targeted-test-only
+  row.
+- Raw-kernel-only helpers that are not public promotion gates
+  (`transform_coordinates_with_covariance`, rotation, propagation arc helpers,
+  MOID batch, porkchop grid, and weighted statistics) have direct parity rows
+  and diagnostic speed rows where feasible.
 
 Verification:
 
-- Reports distinguish raw kernel coverage, public dispatch coverage, and orchestration coverage.
+- Reports distinguish raw-kernel diagnostic rows, public dispatch rows, fixed
+  fixtures, and public orchestration rows. The 2026-05-14 canonical artifacts
+  report 42 random-fuzz APIs, 0 targeted-test rows, and 126 speed rows.
 
 ### RM-WE4-001: I/O And External Client Cold Paths
 

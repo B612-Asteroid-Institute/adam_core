@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-14 (`coordinates.transform_coordinates_with_covariance` direct raw-kernel random-fuzz/diagnostic-speed governance in progress after rotation graduation)
+Last updated: 2026-05-14 (merge-readiness housekeeping after final targeted-test graduation; canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, and 126 speed rows with raw-kernel-only speed rows labeled diagnostic)
 
 ## Current Review-Derived Backlog
 
@@ -32,9 +32,17 @@ Last updated: 2026-05-14 (`coordinates.transform_coordinates_with_covariance` di
 - [x] RM-P1-018 latency-gate statistical policy resolved on 2026-05-03: default pass/fail is single-thread, latency artifacts preserve raw trial samples, and native/multithread measurements are diagnostic-only unless separately labeled.
 - [x] RM-P1-019/RM-P1-019A added shaped baseline speed governance: Rust-vs-baseline artifacts and tables expose enforced `tiny-n`, historical `small-n`/`n=2000`, and API-shaped `large-n` lanes with structured workload axes, lane status, explicit cold/thread metadata, and serialized baseline-main legacy timing cache. Large-n misses remain red under RM-P1-020; no active large-n waivers are acceptable without an explicit user structural-acceptance decision.
 - [x] RM-P1-021: direct randomized fuzz parity coverage and canonical Rust-vs-baseline speed lanes for `orbits.classify_orbits` and `dynamics.calculate_moid` landed on 2026-05-07. The regenerated parity table/report artifacts show both APIs passing all fuzz seeds and tiny/small/large speed lanes; public `calculate_perturber_moids` orchestration is now covered separately under RM-WE2-003.
-- [x] RM-P1-020: closed 2026-05-07. Multi-thread canonical comparison (Rust Rayon + legacy JAX/XLA both uncapped) replaced the asymmetric single-thread gate; serial-dispatch thresholds (chi2 n<=256, propagate_2body n<=64, cartesian_to_geodetic n<=64, classify_orbits n<16384) eliminated Rayon-spawn-overhead misses on small workloads; tiny-n p95 enforcement dropped because microsecond-scale work is dominated by scheduler jitter (p50 stays enforced at 1.2x). All 25 APIs now PASS every lane (tiny/small/large) in the committed canonical artifacts.
+- [x] RM-P1-020: closed 2026-05-07. Multi-thread canonical comparison (Rust Rayon + legacy JAX/XLA both uncapped) replaced the asymmetric single-thread gate; serial-dispatch thresholds (chi2 n<=256, propagate_2body n<=64, cartesian_to_geodetic n<=64, classify_orbits n<16384) eliminated Rayon-spawn-overhead misses on small workloads; tiny-n p95 enforcement is disabled because microsecond-scale work is dominated by scheduler jitter while tiny-n p50 remains enforced at 1.2x. The final 2026-05-14 canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, and 126 speed rows; all enforced rows pass, and raw-kernel-only speed rows are labeled diagnostic rather than promotion gates.
+- [x] Final targeted-test graduation completed 2026-05-14. `orbit_determination.gaussIOD` now has constrained random-fuzz plus supplemental fixed fixtures, transform covariance/rotation and propagation arc helpers have direct raw-kernel fuzz governance, and the final raw batch helpers (`dynamics.calculate_moid_batch`, `missions.porkchop_grid`) have random-fuzz rows with diagnostic raw-kernel speed.
 - [x] RM-P1-017: final clean validation pass completed 2026-05-07. test-rust-full (754 passed / 144 skipped / 2 deselected), rust-quality, script-preflight, rust-latency-gate (all APIs within regression tolerance), wheel-build + wheel-inspect (adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl), docs-check, rust-parity-main and rust-parity-speed-cold all pass. Public-import compatibility (`test_public_module_compatibility.py`) and runtime dep audit (`test_runtime_dependency_audit.py`) included in the rust-full suite.
 - [x] RM-SPICE-LSK-001: completed 2026-05-07. Verified `spicekit v0.2.2` ships parsed `KPL/LSK` `DELTET/*` and Earth->ITRF93 FK content (tag points at commit after `084edd6 Add LSK text-kernel support`). Bumped `rust/adam_core_rs_spice` to spicekit 0.2.2, switched furnsh from `parse_body_bindings` to `parse_text_kernel`, replaced silent `Kernel::Ignored` classification with retained `Kernel::Text { content: TextKernelContent }` carrying bindings + leapseconds + frame_associations, exposed `AdamCoreSpiceBackend::leapseconds()` and `frame_associations()` accessors, and added `SpiceBackendError::UnsupportedTextKernel` so genuinely empty text kernels fail loudly. `Timestamp.rescale()` keeps its ERFA policy. Added cargo tests for both LSK retention and unsupported-text rejection. Targeted SPICE pytest 18/18, full test-rust-full 754 passed.
+
+## Remaining Implementation Backlog
+
+- [ ] RM-WE2-003: variants and covariance-sampling linear algebra, only where measured data shows wins over current Python/BLAS paths.
+- [ ] RM-WE2-004: OD evaluation and outlier helper hot paths; avoid porting orchestration without measured benefit.
+- [ ] RM-WE3-001: least-squares inner-loop fusion with preserved diagnostics and deterministic OD-case parity.
+- [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-rs` propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.
 
 ## Active Sprint (Milestone 1 hardening)
 
