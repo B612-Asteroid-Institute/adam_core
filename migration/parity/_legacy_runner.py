@@ -228,6 +228,12 @@ def _coordinates_spherical_to_cartesian(coords: np.ndarray) -> dict[str, np.ndar
     return {"out": out}
 
 
+def _coordinates_transform_coordinates_with_covariance(
+    cases: list[dict[str, Any]],
+) -> dict[str, np.ndarray]:
+    return _coordinates_transform_coordinates(cases)
+
+
 def _coordinates_rotate_cartesian_time_varying(
     coords: np.ndarray,
     time_index: np.ndarray,
@@ -1056,6 +1062,9 @@ def _orbit_determination_gauss_iod(
 DISPATCH = {
     "coordinates.cartesian_to_spherical": _coordinates_cartesian_to_spherical,
     "coordinates.transform_coordinates": _coordinates_transform_coordinates,
+    "coordinates.transform_coordinates_with_covariance": (
+        _coordinates_transform_coordinates_with_covariance
+    ),
     "coordinates.cartesian_to_geodetic": _coordinates_cartesian_to_geodetic,
     "coordinates.cartesian_to_keplerian": _coordinates_cartesian_to_keplerian,
     "coordinates.keplerian.to_cartesian": _coordinates_keplerian_to_cartesian,

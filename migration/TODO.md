@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-14 (`coordinates.rotate_cartesian_time_varying` graduated from targeted tests into regular random-fuzz/diagnostic-speed governance)
+Last updated: 2026-05-14 (`coordinates.transform_coordinates_with_covariance` direct raw-kernel random-fuzz/diagnostic-speed governance in progress after rotation graduation)
 
 ## Current Review-Derived Backlog
 

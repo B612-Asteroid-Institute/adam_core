@@ -271,6 +271,42 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "exclusions are explicit in the migration registry."
         ),
     ),
+    "coordinates.transform_coordinates_with_covariance": ToleranceSpec(
+        outputs={
+            "raw_cart_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
+            "raw_cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "raw_cart_cov_eq_to_kep_ec": OutputTol(atol=1e-9, rtol=1e-12),
+            "raw_cart_cov_eq_to_kep_ec_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "raw_kep_cov_ec_to_cart_eq": OutputTol(atol=3e-12, rtol=1e-12),
+            "raw_kep_cov_ec_to_cart_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "raw_kep_cov_eq_to_sph_ec": OutputTol(atol=1e-10, rtol=1e-12),
+            "raw_kep_cov_eq_to_sph_ec_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+        },
+        rationale=(
+            "Raw forward-mode AD covariance transform kernel over representative "
+            "constant-frame Cartesian and Keplerian representation chains, with "
+            "one all-NaN covariance row per subcase to pin row-level NaN policy."
+        ),
+        dominant_column="Keplerian angular outputs and propagated 6×6 covariance cells",
+        physical_magnitude=(
+            "State outputs inherit the direct transform-coordinate scale: "
+            "3e-12 AU for Keplerian→Cartesian, 1e-10 deg for spherical angles, "
+            "and 1e-9 on Cartesian→Keplerian epoch/angle-like fields. "
+            "Covariance rows use 1e-21 absolute for near-zero cells plus 1e-8 "
+            "relative for finite Jacobian-propagated covariance terms."
+        ),
+        root_cause=(
+            "Rust evaluates a Dual<6> transform chain and applies J·Σ·Jᵀ in "
+            "row-major loops while the baseline-main oracle reaches the same "
+            "public covariance transform through JAX jacfwd and NumPy matrix "
+            "multiplication. Finite drift is last-ulp representation conversion "
+            "and matrix-product ordering noise."
+        ),
+        verdict=(
+            "raw-kernel parity; performance rows are diagnostic, not public "
+            "dispatcher promotion gates."
+        ),
+    ),
     "coordinates.rotate_cartesian_time_varying": ToleranceSpec(
         outputs={
             "coords": OutputTol(atol=1e-12, rtol=1e-12),

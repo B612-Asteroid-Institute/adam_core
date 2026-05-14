@@ -211,6 +211,41 @@ def _coordinates_spherical_to_cartesian(coords: np.ndarray) -> dict[str, np.ndar
     }
 
 
+def _coordinates_transform_coordinates_with_covariance(
+    cases: list[dict[str, Any]],
+) -> dict[str, np.ndarray]:
+    outputs: dict[str, np.ndarray] = {}
+    for case in cases:
+        name = str(case["name"])
+        coords = np.ascontiguousarray(case["coords"], dtype=np.float64)
+        n = coords.shape[0]
+        covariances = np.ascontiguousarray(
+            np.asarray(case["covariance"], dtype=np.float64).reshape(n, 36)
+        )
+        coords_out, covariances_out = (
+            _rust_api.transform_coordinates_with_covariance_numpy(
+                coords,
+                covariances,
+                str(case["representation_in"]),
+                str(case["representation_out"]),
+                t0=np.ascontiguousarray(case["time_mjd"], dtype=np.float64),
+                mu=np.ascontiguousarray(case["mu"], dtype=np.float64),
+                max_iter=1000,
+                tol=1e-15,
+                frame_in=str(case["frame_in"]),
+                frame_out=str(case["frame_out"]),
+            )
+        )
+        outputs[name] = _ensure(
+            coords_out, f"transform_coordinates_with_covariance.{name}"
+        )
+        outputs[f"{name}_covariance"] = _ensure(
+            covariances_out,
+            f"transform_coordinates_with_covariance.{name}_covariance",
+        ).reshape(n, 6, 6)
+    return outputs
+
+
 def _coordinates_rotate_cartesian_time_varying(
     coords: np.ndarray,
     time_index: np.ndarray,
@@ -799,6 +834,9 @@ def _orbit_determination_gauss_iod(
 DISPATCH = {
     "coordinates.cartesian_to_spherical": _coordinates_cartesian_to_spherical,
     "coordinates.transform_coordinates": _coordinates_transform_coordinates,
+    "coordinates.transform_coordinates_with_covariance": (
+        _coordinates_transform_coordinates_with_covariance
+    ),
     "coordinates.cartesian_to_geodetic": _coordinates_cartesian_to_geodetic,
     "coordinates.cartesian_to_keplerian": _coordinates_cartesian_to_keplerian,
     "coordinates.keplerian.to_cartesian": _coordinates_keplerian_to_cartesian,

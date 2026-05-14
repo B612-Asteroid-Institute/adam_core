@@ -241,6 +241,13 @@ def _sample_keplerian_covariance(rng: np.random.Generator, n: int) -> np.ndarray
     return _sample_covariance(rng, n, scales)
 
 
+def _pin_all_nan_covariance_row(covariances: np.ndarray) -> np.ndarray:
+    pinned = np.array(covariances, dtype=np.float64, copy=True)
+    if pinned.shape[0]:
+        pinned[0, :, :] = np.nan
+    return np.ascontiguousarray(pinned)
+
+
 def _transform_case(
     name: str,
     coords: np.ndarray,
@@ -452,6 +459,126 @@ def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
             "ecliptic",
             "equatorial",
             covariance=_sample_keplerian_covariance(rng, size),
+        )
+    )
+
+    kw = {"cases": cases}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+_TRANSFORM_COVARIANCE_SUBCASE_NAMES: tuple[str, ...] = (
+    "raw_cart_cov_ec_to_sph_eq",
+    "raw_cart_cov_eq_to_kep_ec",
+    "raw_kep_cov_ec_to_cart_eq",
+    "raw_kep_cov_eq_to_sph_ec",
+)
+
+
+def _split_transform_covariance_rows(n: int) -> list[int]:
+    case_count = len(_TRANSFORM_COVARIANCE_SUBCASE_NAMES)
+    if n < case_count:
+        raise ValueError(
+            "coordinates.transform_coordinates_with_covariance needs at least "
+            f"{case_count} rows to exercise every raw-kernel subcase"
+        )
+    rows_per_case, remainder = divmod(n, case_count)
+    return [rows_per_case + (1 if i < remainder else 0) for i in range(case_count)]
+
+
+def _transform_covariance_case(
+    name: str,
+    coords: np.ndarray,
+    time_mjd: np.ndarray,
+    representation_in: str,
+    representation_out: str,
+    frame_in: str,
+    frame_out: str,
+    covariance: np.ndarray,
+) -> dict[str, Any]:
+    case = _transform_case(
+        name,
+        coords,
+        time_mjd,
+        representation_in,
+        representation_out,
+        frame_in,
+        frame_out,
+        covariance=_pin_all_nan_covariance_row(covariance),
+    )
+    case["mu"] = np.full(coords.shape[0], MU_SUN, dtype=np.float64)
+    return case
+
+
+def make_transform_coordinates_with_covariance(
+    rng: np.random.Generator, n: int
+) -> Sample:
+    """Raw covariance-transform kernel subcase matrix.
+
+    The direct raw-kernel comparison exercises representative constant-frame
+    Cartesian/Keplerian representation chains and covariance propagation. The
+    public ``coordinates.transform_coordinates`` matrix separately covers
+    origin-translation and ITRF93 public-dispatch covariance paths.
+    """
+    sizes = iter(_split_transform_covariance_rows(n))
+    cases: list[dict[str, Any]] = []
+
+    size = next(sizes)
+    time_mjd = _sample_transform_time(rng, size)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_covariance_case(
+            "raw_cart_cov_ec_to_sph_eq",
+            coords,
+            time_mjd,
+            "cartesian",
+            "spherical",
+            "ecliptic",
+            "equatorial",
+            _sample_cartesian_covariance(rng, size),
+        )
+    )
+
+    size = next(sizes)
+    time_mjd = _sample_transform_time(rng, size)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, size))
+    cases.append(
+        _transform_covariance_case(
+            "raw_cart_cov_eq_to_kep_ec",
+            coords,
+            time_mjd,
+            "cartesian",
+            "keplerian",
+            "equatorial",
+            "ecliptic",
+            _sample_cartesian_covariance(rng, size),
+        )
+    )
+
+    size = next(sizes)
+    cases.append(
+        _transform_covariance_case(
+            "raw_kep_cov_ec_to_cart_eq",
+            _sample_keplerian_elements(rng, size),
+            _sample_transform_time(rng, size),
+            "keplerian",
+            "cartesian",
+            "ecliptic",
+            "equatorial",
+            _sample_keplerian_covariance(rng, size),
+        )
+    )
+
+    size = next(sizes)
+    cases.append(
+        _transform_covariance_case(
+            "raw_kep_cov_eq_to_sph_ec",
+            _sample_keplerian_elements(rng, size),
+            _sample_transform_time(rng, size),
+            "keplerian",
+            "spherical",
+            "equatorial",
+            "ecliptic",
+            _sample_keplerian_covariance(rng, size),
         )
     )
 
@@ -1502,6 +1629,9 @@ def make_predict_magnitudes_shape(
 GENERATORS = {
     "coordinates.cartesian_to_spherical": make_cartesian_to_spherical,
     "coordinates.transform_coordinates": make_transform_coordinates,
+    "coordinates.transform_coordinates_with_covariance": (
+        make_transform_coordinates_with_covariance
+    ),
     "coordinates.cartesian_to_geodetic": make_cartesian_to_geodetic,
     "coordinates.cartesian_to_keplerian": make_cartesian_to_keplerian,
     "coordinates.keplerian.to_cartesian": make_keplerian_to_cartesian,
@@ -1570,6 +1700,9 @@ SHAPED_GENERATORS = {
 
 TINY_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.transform_coordinates": WorkloadShape(len(_TRANSFORM_SUBCASE_NAMES)),
+    "coordinates.transform_coordinates_with_covariance": WorkloadShape(
+        len(_TRANSFORM_COVARIANCE_SUBCASE_NAMES)
+    ),
     # `calculate_moid` is a scalar optimizer API; one pair is the true
     # one-off call shape, unlike vector kernels where n=10 is the tiny lane.
     "dynamics.calculate_moid": WorkloadShape(1),
@@ -1616,6 +1749,7 @@ FUZZ_N_OVERRIDES: dict[str, int] = {
 LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "coordinates.cartesian_to_spherical": WorkloadShape(20_000),
     "coordinates.transform_coordinates": WorkloadShape(12_000),
+    "coordinates.transform_coordinates_with_covariance": WorkloadShape(4_000),
     "coordinates.cartesian_to_geodetic": WorkloadShape(20_000),
     "coordinates.cartesian_to_keplerian": WorkloadShape(20_000),
     "coordinates.keplerian.to_cartesian": WorkloadShape(20_000),

@@ -175,10 +175,19 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         rust_module=(
             "adam_core._rust_native.transform_coordinates_with_covariance_numpy"
         ),
-        parity_coverage="targeted-tests",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Raw covariance-transform kernel used by coordinate-class "
-            "dispatch; not part of baseline-main random-fuzz manifest."
+            "Raw forward-mode AD covariance-transform kernel is fuzzed directly "
+            "against baseline-main public covariance transforms with diagnostic "
+            "raw-kernel comparisons; public coordinate-dispatch coverage remains "
+            "tracked separately."
+        ),
+        covered_subcases=(
+            "Cartesian covariance transform to spherical with ecliptic→equatorial frame rotation",
+            "Cartesian covariance transform to Keplerian with equatorial→ecliptic frame rotation",
+            "Keplerian covariance transform to Cartesian with ecliptic→equatorial frame rotation",
+            "Keplerian covariance transform to spherical with equatorial→ecliptic frame rotation",
+            "all-NaN covariance row pass-through policy",
         ),
     ),
     ApiMigration(

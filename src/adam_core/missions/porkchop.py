@@ -23,6 +23,26 @@ from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_bas
 logger = logging.getLogger(__name__)
 
 
+_TIME_SORT_COLUMNS = ["coordinates.time.days", "coordinates.time.nanos"]
+
+
+def _timestamp_is_non_decreasing(time: Timestamp) -> bool:
+    if len(time) < 2:
+        return True
+
+    days = np.asarray(time.days.to_numpy(zero_copy_only=False), dtype=np.int64)
+    nanos = np.asarray(time.nanos.to_numpy(zero_copy_only=False), dtype=np.int64)
+    increasing_day = days[1:] > days[:-1]
+    same_day_increasing_nanos = (days[1:] == days[:-1]) & (nanos[1:] >= nanos[:-1])
+    return bool(np.all(increasing_day | same_day_increasing_nanos))
+
+
+def _sort_orbits_by_time_if_needed(orbits: Orbits) -> Orbits:
+    if _timestamp_is_non_decreasing(orbits.coordinates.time):
+        return orbits
+    return orbits.sort_by(_TIME_SORT_COLUMNS)
+
+
 def generate_saturated_colorscale(
     base_color: str, n_levels: int = 8, max_alpha: float = 0.8, min_alpha: float = 0.1
 ) -> List[List]:
@@ -585,12 +605,8 @@ def generate_porkchop_data(
         == arrival_orbits.coordinates.origin.code[0]
     ), "Departure and arrival origins must be the same"
 
-    departure_orbits = departure_orbits.sort_by(
-        ["coordinates.time.days", "coordinates.time.nanos"]
-    )
-    arrival_orbits = arrival_orbits.sort_by(
-        ["coordinates.time.days", "coordinates.time.nanos"]
-    )
+    departure_orbits = _sort_orbits_by_time_if_needed(departure_orbits)
+    arrival_orbits = _sort_orbits_by_time_if_needed(arrival_orbits)
 
     n_dep = len(departure_orbits)
     n_arr = len(arrival_orbits)
@@ -600,9 +616,7 @@ def generate_porkchop_data(
     dep_times_mjd = departure_orbits.coordinates.time.mjd().to_numpy(
         zero_copy_only=False
     )
-    arr_times_mjd = arrival_orbits.coordinates.time.mjd().to_numpy(
-        zero_copy_only=False
-    )
+    arr_times_mjd = arrival_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
     dep_states = np.ascontiguousarray(
         departure_orbits.coordinates.values, dtype=np.float64
     )
@@ -628,17 +642,14 @@ def generate_porkchop_data(
     if len(dep_idx) == 0:
         return LambertSolutions.empty()
 
-    dep_idx_i64 = dep_idx.astype(np.int64)
-    arr_idx_i64 = arr_idx.astype(np.int64)
-    stacked_departure_orbits = departure_orbits.take(dep_idx_i64)
-    stacked_arrival_orbits = arrival_orbits.take(arr_idx_i64)
-
-    departure_coordinates = stacked_departure_orbits.coordinates
-    arrival_coordinates = stacked_arrival_orbits.coordinates
+    dep_idx_i64 = np.asarray(dep_idx, dtype=np.int64)
+    arr_idx_i64 = np.asarray(arr_idx, dtype=np.int64)
+    departure_coordinates = departure_orbits.coordinates.take(dep_idx_i64)
+    arrival_coordinates = arrival_orbits.coordinates.take(arr_idx_i64)
     origins = Origin.from_OriginCodes(propagation_origin, size=len(dep_idx))
 
     return LambertSolutions.from_kwargs(
-        departure_body_id=stacked_departure_orbits.orbit_id.to_pylist(),
+        departure_body_id=departure_orbits.orbit_id.take(dep_idx_i64),
         departure_time=departure_coordinates.time,
         departure_body_x=departure_coordinates.x,
         departure_body_y=departure_coordinates.y,
@@ -646,7 +657,7 @@ def generate_porkchop_data(
         departure_body_vx=departure_coordinates.vx,
         departure_body_vy=departure_coordinates.vy,
         departure_body_vz=departure_coordinates.vz,
-        arrival_body_id=stacked_arrival_orbits.orbit_id.to_pylist(),
+        arrival_body_id=arrival_orbits.orbit_id.take(arr_idx_i64),
         arrival_time=arrival_coordinates.time,
         arrival_body_x=arrival_coordinates.x,
         arrival_body_y=arrival_coordinates.y,
