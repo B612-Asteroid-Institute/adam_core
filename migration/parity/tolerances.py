@@ -221,13 +221,13 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "cart_ec_earth_to_sph_itrf93": OutputTol(atol=3e-8, rtol=1e-12),
             "cart_itrf93_earth_to_sph_eq": OutputTol(atol=3e-8, rtol=1e-12),
             "cart_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
-            "cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
             "cart_cov_ec_sun_to_sph_ec_earth": OutputTol(atol=1e-11, rtol=1e-12),
             "cart_cov_ec_sun_to_sph_ec_earth_covariance": OutputTol(
-                atol=1e-21, rtol=1e-8
+                atol=1e-21, rtol=1e-9
             ),
             "kep_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
-            "kep_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "kep_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
         },
         rationale=(
             "Public dispatcher matrix covering Cartesian constant-frame "
@@ -243,7 +243,7 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "1e-10 deg is 0.36 microarcsec for constant-frame angular columns; "
             "1e-9 days is 86 microseconds for the Cometary→Keplerian epoch-like "
             "column. Covariance rows use 1e-21 absolute for near-zero covariance "
-            "cells plus 1e-8 relative for finite propagated covariance terms. "
+            "cells plus 1e-9 relative for finite propagated covariance terms. "
             "SUN↔EARTH origin translations are held to 1e-11 in mixed "
             "spherical units, i.e. 1.5 m in range or 0.036 microarcsec in angular "
             "columns. The ITRF93 rows keep 3e-8 deg/day only for spherical "
@@ -274,13 +274,13 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     "coordinates.transform_coordinates_with_covariance": ToleranceSpec(
         outputs={
             "raw_cart_cov_ec_to_sph_eq": OutputTol(atol=1e-10, rtol=1e-12),
-            "raw_cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "raw_cart_cov_ec_to_sph_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
             "raw_cart_cov_eq_to_kep_ec": OutputTol(atol=1e-9, rtol=1e-12),
-            "raw_cart_cov_eq_to_kep_ec_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "raw_cart_cov_eq_to_kep_ec_covariance": OutputTol(atol=1e-21, rtol=1e-9),
             "raw_kep_cov_ec_to_cart_eq": OutputTol(atol=3e-12, rtol=1e-12),
-            "raw_kep_cov_ec_to_cart_eq_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "raw_kep_cov_ec_to_cart_eq_covariance": OutputTol(atol=1e-21, rtol=1e-9),
             "raw_kep_cov_eq_to_sph_ec": OutputTol(atol=1e-10, rtol=1e-12),
-            "raw_kep_cov_eq_to_sph_ec_covariance": OutputTol(atol=1e-21, rtol=1e-8),
+            "raw_kep_cov_eq_to_sph_ec_covariance": OutputTol(atol=1e-21, rtol=1e-9),
         },
         rationale=(
             "Raw forward-mode AD covariance transform kernel over representative "
@@ -292,7 +292,7 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "State outputs inherit the direct transform-coordinate scale: "
             "3e-12 AU for Keplerian→Cartesian, 1e-10 deg for spherical angles, "
             "and 1e-9 on Cartesian→Keplerian epoch/angle-like fields. "
-            "Covariance rows use 1e-21 absolute for near-zero cells plus 1e-8 "
+            "Covariance rows use 1e-21 absolute for near-zero cells plus 1e-9 "
             "relative for finite Jacobian-propagated covariance terms."
         ),
         root_cause=(
