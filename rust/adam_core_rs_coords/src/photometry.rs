@@ -27,6 +27,7 @@
 use rayon::prelude::*;
 
 const RAD2DEG: f64 = 180.0_f64 / std::f64::consts::PI;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const TWO_POINT_FIVE_OVER_LN10: f64 = 2.5_f64 / std::f64::consts::LN_10;
 
 /// Rayon chunk size for batched photometry kernels. Per-row work is tiny,
