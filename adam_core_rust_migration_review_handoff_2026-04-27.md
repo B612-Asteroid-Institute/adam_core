@@ -11,7 +11,7 @@ Baseline checkout: `/Users/aleck/Code/adam-core`
 This file began as a 2026-04-27 critique and the 2026-04-30 section below is
 now historical. Current source-of-truth state is the committed branch plus:
 
-- Latest branch head when this note was added: `b775a4c1` (`Fix CI lint formatting`).
+- Latest branch head after CI-housekeeping follow-ups: `c8e6ecc1` (`Fix non-macOS photometry clippy`).
 - Final targeted-test cleanup is complete: canonical artifacts show 42
   random-fuzz APIs, 0 targeted-test rows, and 126 speed rows.
 - `orbit_determination.gaussIOD` has constrained random-fuzz plus supplemental
