@@ -1509,7 +1509,7 @@ Callers that bypass `Residuals.calculate` for hot loops should keep using `compu
 
 ### RM-WE2-003: Variants And Covariance Sampling Linear Algebra
 
-Status: open
+Status: complete (2026-05-14)
 
 Source task: #148 follow-up.
 
@@ -1523,6 +1523,14 @@ Verification:
 
 - Parity for sigma-point and Monte Carlo sampling shape/statistical contracts.
 - Performance at realistic variant counts.
+
+Completion notes:
+
+- Profiling showed the hot cost in `VariantOrbits.create(method="sigma-point")` was not `scipy.linalg.sqrtm` itself (~7 µs/row) but the per-coordinate quivr table assembly and repeated `qv.concatenate` of per-sample time/origin rows. A Rust/faer sigma-point port would not address that dominant Python/table overhead.
+- Refactored `coordinates.variants.create_coordinate_variants` to sample each covariance row into NumPy blocks, concatenate the blocks once, and build one variant coordinate table with Arrow `take` for repeated time/origin metadata. This preserves the existing SciPy `sqrtm` sigma-point semantics, Monte Carlo seed behavior, auto-mode fallback behavior, and BLAS-backed weighted mean/covariance policy.
+- Local benchmark on 28 real orbit fixtures after the refactor: `create_coordinate_variants(..., method="sigma-point")` p50 is ~0.60 ms for 10 orbits and ~0.98 ms for 28 orbits; `VariantOrbits.create(..., method="sigma-point")` p50 is ~0.97 ms for 10 orbits and ~1.30 ms for 28 orbits. The pre-refactor measurements were ~8.1 ms and ~22.6 ms for `create_coordinate_variants` at the same sizes, so the table-assembly refactor yields the meaningful win without changing numerical linear algebra.
+- Linalg strategy remains: keep public weighted mean/covariance on NumPy/BLAS; keep `sample_covariance_sigma_points` on SciPy `sqrtm` for exact legacy behavior; use `faer` for future Cholesky/symmetric-eigen/SVD production ports only when profiling shows the linalg kernel, not table orchestration, is the bottleneck.
+- Validation passed targeted covariance/variant/propagator tests (`52 passed`), representation smoke for Cartesian/Spherical/Keplerian/Cometary variants, static formatting/lint/compile checks, and `git diff --check`.
 
 ### RM-WE2-004: OD Evaluation And Outlier Helpers
 
