@@ -440,6 +440,26 @@
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
+<span class="n">_TIME_SORT_COLUMNS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_timestamp_is_non_decreasing</span><span class="p">(</span><span class="n">time</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">time</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="n">days</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">nanos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">increasing_day</span> <span class="o">=</span> <span class="n">days</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">&gt;</span> <span class="n">days</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">same_day_increasing_nanos</span> <span class="o">=</span> <span class="p">(</span><span class="n">days</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="n">days</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">nanos</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">&gt;=</span> <span class="n">nanos</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">increasing_day</span> <span class="o">|</span> <span class="n">same_day_increasing_nanos</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sort_orbits_by_time_if_needed</span><span class="p">(</span><span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">_timestamp_is_non_decreasing</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">orbits</span>
+    <span class="k">return</span> <span class="n">orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span><span class="n">_TIME_SORT_COLUMNS</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="generate_saturated_colorscale">
 <a class="viewcode-back" href="../../../reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.generate_saturated_colorscale">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">generate_saturated_colorscale</span><span class="p">(</span>
@@ -1046,12 +1066,8 @@
         <span class="o">==</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="p">),</span> <span class="s2">&quot;Departure and arrival origins must be the same&quot;</span>
 
-    <span class="n">departure_orbits</span> <span class="o">=</span> <span class="n">departure_orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-        <span class="p">[</span><span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">]</span>
-    <span class="p">)</span>
-    <span class="n">arrival_orbits</span> <span class="o">=</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-        <span class="p">[</span><span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">]</span>
-    <span class="p">)</span>
+    <span class="n">departure_orbits</span> <span class="o">=</span> <span class="n">_sort_orbits_by_time_if_needed</span><span class="p">(</span><span class="n">departure_orbits</span><span class="p">)</span>
+    <span class="n">arrival_orbits</span> <span class="o">=</span> <span class="n">_sort_orbits_by_time_if_needed</span><span class="p">(</span><span class="n">arrival_orbits</span><span class="p">)</span>
 
     <span class="n">n_dep</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">departure_orbits</span><span class="p">)</span>
     <span class="n">n_arr</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">arrival_orbits</span><span class="p">)</span>
@@ -1061,9 +1077,7 @@
     <span class="n">dep_times_mjd</span> <span class="o">=</span> <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span>
         <span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span>
     <span class="p">)</span>
-    <span class="n">arr_times_mjd</span> <span class="o">=</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span>
-        <span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span>
-    <span class="p">)</span>
+    <span class="n">arr_times_mjd</span> <span class="o">=</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">dep_states</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
         <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
     <span class="p">)</span>
@@ -1089,17 +1103,14 @@
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dep_idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">LambertSolutions</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
 
-    <span class="n">dep_idx_i64</span> <span class="o">=</span> <span class="n">dep_idx</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">arr_idx_i64</span> <span class="o">=</span> <span class="n">arr_idx</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">stacked_departure_orbits</span> <span class="o">=</span> <span class="n">departure_orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">dep_idx_i64</span><span class="p">)</span>
-    <span class="n">stacked_arrival_orbits</span> <span class="o">=</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">arr_idx_i64</span><span class="p">)</span>
-
-    <span class="n">departure_coordinates</span> <span class="o">=</span> <span class="n">stacked_departure_orbits</span><span class="o">.</span><span class="n">coordinates</span>
-    <span class="n">arrival_coordinates</span> <span class="o">=</span> <span class="n">stacked_arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span>
+    <span class="n">dep_idx_i64</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">dep_idx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">arr_idx_i64</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">arr_idx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">departure_coordinates</span> <span class="o">=</span> <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">dep_idx_i64</span><span class="p">)</span>
+    <span class="n">arrival_coordinates</span> <span class="o">=</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">arr_idx_i64</span><span class="p">)</span>
     <span class="n">origins</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_OriginCodes</span><span class="p">(</span><span class="n">propagation_origin</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">dep_idx</span><span class="p">))</span>
 
     <span class="k">return</span> <span class="n">LambertSolutions</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">departure_body_id</span><span class="o">=</span><span class="n">stacked_departure_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">departure_body_id</span><span class="o">=</span><span class="n">departure_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">dep_idx_i64</span><span class="p">),</span>
         <span class="n">departure_time</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
         <span class="n">departure_body_x</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
         <span class="n">departure_body_y</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
@@ -1107,7 +1118,7 @@
         <span class="n">departure_body_vx</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">vx</span><span class="p">,</span>
         <span class="n">departure_body_vy</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">vy</span><span class="p">,</span>
         <span class="n">departure_body_vz</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">vz</span><span class="p">,</span>
-        <span class="n">arrival_body_id</span><span class="o">=</span><span class="n">stacked_arrival_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">arrival_body_id</span><span class="o">=</span><span class="n">arrival_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">arr_idx_i64</span><span class="p">),</span>
         <span class="n">arrival_time</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
         <span class="n">arrival_body_x</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
         <span class="n">arrival_body_y</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
