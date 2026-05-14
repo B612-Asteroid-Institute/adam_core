@@ -512,6 +512,28 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict="algorithm-equivalent optimizer parity for the direct NumPy boundary.",
     ),
+    "dynamics.calculate_moid_batch": ToleranceSpec(
+        outputs={
+            "moid": OutputTol(atol=1e-9, rtol=1e-8),
+            "dt_at_min": OutputTol(atol=1e-3, rtol=1e-8),
+        },
+        rationale=(
+            "Raw Rayon batch MOID kernel over Cartesian primary/secondary orbit "
+            "pairs. The legacy oracle loops over the same baseline-main scalar "
+            "MOID formulation used by dynamics.calculate_moid."
+        ),
+        dominant_column="dt_at_min from the outer bounded minimizer",
+        physical_magnitude=(
+            "Same randomized optimizer envelope as dynamics.calculate_moid: "
+            "MOID atol 1e-9 AU ≈ 150 m and dt_at_min atol 1e-3 day ≈ 86 s."
+        ),
+        root_cause=(
+            "The Rust batch path only changes dispatch and Rayon scheduling over "
+            "independent scalar MOID solves; per-row optimizer branch-history "
+            "differences are the same as dynamics.calculate_moid."
+        ),
+        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    ),
     "dynamics.calculate_perturber_moids": ToleranceSpec(
         outputs={
             "orbit_index": OutputTol(atol=0.0, rtol=0.0),
@@ -920,6 +942,27 @@ TOLERANCES: dict[str, ToleranceSpec] = {
     #
     # `gaussIOD` has a dedicated entry above documenting its intrinsic
     # Laguerre-vs-LAPACK randomized-root divergence.
+    "missions.porkchop_grid": ToleranceSpec(
+        outputs={
+            "departure_index": OutputTol(atol=0.0, rtol=0.0),
+            "arrival_index": OutputTol(atol=0.0, rtol=0.0),
+            "solution_departure_velocity": OutputTol(atol=1e-13, rtol=1e-12),
+            "solution_arrival_velocity": OutputTol(atol=1e-13, rtol=1e-12),
+        },
+        rationale=(
+            "Raw fused porkchop grid kernel: enumerate arrival-after-departure "
+            "grid pairs and solve Lambert for each valid pair. The legacy oracle "
+            "uses baseline-main _izzo_lambert_vmap over the same filtered grid."
+        ),
+        dominant_column="solution_departure_velocity / solution_arrival_velocity",
+        physical_magnitude="1e-13 AU/day ≈ 0.00017 mm/s; grid indices exact.",
+        root_cause=(
+            "Same Householder iteration floating-point branch history as "
+            "dynamics.solve_lambert; the raw kernel only fuses time-order "
+            "filtering and batched Lambert dispatch."
+        ),
+        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    ),
     "dynamics.generate_porkchop_data": ToleranceSpec(
         outputs={
             "departure_index": OutputTol(atol=0.0, rtol=0.0),

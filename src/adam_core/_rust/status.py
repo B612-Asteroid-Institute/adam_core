@@ -415,10 +415,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.calculate_moid_batch_numpy",
-        parity_coverage="targeted-tests",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Rayon batch kernel used by calculate_perturber_moids; direct "
-            "random-fuzz coverage is represented by the orchestration row."
+            "Rayon batch kernel used by calculate_perturber_moids; randomized "
+            "diagnostic raw-kernel comparisons check direct batched pairs "
+            "against the baseline-main scalar MOID oracle."
+        ),
+        covered_subcases=(
+            "Batched primary/secondary Cartesian orbit pairs",
+            "Per-row MOID distance and optimizer dt_at_min outputs",
         ),
     ),
     ApiMigration(
@@ -468,10 +473,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.porkchop_grid_numpy",
-        parity_coverage="targeted-tests",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Raw fused grid kernel behind generate_porkchop_data; public "
-            "orchestration coverage is tracked separately."
+            "Raw fused grid kernel behind generate_porkchop_data; randomized "
+            "diagnostic raw-kernel comparisons check direct grid filtering and "
+            "Lambert velocity outputs against baseline-main Lambert solves."
+        ),
+        covered_subcases=(
+            "Departure/arrival grid filtering where arrival MJD exceeds departure MJD",
+            "Raw Lambert departure/arrival velocity outputs for valid grid pairs",
         ),
     ),
     ApiMigration(

@@ -277,6 +277,22 @@ def test_raw_propagation_arc_kernels_are_random_fuzz_with_diagnostic_speed() -> 
         assert parity_speed._is_diagnostic_speed_api(api_id)
 
 
+def test_raw_batch_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
+    api_ids = {
+        "dynamics.calculate_moid_batch",
+        "missions.porkchop_grid",
+    }
+
+    assert api_ids <= set(_inputs.all_api_ids())
+    for api_id in api_ids:
+        migration = API_MIGRATIONS_BY_ID[api_id]
+        assert migration.status == "raw-kernel-only"
+        assert migration.parity_coverage == "random-fuzz"
+        assert "diagnostic raw-kernel comparisons" in migration.coverage_note
+        assert migration.covered_subcases
+        assert parity_speed._is_diagnostic_speed_api(api_id)
+
+
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
     latency_ids = {
         migration.api_id

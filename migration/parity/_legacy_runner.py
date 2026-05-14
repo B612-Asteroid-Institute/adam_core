@@ -406,6 +406,57 @@ def _dynamics_calculate_moid(
     return {"moid": moids, "dt_at_min": dts}
 
 
+def _missions_porkchop_grid(
+    dep_states: np.ndarray,
+    dep_mjds: np.ndarray,
+    arr_states: np.ndarray,
+    arr_mjds: np.ndarray,
+    mu: float,
+    prograde: bool,
+    maxiter: int,
+    atol: float,
+    rtol: float,
+) -> dict[str, np.ndarray]:
+    from adam_core.dynamics.lambert import _izzo_lambert_vmap
+
+    pair_indices = [
+        (i, j)
+        for i, dep_mjd in enumerate(dep_mjds)
+        for j, arr_mjd in enumerate(arr_mjds)
+        if arr_mjd > dep_mjd
+    ]
+    dep_idx_i = np.asarray([i for i, _ in pair_indices], dtype=np.int64)
+    arr_idx_i = np.asarray([j for _, j in pair_indices], dtype=np.int64)
+    if dep_idx_i.size == 0:
+        empty_velocity = np.empty((0, 3), dtype=np.float64)
+        return {
+            "departure_index": dep_idx_i.astype(np.float64),
+            "arrival_index": arr_idx_i.astype(np.float64),
+            "solution_departure_velocity": empty_velocity,
+            "solution_arrival_velocity": empty_velocity.copy(),
+        }
+
+    tof = arr_mjds[arr_idx_i] - dep_mjds[dep_idx_i]
+    v1, v2 = _izzo_lambert_vmap(
+        dep_states[dep_idx_i, :3],
+        arr_states[arr_idx_i, :3],
+        tof,
+        mu,
+        0,
+        prograde,
+        True,
+        maxiter,
+        atol,
+        rtol,
+    )
+    return {
+        "departure_index": dep_idx_i.astype(np.float64),
+        "arrival_index": arr_idx_i.astype(np.float64),
+        "solution_departure_velocity": np.asarray(v1, dtype=np.float64),
+        "solution_arrival_velocity": np.asarray(v2, dtype=np.float64),
+    }
+
+
 def _pack_perturber_moids(moids: Any) -> dict[str, np.ndarray]:
     from adam_core.coordinates.origin import OriginCodes
 
@@ -1105,7 +1156,9 @@ DISPATCH = {
     "dynamics.tisserand_parameter": _dynamics_tisserand_parameter,
     "orbits.classify_orbits": _orbits_classify_orbits,
     "dynamics.calculate_moid": _dynamics_calculate_moid,
+    "dynamics.calculate_moid_batch": _dynamics_calculate_moid,
     "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
+    "missions.porkchop_grid": _missions_porkchop_grid,
     "dynamics.generate_porkchop_data": _dynamics_generate_porkchop_data,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
     "dynamics.propagate_2body_along_arc": _dynamics_propagate_2body_along_arc,

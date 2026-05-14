@@ -237,10 +237,11 @@ pretty-printer joins this registry to `tolerances.py` so reports distinguish
 direct randomized fuzz, fixed-fixture coverage, orchestration-implied coverage,
 targeted-test-only coverage, and intentional exclusions.
 
-Currently wired directly in randomized fuzz (38):
+Currently wired directly in randomized fuzz (42):
 - 14 coordinates/transform/residual surfaces
-- 11 dynamics primitives and public orchestration surfaces, including direct
-  MOID, perturber MOIDs, Tisserand parameter, LT-correction, and porkchop grids
+- 15 dynamics/missions primitives and public orchestration surfaces, including
+  direct MOID, batch MOID, perturber MOIDs, Tisserand parameter, propagation
+  arc helpers, LT-correction, Lambert, and raw/public porkchop grids
 - 6 photometry surfaces, including H-fit row and grouped kernels
 - 1 orbit-classification rule surface
 - 4 OD primitives, including constrained shared-root `gaussIOD` fuzz

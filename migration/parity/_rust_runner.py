@@ -303,6 +303,50 @@ def _dynamics_calculate_moid(
     return {"moid": moids, "dt_at_min": dts}
 
 
+def _dynamics_calculate_moid_batch(
+    primary_orbits: np.ndarray,
+    secondary_orbits: np.ndarray,
+    mus: np.ndarray,
+    max_iter: int,
+    xtol: float,
+) -> dict[str, np.ndarray]:
+    result = _rust_api.calculate_moid_batch_numpy(
+        primary_orbits, secondary_orbits, mus, max_iter, xtol
+    )
+    if result is None:
+        raise RuntimeError("rust calculate_moid_batch unavailable")
+    moids, dts = result
+    return {
+        "moid": np.asarray(moids, dtype=np.float64),
+        "dt_at_min": np.asarray(dts, dtype=np.float64),
+    }
+
+
+def _missions_porkchop_grid(
+    dep_states: np.ndarray,
+    dep_mjds: np.ndarray,
+    arr_states: np.ndarray,
+    arr_mjds: np.ndarray,
+    mu: float,
+    prograde: bool,
+    maxiter: int,
+    atol: float,
+    rtol: float,
+) -> dict[str, np.ndarray]:
+    result = _rust_api.porkchop_grid_numpy(
+        dep_states, dep_mjds, arr_states, arr_mjds, mu, prograde, maxiter, atol, rtol
+    )
+    if result is None:
+        raise RuntimeError("rust porkchop_grid unavailable")
+    dep_idx, arr_idx, v1, v2 = result
+    return {
+        "departure_index": np.asarray(dep_idx, dtype=np.float64),
+        "arrival_index": np.asarray(arr_idx, dtype=np.float64),
+        "solution_departure_velocity": np.asarray(v1, dtype=np.float64),
+        "solution_arrival_velocity": np.asarray(v2, dtype=np.float64),
+    }
+
+
 def _pack_perturber_moids(moids: Any) -> dict[str, np.ndarray]:
     from adam_core.coordinates.origin import OriginCodes
 
@@ -880,7 +924,9 @@ DISPATCH = {
     "dynamics.tisserand_parameter": _dynamics_tisserand_parameter,
     "orbits.classify_orbits": _orbits_classify_orbits,
     "dynamics.calculate_moid": _dynamics_calculate_moid,
+    "dynamics.calculate_moid_batch": _dynamics_calculate_moid_batch,
     "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
+    "missions.porkchop_grid": _missions_porkchop_grid,
     "dynamics.generate_porkchop_data": _dynamics_generate_porkchop_data,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
     "dynamics.propagate_2body_along_arc": _dynamics_propagate_2body_along_arc,

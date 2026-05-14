@@ -1004,6 +1004,10 @@ def make_calculate_moid(rng: np.random.Generator, n: int) -> Sample:
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_calculate_moid_batch(rng: np.random.Generator, n: int) -> Sample:
+    return make_calculate_moid(rng, n)
+
+
 def make_calculate_perturber_moids(rng: np.random.Generator, n: int) -> Sample:
     """Public quivr orchestration over the batched MOID kernel.
 
@@ -1057,12 +1061,12 @@ def _sample_porkchop_keplerian_elements(
     return np.stack([a, e, i_deg, raan, omega, m_anom], axis=1).astype(np.float64)
 
 
-def _make_porkchop_sample(
+def _make_porkchop_grid_arrays(
     rng: np.random.Generator,
     *,
     n_departures: int,
     n_arrivals: int,
-) -> Sample:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     departure_coords = _kep_to_cart(
         _sample_porkchop_keplerian_elements(rng, n_departures, a_min=0.85, a_max=1.35)
     )
@@ -1074,6 +1078,20 @@ def _make_porkchop_sample(
         60000.0
         + max(8.0, 2.0 * float(n_departures))
         + 5.0 * np.arange(n_arrivals, dtype=np.float64)
+    )
+    return departure_coords, arrival_coords, departure_time_mjd, arrival_time_mjd
+
+
+def _make_porkchop_sample(
+    rng: np.random.Generator,
+    *,
+    n_departures: int,
+    n_arrivals: int,
+) -> Sample:
+    departure_coords, arrival_coords, departure_time_mjd, arrival_time_mjd = (
+        _make_porkchop_grid_arrays(
+            rng, n_departures=n_departures, n_arrivals=n_arrivals
+        )
     )
     kw = {
         "departure_coords": departure_coords,
@@ -1099,6 +1117,38 @@ def _make_porkchop_sample(
 def make_generate_porkchop_data(rng: np.random.Generator, n: int) -> Sample:
     n_departures, n_arrivals = _porkchop_counts_for_rows(n)
     return _make_porkchop_sample(rng, n_departures=n_departures, n_arrivals=n_arrivals)
+
+
+def _make_porkchop_grid_sample(
+    rng: np.random.Generator,
+    *,
+    n_departures: int,
+    n_arrivals: int,
+) -> Sample:
+    departure_coords, arrival_coords, departure_time_mjd, arrival_time_mjd = (
+        _make_porkchop_grid_arrays(
+            rng, n_departures=n_departures, n_arrivals=n_arrivals
+        )
+    )
+    kw = {
+        "dep_states": departure_coords,
+        "dep_mjds": departure_time_mjd,
+        "arr_states": arrival_coords,
+        "arr_mjds": arrival_time_mjd,
+        "mu": MU_SUN,
+        "prograde": True,
+        "maxiter": 35,
+        "atol": 1e-10,
+        "rtol": 1e-10,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_porkchop_grid(rng: np.random.Generator, n: int) -> Sample:
+    n_departures, n_arrivals = _porkchop_counts_for_rows(n)
+    return _make_porkchop_grid_sample(
+        rng, n_departures=n_departures, n_arrivals=n_arrivals
+    )
 
 
 def _sample_dts(rng: np.random.Generator, n: int) -> np.ndarray:
@@ -1546,6 +1596,13 @@ def make_generate_porkchop_data_shape(
     return _make_porkchop_sample(rng, n_departures=n_departures, n_arrivals=n_arrivals)
 
 
+def make_porkchop_grid_shape(rng: np.random.Generator, shape: WorkloadShape) -> Sample:
+    n_departures, n_arrivals = _porkchop_grid(shape)
+    return _make_porkchop_grid_sample(
+        rng, n_departures=n_departures, n_arrivals=n_arrivals
+    )
+
+
 def make_propagate_2body_shape(
     rng: np.random.Generator, shape: WorkloadShape
 ) -> Sample:
@@ -1707,7 +1764,9 @@ GENERATORS = {
     "dynamics.tisserand_parameter": make_tisserand_parameter,
     "orbits.classify_orbits": make_classify_orbits,
     "dynamics.calculate_moid": make_calculate_moid,
+    "dynamics.calculate_moid_batch": make_calculate_moid_batch,
     "dynamics.calculate_perturber_moids": make_calculate_perturber_moids,
+    "missions.porkchop_grid": make_porkchop_grid,
     "dynamics.generate_porkchop_data": make_generate_porkchop_data,
     "dynamics.propagate_2body": make_propagate_2body,
     "dynamics.propagate_2body_along_arc": make_propagate_2body_along_arc,
@@ -1744,6 +1803,7 @@ SHAPED_GENERATORS = {
     "dynamics.generate_ephemeris_2body_with_covariance": (
         make_generate_ephemeris_2body_with_covariance_shape
     ),
+    "missions.porkchop_grid": make_porkchop_grid_shape,
     "dynamics.generate_porkchop_data": make_generate_porkchop_data_shape,
     "dynamics.add_light_time": make_add_light_time_shape,
     "photometry.calculate_phase_angle": make_calculate_phase_angle_shape,
@@ -1765,7 +1825,9 @@ TINY_WORKLOADS: dict[str, WorkloadShape] = {
     # `calculate_moid` is a scalar optimizer API; one pair is the true
     # one-off call shape, unlike vector kernels where n=10 is the tiny lane.
     "dynamics.calculate_moid": WorkloadShape(1),
+    "dynamics.calculate_moid_batch": WorkloadShape(1),
     "dynamics.calculate_perturber_moids": WorkloadShape(1),
+    "missions.porkchop_grid": WorkloadShape(4, extra={"departures": 2, "arrivals": 2}),
     "dynamics.generate_porkchop_data": WorkloadShape(
         4, extra={"departures": 2, "arrivals": 2}
     ),
@@ -1779,10 +1841,14 @@ SMALL_WORKLOADS: dict[str, WorkloadShape] = {
     # Keep canonical MOID speed governance affordable: baseline-main uses
     # scipy bounded minimization per pair, so n=2000 would be minutes per rep.
     "dynamics.calculate_moid": WorkloadShape(8),
+    "dynamics.calculate_moid_batch": WorkloadShape(8),
     "dynamics.calculate_perturber_moids": WorkloadShape(8),
     # Public porkchop calls are grid-orchestration/table-assembly workloads;
     # 44×44 stays near the canonical n=2000 small lane while preserving a
     # square departure/arrival grid.
+    "missions.porkchop_grid": WorkloadShape(
+        1_936, extra={"departures": 44, "arrivals": 44}
+    ),
     "dynamics.generate_porkchop_data": WorkloadShape(
         1_936, extra={"departures": 44, "arrivals": 44}
     ),
@@ -1804,7 +1870,9 @@ FUZZ_N_OVERRIDES: dict[str, int] = {
     # oracle. Eight pairs × eight seeds gives direct randomized coverage while
     # keeping canonical fuzz runs within the existing time budget.
     "dynamics.calculate_moid": 8,
+    "dynamics.calculate_moid_batch": 8,
     "dynamics.calculate_perturber_moids": 8,
+    "missions.porkchop_grid": 16,
     "dynamics.generate_porkchop_data": 16,
     # Full Gauss-IOD calls are scalar/root-finder heavy in the legacy oracle.
     # Sixteen randomized, well-conditioned triplets per seed gives direct fuzz
@@ -1837,7 +1905,11 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "dynamics.tisserand_parameter": WorkloadShape(100_000),
     "orbits.classify_orbits": WorkloadShape(50_000),
     "dynamics.calculate_moid": WorkloadShape(64),
+    "dynamics.calculate_moid_batch": WorkloadShape(64),
     "dynamics.calculate_perturber_moids": WorkloadShape(64),
+    "missions.porkchop_grid": WorkloadShape(
+        4_096, extra={"departures": 64, "arrivals": 64}
+    ),
     "dynamics.generate_porkchop_data": WorkloadShape(
         4_096, extra={"departures": 64, "arrivals": 64}
     ),
