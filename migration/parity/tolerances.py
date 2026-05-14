@@ -556,6 +556,46 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "the 13-pm rust-vs-legacy drift."
         ),
     ),
+    "dynamics.propagate_2body_along_arc": ToleranceSpec(
+        outputs={"out": OutputTol(atol=1e-12)},
+        rationale=(
+            "Raw warm-started single-orbit arc helper compared against "
+            "baseline-main _propagate_2body_vmap on the same orbit and "
+            "random unsorted dt arrays."
+        ),
+        dominant_column="position (x, y, z)",
+        physical_magnitude=(
+            "Same units as propagate_2body; 1e-12 AU is 0.15 m and observed "
+            "warm-start drift is expected at picometer/ulp scale."
+        ),
+        root_cause=(
+            "Rust reuses orbit constants and warm-starts chi across sorted dt "
+            "values, then restores input order. Baseline-main cold-starts each "
+            "row through the vectorized propagation path; any drift should be "
+            "limited to the same Newton/universal-Kepler last-bit choices as "
+            "dynamics.propagate_2body."
+        ),
+        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    ),
+    "dynamics.propagate_2body_arc_batch": ToleranceSpec(
+        outputs={"out": OutputTol(atol=1e-12)},
+        rationale=(
+            "Raw batched warm-started arc helper compared against baseline-main "
+            "_propagate_2body_vmap after flattening an orbits × dt grid."
+        ),
+        dominant_column="position (x, y, z)",
+        physical_magnitude=(
+            "Same units as propagate_2body; 1e-12 AU is 0.15 m and covers only "
+            "last-bit Newton/universal-Kepler drift."
+        ),
+        root_cause=(
+            "Each orbit block warm-starts chi serially within its dt row while "
+            "Rayon distributes blocks across orbits. Baseline-main cold-starts "
+            "the flattened rows; differences should mirror the single-row "
+            "propagation kernel and row-order restoration."
+        ),
+        verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
+    ),
     "dynamics.propagate_2body_with_covariance": ToleranceSpec(
         outputs={
             "state": OutputTol(atol=1e-11),

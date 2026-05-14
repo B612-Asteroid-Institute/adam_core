@@ -591,6 +591,25 @@ def _dynamics_propagate_2body(
     return {"out": out}
 
 
+def _dynamics_propagate_2body_along_arc(
+    orbit: np.ndarray, dts: np.ndarray, mu: float, max_iter: int, tol: float
+) -> dict[str, np.ndarray]:
+    n = dts.shape[0]
+    orbits = np.broadcast_to(orbit.reshape(1, 6), (n, 6)).copy()
+    mus = np.full(n, mu, dtype=np.float64)
+    return _dynamics_propagate_2body(orbits, dts, mus, max_iter, tol)
+
+
+def _dynamics_propagate_2body_arc_batch(
+    orbits: np.ndarray, dts: np.ndarray, mus: np.ndarray, max_iter: int, tol: float
+) -> dict[str, np.ndarray]:
+    n_orbits, n_epochs = dts.shape
+    flat_orbits = np.repeat(orbits, n_epochs, axis=0)
+    flat_dts = dts.reshape(n_orbits * n_epochs)
+    flat_mus = np.repeat(mus, n_epochs)
+    return _dynamics_propagate_2body(flat_orbits, flat_dts, flat_mus, max_iter, tol)
+
+
 def _dynamics_propagate_2body_with_covariance(
     orbits: np.ndarray,
     covariances: np.ndarray,
@@ -1089,6 +1108,8 @@ DISPATCH = {
     "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
     "dynamics.generate_porkchop_data": _dynamics_generate_porkchop_data,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
+    "dynamics.propagate_2body_along_arc": _dynamics_propagate_2body_along_arc,
+    "dynamics.propagate_2body_arc_batch": _dynamics_propagate_2body_arc_batch,
     "dynamics.propagate_2body_with_covariance": _dynamics_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": _dynamics_generate_ephemeris_2body,
     "dynamics.generate_ephemeris_2body_with_covariance": (

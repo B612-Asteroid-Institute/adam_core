@@ -496,6 +496,28 @@ def _dynamics_propagate_2body(
     }
 
 
+def _dynamics_propagate_2body_along_arc(
+    orbit: np.ndarray, dts: np.ndarray, mu: float, max_iter: int, tol: float
+) -> dict[str, np.ndarray]:
+    return {
+        "out": _ensure(
+            _rust_api.propagate_2body_along_arc_numpy(orbit, dts, mu, max_iter, tol),
+            "propagate_2body_along_arc",
+        )
+    }
+
+
+def _dynamics_propagate_2body_arc_batch(
+    orbits: np.ndarray, dts: np.ndarray, mus: np.ndarray, max_iter: int, tol: float
+) -> dict[str, np.ndarray]:
+    return {
+        "out": _ensure(
+            _rust_api.propagate_2body_arc_batch_numpy(orbits, dts, mus, max_iter, tol),
+            "propagate_2body_arc_batch",
+        )
+    }
+
+
 def _dynamics_propagate_2body_with_covariance(
     orbits: np.ndarray,
     covariances: np.ndarray,
@@ -861,6 +883,8 @@ DISPATCH = {
     "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
     "dynamics.generate_porkchop_data": _dynamics_generate_porkchop_data,
     "dynamics.propagate_2body": _dynamics_propagate_2body,
+    "dynamics.propagate_2body_along_arc": _dynamics_propagate_2body_along_arc,
+    "dynamics.propagate_2body_arc_batch": _dynamics_propagate_2body_arc_batch,
     "dynamics.propagate_2body_with_covariance": _dynamics_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": _dynamics_generate_ephemeris_2body,
     "dynamics.generate_ephemeris_2body_with_covariance": (

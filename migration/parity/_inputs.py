@@ -1034,6 +1034,13 @@ def _porkchop_counts_for_rows(rows: int) -> tuple[int, int]:
     return n_departures, n_arrivals
 
 
+def _arc_grid_for_rows(rows: int) -> tuple[int, int]:
+    n_orbits = max(1, int(np.sqrt(rows)))
+    while rows % n_orbits != 0:
+        n_orbits -= 1
+    return n_orbits, rows // n_orbits
+
+
 def _sample_porkchop_keplerian_elements(
     rng: np.random.Generator,
     n: int,
@@ -1098,12 +1105,52 @@ def _sample_dts(rng: np.random.Generator, n: int) -> np.ndarray:
     return rng.uniform(-10000.0, 10000.0, size=n).astype(np.float64)
 
 
+def _sample_arc_dts(rng: np.random.Generator, n: int) -> np.ndarray:
+    dts = _sample_dts(rng, n)
+    if n:
+        dts[0] = 0.0
+        rng.shuffle(dts)
+    return np.ascontiguousarray(dts, dtype=np.float64)
+
+
 def make_propagate_2body(rng: np.random.Generator, n: int) -> Sample:
     coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
     dts = _sample_dts(rng, n)
     mus = np.full(n, MU_SUN, dtype=np.float64)
     kw = {"orbits": coords, "dts": dts, "mus": mus, "max_iter": 100, "tol": 1e-15}
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_propagate_2body_along_arc(rng: np.random.Generator, n: int) -> Sample:
+    orbit = _kep_to_cart(_sample_keplerian_elements(rng, 1))[0]
+    dts = _sample_arc_dts(rng, n)
+    kw = {"orbit": orbit, "dts": dts, "mu": MU_SUN, "max_iter": 100, "tol": 1e-15}
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def _make_propagate_2body_arc_batch_sample(
+    rng: np.random.Generator, *, n_orbits: int, n_epochs: int
+) -> Sample:
+    orbits = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))
+    dts = _sample_dts(rng, n_orbits * n_epochs).reshape(n_orbits, n_epochs)
+    if n_epochs:
+        dts[:, 0] = 0.0
+    mus = np.full(n_orbits, MU_SUN, dtype=np.float64)
+    kw = {
+        "orbits": orbits,
+        "dts": np.ascontiguousarray(dts, dtype=np.float64),
+        "mus": mus,
+        "max_iter": 100,
+        "tol": 1e-15,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_propagate_2body_arc_batch(rng: np.random.Generator, n: int) -> Sample:
+    n_orbits, n_epochs = _arc_grid_for_rows(n)
+    return _make_propagate_2body_arc_batch_sample(
+        rng, n_orbits=n_orbits, n_epochs=n_epochs
+    )
 
 
 def make_propagate_2body_with_covariance(rng: np.random.Generator, n: int) -> Sample:
@@ -1511,6 +1558,15 @@ def make_propagate_2body_shape(
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
+def make_propagate_2body_arc_batch_shape(
+    rng: np.random.Generator, shape: WorkloadShape
+) -> Sample:
+    n_orbits, n_epochs = _orbit_epoch_grid(shape)
+    return _make_propagate_2body_arc_batch_sample(
+        rng, n_orbits=n_orbits, n_epochs=n_epochs
+    )
+
+
 def make_propagate_2body_with_covariance_shape(
     rng: np.random.Generator, shape: WorkloadShape
 ) -> Sample:
@@ -1654,6 +1710,8 @@ GENERATORS = {
     "dynamics.calculate_perturber_moids": make_calculate_perturber_moids,
     "dynamics.generate_porkchop_data": make_generate_porkchop_data,
     "dynamics.propagate_2body": make_propagate_2body,
+    "dynamics.propagate_2body_along_arc": make_propagate_2body_along_arc,
+    "dynamics.propagate_2body_arc_batch": make_propagate_2body_arc_batch,
     "dynamics.propagate_2body_with_covariance": make_propagate_2body_with_covariance,
     "dynamics.generate_ephemeris_2body": make_generate_ephemeris_2body,
     "dynamics.generate_ephemeris_2body_with_covariance": (
@@ -1678,6 +1736,7 @@ GENERATORS = {
 
 SHAPED_GENERATORS = {
     "dynamics.propagate_2body": make_propagate_2body_shape,
+    "dynamics.propagate_2body_arc_batch": make_propagate_2body_arc_batch_shape,
     "dynamics.propagate_2body_with_covariance": (
         make_propagate_2body_with_covariance_shape
     ),
@@ -1710,6 +1769,8 @@ TINY_WORKLOADS: dict[str, WorkloadShape] = {
     "dynamics.generate_porkchop_data": WorkloadShape(
         4, extra={"departures": 2, "arrivals": 2}
     ),
+    "dynamics.propagate_2body_along_arc": WorkloadShape(10),
+    "dynamics.propagate_2body_arc_batch": WorkloadShape(10, n_orbits=2, n_epochs=5),
     "orbit_determination.gaussIOD": WorkloadShape(1, extra={"triplets": 1}),
 }
 
@@ -1724,6 +1785,12 @@ SMALL_WORKLOADS: dict[str, WorkloadShape] = {
     # square departure/arrival grid.
     "dynamics.generate_porkchop_data": WorkloadShape(
         1_936, extra={"departures": 44, "arrivals": 44}
+    ),
+    # The single-orbit arc helper is only used below the production dispatch
+    # crossover; keep its diagnostic lanes inside that intended K<500 regime.
+    "dynamics.propagate_2body_along_arc": WorkloadShape(100),
+    "dynamics.propagate_2body_arc_batch": WorkloadShape(
+        2_000, n_orbits=40, n_epochs=50
     ),
     # Full Gauss-IOD is scalar/root-finder heavy in the legacy oracle. Sixteen
     # triplets matches the fuzz governance size and keeps the historical small
@@ -1775,6 +1842,10 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
         4_096, extra={"departures": 64, "arrivals": 64}
     ),
     "dynamics.propagate_2body": WorkloadShape(20_000, n_orbits=1_000, n_epochs=20),
+    "dynamics.propagate_2body_along_arc": WorkloadShape(400),
+    "dynamics.propagate_2body_arc_batch": WorkloadShape(
+        20_000, n_orbits=400, n_epochs=50
+    ),
     "dynamics.propagate_2body_with_covariance": WorkloadShape(
         4_000, n_orbits=200, n_epochs=20
     ),

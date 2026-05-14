@@ -308,10 +308,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.propagate_2body_along_arc_numpy",
-        parity_coverage="targeted-tests",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Warm-started arc helper behind propagation dispatch; not a "
-            "separate baseline-main random-fuzz API."
+            "Warm-started arc helper behind propagation dispatch; randomized "
+            "diagnostic raw-kernel comparisons check unsorted dt arrays against "
+            "baseline-main vector propagation."
+        ),
+        covered_subcases=(
+            "Single orbit propagated over many unsorted dt values, including dt=0",
+            "Row-order restoration after internal dt sorting and warm-starting",
         ),
     ),
     ApiMigration(
@@ -320,10 +325,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.propagate_2body_arc_batch_numpy",
-        parity_coverage="targeted-tests",
+        parity_coverage="random-fuzz",
         coverage_note=(
-            "Batched warm-start propagation helper; not a separate "
-            "baseline-main random-fuzz API."
+            "Batched warm-start propagation helper; randomized diagnostic "
+            "raw-kernel comparisons flatten orbits × dt grids against "
+            "baseline-main vector propagation."
+        ),
+        covered_subcases=(
+            "Multiple orbit blocks with per-orbit unsorted dt rows",
+            "Orbit-major flattened output ordering for the batched arc helper",
         ),
     ),
     ApiMigration(
