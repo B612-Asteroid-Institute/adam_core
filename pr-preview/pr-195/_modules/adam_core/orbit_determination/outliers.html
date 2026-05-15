@@ -424,6 +424,20 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_lowest_probability_observation_index</span><span class="p">(</span><span class="n">orbit_members</span><span class="p">:</span> <span class="n">FittedOrbitMembers</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="n">min_probability</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">residuals</span><span class="o">.</span><span class="n">probability</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+    <span class="n">probabilities</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">residuals</span><span class="o">.</span><span class="n">probability</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">candidate_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">probabilities</span> <span class="o">==</span> <span class="n">min_probability</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">candidate_indices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">candidate_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">candidate_indices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Could not identify a lowest-probability observation.&quot;</span><span class="p">)</span>
+
+    <span class="n">residual_values</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">residuals</span><span class="o">.</span><span class="n">to_array</span><span class="p">()[</span><span class="n">candidate_indices</span><span class="p">]</span>
+    <span class="n">residual_norms</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">(</span><span class="n">residual_values</span> <span class="o">*</span> <span class="n">residual_values</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">candidate_indices</span><span class="p">[</span><span class="n">residual_norms</span><span class="o">.</span><span class="n">argmax</span><span class="p">()])</span>
+
+
 <div class="viewcode-block" id="calculate_max_outliers">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.outliers.html#adam_core.orbit_determination.outliers.calculate_max_outliers">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">calculate_max_outliers</span><span class="p">(</span>
@@ -458,8 +472,7 @@
     <span class="p">),</span> <span class="s2">&quot;Contamination percentage must be between 0 and 100.&quot;</span>
 
     <span class="n">max_outliers</span> <span class="o">=</span> <span class="n">num_obs</span> <span class="o">*</span> <span class="p">(</span><span class="n">contamination_percentage</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span>
-    <span class="n">outliers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">([</span><span class="n">max_outliers</span><span class="p">,</span> <span class="n">num_obs</span> <span class="o">-</span> <span class="n">min_obs</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">outliers</span></div>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">max_outliers</span><span class="p">,</span> <span class="n">num_obs</span> <span class="o">-</span> <span class="n">min_obs</span><span class="p">))</span></div>
 
 
 
@@ -495,27 +508,17 @@
     <span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span> <span class="s2">&quot;Observations must contain all orbit member observations&quot;</span>
 
     <span class="c1"># Find the worst outlier (the observation that has the lowest probability of</span>
-    <span class="c1"># drawing a more extreme residual than the one observed)</span>
-    <span class="n">worst_outlier</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
-        <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span>
-            <span class="n">orbit_members</span><span class="o">.</span><span class="n">residuals</span><span class="o">.</span><span class="n">probability</span><span class="p">,</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">residuals</span><span class="o">.</span><span class="n">probability</span><span class="p">),</span>
-        <span class="p">)</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">worst_outlier</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="c1"># If there are multiple worst outliers (which would be quite unlikely),</span>
-        <span class="c1"># then remove the outlier with the highest squared residual value</span>
-        <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">(</span><span class="n">worst_outlier</span><span class="o">.</span><span class="n">residuals</span><span class="o">.</span><span class="n">to_array</span><span class="p">()</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">argmax</span><span class="p">()</span>
-        <span class="n">worst_outlier</span> <span class="o">=</span> <span class="n">worst_outlier</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="n">index</span><span class="p">])</span>
+    <span class="c1"># drawing a more extreme residual than the one observed). If there are</span>
+    <span class="c1"># multiple worst outliers, remove the one with the highest squared residual.</span>
+    <span class="n">outlier_index</span> <span class="o">=</span> <span class="n">_lowest_probability_observation_index</span><span class="p">(</span><span class="n">orbit_members</span><span class="p">)</span>
 
     <span class="c1"># Grab the observation ID of the worst outlier</span>
-    <span class="n">obs_id</span> <span class="o">=</span> <span class="n">worst_outlier</span><span class="o">.</span><span class="n">obs_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+    <span class="n">obs_id</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">obs_id</span><span class="p">[</span><span class="n">outlier_index</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
 
     <span class="c1"># Grab the surviving observation IDs</span>
-    <span class="n">obs_ids</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
-        <span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span> <span class="n">obs_id</span><span class="p">))</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">obs_id</span>
+    <span class="n">obs_ids</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+        <span class="n">orbit_members</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">not_equal</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span> <span class="n">obs_id</span><span class="p">)</span>
+    <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">obs_id</span><span class="p">,</span> <span class="n">observations</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">obs_ids</span><span class="p">))</span></div>
 
@@ -537,7 +540,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-14</div>
+              Last updated on 2026-05-15</div>
           </div>
           <div class="right-details">
             

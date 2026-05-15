@@ -418,11 +418,12 @@
 <span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span><span class="p">,</span> <span class="n">calculate_reduced_chi2</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..observers.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
@@ -448,6 +449,62 @@
     <span class="n">observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
     <span class="n">photometry</span> <span class="o">=</span> <span class="n">OrbitDeterminationPhotometry</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mask_to_numpy</span><span class="p">(</span><span class="n">mask</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">BooleanArray</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_repeat_observation_indices</span><span class="p">(</span>
+    <span class="n">num_orbits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">num_observations</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
+    <span class="n">observation_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_observations</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">observation_indices</span><span class="p">,</span> <span class="n">num_orbits</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_ephemeris_orbit_order</span><span class="p">(</span>
+    <span class="n">ephemeris_orbit_ids</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">,</span>
+    <span class="n">orbit_ids</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">,</span>
+    <span class="n">num_observations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span>
+        <span class="n">orbit_ids</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="n">num_observations</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">actual</span> <span class="o">=</span> <span class="n">ephemeris_orbit_ids</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">actual</span><span class="p">,</span> <span class="n">expected</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="s2">&quot;Ephemeris rows must be grouped by sorted orbit_id with one block per &quot;</span>
+        <span class="s2">&quot;observation; this is the documented Propagator.generate_ephemeris order.&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_calculate_orbit_statistics</span><span class="p">(</span>
+    <span class="n">residuals</span><span class="p">:</span> <span class="n">Residuals</span><span class="p">,</span>
+    <span class="n">num_orbits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">num_observations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">include_mask</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">],</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
+    <span class="n">expected_residuals</span> <span class="o">=</span> <span class="n">num_orbits</span> <span class="o">*</span> <span class="n">num_observations</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">residuals</span><span class="p">)</span> <span class="o">!=</span> <span class="n">expected_residuals</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="n">expected_residuals</span><span class="si">}</span><span class="s2"> residual rows, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">residuals</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">chi2_rows</span> <span class="o">=</span> <span class="n">residuals</span><span class="o">.</span><span class="n">chi2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+        <span class="n">num_orbits</span><span class="p">,</span> <span class="n">num_observations</span>
+    <span class="p">)</span>
+    <span class="n">dof_rows</span> <span class="o">=</span> <span class="n">residuals</span><span class="o">.</span><span class="n">dof</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+        <span class="n">num_orbits</span><span class="p">,</span> <span class="n">num_observations</span>
+    <span class="p">)</span>
+
+    <span class="n">chi2</span> <span class="o">=</span> <span class="n">chi2_rows</span><span class="p">[:,</span> <span class="n">include_mask</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">dof</span> <span class="o">=</span> <span class="n">dof_rows</span><span class="p">[:,</span> <span class="n">include_mask</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">parameters</span>
+    <span class="n">reduced_chi2</span> <span class="o">=</span> <span class="n">chi2</span> <span class="o">/</span> <span class="n">dof</span>
+    <span class="k">return</span> <span class="n">chi2</span><span class="p">,</span> <span class="n">reduced_chi2</span>
 
 
 <div class="viewcode-block" id="evaluate_orbits">
@@ -506,12 +563,20 @@
     <span class="c1"># Sort the orbits by ID (the ephemeris is already sorted by</span>
     <span class="c1"># orbit ID, time, and origin)</span>
     <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">([</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">])</span>
+    <span class="n">num_observations</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+    <span class="n">_validate_ephemeris_orbit_order</span><span class="p">(</span>
+        <span class="n">ephemeris</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
+        <span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
+        <span class="n">num_observations</span><span class="p">,</span>
+    <span class="p">)</span>
 
-    <span class="c1"># Stack the observations into a single table and compute the residuals with respect</span>
-    <span class="c1"># to the predicted coordinates</span>
-    <span class="n">observations_stacked</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">observations</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_orbits</span><span class="p">)])</span>
+    <span class="c1"># Stack the observation coordinates logically by taking the observation rows</span>
+    <span class="c1"># in orbit-major order. This avoids constructing full repeated observation</span>
+    <span class="c1"># tables before residual calculation.</span>
+    <span class="n">observation_indices</span> <span class="o">=</span> <span class="n">_repeat_observation_indices</span><span class="p">(</span><span class="n">num_orbits</span><span class="p">,</span> <span class="n">num_observations</span><span class="p">)</span>
+    <span class="n">observation_indices_arrow</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">observation_indices</span><span class="p">)</span>
     <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span>
-        <span class="n">observations_stacked</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span>
+        <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">observation_indices</span><span class="p">),</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span>
     <span class="p">)</span>
 
     <span class="c1"># If outliers are provided, we need to mask them out of the observations</span>
@@ -522,18 +587,20 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">mask</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">))</span>
         <span class="n">observations_to_include</span> <span class="o">=</span> <span class="n">observations</span>
+    <span class="n">include_mask</span> <span class="o">=</span> <span class="n">_mask_to_numpy</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
 
     <span class="c1"># Compute number of observations</span>
     <span class="n">num_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations_to_include</span><span class="p">)</span>
 
-    <span class="c1"># Compute chi2 and reduced chi2 for each orbit</span>
-    <span class="n">chi2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">num_orbits</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">reduced_chi2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">num_orbits</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">orbit_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">):</span>
-        <span class="n">orbit_mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">orbit_id</span><span class="p">)</span>
-        <span class="n">residuals_to_include</span> <span class="o">=</span> <span class="n">residuals</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">orbit_mask</span><span class="p">)</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
-        <span class="n">chi2</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">residuals_to_include</span><span class="o">.</span><span class="n">chi2</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-        <span class="n">reduced_chi2</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">calculate_reduced_chi2</span><span class="p">(</span><span class="n">residuals_to_include</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="c1"># Compute chi2 and reduced chi2 for each orbit by reshaping the residual rows</span>
+    <span class="c1"># into the documented Propagator output order: (orbit_id, observation).</span>
+    <span class="n">chi2</span><span class="p">,</span> <span class="n">reduced_chi2</span> <span class="o">=</span> <span class="n">_calculate_orbit_statistics</span><span class="p">(</span>
+        <span class="n">residuals</span><span class="p">,</span>
+        <span class="n">num_orbits</span><span class="p">,</span>
+        <span class="n">num_observations</span><span class="p">,</span>
+        <span class="n">include_mask</span><span class="p">,</span>
+        <span class="n">parameters</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="c1"># Compute arc length for the orbits (will be the same for all orbits)</span>
     <span class="n">arc_length</span> <span class="o">=</span> <span class="p">(</span>
@@ -554,9 +621,9 @@
     <span class="p">)</span>
     <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
         <span class="n">orbit_id</span><span class="o">=</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-        <span class="n">obs_id</span><span class="o">=</span><span class="n">observations_stacked</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+        <span class="n">obs_id</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">observation_indices_arrow</span><span class="p">),</span>
         <span class="n">residuals</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
-        <span class="n">outlier</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">concat_arrays</span><span class="p">([</span><span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_orbits</span><span class="p">)]),</span>
+        <span class="n">outlier</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="o">~</span><span class="n">include_mask</span><span class="p">,</span> <span class="n">num_orbits</span><span class="p">),</span>
     <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span></div>
@@ -579,7 +646,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-14</div>
+              Last updated on 2026-05-15</div>
           </div>
           <div class="right-details">
             
