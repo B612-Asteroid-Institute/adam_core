@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-14 (RM-WE2-003 variants/covariance-sampling hot-path refactor complete; local validation remains primary and GitHub CI is final external confirmation only)
+Last updated: 2026-05-15 (RM-WE2-004 OD evaluate/outlier hot-path refactor complete; local validation remains primary and GitHub CI is final external confirmation only)
 
 ## Current Review-Derived Backlog
 
@@ -40,7 +40,7 @@ Last updated: 2026-05-14 (RM-WE2-003 variants/covariance-sampling hot-path refac
 ## Remaining Implementation Backlog
 
 - [x] RM-WE2-003: variants and covariance-sampling linear algebra hot path refactored where measured data showed wins. `create_coordinate_variants` now batches samples/weights/time/origin assembly into one table build while keeping SciPy `sqrtm` and NumPy/BLAS weighted statistics where they remain the right numerical/performance choice.
-- [ ] RM-WE2-004: OD evaluation and outlier helper hot paths; avoid porting orchestration without measured benefit.
+- [x] RM-WE2-004: OD evaluation and outlier helper hot paths refactored where measured data showed wins. `evaluate_orbits` now avoids full repeated observation-table construction and per-orbit Arrow-mask aggregation by using indexed coordinate repetition plus vectorized residual-stat reshaping; outlier helpers avoid unnecessary NumPy/table construction on scalar paths.
 - [ ] RM-WE3-001: least-squares inner-loop fusion with preserved diagnostics and deterministic OD-case parity.
 - [ ] RM-PERF-001: after the current RM-WE2/RM-WE3 tasks, audit PR #195 broad GitHub benchmark-action slower rows as clues for additional surface area (for example one-off observer/perturber SPICE wrappers, time rescale, covariance matrix conversion, bandpass conversion, and propagator helper benches). Treat this as surface discovery, not a merge-readiness blocker or replacement for the canonical parity/speed gates.
 - [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-rs` propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.

@@ -1534,7 +1534,7 @@ Completion notes:
 
 ### RM-WE2-004: OD Evaluation And Outlier Helpers
 
-Status: open
+Status: complete (2026-05-15)
 
 Scope:
 
@@ -1545,6 +1545,15 @@ Verification:
 
 - Parity against baseline evaluation outputs.
 - Bench in realistic OD loops, not isolated toy calls only.
+
+Completion notes:
+
+- Profiling showed `evaluate_orbits` still spent meaningful time in Python/quivr orchestration after residual calculation: repeated full observation-table concatenation and per-orbit Arrow masks for chi2/reduced-chi2 aggregation. The residual/chi2 numeric kernel is already Rust-backed through `Residuals.calculate`, so no new Rust port was needed for this pass.
+- Refactored `evaluate_orbits` to take repeated observation coordinates by index, validate the documented ephemeris orbit-major grouping, compute per-orbit chi2/reduced-chi2 by reshaping the residual arrays, and construct fitted-member `obs_id`/`outlier` arrays with vectorized Arrow/NumPy operations. This preserves existing residual semantics and fails loudly if a custom ephemeris provider violates the row-order contract instead of silently producing mismatched residual/member rows.
+- Simplified `calculate_max_outliers` to scalar `min`/`int` and refactored `remove_lowest_probability_observation` to identify the lowest-probability row by index before filtering, avoiding construction of an intermediate one-row `FittedOrbitMembers` table on the normal path.
+- Local synthetic fixed-ephemeris benchmark after the refactor: `evaluate_orbits` p50 improved from ~5.1 ms to ~1.4 ms for 10 orbits × 30 observations, from ~11.7 ms to ~2.5 ms for 28 × 50, and from ~13.5 ms to ~4.2 ms for 28 × 100. The inner chi2 aggregation dropped from ~0.44/1.31/1.49 ms p50 to ~0.010/0.013/0.017 ms for those same sizes.
+- `remove_lowest_probability_observation` remains table-filter dominated but improved modestly in local synthetic checks, e.g. n=10 non-tie p50 ~176 µs → ~151 µs and n=100 all-tie p50 ~291 µs → ~231 µs.
+- Validation covered deterministic evaluate/outlier tests without requiring pyoorb, the OD test suite, targeted compile/format/lint checks, and diff checks.
 
 ### RM-WE3-001: Least-Squares Inner-Loop Fusion
 

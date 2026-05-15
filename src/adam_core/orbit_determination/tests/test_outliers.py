@@ -8,7 +8,25 @@ from ...observers.observers import Observers
 from ...time.time import Timestamp
 from ..differential_correction import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers
-from ..outliers import remove_lowest_probability_observation
+from ..outliers import calculate_max_outliers, remove_lowest_probability_observation
+
+
+def test_calculate_max_outliers() -> None:
+    assert calculate_max_outliers(10, 6, 50.0) == 4
+    assert calculate_max_outliers(10, 1, 25.0) == 2
+    assert calculate_max_outliers(10, 10, 100.0) == 0
+
+    with pytest.raises(
+        AssertionError,
+        match="Number of observations must be greater than or equal",
+    ):
+        calculate_max_outliers(5, 6, 10.0)
+
+    with pytest.raises(
+        AssertionError,
+        match="Contamination percentage must be between 0 and 100",
+    ):
+        calculate_max_outliers(10, 6, 101.0)
 
 
 def test_remove_lowest_probability_observation():
