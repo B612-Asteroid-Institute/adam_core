@@ -28,6 +28,7 @@ dependencies = [
  "arrow-schema",
  "faer",
  "rayon",
+ "serde_json",
 ]
 
 [[package]]

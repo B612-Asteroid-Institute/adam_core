@@ -6,7 +6,9 @@
 //! validation, and error types.
 
 pub mod arrow;
+pub mod time;
 pub use arrow::{ArrowSchemaExport, IntoRecordBatch, TryFromRecordBatch};
+pub use time::{J2000_TDB_MJD, SECONDS_PER_DAY};
 
 use std::fmt;
 

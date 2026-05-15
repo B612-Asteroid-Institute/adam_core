@@ -35,7 +35,7 @@ User decisions incorporated:
 
 - Python `Timestamp` stores a single `scale` plus `days: i64` and `nanos: i64` since MJD epoch.
 - Current Python-supported scales are `tai`, `tt`, `ut1`, `utc`, and `tdb`.
-- `Timestamp.rescale` uses Python `erfa` for UTC↔TAI↔TT↔TDB and delegates UT1 handling to Astropy/IERS machinery.
+- `Timestamp.rescale` uses Python `erfa` for UTC↔TAI leap-second conversion, an exact TAI↔TT constant, a project-local TT↔TDB approximation, and delegates UT1 handling to Astropy/IERS machinery.
 - `Timestamp.et()` / `_jd_tdb_to_et` are pure arithmetic: `(MJD_TDB - 51544.5) * 86400`.
 - The TDB→ET arithmetic already bit-matches `sp.str2et("JD ... TDB")` for fixed fixtures.
 
@@ -619,10 +619,10 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 
 ### RM-STANDALONE-004 time validation
 
-- ERFA/SOFA FFI parity against current Python `Timestamp.rescale` across UTC↔TAI↔TT↔TDB.
-- Fixed leap-second matrix covering every post-1999 leap second.
+- ERFA/SOFA FFI parity against current Python `Timestamp.rescale` across UTC↔TAI↔TT↔TDB, preserving the project-local TT↔TDB approximation rather than silently switching conventions.
+- Fixed leap-second matrix covering every post-1999 leap second in `migration/artifacts/time_scale_rescale_fixture_2026-05-15.json`.
 - TDB→ET fixture preserving current pure arithmetic identity.
-- Document Rust-native replacement candidates and why they pass/fail parity.
+- Document Rust-native replacement candidates and why they pass/fail parity in `migration/time_scale_strategy_spike_2026-05-15.md`.
 
 ### Later workflow validation
 
@@ -637,11 +637,12 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 ## 21. Rollout plan
 
 1. **RM-STANDALONE-003:** implement prototype `TimeArray`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, and Arrow adapters as modules in current crates.
-2. **RM-STANDALONE-004:** implement or prototype ERFA/SOFA FFI time conversion and document Rust-native replacement candidates.
-3. **RM-STANDALONE-005:** promote `adam_core_rs_spice` service APIs for origins, frames, and observers.
-4. **RM-STANDALONE-006:** define `PropagatorBackend` and lift existing 2-body kernels behind it.
-5. **RM-STANDALONE-007:** integrate `assist-rs` behind the trait while keeping backend pluggability.
-6. **RM-STANDALONE-008+**: port OD/IOD/LSQ and observation/photometry/product workflows on top of typed batches.
+2. **RM-STANDALONE-004:** lock down ERFA/SOFA time strategy, leap-second fixtures, Rust-native replacement criteria, and first TDB→ET Rust arithmetic helper.
+3. **RM-STANDALONE-004A:** implement the ERFA/liberfa FFI service for UTC↔TAI while preserving the current TAI↔TT and TT↔TDB policies.
+4. **RM-STANDALONE-005:** promote `adam_core_rs_spice` service APIs for origins, frames, and observers.
+5. **RM-STANDALONE-006:** define `PropagatorBackend` and lift existing 2-body kernels behind it.
+6. **RM-STANDALONE-007:** integrate `assist-rs` behind the trait while keeping backend pluggability.
+7. **RM-STANDALONE-008+**: port OD/IOD/LSQ and observation/photometry/product workflows on top of typed batches.
 
 ## 22. Acceptance criteria for this RFC
 

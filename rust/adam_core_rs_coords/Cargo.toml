@@ -13,5 +13,8 @@ adam_core_rs_autodiff = { path = "../adam_core_rs_autodiff" }
 # Cholesky/LU/QR/eigen kernels (sigma-point sampling, ATWA solve, etc.).
 faer = "0.22"
 
+[dev-dependencies]
+serde_json = "1"
+
 [lib]
 path = "src/lib.rs"

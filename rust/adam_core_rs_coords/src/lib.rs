@@ -8,7 +8,7 @@ pub use types::{
     ArrowSchemaExport, CoordinateBatch, CoordinateRepresentation, CoordinateValues,
     CovarianceBatch, CovarianceUnits, Epoch, Frame as DataFrame, IntoRecordBatch, ObjectId,
     OrbitBatch, OrbitId, OriginArray, OriginId, SchemaError, TimeArray, TimeScale,
-    TryFromRecordBatch, Validity, NANOS_PER_DAY,
+    TryFromRecordBatch, Validity, J2000_TDB_MJD, NANOS_PER_DAY, SECONDS_PER_DAY,
 };
 
 pub mod generic;

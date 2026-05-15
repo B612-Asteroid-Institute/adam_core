@@ -60,8 +60,8 @@
     "time_strategy": {
       "decision": "start_with_erfa_sofa_ffi",
       "source": "user clarification 2026-05-15",
-      "next_step": "Outline/evaluate Rust-native replacement candidates after FFI baseline is specified.",
-      "current_baseline": "Python Timestamp.rescale uses erfa; MJD_TDB to ET is pure arithmetic and remains a fixture baseline."
+      "next_step": "Implement ERFA/liberfa UTC-TAI FFI behind the fixture; evaluate Rust-native replacements only after they match it.",
+      "current_baseline": "Python Timestamp.rescale uses ERFA for UTC-TAI leap seconds, an exact TAI-TT offset, a project-local TT-TDB approximation, Astropy/IERS for UT1, and pure arithmetic MJD_TDB to ET."
     },
     "nbody_backend": {
       "decision": "assist_rs_preferred_with_pluggable_backend_trait",
@@ -834,8 +834,9 @@
     "note": "Adapter work is intentionally tracked outside the 507 public-ish Python entry inventory."
   },
   "next_tasks": [
-    "RM-STANDALONE-002: Rust-native data model RFC",
-    "RM-STANDALONE-003: CoordinateBatch/OrbitBatch plus Arrow adapter prototype",
-    "RM-STANDALONE-004: ERFA/SOFA FFI time-strategy spike with Rust-native replacement outline"
+    "RM-STANDALONE-002: Rust-native data model RFC (complete)",
+    "RM-STANDALONE-003: CoordinateBatch/OrbitBatch plus Arrow adapter prototype (complete)",
+    "RM-STANDALONE-004: ERFA/SOFA time-strategy fixture spike with Rust-native replacement outline (complete)",
+    "RM-STANDALONE-004A: ERFA/liberfa UTC-TAI FFI service"
   ]
 }
