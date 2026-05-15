@@ -427,17 +427,82 @@
     <span class="n">SphericalCoordinates</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">Residuals</span><span class="p">,</span>
-    <span class="n">calculate_reduced_chi2</span><span class="p">,</span>
-    <span class="n">compute_residuals_ndarray</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span><span class="p">,</span> <span class="n">calculate_reduced_chi2</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">OrbitDeterminationObservations</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_spherical_residual_columns_from_values</span><span class="p">(</span>
+    <span class="n">observed_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">predicted_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute RA/Dec residual columns directly from spherical value arrays.</span>
+
+<span class="sd">    This is the same longitude-wrap and cos(latitude) convention as</span>
+<span class="sd">    ``compute_residuals_ndarray(... )[:, 1:3]`` but avoids building temporary</span>
+<span class="sd">    quivr coordinate tables inside the least-squares finite-difference loop.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">predicted_values</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">observed_values</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">predicted_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">predicted_values</span><span class="p">,</span> <span class="n">observed_values</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">predicted_values</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observed_values</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Predicted coordinates must have length 1 or match observed length &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">observed_values</span><span class="p">)</span><span class="si">}</span><span class="s2">), got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">predicted_values</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">residual_lon</span> <span class="o">=</span> <span class="n">observed_values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">predicted_values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">residual_lat</span> <span class="o">=</span> <span class="n">observed_values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">predicted_values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+
+    <span class="n">lon_greater_than_180</span> <span class="o">=</span> <span class="n">residual_lon</span> <span class="o">&gt;</span> <span class="mf">180.0</span>
+    <span class="n">lon_less_than_minus_180</span> <span class="o">=</span> <span class="n">residual_lon</span> <span class="o">&lt;</span> <span class="o">-</span><span class="mf">180.0</span>
+    <span class="n">residual_lon</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">lon_greater_than_180</span><span class="p">,</span> <span class="n">residual_lon</span> <span class="o">-</span> <span class="mf">360.0</span><span class="p">,</span> <span class="n">residual_lon</span><span class="p">)</span>
+    <span class="n">residual_lon</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+        <span class="n">lon_less_than_minus_180</span><span class="p">,</span>
+        <span class="n">residual_lon</span> <span class="o">+</span> <span class="mf">360.0</span><span class="p">,</span>
+        <span class="n">residual_lon</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">crosses_zero_boundary</span> <span class="o">=</span> <span class="p">(</span><span class="n">lon_greater_than_180</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">observed_values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">180.0</span><span class="p">))</span> <span class="o">|</span> <span class="p">(</span>
+        <span class="n">lon_less_than_minus_180</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">observed_values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">180.0</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">residual_lon</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">crosses_zero_boundary</span><span class="p">,</span> <span class="o">-</span><span class="n">residual_lon</span><span class="p">,</span> <span class="n">residual_lon</span><span class="p">)</span>
+    <span class="n">residual_lon</span> <span class="o">*=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">observed_values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]))</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">residual_lon</span><span class="p">,</span> <span class="n">residual_lat</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normal_equations</span><span class="p">(</span>
+    <span class="n">partials</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">residuals</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Accumulate the weighted normal-equation matrices for RA/Dec least squares.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    partials : np.ndarray</span>
+<span class="sd">        Shape ``(N, 2, P)`` matrix of observation partial derivatives.</span>
+<span class="sd">    residuals : np.ndarray</span>
+<span class="sd">        Shape ``(N, 2)`` residual matrix.</span>
+<span class="sd">    weights : np.ndarray</span>
+<span class="sd">        Shape ``(N, 2)`` diagonal weights for each observation component.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ATWA : np.ndarray</span>
+<span class="sd">        Shape ``(P, P)`` normal-equation left-hand side.</span>
+<span class="sd">    ATWb : np.ndarray</span>
+<span class="sd">        Shape ``(P,)`` normal-equation right-hand side.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">weighted_partials</span> <span class="o">=</span> <span class="n">partials</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">ATWA</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nkp,nkq-&gt;pq&quot;</span><span class="p">,</span> <span class="n">weighted_partials</span><span class="p">,</span> <span class="n">partials</span><span class="p">)</span>
+    <span class="n">ATWb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nkp,nk-&gt;p&quot;</span><span class="p">,</span> <span class="n">weighted_partials</span><span class="p">,</span> <span class="n">residuals</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ATWA</span><span class="p">,</span> <span class="n">ATWb</span>
 
 
 <div class="viewcode-block" id="LeastSquares">
@@ -519,8 +584,7 @@
 <span class="sd">        --------</span>
 <span class="sd">        (N, 2) array of residuals for RA and DEC.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">residuals</span> <span class="o">=</span> <span class="n">compute_residuals_ndarray</span><span class="p">(</span><span class="n">coord1</span><span class="p">,</span> <span class="n">coord2</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">residuals</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">_spherical_residual_columns_from_values</span><span class="p">(</span><span class="n">coord1</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">coord2</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_compute_partials</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -617,18 +681,31 @@
             <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
         <span class="p">)</span>
 
+        <span class="n">ephemeris_values</span> <span class="o">=</span> <span class="n">ephemeris_all</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">ephemeris_orbit_ids</span> <span class="o">=</span> <span class="n">ephemeris_all</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">ephemeris_blocks</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">orbit_id</span> <span class="ow">in</span> <span class="n">pert_ids</span><span class="p">:</span>
+            <span class="n">ephemeris_block</span> <span class="o">=</span> <span class="n">ephemeris_values</span><span class="p">[</span><span class="n">ephemeris_orbit_ids</span> <span class="o">==</span> <span class="n">orbit_id</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">ephemeris_block</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">num_obs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="n">num_obs</span><span class="si">}</span><span class="s2"> ephemeris rows for perturbed orbit </span><span class="si">{</span><span class="n">orbit_id</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">ephemeris_block</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">ephemeris_blocks</span><span class="p">[</span><span class="n">orbit_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">ephemeris_block</span>
+        <span class="n">nominal_values</span> <span class="o">=</span> <span class="n">nominal_ephemeris_coordinates</span><span class="o">.</span><span class="n">values</span>
+
         <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_obs</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">num_param</span><span class="p">))</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_param</span><span class="p">):</span>
-            <span class="n">eph_p</span> <span class="o">=</span> <span class="n">ephemeris_all</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;_ls_p_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">eph_p_values</span> <span class="o">=</span> <span class="n">ephemeris_blocks</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;_ls_p_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">use_central_difference</span><span class="p">:</span>
-                <span class="n">eph_m</span> <span class="o">=</span> <span class="n">ephemeris_all</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;_ls_m_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="n">col</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual_columns</span><span class="p">(</span><span class="n">eph_p</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">eph_m</span><span class="o">.</span><span class="n">coordinates</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span>
-                    <span class="mi">2</span> <span class="o">*</span> <span class="n">d_per_param</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-                <span class="p">)</span>
+                <span class="n">eph_m_values</span> <span class="o">=</span> <span class="n">ephemeris_blocks</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;_ls_m_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+                <span class="n">col</span> <span class="o">=</span> <span class="n">_spherical_residual_columns_from_values</span><span class="p">(</span>
+                    <span class="n">eph_p_values</span><span class="p">,</span> <span class="n">eph_m_values</span>
+                <span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">d_per_param</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">col</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_residual_columns</span><span class="p">(</span>
-                        <span class="n">eph_p</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">nominal_ephemeris_coordinates</span>
+                    <span class="n">_spherical_residual_columns_from_values</span><span class="p">(</span>
+                        <span class="n">eph_p_values</span><span class="p">,</span> <span class="n">nominal_values</span>
                     <span class="p">)</span>
                     <span class="o">/</span> <span class="n">d_per_param</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
                 <span class="p">)</span>
@@ -753,16 +830,10 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_use_central_difference</span><span class="p">,</span>
             <span class="p">)</span>
 
-            <span class="c1"># Accumulators for the matrices, see Vallado</span>
-            <span class="n">ATWA</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_param</span><span class="p">,</span> <span class="n">num_param</span><span class="p">))</span>  <span class="c1"># params x params</span>
-            <span class="n">ATWb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_param</span><span class="p">,))</span>  <span class="c1"># params x 1</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)):</span>
-                <span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">W_all</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:])</span>
-                <span class="n">Ai</span> <span class="o">=</span> <span class="n">A</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>  <span class="c1"># Ai is d(ra|dec) / d(r|v), so 2x6</span>
-                <span class="n">b</span> <span class="o">=</span> <span class="n">B</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span>
-                <span class="n">AtW</span> <span class="o">=</span> <span class="n">Ai</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">W</span>  <span class="c1"># (6, 2) * (2, 2) -&gt; (6, 2)</span>
-                <span class="n">ATWA</span> <span class="o">+=</span> <span class="n">AtW</span> <span class="o">@</span> <span class="n">Ai</span>  <span class="c1"># (6,2)*(2,6) -&gt; (6, 6)</span>
-                <span class="n">ATWb</span> <span class="o">+=</span> <span class="n">AtW</span> <span class="o">@</span> <span class="n">b</span>  <span class="c1"># (6,2)*(2,) -&gt; (6,)</span>
+            <span class="c1"># Accumulate the weighted normal-equation matrices, see Vallado.</span>
+            <span class="c1"># A[i] is d(ra|dec) / d(r|v), so each observation contributes</span>
+            <span class="c1"># A_i.T @ W_i @ A_i and A_i.T @ W_i @ b_i.</span>
+            <span class="n">ATWA</span><span class="p">,</span> <span class="n">ATWb</span> <span class="o">=</span> <span class="n">_normal_equations</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">W_all</span><span class="p">)</span>
 
             <span class="c1"># AKA P, AKA covariance matrix, diagonal has squares of sigma_rI, sigma_rJ, ..., sigma_vK</span>
             <span class="c1"># Eigenvalues and eigenvectors would give error ellipse dimensions and orientation</span>
