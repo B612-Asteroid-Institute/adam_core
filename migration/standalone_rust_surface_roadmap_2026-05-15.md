@@ -1,0 +1,483 @@
+# Standalone Rust Surface Roadmap (2026-05-15)
+
+Status: long-term capability map for making `adam-core-rs` capable of covering the full `adam_core` functional surface without requiring the Python interface.
+
+Related artifacts:
+
+- Full public-ish inventory: `migration/artifacts/adam_core_public_surface_inventory_2026-05-15.json` (`507` entries)
+- Gap report: `migration/adam_core_rust_surface_gap_report_2026-05-15.md`
+- Existing review backlog: `migration/review_task_backlog_2026-04-28.md`
+- Current migration tracker: `migration/TODO.md`
+
+## Premise
+
+The previous migration framing asked: “Which surfaces should be ported for the current Python/PyO3 interface?” The long-term framing is different:
+
+> `adam-core-rs` should become a standalone Rust library that can handle the whole adam_core domain, with Python becoming an adapter rather than the owner of core behavior.
+
+That changes the interpretation of “keep Python.” For the current Python API, many table/orchestration/network surfaces are poor speedup targets. For standalone Rust, they are capability gaps. The correct implementation direction is **not** a line-by-line port of PyArrow/quivr classes. It is a Rust-native domain model plus adapters for Arrow/Python where needed.
+
+## Design principles
+
+1. **Rust owns domain semantics; Python adapts.** Long-term Python modules should wrap Rust-native types and workflows, not reimplement them.
+2. **Use typed Rust data contracts before porting high-level workflows.** OD, propagation, impact, observations, and exports should not be ported on top of ad hoc `&[f64]` buffers alone.
+3. **Separate core computation from adapters.** Core crates should not depend on PyO3. Arrow, Python, network, and plotting should be optional features or adapter crates.
+4. **Fail loudly on unsupported semantics.** Do not add silent fallbacks while replacing Python behavior.
+5. **Keep scientific parity explicit.** Time scales, SPICE frame/body resolution, n-body dynamics, OD root selection, covariance propagation, and photometry validity policies need written parity contracts before implementation changes.
+6. **Port workflows by stable boundaries, not helper-by-helper.** Small helpers should exist in Rust because they compose inside Rust workflows, but user-visible milestones should be high-level capabilities.
+
+## Current Rust baseline
+
+Current workspace members:
+
+| Crate | Current role | Long-term direction |
+|---|---|---|
+| `adam_core_rs_autodiff` | `Dual<N>` and scalar trait for covariance/Jacobian kernels | Keep as low-level math/autodiff crate. Consider extending only when real workflows need more AD features. |
+| `adam_core_rs_coords` | Coordinates, dynamics kernels, propagation, ephemeris, Lambert, MOID, photometry, weighted stats | Keep as the numerical-kernel base initially. Split into domain crates only after Rust-native data contracts stabilize. |
+| `adam_core_rs_spice` | Direct Rust-to-Rust `spicekit` backend for SPK/PCK/text-kernel loading and frame/body lookup | Promote from backend wrapper to first-class ephemeris/frame service used by Rust workflows. |
+| `adam_core_rs_orbit_determination` | Gibbs/Herrick-Gibbs/Gauss/GaussIOD kernels | Expand after propagation and data-model foundations exist. |
+| `adam_core_py` | PyO3 boundary for current Python package | Treat as adapter only; do not put domain behavior here. |
+
+## Target crate/layer architecture
+
+This is a direction, not a required immediate split. Start with modules inside existing crates if that keeps the migration tractable; split once boundaries are stable.
+
+```text
+adam_core_rs_core          # errors, units, IDs, constants, validation helpers
+adam_core_rs_time          # Epoch/TimeArray, scale conversion, leap-second policy
+adam_core_rs_types         # coordinates, covariance, orbits, observers, observations, ephemerides
+adam_core_rs_spice         # kernel store, frames, origins, body lookup, SPICE state providers
+adam_core_rs_coords        # representation transforms, frame transforms, covariance propagation
+adam_core_rs_dynamics      # 2-body, Lambert, MOID, Tisserand, porkchop, aberration
+adam_core_rs_propagation   # Propagator trait, 2-body backend, assist-rs/n-body backend, ephemeris generation
+adam_core_rs_od            # IOD, OD, least squares, outliers, evaluation, diagnostics
+adam_core_rs_photometry    # H-G/H-G12/absolute magnitude, bandpass registry, magnitude predictions
+adam_core_rs_observations  # detections, exposures, associations, ADES/MPC transforms
+adam_core_rs_products      # OEM, SPK, OpenSpace, report/export products
+adam_core_rs_catalogs      # optional network clients for Horizons/Scout/SBDB/NEOCC/source catalogs
+adam_core_rs_arrow         # optional Arrow import/export adapters
+adam_core_py               # Python adapter over Rust core + Arrow adapters
+```
+
+Recommended dependency direction:
+
+```text
+core → time → types
+core + time + spice → coords
+coords + spice → dynamics
+coords + dynamics + spice + time + types → propagation
+propagation + observations + photometry → od / impacts / products
+catalogs and Python adapters sit at the edge
+```
+
+## Entire surface-area map
+
+The exact 507-entry list is in `migration/artifacts/adam_core_public_surface_inventory_2026-05-15.json`. This table maps every module family from that inventory into a long-term Rust workstream.
+
+| Workstream | Python modules covered | Inventory count | Implementation direction |
+|---|---|---:|---|
+| **W1 Core coordinate/time/orbit data model** | `time.time`; `coordinates.cartesian`, `coordinates.spherical`, `coordinates.keplerian`, `coordinates.cometary`, `coordinates.geodetics`, `coordinates.origin`, `coordinates.covariances`; `orbits.orbits`, `orbits.variants`, `orbits.classification`, `orbits.physical_parameters`; `observers.observers`, `observers.state` | 204 | Rust-native typed batches for epochs, origins, frames, coordinate representations, covariance blocks, orbit rows, observer rows, and metadata. Provide Arrow/Python adapters, not PyArrow-shaped internals. |
+| **W2 Coordinate transforms, units, residuals, variants** | `coordinates.transform`, `coordinates.units`, `coordinates.residuals`, `coordinates.variants` | 34 | Lift existing Rust kernels onto Rust-native coordinate batches. Add Rust-native unit conversions, residual arrays, covariance sampling, and variant generation. Keep SciPy/NumPy choices only in Python adapter until Rust-native linalg/parity is implemented. |
+| **W3 SPICE, frames, origins, observers** | `utils.spice_backend`, `utils.spice`, `observers.utils` | 18 | Make `adam_core_rs_spice` a reusable Rust service: kernel store, frame graph, body/frame/name lookup, origin-state cache, observer-state generation, fixed-kernel test fixtures. |
+| **W4 Dynamics and mission design** | `dynamics.kepler`, `dynamics.barker`, `dynamics.stumpff`, `dynamics.chi`, `dynamics.lagrange`, `dynamics.propagation`, `dynamics.ephemeris`, `dynamics.aberrations`, `dynamics.lambert`, `dynamics.moid`, `dynamics.tisserand`, `dynamics.impacts`, `dynamics.exceptions`, `dynamics._rust_compat`, `missions.porkchop` | 60 | Govern existing Rust helpers, then expose typed Rust APIs for two-body propagation, ephemerides, Lambert/porkchop, MOID, Tisserand, aberration, and impacts. Make n-body/assist-rs the strategic propagation blocker. |
+| **W5 Propagator abstraction and execution model** | `propagator.propagator`, `propagator.utils`, `parallel`, `ray_cluster`, `utils.chunking`, `utils.bounded_lru` | 33 | Replace Python subclass/Ray orchestration with Rust `Propagator` traits and Rayon chunking. Keep Ray/distributed execution as an edge adapter, not the in-process default. |
+| **W6 Orbit determination workflows** | `orbit_determination.gibbs`, `orbit_determination.herrick_gibbs`, `orbit_determination.gauss`, `orbit_determination.iod`, `orbit_determination.od`, `orbit_determination.least_squares`, `orbit_determination.evaluate`, `orbit_determination.outliers`, `orbit_determination.differential_correction`, `orbit_determination.orbit_fitter`, `orbit_determination.fitted_orbits` | 28 | Port after Rust data model + propagator trait exist. Build typed residual/fit/diagnostic outputs, deterministic convergence policies, root-selection policy, and covariance handling. |
+| **W7 Photometry and bandpasses** | `photometry.magnitude`, `photometry.magnitude_common`, `photometry.absolute_magnitude`, `photometry.bandpasses.api`, `photometry.bandpasses.tables`, `photometry.bandpasses.vendor`, `photometry.bandpasses.constants`, `observations.photometry` | 35 | Existing numeric magnitude kernels are Rust. Add Rust bandpass registry/data model, filter conversions, grouped absolute-magnitude workflows, and observation/exposure joins once observation data model exists. |
+| **W8 Observations, exposures, catalogs, associations** | `observations.ades`, `observations.detections`, `observations.exposures`, `observations.associations`, `observations.source_catalog` | 29 | Rust-native observation/exposure/association batches, ADES/MPC import/export data contracts, source-catalog schemas, and validation. Network retrieval can remain optional. |
+| **W9 Orbit products, I/O, and visualization products** | `orbits.spice_kernel`, `orbits.oem_io`, `orbits.ephemeris`, `orbits.openspace.assets`, `orbits.openspace.renderable`, `orbits.openspace.translation`, `orbits.openspace.lua`, `orbits.plots`, `dynamics.plots`, `utils.plots.logos` | 43 | Implement product emitters as optional Rust exporters over Rust-native orbit/ephemeris batches. Plotting should produce data/specs or use optional crates; do not make plotting a core dependency. |
+| **W10 Query/network clients** | `orbits.query.horizons`, `orbits.query.scout`, `orbits.query.sbdb`, `orbits.query.neocc` | 11 | Optional `catalogs`/`net` feature using `reqwest`/`serde`, isolated from core numerical crates. Preserve explicit error/timeout semantics. |
+| **W11 Utility/string/helper surfaces** | `utils.mpc`, `utils.helpers.orbits`, `utils.helpers.observations` | 12 | Port small helpers when needed by Rust workflows. Use strong parsed types for MPC designations and observation IDs rather than only string functions. |
+| **W12 Python compatibility and packaging** | `adam_core_py`; Python modules that become adapters | n/a | Keep Python API stable by round-tripping Rust-native batches through Arrow/PyO3. Python remains a consumer, not the source of truth. |
+
+## Implementation directions by workstream
+
+### W0 — Governance and roadmap control
+
+Goal: keep the long-term port auditable while not destabilizing the current green migration branch.
+
+Directions:
+
+- Add a standalone-Rust status registry separate from the current Python-interface `API_MIGRATIONS` table.
+- Track three states per surface family: `python-adapter-only`, `rust-native-kernel`, `rust-native-workflow`.
+- Add dependency metadata: data model, time, SPICE, propagation, observation model, and network requirement.
+- Keep the current canonical parity/speed gates for Python-facing migrated APIs.
+- Add Rust-native validation suites for APIs that have no Python speed relevance but are required for standalone completeness.
+
+First deliverable:
+
+- `migration/standalone_rust_surface_status.json` or a typed Rust/Python-generated report derived from the 507-entry inventory and this roadmap.
+
+### W1 — Rust-native data model
+
+Goal: create the foundation that lets high-level workflows move to Rust without copying PyArrow/quivr semantics.
+
+Directions:
+
+- Use strongly typed batches with explicit lengths and validity policies:
+  - `TimeArray`, `OriginArray`, `Frame`, `CoordinateRep`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, `ObserverBatch`, `ObservationBatch`, `ExposureBatch`, `EphemerisBatch`, `ResidualBatch`, `FitResultBatch`.
+- Prefer structure-of-arrays storage for large vectorized workloads; expose row views for scalar algorithms.
+- Store covariance as fixed-size row blocks (`[f64; 36]` initially; consider symmetric `[f64; 21]` later only if it does not complicate interop).
+- Keep metadata/provenance explicit rather than piggybacking on Arrow schema fields.
+- Add optional Arrow adapters after core types exist:
+  - `TryFrom<&arrow_array::RecordBatch>` into Rust batches;
+  - `Into<RecordBatch>` for Python/quivr compatibility;
+  - schema-version checks that fail loudly.
+
+Implementation order:
+
+1. Core enums and IDs: `Frame`, `OriginCode`, `TimeScale`, `CoordinateRepresentation`, `PhotometricFilter`, `OrbitClass`.
+2. Numeric batches for coordinates + covariance.
+3. Orbit/observer/observation/exposure batches.
+4. Arrow import/export adapters.
+5. Python wrappers that delegate construction/validation to Rust where feasible.
+
+### W2 — Time and units
+
+Goal: replace Python/Astropy ownership of `Timestamp` semantics with an explicit Rust time model.
+
+Directions:
+
+- Define the exact supported time scales: at minimum TDB, TT, TAI, UTC, GPS if currently exposed.
+- Keep MJD/JD representation policy explicit. Prefer an internal high-precision split representation (`day: i64`, `fraction: f64`) if f64 MJD roundoff becomes visible in parity.
+- Evaluate ERFA/SOFA-compatible strategies before implementing conversions:
+  - Rust wrapper around ERFA/SOFA if acceptable for licensing/distribution;
+  - Rust-native library if it can match Astropy/ERFA across leap-second and TDB cases;
+  - spicekit LSK only for ET/TDB and kernel metadata, not as a full Astropy replacement unless parity proves it.
+- Create fixed fixtures across every post-1999 leap second and representative pre/post J2000 epochs.
+- Preserve the current pure arithmetic identity for MJD_TDB ↔ ET where applicable.
+
+Acceptance criteria:
+
+- `Timestamp.rescale` parity fixtures pass against the Python/Astropy current behavior.
+- Observer/SPICE paths using ET do not drift across leap-second boundaries.
+- Unsupported scales fail loudly, not silently approximate.
+
+### W3 — SPICE, frames, origins, observers
+
+Goal: make frame/origin/body services usable directly from Rust workflows.
+
+Directions:
+
+- Promote `AdamCoreSpiceBackend` into a Rust service API with:
+  - kernel registry and last-loaded-wins semantics;
+  - SPK/PCK/text-kernel dispatch;
+  - body name/code resolution;
+  - frame association and frame graph lookup;
+  - batched `spkez`, `pxform`, and `sxform`;
+  - origin translation vectors in AU/AU-day for coordinate workflows.
+- Add Rust-native observer state generation:
+  - geodetic → ITRF state;
+  - ITRF → inertial frame with PCK `sxform`;
+  - observatory code lookup and MPC observer-table handling if needed by standalone workflows.
+- Keep CSpice parity ownership in `spicekit`/`spicekit-bench`, but adam-core should own fixture coverage for its units, defaults, and kernel lifecycle.
+
+Acceptance criteria:
+
+- Fixed-kernel Rust fixtures cover default kernels, user-loaded SPKs, ITRF93 rotations, LSK/FK retention, body alias resolution, and origin translations.
+- Rust workflows no longer need Python `utils.spice` or observer helpers.
+
+### W4 — Coordinates, covariance, units, variants
+
+Goal: expose the already-migrated numerical coordinate kernels through typed Rust-native APIs.
+
+Directions:
+
+- Wrap existing transform kernels with `CoordinateBatch` inputs/outputs.
+- Keep representation/frame/origin transforms as a single high-level Rust call path.
+- Add covariance propagation as a first-class batch operation, including NaN policy.
+- Port coordinate variants/sigma-point generation natively only after data-model and linalg choices are settled:
+  - use `faer` or another Rust linalg backend for matrix square roots/eigendecomposition if parity and performance justify replacing SciPy `sqrtm`;
+  - otherwise keep Python adapter-specific behavior while Rust workflows use a simpler validated Rust covariance sampler.
+- Add unit conversions as tiny Rust helpers because they compose in Rust workflows, even if they do not matter for Python speed.
+
+Acceptance criteria:
+
+- Rust-native transform/covariance APIs can execute without PyO3/NumPy.
+- Arrow/Python adapter outputs remain compatible with current coordinate tables.
+
+### W5 — Dynamics, propagation, ephemerides, impacts
+
+Goal: make propagation and ephemeris generation a Rust-owned workflow.
+
+Directions:
+
+- Keep current 2-body kernels as the first `Propagator` implementation.
+- Define a Rust trait along these lines:
+
+```rust
+pub trait Propagator {
+    fn propagate(&self, orbits: &OrbitBatch, times: &TimeArray) -> Result<OrbitBatch>;
+    fn generate_ephemeris(
+        &self,
+        orbits: &OrbitBatch,
+        observers: &ObserverBatch,
+        options: &EphemerisOptions,
+    ) -> Result<EphemerisBatch>;
+}
+```
+
+- Add `TwoBodyPropagator` first by lifting existing kernels.
+- Add `AssistPropagator` via `assist-rs` or an equivalent n-body backend:
+  - perturbing-body state lookup through `adam_core_rs_spice`;
+  - covariance support via AD or variational equations;
+  - chunked Rayon dispatch inside Rust.
+- Rebuild impact/collision helpers on top of the same propagator trait.
+
+Acceptance criteria:
+
+- 2-body Rust workflow reproduces current `dynamics.propagate_2body` and `generate_ephemeris_2body` behavior without Python.
+- n-body Rust workflow reproduces representative ASSIST-backed Python outputs and performance profiles.
+- Ray is no longer needed for in-process propagation/OD/impact defaults.
+
+### W6 — Orbit determination workflows
+
+Goal: port IOD/OD/LSQ after propagation and typed data exist.
+
+Directions:
+
+- Keep existing Rust Gibbs/Herrick/Gauss/GaussIOD kernels.
+- Build Rust-native workflow types:
+  - `IODProblem`, `IODSolutionSet`, `ODProblem`, `LeastSquaresOptions`, `FitDiagnostics`, `FittedOrbitBatch`.
+- Inject a `Propagator` trait object/generic into OD and LSQ so 2-body and n-body use the same orchestration.
+- Preserve deterministic convergence and diagnostic semantics:
+  - iteration counts;
+  - chi2/reduced-chi2;
+  - residual batches;
+  - covariance outputs;
+  - outlier removal decisions.
+- Make Gauss root-selection policy explicit and fixture-governed before broadening random input domains.
+
+Acceptance criteria:
+
+- Rust LSQ end-to-end fixture matches current Python workflow outputs and diagnostics.
+- Rust OD/IOD workflows can run without constructing Python quivr tables.
+- Performance summaries distinguish inner microbenchmarks from end-to-end wall-clock.
+
+### W7 — Photometry and bandpass workflows
+
+Goal: move from Rust numeric kernels to Rust-native photometry workflows.
+
+Directions:
+
+- Keep existing H-G phase/magnitude kernels.
+- Add Rust data types for filters, bandpass metadata, exposures, and detection photometry.
+- Decide whether bandpass/vendor data should be compiled into the crate, loaded from package data, or supplied by users.
+- Port absolute-magnitude group workflows after observations/exposures data model exists.
+- Keep validity policies explicit for invalid geometry, missing filter conversions, and NaN inputs.
+
+Acceptance criteria:
+
+- `predict_magnitudes` and absolute-magnitude estimators can run over Rust-native orbit/ephemeris/exposure/detection batches.
+- Python bandpass API becomes an adapter over the Rust registry or remains clearly out-of-core if product scope says so.
+
+### W8 — Observations, exposures, associations, catalogs
+
+Goal: make the data that drives OD/photometry available natively in Rust.
+
+Directions:
+
+- Define `ObservationBatch`, `DetectionBatch`, `ExposureBatch`, `AssociationBatch`, and `SourceCatalogBatch`.
+- Implement ADES/MPC parsing/serialization as optional but first-class Rust data ingest if standalone means end-to-end survey workflows.
+- Keep crossmatch/association operations vectorized and typed.
+- Treat network download/query as optional edge functionality; parsing and validation should not require network features.
+
+Acceptance criteria:
+
+- OD/photometry workflows consume Rust observation/exposure batches.
+- ADES/MPC fixture round trips match current Python behavior where applicable.
+
+### W9 — Orbit products, file formats, and visualization outputs
+
+Goal: produce the same outputs without Python orchestration when required by standalone product scope.
+
+Directions:
+
+- SPK writing already exists through spicekit; expose it through Rust-native orbit/ephemeris batches.
+- Add OEM read/write over Rust orbit/ephemeris types.
+- Add OpenSpace renderable/Lua/export builders as optional text-product generators.
+- Plotting should be optional and should preferably produce data/specification outputs rather than make heavy plotting dependencies part of core.
+
+Acceptance criteria:
+
+- SPK/OEM/OpenSpace output fixtures match Python output semantically.
+- Product exporters are feature-gated outside numerical core.
+
+### W10 — Query and network clients
+
+Goal: decide whether standalone means numerical/workflow standalone only, or also network-client standalone.
+
+Directions:
+
+- If network clients are required, implement an optional `net` feature or companion crate with `reqwest` + `serde`.
+- Keep query response parsing separate from HTTP transport so fixture tests do not need network.
+- Preserve current timeout/error behavior explicitly.
+
+Acceptance criteria:
+
+- Horizons/Scout/SBDB/NEOCC parsers have local fixtures.
+- Live network tests, if any, are opt-in and not required for normal correctness CI.
+
+### W11 — Utility surfaces and execution model
+
+Goal: avoid carrying Python infrastructure assumptions into Rust.
+
+Directions:
+
+- Replace `parallel`/`ray_cluster` defaults with Rust Rayon for in-process workloads.
+- Keep a distributed execution abstraction only if product workflows require multi-machine execution.
+- Port MPC/string helpers into typed parsers where they are part of observation/catalog ingestion.
+- Keep cache/chunk helpers private to the crates that need them.
+
+Acceptance criteria:
+
+- Core workflows do not depend on Python Ray, process pickling, or Python-side chunking.
+- Rust APIs expose deterministic chunking and thread controls only where needed.
+
+### W12 — Python and Arrow adapters
+
+Goal: preserve the existing Python user interface while moving ownership to Rust.
+
+Directions:
+
+- Python classes should become thin wrappers around Rust-native batches plus Arrow adapters.
+- Adapter responsibilities:
+  - Python import compatibility;
+  - quivr/PyArrow table conversion;
+  - NumPy buffer conversion where still needed;
+  - user-facing exceptions mapped from Rust errors.
+- Avoid putting new domain behavior in `adam_core_py`.
+
+Acceptance criteria:
+
+- Existing Python tests continue to pass as workflows migrate underneath.
+- Rust-native tests can run without importing Python.
+
+## Suggested milestone plan
+
+### Milestone A — Standalone governance and typed skeleton
+
+Scope:
+
+- Add standalone status registry.
+- Define core Rust enums/errors and first typed coordinate/time/orbit batches.
+- Add Arrow adapter prototype for one coordinate batch.
+
+Exit criteria:
+
+- Rust-only tests cover construction, validation, Arrow round-trip, and Python adapter smoke for one batch type.
+
+### Milestone B — Time/SPICE foundations
+
+Scope:
+
+- Implement Rust time strategy/parity fixtures.
+- Promote `adam_core_rs_spice` service API for frames/origins/observer states.
+
+Exit criteria:
+
+- Fixed leap-second and SPICE fixture suite passes without Python.
+
+### Milestone C — Rust-native coordinates/orbits
+
+Scope:
+
+- Lift existing coordinate transform/covariance kernels onto typed batches.
+- Port units, residual helpers, and Rust-native covariance/variant workflows as needed.
+
+Exit criteria:
+
+- Coordinate workflows can run end-to-end in Rust and round-trip through Python/Arrow.
+
+### Milestone D — Propagation and ephemeris trait
+
+Scope:
+
+- Define `Propagator` trait.
+- Implement typed `TwoBodyPropagator`.
+- Integrate `assist-rs`/n-body backend or choose equivalent Rust n-body path.
+
+Exit criteria:
+
+- 2-body and representative n-body propagation/ephemeris fixtures pass.
+- Parallelism lives in Rust for in-process workloads.
+
+### Milestone E — OD/IOD/LSQ workflows
+
+Scope:
+
+- Port IOD/OD/LSQ orchestration to Rust-native batches.
+- Preserve diagnostics, covariance, outlier, and convergence semantics.
+
+Exit criteria:
+
+- End-to-end OD/IOD/LSQ fixtures pass without Python table construction.
+
+### Milestone F — Observations, photometry, products
+
+Scope:
+
+- Port observation/exposure/association/bandpass data workflows.
+- Add native photometry workflows over Rust batches.
+- Add SPK/OEM/OpenSpace/ADES product emitters as optional features.
+
+Exit criteria:
+
+- End-to-end observation → OD/photometry → product-output fixtures pass.
+
+### Milestone G — Optional catalog/network/product edges
+
+Scope:
+
+- Add optional network clients if standalone product scope requires them.
+- Add optional plotting/export integrations.
+
+Exit criteria:
+
+- Network and visualization are feature-gated and fixture-tested without live services by default.
+
+## Near-term task proposals
+
+| Task | Purpose | Depends on | Notes |
+|---|---|---|---|
+| **RM-STANDALONE-001** | Create standalone surface status registry from the 507-entry inventory. | Existing inventory | No runtime code changes. |
+| **RM-STANDALONE-002** | Define Rust-native data model RFC for time, coordinates, covariances, orbits, observers, observations, exposures, and fitted results. | RM-STANDALONE-001 | Design first; avoid ad hoc buffer APIs. |
+| **RM-STANDALONE-003** | Prototype `CoordinateBatch` + `OrbitBatch` Rust types and Arrow adapters. | RM-STANDALONE-002 | Use one or two existing Python tables as compatibility fixtures. |
+| **RM-STANDALONE-004** | Time-scale strategy spike: ERFA/SOFA wrapper vs Rust-native library vs limited internal implementation. | RM-STANDALONE-002 | Must include leap-second fixtures before selecting implementation. |
+| **RM-STANDALONE-005** | Rust SPICE service API for origin/frame/observer states. | Existing `adam_core_rs_spice` | Build on direct spicekit dependency. |
+| **RM-STANDALONE-006** | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/005 | Reuse existing Rust 2-body kernels. |
+| **RM-STANDALONE-007** | `assist-rs` integration spike and n-body parity fixture plan. | RM-STANDALONE-006 | Strategic blocker for OD/impact parity. |
+| **RM-STANDALONE-008** | Rust-native OD/LSQ design over typed propagator and observation batches. | RM-STANDALONE-003/006/007 | Design before implementation. |
+| **RM-STANDALONE-009** | Observation/exposure/bandpass Rust model and parsers. | RM-STANDALONE-003 | Unblocks photometry workflows. |
+| **RM-STANDALONE-010** | Product/export scope decision: SPK/OEM/OpenSpace/ADES/network/plotting required or optional. | RM-STANDALONE-001 | Prevents core crate dependency bloat. |
+
+## Open product-scope questions
+
+1. Does “standalone” require **all network clients** (`Horizons`, `Scout`, `SBDB`, `NEOCC`) or only local parsing/workflow capability?
+2. Does “standalone” require **plot rendering**, or only product data/spec generation for downstream plotting tools?
+3. Should Python/quivr table schemas remain the canonical interchange format, or should Rust define schemas and Python adapt?
+4. What is the acceptable Rust time dependency story: pure Rust only, C ERFA/SOFA binding allowed, or mixed optional feature?
+5. Is `assist-rs` the chosen n-body backend, or should the roadmap compare it against another integrator path first?
+6. Which file/product formats are required for a first standalone release: SPK, OEM, ADES, OpenSpace, all of them, or a smaller set?
+
+## Validation model
+
+For each workstream:
+
+- **Rust-native unit tests:** validate Rust types and algorithms without Python.
+- **Fixture parity tests:** compare against current Python behavior, fixed CSPICE/ERFA fixtures, or spicekit-bench where appropriate.
+- **Adapter tests:** verify Python/Arrow wrappers preserve current schemas and exceptions.
+- **Performance tests:** only where performance is a stated goal; do not block standalone capability on Python-call speed.
+- **End-to-end workflow tests:** required before claiming standalone coverage for propagation, OD, photometry, impacts, or product generation.
+
+## Summary recommendation
+
+The next best long-term step is **not another isolated kernel port**. It is a small but explicit standalone foundation project:
+
+1. generate a standalone surface status registry from the 507-entry inventory;
+2. write the Rust-native data model RFC;
+3. prototype coordinate/orbit/time batch types plus Arrow adapters;
+4. decide the time-scale implementation strategy;
+5. extend the Rust SPICE service API;
+6. then tackle the propagator trait and `assist-rs` integration.
+
+Once those foundations exist, the high-level workflow ports become tractable and testable instead of being a piecemeal translation of Python orchestration.
