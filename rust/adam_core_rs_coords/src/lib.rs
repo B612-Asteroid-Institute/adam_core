@@ -3,6 +3,14 @@
 use adam_core_rs_autodiff::Dual;
 use rayon::prelude::*;
 
+pub mod types;
+pub use types::{
+    ArrowSchemaExport, CoordinateBatch, CoordinateRepresentation, CoordinateValues,
+    CovarianceBatch, CovarianceUnits, Epoch, Frame as DataFrame, IntoRecordBatch, ObjectId,
+    OrbitBatch, OrbitId, OriginArray, OriginId, SchemaError, TimeArray, TimeScale,
+    TryFromRecordBatch, Validity, NANOS_PER_DAY,
+};
+
 pub mod generic;
 pub use generic::{
     cartesian_to_cometary6, cartesian_to_geodetic6, cartesian_to_keplerian6,

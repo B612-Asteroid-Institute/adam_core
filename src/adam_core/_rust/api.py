@@ -55,6 +55,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "calculate_moid_batch_numpy",
     "calculate_moid_numpy",
     "calculate_phase_angle_numpy",
+    "cartesian_coordinate_schema_metadata",
     "cartesian_to_cometary_numpy",
     "cartesian_to_geodetic_numpy",
     "cartesian_to_keplerian_numpy",
@@ -75,6 +76,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "naif_pck_open",
     "naif_spk_open",
     "naif_spk_writer",
+    "orbit_schema_metadata",
     "porkchop_grid_numpy",
     "predict_magnitudes_bandpass_numpy",
     "propagate_2body_along_arc_numpy",
@@ -128,6 +130,14 @@ def _as_contiguous_i32(
     ):
         return values
     return np.ascontiguousarray(np.asarray(values, dtype=np.int32))
+
+
+def cartesian_coordinate_schema_metadata() -> tuple[list[str], dict[str, str]]:
+    return _native.cartesian_coordinate_schema_metadata()
+
+
+def orbit_schema_metadata() -> tuple[list[str], dict[str, str]]:
+    return _native.orbit_schema_metadata()
 
 
 def cartesian_to_spherical_numpy(coords: np.ndarray) -> np.ndarray:

@@ -476,8 +476,8 @@ Exit criteria:
 |---|---:|---|---|---|
 | **RM-STANDALONE-001** | S | Create standalone surface status registry from the 507-entry inventory. | Existing inventory | Complete in `migration/standalone_rust_surface_status.json`; no runtime code changes. |
 | **RM-STANDALONE-002** | M | Define Rust-native data model RFC for time, coordinates, covariances, orbits, observers, observations, exposures, and fitted results. | RM-STANDALONE-001 + product-scope decisions above | Complete in `migration/rust_native_data_model_rfc_2026-05-15.md`; covers covariance, variants, chunking, provenance, and adapter boundaries. |
-| **RM-STANDALONE-003** | M | Prototype `CoordinateBatch` + `OrbitBatch` Rust types and Arrow adapters. | RM-STANDALONE-002 | Next standalone implementation task; use one or two existing Python tables as compatibility fixtures. |
-| **RM-STANDALONE-004** | M | Time-scale strategy spike against the current ERFA baseline. | RM-STANDALONE-002 | Compare ERFA/SOFA FFI, Rust-native library, and TDB-only Rust workflows with Python ERFA adapter support; include leap-second fixtures before selecting implementation. |
+| **RM-STANDALONE-003** | M | Prototype `CoordinateBatch` + `OrbitBatch` Rust types and Arrow adapters. | RM-STANDALONE-002 | Complete in `adam_core_rs_coords::types` with first flat Cartesian/Orbit Arrow contracts and PyO3 schema-metadata fixture hooks. |
+| **RM-STANDALONE-004** | M | Time-scale strategy spike against the current ERFA baseline. | RM-STANDALONE-002/003 | Next standalone implementation task; compare ERFA/SOFA FFI, Rust-native library, and TDB-only Rust workflows with Python ERFA adapter support; include leap-second fixtures before selecting implementation. |
 | **RM-STANDALONE-005** | M | Rust SPICE service API for origin/frame/observer states. | Existing `adam_core_rs_spice` | Build on direct spicekit dependency. |
 | **RM-STANDALONE-006** | L | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/005 | Reuse existing Rust 2-body kernels; include covariance, variants, and Rayon-side chunk/thread controls. |
 | **RM-STANDALONE-007** | L | `assist-rs` integration spike and n-body parity fixture plan. | RM-STANDALONE-006 | Refines/supersedes RM-FUTURE-002; strategic blocker for OD/impact parity. |
@@ -512,8 +512,8 @@ The long-term track should remain a small but explicit standalone foundation pro
 
 1. generate a standalone surface status registry from the 507-entry inventory — **complete**;
 2. write the Rust-native data model RFC using the resolved scope decisions above — **complete**;
-3. prototype coordinate/orbit/time batch types plus Arrow adapters — **next**;
-4. decide the time-scale implementation strategy against the current ERFA/TDB→ET baseline;
+3. prototype coordinate/orbit/time batch types plus Arrow adapters — **complete**;
+4. decide the time-scale implementation strategy against the current ERFA/TDB→ET baseline — **next**;
 5. extend the Rust SPICE service API;
 6. then tackle the propagator trait and RM-FUTURE-002 / RM-STANDALONE-007 `assist-rs` integration.
 

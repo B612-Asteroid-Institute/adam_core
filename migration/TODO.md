@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-15 (RM-WE3-001 least-squares inner-loop refactor complete; local validation remains primary and GitHub CI is final external confirmation only)
+Last updated: 2026-05-15 (RM-STANDALONE-003 data-model prototype complete; local validation remains primary and GitHub CI is final external confirmation only)
 
 ## Current Review-Derived Backlog
 
@@ -45,7 +45,8 @@ Last updated: 2026-05-15 (RM-WE3-001 least-squares inner-loop refactor complete;
 - [ ] RM-PERF-001: after the current RM-WE2/RM-WE3 tasks, audit PR #195 broad GitHub benchmark-action slower rows as clues for additional surface area (for example one-off observer/perturber SPICE wrappers, time rescale, covariance matrix conversion, bandpass conversion, and propagator helper benches). Treat this as surface discovery, not a merge-readiness blocker or replacement for the canonical parity/speed gates.
 - [x] RM-STANDALONE-001: standalone scope decisions are recorded and the surface status registry is captured in [`standalone_rust_surface_status.json`](standalone_rust_surface_status.json), mapping all 507 inventory entries to long-term Rust workstreams/statuses.
 - [x] RM-STANDALONE-002: Rust-native data model RFC is captured in [`rust_native_data_model_rfc_2026-05-15.md`](rust_native_data_model_rfc_2026-05-15.md), covering canonical Rust schemas, ERFA/SOFA-first time strategy with Rust-native replacement path, pluggable `assist-rs` propagation, covariance, variants, chunking, provenance, network clients, plotting/product outputs, and Arrow/Python adapters.
-- [ ] RM-STANDALONE-003: prototype `TimeArray`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, and Arrow adapters as modules inside the current crates first; validate with Rust unit tests plus Arrow/Python compatibility fixtures.
+- [x] RM-STANDALONE-003: prototype `TimeArray`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, and Arrow adapters landed in `adam_core_rs_coords::types`, with PyO3 schema-metadata helpers and Rust/Python compatibility tests for the first flat Cartesian/Orbit Arrow contracts.
+- [ ] RM-STANDALONE-004: start the ERFA/SOFA FFI time strategy spike against current Python `Timestamp.rescale` and TDB→ET arithmetic fixtures; include leap-second coverage and a Rust-native replacement evaluation path.
 - [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-rs` propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.
 
 ## Active Sprint (Milestone 1 hardening)

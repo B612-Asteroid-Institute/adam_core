@@ -34,7 +34,8 @@ User decisions incorporated:
 ### Current time model
 
 - Python `Timestamp` stores a single `scale` plus `days: i64` and `nanos: i64` since MJD epoch.
-- `Timestamp.rescale` uses Python `erfa` for UTC↔TAI↔TT↔TDB.
+- Current Python-supported scales are `tai`, `tt`, `ut1`, `utc`, and `tdb`.
+- `Timestamp.rescale` uses Python `erfa` for UTC↔TAI↔TT↔TDB and delegates UT1 handling to Astropy/IERS machinery.
 - `Timestamp.et()` / `_jd_tdb_to_et` are pure arithmetic: `(MJD_TDB - 51544.5) * 86400`.
 - The TDB→ET arithmetic already bit-matches `sp.str2et("JD ... TDB")` for fixed fixtures.
 
@@ -106,6 +107,7 @@ pub enum TimeScale {
     Tdb,
     Tt,
     Utc,
+    Ut1,
     Gps,
 }
 

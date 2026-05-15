@@ -5,13 +5,34 @@ use adam_core_rs_coords::{
     cometary_to_cartesian_flat6, keplerian_to_cartesian_flat6, rotate_cartesian_frame_flat6,
     rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
     tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
-    weighted_mean_flat, Frame, Representation as CoordsRepresentation,
+    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, Frame,
+    OrbitBatch as DataOrbitBatch, Representation as CoordsRepresentation,
 };
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use std::collections::HashMap;
+
+fn schema_metadata(schema: arrow_schema::Schema) -> (Vec<String>, HashMap<String, String>) {
+    let fields = schema
+        .fields()
+        .iter()
+        .map(|field| field.name().clone())
+        .collect();
+    (fields, schema.metadata().clone())
+}
+
+#[pyfunction]
+fn cartesian_coordinate_schema_metadata() -> (Vec<String>, HashMap<String, String>) {
+    schema_metadata(DataCoordinateBatch::schema())
+}
+
+#[pyfunction]
+fn orbit_schema_metadata() -> (Vec<String>, HashMap<String, String>) {
+    schema_metadata(DataOrbitBatch::schema())
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Representation {
@@ -1023,6 +1044,8 @@ fn tisserand_parameter_numpy<'py>(
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
+    m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(cartesian_to_spherical_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(spherical_to_cartesian_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(cartesian_to_geodetic_numpy, m)?)?;

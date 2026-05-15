@@ -1,0 +1,687 @@
+//! Canonical Rust data-model prototypes for standalone `adam-core-rs`.
+//!
+//! These types are intentionally small first implementations of the
+//! RM-STANDALONE-002 RFC contracts. They keep Python/quivr and Arrow at the
+//! adapter boundary while giving Rust-owned workflows explicit schemas,
+//! validation, and error types.
+
+pub mod arrow;
+pub use arrow::{ArrowSchemaExport, IntoRecordBatch, TryFromRecordBatch};
+
+use std::fmt;
+
+pub const NANOS_PER_DAY: i64 = 86_400_000_000_000;
+
+pub type SchemaResult<T> = Result<T, SchemaError>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SchemaError {
+    LengthMismatch {
+        field: String,
+        expected: usize,
+        actual: usize,
+    },
+    InvalidTimeScale(String),
+    UnsupportedFrame(String),
+    UnsupportedOrigin(String),
+    InvalidCovarianceShape {
+        rows: usize,
+        dimension: usize,
+        values: usize,
+    },
+    InvalidUnit {
+        field: String,
+        unit: String,
+    },
+    MissingRequiredField(String),
+    UnsupportedNull {
+        field: String,
+        row: usize,
+    },
+    InvalidRecordBatch(String),
+    Arrow(String),
+}
+
+impl fmt::Display for SchemaError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LengthMismatch {
+                field,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "length mismatch for {field}: expected {expected}, got {actual}"
+            ),
+            Self::InvalidTimeScale(scale) => write!(f, "invalid time scale: {scale}"),
+            Self::UnsupportedFrame(frame) => write!(f, "unsupported frame: {frame}"),
+            Self::UnsupportedOrigin(origin) => write!(f, "unsupported origin: {origin}"),
+            Self::InvalidCovarianceShape {
+                rows,
+                dimension,
+                values,
+            } => write!(
+                f,
+                "invalid covariance shape: rows={rows}, dimension={dimension}, values={values}"
+            ),
+            Self::InvalidUnit { field, unit } => {
+                write!(f, "invalid unit for {field}: {unit}")
+            }
+            Self::MissingRequiredField(field) => write!(f, "missing required field: {field}"),
+            Self::UnsupportedNull { field, row } => {
+                write!(f, "unsupported null in field {field} at row {row}")
+            }
+            Self::InvalidRecordBatch(message) => write!(f, "invalid record batch: {message}"),
+            Self::Arrow(message) => write!(f, "arrow error: {message}"),
+        }
+    }
+}
+
+impl std::error::Error for SchemaError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeScale {
+    Tai,
+    Tdb,
+    Tt,
+    Utc,
+    Ut1,
+    Gps,
+}
+
+impl TimeScale {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Tai => "tai",
+            Self::Tdb => "tdb",
+            Self::Tt => "tt",
+            Self::Utc => "utc",
+            Self::Ut1 => "ut1",
+            Self::Gps => "gps",
+        }
+    }
+
+    pub fn parse(value: &str) -> SchemaResult<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "tai" => Ok(Self::Tai),
+            "tdb" => Ok(Self::Tdb),
+            "tt" => Ok(Self::Tt),
+            "utc" => Ok(Self::Utc),
+            "ut1" => Ok(Self::Ut1),
+            "gps" => Ok(Self::Gps),
+            other => Err(SchemaError::InvalidTimeScale(other.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Epoch {
+    pub days: i64,
+    pub nanos: i64,
+}
+
+impl Epoch {
+    pub fn new(days: i64, nanos: i64) -> Self {
+        let day_offset = nanos.div_euclid(NANOS_PER_DAY);
+        let nanos = nanos.rem_euclid(NANOS_PER_DAY);
+        Self {
+            days: days + day_offset,
+            nanos,
+        }
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
+        if (0..NANOS_PER_DAY).contains(&self.nanos) {
+            return Ok(());
+        }
+        Err(SchemaError::InvalidRecordBatch(format!(
+            "epoch nanos must satisfy 0 <= nanos < {NANOS_PER_DAY}; got {}",
+            self.nanos
+        )))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeArray {
+    pub scale: TimeScale,
+    pub epochs: Vec<Epoch>,
+}
+
+impl TimeArray {
+    pub fn new(scale: TimeScale, epochs: Vec<Epoch>) -> SchemaResult<Self> {
+        let out = Self { scale, epochs };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub fn from_parts(scale: TimeScale, days: Vec<i64>, nanos: Vec<i64>) -> SchemaResult<Self> {
+        if days.len() != nanos.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "time.nanos".to_string(),
+                expected: days.len(),
+                actual: nanos.len(),
+            });
+        }
+        let epochs = days
+            .into_iter()
+            .zip(nanos)
+            .map(|(days, nanos)| Epoch::new(days, nanos))
+            .collect();
+        Self::new(scale, epochs)
+    }
+
+    pub fn len(&self) -> usize {
+        self.epochs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.epochs.is_empty()
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
+        for epoch in &self.epochs {
+            epoch.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Validity {
+    len: usize,
+    bits: Vec<u64>,
+}
+
+impl Validity {
+    pub fn all_valid(len: usize) -> Self {
+        let words = len.div_ceil(64);
+        let mut bits = vec![u64::MAX; words];
+        if !len.is_multiple_of(64) {
+            let used_bits = len % 64;
+            let mask = (1_u64 << used_bits) - 1;
+            if let Some(last) = bits.last_mut() {
+                *last = mask;
+            }
+        }
+        Self { len, bits }
+    }
+
+    pub fn from_bools(values: &[bool]) -> Self {
+        let len = values.len();
+        let mut bits = vec![0_u64; len.div_ceil(64)];
+        for (index, valid) in values.iter().copied().enumerate() {
+            if valid {
+                bits[index / 64] |= 1_u64 << (index % 64);
+            }
+        }
+        Self { len, bits }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn is_valid(&self, index: usize) -> bool {
+        assert!(index < self.len, "validity index out of bounds");
+        self.bits[index / 64] & (1_u64 << (index % 64)) != 0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrbitId(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjectId(pub String);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Frame {
+    Ecliptic,
+    Equatorial,
+    Itrf93,
+    Unspecified,
+}
+
+impl Frame {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ecliptic => "ecliptic",
+            Self::Equatorial => "equatorial",
+            Self::Itrf93 => "itrf93",
+            Self::Unspecified => "unspecified",
+        }
+    }
+
+    pub fn parse(value: &str) -> SchemaResult<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "ecliptic" => Ok(Self::Ecliptic),
+            "equatorial" => Ok(Self::Equatorial),
+            "itrf93" => Ok(Self::Itrf93),
+            "unspecified" => Ok(Self::Unspecified),
+            other => Err(SchemaError::UnsupportedFrame(other.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoordinateRepresentation {
+    Cartesian,
+    Spherical,
+    Keplerian,
+    Cometary,
+    Geodetic,
+}
+
+impl CoordinateRepresentation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cartesian => "cartesian",
+            Self::Spherical => "spherical",
+            Self::Keplerian => "keplerian",
+            Self::Cometary => "cometary",
+            Self::Geodetic => "geodetic",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OriginId {
+    SolarSystemBarycenter,
+    Naif(i32),
+    Named(String),
+}
+
+impl OriginId {
+    pub fn from_code(code: impl Into<String>) -> Self {
+        let code = code.into();
+        if code == "SOLAR_SYSTEM_BARYCENTER" {
+            return Self::SolarSystemBarycenter;
+        }
+        if let Some(rest) = code.strip_prefix("NAIF:") {
+            if let Ok(id) = rest.parse::<i32>() {
+                return Self::Naif(id);
+            }
+        }
+        Self::Named(code)
+    }
+
+    pub fn code(&self) -> String {
+        match self {
+            Self::SolarSystemBarycenter => "SOLAR_SYSTEM_BARYCENTER".to_string(),
+            Self::Naif(id) => format!("NAIF:{id}"),
+            Self::Named(code) => code.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OriginArray {
+    pub origins: Vec<OriginId>,
+}
+
+impl OriginArray {
+    pub fn new(origins: Vec<OriginId>) -> Self {
+        Self { origins }
+    }
+
+    pub fn repeat(origin: OriginId, len: usize) -> Self {
+        Self {
+            origins: vec![origin; len],
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.origins.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.origins.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CovarianceUnits {
+    Coordinate(CoordinateRepresentation),
+    ObservationAngular2D,
+    Photometry1D,
+    Custom(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CovarianceBatch {
+    pub rows: usize,
+    pub dimension: usize,
+    pub values_row_major: Vec<f64>,
+    pub row_validity: Option<Validity>,
+    pub units: CovarianceUnits,
+}
+
+impl CovarianceBatch {
+    pub fn new(
+        rows: usize,
+        dimension: usize,
+        values_row_major: Vec<f64>,
+        units: CovarianceUnits,
+    ) -> SchemaResult<Self> {
+        let out = Self {
+            rows,
+            dimension,
+            values_row_major,
+            row_validity: None,
+            units,
+        };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub fn with_row_validity(mut self, row_validity: Validity) -> SchemaResult<Self> {
+        if row_validity.len() != self.rows {
+            return Err(SchemaError::LengthMismatch {
+                field: "covariance.row_validity".to_string(),
+                expected: self.rows,
+                actual: row_validity.len(),
+            });
+        }
+        self.row_validity = Some(row_validity);
+        Ok(self)
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
+        let expected = self.rows * self.dimension * self.dimension;
+        if self.dimension == 0 || self.values_row_major.len() != expected {
+            return Err(SchemaError::InvalidCovarianceShape {
+                rows: self.rows,
+                dimension: self.dimension,
+                values: self.values_row_major.len(),
+            });
+        }
+        if let Some(validity) = &self.row_validity {
+            if validity.len() != self.rows {
+                return Err(SchemaError::LengthMismatch {
+                    field: "covariance.row_validity".to_string(),
+                    expected: self.rows,
+                    actual: validity.len(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn is_row_valid(&self, row: usize) -> bool {
+        assert!(row < self.rows, "covariance row index out of bounds");
+        self.row_validity
+            .as_ref()
+            .is_none_or(|validity| validity.is_valid(row))
+    }
+
+    pub fn row_values(&self, row: usize) -> &[f64] {
+        assert!(row < self.rows, "covariance row index out of bounds");
+        let stride = self.dimension * self.dimension;
+        let start = row * stride;
+        &self.values_row_major[start..start + stride]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CoordinateValues {
+    Cartesian(Vec<[f64; 6]>),
+    Spherical(Vec<[f64; 6]>),
+    Keplerian(Vec<[f64; 6]>),
+    Cometary(Vec<[f64; 6]>),
+    Geodetic(Vec<[f64; 6]>),
+}
+
+impl CoordinateValues {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Cartesian(values)
+            | Self::Spherical(values)
+            | Self::Keplerian(values)
+            | Self::Cometary(values)
+            | Self::Geodetic(values) => values.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn representation(&self) -> CoordinateRepresentation {
+        match self {
+            Self::Cartesian(_) => CoordinateRepresentation::Cartesian,
+            Self::Spherical(_) => CoordinateRepresentation::Spherical,
+            Self::Keplerian(_) => CoordinateRepresentation::Keplerian,
+            Self::Cometary(_) => CoordinateRepresentation::Cometary,
+            Self::Geodetic(_) => CoordinateRepresentation::Geodetic,
+        }
+    }
+
+    pub fn cartesian(&self) -> Option<&[[f64; 6]]> {
+        match self {
+            Self::Cartesian(values) => Some(values),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoordinateBatch {
+    pub values: CoordinateValues,
+    pub frame: Frame,
+    pub origins: OriginArray,
+    pub times: Option<TimeArray>,
+    pub covariance: Option<CovarianceBatch>,
+}
+
+impl CoordinateBatch {
+    pub fn new(
+        values: CoordinateValues,
+        frame: Frame,
+        origins: OriginArray,
+        times: Option<TimeArray>,
+        covariance: Option<CovarianceBatch>,
+    ) -> SchemaResult<Self> {
+        let out = Self {
+            values,
+            frame,
+            origins,
+            times,
+            covariance,
+        };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub fn cartesian(
+        values: Vec<[f64; 6]>,
+        frame: Frame,
+        origins: OriginArray,
+        times: Option<TimeArray>,
+        covariance: Option<CovarianceBatch>,
+    ) -> SchemaResult<Self> {
+        Self::new(
+            CoordinateValues::Cartesian(values),
+            frame,
+            origins,
+            times,
+            covariance,
+        )
+    }
+
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    pub fn representation(&self) -> CoordinateRepresentation {
+        self.values.representation()
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
+        let rows = self.len();
+        if self.origins.len() != rows {
+            return Err(SchemaError::LengthMismatch {
+                field: "coordinates.origin".to_string(),
+                expected: rows,
+                actual: self.origins.len(),
+            });
+        }
+        if let Some(times) = &self.times {
+            times.validate()?;
+            if times.len() != rows {
+                return Err(SchemaError::LengthMismatch {
+                    field: "coordinates.time".to_string(),
+                    expected: rows,
+                    actual: times.len(),
+                });
+            }
+        }
+        if let Some(covariance) = &self.covariance {
+            covariance.validate()?;
+            if covariance.rows != rows {
+                return Err(SchemaError::LengthMismatch {
+                    field: "coordinates.covariance".to_string(),
+                    expected: rows,
+                    actual: covariance.rows,
+                });
+            }
+            if covariance.dimension != 6 {
+                return Err(SchemaError::InvalidCovarianceShape {
+                    rows: covariance.rows,
+                    dimension: covariance.dimension,
+                    values: covariance.values_row_major.len(),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrbitBatch {
+    pub orbit_id: Vec<OrbitId>,
+    pub object_id: Vec<Option<ObjectId>>,
+    pub coordinates: CoordinateBatch,
+}
+
+impl OrbitBatch {
+    pub fn new(
+        orbit_id: Vec<OrbitId>,
+        object_id: Vec<Option<ObjectId>>,
+        coordinates: CoordinateBatch,
+    ) -> SchemaResult<Self> {
+        let out = Self {
+            orbit_id,
+            object_id,
+            coordinates,
+        };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub fn len(&self) -> usize {
+        self.coordinates.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.coordinates.is_empty()
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
+        let rows = self.coordinates.len();
+        if self.coordinates.representation() != CoordinateRepresentation::Cartesian {
+            return Err(SchemaError::InvalidRecordBatch(
+                "OrbitBatch coordinates must be Cartesian".to_string(),
+            ));
+        }
+        self.coordinates.validate()?;
+        if self.orbit_id.len() != rows {
+            return Err(SchemaError::LengthMismatch {
+                field: "orbit_id".to_string(),
+                expected: rows,
+                actual: self.orbit_id.len(),
+            });
+        }
+        if self.object_id.len() != rows {
+            return Err(SchemaError::LengthMismatch {
+                field: "object_id".to_string(),
+                expected: rows,
+                actual: self.object_id.len(),
+            });
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn epoch_new_normalizes_nanos() {
+        let epoch = Epoch::new(10, NANOS_PER_DAY + 5);
+        assert_eq!(epoch.days, 11);
+        assert_eq!(epoch.nanos, 5);
+
+        let epoch = Epoch::new(10, -5);
+        assert_eq!(epoch.days, 9);
+        assert_eq!(epoch.nanos, NANOS_PER_DAY - 5);
+    }
+
+    #[test]
+    fn time_array_from_parts_requires_equal_lengths() {
+        let err = TimeArray::from_parts(TimeScale::Tdb, vec![1, 2], vec![0]).unwrap_err();
+        assert!(matches!(err, SchemaError::LengthMismatch { .. }));
+    }
+
+    #[test]
+    fn coordinate_batch_validates_lengths() {
+        let values = vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 2];
+        let origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, 1);
+        let err =
+            CoordinateBatch::cartesian(values, Frame::Ecliptic, origins, None, None).unwrap_err();
+        assert!(matches!(err, SchemaError::LengthMismatch { .. }));
+    }
+
+    #[test]
+    fn coordinate_batch_requires_six_dimensional_covariance() {
+        let values = vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 1];
+        let origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, 1);
+        let covariance = CovarianceBatch::new(
+            1,
+            2,
+            vec![0.0; 4],
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        let err =
+            CoordinateBatch::cartesian(values, Frame::Ecliptic, origins, None, Some(covariance))
+                .unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidCovarianceShape { .. }));
+    }
+
+    #[test]
+    fn orbit_batch_requires_cartesian_coordinates() {
+        let coords = CoordinateBatch::new(
+            CoordinateValues::Spherical(vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 1]),
+            Frame::Equatorial,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 1),
+            None,
+            None,
+        )
+        .unwrap();
+        let err = OrbitBatch::new(
+            vec![OrbitId("orbit-1".to_string())],
+            vec![Some(ObjectId("object-1".to_string()))],
+            coords,
+        )
+        .unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+}

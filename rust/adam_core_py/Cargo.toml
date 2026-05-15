@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.22", features = ["extension-module"] }
 numpy = "0.22"
 ndarray = "0.16"
+arrow-schema = "54"
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
 adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }
 adam_core_rs_spice = { path = "../adam_core_rs_spice" }

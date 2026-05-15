@@ -127,6 +127,32 @@ def test_rust_api_mandatory_native_contract() -> None:
     assert missing == []
 
 
+def test_standalone_data_model_schema_metadata_matches_python_adapter_contract() -> None:
+    coordinate_fields, coordinate_metadata = rust_api.cartesian_coordinate_schema_metadata()
+    assert coordinate_fields[:9] == [
+        "x",
+        "y",
+        "z",
+        "vx",
+        "vy",
+        "vz",
+        "time_days",
+        "time_nanos",
+        "origin_code",
+    ]
+    assert coordinate_fields[9] == "covariance_00"
+    assert coordinate_fields[-1] == "covariance_55"
+    assert len(coordinate_fields) == 45
+    assert coordinate_metadata["adam_core_schema"] == "CoordinateBatch.cartesian.flat.v1"
+    assert coordinate_metadata["adam_core_representation"] == "cartesian"
+
+    orbit_fields, orbit_metadata = rust_api.orbit_schema_metadata()
+    assert orbit_fields[:11] == ["orbit_id", "object_id", *coordinate_fields[:9]]
+    assert orbit_fields[-1] == "covariance_55"
+    assert len(orbit_fields) == 47
+    assert orbit_metadata["adam_core_schema"] == "OrbitBatch.cartesian.flat.v1"
+
+
 def test_cartesian_to_spherical_prefers_rust_when_available(monkeypatch):
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
 
