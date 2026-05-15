@@ -2,24 +2,93 @@
 //!
 //! RM-STANDALONE-004 keeps the first Rust-owned behavior intentionally narrow:
 //! `TimeArray` stores canonical epoch batches, and Rust can perform the
-//! already-established TDB -> ET arithmetic without crossing Python. Cross-scale
-//! conversion remains behind the fixture-pinned ERFA/SOFA strategy until the FFI
-//! service lands.
+//! already-established TDB -> ET arithmetic without crossing Python.
+//! RM-STANDALONE-004A adds ERFA-backed UTC <-> TAI conversion and ports the
+//! existing project-local TAI/TT and TT/TDB policies behind the same fixture.
 
 use super::{Epoch, SchemaError, SchemaResult, TimeArray, TimeScale, NANOS_PER_DAY};
 
 pub const SECONDS_PER_DAY: f64 = 86_400.0;
 pub const J2000_TDB_MJD: f64 = 51_544.5;
+pub const TAI_TT_NANOS: i64 = 32_184_000_000;
+
+const MJD_TO_JD_DAY_OFFSET: f64 = 2_400_000.0;
+const MJD_TO_JD_FRACTION_OFFSET: f64 = 0.5;
+const NANOS_PER_DAY_F64: f64 = NANOS_PER_DAY as f64;
+const NANOS_PER_SECOND_F64: f64 = 1_000_000_000.0;
+
+enum ErfaScaleConverter {
+    UtcTai,
+    TaiUtc,
+}
+
+impl ErfaScaleConverter {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::UtcTai => "eraUtctai",
+            Self::TaiUtc => "eraTaiutc",
+        }
+    }
+
+    fn convert(&self, day: f64, fraction: f64) -> SchemaResult<(f64, f64)> {
+        let result = match self {
+            Self::UtcTai => erfars::timescales::Utctai(day, fraction),
+            Self::TaiUtc => erfars::timescales::Taiutc(day, fraction),
+        };
+        result
+            .map(|((new_day, new_fraction), _warning)| (new_day, new_fraction))
+            .map_err(|code| {
+                SchemaError::InvalidRecordBatch(format!(
+                    "{} failed with ERFA status {code}",
+                    self.name()
+                ))
+            })
+    }
+}
 
 impl Epoch {
     pub fn mjd(self) -> f64 {
-        self.days as f64 + self.nanos as f64 / NANOS_PER_DAY as f64
+        self.days as f64 + self.nanos as f64 / NANOS_PER_DAY_F64
     }
 }
 
 impl TimeArray {
     pub fn mjd_values(&self) -> Vec<f64> {
         self.epochs.iter().map(|epoch| epoch.mjd()).collect()
+    }
+
+    pub fn rescale(&self, new_scale: TimeScale) -> SchemaResult<Self> {
+        if self.scale == new_scale {
+            return Ok(self.clone());
+        }
+        reject_unsupported_rescale(self.scale, new_scale)?;
+
+        let correction = self.rescale_correction_nanos(new_scale)?;
+        self.add_nanos_with_scale(new_scale, &correction)
+    }
+
+    pub fn utc_to_tai_erfa(&self) -> SchemaResult<Self> {
+        if self.scale != TimeScale::Utc {
+            return Err(SchemaError::InvalidTimeScale(format!(
+                "UTC to TAI conversion requires utc scale; got {}",
+                self.scale.as_str()
+            )));
+        }
+        let zeros = vec![0; self.len()];
+        let correction = self.leap_seconds_correction(ErfaScaleConverter::UtcTai, &zeros)?;
+        self.add_nanos_with_scale(TimeScale::Tai, &correction)
+    }
+
+    pub fn tai_to_utc_erfa(&self) -> SchemaResult<Self> {
+        if self.scale != TimeScale::Tai {
+            return Err(SchemaError::InvalidTimeScale(format!(
+                "TAI to UTC conversion requires tai scale; got {}",
+                self.scale.as_str()
+            )));
+        }
+        let zeros = vec![0; self.len()];
+        let correction = self.leap_seconds_correction(ErfaScaleConverter::TaiUtc, &zeros)?;
+        self.add_nanos_with_scale(TimeScale::Utc, &correction)
     }
 
     pub fn tdb_et_seconds(&self) -> SchemaResult<Vec<f64>> {
@@ -35,6 +104,158 @@ impl TimeArray {
             .map(|epoch| (epoch.mjd() - J2000_TDB_MJD) * SECONDS_PER_DAY)
             .collect())
     }
+
+    fn rescale_correction_nanos(&self, new_scale: TimeScale) -> SchemaResult<Vec<i64>> {
+        let zeros = vec![0; self.len()];
+        match self.scale {
+            TimeScale::Tt => match new_scale {
+                TimeScale::Tai => Ok(constant_correction(self.len(), -TAI_TT_NANOS)),
+                TimeScale::Utc => {
+                    let leap = self.leap_seconds_correction(ErfaScaleConverter::TaiUtc, &zeros)?;
+                    Ok(add_constant(&leap, -TAI_TT_NANOS))
+                }
+                TimeScale::Tdb => Ok(self.tt_tdb_correction(true, &zeros)),
+                _ => unsupported_rescale(self.scale, new_scale),
+            },
+            TimeScale::Utc => {
+                let utc_to_tai =
+                    self.leap_seconds_correction(ErfaScaleConverter::UtcTai, &zeros)?;
+                match new_scale {
+                    TimeScale::Tai => Ok(utc_to_tai),
+                    TimeScale::Tt => Ok(add_constant(&utc_to_tai, TAI_TT_NANOS)),
+                    TimeScale::Tdb => {
+                        let tt_offset = add_constant(&utc_to_tai, TAI_TT_NANOS);
+                        let tt_tdb = self.tt_tdb_correction(true, &tt_offset);
+                        Ok(add_constant(
+                            &add_corrections(&utc_to_tai, &tt_tdb),
+                            TAI_TT_NANOS,
+                        ))
+                    }
+                    _ => unsupported_rescale(self.scale, new_scale),
+                }
+            }
+            TimeScale::Tai => match new_scale {
+                TimeScale::Tt => Ok(constant_correction(self.len(), TAI_TT_NANOS)),
+                TimeScale::Tdb => {
+                    let tt_tdb = self
+                        .tt_tdb_correction(true, &constant_correction(self.len(), TAI_TT_NANOS));
+                    Ok(add_constant(&tt_tdb, TAI_TT_NANOS))
+                }
+                TimeScale::Utc => self.leap_seconds_correction(ErfaScaleConverter::TaiUtc, &zeros),
+                _ => unsupported_rescale(self.scale, new_scale),
+            },
+            TimeScale::Tdb => match new_scale {
+                TimeScale::Tt => Ok(self.tt_tdb_correction(false, &zeros)),
+                TimeScale::Tai => {
+                    let tdb_tt = self.tt_tdb_correction(false, &zeros);
+                    Ok(add_constant(&tdb_tt, -TAI_TT_NANOS))
+                }
+                TimeScale::Utc => {
+                    let mut correction =
+                        add_constant(&self.tt_tdb_correction(false, &zeros), -TAI_TT_NANOS);
+                    let leap =
+                        self.leap_seconds_correction(ErfaScaleConverter::TaiUtc, &correction)?;
+                    correction = add_corrections(&correction, &leap);
+                    Ok(correction)
+                }
+                _ => unsupported_rescale(self.scale, new_scale),
+            },
+            TimeScale::Ut1 | TimeScale::Gps => unsupported_rescale(self.scale, new_scale),
+        }
+    }
+
+    fn leap_seconds_correction(
+        &self,
+        converter: ErfaScaleConverter,
+        correction: &[i64],
+    ) -> SchemaResult<Vec<i64>> {
+        if correction.len() != self.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "time.correction".to_string(),
+                expected: self.len(),
+                actual: correction.len(),
+            });
+        }
+
+        self.epochs
+            .iter()
+            .zip(correction.iter().copied())
+            .map(|(epoch, correction)| {
+                let old_day = epoch.days as f64 + MJD_TO_JD_DAY_OFFSET;
+                let old_fraction = (epoch.nanos as f64 + correction as f64) / NANOS_PER_DAY_F64
+                    + MJD_TO_JD_FRACTION_OFFSET;
+                let (new_day, new_fraction) = converter.convert(old_day, old_fraction)?;
+                let delta_nanos =
+                    ((new_day - old_day) + (new_fraction - old_fraction)) * NANOS_PER_DAY_F64;
+                Ok((delta_nanos / NANOS_PER_SECOND_F64).round() as i64 * 1_000_000_000)
+            })
+            .collect()
+    }
+
+    fn tt_tdb_correction(&self, positive: bool, correction: &[i64]) -> Vec<i64> {
+        self.epochs
+            .iter()
+            .zip(correction.iter().copied())
+            .map(|(epoch, correction)| {
+                let days = (epoch.days - 51_545) as f64;
+                let fractions = (epoch.nanos as f64 + correction as f64) / NANOS_PER_DAY_F64 + 0.5;
+                let centuries = (days + fractions) / 36_525.0;
+                let anomaly = (35_999.050 * centuries + 357.528).to_radians();
+                let mut delta = (anomaly + 0.0167 * anomaly.sin()).sin() * 1_658_000.0;
+                if !positive {
+                    delta = -delta;
+                }
+                delta as i64
+            })
+            .collect()
+    }
+
+    fn add_nanos_with_scale(&self, scale: TimeScale, correction: &[i64]) -> SchemaResult<Self> {
+        if correction.len() != self.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "time.correction".to_string(),
+                expected: self.len(),
+                actual: correction.len(),
+            });
+        }
+        Self::new(
+            scale,
+            self.epochs
+                .iter()
+                .zip(correction.iter().copied())
+                .map(|(epoch, correction)| Epoch::new(epoch.days, epoch.nanos + correction))
+                .collect(),
+        )
+    }
+}
+
+fn reject_unsupported_rescale(scale: TimeScale, new_scale: TimeScale) -> SchemaResult<()> {
+    if matches!(scale, TimeScale::Ut1 | TimeScale::Gps)
+        || matches!(new_scale, TimeScale::Ut1 | TimeScale::Gps)
+    {
+        return unsupported_rescale(scale, new_scale);
+    }
+    Ok(())
+}
+
+fn unsupported_rescale<T>(scale: TimeScale, new_scale: TimeScale) -> SchemaResult<T> {
+    Err(SchemaError::InvalidTimeScale(format!(
+        "rescale from {} to {} is not supported",
+        scale.as_str(),
+        new_scale.as_str()
+    )))
+}
+
+fn constant_correction(len: usize, value: i64) -> Vec<i64> {
+    vec![value; len]
+}
+
+fn add_constant(values: &[i64], value: i64) -> Vec<i64> {
+    values.iter().map(|item| item + value).collect()
+}
+
+fn add_corrections(left: &[i64], right: &[i64]) -> Vec<i64> {
+    left.iter().zip(right.iter()).map(|(a, b)| a + b).collect()
 }
 
 #[cfg(test)]
@@ -60,6 +281,92 @@ mod tests {
             .collect()
     }
 
+    fn scale(value: &Value) -> TimeScale {
+        TimeScale::parse(value.as_str().expect("fixture scale must be a string")).unwrap()
+    }
+
+    fn time_array(payload: &Value, scale: TimeScale) -> TimeArray {
+        TimeArray::from_parts(
+            scale,
+            i64_array(payload.get("days").expect("payload must contain days")),
+            i64_array(payload.get("nanos").expect("payload must contain nanos")),
+        )
+        .unwrap()
+    }
+
+    fn fixture() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../../migration/artifacts/time_scale_rescale_fixture_2026-05-15.json"
+        ))
+        .unwrap()
+    }
+
+    fn assert_time_array_eq(actual: &TimeArray, expected: &TimeArray) {
+        assert_eq!(actual.scale, expected.scale);
+        assert_eq!(actual.epochs, expected.epochs);
+    }
+
+    #[test]
+    fn rescale_preserves_python_fixture() {
+        let fixture = fixture();
+        let cases = fixture
+            .get("cases")
+            .and_then(Value::as_array)
+            .expect("fixture must contain rescale cases");
+        for case in cases {
+            let from_scale = scale(
+                case.get("from_scale")
+                    .expect("case must contain from_scale"),
+            );
+            let to_scale = scale(case.get("to_scale").expect("case must contain to_scale"));
+            let input = time_array(
+                case.get("input").expect("case must contain input"),
+                from_scale,
+            );
+            let expected = time_array(
+                case.get("output").expect("case must contain output"),
+                to_scale,
+            );
+            let actual = input.rescale(to_scale).unwrap();
+            assert_time_array_eq(&actual, &expected);
+        }
+    }
+
+    #[test]
+    fn erfa_utc_tai_helpers_preserve_fixture_rows() {
+        let fixture = fixture();
+        let cases = fixture
+            .get("cases")
+            .and_then(Value::as_array)
+            .expect("fixture must contain rescale cases");
+        let utc_to_tai = cases
+            .iter()
+            .find(|case| case["from_scale"] == "utc" && case["to_scale"] == "tai")
+            .expect("fixture must contain utc->tai case");
+        let tai_to_utc = cases
+            .iter()
+            .find(|case| case["from_scale"] == "tai" && case["to_scale"] == "utc")
+            .expect("fixture must contain tai->utc case");
+
+        let utc = time_array(&utc_to_tai["input"], TimeScale::Utc);
+        let tai = time_array(&utc_to_tai["output"], TimeScale::Tai);
+        assert_time_array_eq(&utc.utc_to_tai_erfa().unwrap(), &tai);
+
+        let tai = time_array(&tai_to_utc["input"], TimeScale::Tai);
+        let utc = time_array(&tai_to_utc["output"], TimeScale::Utc);
+        assert_time_array_eq(&tai.tai_to_utc_erfa().unwrap(), &utc);
+    }
+
+    #[test]
+    fn rescale_rejects_ut1_and_gps_without_provider() {
+        let times = TimeArray::from_parts(TimeScale::Utc, vec![60_000], vec![0]).unwrap();
+        assert!(times.rescale(TimeScale::Ut1).is_err());
+        assert!(times.rescale(TimeScale::Gps).is_err());
+
+        let ut1 = TimeArray::from_parts(TimeScale::Ut1, vec![60_000], vec![0]).unwrap();
+        assert!(ut1.rescale(TimeScale::Utc).is_err());
+    }
+
     #[test]
     fn tdb_et_seconds_rejects_non_tdb_scales() {
         let times = TimeArray::from_parts(TimeScale::Utc, vec![60_000], vec![0]).unwrap();
@@ -69,10 +376,7 @@ mod tests {
 
     #[test]
     fn tdb_et_seconds_preserves_python_fixture() {
-        let fixture: Value = serde_json::from_str(include_str!(
-            "../../../../migration/artifacts/time_scale_rescale_fixture_2026-05-15.json"
-        ))
-        .unwrap();
+        let fixture = fixture();
         let tdb_cases = fixture
             .get("tdb_et_cases")
             .expect("fixture must contain tdb_et_cases");

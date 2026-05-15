@@ -8,7 +8,7 @@
 pub mod arrow;
 pub mod time;
 pub use arrow::{ArrowSchemaExport, IntoRecordBatch, TryFromRecordBatch};
-pub use time::{J2000_TDB_MJD, SECONDS_PER_DAY};
+pub use time::{J2000_TDB_MJD, SECONDS_PER_DAY, TAI_TT_NANOS};
 
 use std::fmt;
 

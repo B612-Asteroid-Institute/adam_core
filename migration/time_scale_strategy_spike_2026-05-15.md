@@ -1,6 +1,6 @@
 # RM-STANDALONE-004 Time-Scale Strategy Spike (2026-05-15)
 
-Status: strategy + fixture spike for the standalone Rust time model.
+Status: strategy + fixture spike plus first ERFA-backed Rust implementation for UTC↔TAI.
 
 Related artifacts:
 
@@ -70,3 +70,16 @@ Libraries such as `hifitime` may still be useful for parsing or internal time re
 The RM-STANDALONE-003 `TimeArray` stays as the canonical Rust batch type. RM-STANDALONE-004 adds the fixture and starts with a TDB-only Rust arithmetic helper; the ERFA service should be added as a small module inside `adam_core_rs_coords::types` first. Split to an `adam_core_rs_time` crate only after the API is stable and reused by SPICE, propagation, and OD workflows.
 
 Unsupported conversions must fail loudly. Python can remain the adapter for full `Timestamp.rescale` until the Rust service passes the fixture.
+
+## RM-STANDALONE-004A implementation
+
+The first ERFA-backed Rust service lives in `adam_core_rs_coords::types::time` and uses the `erfars` crate, which builds/bundles ERFA C sources through Cargo rather than linking against PyERFA's private wheel artifacts.
+
+Implemented Rust behavior:
+
+- `TimeArray::utc_to_tai_erfa()` and `TimeArray::tai_to_utc_erfa()` call ERFA UTC/TAI routines and require the matching source scale.
+- `TimeArray::rescale()` now supports the fixture matrix (`utc`, `tai`, `tt`, `tdb`) using ERFA for UTC↔TAI, the exact `32.184 s` TAI↔TT offset, and a literal port of the existing project-local TT↔TDB approximation.
+- `TimeArray::tdb_et_seconds()` remains pure arithmetic.
+- UT1 and GPS rescaling fail loudly until an explicit provider contract exists.
+
+The fixture-backed Rust test asserts exact day/nanosecond parity for all UTC/TAI/TT/TDB cases in `time_scale_rescale_fixture_2026-05-15.json`.

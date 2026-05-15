@@ -638,7 +638,7 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 
 1. **RM-STANDALONE-003:** implement prototype `TimeArray`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, and Arrow adapters as modules in current crates.
 2. **RM-STANDALONE-004:** lock down ERFA/SOFA time strategy, leap-second fixtures, Rust-native replacement criteria, and first TDB→ET Rust arithmetic helper.
-3. **RM-STANDALONE-004A:** implement the ERFA/liberfa FFI service for UTC↔TAI while preserving the current TAI↔TT and TT↔TDB policies.
+3. **RM-STANDALONE-004A:** implement the ERFA/liberfa FFI service for UTC↔TAI while preserving the current TAI↔TT and TT↔TDB policies. **Complete** in `adam_core_rs_coords::types::time` via `erfars`.
 4. **RM-STANDALONE-005:** promote `adam_core_rs_spice` service APIs for origins, frames, and observers.
 5. **RM-STANDALONE-006:** define `PropagatorBackend` and lift existing 2-body kernels behind it.
 6. **RM-STANDALONE-007:** integrate `assist-rs` behind the trait while keeping backend pluggability.

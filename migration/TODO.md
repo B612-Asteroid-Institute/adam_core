@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-15 (RM-STANDALONE-004 time strategy fixture spike in progress; local validation remains primary and GitHub CI is final external confirmation only)
+Last updated: 2026-05-15 (RM-STANDALONE-004A ERFA-backed time service in progress; local validation remains primary and GitHub CI is final external confirmation only)
 
 ## Current Review-Derived Backlog
 
@@ -47,7 +47,8 @@ Last updated: 2026-05-15 (RM-STANDALONE-004 time strategy fixture spike in progr
 - [x] RM-STANDALONE-002: Rust-native data model RFC is captured in [`rust_native_data_model_rfc_2026-05-15.md`](rust_native_data_model_rfc_2026-05-15.md), covering canonical Rust schemas, ERFA/SOFA-first time strategy with Rust-native replacement path, pluggable `assist-rs` propagation, covariance, variants, chunking, provenance, network clients, plotting/product outputs, and Arrow/Python adapters.
 - [x] RM-STANDALONE-003: prototype `TimeArray`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, and Arrow adapters landed in `adam_core_rs_coords::types`, with PyO3 schema-metadata helpers and Rust/Python compatibility tests for the first flat Cartesian/Orbit Arrow contracts.
 - [x] RM-STANDALONE-004: ERFA/SOFA time strategy spike captured in [`time_scale_strategy_spike_2026-05-15.md`](time_scale_strategy_spike_2026-05-15.md), with leap-second fixture artifact, Python fixture regression test, Rust TDB→ET arithmetic helper/test, and a Rust-native replacement evaluation path.
-- [ ] RM-STANDALONE-004A: implement the ERFA/liberfa UTC↔TAI FFI service behind the RM-STANDALONE-004 fixture, preserving exact TAI↔TT and project-local TT↔TDB behavior and rejecting UT1 until an IERS provider contract exists.
+- [x] RM-STANDALONE-004A: ERFA-backed Rust time service landed in `adam_core_rs_coords::types::time` using the `erfars` crate. `TimeArray::rescale` passes the UTC/TAI/TT/TDB fixture matrix, `utc_to_tai_erfa` and `tai_to_utc_erfa` expose the first ERFA service hooks, TAI↔TT and project-local TT↔TDB policies are preserved, and UT1/GPS fail loudly pending provider contracts.
+- [ ] RM-STANDALONE-005: promote `adam_core_rs_spice` service APIs for origins, frames, and observer states on top of the Rust-native time/data-model foundation.
 - [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-rs` propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.
 
 ## Active Sprint (Milestone 1 hardening)

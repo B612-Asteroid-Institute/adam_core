@@ -60,8 +60,8 @@
     "time_strategy": {
       "decision": "start_with_erfa_sofa_ffi",
       "source": "user clarification 2026-05-15",
-      "next_step": "Implement ERFA/liberfa UTC-TAI FFI behind the fixture; evaluate Rust-native replacements only after they match it.",
-      "current_baseline": "Python Timestamp.rescale uses ERFA for UTC-TAI leap seconds, an exact TAI-TT offset, a project-local TT-TDB approximation, Astropy/IERS for UT1, and pure arithmetic MJD_TDB to ET."
+      "next_step": "Promote Rust SPICE service APIs now that the first fixture-backed Rust time service exists; evaluate Rust-native time replacements only after they match the fixture.",
+      "current_baseline": "Python Timestamp.rescale uses ERFA for UTC-TAI leap seconds, an exact TAI-TT offset, a project-local TT-TDB approximation, Astropy/IERS for UT1, and pure arithmetic MJD_TDB to ET. RM-STANDALONE-004A mirrors UTC/TAI/TT/TDB in Rust through erfars-backed ERFA calls plus project-local arithmetic."
     },
     "nbody_backend": {
       "decision": "assist_rs_preferred_with_pluggable_backend_trait",
@@ -837,6 +837,7 @@
     "RM-STANDALONE-002: Rust-native data model RFC (complete)",
     "RM-STANDALONE-003: CoordinateBatch/OrbitBatch plus Arrow adapter prototype (complete)",
     "RM-STANDALONE-004: ERFA/SOFA time-strategy fixture spike with Rust-native replacement outline (complete)",
-    "RM-STANDALONE-004A: ERFA/liberfa UTC-TAI FFI service"
+    "RM-STANDALONE-004A: ERFA/liberfa UTC-TAI FFI service (complete)",
+    "RM-STANDALONE-005: Rust SPICE service API for origin/frame/observer states"
   ]
 }
