@@ -5,6 +5,7 @@ Status: long-term capability map for making `adam-core-rs` capable of covering t
 Related artifacts:
 
 - Full public-ish inventory: `migration/artifacts/adam_core_public_surface_inventory_2026-05-15.json` (`507` entries)
+- Standalone surface status registry: `migration/standalone_rust_surface_status.json`
 - Gap report: `migration/adam_core_rust_surface_gap_report_2026-05-15.md`
 - Existing review backlog: `migration/review_task_backlog_2026-04-28.md`
 - Current migration tracker: `migration/TODO.md`
@@ -472,8 +473,8 @@ Exit criteria:
 
 | Task | Size | Purpose | Depends on | Notes |
 |---|---:|---|---|---|
-| **RM-STANDALONE-001** | S | Create standalone surface status registry from the 507-entry inventory. | Existing inventory | No runtime code changes. |
-| **RM-STANDALONE-002** | M | Define Rust-native data model RFC for time, coordinates, covariances, orbits, observers, observations, exposures, and fitted results. | RM-STANDALONE-001 + scope questions below | Resolve schema ownership/time-dependency posture first; explicitly cover covariance, variants, chunking, provenance, and adapter boundaries. |
+| **RM-STANDALONE-001** | S | Create standalone surface status registry from the 507-entry inventory. | Existing inventory | Complete in `migration/standalone_rust_surface_status.json`; no runtime code changes. |
+| **RM-STANDALONE-002** | M | Define Rust-native data model RFC for time, coordinates, covariances, orbits, observers, observations, exposures, and fitted results. | RM-STANDALONE-001 + product-scope decisions above | Schema ownership/time-dependency posture is resolved; explicitly cover covariance, variants, chunking, provenance, and adapter boundaries. |
 | **RM-STANDALONE-003** | M | Prototype `CoordinateBatch` + `OrbitBatch` Rust types and Arrow adapters. | RM-STANDALONE-002 | Use one or two existing Python tables as compatibility fixtures. |
 | **RM-STANDALONE-004** | M | Time-scale strategy spike against the current ERFA baseline. | RM-STANDALONE-002 | Compare ERFA/SOFA FFI, Rust-native library, and TDB-only Rust workflows with Python ERFA adapter support; include leap-second fixtures before selecting implementation. |
 | **RM-STANDALONE-005** | M | Rust SPICE service API for origin/frame/observer states. | Existing `adam_core_rs_spice` | Build on direct spicekit dependency. |
@@ -483,14 +484,16 @@ Exit criteria:
 | **RM-STANDALONE-009** | M | Observation/exposure/bandpass Rust model and parsers. | RM-STANDALONE-003 | Unblocks photometry workflows. |
 | **RM-STANDALONE-010** | S | Product/export scope decision: SPK/OEM/OpenSpace/ADES/network/plotting required or optional. | RM-STANDALONE-001 | Prevents core crate dependency bloat. |
 
-## Open product-scope questions
+## Product-scope decisions
 
-1. Does “standalone” require **all network clients** (`Horizons`, `Scout`, `SBDB`, `NEOCC`) or only local parsing/workflow capability?
-2. Does “standalone” require **plot rendering**, or only product data/spec generation for downstream plotting tools?
-3. Should Python/quivr table schemas remain the canonical interchange format, or should Rust define schemas and Python adapt?
-4. What is the acceptable Rust time dependency story: pure Rust only, C ERFA/SOFA binding allowed, or mixed optional feature?
-5. Is `assist-rs` the chosen n-body backend, or should the roadmap compare it against another integrator path first?
-6. Which file/product formats are required for a first standalone release: SPK, OEM, ADES, OpenSpace, all of them, or a smaller set?
+Resolved on 2026-05-15:
+
+1. **Schema ownership:** Rust schemas are canonical; Python/quivr adapts through Arrow/PyO3 adapters.
+2. **Time strategy:** start with FFI to ERFA/SOFA; outline and evaluate a Rust-native replacement as the next step.
+3. **N-body backend:** `assist-rs` is preferred, but the propagator design must remain pluggable.
+4. **Network clients:** include network clients in first standalone scope, preferably as optional net/companion functionality with fixture-testable parsers and opt-in live tests.
+5. **Plotting:** include plotting/visualization products in first standalone scope, but expect a new data/spec-oriented approach rather than direct Python plotting parity.
+6. **File/product formats:** keep SPK/OEM/ADES/OpenSpace/product exporters in first standalone planning; exact first-release cut can be decided under `RM-STANDALONE-010`.
 
 ## Validation model
 
@@ -507,7 +510,7 @@ For each workstream:
 The next best long-term step is **not another isolated kernel port**. It is a small but explicit standalone foundation project:
 
 1. generate a standalone surface status registry from the 507-entry inventory;
-2. answer the schema-ownership and time-dependency scope questions, then write the Rust-native data model RFC;
+2. write the Rust-native data model RFC using the resolved scope decisions above;
 3. prototype coordinate/orbit/time batch types plus Arrow adapters;
 4. decide the time-scale implementation strategy against the current ERFA/TDB→ET baseline;
 5. extend the Rust SPICE service API;
