@@ -1557,7 +1557,7 @@ Completion notes:
 
 ### RM-WE3-001: Least-Squares Inner-Loop Fusion
 
-Status: open
+Status: complete (2026-05-15)
 
 Reason: next high-leverage performance lever after Wave E2 is fusing LSQ inner-loop linear algebra and residual scoring to avoid PyO3 and quivr overhead at small N.
 
@@ -1572,6 +1572,15 @@ Verification:
 - Baseline parity on deterministic OD cases.
 - Existing least-squares tests, including order-dependent flake awareness.
 - Performance comparison on representative OD fits.
+
+Completion notes:
+
+- Profiling the deterministic `test_least_squares` fixture showed full-fit wall time is dominated by `Propagator.generate_ephemeris` / ASSIST propagation and associated coordinate transforms (~0.75-0.84 s of a ~0.81-0.90 s fit). A Rust/faer normal-equation solve would not move the full-fit wall clock because 6×6 inversion/solve is not the bottleneck.
+- Refactored the measured Python overhead that remained local to `least_squares.py`: `_compute_partials` now avoids per-parameter `ephemeris_all.select(...)` / quivr table construction by grouping ephemeris values by orbit_id once and computing RA/Dec residual columns directly from spherical value arrays; the existing public `_residual_columns` path now uses the same direct value helper. The helper preserves longitude wrap, 0°/360° sign convention, cos(latitude) scaling, single-predicted-row broadcast, and mismatch errors.
+- Replaced the per-observation Python normal-equation accumulation loop with `_normal_equations`, an `einsum`-based batched accumulation of `AᵀWA` and `AᵀWb`. Kept `np.linalg.inv(ATWA)` for covariance/diagnostic parity rather than switching to a solve-only Cholesky path, because the covariance matrix is part of the current output behavior and the solve is negligible in profiling.
+- Local microbenchmarks: one-sided partials assembly for the six-observation deterministic fixture improved from ~1110 µs p50 to ~166 µs p50; normal-equation accumulation improved from ~22 µs to ~4 µs at N=6, ~374 µs to ~10 µs at N=100, ~3.7 ms to ~68 µs at N=1000, and ~37 ms to ~0.66 ms at N=10000. Direct residual columns are neutral at tiny N but faster at large N (~488 µs to ~326 µs at N=10000).
+- Full-fit profiling after the refactor still runs ~0.81-0.90 s on the deterministic fixture because propagation dominates. The next meaningful LSQ/OD wall-clock work would have to reduce `generate_ephemeris`/ASSIST propagation and transform overhead, likely in the deferred n-body/assist-rs propagator line rather than another local normal-equation port.
+- Validation passed deterministic least-squares tests, the full OD test suite, compile/format/lint checks, script-preflight, full lint, and diff checks.
 
 ### RM-PERF-001: Audit PR #195 Broad Benchmark-Action Slow Rows
 

@@ -10,17 +10,82 @@ from ..coordinates import (
     SphericalCoordinates,
 )
 from ..coordinates.origin import Origin
-from ..coordinates.residuals import (
-    Residuals,
-    calculate_reduced_chi2,
-    compute_residuals_ndarray,
-)
+from ..coordinates.residuals import Residuals, calculate_reduced_chi2
 from ..orbits.orbits import Orbits
 from ..propagator import Propagator
 from ..time import Timestamp
 from .evaluate import FittedOrbits, OrbitDeterminationObservations
 
 logger = logging.getLogger(__name__)
+
+
+def _spherical_residual_columns_from_values(
+    observed_values: np.ndarray, predicted_values: np.ndarray
+) -> np.ndarray:
+    """
+    Compute RA/Dec residual columns directly from spherical value arrays.
+
+    This is the same longitude-wrap and cos(latitude) convention as
+    ``compute_residuals_ndarray(... )[:, 1:3]`` but avoids building temporary
+    quivr coordinate tables inside the least-squares finite-difference loop.
+    """
+    if len(predicted_values) == 1 and len(observed_values) > 1:
+        predicted_values = np.broadcast_to(predicted_values, observed_values.shape)
+    elif len(predicted_values) != len(observed_values):
+        raise ValueError(
+            "Predicted coordinates must have length 1 or match observed length "
+            f"({len(observed_values)}), got {len(predicted_values)}."
+        )
+
+    residual_lon = observed_values[:, 1] - predicted_values[:, 1]
+    residual_lat = observed_values[:, 2] - predicted_values[:, 2]
+
+    lon_greater_than_180 = residual_lon > 180.0
+    lon_less_than_minus_180 = residual_lon < -180.0
+    residual_lon = np.where(lon_greater_than_180, residual_lon - 360.0, residual_lon)
+    residual_lon = np.where(
+        lon_less_than_minus_180,
+        residual_lon + 360.0,
+        residual_lon,
+    )
+
+    crosses_zero_boundary = (lon_greater_than_180 & (observed_values[:, 1] > 180.0)) | (
+        lon_less_than_minus_180 & (observed_values[:, 1] < 180.0)
+    )
+    residual_lon = np.where(crosses_zero_boundary, -residual_lon, residual_lon)
+    residual_lon *= np.cos(np.radians(observed_values[:, 2]))
+
+    return np.column_stack((residual_lon, residual_lat))
+
+
+def _normal_equations(
+    partials: np.ndarray,
+    residuals: np.ndarray,
+    weights: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Accumulate the weighted normal-equation matrices for RA/Dec least squares.
+
+    Parameters
+    ----------
+    partials : np.ndarray
+        Shape ``(N, 2, P)`` matrix of observation partial derivatives.
+    residuals : np.ndarray
+        Shape ``(N, 2)`` residual matrix.
+    weights : np.ndarray
+        Shape ``(N, 2)`` diagonal weights for each observation component.
+
+    Returns
+    -------
+    ATWA : np.ndarray
+        Shape ``(P, P)`` normal-equation left-hand side.
+    ATWb : np.ndarray
+        Shape ``(P,)`` normal-equation right-hand side.
+    """
+    weighted_partials = partials * weights[:, :, None]
+    ATWA = np.einsum("nkp,nkq->pq", weighted_partials, partials)
+    ATWb = np.einsum("nkp,nk->p", weighted_partials, residuals)
+    return ATWA, ATWb
 
 
 class LeastSquares(ABC):
@@ -100,8 +165,7 @@ class LeastSquares(ABC):
         --------
         (N, 2) array of residuals for RA and DEC.
         """
-        residuals = compute_residuals_ndarray(coord1, coord2)
-        return residuals[:, 1:3]
+        return _spherical_residual_columns_from_values(coord1.values, coord2.values)
 
     def _compute_partials(
         self,
@@ -198,18 +262,31 @@ class LeastSquares(ABC):
             max_processes=1,
         )
 
+        ephemeris_values = ephemeris_all.coordinates.values
+        ephemeris_orbit_ids = ephemeris_all.orbit_id.to_numpy(zero_copy_only=False)
+        ephemeris_blocks = {}
+        for orbit_id in pert_ids:
+            ephemeris_block = ephemeris_values[ephemeris_orbit_ids == orbit_id]
+            if ephemeris_block.shape[0] != num_obs:
+                raise ValueError(
+                    f"Expected {num_obs} ephemeris rows for perturbed orbit {orbit_id}, "
+                    f"got {ephemeris_block.shape[0]}."
+                )
+            ephemeris_blocks[orbit_id] = ephemeris_block
+        nominal_values = nominal_ephemeris_coordinates.values
+
         A = np.zeros((num_obs, 2, num_param))
         for i in range(num_param):
-            eph_p = ephemeris_all.select("orbit_id", f"_ls_p_{i}")
+            eph_p_values = ephemeris_blocks[f"_ls_p_{i}"]
             if use_central_difference:
-                eph_m = ephemeris_all.select("orbit_id", f"_ls_m_{i}")
-                col = self._residual_columns(eph_p.coordinates, eph_m.coordinates) / (
-                    2 * d_per_param[i]
-                )
+                eph_m_values = ephemeris_blocks[f"_ls_m_{i}"]
+                col = _spherical_residual_columns_from_values(
+                    eph_p_values, eph_m_values
+                ) / (2 * d_per_param[i])
             else:
                 col = (
-                    self._residual_columns(
-                        eph_p.coordinates, nominal_ephemeris_coordinates
+                    _spherical_residual_columns_from_values(
+                        eph_p_values, nominal_values
                     )
                     / d_per_param[i]
                 )
@@ -332,16 +409,10 @@ class LeastSquares(ABC):
                 self._use_central_difference,
             )
 
-            # Accumulators for the matrices, see Vallado
-            ATWA = np.zeros((num_param, num_param))  # params x params
-            ATWb = np.zeros((num_param,))  # params x 1
-            for i in range(len(observations)):
-                W = np.diag(W_all[i, :])
-                Ai = A[i, :, :]  # Ai is d(ra|dec) / d(r|v), so 2x6
-                b = B[i, :]
-                AtW = Ai.T @ W  # (6, 2) * (2, 2) -> (6, 2)
-                ATWA += AtW @ Ai  # (6,2)*(2,6) -> (6, 6)
-                ATWb += AtW @ b  # (6,2)*(2,) -> (6,)
+            # Accumulate the weighted normal-equation matrices, see Vallado.
+            # A[i] is d(ra|dec) / d(r|v), so each observation contributes
+            # A_i.T @ W_i @ A_i and A_i.T @ W_i @ b_i.
+            ATWA, ATWb = _normal_equations(A, B, W_all)
 
             # AKA P, AKA covariance matrix, diagonal has squares of sigma_rI, sigma_rJ, ..., sigma_vK
             # Eigenvalues and eigenvectors would give error ellipse dimensions and orientation
