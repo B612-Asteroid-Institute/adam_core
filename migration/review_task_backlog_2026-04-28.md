@@ -1690,13 +1690,13 @@ Scope:
 
 ### RM-FUTURE-002: Trait-Based N-Body Propagator Backed By assist-rs
 
-Status: future major project (proposed 2026-05-07)
+Status: future major project (proposed 2026-05-07); refined by `RM-STANDALONE-007` in `standalone_rust_surface_roadmap_2026-05-15.md`.
 
 Reason: The current Python `Propagator` class lets users plug in ASSIST or other n-body backends via subclassing, with parallelism dispatched at the Python level via Ray. Once `assist-rs` (https://github.com/B612-Asteroid-Institute/assist-rs) is integrated, the entire propagator interface can move down into Rust, with parallelism handled by Rayon over chunks instead of Ray over Python processes. That collapses an entire layer of dispatch and removes the GIL-bound per-task pickling that motivates Ray today.
 
 Scope:
 
-- Define a Rust `Propagator` trait covering `propagate_orbits`, `generate_ephemeris`, and impact-detection extension points.
+- Define a Rust `Propagator` trait covering `propagate_orbits`, `generate_ephemeris`, and impact-detection extension points. The standalone roadmap refines this trait scope to include covariance transport, variant/sigma-point propagation, and Rayon-side chunk/thread controls.
 - Implement the trait for the 2-body kernel (already in Rust).
 - Implement the trait for n-body via `assist-rs`; pull SPICE perturber lookup through the existing `spicekit`-backed plumbing.
 - Re-expose the trait via PyO3 so the existing Python `Propagator` API stays intact.
