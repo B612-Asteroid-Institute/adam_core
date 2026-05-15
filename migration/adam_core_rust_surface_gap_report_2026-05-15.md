@@ -31,7 +31,12 @@ This report intentionally covers more than known hot paths. It distinguishes:
 | Targeted-test-only registry rows | 0 |
 | Active performance waivers | 0 |
 
-The key interpretation is: **canonical Rust migration governance is complete for the registered migrated numerical/Rust surfaces, but not for all of adam_core.** Large parts of adam_core are PyArrow/quivr table orchestration, network clients, plotting, textual I/O, timestamp scale handling, public workflow glue, and ASSIST/n-body propagation. Those are not automatically appropriate Rust-port targets.
+The key interpretation is: **canonical Rust migration governance is complete for the registered migrated numerical/Rust surfaces, but not for all of adam_core.** Large parts of adam_core are PyArrow/quivr table orchestration, network clients, plotting, textual I/O, timestamp scale handling, public workflow glue, and ASSIST/n-body propagation. Those are not automatically appropriate Rust-port targets for Python-interface speedup work.
+
+Strategic standalone-Rust update (2026-05-15): the analysis has two horizons.
+
+1. **Current Python interface / migration merge horizon:** avoid speculative Rust ports when PyO3 overhead, PyArrow/quivr assembly, Astropy/ERFA, network I/O, plotting, or ASSIST dominate. Under this horizon, "Keep Python" means "do not port just to improve the current Python API."
+2. **Standalone Rust library horizon:** if `adam-core-rs` must eventually handle all adam_core functionality without the Python interface, many "Keep Python" surfaces become Rust-native capability gaps. They should be redesigned as Rust data models, traits, workflows, and optional feature crates rather than line-by-line PyArrow/quivr wrapper ports.
 
 ## Conversion-priority legend
 
@@ -374,7 +379,11 @@ Recommendation: **do not convert these unless a separate product/architecture de
 2. **RM-GOV-HELPERS:** Add canonical governance for Rust-backed dynamics helper/compatibility APIs if the goal is “every Rust equivalent is counted.”
 3. **RM-GOV-SPICE-WIRING:** Add fixed-kernel adam-core wiring gates for Rust SPICE backend wrappers without duplicating spicekit’s CSpice oracle suite.
 4. **RM-DOC-SCOPE:** Document that the 42 canonical API IDs cover migrated numerical/Rust surfaces, not every public `adam_core` surface.
-5. **Future project:** Evaluate `assist-rs` / n-body propagation only as a dedicated project, because propagation dominates OD/LSQ/IOD wall-clock.
+5. **RM-STANDALONE-ROADMAP:** Split the surface inventory into two plans: Python-interface migration ROI versus standalone Rust capability completeness.
+6. **RM-RS-DATAMODEL:** Design Rust-native coordinate/orbit/observation/time/fitted-result data models and Python/Arrow adapters.
+7. **RM-RS-TIME:** Decide the Rust-native time-scale/ERFA-equivalent strategy before porting `Timestamp` semantics.
+8. **RM-RS-PROPAGATOR-ASSIST:** Evaluate `assist-rs` / n-body propagation as a dedicated strategic blocker, because propagation dominates OD/LSQ/IOD wall-clock and standalone Rust cannot depend on Python ASSIST orchestration.
+9. **RM-RS-OD-WORKFLOWS:** After Rust data models and propagation are available, port OD/IOD/LSQ workflow orchestration natively.
 
 ## 8. Reporting rule for future benchmark summaries
 
@@ -387,3 +396,37 @@ When reporting follow-up performance evidence, explicitly state:
 - whether the result is an isolated microbenchmark or end-to-end wall-clock.
 
 This avoids overclaiming inner-loop speedups as full workflow acceleration.
+
+## 9. Standalone Rust reinterpretation
+
+The standalone-Rust goal **does change the long-term conversion analysis**. It does not invalidate the near-term Python-interface recommendations, but it changes their meaning.
+
+### What changes
+
+| Area | Python-interface migration view | Standalone Rust view |
+|---|---|---|
+| PyArrow/quivr table models | Keep Python; Rust would still cross Python object boundaries. | Define Rust-native structs/arrays and optional Arrow/Python adapters. This is foundational. |
+| Timestamp/time scales | Keep Python/Astropy/ERFA for current API. | Needs a Rust time strategy or dependency with explicit ERFA/leap-second parity policy. |
+| ASSIST/n-body propagation | Defer as future perf architecture work. | Strategic blocker for standalone OD/IOD/impact workflows. |
+| OD/IOD/LSQ orchestration | Keep Python after local NumPy/PyArrow cleanup until propagation changes. | Port natively after Rust data model + propagator traits exist. |
+| Covariance/variants/statistics | Keep public Python NumPy/SciPy/BLAS where faster. | Provide Rust-native equivalents for Rust workflows, even if Python wrappers continue using NumPy. |
+| SPICE/NAIF wrappers | Gate wiring; CSpice parity mostly owned by spicekit. | Complete Rust-side backend API, kernel lifecycle, body/frame lookup, and fixture governance. |
+| Network/query clients | Not useful for numeric speedup. | Optional feature crates or companion tools if standalone means end-to-end catalog/query functionality. |
+| Plotting/OpenSpace/OEM/SPK/text exporters | Keep Python for current ecosystem ergonomics. | Implement as optional exporters if required by standalone product scope; not part of numerical core. |
+| Tiny scalar helpers | PyO3 overhead can erase Python-call speedup. | Still worth native Rust coverage because they compose inside Rust workflows. |
+
+### Revised long-term priority order
+
+1. **Govern what is already Rust-backed** so the current state is auditable.
+2. **Design Rust-native data contracts** for coordinates, covariances, times, observers, detections, exposures, orbits, residuals, fitted results, ephemerides, and provenance/diagnostics.
+3. **Complete Rust SPICE/time foundations** because transforms, observers, and ephemerides depend on them.
+4. **Build the Rust propagator abstraction**, including an `assist-rs`/n-body backend or equivalent.
+5. **Port high-level workflows natively**: propagation, ephemeris generation, IOD, OD, least squares, impact/collision workflows, and photometry workflows.
+6. **Add optional integration layers** for network clients, text/file exporters, plotting/OpenSpace output, and Python/Arrow compatibility.
+
+### What does not change
+
+- Current merge-readiness should still be local-validation-first and should not block on speculative standalone-Rust architecture work.
+- Existing parity/performance governance remains valid for migrated numerical kernels.
+- Python-specific performance conclusions remain valid for the Python API; they simply should not be used to argue that a standalone Rust capability is unnecessary.
+- Scientific/numerical semantics still require explicit parity policy before any port, especially for time scales, SPICE, OD root selection, covariance propagation, and n-body dynamics.
