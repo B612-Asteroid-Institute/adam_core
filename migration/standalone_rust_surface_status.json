@@ -177,15 +177,15 @@
         "adam_core.utils.spice",
         "adam_core.observers.utils"
       ],
-      "status": "rust_service_available_extend",
+      "status": "rust_native_service_api",
       "first_scope": true,
-      "implementation_direction": "Promote adam_core_rs_spice into a Rust service API for kernel lifecycle, frame graph, origins, and observer states.",
+      "implementation_direction": "adam_core_rs_spice now exposes typed Rust service APIs for kernel lifecycle, frame transforms, origin resolution, AU/AU-day state batches, origin translations, and Earth-fixed observer states; MPC observer-table ingestion remains future data-model work.",
       "dependencies": [
         "spicekit",
         "time_strategy_decision"
       ],
       "next_tasks": [
-        "RM-STANDALONE-005"
+        "RM-STANDALONE-006"
       ],
       "entry_count": 18,
       "module_count": 3
@@ -838,6 +838,6 @@
     "RM-STANDALONE-003: CoordinateBatch/OrbitBatch plus Arrow adapter prototype (complete)",
     "RM-STANDALONE-004: ERFA/SOFA time-strategy fixture spike with Rust-native replacement outline (complete)",
     "RM-STANDALONE-004A: ERFA/liberfa UTC-TAI FFI service (complete)",
-    "RM-STANDALONE-005: Rust SPICE service API for origin/frame/observer states"
+    "RM-STANDALONE-005: Rust SPICE service API for origin/frame/observer states (complete)"
   ]
 }

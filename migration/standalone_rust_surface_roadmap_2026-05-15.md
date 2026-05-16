@@ -187,6 +187,8 @@ Acceptance criteria:
 
 Goal: make frame/origin/body services usable directly from Rust workflows.
 
+Status 2026-05-15: RM-STANDALONE-005 promoted `AdamCoreSpiceBackend` beyond string/low-level SPICE wrappers. The crate now has typed Rust service methods for data-model frames/origins/times, AU/AU-day state batches, origin translation vectors, frame transform matrices, and Earth-fixed ground-observer state generation. MPC observatory-table ownership remains a later data-ingest/model task; the current Rust API accepts already-resolved parallax coefficients.
+
 Directions:
 
 - Promote `AdamCoreSpiceBackend` into a Rust service API with:
@@ -406,7 +408,7 @@ Exit criteria:
 Scope:
 
 - Implement Rust time strategy/parity fixtures.
-- Promote `adam_core_rs_spice` service API for frames/origins/observer states.
+- Promote `adam_core_rs_spice` service API for frames/origins/observer states. **Complete in RM-STANDALONE-005.**
 
 Exit criteria:
 
@@ -479,7 +481,7 @@ Exit criteria:
 | **RM-STANDALONE-003** | M | Prototype `CoordinateBatch` + `OrbitBatch` Rust types and Arrow adapters. | RM-STANDALONE-002 | Complete in `adam_core_rs_coords::types` with first flat Cartesian/Orbit Arrow contracts and PyO3 schema-metadata fixture hooks. |
 | **RM-STANDALONE-004** | M | Time-scale strategy spike against the current ERFA baseline. | RM-STANDALONE-002/003 | Complete in `migration/time_scale_strategy_spike_2026-05-15.md` with leap-second fixture artifact and TDB→ET Rust arithmetic helper; first ERFA FFI implementation follows as RM-STANDALONE-004A. |
 | **RM-STANDALONE-004A** | M | ERFA/liberfa FFI implementation for UTC↔TAI conversion. | RM-STANDALONE-004 | Complete in `adam_core_rs_coords::types::time` via `erfars`; fixture-backed `TimeArray::rescale` covers UTC/TAI/TT/TDB and rejects UT1/GPS. |
-| **RM-STANDALONE-005** | M | Rust SPICE service API for origin/frame/observer states. | Existing `adam_core_rs_spice` | Next standalone implementation task; build on direct spicekit dependency. |
+| **RM-STANDALONE-005** | M | Rust SPICE service API for origin/frame/observer states. | Existing `adam_core_rs_spice` | Complete: typed service methods build on direct `spicekit` plus Rust-native `TimeArray`/`CoordinateBatch` contracts. |
 | **RM-STANDALONE-006** | L | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/005 | Reuse existing Rust 2-body kernels; include covariance, variants, and Rayon-side chunk/thread controls. |
 | **RM-STANDALONE-007** | L | `assist-rs` integration spike and n-body parity fixture plan. | RM-STANDALONE-006 | Refines/supersedes RM-FUTURE-002; strategic blocker for OD/impact parity. |
 | **RM-STANDALONE-008** | L | Rust-native OD/LSQ design over typed propagator and observation batches. | RM-STANDALONE-003/006/007 | Design before implementation; reuse `adam_core_rs_autodiff::Dual` where appropriate. |

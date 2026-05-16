@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-15 (RM-STANDALONE-004A ERFA-backed time service in progress; local validation remains primary and GitHub CI is final external confirmation only)
+Last updated: 2026-05-15 (RM-STANDALONE-005 Rust SPICE service APIs promoted; local validation remains primary and GitHub CI is final external confirmation only)
 
 ## Current Review-Derived Backlog
 
@@ -48,7 +48,7 @@ Last updated: 2026-05-15 (RM-STANDALONE-004A ERFA-backed time service in progres
 - [x] RM-STANDALONE-003: prototype `TimeArray`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, and Arrow adapters landed in `adam_core_rs_coords::types`, with PyO3 schema-metadata helpers and Rust/Python compatibility tests for the first flat Cartesian/Orbit Arrow contracts.
 - [x] RM-STANDALONE-004: ERFA/SOFA time strategy spike captured in [`time_scale_strategy_spike_2026-05-15.md`](time_scale_strategy_spike_2026-05-15.md), with leap-second fixture artifact, Python fixture regression test, Rust TDB→ET arithmetic helper/test, and a Rust-native replacement evaluation path.
 - [x] RM-STANDALONE-004A: ERFA-backed Rust time service landed in `adam_core_rs_coords::types::time` using the `erfars` crate. `TimeArray::rescale` passes the UTC/TAI/TT/TDB fixture matrix, `utc_to_tai_erfa` and `tai_to_utc_erfa` expose the first ERFA service hooks, TAI↔TT and project-local TT↔TDB policies are preserved, and UT1/GPS fail loudly pending provider contracts.
-- [ ] RM-STANDALONE-005: promote `adam_core_rs_spice` service APIs for origins, frames, and observer states on top of the Rust-native time/data-model foundation.
+- [x] RM-STANDALONE-005: promoted `adam_core_rs_spice` service APIs for origins, frames, and observer states on top of the Rust-native time/data-model foundation. `AdamCoreSpiceBackend` now exposes typed origin resolution, `Frame`→NAIF frame mapping, `TimeArray`→ET conversion, AU/AU-day state batches, origin translation vectors, typed frame transform matrices, and Earth-fixed ground-observer state generation while continuing to use `spicekit` under the hood.
 - [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-rs` propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.
 
 ## Active Sprint (Milestone 1 hardening)
