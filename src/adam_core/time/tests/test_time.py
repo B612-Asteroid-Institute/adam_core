@@ -771,16 +771,17 @@ def test_time_scale_fixture_matches_current_timestamp_contract():
     )
     fixture = json.loads(fixture_path.read_text())
 
-    for case in fixture["cases"]:
-        original = Timestamp.from_kwargs(
-            days=case["input"]["days"],
-            nanos=case["input"]["nanos"],
-            scale=case["from_scale"],
-        )
-        rescaled = original.rescale(case["to_scale"])
-        assert rescaled.days.to_pylist() == case["output"]["days"]
-        assert rescaled.nanos.to_pylist() == case["output"]["nanos"]
-        assert rescaled.scale == case["to_scale"]
+    for case_group in ["cases", "rescale_correctness_cases"]:
+        for case in fixture[case_group]:
+            original = Timestamp.from_kwargs(
+                days=case["input"]["days"],
+                nanos=case["input"]["nanos"],
+                scale=case["from_scale"],
+            )
+            rescaled = original.rescale(case["to_scale"])
+            assert rescaled.days.to_pylist() == case["output"]["days"]
+            assert rescaled.nanos.to_pylist() == case["output"]["nanos"]
+            assert rescaled.scale == case["to_scale"]
 
     tdb_case = fixture["tdb_et_cases"]
     tdb = Timestamp.from_kwargs(

@@ -18,6 +18,35 @@ import numpy as np
 from adam_core.time import Timestamp
 
 SCALES: tuple[str, ...] = ("utc", "tai", "tt", "tdb")
+RESCALE_CORRECTNESS_SCALES: tuple[str, ...] = ("tai", "utc", "tdb", "tt", "ut1")
+RESCALE_CORRECTNESS_DAYS: tuple[int, ...] = (
+    -57032,
+    -36525,
+    -2,
+    -1,
+    0,
+    51544,
+    103088,
+    164178,
+    68000,
+    68000,
+    68010,
+    68020,
+)
+RESCALE_CORRECTNESS_NANOS: tuple[int, ...] = (
+    50_000,
+    0,
+    123,
+    100_000_000,
+    200_000_000,
+    300_000_000,
+    400_000_000,
+    500_000_000,
+    1,
+    2,
+    3,
+    4,
+)
 POST_1999_LEAP_SECOND_DAYS: tuple[str, ...] = (
     "2005-12-31",
     "2008-12-31",
@@ -61,6 +90,9 @@ class Fixture(TypedDict):
     utc_iso: list[str]
     cases: list[RescaleCase]
     tdb_et_cases: TdbEtCases
+    rescale_correctness_scales: list[str]
+    rescale_correctness_input: TimePayload
+    rescale_correctness_cases: list[RescaleCase]
 
 
 def build_utc_iso() -> list[str]:
@@ -93,6 +125,26 @@ def float_list(values: list[float | None]) -> list[float]:
     return output
 
 
+def build_rescale_cases() -> list[RescaleCase]:
+    cases: list[RescaleCase] = []
+    for from_scale in RESCALE_CORRECTNESS_SCALES:
+        source = Timestamp.from_kwargs(
+            days=list(RESCALE_CORRECTNESS_DAYS),
+            nanos=list(RESCALE_CORRECTNESS_NANOS),
+            scale=from_scale,
+        )
+        for to_scale in RESCALE_CORRECTNESS_SCALES:
+            cases.append(
+                {
+                    "from_scale": from_scale,
+                    "to_scale": to_scale,
+                    "input": payload(source),
+                    "output": payload(source.rescale(to_scale)),
+                }
+            )
+    return cases
+
+
 def build_fixture() -> Fixture:
     utc_iso = build_utc_iso()
     utc_times = Timestamp.from_astropy(
@@ -120,7 +172,7 @@ def build_fixture() -> Fixture:
         "source_contract": (
             "Current Python Timestamp.rescale contract: ERFA UTC/TAI leap-second "
             "conversion, constant TAI/TT offset, project-local TT/TDB approximation, "
-            "and pure arithmetic MJD_TDB to ET seconds."
+            "Astropy/IERS-owned UT1 conversions, and pure arithmetic MJD_TDB to ET seconds."
         ),
         "scales": list(SCALES),
         "post_1999_leap_second_days": list(POST_1999_LEAP_SECOND_DAYS),
@@ -131,6 +183,12 @@ def build_fixture() -> Fixture:
             "mjd_tdb": float_list(tdb_times.mjd().to_pylist()),
             "et_seconds": float_list(tdb_times.et().to_pylist()),
         },
+        "rescale_correctness_scales": list(RESCALE_CORRECTNESS_SCALES),
+        "rescale_correctness_input": {
+            "days": list(RESCALE_CORRECTNESS_DAYS),
+            "nanos": list(RESCALE_CORRECTNESS_NANOS),
+        },
+        "rescale_correctness_cases": build_rescale_cases(),
     }
 
 

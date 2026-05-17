@@ -17,6 +17,10 @@ const MJD_TO_JD_FRACTION_OFFSET: f64 = 0.5;
 const NANOS_PER_DAY_F64: f64 = NANOS_PER_DAY as f64;
 const NANOS_PER_SECOND_F64: f64 = 1_000_000_000.0;
 
+pub trait TimeScaleProvider {
+    fn rescale(&self, times: &TimeArray, new_scale: TimeScale) -> SchemaResult<TimeArray>;
+}
+
 enum ErfaScaleConverter {
     UtcTai,
     TaiUtc,
@@ -65,6 +69,20 @@ impl TimeArray {
 
         let correction = self.rescale_correction_nanos(new_scale)?;
         self.add_nanos_with_scale(new_scale, &correction)
+    }
+
+    pub fn rescale_with_provider(
+        &self,
+        new_scale: TimeScale,
+        provider: &dyn TimeScaleProvider,
+    ) -> SchemaResult<Self> {
+        if self.scale == new_scale {
+            return Ok(self.clone());
+        }
+        if requires_time_scale_provider(self.scale, new_scale) {
+            return provider.rescale(self, new_scale);
+        }
+        self.rescale(new_scale)
     }
 
     pub fn utc_to_tai_erfa(&self) -> SchemaResult<Self> {
@@ -230,12 +248,15 @@ impl TimeArray {
 }
 
 fn reject_unsupported_rescale(scale: TimeScale, new_scale: TimeScale) -> SchemaResult<()> {
-    if matches!(scale, TimeScale::Ut1 | TimeScale::Gps)
-        || matches!(new_scale, TimeScale::Ut1 | TimeScale::Gps)
-    {
+    if requires_time_scale_provider(scale, new_scale) {
         return unsupported_rescale(scale, new_scale);
     }
     Ok(())
+}
+
+fn requires_time_scale_provider(scale: TimeScale, new_scale: TimeScale) -> bool {
+    matches!(scale, TimeScale::Ut1 | TimeScale::Gps)
+        || matches!(new_scale, TimeScale::Ut1 | TimeScale::Gps)
 }
 
 fn unsupported_rescale<T>(scale: TimeScale, new_scale: TimeScale) -> SchemaResult<T> {
@@ -301,6 +322,42 @@ mod tests {
         .unwrap()
     }
 
+    struct FixtureTimeScaleProvider {
+        fixture: Value,
+    }
+
+    impl TimeScaleProvider for FixtureTimeScaleProvider {
+        fn rescale(&self, times: &TimeArray, new_scale: TimeScale) -> SchemaResult<TimeArray> {
+            let cases = self
+                .fixture
+                .get("rescale_correctness_cases")
+                .and_then(Value::as_array)
+                .expect("fixture must contain rescale correctness cases");
+            for case in cases {
+                let from_scale = scale(
+                    case.get("from_scale")
+                        .expect("case must contain from_scale"),
+                );
+                let to_scale = scale(case.get("to_scale").expect("case must contain to_scale"));
+                if times.scale != from_scale || new_scale != to_scale {
+                    continue;
+                }
+
+                let input = time_array(
+                    case.get("input").expect("case must contain input"),
+                    from_scale,
+                );
+                if input.epochs == times.epochs {
+                    return Ok(time_array(
+                        case.get("output").expect("case must contain output"),
+                        to_scale,
+                    ));
+                }
+            }
+            unsupported_rescale(times.scale, new_scale)
+        }
+    }
+
     fn assert_time_array_eq(actual: &TimeArray, expected: &TimeArray) {
         assert_eq!(actual.scale, expected.scale);
         assert_eq!(actual.epochs, expected.epochs);
@@ -328,6 +385,70 @@ mod tests {
                 to_scale,
             );
             let actual = input.rescale(to_scale).unwrap();
+            assert_time_array_eq(&actual, &expected);
+        }
+    }
+
+    #[test]
+    fn rescale_roundtrip_preserves_midnight_regression() {
+        let times =
+            TimeArray::from_parts(TimeScale::Tdb, vec![59_005, 40_005, 40_000], vec![0, 0, 0])
+                .unwrap();
+        let round_tripped = times
+            .rescale(TimeScale::Utc)
+            .unwrap()
+            .rescale(TimeScale::Tdb)
+            .unwrap();
+        assert_eq!(round_tripped.scale, TimeScale::Tdb);
+        assert_eq!(round_tripped.epochs, times.epochs);
+        assert_ne!(
+            round_tripped.epochs,
+            vec![
+                Epoch {
+                    days: 59_004,
+                    nanos: NANOS_PER_DAY,
+                },
+                Epoch {
+                    days: 40_004,
+                    nanos: NANOS_PER_DAY,
+                },
+                Epoch {
+                    days: 39_999,
+                    nanos: NANOS_PER_DAY,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn rescale_with_provider_preserves_python_correctness_matrix() {
+        let fixture = fixture();
+        let provider = FixtureTimeScaleProvider {
+            fixture: fixture.clone(),
+        };
+        let cases = fixture
+            .get("rescale_correctness_cases")
+            .and_then(Value::as_array)
+            .expect("fixture must contain rescale correctness cases");
+        for case in cases {
+            let from_scale = scale(
+                case.get("from_scale")
+                    .expect("case must contain from_scale"),
+            );
+            let to_scale = scale(case.get("to_scale").expect("case must contain to_scale"));
+            let input = time_array(
+                case.get("input").expect("case must contain input"),
+                from_scale,
+            );
+            let expected = time_array(
+                case.get("output").expect("case must contain output"),
+                to_scale,
+            );
+            let actual = if requires_time_scale_provider(from_scale, to_scale) {
+                input.rescale_with_provider(to_scale, &provider).unwrap()
+            } else {
+                input.rescale(to_scale).unwrap()
+            };
             assert_time_array_eq(&actual, &expected);
         }
     }

@@ -481,8 +481,9 @@ Exit criteria:
 | **RM-STANDALONE-003** | M | Prototype `CoordinateBatch` + `OrbitBatch` Rust types and Arrow adapters. | RM-STANDALONE-002 | Complete in `adam_core_rs_coords::types` with first flat Cartesian/Orbit Arrow contracts and PyO3 schema-metadata fixture hooks. |
 | **RM-STANDALONE-004** | M | Time-scale strategy spike against the current ERFA baseline. | RM-STANDALONE-002/003 | Complete in `migration/time_scale_strategy_spike_2026-05-15.md` with leap-second fixture artifact and TDB→ET Rust arithmetic helper; first ERFA FFI implementation follows as RM-STANDALONE-004A. |
 | **RM-STANDALONE-004A** | M | ERFA/liberfa FFI implementation for UTC↔TAI conversion. | RM-STANDALONE-004 | Complete in `adam_core_rs_coords::types::time` via `erfars`; fixture-backed `TimeArray::rescale` covers UTC/TAI/TT/TDB and rejects UT1/GPS. |
+| **RM-STANDALONE-004B** | M | Saturate Rust time-rescale parity against existing Python `Timestamp` rescale tests. | RM-STANDALONE-004A | Complete: the fixture now mirrors the full scale-pair correctness matrix including UT1, Python verifies it against `Timestamp`, and Rust verifies it through an explicit provider boundary while provider-less UT1/GPS fail loudly. |
 | **RM-STANDALONE-005** | M | Rust SPICE service API for origin/frame/observer states. | Existing `adam_core_rs_spice` | Complete: typed service methods build on direct `spicekit` plus Rust-native `TimeArray`/`CoordinateBatch` contracts. |
-| **RM-STANDALONE-006** | L | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/005 | Reuse existing Rust 2-body kernels; include covariance, variants, and Rayon-side chunk/thread controls. |
+| **RM-STANDALONE-006** | L | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/004B/005 | Reuse existing Rust 2-body kernels; include covariance, variants, and Rayon-side chunk/thread controls. |
 | **RM-STANDALONE-007** | L | `assist-rs` integration spike and n-body parity fixture plan. | RM-STANDALONE-006 | Refines/supersedes RM-FUTURE-002; strategic blocker for OD/impact parity. |
 | **RM-STANDALONE-008** | L | Rust-native OD/LSQ design over typed propagator and observation batches. | RM-STANDALONE-003/006/007 | Design before implementation; reuse `adam_core_rs_autodiff::Dual` where appropriate. |
 | **RM-STANDALONE-009** | M | Observation/exposure/bandpass Rust model and parsers. | RM-STANDALONE-003 | Unblocks photometry workflows. |
@@ -518,7 +519,8 @@ The long-term track should remain a small but explicit standalone foundation pro
 3. prototype coordinate/orbit/time batch types plus Arrow adapters — **complete**;
 4. decide the time-scale implementation strategy against the current ERFA/TDB→ET baseline — **complete**;
 5. implement the first ERFA/liberfa UTC↔TAI service behind the fixture — **complete**;
-6. extend the Rust SPICE service API — **next**;
-7. then tackle the propagator trait and RM-FUTURE-002 / RM-STANDALONE-007 `assist-rs` integration.
+6. saturate Rust time-rescale parity against the existing Python `Timestamp` rescale tests — **complete**;
+7. extend the Rust SPICE service API — **complete**;
+8. then tackle the propagator trait and RM-FUTURE-002 / RM-STANDALONE-007 `assist-rs` integration — **next**.
 
 Once those foundations exist, the high-level workflow ports become tractable and testable instead of being a piecemeal translation of Python orchestration.

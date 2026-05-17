@@ -1,6 +1,6 @@
 # RM-STANDALONE-004 Time-Scale Strategy Spike (2026-05-15)
 
-Status: strategy + fixture spike plus first ERFA-backed Rust implementation for UTC↔TAI.
+Status: strategy + fixture spike, first ERFA-backed Rust implementation for UTC↔TAI, and RM-STANDALONE-004B parity saturation against the existing Python time-rescale test matrix.
 
 Related artifacts:
 
@@ -51,6 +51,16 @@ Use an ERFA C FFI path first, but only for the behavior ERFA currently owns in P
 5. Reject UT1 in the first Rust service unless an explicit IERS provider is supplied.
 
 Prefer ERFA/liberfa over raw SOFA for the first FFI because Python already depends on PyERFA/Astropy behavior and ERFA has the redistribution posture expected by PyERFA. Do not link against the Python wheel's private shared objects; either use a Rust crate with an audited ERFA build or vendor/build the needed ERFA C sources through Cargo with license text preserved.
+
+## RM-STANDALONE-004B parity saturation requirement
+
+Before `TimeArray` is treated as sufficient for standalone propagation or used to replace Python `Timestamp.rescale`, the Rust implementation must pass the existing Python rescale test contract. That means porting or mirroring:
+
+- `test_Timestamp_rescale_roundtrip`, including the no-`86400e9` nanos regression case;
+- `test_time_scale_fixture_matches_current_timestamp_contract`;
+- the full `test_Timestamp_rescale_correctness` scale-pair matrix over `tai`, `utc`, `tdb`, `tt`, and `ut1`.
+
+Current Rust covers the non-UT1 fixture-backed `utc`/`tai`/`tt`/`tdb` contract. UT1 remains adapter-owned through Astropy/IERS until a Rust provider contract exists. RM-STANDALONE-004B makes that boundary explicit in tests: the fixture includes the full Python `tai`/`utc`/`tdb`/`tt`/`ut1` matrix, Rust verifies it through an explicit `TimeScaleProvider` boundary, and provider-less UT1/GPS continue to fail loudly.
 
 ## Rust-native replacement evaluation path
 
