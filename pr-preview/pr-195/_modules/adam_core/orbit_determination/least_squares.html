@@ -435,6 +435,8 @@
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
+<span class="n">_INVALID_LIGHT_TIME_MESSAGE</span> <span class="o">=</span> <span class="s2">&quot;Light travel time is NaN or too large&quot;</span>
+
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_spherical_residual_columns_from_values</span><span class="p">(</span>
     <span class="n">observed_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">predicted_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
@@ -821,14 +823,34 @@
 
             <span class="n">iteration</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="c1"># partial derivatives for all examples, d(ra|dec)/d(r|v)</span>
-            <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_partials</span><span class="p">(</span>
-                <span class="n">perturbation_fraction</span><span class="p">,</span>
-                <span class="n">observations</span><span class="p">,</span>
-                <span class="n">orbit_prev</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-                <span class="n">ephemeris_nom</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-                <span class="n">prop</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_use_central_difference</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_partials</span><span class="p">(</span>
+                    <span class="n">perturbation_fraction</span><span class="p">,</span>
+                    <span class="n">observations</span><span class="p">,</span>
+                    <span class="n">orbit_prev</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
+                    <span class="n">ephemeris_nom</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
+                    <span class="n">prop</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_use_central_difference</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">_INVALID_LIGHT_TIME_MESSAGE</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">):</span>
+                    <span class="k">raise</span>
+                <span class="k">if</span> <span class="n">perturbation_fraction</span> <span class="o">&gt;</span> <span class="mf">1e-12</span><span class="p">:</span>
+                    <span class="n">perturbation_fraction</span> <span class="o">*=</span> <span class="n">perturbation_multiplier</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="s2">&quot;Reducing perturbation to </span><span class="si">%s</span><span class="s2"> after invalid partials&quot;</span><span class="p">,</span>
+                        <span class="n">perturbation_fraction</span><span class="p">,</span>
+                        <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">debug_info</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">debug_info</span><span class="p">[</span><span class="s2">&quot;exit_message&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="s2">&quot;Partials produced invalid light-time and perturbation is &quot;</span>
+                        <span class="s2">&quot;already tiny. Stopping now&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">iteration</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">orbit_prev</span>
+                <span class="k">return</span> <span class="kc">None</span>
 
             <span class="c1"># Accumulate the weighted normal-equation matrices, see Vallado.</span>
             <span class="c1"># A[i] is d(ra|dec) / d(r|v), so each observation contributes</span>
@@ -843,37 +865,66 @@
                 <span class="sa">f</span><span class="s2">&quot;Iteration </span><span class="si">{</span><span class="n">iteration</span><span class="si">}</span><span class="se">\n</span><span class="s2">initial </span><span class="si">{</span><span class="n">initial_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="si">}</span><span class="se">\n</span><span class="s2">update </span><span class="si">{</span><span class="n">corrections</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
-            <span class="c1"># Eval</span>
+            <span class="c1"># Eval. A differential-correction step can leave the domain where</span>
+            <span class="c1"># light-time iteration converges. Treat that as a rejected trial</span>
+            <span class="c1"># step, not as an unrecoverable fitter error, and let the existing</span>
+            <span class="c1"># perturbation backoff retry from the previous orbit.</span>
             <span class="n">updated_orbit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update_orbit</span><span class="p">(</span>
                 <span class="n">orbit_prev</span><span class="o">.</span><span class="n">coordinates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">corrections</span><span class="p">,</span> <span class="n">AtWA1</span>
             <span class="p">)</span>
-            <span class="n">ephemeris_updated</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
-                <span class="n">updated_orbit</span><span class="p">,</span> <span class="n">observations</span><span class="o">.</span><span class="n">observers</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span>
-            <span class="p">)</span>
-            <span class="n">B_updated</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual_columns</span><span class="p">(</span>
-                <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">ephemeris_updated</span><span class="o">.</span><span class="n">coordinates</span>
-            <span class="p">)</span>
-            <span class="n">rms_updated</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rms</span><span class="p">(</span><span class="n">B_updated</span><span class="p">,</span> <span class="n">W_all</span><span class="p">)</span>
-            <span class="n">delta_rms</span> <span class="o">=</span> <span class="p">(</span><span class="n">rms_initial</span> <span class="o">-</span> <span class="n">rms_updated</span><span class="p">)</span> <span class="o">/</span> <span class="n">rms_initial</span>
-            <span class="n">converged</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">delta_rms</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">rms_epsilon</span>
+            <span class="n">rejected_update_error</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">ephemeris_updated</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
+                    <span class="n">updated_orbit</span><span class="p">,</span>
+                    <span class="n">observations</span><span class="o">.</span><span class="n">observers</span><span class="p">,</span>
+                    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">_INVALID_LIGHT_TIME_MESSAGE</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">):</span>
+                    <span class="k">raise</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Rejecting invalid least-squares update&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">rejected_update_error</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+                <span class="n">B_updated</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">rms_updated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+                <span class="n">delta_rms</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+                <span class="n">converged</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">B_updated</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual_columns</span><span class="p">(</span>
+                    <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">ephemeris_updated</span><span class="o">.</span><span class="n">coordinates</span>
+                <span class="p">)</span>
+                <span class="n">rms_updated</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rms</span><span class="p">(</span><span class="n">B_updated</span><span class="p">,</span> <span class="n">W_all</span><span class="p">)</span>
+                <span class="n">delta_rms</span> <span class="o">=</span> <span class="p">(</span><span class="n">rms_initial</span> <span class="o">-</span> <span class="n">rms_updated</span><span class="p">)</span> <span class="o">/</span> <span class="n">rms_initial</span>
+                <span class="n">converged</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">delta_rms</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">rms_epsilon</span><span class="p">)</span>
+
             <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;RMS old=</span><span class="si">{</span><span class="n">rms_initial</span><span class="si">}</span><span class="s2">, new </span><span class="si">{</span><span class="n">rms_updated</span><span class="si">}</span><span class="s2">, change </span><span class="si">{</span><span class="n">delta_rms</span><span class="si">}</span><span class="s2">, converged </span><span class="si">{</span><span class="n">converged</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
             <span class="k">if</span> <span class="n">debug_info</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">rchi2_updated</span> <span class="o">=</span> <span class="n">calculate_reduced_chi2</span><span class="p">(</span>
-                    <span class="n">Residuals</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span>
-                        <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">ephemeris_updated</span><span class="o">.</span><span class="n">coordinates</span>
-                    <span class="p">),</span>
-                    <span class="n">num_param</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">one_line</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="s2">&quot;rchi2&quot;</span><span class="p">:</span> <span class="n">rchi2_updated</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
-                    <span class="s2">&quot;rms&quot;</span><span class="p">:</span> <span class="n">rms_updated</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
-                    <span class="s2">&quot;delta_rms&quot;</span><span class="p">:</span> <span class="n">delta_rms</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
-                    <span class="s2">&quot;converged&quot;</span><span class="p">:</span> <span class="n">converged</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
-                    <span class="s2">&quot;perturbation&quot;</span><span class="p">:</span> <span class="n">perturbation_fraction</span><span class="p">,</span>
-                <span class="p">}</span>
+                <span class="k">if</span> <span class="n">rejected_update_error</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">rchi2_updated</span> <span class="o">=</span> <span class="n">calculate_reduced_chi2</span><span class="p">(</span>
+                        <span class="n">Residuals</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span>
+                            <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">ephemeris_updated</span><span class="o">.</span><span class="n">coordinates</span>
+                        <span class="p">),</span>
+                        <span class="n">num_param</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">one_line</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;rchi2&quot;</span><span class="p">:</span> <span class="n">rchi2_updated</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+                        <span class="s2">&quot;rms&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">rms_updated</span><span class="p">),</span>
+                        <span class="s2">&quot;delta_rms&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">delta_rms</span><span class="p">),</span>
+                        <span class="s2">&quot;converged&quot;</span><span class="p">:</span> <span class="n">converged</span><span class="p">,</span>
+                        <span class="s2">&quot;perturbation&quot;</span><span class="p">:</span> <span class="n">perturbation_fraction</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">one_line</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;rchi2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">),</span>
+                        <span class="s2">&quot;rms&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">),</span>
+                        <span class="s2">&quot;delta_rms&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">),</span>
+                        <span class="s2">&quot;converged&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                        <span class="s2">&quot;perturbation&quot;</span><span class="p">:</span> <span class="n">perturbation_fraction</span><span class="p">,</span>
+                        <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="n">rejected_update_error</span><span class="p">,</span>
+                    <span class="p">}</span>
                 <span class="n">debug_info</span><span class="p">[</span><span class="s2">&quot;iterations&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">one_line</span><span class="p">)</span>
                 <span class="n">debug_info</span><span class="p">[</span><span class="s2">&quot;corrections&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">corrections</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
 
@@ -882,7 +933,7 @@
             <span class="p">)</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="n">initial_orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">)</span>
 
             <span class="c1"># Reuse computed values for the next iteration</span>
-            <span class="k">if</span> <span class="n">rms_updated</span> <span class="o">&lt;</span> <span class="n">rms_initial</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">B_updated</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">rms_updated</span> <span class="o">&lt;</span> <span class="n">rms_initial</span><span class="p">:</span>
                 <span class="n">orbit_prev</span> <span class="o">=</span> <span class="n">updated_orbit</span>
                 <span class="n">ephemeris_nom</span> <span class="o">=</span> <span class="n">ephemeris_updated</span>
                 <span class="n">B</span> <span class="o">=</span> <span class="n">B_updated</span>
