@@ -1,0 +1,17 @@
+adam\_core.observers package
+============================
+
+.. automodule:: adam_core.observers
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.observers.observers
+   adam_core.observers.state
+   adam_core.observers.utils

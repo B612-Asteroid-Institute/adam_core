@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">adam_core orbit workflow</title>
+  <desc id="desc">Pipeline from orbit sources through propagation and ephemeris products.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .card { fill: #ffffff; stroke: #1f2937; stroke-width: 2; rx: 14; }
+      .h { font: 700 20px 'Helvetica Neue', Arial, sans-serif; fill: #111827; }
+      .p { font: 500 14px 'Helvetica Neue', Arial, sans-serif; fill: #374151; }
+      .arrow { stroke: #2563eb; stroke-width: 4; fill: none; marker-end: url(#arrowhead); }
+      .accentA { fill: #e0f2fe; }
+      .accentB { fill: #dcfce7; }
+      .accentC { fill: #fef3c7; }
+      .accentD { fill: #f3e8ff; }
+      .title { font: 700 26px 'Helvetica Neue', Arial, sans-serif; fill: #0f172a; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="360" />
+  <text class="title" x="36" y="44">adam_core end-to-end workflow</text>
+
+  <rect class="card accentA" x="36" y="88" width="248" height="190" />
+  <text class="h" x="56" y="124">1) Orbit Inputs</text>
+  <text class="p" x="56" y="152">- query_sbdb / query_horizons</text>
+  <text class="p" x="56" y="176">- query_scout variants</text>
+  <text class="p" x="56" y="200">- custom state vectors</text>
+  <text class="p" x="56" y="224">- covariance-aware Orbits</text>
+
+  <rect class="card accentB" x="332" y="88" width="248" height="190" />
+  <text class="h" x="352" y="124">2) Propagation</text>
+  <text class="p" x="352" y="152">- Propagator interface</text>
+  <text class="p" x="352" y="176">- propagate_orbits</text>
+  <text class="p" x="352" y="200">- multiprocessing options</text>
+  <text class="p" x="352" y="224">- impact simulation support</text>
+
+  <rect class="card accentC" x="628" y="88" width="248" height="190" />
+  <text class="h" x="648" y="124">3) Observation Context</text>
+  <text class="p" x="648" y="152">- Timestamp scales</text>
+  <text class="p" x="648" y="176">- Observers.from_code</text>
+  <text class="p" x="648" y="200">- frame and origin transforms</text>
+  <text class="p" x="648" y="224">- residual analysis</text>
+
+  <rect class="card accentD" x="924" y="88" width="248" height="190" />
+  <text class="h" x="944" y="124">4) Products</text>
+  <text class="p" x="944" y="152">- ephemerides + uncertainties</text>
+  <text class="p" x="944" y="176">- impact probabilities</text>
+  <text class="p" x="944" y="200">- orbit determination outputs</text>
+  <text class="p" x="944" y="224">- plots / notebooks / services</text>
+
+  <path class="arrow" d="M286 182 L322 182" />
+  <path class="arrow" d="M582 182 L618 182" />
+  <path class="arrow" d="M878 182 L914 182" />
+</svg>
