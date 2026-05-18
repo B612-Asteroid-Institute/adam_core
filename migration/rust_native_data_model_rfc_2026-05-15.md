@@ -17,7 +17,7 @@ User decisions incorporated:
 
 - Rust schemas are canonical; Python/quivr adapts through Arrow/PyO3 adapters.
 - Time conversion starts with FFI to ERFA/SOFA; a Rust-native replacement should be outlined/evaluated as a follow-up.
-- `assist-rs` is the preferred n-body backend, but propagation must be backend-pluggable.
+- ASSIST-compatible n-body propagation is preferred, but no high-level `assist-rs` crate exists; current Rust crates are raw `assist-sys` + `rebound-sys`, so propagation must be backend-pluggable and the safe wrapper/license boundary must be explicit.
 - Network clients are in first standalone scope, preferably optional/feature-gated.
 - Plotting/visualization products are in first standalone scope, but likely as data/spec output rather than a direct Python plotting port.
 
@@ -502,40 +502,87 @@ Convergence diagnostics, outlier decisions, root-selection policy, and covarianc
 
 ## 16. Propagation request/response data
 
-The data model must support the pluggable propagator design before `assist-rs` is wired.
+The data model must support the pluggable propagator design before the `assist-sys`/`rebound-sys` safe wrapper is wired. The core trait name is `Propagator` to match Python terminology and the roadmap. Under the modules-first policy, RM-STANDALONE-006 may start in a `propagation` module inside current crates; split to a future `adam_core_rs_propagation` crate only after the dependency boundary is stable and explicitly approved. The trait owns propagation only; ephemeris generation is a free workflow over a `Propagator` so light-time, aberration, frame rotation, and photometry semantics are shared across 2-body and n-body backends.
 
 ```rust
-pub struct PropagationOptions {
+pub enum EpochPolicy<'a> {
+    /// Each orbit propagates from its own coordinates.time to every requested epoch.
+    CrossProduct,
+    /// Requires len(orbits) == len(times); output has len(orbits) rows.
+    Pairwise,
+    /// Future compact representation for per-orbit epoch subsets.
+    PerOrbit { indices: &'a [u32] },
+}
+
+pub enum CovariancePropagation {
+    None,
+    Linearized,
+    Monte { samples: usize, seed: u64 },
+    SigmaPoint { alpha: f64, beta: f64, kappa: f64 },
+}
+
+pub struct PropagationOptions<'a> {
     pub chunk_size: Option<usize>,
     pub thread_limit: Option<usize>,
+    pub epoch_policy: EpochPolicy<'a>,
+    pub covariance: CovariancePropagation,
 }
 
 pub struct PropagationRequest<'a> {
     pub orbits: &'a OrbitBatch,
     pub times: &'a TimeArray,
-    pub covariances: Option<&'a CovarianceBatch>,
-    pub variants: Option<&'a OrbitVariantBatch>,
-    pub options: PropagationOptions,
+    pub options: PropagationOptions<'a>,
+}
+
+pub struct PropagationDiagnostics {
+    pub convergence: Vec<PropagationConvergence>,
 }
 
 pub struct PropagationResult {
     pub orbits: OrbitBatch,
-    pub covariances: Option<CovarianceBatch>,
-    pub variants: Option<OrbitVariantBatch>,
+    pub times: TimeArray,
+    pub validity: Validity,
+    pub diagnostics: PropagationDiagnostics,
 }
 
-pub trait PropagatorBackend {
-    fn propagate(&self, request: &PropagationRequest<'_>) -> Result<PropagationResult>;
-    fn generate_ephemeris(
+pub trait Propagator: Sync {
+    type Config;
+    type Shard: PropagatorShard;
+
+    fn integration_time_scale(&self) -> TimeScale;
+    fn supports(&self, mode: CovariancePropagation) -> bool;
+    fn create_shard(&self) -> Self::Shard;
+    fn propagate(
         &self,
-        orbits: &OrbitBatch,
-        observers: &ObserverBatch,
-        options: &EphemerisOptions,
-    ) -> Result<EphemerisBatch>;
+        request: &PropagationRequest<'_>,
+        provider: &dyn TimeScaleProvider,
+    ) -> Result<PropagationResult>;
 }
+
+pub trait PropagatorShard: Send {
+    fn propagate_one(&mut self, orbit: OrbitRow<'_>, times: &[Epoch]) -> Result<RowOutput>;
+}
+
+pub fn generate_ephemeris<P: Propagator>(
+    propagator: &P,
+    orbits: &OrbitBatch,
+    observers: &ObserverBatch,
+    options: &EphemerisOptions,
+    spice: &dyn OriginStateProvider,
+    provider: &dyn TimeScaleProvider,
+) -> Result<EphemerisBatch>;
 ```
 
-The first backend should wrap existing 2-body Rust kernels. The n-body backend should target `assist-rs`, but the trait must not encode `assist-rs`-specific assumptions.
+The first backend should wrap existing 2-body Rust kernels. The n-body backend should target an ASSIST-compatible safe wrapper over `assist-sys` + `rebound-sys`, but the trait must not encode ASSIST-specific assumptions.
+
+Important invariants for RM-STANDALONE-006:
+
+- Covariance source of truth is `OrbitBatch.coordinates.covariance`; there is no separate `request.covariances`.
+- `PropagationRequest::new` should validate or normalize chronological time ordering and return enough permutation metadata to restore caller order.
+- `TimeScaleProvider` is required on propagation calls. Inputs must convert to `integration_time_scale()` or fail loudly, and returned `PropagationResult.times` must explicitly state output scale.
+- Per-row failures are represented by `Validity` plus diagnostics; `Err` is reserved for setup/request errors.
+- Hot Rust workflow helpers should be generic over `<P: Propagator>`; trait objects are for user-facing/plugin edges.
+- Backend constructors use typed config structs, not unstructured kwargs.
 
 ## 17. Network and plotting/product scope
 
@@ -629,7 +676,7 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 - Coordinate transform/covariance parity through typed batches.
 - Observer/SPICE fixtures through Rust service APIs.
 - 2-body propagator typed fixtures.
-- `assist-rs` n-body representative fixtures.
+- ASSIST-compatible n-body representative fixtures generated from today's Python `adam_assist` behavior, with live `assist-sys`/`rebound-sys` tests gated behind an explicit feature/env var.
 - OD/IOD/LSQ end-to-end fixtures without Python table construction.
 - Network parser fixtures without live HTTP.
 - Product/export fixtures for SPK, OEM, ADES, and OpenSpace outputs.
@@ -639,16 +686,17 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 1. **RM-STANDALONE-003:** implement prototype `TimeArray`, `CoordinateBatch`, `CovarianceBatch`, `OrbitBatch`, and Arrow adapters as modules in current crates.
 2. **RM-STANDALONE-004:** lock down ERFA/SOFA time strategy, leap-second fixtures, Rust-native replacement criteria, and first TDB→ET Rust arithmetic helper.
 3. **RM-STANDALONE-004A:** implement the ERFA/liberfa FFI service for UTC↔TAI while preserving the current TAI↔TT and TT↔TDB policies. **Complete** in `adam_core_rs_coords::types::time` via `erfars`.
-4. **RM-STANDALONE-005:** promote `adam_core_rs_spice` service APIs for origins, frames, and observers.
-5. **RM-STANDALONE-006:** define `PropagatorBackend` and lift existing 2-body kernels behind it.
-6. **RM-STANDALONE-007:** integrate `assist-rs` behind the trait while keeping backend pluggability.
-7. **RM-STANDALONE-008+**: port OD/IOD/LSQ and observation/photometry/product workflows on top of typed batches.
+4. **RM-STANDALONE-005:** promote `adam_core_rs_spice` service APIs for origins, frames, and observers. **Complete.**
+5. **RM-STANDALONE-004B:** saturate Rust time-rescale parity against the existing Python `Timestamp` rescale matrix before propagation depends on `TimeArray`. **Complete.**
+6. **RM-STANDALONE-006:** define `Propagator` and backend-agnostic `generate_ephemeris`, then lift existing 2-body kernels behind the trait.
+7. **RM-STANDALONE-007:** integrate an ASSIST-compatible safe wrapper over `assist-sys` + `rebound-sys` behind the trait while keeping backend pluggability and license/package boundaries explicit.
+8. **RM-STANDALONE-008+**: port OD/IOD/LSQ and observation/photometry/product workflows on top of typed batches.
 
 ## 22. Acceptance criteria for this RFC
 
 - Names and describes the canonical Rust batch types needed for standalone workflows.
 - Records Rust-schema ownership and Python/quivr adapter posture.
 - Records ERFA/SOFA FFI as the initial time strategy with a Rust-native follow-up path.
-- Keeps `assist-rs` preferred but backend-pluggable.
+- Keeps ASSIST-compatible n-body propagation preferred while making the actual `assist-sys`/`rebound-sys` safe-wrapper and licensing work explicit and backend-pluggable.
 - Covers covariance, variants, chunking, provenance, Arrow/Python adapters, network clients, and plotting/product outputs.
 - Defines concrete next implementation tasks and validation gates.
