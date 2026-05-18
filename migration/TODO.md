@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-17 (RM-STANDALONE-004B time-rescale parity saturation complete; RM-STANDALONE-006 is next after local validation remains primary and GitHub CI is final external confirmation only)
+Last updated: 2026-05-18 (GitHub CI/Tier-1 are green after the `adam-assist` and least-squares fixes; RM-STANDALONE-006 typed propagation is underway with the Rust `Propagator`/`TwoBodyPropagator` surface landed first)
 
 ## Current Review-Derived Backlog
 
@@ -50,7 +50,7 @@ Last updated: 2026-05-17 (RM-STANDALONE-004B time-rescale parity saturation comp
 - [x] RM-STANDALONE-004A: ERFA-backed Rust time service landed in `adam_core_rs_coords::types::time` using the `erfars` crate. `TimeArray::rescale` passes the UTC/TAI/TT/TDB fixture matrix, `utc_to_tai_erfa` and `tai_to_utc_erfa` expose the first ERFA service hooks, TAI↔TT and project-local TT↔TDB policies are preserved, and UT1/GPS fail loudly pending provider contracts.
 - [x] RM-STANDALONE-004B: Rust time-rescale parity is saturated against the existing Python `Timestamp` rescale test contract before standalone propagation depends on `TimeArray`. The time fixture now includes the full `test_Timestamp_rescale_correctness` scale-pair matrix (`tai`, `utc`, `tdb`, `tt`, `ut1`), the Python fixture regression checks it, and Rust unit tests cover the fixture-backed matrix through an explicit `TimeScaleProvider` boundary while provider-less UT1/GPS still fail loudly.
 - [x] RM-STANDALONE-005: promoted `adam_core_rs_spice` service APIs for origins, frames, and observer states on top of the Rust-native time/data-model foundation. `AdamCoreSpiceBackend` now exposes typed origin resolution, `Frame`→NAIF frame mapping, `TimeArray`→ET conversion, AU/AU-day state batches, origin translation vectors, typed frame transform matrices, and Earth-fixed ground-observer state generation while continuing to use `spicekit` under the hood.
-- [ ] RM-STANDALONE-006: typed `Propagator` trait and `TwoBodyPropagator` implementation. Start from the RM-STANDALONE-004B time contract so propagation cannot accidentally narrow or reinterpret time-scale behavior.
+- [x] RM-STANDALONE-006: typed `Propagator` trait and `TwoBodyPropagator` implementation landed in `adam_core_rs_coords::propagation`. The first typed surface uses `PropagationRequest`/`PropagationResult`, `EpochPolicy`, `CovariancePropagation`, mandatory `TimeScaleProvider` rescaling to the backend integration scale, per-row `Validity` plus diagnostics, linearized covariance propagation, and Rayon-side chunk/thread controls.
 - [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-sys`+`rebound-sys` safe-wrapper propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.
 
 ## Active Sprint (Milestone 1 hardening)

@@ -8,7 +8,8 @@ pub use types::{
     ArrowSchemaExport, CoordinateBatch, CoordinateRepresentation, CoordinateValues,
     CovarianceBatch, CovarianceUnits, Epoch, Frame as DataFrame, IntoRecordBatch, ObjectId,
     OrbitBatch, OrbitId, OriginArray, OriginId, SchemaError, TimeArray, TimeScale,
-    TryFromRecordBatch, Validity, J2000_TDB_MJD, NANOS_PER_DAY, SECONDS_PER_DAY, TAI_TT_NANOS,
+    TimeScaleProvider, TryFromRecordBatch, Validity, J2000_TDB_MJD, NANOS_PER_DAY, SECONDS_PER_DAY,
+    TAI_TT_NANOS,
 };
 
 pub mod generic;
@@ -19,6 +20,13 @@ pub use generic::{
 };
 
 pub mod propagate;
+pub mod propagation;
+pub use propagation::{
+    CovariancePropagation, EpochOrder, EpochPolicy, OrbitRow, PropagationConvergence,
+    PropagationConvergenceStatus, PropagationDiagnostics, PropagationError, PropagationOptions,
+    PropagationRequest, PropagationResult, PropagationResultValue, Propagator, PropagatorShard,
+    RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
+};
 pub mod tisserand;
 pub use tisserand::tisserand_parameter_flat;
 
@@ -44,7 +52,7 @@ pub use propagate::{
     apply_lagrange_coefficients, calc_chi, calc_chi_with_init, calc_lagrange_coefficients,
     calc_stumpff, propagate_2body_along_arc, propagate_2body_arc_batch_flat6,
     propagate_2body_flat6, propagate_2body_row, propagate_2body_with_covariance_flat6,
-    OrbitConstants,
+    propagate_2body_with_covariance_row, OrbitConstants,
 };
 
 pub mod ephemeris;

@@ -604,6 +604,48 @@ fn propagate_with_jacobian_row(
     (value, jac)
 }
 
+/// Propagate a single row with covariance transport.
+///
+/// Evaluates the state and the 6x6 Jacobian via a single `Dual<6>` pass, then
+/// applies `Sigma_out = J @ Sigma_in @ J^T`. NaN covariance payloads pass
+/// through as an all-NaN covariance row while the state is still propagated.
+pub fn propagate_2body_with_covariance_row(
+    orbit: [f64; 6],
+    covariance: &[f64; 36],
+    dt: f64,
+    mu: f64,
+    max_iter: usize,
+    tol: f64,
+) -> ([f64; 6], [f64; 36]) {
+    let (value, jac) = propagate_with_jacobian_row(orbit, dt, mu, max_iter, tol);
+    let mut covariance_out = [0.0_f64; 36];
+    if covariance.iter().any(|value| value.is_nan()) {
+        covariance_out.fill(f64::NAN);
+        return (value, covariance_out);
+    }
+
+    let mut m = [[0.0_f64; 6]; 6];
+    for i in 0..6 {
+        for j in 0..6 {
+            let mut acc = 0.0;
+            for k in 0..6 {
+                acc += jac[i][k] * covariance[k * 6 + j];
+            }
+            m[i][j] = acc;
+        }
+    }
+    for i in 0..6 {
+        for j in 0..6 {
+            let mut acc = 0.0;
+            for k in 0..6 {
+                acc += m[i][k] * jac[j][k];
+            }
+            covariance_out[i * 6 + j] = acc;
+        }
+    }
+    (value, covariance_out)
+}
+
 /// Batched propagation with covariance transport. For each row, evaluates
 /// the state and the 6x6 Jacobian via a single `Dual<6>` pass, then applies
 /// `Sigma_out = J @ Sigma_in @ J^T`. NaN covariance rows pass NaN through.
