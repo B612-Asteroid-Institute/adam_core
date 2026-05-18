@@ -11,7 +11,8 @@ use crate::types::origin_mu_au3_day2;
 use crate::types::time::TimeScaleProvider;
 use crate::{
     CoordinateBatch, CovarianceBatch, CovarianceUnits, Epoch, ObjectId, OrbitBatch, OrbitId,
-    OriginArray, OriginId, SchemaError, TimeArray, TimeScale, Validity,
+    OrbitVariantBatch, OriginArray, OriginId, SchemaError, TimeArray, TimeScale, Validity,
+    VariantId,
 };
 use rayon::prelude::*;
 use std::fmt;
@@ -171,9 +172,75 @@ impl EpochOrder {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PropagationInput<'a> {
+    Orbits(&'a OrbitBatch),
+    Variants(&'a OrbitVariantBatch),
+}
+
+impl<'a> PropagationInput<'a> {
+    pub fn validate(&self) -> PropagationResultValue<()> {
+        match self {
+            Self::Orbits(orbits) => orbits.validate()?,
+            Self::Variants(variants) => variants.validate()?,
+        }
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.coordinates().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.coordinates().is_empty()
+    }
+
+    pub fn orbit_id(&self) -> &'a [OrbitId] {
+        match self {
+            Self::Orbits(orbits) => &orbits.orbit_id,
+            Self::Variants(variants) => &variants.orbit_id,
+        }
+    }
+
+    pub fn object_id(&self) -> &'a [Option<ObjectId>] {
+        match self {
+            Self::Orbits(orbits) => &orbits.object_id,
+            Self::Variants(variants) => &variants.object_id,
+        }
+    }
+
+    pub fn variant_id(&self) -> Option<&'a [Option<VariantId>]> {
+        match self {
+            Self::Orbits(_) => None,
+            Self::Variants(variants) => Some(&variants.variant_id),
+        }
+    }
+
+    pub fn weights(&self) -> Option<&'a [Option<f64>]> {
+        match self {
+            Self::Orbits(_) => None,
+            Self::Variants(variants) => Some(&variants.weights),
+        }
+    }
+
+    pub fn weights_cov(&self) -> Option<&'a [Option<f64>]> {
+        match self {
+            Self::Orbits(_) => None,
+            Self::Variants(variants) => Some(&variants.weights_cov),
+        }
+    }
+
+    pub fn coordinates(&self) -> &'a CoordinateBatch {
+        match self {
+            Self::Orbits(orbits) => &orbits.coordinates,
+            Self::Variants(variants) => &variants.coordinates,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropagationRequest<'a> {
-    pub orbits: &'a OrbitBatch,
+    pub input: PropagationInput<'a>,
     pub times: &'a TimeArray,
     pub options: PropagationOptions,
     pub epoch_order: EpochOrder,
@@ -185,19 +252,35 @@ impl<'a> PropagationRequest<'a> {
         times: &'a TimeArray,
         options: PropagationOptions,
     ) -> PropagationResultValue<Self> {
-        orbits.validate()?;
+        Self::new_input(PropagationInput::Orbits(orbits), times, options)
+    }
+
+    pub fn new_variants(
+        variants: &'a OrbitVariantBatch,
+        times: &'a TimeArray,
+        options: PropagationOptions,
+    ) -> PropagationResultValue<Self> {
+        Self::new_input(PropagationInput::Variants(variants), times, options)
+    }
+
+    pub fn new_input(
+        input: PropagationInput<'a>,
+        times: &'a TimeArray,
+        options: PropagationOptions,
+    ) -> PropagationResultValue<Self> {
+        input.validate()?;
         times.validate()?;
         options.validate()?;
-        if orbits.coordinates.times.is_none() {
+        if input.coordinates().times.is_none() {
             return Err(PropagationError::MissingOrbitTimes);
         }
         match &options.epoch_policy {
             EpochPolicy::CrossProduct => {}
             EpochPolicy::Pairwise => {
-                if orbits.len() != times.len() {
+                if input.len() != times.len() {
                     return Err(PropagationError::InvalidRequest(format!(
                         "pairwise propagation requires len(orbits) == len(times); got {} and {}",
-                        orbits.len(),
+                        input.len(),
                         times.len()
                     )));
                 }
@@ -210,7 +293,7 @@ impl<'a> PropagationRequest<'a> {
             }
         }
         Ok(Self {
-            orbits,
+            input,
             times,
             options,
             epoch_order: EpochOrder::from_times(times),
@@ -219,8 +302,8 @@ impl<'a> PropagationRequest<'a> {
 
     pub fn output_len(&self) -> usize {
         match self.options.epoch_policy {
-            EpochPolicy::CrossProduct => self.orbits.len() * self.times.len(),
-            EpochPolicy::Pairwise => self.orbits.len(),
+            EpochPolicy::CrossProduct => self.input.len() * self.times.len(),
+            EpochPolicy::Pairwise => self.input.len(),
             EpochPolicy::PerOrbit { .. } => 0,
         }
     }
@@ -258,6 +341,7 @@ impl PropagationDiagnostics {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropagationResult {
     pub orbits: OrbitBatch,
+    pub variants: Option<OrbitVariantBatch>,
     pub times: TimeArray,
     pub validity: Validity,
     pub diagnostics: PropagationDiagnostics,
@@ -268,6 +352,9 @@ pub struct OrbitRow<'a> {
     pub index: usize,
     pub orbit_id: &'a OrbitId,
     pub object_id: Option<&'a ObjectId>,
+    pub variant_id: Option<&'a VariantId>,
+    pub weight: Option<f64>,
+    pub weight_cov: Option<f64>,
     pub state: [f64; 6],
     pub origin: &'a OriginId,
     pub mu: f64,
@@ -362,21 +449,17 @@ impl TwoBodyPropagator {
         target_times: &TimeArray,
         mus: &[f64],
     ) -> PropagationResultValue<Vec<OrbitBlock>> {
-        let states = request
-            .orbits
-            .coordinates
-            .values
-            .cartesian()
-            .ok_or_else(|| {
-                PropagationError::InvalidRequest(
-                    "TwoBodyPropagator requires Cartesian orbit coordinates".to_string(),
-                )
-            })?;
-        let covariance = request.orbits.coordinates.covariance.as_ref();
+        let input_coordinates = request.input.coordinates();
+        let states = input_coordinates.values.cartesian().ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "TwoBodyPropagator requires Cartesian orbit coordinates".to_string(),
+            )
+        })?;
+        let covariance = input_coordinates.covariance.as_ref();
         let include_covariance =
             request.options.covariance == CovariancePropagation::Linearized && covariance.is_some();
-        let orbit_indices = (0..request.orbits.len()).collect::<Vec<_>>();
-        let chunk_size = normalized_chunk_size(request.options.chunk_size, request.orbits.len());
+        let orbit_indices = (0..request.input.len()).collect::<Vec<_>>();
+        let chunk_size = normalized_chunk_size(request.options.chunk_size, request.input.len());
         let policy = request.options.epoch_policy.clone();
 
         let chunk_results = orbit_indices
@@ -386,7 +469,7 @@ impl TwoBodyPropagator {
                 let mut blocks = Vec::with_capacity(chunk.len());
                 for &orbit_index in chunk {
                     let row = orbit_row(
-                        request.orbits,
+                        request.input,
                         states,
                         orbit_times,
                         covariance,
@@ -439,7 +522,7 @@ impl TwoBodyPropagator {
             })
             .collect::<Vec<_>>();
 
-        let mut blocks = Vec::with_capacity(request.orbits.len());
+        let mut blocks = Vec::with_capacity(request.input.len());
         for chunk in chunk_results {
             blocks.extend(chunk?);
         }
@@ -472,7 +555,7 @@ impl Propagator for TwoBodyPropagator {
         request: &PropagationRequest<'_>,
         provider: &dyn TimeScaleProvider,
     ) -> PropagationResultValue<PropagationResult> {
-        request.orbits.validate()?;
+        request.input.validate()?;
         request.times.validate()?;
         request.options.validate()?;
         if !self.supports(request.options.covariance) {
@@ -481,8 +564,8 @@ impl Propagator for TwoBodyPropagator {
             ));
         }
         let input_orbit_times = request
-            .orbits
-            .coordinates
+            .input
+            .coordinates()
             .times
             .as_ref()
             .ok_or(PropagationError::MissingOrbitTimes)?;
@@ -496,8 +579,8 @@ impl Propagator for TwoBodyPropagator {
         let target_times =
             rescale_for_propagation(request.times, integration_scale, provider, "target times")?;
         let mus = request
-            .orbits
-            .coordinates
+            .input
+            .coordinates()
             .origins
             .origins
             .iter()
@@ -671,7 +754,7 @@ fn time_indices_for_policy(
 }
 
 fn orbit_row<'a>(
-    orbits: &'a OrbitBatch,
+    input: PropagationInput<'a>,
     states: &'a [[f64; 6]],
     orbit_times: &'a TimeArray,
     covariance: Option<&'a CovarianceBatch>,
@@ -689,10 +772,17 @@ fn orbit_row<'a>(
         .is_none_or(|covariance| covariance.is_row_valid(orbit_index));
     OrbitRow {
         index: orbit_index,
-        orbit_id: &orbits.orbit_id[orbit_index],
-        object_id: orbits.object_id[orbit_index].as_ref(),
+        orbit_id: &input.orbit_id()[orbit_index],
+        object_id: input.object_id()[orbit_index].as_ref(),
+        variant_id: input
+            .variant_id()
+            .and_then(|variant_id| variant_id[orbit_index].as_ref()),
+        weight: input.weights().and_then(|weights| weights[orbit_index]),
+        weight_cov: input
+            .weights_cov()
+            .and_then(|weights_cov| weights_cov[orbit_index]),
         state: states[orbit_index],
-        origin: &orbits.coordinates.origins.origins[orbit_index],
+        origin: &input.coordinates().origins.origins[orbit_index],
         mu: mus[orbit_index],
         time: orbit_times.epochs[orbit_index],
         covariance: covariance_values,
@@ -713,9 +803,26 @@ fn assemble_result(
     let mut epochs = Vec::with_capacity(output_rows);
     let mut validity = Vec::with_capacity(output_rows);
     let mut diagnostics = Vec::with_capacity(output_rows);
+    let mut variant_ids = request
+        .input
+        .variant_id()
+        .map(|_| Vec::with_capacity(output_rows));
+    let mut weights = request
+        .input
+        .weights()
+        .map(|_| Vec::with_capacity(output_rows));
+    let mut weights_cov = request
+        .input
+        .weights_cov()
+        .map(|_| Vec::with_capacity(output_rows));
+
+    let input_coordinates = request.input.coordinates();
+    let input_variant_ids = request.input.variant_id();
+    let input_weights = request.input.weights();
+    let input_weights_cov = request.input.weights_cov();
 
     let output_has_covariance = request.options.covariance == CovariancePropagation::Linearized
-        && request.orbits.coordinates.covariance.is_some();
+        && input_coordinates.covariance.is_some();
     let mut covariance_values = if output_has_covariance {
         Some(Vec::with_capacity(output_rows * 36))
     } else {
@@ -732,10 +839,24 @@ fn assemble_result(
             let output_row = states.len();
             let time_index = block.time_indices[row_offset];
             let row_valid = block.validity[row_offset];
-            orbit_ids.push(request.orbits.orbit_id[block.orbit_index].clone());
-            object_ids.push(request.orbits.object_id[block.orbit_index].clone());
+            orbit_ids.push(request.input.orbit_id()[block.orbit_index].clone());
+            object_ids.push(request.input.object_id()[block.orbit_index].clone());
+            if let Some(values) = &mut variant_ids {
+                values.push(
+                    input_variant_ids.expect("variant ids are present")[block.orbit_index].clone(),
+                );
+            }
+            if let Some(values) = &mut weights {
+                values.push(input_weights.expect("variant weights are present")[block.orbit_index]);
+            }
+            if let Some(values) = &mut weights_cov {
+                values.push(
+                    input_weights_cov.expect("variant covariance weights are present")
+                        [block.orbit_index],
+                );
+            }
             states.push(block.states[row_offset]);
-            origins.push(request.orbits.coordinates.origins.origins[block.orbit_index].clone());
+            origins.push(input_coordinates.origins.origins[block.orbit_index].clone());
             epochs.push(target_times.epochs[time_index]);
             validity.push(row_valid);
             diagnostics.push(PropagationConvergence {
@@ -770,21 +891,38 @@ fn assemble_result(
 
     let times = TimeArray::new(target_times.scale, epochs)?;
     let covariance = build_output_covariance(
-        request.orbits.coordinates.covariance.as_ref(),
+        input_coordinates.covariance.as_ref(),
         covariance_values,
         covariance_validity,
         output_rows,
     )?;
     let coordinates = CoordinateBatch::cartesian(
         states,
-        request.orbits.coordinates.frame,
+        input_coordinates.frame,
         OriginArray::new(origins),
         Some(times.clone()),
         covariance,
     )?;
+    let variants = match (variant_ids, weights, weights_cov) {
+        (Some(variant_ids), Some(weights), Some(weights_cov)) => Some(OrbitVariantBatch::new(
+            orbit_ids.clone(),
+            object_ids.clone(),
+            variant_ids,
+            weights,
+            weights_cov,
+            coordinates.clone(),
+        )?),
+        (None, None, None) => None,
+        _ => {
+            return Err(PropagationError::InvalidRequest(
+                "incomplete variant metadata in propagation output".to_string(),
+            ));
+        }
+    };
     let orbits = OrbitBatch::new(orbit_ids, object_ids, coordinates)?;
     Ok(PropagationResult {
         orbits,
+        variants,
         times,
         validity: Validity::from_bools(&validity),
         diagnostics: PropagationDiagnostics {
@@ -909,6 +1047,22 @@ mod tests {
         .unwrap()
     }
 
+    fn sample_variants() -> OrbitVariantBatch {
+        let orbits = sample_orbits(None);
+        OrbitVariantBatch::new(
+            orbits.orbit_id,
+            orbits.object_id,
+            vec![
+                Some(VariantId("variant-a".to_string())),
+                Some(VariantId("variant-b".to_string())),
+            ],
+            vec![Some(0.7), Some(0.3)],
+            vec![Some(0.49), Some(0.09)],
+            orbits.coordinates,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn request_records_epoch_permutation() {
         let orbits = sample_orbits(None);
@@ -920,6 +1074,23 @@ mod tests {
         assert_eq!(request.epoch_order.sorted_to_input, vec![1, 0]);
         assert_eq!(request.epoch_order.input_to_sorted, vec![1, 0]);
         assert_eq!(request.output_len(), 4);
+    }
+
+    #[test]
+    fn request_accepts_variant_metadata() {
+        let variants = sample_variants();
+        let times = tdb_times();
+        let request =
+            PropagationRequest::new_variants(&variants, &times, PropagationOptions::default())
+                .unwrap();
+        assert_eq!(request.input.len(), 2);
+        assert_eq!(request.output_len(), 4);
+        assert_eq!(
+            request.input.variant_id().unwrap()[0].as_ref().unwrap().0,
+            "variant-a"
+        );
+        assert_eq!(request.input.weights().unwrap()[1], Some(0.3));
+        assert_eq!(request.input.weights_cov().unwrap()[0], Some(0.49));
     }
 
     #[test]
@@ -994,6 +1165,49 @@ mod tests {
         assert_eq!(result.orbits.orbit_id[1].0, "orbit-b");
         assert_eq!(result.times.epochs[0], times.epochs[0]);
         assert_eq!(result.times.epochs[1], times.epochs[1]);
+    }
+
+    #[test]
+    fn two_body_preserves_variant_metadata() {
+        let variants = sample_variants();
+        let times = tdb_times();
+        let options = PropagationOptions {
+            covariance: CovariancePropagation::None,
+            chunk_size: Some(1),
+            thread_limit: Some(1),
+            ..PropagationOptions::default()
+        };
+        let request = PropagationRequest::new_variants(&variants, &times, options).unwrap();
+        let result = TwoBodyPropagator::default()
+            .propagate(&request, &NoopProvider)
+            .unwrap();
+        let output_variants = result.variants.as_ref().unwrap();
+        assert_eq!(output_variants.len(), 4);
+        assert_eq!(result.orbits, output_variants.to_orbit_batch().unwrap());
+        assert_eq!(
+            output_variants.variant_id[0].as_ref().unwrap().0,
+            "variant-a"
+        );
+        assert_eq!(
+            output_variants.variant_id[1].as_ref().unwrap().0,
+            "variant-a"
+        );
+        assert_eq!(
+            output_variants.variant_id[2].as_ref().unwrap().0,
+            "variant-b"
+        );
+        assert_eq!(
+            output_variants.variant_id[3].as_ref().unwrap().0,
+            "variant-b"
+        );
+        assert_eq!(
+            output_variants.weights,
+            vec![Some(0.7), Some(0.7), Some(0.3), Some(0.3)]
+        );
+        assert_eq!(
+            output_variants.weights_cov,
+            vec![Some(0.49), Some(0.49), Some(0.09), Some(0.09)]
+        );
     }
 
     #[test]
