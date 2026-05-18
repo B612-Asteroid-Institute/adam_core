@@ -505,13 +505,13 @@ Convergence diagnostics, outlier decisions, root-selection policy, and covarianc
 The data model must support the pluggable propagator design before the `assist-sys`/`rebound-sys` safe wrapper is wired. The core trait name is `Propagator` to match Python terminology and the roadmap. Under the modules-first policy, RM-STANDALONE-006 may start in a `propagation` module inside current crates; split to a future `adam_core_rs_propagation` crate only after the dependency boundary is stable and explicitly approved. The trait owns propagation only; ephemeris generation is a free workflow over a `Propagator` so light-time, aberration, frame rotation, and photometry semantics are shared across 2-body and n-body backends.
 
 ```rust
-pub enum EpochPolicy<'a> {
+pub enum EpochPolicy {
     /// Each orbit propagates from its own coordinates.time to every requested epoch.
     CrossProduct,
     /// Requires len(orbits) == len(times); output has len(orbits) rows.
     Pairwise,
     /// Future compact representation for per-orbit epoch subsets.
-    PerOrbit { indices: &'a [u32] },
+    PerOrbit { indices: Box<[u32]> },
 }
 
 pub enum CovariancePropagation {
@@ -521,17 +521,17 @@ pub enum CovariancePropagation {
     SigmaPoint { alpha: f64, beta: f64, kappa: f64 },
 }
 
-pub struct PropagationOptions<'a> {
+pub struct PropagationOptions {
     pub chunk_size: Option<usize>,
     pub thread_limit: Option<usize>,
-    pub epoch_policy: EpochPolicy<'a>,
+    pub epoch_policy: EpochPolicy,
     pub covariance: CovariancePropagation,
 }
 
 pub struct PropagationRequest<'a> {
     pub orbits: &'a OrbitBatch,
     pub times: &'a TimeArray,
-    pub options: PropagationOptions<'a>,
+    pub options: PropagationOptions,
 }
 
 pub struct PropagationDiagnostics {
@@ -546,11 +546,11 @@ pub struct PropagationResult {
 }
 
 pub trait Propagator: Sync {
-    type Config;
     type Shard: PropagatorShard;
 
     fn integration_time_scale(&self) -> TimeScale;
     fn supports(&self, mode: CovariancePropagation) -> bool;
+    /// Called once per Rayon worker; shards are Send, not Sync, and own mutable per-worker backend state.
     fn create_shard(&self) -> Self::Shard;
     fn propagate(
         &self,

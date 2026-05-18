@@ -4,8 +4,9 @@ This is the dynamics-only slice of RM-WD3-001 step 2. Surfaces that touch
 the n-body propagation line (anything backed by ASSIST: ``Propagator``
 wrapper paths, ``dynamics.impacts``, ``orbit_determination.od``/``iod``)
 are deliberately out of scope here — those decisions are deferred until
-the n-body line is itself migrated to Rust traits backed by ``assist-rs``
-(see RM-FUTURE-002).
+the n-body line is itself migrated to Rust traits backed by an ASSIST-compatible
+safe wrapper over ``assist-sys`` + ``rebound-sys`` (see RM-FUTURE-002 /
+RM-STANDALONE-007).
 
 The four surfaces measured all delegate (directly or via a tiny harness
 propagator) to Rust kernels that are already Rayon-parallel. Adding Ray

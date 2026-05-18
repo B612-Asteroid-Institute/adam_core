@@ -221,10 +221,10 @@ Directions:
 - RM-STANDALONE-006 should land any missing prerequisite typed data-model pieces that the trait references (`EpochPolicy`, `CovariancePropagation`, `PropagationDiagnostics`, `EphemerisOptions`, `ObserverBatch`, `EphemerisBatch`, and row views as needed) before wiring high-level workflows.
 
 ```rust
-pub enum EpochPolicy<'a> {
+pub enum EpochPolicy {
     CrossProduct,
     Pairwise,
-    PerOrbit { indices: &'a [u32] },
+    PerOrbit { indices: Box<[u32]> },
 }
 
 pub enum CovariancePropagation {
@@ -234,17 +234,17 @@ pub enum CovariancePropagation {
     SigmaPoint { alpha: f64, beta: f64, kappa: f64 },
 }
 
-pub struct PropagationOptions<'a> {
+pub struct PropagationOptions {
     pub chunk_size: Option<usize>,
     pub thread_limit: Option<usize>,
-    pub epoch_policy: EpochPolicy<'a>,
+    pub epoch_policy: EpochPolicy,
     pub covariance: CovariancePropagation,
 }
 
 pub struct PropagationRequest<'a> {
     pub orbits: &'a OrbitBatch,
     pub times: &'a TimeArray,
-    pub options: PropagationOptions<'a>,
+    pub options: PropagationOptions,
 }
 
 pub struct PropagationResult {
@@ -255,11 +255,11 @@ pub struct PropagationResult {
 }
 
 pub trait Propagator: Sync {
-    type Config;
     type Shard: PropagatorShard;
 
     fn integration_time_scale(&self) -> TimeScale;
     fn supports(&self, mode: CovariancePropagation) -> bool;
+    /// Called once per Rayon worker; shards are Send, not Sync, and own mutable per-worker backend state.
     fn create_shard(&self) -> Self::Shard;
     fn propagate(
         &self,

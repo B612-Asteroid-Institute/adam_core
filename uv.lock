@@ -118,6 +118,7 @@ test = [
     { name = "pytest-doctestplus" },
     { name = "pytest-mock" },
     { name = "pytest-xdist" },
+    { name = "rebound", specifier = ">=4.4.11,<5" },
     { name = "ruff" },
 ]
 

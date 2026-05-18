@@ -748,7 +748,7 @@ Current state as of 2026-05-14:
 - All P0/P1 stabilization tasks through RM-P1-021 are complete.
 - RM-P1-020 is closed under the canonical multi-thread Rust-vs-baseline gate; tiny-n p95 is diagnostic only, and tiny-n p50 remains enforced at 1.2x.
 - Final targeted-test graduation is complete: canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, 126 speed rows, and no active performance waivers.
-- Merge-readiness housekeeping should stay scoped to CI, current planning docs, and artifact cleanup. New implementation work should move to RM-WE2-003, RM-WE2-004, RM-WE3-001, then RM-PERF-001 broad benchmark-action surface audit, or the future n-body/assist-rs line after merge-readiness is settled.
+- Merge-readiness housekeeping should stay scoped to CI, current planning docs, and artifact cleanup. New implementation work should move to RM-WE2-003, RM-WE2-004, RM-WE3-001, then RM-PERF-001 broad benchmark-action surface audit, or the future ASSIST-compatible `assist-sys`/`rebound-sys` safe-wrapper line after merge-readiness is settled.
 
 Reviewer-feedback disposition:
 
@@ -1579,7 +1579,7 @@ Completion notes:
 - Refactored the measured Python overhead that remained local to `least_squares.py`: `_compute_partials` now avoids per-parameter `ephemeris_all.select(...)` / quivr table construction by grouping ephemeris values by orbit_id once and computing RA/Dec residual columns directly from spherical value arrays; the existing public `_residual_columns` path now uses the same direct value helper. The helper preserves longitude wrap, 0°/360° sign convention, cos(latitude) scaling, single-predicted-row broadcast, and mismatch errors.
 - Replaced the per-observation Python normal-equation accumulation loop with `_normal_equations`, an `einsum`-based batched accumulation of `AᵀWA` and `AᵀWb`. Kept `np.linalg.inv(ATWA)` for covariance/diagnostic parity rather than switching to a solve-only Cholesky path, because the covariance matrix is part of the current output behavior and the solve is negligible in profiling.
 - Local microbenchmarks: one-sided partials assembly for the six-observation deterministic fixture improved from ~1110 µs p50 to ~166 µs p50; normal-equation accumulation improved from ~22 µs to ~4 µs at N=6, ~374 µs to ~10 µs at N=100, ~3.7 ms to ~68 µs at N=1000, and ~37 ms to ~0.66 ms at N=10000. Direct residual columns are neutral at tiny N but faster at large N (~488 µs to ~326 µs at N=10000).
-- Full-fit profiling after the refactor still runs ~0.81-0.90 s on the deterministic fixture because propagation dominates. The next meaningful LSQ/OD wall-clock work would have to reduce `generate_ephemeris`/ASSIST propagation and transform overhead, likely in the deferred n-body/assist-rs propagator line rather than another local normal-equation port.
+- Full-fit profiling after the refactor still runs ~0.81-0.90 s on the deterministic fixture because propagation dominates. The next meaningful LSQ/OD wall-clock work would have to reduce `generate_ephemeris`/ASSIST propagation and transform overhead, likely in the deferred ASSIST-compatible `assist-sys`/`rebound-sys` safe-wrapper propagator line rather than another local normal-equation port.
 - Validation passed deterministic least-squares tests, the full OD test suite, compile/format/lint checks, script-preflight, full lint, and diff checks.
 
 ### RM-PERF-001: Audit PR #195 Broad Benchmark-Action Slow Rows
@@ -1688,17 +1688,17 @@ Scope:
 - Integration with existing `Propagator` abstraction.
 - This is a multi-day or multi-week project and should not be mixed into stabilization work.
 
-### RM-FUTURE-002: Trait-Based N-Body Propagator Backed By assist-rs
+### RM-FUTURE-002: Trait-Based N-Body Propagator Backed By ASSIST-Compatible Safe Wrapper
 
-Status: future major project (proposed 2026-05-07); refined by `RM-STANDALONE-007` in `standalone_rust_surface_roadmap_2026-05-15.md`.
+Status: future major project (proposed 2026-05-07); refined/superseded by `RM-STANDALONE-007` in `standalone_rust_surface_roadmap_2026-05-15.md`. No high-level `assist-rs` crate exists today; the current Rust dependency line is raw `assist-sys` + `rebound-sys`, so the safe-wrapper and GPL/package-boundary decisions must be explicit before implementation.
 
-Reason: The current Python `Propagator` class lets users plug in ASSIST or other n-body backends via subclassing, with parallelism dispatched at the Python level via Ray. Once `assist-rs` (https://github.com/B612-Asteroid-Institute/assist-rs) is integrated, the entire propagator interface can move down into Rust, with parallelism handled by Rayon over chunks instead of Ray over Python processes. That collapses an entire layer of dispatch and removes the GIL-bound per-task pickling that motivates Ray today.
+Reason: The current Python `Propagator` class lets users plug in ASSIST or other n-body backends via subclassing, with parallelism dispatched at the Python level via Ray. Once an ASSIST-compatible safe wrapper over raw `assist-sys` + `rebound-sys` is available, the propagator interface can move down into Rust, with parallelism handled by Rayon over chunks instead of Ray over Python processes. That collapses an entire layer of dispatch and removes the GIL-bound per-task pickling that motivates Ray today.
 
 Scope:
 
-- Define a Rust `Propagator` trait covering `propagate_orbits`, `generate_ephemeris`, and impact-detection extension points. The standalone roadmap refines this trait scope to include covariance transport, variant/sigma-point propagation, and Rayon-side chunk/thread controls.
+- Define a Rust `Propagator` trait for propagation and keep ephemeris/impact generation as backend-agnostic workflows over that trait. The standalone roadmap refines this trait scope to include covariance transport, variant/sigma-point propagation, and Rayon-side chunk/thread controls.
 - Implement the trait for the 2-body kernel (already in Rust).
-- Implement the trait for n-body via `assist-rs`; pull SPICE perturber lookup through the existing `spicekit`-backed plumbing.
+- Implement the trait for n-body via an ASSIST-compatible safe wrapper over `assist-sys` + `rebound-sys`; pull SPICE perturber lookup through the existing `spicekit`-backed plumbing.
 - Re-expose the trait via PyO3 so the existing Python `Propagator` API stays intact.
 - Move per-orbit chunk dispatch into Rust (Rayon) for the n-body backend, mirroring how the 2-body kernel already parallelizes.
 - Revisit RM-WD3-001 step 3 for the deferred surfaces (`Propagator.propagate_orbits`, `Propagator.generate_ephemeris`, `dynamics.impacts`, `orbit_determination.od`, `orbit_determination.iod`) once the underlying compute is Rust-parallel: the in-process Ray default likely becomes Sequential the same way it did for the dynamics-direct surfaces.
