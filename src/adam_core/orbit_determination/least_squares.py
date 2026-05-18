@@ -18,6 +18,8 @@ from .evaluate import FittedOrbits, OrbitDeterminationObservations
 
 logger = logging.getLogger(__name__)
 
+_INVALID_LIGHT_TIME_MESSAGE = "Light travel time is NaN or too large"
+
 
 def _spherical_residual_columns_from_values(
     observed_values: np.ndarray, predicted_values: np.ndarray
@@ -400,14 +402,34 @@ class LeastSquares(ABC):
 
             iteration += 1
             # partial derivatives for all examples, d(ra|dec)/d(r|v)
-            A = self._compute_partials(
-                perturbation_fraction,
-                observations,
-                orbit_prev.coordinates,
-                ephemeris_nom.coordinates,
-                prop,
-                self._use_central_difference,
-            )
+            try:
+                A = self._compute_partials(
+                    perturbation_fraction,
+                    observations,
+                    orbit_prev.coordinates,
+                    ephemeris_nom.coordinates,
+                    prop,
+                    self._use_central_difference,
+                )
+            except ValueError as err:
+                if _INVALID_LIGHT_TIME_MESSAGE not in str(err):
+                    raise
+                if perturbation_fraction > 1e-12:
+                    perturbation_fraction *= perturbation_multiplier
+                    logger.debug(
+                        "Reducing perturbation to %s after invalid partials",
+                        perturbation_fraction,
+                        exc_info=True,
+                    )
+                    continue
+                if debug_info is not None:
+                    debug_info["exit_message"] = (
+                        "Partials produced invalid light-time and perturbation is "
+                        "already tiny. Stopping now"
+                    )
+                if iteration > 1:
+                    return orbit_prev
+                return None
 
             # Accumulate the weighted normal-equation matrices, see Vallado.
             # A[i] is d(ra|dec) / d(r|v), so each observation contributes
@@ -422,37 +444,66 @@ class LeastSquares(ABC):
                 f"Iteration {iteration}\ninitial {initial_orbit.coordinates.values}\nupdate {corrections}"
             )
 
-            # Eval
+            # Eval. A differential-correction step can leave the domain where
+            # light-time iteration converges. Treat that as a rejected trial
+            # step, not as an unrecoverable fitter error, and let the existing
+            # perturbation backoff retry from the previous orbit.
             updated_orbit = self._update_orbit(
                 orbit_prev.coordinates[0], corrections, AtWA1
             )
-            ephemeris_updated = prop.generate_ephemeris(
-                updated_orbit, observations.observers, chunk_size=1, max_processes=1
-            )
-            B_updated = self._residual_columns(
-                observations.coordinates, ephemeris_updated.coordinates
-            )
-            rms_updated = self._rms(B_updated, W_all)
-            delta_rms = (rms_initial - rms_updated) / rms_initial
-            converged = np.abs(delta_rms) < rms_epsilon
+            rejected_update_error: str | None = None
+            try:
+                ephemeris_updated = prop.generate_ephemeris(
+                    updated_orbit,
+                    observations.observers,
+                    chunk_size=1,
+                    max_processes=1,
+                )
+            except ValueError as err:
+                if _INVALID_LIGHT_TIME_MESSAGE not in str(err):
+                    raise
+                logger.debug("Rejecting invalid least-squares update", exc_info=True)
+                rejected_update_error = str(err)
+                B_updated = None
+                rms_updated = np.inf
+                delta_rms = -np.inf
+                converged = False
+            else:
+                B_updated = self._residual_columns(
+                    observations.coordinates, ephemeris_updated.coordinates
+                )
+                rms_updated = self._rms(B_updated, W_all)
+                delta_rms = (rms_initial - rms_updated) / rms_initial
+                converged = bool(np.abs(delta_rms) < rms_epsilon)
+
             logger.debug(
                 f"RMS old={rms_initial}, new {rms_updated}, change {delta_rms}, converged {converged}"
             )
 
             if debug_info is not None:
-                rchi2_updated = calculate_reduced_chi2(
-                    Residuals.calculate(
-                        observations.coordinates, ephemeris_updated.coordinates
-                    ),
-                    num_param,
-                )
-                one_line = {
-                    "rchi2": rchi2_updated.item(),
-                    "rms": rms_updated.item(),
-                    "delta_rms": delta_rms.item(),
-                    "converged": converged.item(),
-                    "perturbation": perturbation_fraction,
-                }
+                if rejected_update_error is None:
+                    rchi2_updated = calculate_reduced_chi2(
+                        Residuals.calculate(
+                            observations.coordinates, ephemeris_updated.coordinates
+                        ),
+                        num_param,
+                    )
+                    one_line = {
+                        "rchi2": rchi2_updated.item(),
+                        "rms": float(rms_updated),
+                        "delta_rms": float(delta_rms),
+                        "converged": converged,
+                        "perturbation": perturbation_fraction,
+                    }
+                else:
+                    one_line = {
+                        "rchi2": float("inf"),
+                        "rms": float("inf"),
+                        "delta_rms": float("-inf"),
+                        "converged": False,
+                        "perturbation": perturbation_fraction,
+                        "error": rejected_update_error,
+                    }
                 debug_info["iterations"].append(one_line)
                 debug_info["corrections"].append(corrections.tolist())
 
@@ -461,7 +512,7 @@ class LeastSquares(ABC):
             ).set_column("orbit_id", initial_orbit.orbit_id)
 
             # Reuse computed values for the next iteration
-            if rms_updated < rms_initial:
+            if B_updated is not None and rms_updated < rms_initial:
                 orbit_prev = updated_orbit
                 ephemeris_nom = ephemeris_updated
                 B = B_updated
