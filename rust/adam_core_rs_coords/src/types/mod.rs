@@ -244,6 +244,9 @@ pub struct OrbitId(pub String);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectId(pub String);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VariantId(pub String);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Frame {
     Ecliptic,
@@ -601,29 +604,106 @@ impl OrbitBatch {
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
+        validate_orbit_metadata(&self.orbit_id, &self.object_id, &self.coordinates)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrbitVariantBatch {
+    pub orbit_id: Vec<OrbitId>,
+    pub object_id: Vec<Option<ObjectId>>,
+    pub variant_id: Vec<Option<VariantId>>,
+    pub weights: Vec<Option<f64>>,
+    pub weights_cov: Vec<Option<f64>>,
+    pub coordinates: CoordinateBatch,
+}
+
+impl OrbitVariantBatch {
+    pub fn new(
+        orbit_id: Vec<OrbitId>,
+        object_id: Vec<Option<ObjectId>>,
+        variant_id: Vec<Option<VariantId>>,
+        weights: Vec<Option<f64>>,
+        weights_cov: Vec<Option<f64>>,
+        coordinates: CoordinateBatch,
+    ) -> SchemaResult<Self> {
+        let out = Self {
+            orbit_id,
+            object_id,
+            variant_id,
+            weights,
+            weights_cov,
+            coordinates,
+        };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub fn len(&self) -> usize {
+        self.coordinates.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.coordinates.is_empty()
+    }
+
+    pub fn to_orbit_batch(&self) -> SchemaResult<OrbitBatch> {
+        OrbitBatch::new(
+            self.orbit_id.clone(),
+            self.object_id.clone(),
+            self.coordinates.clone(),
+        )
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
         let rows = self.coordinates.len();
-        if self.coordinates.representation() != CoordinateRepresentation::Cartesian {
-            return Err(SchemaError::InvalidRecordBatch(
-                "OrbitBatch coordinates must be Cartesian".to_string(),
-            ));
-        }
-        self.coordinates.validate()?;
-        if self.orbit_id.len() != rows {
-            return Err(SchemaError::LengthMismatch {
-                field: "orbit_id".to_string(),
-                expected: rows,
-                actual: self.orbit_id.len(),
-            });
-        }
-        if self.object_id.len() != rows {
-            return Err(SchemaError::LengthMismatch {
-                field: "object_id".to_string(),
-                expected: rows,
-                actual: self.object_id.len(),
-            });
-        }
+        validate_orbit_metadata(&self.orbit_id, &self.object_id, &self.coordinates)?;
+        validate_len("variant_id", rows, self.variant_id.len())?;
+        validate_len("weights", rows, self.weights.len())?;
+        validate_len("weights_cov", rows, self.weights_cov.len())?;
+        validate_optional_finite("weights", &self.weights)?;
+        validate_optional_finite("weights_cov", &self.weights_cov)?;
         Ok(())
     }
+}
+
+fn validate_orbit_metadata(
+    orbit_id: &[OrbitId],
+    object_id: &[Option<ObjectId>],
+    coordinates: &CoordinateBatch,
+) -> SchemaResult<()> {
+    let rows = coordinates.len();
+    if coordinates.representation() != CoordinateRepresentation::Cartesian {
+        return Err(SchemaError::InvalidRecordBatch(
+            "orbit coordinates must be Cartesian".to_string(),
+        ));
+    }
+    coordinates.validate()?;
+    validate_len("orbit_id", rows, orbit_id.len())?;
+    validate_len("object_id", rows, object_id.len())?;
+    Ok(())
+}
+
+fn validate_len(field: &str, expected: usize, actual: usize) -> SchemaResult<()> {
+    if actual == expected {
+        return Ok(());
+    }
+    Err(SchemaError::LengthMismatch {
+        field: field.to_string(),
+        expected,
+        actual,
+    })
+}
+
+fn validate_optional_finite(field: &str, values: &[Option<f64>]) -> SchemaResult<()> {
+    for (row, value) in values.iter().enumerate() {
+        if value.is_some_and(|value| !value.is_finite()) {
+            return Err(SchemaError::InvalidRecordBatch(format!(
+                "{field} must be finite when present; row {row} is non-finite"
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -690,5 +770,77 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
+    fn orbit_variant_batch_validates_metadata_lengths() {
+        let coords = CoordinateBatch::cartesian(
+            vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 2],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+            None,
+            None,
+        )
+        .unwrap();
+        let err = OrbitVariantBatch::new(
+            vec![OrbitId("orbit-1".to_string())],
+            vec![Some(ObjectId("object-1".to_string())), None],
+            vec![
+                Some(VariantId("0".to_string())),
+                Some(VariantId("1".to_string())),
+            ],
+            vec![Some(0.5), Some(0.5)],
+            vec![Some(0.5), Some(0.5)],
+            coords,
+        )
+        .unwrap_err();
+        assert!(matches!(err, SchemaError::LengthMismatch { .. }));
+    }
+
+    #[test]
+    fn orbit_variant_batch_rejects_nonfinite_weights() {
+        let coords = CoordinateBatch::cartesian(
+            vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 1],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 1),
+            None,
+            None,
+        )
+        .unwrap();
+        let err = OrbitVariantBatch::new(
+            vec![OrbitId("orbit-1".to_string())],
+            vec![None],
+            vec![Some(VariantId("0".to_string()))],
+            vec![Some(f64::NAN)],
+            vec![Some(1.0)],
+            coords,
+        )
+        .unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
+    fn orbit_variant_batch_can_export_orbit_batch_view() {
+        let coords = CoordinateBatch::cartesian(
+            vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 1],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 1),
+            None,
+            None,
+        )
+        .unwrap();
+        let variants = OrbitVariantBatch::new(
+            vec![OrbitId("orbit-1".to_string())],
+            vec![Some(ObjectId("object-1".to_string()))],
+            vec![Some(VariantId("0".to_string()))],
+            vec![None],
+            vec![None],
+            coords,
+        )
+        .unwrap();
+        let orbits = variants.to_orbit_batch().unwrap();
+        assert_eq!(orbits.orbit_id, variants.orbit_id);
+        assert_eq!(orbits.object_id, variants.object_id);
+        assert_eq!(orbits.coordinates, variants.coordinates);
     }
 }
