@@ -124,7 +124,9 @@ This is the key upstream fix.
 
 ## Preferred solution
 
-Release a new `adam-assist` version that depends on `assist 1.2.3` or later in the 1.2 line.
+Update: `adam-assist 0.3.9` has been released with this metadata fix. It declares `assist<1.3,>=1.2.3` and `rebound<5,>=4.4.11`, so adam-core should consume `adam-assist>=0.3.9` and no longer needs to own the temporary direct REBOUND cap.
+
+Original recommendation: release a new `adam-assist` version that depends on `assist 1.2.3` or later in the 1.2 line.
 
 Recommended `adam-assist` dependency update:
 

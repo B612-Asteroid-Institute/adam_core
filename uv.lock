@@ -97,7 +97,7 @@ docs = [
     { name = "sphinx-sitemap", specifier = ">=2.8.0" },
 ]
 test = [
-    { name = "adam-assist", specifier = ">=0.3.5" },
+    { name = "adam-assist", specifier = ">=0.3.9" },
     { name = "black" },
     { name = "geopandas", specifier = ">=1.0.1" },
     { name = "google-cloud-bigquery" },
@@ -118,7 +118,6 @@ test = [
     { name = "pytest-doctestplus" },
     { name = "pytest-mock" },
     { name = "pytest-xdist" },
-    { name = "rebound", specifier = ">=4.4.11,<5" },
     { name = "ruff" },
 ]
 
