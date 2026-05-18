@@ -122,6 +122,10 @@ docs = [
     "sphinx-sitemap>=2.8.0",
 ]
 
+[tool.pdm.resolution.overrides]
+# Temporary CI unblocker until adam-assist publishes metadata depending on assist>=1.2.3.
+assist = "==1.2.3"
+
 [tool.black]
 line-length = 88
 
