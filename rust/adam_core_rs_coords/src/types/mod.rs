@@ -6,8 +6,13 @@
 //! validation, and error types.
 
 pub mod arrow;
+pub mod origin;
 pub mod time;
 pub use arrow::{ArrowSchemaExport, IntoRecordBatch, TryFromRecordBatch};
+pub use origin::{
+    convert_mu_km3_s2_to_au3_day2, naif_origin_name, origin_code_mu_au3_day2, origin_mu_au3_day2,
+    solar_system_barycenter_mu_au3_day2, KM_PER_AU,
+};
 pub use time::{TimeScaleProvider, J2000_TDB_MJD, SECONDS_PER_DAY, TAI_TT_NANOS};
 
 use std::fmt;

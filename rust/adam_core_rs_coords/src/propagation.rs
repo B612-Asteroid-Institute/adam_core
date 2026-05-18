@@ -7,15 +7,15 @@
 //! `Err` for request/setup errors.
 
 use crate::propagate::{propagate_2body_along_arc, propagate_2body_with_covariance_row};
+use crate::types::origin_mu_au3_day2;
 use crate::types::time::TimeScaleProvider;
 use crate::{
     CoordinateBatch, CovarianceBatch, CovarianceUnits, Epoch, ObjectId, OrbitBatch, OrbitId,
-    OriginArray, OriginId, SchemaError, TimeArray, TimeScale, Validity, SECONDS_PER_DAY,
+    OriginArray, OriginId, SchemaError, TimeArray, TimeScale, Validity,
 };
 use rayon::prelude::*;
 use std::fmt;
 
-const KM_PER_AU: f64 = 149_597_870.700;
 const DEFAULT_TWO_BODY_MAX_ITER: usize = 1000;
 const DEFAULT_TWO_BODY_TOL: f64 = 1.0e-14;
 
@@ -27,7 +27,6 @@ pub enum PropagationError {
     InvalidRequest(String),
     MissingOrbitTimes,
     UnsupportedCovarianceMode(CovariancePropagation),
-    UnsupportedOrigin(String),
     ThreadPool(String),
 }
 
@@ -39,9 +38,6 @@ impl fmt::Display for PropagationError {
             Self::MissingOrbitTimes => write!(f, "propagation requires per-orbit coordinate times"),
             Self::UnsupportedCovarianceMode(mode) => {
                 write!(f, "unsupported covariance propagation mode: {mode:?}")
-            }
-            Self::UnsupportedOrigin(origin) => {
-                write!(f, "unsupported propagation origin: {origin}")
             }
             Self::ThreadPool(message) => {
                 write!(f, "failed to build propagation thread pool: {message}")
@@ -505,8 +501,8 @@ impl Propagator for TwoBodyPropagator {
             .origins
             .origins
             .iter()
-            .map(mu_for_origin)
-            .collect::<PropagationResultValue<Vec<_>>>()?;
+            .map(origin_mu_au3_day2)
+            .collect::<Result<Vec<_>, _>>()?;
 
         run_with_thread_limit(request.options.thread_limit, || {
             let blocks = self.propagate_blocks(request, &orbit_times, &target_times, &mus)?;
@@ -851,79 +847,6 @@ fn validity_messages(validity: &[bool]) -> Vec<Option<String>> {
         .collect()
 }
 
-fn convert_mu_units(mu_km3_s2: f64) -> f64 {
-    mu_km3_s2 / KM_PER_AU.powi(3) * SECONDS_PER_DAY.powi(2)
-}
-
-fn mu_for_origin(origin: &OriginId) -> PropagationResultValue<f64> {
-    let code = match origin {
-        OriginId::SolarSystemBarycenter => "SOLAR_SYSTEM_BARYCENTER".to_string(),
-        OriginId::Naif(code) => naif_origin_name(*code).unwrap_or_else(|| format!("NAIF:{code}")),
-        OriginId::Named(code) => code.clone(),
-    };
-    mu_for_origin_code(&code).ok_or(PropagationError::UnsupportedOrigin(code))
-}
-
-fn naif_origin_name(code: i32) -> Option<String> {
-    let name = match code {
-        0 => "SOLAR_SYSTEM_BARYCENTER",
-        1 => "MERCURY_BARYCENTER",
-        2 => "VENUS_BARYCENTER",
-        4 => "MARS_BARYCENTER",
-        5 => "JUPITER_BARYCENTER",
-        6 => "SATURN_BARYCENTER",
-        7 => "URANUS_BARYCENTER",
-        8 => "NEPTUNE_BARYCENTER",
-        9 => "PLUTO_BARYCENTER",
-        10 => "SUN",
-        199 => "MERCURY",
-        299 => "VENUS",
-        301 => "MOON",
-        399 => "EARTH",
-        _ => return None,
-    };
-    Some(name.to_string())
-}
-
-fn mu_for_origin_code(code: &str) -> Option<f64> {
-    match code {
-        "SOLAR_SYSTEM_BARYCENTER" => Some(solar_system_barycenter_mu()),
-        "MERCURY_BARYCENTER" => Some(convert_mu_units(22_032.080_486_418)),
-        "VENUS_BARYCENTER" => Some(convert_mu_units(324_858.592_000)),
-        "MARS_BARYCENTER" => Some(convert_mu_units(42_828.375_816)),
-        "JUPITER_BARYCENTER" => Some(convert_mu_units(126_712_764.100_000)),
-        "SATURN_BARYCENTER" => Some(convert_mu_units(37_940_584.841_800)),
-        "URANUS_BARYCENTER" => Some(convert_mu_units(5_794_556.400_000)),
-        "NEPTUNE_BARYCENTER" => Some(convert_mu_units(6_836_527.100_580)),
-        "PLUTO_BARYCENTER" => Some(convert_mu_units(975.500_000)),
-        "SUN" => Some(convert_mu_units(132_712_440_041.279_42)),
-        "MERCURY" => Some(convert_mu_units(22_031.868_551)),
-        "VENUS" => Some(convert_mu_units(324_858.592_000)),
-        "EARTH" => Some(convert_mu_units(398_600.435_507)),
-        "MOON" => Some(convert_mu_units(4_902.800_118)),
-        _ => None,
-    }
-}
-
-fn solar_system_barycenter_mu() -> f64 {
-    [
-        132_712_440_041.279_42,
-        22_032.080_486_418,
-        324_858.592_000,
-        398_600.435_507,
-        4_902.800_118,
-        42_828.375_816,
-        126_712_764.100_000,
-        37_940_584.841_800,
-        5_794_556.400_000,
-        6_836_527.100_580,
-        975.500_000,
-    ]
-    .into_iter()
-    .map(convert_mu_units)
-    .sum()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1038,7 +961,7 @@ mod tests {
         }
 
         let states = result.orbits.coordinates.values.cartesian().unwrap();
-        let mu = mu_for_origin(&OriginId::Named("SUN".to_string())).unwrap();
+        let mu = origin_mu_au3_day2(&OriginId::Named("SUN".to_string())).unwrap();
         let expected = propagate_2body_along_arc(
             [1.0, 0.2, 0.1, 0.001, 0.015, 0.0005],
             &[0.0, 10.5],
@@ -1208,6 +1131,8 @@ mod tests {
         let err = TwoBodyPropagator::default()
             .propagate(&request, &NoopProvider)
             .unwrap_err();
-        assert!(matches!(err, PropagationError::UnsupportedOrigin(origin) if origin == "UNKNOWN"));
+        assert!(
+            matches!(err, PropagationError::Schema(SchemaError::UnsupportedOrigin(origin)) if origin == "UNKNOWN")
+        );
     }
 }
