@@ -6,7 +6,10 @@
 //! keep per-row numerical failures in `Validity` plus diagnostics while reserving
 //! `Err` for request/setup errors.
 
-use crate::propagate::{propagate_2body_along_arc, propagate_2body_with_covariance_row};
+use crate::propagate::{
+    propagate_2body_along_arc_with_diagnostics,
+    propagate_2body_with_covariance_row_with_diagnostics, ChiConvergence, ChiConvergenceStatus,
+};
 use crate::types::origin_mu_au3_day2;
 use crate::types::time::TimeScaleProvider;
 use crate::{
@@ -315,12 +318,24 @@ pub enum PropagationConvergenceStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropagationFailureCode {
+    NonFiniteInputState,
+    NonFiniteOutputState,
+    NonFiniteCovariance,
+    SolverZeroDerivative,
+    SolverMaxIterations,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropagationConvergence {
     pub output_row: usize,
     pub input_orbit_index: usize,
     pub input_time_index: usize,
     pub status: PropagationConvergenceStatus,
+    pub backend: Option<String>,
+    pub iterations: Option<usize>,
+    pub failure_code: Option<PropagationFailureCode>,
     pub message: Option<String>,
 }
 
@@ -370,6 +385,9 @@ pub struct RowOutput {
     pub covariance_validity: Option<Vec<bool>>,
     pub validity: Vec<bool>,
     pub messages: Vec<Option<String>>,
+    pub backend: Option<String>,
+    pub iterations: Vec<Option<usize>>,
+    pub failure_codes: Vec<Option<PropagationFailureCode>>,
 }
 
 pub trait Propagator: Sync {
@@ -487,6 +505,8 @@ impl TwoBodyPropagator {
                     if output.states.len() != time_indices.len()
                         || output.validity.len() != time_indices.len()
                         || output.messages.len() != time_indices.len()
+                        || output.iterations.len() != time_indices.len()
+                        || output.failure_codes.len() != time_indices.len()
                     {
                         return Err(PropagationError::InvalidRequest(
                             "propagator shard returned inconsistent row lengths".to_string(),
@@ -516,6 +536,9 @@ impl TwoBodyPropagator {
                         covariance_validity: output.covariance_validity,
                         validity: output.validity,
                         messages: output.messages,
+                        backend: output.backend,
+                        iterations: output.iterations,
+                        failure_codes: output.failure_codes,
                     });
                 }
                 Ok(blocks)
@@ -609,77 +632,109 @@ impl PropagatorShard for TwoBodyShard {
             .iter()
             .map(|epoch| epoch.mjd() - orbit.time.mjd())
             .collect::<Vec<_>>();
+        let covariance_requested = orbit.covariance.is_some();
 
-        let (states, covariance, covariance_validity) = match orbit.covariance {
-            Some(covariance) if orbit.covariance_valid => {
-                let input_covariance = covariance_36(covariance)?;
-                let input_has_nan = input_covariance.iter().any(|value| value.is_nan());
-                let mut states = Vec::with_capacity(dts.len());
-                let mut covariance_rows = Vec::with_capacity(dts.len());
-                let mut covariance_validity = Vec::with_capacity(dts.len());
-                for &dt in &dts {
-                    let (state, covariance_row) = propagate_2body_with_covariance_row(
+        if !state_is_finite(&orbit.state) || !orbit.mu.is_finite() {
+            return Ok(row_failure_output(
+                dts.len(),
+                covariance_requested,
+                PropagationFailureCode::NonFiniteInputState,
+            ));
+        }
+
+        let (states, covariance, covariance_validity, convergence, input_has_nan_covariance) =
+            match orbit.covariance {
+                Some(covariance) if orbit.covariance_valid => {
+                    let input_covariance = covariance_36(covariance)?;
+                    let input_has_nan = input_covariance.iter().any(|value| value.is_nan());
+                    let mut states = Vec::with_capacity(dts.len());
+                    let mut covariance_rows = Vec::with_capacity(dts.len());
+                    let mut covariance_validity = Vec::with_capacity(dts.len());
+                    let mut convergence = Vec::with_capacity(dts.len());
+                    for &dt in &dts {
+                        let (state, covariance_row, row_convergence) =
+                            propagate_2body_with_covariance_row_with_diagnostics(
+                                orbit.state,
+                                input_covariance,
+                                dt,
+                                orbit.mu,
+                                self.config.max_iter,
+                                self.config.tol,
+                            );
+                        states.push(state);
+                        covariance_rows.push(covariance_row);
+                        covariance_validity.push(true);
+                        convergence.push(row_convergence);
+                    }
+                    (
+                        states,
+                        Some(covariance_rows),
+                        Some(covariance_validity),
+                        convergence,
+                        input_has_nan,
+                    )
+                }
+                Some(_) => {
+                    let (states, convergence) = propagate_2body_along_arc_with_diagnostics(
                         orbit.state,
-                        input_covariance,
-                        dt,
+                        &dts,
                         orbit.mu,
                         self.config.max_iter,
                         self.config.tol,
                     );
-                    states.push(state);
-                    covariance_rows.push(covariance_row);
-                    covariance_validity.push(true);
+                    let covariance_rows = vec![[0.0_f64; 36]; dts.len()];
+                    let covariance_validity = vec![false; dts.len()];
+                    (
+                        states,
+                        Some(covariance_rows),
+                        Some(covariance_validity),
+                        convergence,
+                        false,
+                    )
                 }
-                let validity = states
-                    .iter()
-                    .zip(covariance_rows.iter())
-                    .map(|(state, covariance_row)| {
-                        state_is_finite(state)
-                            && (input_has_nan
-                                || covariance_row.iter().all(|value| value.is_finite()))
-                    })
-                    .collect::<Vec<_>>();
-                let messages = validity_messages(&validity);
-                return Ok(RowOutput {
-                    states,
-                    covariance: Some(covariance_rows),
-                    covariance_validity: Some(covariance_validity),
-                    validity,
-                    messages,
-                });
-            }
-            Some(_) => {
-                let states = propagate_2body_along_arc(
-                    orbit.state,
-                    &dts,
-                    orbit.mu,
-                    self.config.max_iter,
-                    self.config.tol,
-                );
-                let covariance_rows = vec![[0.0_f64; 36]; dts.len()];
-                let covariance_validity = vec![false; dts.len()];
-                (states, Some(covariance_rows), Some(covariance_validity))
-            }
-            None => {
-                let states = propagate_2body_along_arc(
-                    orbit.state,
-                    &dts,
-                    orbit.mu,
-                    self.config.max_iter,
-                    self.config.tol,
-                );
-                (states, None, None)
-            }
-        };
+                None => {
+                    let (states, convergence) = propagate_2body_along_arc_with_diagnostics(
+                        orbit.state,
+                        &dts,
+                        orbit.mu,
+                        self.config.max_iter,
+                        self.config.tol,
+                    );
+                    (states, None, None, convergence, false)
+                }
+            };
 
-        let validity = states.iter().map(state_is_finite).collect::<Vec<_>>();
-        let messages = validity_messages(&validity);
+        let failure_codes = states
+            .iter()
+            .enumerate()
+            .map(|(index, state)| {
+                let covariance_row = covariance.as_ref().map(|rows| &rows[index]);
+                two_body_failure_code(
+                    state,
+                    covariance_row,
+                    input_has_nan_covariance,
+                    convergence[index],
+                )
+            })
+            .collect::<Vec<_>>();
+        let validity = failure_codes
+            .iter()
+            .map(Option::is_none)
+            .collect::<Vec<_>>();
+        let messages = failure_messages(&failure_codes);
+        let iterations = convergence
+            .iter()
+            .map(|row| Some(row.iterations))
+            .collect::<Vec<_>>();
         Ok(RowOutput {
             states,
             covariance,
             covariance_validity,
             validity,
             messages,
+            backend: two_body_backend(),
+            iterations,
+            failure_codes,
         })
     }
 }
@@ -693,6 +748,9 @@ struct OrbitBlock {
     covariance_validity: Option<Vec<bool>>,
     validity: Vec<bool>,
     messages: Vec<Option<String>>,
+    backend: Option<String>,
+    iterations: Vec<Option<usize>>,
+    failure_codes: Vec<Option<PropagationFailureCode>>,
 }
 
 fn rescale_for_propagation(
@@ -868,6 +926,9 @@ fn assemble_result(
                 } else {
                     PropagationConvergenceStatus::Failed
                 },
+                backend: block.backend.clone(),
+                iterations: block.iterations[row_offset],
+                failure_code: block.failure_codes[row_offset],
                 message: block.messages[row_offset].clone(),
             });
             if let Some(values) = &mut covariance_values {
@@ -972,22 +1033,81 @@ fn state_is_finite(state: &[f64; 6]) -> bool {
     state.iter().all(|value| value.is_finite())
 }
 
-fn validity_messages(validity: &[bool]) -> Vec<Option<String>> {
-    validity
-        .iter()
-        .map(|valid| {
-            if *valid {
-                None
-            } else {
-                Some("two-body propagation produced a non-finite row".to_string())
-            }
-        })
-        .collect()
+fn two_body_backend() -> Option<String> {
+    Some("two_body".to_string())
+}
+
+fn row_failure_output(
+    rows: usize,
+    covariance_requested: bool,
+    failure_code: PropagationFailureCode,
+) -> RowOutput {
+    RowOutput {
+        states: vec![[f64::NAN; 6]; rows],
+        covariance: covariance_requested.then(|| vec![[0.0_f64; 36]; rows]),
+        covariance_validity: covariance_requested.then(|| vec![false; rows]),
+        validity: vec![false; rows],
+        messages: vec![Some(failure_message(failure_code)); rows],
+        backend: two_body_backend(),
+        iterations: vec![None; rows],
+        failure_codes: vec![Some(failure_code); rows],
+    }
+}
+
+fn two_body_failure_code(
+    state: &[f64; 6],
+    covariance: Option<&[f64; 36]>,
+    input_has_nan_covariance: bool,
+    convergence: ChiConvergence,
+) -> Option<PropagationFailureCode> {
+    match convergence.status {
+        ChiConvergenceStatus::Converged => {}
+        ChiConvergenceStatus::ZeroDerivative => {
+            return Some(PropagationFailureCode::SolverZeroDerivative);
+        }
+        ChiConvergenceStatus::MaxIterations => {
+            return Some(PropagationFailureCode::SolverMaxIterations);
+        }
+    }
+    if !state_is_finite(state) {
+        return Some(PropagationFailureCode::NonFiniteOutputState);
+    }
+    if let Some(covariance) = covariance {
+        if !input_has_nan_covariance && covariance.iter().any(|value| !value.is_finite()) {
+            return Some(PropagationFailureCode::NonFiniteCovariance);
+        }
+    }
+    None
+}
+
+fn failure_messages(codes: &[Option<PropagationFailureCode>]) -> Vec<Option<String>> {
+    codes.iter().map(|code| code.map(failure_message)).collect()
+}
+
+fn failure_message(code: PropagationFailureCode) -> String {
+    match code {
+        PropagationFailureCode::NonFiniteInputState => {
+            "two-body propagation input state or gravitational parameter was non-finite".to_string()
+        }
+        PropagationFailureCode::NonFiniteOutputState => {
+            "two-body propagation produced a non-finite state".to_string()
+        }
+        PropagationFailureCode::NonFiniteCovariance => {
+            "two-body covariance propagation produced a non-finite covariance".to_string()
+        }
+        PropagationFailureCode::SolverZeroDerivative => {
+            "two-body universal-anomaly solver encountered a zero derivative".to_string()
+        }
+        PropagationFailureCode::SolverMaxIterations => {
+            "two-body universal-anomaly solver reached the maximum iteration count".to_string()
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::propagate::propagate_2body_along_arc;
     use crate::types::{Frame, SchemaResult};
     use crate::{CoordinateRepresentation, CovarianceUnits, NANOS_PER_DAY};
     use std::cell::Cell;
@@ -1191,6 +1311,65 @@ mod tests {
             for column in 0..6 {
                 assert!((actual[column] - expected[column]).abs() < 1.0e-13);
             }
+        }
+    }
+
+    #[test]
+    fn two_body_records_backend_iterations_for_successful_rows() {
+        let orbits = sample_orbits(None);
+        let times = tdb_times();
+        let options = PropagationOptions {
+            covariance: CovariancePropagation::None,
+            thread_limit: Some(1),
+            ..PropagationOptions::default()
+        };
+        let request = PropagationRequest::new(&orbits, &times, options).unwrap();
+        let result = TwoBodyPropagator::default()
+            .propagate(&request, &NoopProvider)
+            .unwrap();
+
+        assert_eq!(result.diagnostics.convergence.len(), 4);
+        for row in &result.diagnostics.convergence {
+            assert_eq!(row.backend.as_deref(), Some("two_body"));
+            assert!(row.iterations.is_some_and(|iterations| iterations > 0));
+            assert_eq!(row.failure_code, None);
+            assert_eq!(row.status, PropagationConvergenceStatus::Converged);
+            assert!(row.message.is_none());
+        }
+    }
+
+    #[test]
+    fn two_body_solver_nonconvergence_is_a_row_failure() {
+        let orbits = sample_orbits(None);
+        let times = TimeArray::from_parts(TimeScale::Tdb, vec![60_042], vec![0]).unwrap();
+        let options = PropagationOptions {
+            covariance: CovariancePropagation::None,
+            thread_limit: Some(1),
+            ..PropagationOptions::default()
+        };
+        let request = PropagationRequest::new(&orbits, &times, options).unwrap();
+        let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig {
+            max_iter: 1,
+            tol: f64::MIN_POSITIVE,
+        })
+        .unwrap();
+        let result = propagator.propagate(&request, &NoopProvider).unwrap();
+
+        let failures = result.diagnostics.failed_rows().collect::<Vec<_>>();
+        assert!(!failures.is_empty());
+        for failure in failures {
+            assert_eq!(failure.backend.as_deref(), Some("two_body"));
+            assert_eq!(
+                failure.failure_code,
+                Some(PropagationFailureCode::SolverMaxIterations)
+            );
+            assert!(failure.iterations.is_some_and(|iterations| iterations > 0));
+            assert!(failure
+                .message
+                .as_deref()
+                .unwrap()
+                .contains("maximum iteration"));
+            assert!(!result.validity.is_valid(failure.output_row));
         }
     }
 
@@ -1408,6 +1587,17 @@ mod tests {
         let failures = result.diagnostics.failed_rows().collect::<Vec<_>>();
         assert_eq!(failures.len(), 1);
         assert_eq!(failures[0].input_orbit_index, 0);
+        assert_eq!(failures[0].backend.as_deref(), Some("two_body"));
+        assert_eq!(failures[0].iterations, None);
+        assert_eq!(
+            failures[0].failure_code,
+            Some(PropagationFailureCode::NonFiniteInputState)
+        );
+        assert!(failures[0]
+            .message
+            .as_deref()
+            .unwrap()
+            .contains("input state"));
     }
 
     #[test]

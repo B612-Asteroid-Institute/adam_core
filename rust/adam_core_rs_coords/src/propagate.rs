@@ -9,6 +9,19 @@ use rayon::prelude::*;
 
 pub type StumpffCoeffs<T> = [T; 6];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChiConvergenceStatus {
+    Converged,
+    ZeroDerivative,
+    MaxIterations,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChiConvergence {
+    pub iterations: usize,
+    pub status: ChiConvergenceStatus,
+}
+
 /// First six Stumpff functions c0..c5 evaluated at `psi` (= alpha * chi^2).
 /// Danby (1992), Equations 6.9.14–6.9.16.
 ///
@@ -240,13 +253,13 @@ pub fn calc_chi_with_init<T: Scalar>(
     (chi, stumpff)
 }
 
-fn calc_chi_c2_c3_with_init<T: Scalar>(
+fn calc_chi_c2_c3_with_init_diagnostics<T: Scalar>(
     consts: &OrbitConstants<T>,
     dt: T,
     chi_init: T,
     max_iter: usize,
     tol: f64,
-) -> (T, T, T) {
+) -> (T, T, T, ChiConvergence) {
     let r_mag = consts.r_mag;
     let rv = consts.rv;
     let sqrt_mu = consts.sqrt_mu;
@@ -256,7 +269,7 @@ fn calc_chi_c2_c3_with_init<T: Scalar>(
     let mut c2 = T::from_f64(0.0);
     let mut c3 = T::from_f64(0.0);
 
-    for _ in 0..=max_iter {
+    for iteration in 0..=max_iter {
         let chi2 = chi * chi;
         let chi3 = chi2 * chi;
         let psi = alpha * chi2;
@@ -270,16 +283,41 @@ fn calc_chi_c2_c3_with_init<T: Scalar>(
             + r_mag;
 
         if f_prime.re() == 0.0 {
-            break;
+            return (
+                chi,
+                c2,
+                c3,
+                ChiConvergence {
+                    iterations: iteration,
+                    status: ChiConvergenceStatus::ZeroDerivative,
+                },
+            );
         }
         let ratio = f_val / f_prime;
         chi -= ratio;
+        let iterations = iteration.saturating_add(1);
         if ratio.re().abs() <= tol {
-            break;
+            return (
+                chi,
+                c2,
+                c3,
+                ChiConvergence {
+                    iterations,
+                    status: ChiConvergenceStatus::Converged,
+                },
+            );
         }
     }
 
-    (chi, c2, c3)
+    (
+        chi,
+        c2,
+        c3,
+        ChiConvergence {
+            iterations: max_iter.saturating_add(1),
+            status: ChiConvergenceStatus::MaxIterations,
+        },
+    )
 }
 
 /// Lagrange f, g, f_dot, g_dot coefficients for propagating (r, v) by `dt`.
@@ -353,7 +391,20 @@ pub fn propagate_2body_from_consts<T: Scalar>(
     max_iter: usize,
     tol: f64,
 ) -> ([T; 6], T) {
-    let (chi, c2, c3) = calc_chi_c2_c3_with_init::<T>(consts, dt, chi_init, max_iter, tol);
+    let (state, chi, _convergence) =
+        propagate_2body_from_consts_with_diagnostics(consts, dt, chi_init, max_iter, tol);
+    (state, chi)
+}
+
+pub fn propagate_2body_from_consts_with_diagnostics<T: Scalar>(
+    consts: &OrbitConstants<T>,
+    dt: T,
+    chi_init: T,
+    max_iter: usize,
+    tol: f64,
+) -> ([T; 6], T, ChiConvergence) {
+    let (chi, c2, c3, convergence) =
+        calc_chi_c2_c3_with_init_diagnostics::<T>(consts, dt, chi_init, max_iter, tol);
     let chi2 = chi * chi;
     let chi3 = chi2 * chi;
     let one = T::from_f64(1.0);
@@ -381,6 +432,7 @@ pub fn propagate_2body_from_consts<T: Scalar>(
             f_dot * consts.r[2] + g_dot * consts.v[2],
         ],
         chi,
+        convergence,
     )
 }
 
@@ -393,12 +445,25 @@ pub fn propagate_2body_row<T: Scalar>(
     max_iter: usize,
     tol: f64,
 ) -> [T; 6] {
+    let (propagated, _convergence) =
+        propagate_2body_row_with_diagnostics::<T>(orbit, dt, mu, max_iter, tol);
+    propagated
+}
+
+pub fn propagate_2body_row_with_diagnostics<T: Scalar>(
+    orbit: [T; 6],
+    dt: T,
+    mu: T,
+    max_iter: usize,
+    tol: f64,
+) -> ([T; 6], ChiConvergence) {
     let r = [orbit[0], orbit[1], orbit[2]];
     let v = [orbit[3], orbit[4], orbit[5]];
     let consts = OrbitConstants::new(r, v, mu);
     let chi_init = consts.default_chi_init(dt);
-    let (propagated, _) = propagate_2body_from_consts::<T>(&consts, dt, chi_init, max_iter, tol);
-    propagated
+    let (propagated, _chi, convergence) =
+        propagate_2body_from_consts_with_diagnostics::<T>(&consts, dt, chi_init, max_iter, tol);
+    (propagated, convergence)
 }
 
 /// Propagate a single orbit to many dt values.
@@ -417,9 +482,21 @@ pub fn propagate_2body_along_arc(
     max_iter: usize,
     tol: f64,
 ) -> Vec<[f64; 6]> {
+    let (states, _convergence) =
+        propagate_2body_along_arc_with_diagnostics(orbit, dts, mu, max_iter, tol);
+    states
+}
+
+pub fn propagate_2body_along_arc_with_diagnostics(
+    orbit: [f64; 6],
+    dts: &[f64],
+    mu: f64,
+    max_iter: usize,
+    tol: f64,
+) -> (Vec<[f64; 6]>, Vec<ChiConvergence>) {
     let n = dts.len();
     if n == 0 {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
     let r = [orbit[0], orbit[1], orbit[2]];
     let v = [orbit[3], orbit[4], orbit[5]];
@@ -431,11 +508,17 @@ pub fn propagate_2body_along_arc(
     idx.sort_by(|&i, &j| dts[i].partial_cmp(&dts[j]).unwrap());
 
     let mut out = vec![[0.0_f64; 6]; n];
+    let mut convergence = vec![
+        ChiConvergence {
+            iterations: 0,
+            status: ChiConvergenceStatus::MaxIterations,
+        };
+        n
+    ];
     let mut prev_dt = 0.0_f64;
     let mut prev_chi = 0.0_f64;
     let mut have_prev = false;
 
-    let one = 1.0_f64;
     for &i in &idx {
         let dt = dts[i];
         let chi_init = if have_prev {
@@ -446,37 +529,16 @@ pub fn propagate_2body_along_arc(
         } else {
             consts.default_chi_init(dt)
         };
-        let (chi, c2, c3) = calc_chi_c2_c3_with_init(&consts, dt, chi_init, max_iter, tol);
-        let chi2 = chi * chi;
-        let chi3 = chi2 * chi;
+        let (state, chi, row_convergence) =
+            propagate_2body_from_consts_with_diagnostics(&consts, dt, chi_init, max_iter, tol);
 
-        let f = one - chi2 / consts.r_mag * c2;
-        let g = dt - chi3 / consts.sqrt_mu * c3;
-
-        let r_new = [
-            f * r[0] + g * v[0],
-            f * r[1] + g * v[1],
-            f * r[2] + g * v[2],
-        ];
-        let r_new_mag = (r_new[0] * r_new[0] + r_new[1] * r_new[1] + r_new[2] * r_new[2]).sqrt();
-
-        let f_dot = consts.sqrt_mu / (consts.r_mag * r_new_mag) * (consts.alpha * chi3 * c3 - chi);
-        let g_dot = one - chi2 / r_new_mag * c2;
-
-        out[i] = [
-            r_new[0],
-            r_new[1],
-            r_new[2],
-            f_dot * r[0] + g_dot * v[0],
-            f_dot * r[1] + g_dot * v[1],
-            f_dot * r[2] + g_dot * v[2],
-        ];
-
+        out[i] = state;
+        convergence[i] = row_convergence;
         prev_dt = dt;
         prev_chi = chi;
         have_prev = true;
     }
-    out
+    (out, convergence)
 }
 
 /// Batched arc propagation: N orbits, each propagated to K dts, with
@@ -589,10 +651,23 @@ fn propagate_with_jacobian_row(
     max_iter: usize,
     tol: f64,
 ) -> ([f64; 6], [[f64; 6]; 6]) {
+    let (value, jac, _convergence) =
+        propagate_with_jacobian_row_with_diagnostics(orbit, dt, mu, max_iter, tol);
+    (value, jac)
+}
+
+fn propagate_with_jacobian_row_with_diagnostics(
+    orbit: [f64; 6],
+    dt: f64,
+    mu: f64,
+    max_iter: usize,
+    tol: f64,
+) -> ([f64; 6], [[f64; 6]; 6], ChiConvergence) {
     let rows_d: [Dual<6>; 6] = Dual::seed(orbit);
     let dt_d = Dual::constant(dt);
     let mu_d = Dual::constant(mu);
-    let out_d = propagate_2body_row::<Dual<6>>(rows_d, dt_d, mu_d, max_iter, tol);
+    let (out_d, convergence) =
+        propagate_2body_row_with_diagnostics::<Dual<6>>(rows_d, dt_d, mu_d, max_iter, tol);
     let mut value = [0.0_f64; 6];
     let mut jac = [[0.0_f64; 6]; 6];
     for (i, row) in jac.iter_mut().enumerate() {
@@ -601,7 +676,7 @@ fn propagate_with_jacobian_row(
             *dst = out_d[i].du[j];
         }
     }
-    (value, jac)
+    (value, jac, convergence)
 }
 
 /// Propagate a single row with covariance transport.
@@ -617,11 +692,27 @@ pub fn propagate_2body_with_covariance_row(
     max_iter: usize,
     tol: f64,
 ) -> ([f64; 6], [f64; 36]) {
-    let (value, jac) = propagate_with_jacobian_row(orbit, dt, mu, max_iter, tol);
+    let (value, covariance_out, _convergence) =
+        propagate_2body_with_covariance_row_with_diagnostics(
+            orbit, covariance, dt, mu, max_iter, tol,
+        );
+    (value, covariance_out)
+}
+
+pub fn propagate_2body_with_covariance_row_with_diagnostics(
+    orbit: [f64; 6],
+    covariance: &[f64; 36],
+    dt: f64,
+    mu: f64,
+    max_iter: usize,
+    tol: f64,
+) -> ([f64; 6], [f64; 36], ChiConvergence) {
+    let (value, jac, convergence) =
+        propagate_with_jacobian_row_with_diagnostics(orbit, dt, mu, max_iter, tol);
     let mut covariance_out = [0.0_f64; 36];
     if covariance.iter().any(|value| value.is_nan()) {
         covariance_out.fill(f64::NAN);
-        return (value, covariance_out);
+        return (value, covariance_out, convergence);
     }
 
     let mut m = [[0.0_f64; 6]; 6];
@@ -643,7 +734,7 @@ pub fn propagate_2body_with_covariance_row(
             covariance_out[i * 6 + j] = acc;
         }
     }
-    (value, covariance_out)
+    (value, covariance_out, convergence)
 }
 
 /// Batched propagation with covariance transport. For each row, evaluates
@@ -816,6 +907,20 @@ mod tests {
                 (back[i] - orbit[i]).abs()
             );
         }
+    }
+
+    #[test]
+    fn propagate_row_diagnostics_report_solver_status() {
+        let orbit = [1.5, 0.2, 0.05, -0.003, 0.017, 0.0008];
+        let (_value, convergence) =
+            propagate_2body_row_with_diagnostics::<f64>(orbit, 100.0, MU_SUN, 1000, 1e-14);
+        assert_eq!(convergence.status, ChiConvergenceStatus::Converged);
+        assert!(convergence.iterations > 0);
+
+        let (_value, convergence) =
+            propagate_2body_row_with_diagnostics::<f64>(orbit, 100.0, MU_SUN, 0, f64::MIN_POSITIVE);
+        assert_eq!(convergence.status, ChiConvergenceStatus::MaxIterations);
+        assert_eq!(convergence.iterations, 1);
     }
 
     #[test]

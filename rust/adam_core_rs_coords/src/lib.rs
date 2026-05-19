@@ -25,9 +25,9 @@ pub mod propagate;
 pub mod propagation;
 pub use propagation::{
     CovariancePropagation, EpochOrder, EpochPolicy, OrbitRow, PropagationConvergence,
-    PropagationConvergenceStatus, PropagationDiagnostics, PropagationError, PropagationOptions,
-    PropagationRequest, PropagationResult, PropagationResultValue, Propagator, PropagatorShard,
-    RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
+    PropagationConvergenceStatus, PropagationDiagnostics, PropagationError, PropagationFailureCode,
+    PropagationOptions, PropagationRequest, PropagationResult, PropagationResultValue, Propagator,
+    PropagatorShard, RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
 };
 pub mod tisserand;
 pub use tisserand::tisserand_parameter_flat;
@@ -52,9 +52,11 @@ pub use spherical_resid::{apply_cosine_latitude_correction_flat, bound_longitude
 
 pub use propagate::{
     apply_lagrange_coefficients, calc_chi, calc_chi_with_init, calc_lagrange_coefficients,
-    calc_stumpff, propagate_2body_along_arc, propagate_2body_arc_batch_flat6,
-    propagate_2body_flat6, propagate_2body_row, propagate_2body_with_covariance_flat6,
-    propagate_2body_with_covariance_row, OrbitConstants,
+    calc_stumpff, propagate_2body_along_arc, propagate_2body_along_arc_with_diagnostics,
+    propagate_2body_arc_batch_flat6, propagate_2body_flat6, propagate_2body_row,
+    propagate_2body_row_with_diagnostics, propagate_2body_with_covariance_flat6,
+    propagate_2body_with_covariance_row, propagate_2body_with_covariance_row_with_diagnostics,
+    ChiConvergence, ChiConvergenceStatus, OrbitConstants,
 };
 
 pub mod ephemeris;
