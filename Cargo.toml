@@ -6,4 +6,5 @@ members = [
   "rust/adam_core_rs_spice",
   "rust/adam_core_py",
 ]
+exclude = ["rust/adam_core_rs_assist"]
 resolver = "2"

@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-19 (RM-STANDALONE-006G typed propagation/ephemeris foundation is landed; RM-STANDALONE-007A selected a GPL-licensed `assist-rs` harness/adapter boundary for ASSIST-compatible n-body work; Python/quivr typed propagation parity remains separate W12 adapter work)
+Last updated: 2026-05-19 (RM-STANDALONE-006G typed propagation/ephemeris foundation is landed; RM-STANDALONE-007A selected the GPL `assist-rs` harness boundary; RM-STANDALONE-007B now has the first excluded `adam_core_rs_assist` adapter skeleton, with ASSIST parity fixtures still pending; Python/quivr typed propagation parity remains separate W12 adapter work)
 
 ## Current Review-Derived Backlog
 
@@ -39,7 +39,7 @@ Last updated: 2026-05-19 (RM-STANDALONE-006G typed propagation/ephemeris foundat
 
 ## Current Branch / PR Scope
 
-- Branch `rust-migration-waves-d-e` now contains the Wave D/E Rust migration plus the standalone Rust foundation slices through RM-STANDALONE-006G. Current work is moving into RM-STANDALONE-007 `assist-rs` adapter planning/spike work under the GPL harness boundary, not the broad RM-PERF-001 benchmark-action audit.
+- Branch `rust-migration-waves-d-e` now contains the Wave D/E Rust migration plus the standalone Rust foundation slices through RM-STANDALONE-006G and the first RM-STANDALONE-007B `assist-rs` GPL adapter skeleton. Current work remains the `assist-rs` adapter/parity-fixture spike, not the broad RM-PERF-001 benchmark-action audit.
 - Python/quivr typed propagation parity is W12 adapter work and remains blocked until a typed PyO3 propagation adapter exists.
 - RM-STANDALONE-007A is decided: use the GPL-licensed `assist-rs` harness/adapter boundary to make ASSIST-compatible propagation implement adam-core's Rust `Propagator` contracts while keeping permissive core crates backend-generic.
 
@@ -66,7 +66,7 @@ Last updated: 2026-05-19 (RM-STANDALONE-006G typed propagation/ephemeris foundat
 - [x] RM-STANDALONE-006F: evaluated reusable propagation execution context/Rayon-pool strategy for hot production loops and kept the current simple `thread_limit` path. Updated `propagation_bench` compares per-call one-thread pools with the default/global Rayon pool: on the local 1000x20 diagnostic, default multi-thread global-pool typed orbit output was faster than the raw serial loop (`~3.2 ms` vs `~3.8 ms` p50), while `RAYON_NUM_THREADS=1` global/per-call modes were in the same typed-overhead band (`~6.1-6.7 ms` orbit output, `~8.6 ms` variant output). No reusable pool API is justified yet; production should prefer the default global pool and reserve `thread_limit` for diagnostics/tests.
 - [x] RM-STANDALONE-006G: added the backend-agnostic typed `generate_ephemeris<P: Propagator>` workflow over Rust-native `ObserverBatch`/`EphemerisBatch` contracts. The workflow uses `Propagator` for initial orbit propagation, then applies shared light-time correction, optional stellar aberration, ecliptic→equatorial spherical output, optional H-G magnitude/phase photometry, explicit output time scaling, row-level `Validity`, and ephemeris diagnostics. The initial implementation is fail-loud for origin/frame translation gaps: orbit and observer states must already be same-origin ecliptic Cartesian, and photometry currently requires SUN-origin heliocentric states until a higher-level origin-state translation provider is wired.
 - [x] RM-STANDALONE-007A: ASSIST/REBOUND GPL/package boundary decided. Use `assist-rs` (GPL-3.0) as the intended ASSIST/REBOUND Rust harness and adapt it to adam-core's permissive Rust `Propagator` contracts from a GPL crate/package boundary, mirroring the Python `adam-assist` separation.
-- [ ] RM-STANDALONE-007B / RM-FUTURE-002: prototype the GPL `assist-rs` `Propagator` adapter/harness and n-body parity fixture plan. Keep it task-scoped and separate from merge-readiness cleanup and RM-PERF-001.
+- [ ] RM-STANDALONE-007B / RM-FUTURE-002: prototype the GPL `assist-rs` `Propagator` adapter/harness and n-body parity fixture plan. First adapter skeleton is in `rust/adam_core_rs_assist` as an excluded GPL crate/package boundary: TDB-only, heliocentric ecliptic Cartesian, gravity-only propagation through `assist-rs`, optional 6x6 STM covariance transport, row `Validity` diagnostics, and no Python/Ray rewiring. Remaining 007B work is ASSIST/Python parity fixtures, live data-loading validation, richer error classification, and the decision on `assist-rs::assist_generate_ephemeris` vs generic `generate_ephemeris<P>`.
 
 ## Active Sprint (Milestone 1 hardening)
 

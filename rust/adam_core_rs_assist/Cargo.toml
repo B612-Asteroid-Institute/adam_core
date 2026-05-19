@@ -1,0 +1,14 @@
+[package]
+name = "adam_core_rs_assist"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+publish = false
+
+[dependencies]
+adam_core_rs_coords = { path = "../adam_core_rs_coords" }
+assist-rs = { git = "ssh://git@github.com/B612-Asteroid-Institute/assist-rs.git", rev = "181c341f832bd5597024d8dfbd8ddbf48f623de5", default-features = false, features = ["parallel"] }
+rayon = "1.11"
+
+[lib]
+path = "src/lib.rs"
