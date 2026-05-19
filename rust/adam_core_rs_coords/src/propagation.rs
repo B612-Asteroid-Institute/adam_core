@@ -41,6 +41,8 @@ pub enum PropagationError {
     InvalidRequest(String),
     MissingOrbitTimes,
     UnsupportedCovarianceMode(CovariancePropagation),
+    Backend(String),
+    BackendProtocol(String),
     ThreadPool(String),
 }
 
@@ -52,6 +54,10 @@ impl fmt::Display for PropagationError {
             Self::MissingOrbitTimes => write!(f, "propagation requires per-orbit coordinate times"),
             Self::UnsupportedCovarianceMode(mode) => {
                 write!(f, "unsupported covariance propagation mode: {mode:?}")
+            }
+            Self::Backend(message) => write!(f, "propagation backend error: {message}"),
+            Self::BackendProtocol(message) => {
+                write!(f, "propagation backend protocol error: {message}")
             }
             Self::ThreadPool(message) => {
                 write!(f, "failed to build propagation thread pool: {message}")

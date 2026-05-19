@@ -13,6 +13,7 @@ pub enum PropagationFailureCode {
     NonFiniteCovariance,
     SolverZeroDerivative,
     SolverMaxIterations,
+    IntegratorFailure,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +74,9 @@ pub(super) fn failure_message(code: PropagationFailureCode) -> String {
         }
         PropagationFailureCode::SolverMaxIterations => {
             "two-body universal-anomaly solver reached the maximum iteration count".to_string()
+        }
+        PropagationFailureCode::IntegratorFailure => {
+            "propagator backend reported an integration failure".to_string()
         }
     }
 }

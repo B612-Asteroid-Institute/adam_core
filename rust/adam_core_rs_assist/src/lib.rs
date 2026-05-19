@@ -15,7 +15,9 @@ use adam_core_rs_coords::{
     CoordinateBatch, CovarianceBatch, CovarianceUnits, Epoch, OrbitBatch, OrbitVariantBatch,
     OriginArray, OriginId, TimeArray, TimeScale, TimeScaleProvider, Validity,
 };
-use assist_rs::{assist_propagate, AssistData, IntegratorConfig, Orbit as AssistOrbit};
+use assist_rs::{
+    assist_propagate, AssistData, Error as AssistError, IntegratorConfig, Orbit as AssistOrbit,
+};
 use rayon::prelude::*;
 use std::sync::Arc;
 
@@ -66,10 +68,11 @@ impl AssistPropagator {
         let covariance = input_coordinates.covariance.as_ref();
         let include_covariance = compute_stm && covariance.is_some();
         let orbit_indices = (0..request.input.len()).collect::<Vec<_>>();
-        let chunk_size = normalized_chunk_size(request.options.chunk_size, request.input.len());
         let policy = request.options.epoch_policy.clone();
+        let requested_chunk_size = request.options.chunk_size;
 
         run_with_thread_limit(request.options.thread_limit, || {
+            let chunk_size = normalized_chunk_size(requested_chunk_size, request.input.len());
             let chunk_results = orbit_indices
                 .par_chunks(chunk_size)
                 .map(|chunk| {
@@ -86,7 +89,7 @@ impl AssistPropagator {
                             include_covariance,
                         );
                         let time_indices =
-                            time_indices_for_policy(&policy, orbit_index, request.times.len());
+                            time_indices_for_policy(&policy, orbit_index, request.times.len())?;
                         let sorted_time_indices = sorted_time_indices(&time_indices, request.times);
                         let sorted_times = sorted_time_indices
                             .iter()
@@ -196,17 +199,18 @@ impl PropagatorShard for AssistShard {
         ) {
             Ok(mut values) => values.pop().unwrap_or_default(),
             Err(err) => {
+                let (failure_code, message) = classify_assist_error(err)?;
                 return Ok(row_failure_output(
                     times.len(),
                     covariance_requested,
-                    None,
-                    format!("assist-rs propagation failed: {err}"),
+                    Some(failure_code),
+                    message,
                 ));
             }
         };
 
         if propagated.len() != times.len() {
-            return Err(PropagationError::InvalidRequest(format!(
+            return Err(PropagationError::BackendProtocol(format!(
                 "assist-rs returned {} rows for {} target epochs",
                 propagated.len(),
                 times.len()
@@ -332,18 +336,24 @@ fn is_heliocentric_origin(origin: &OriginId) -> bool {
 }
 
 fn normalized_chunk_size(chunk_size: Option<usize>, rows: usize) -> usize {
-    chunk_size.unwrap_or(1).max(1).min(rows.max(1))
+    let rows = rows.max(1);
+    match chunk_size {
+        Some(size) => size.max(1).min(rows),
+        None => rows.div_ceil(rayon::current_num_threads().max(1)).max(1),
+    }
 }
 
 fn time_indices_for_policy(
     policy: &EpochPolicy,
     orbit_index: usize,
     times_len: usize,
-) -> Vec<usize> {
+) -> PropagationResultValue<Vec<usize>> {
     match policy {
-        EpochPolicy::CrossProduct => (0..times_len).collect(),
-        EpochPolicy::Pairwise => vec![orbit_index],
-        EpochPolicy::PerOrbit { .. } => Vec::new(),
+        EpochPolicy::CrossProduct => Ok((0..times_len).collect()),
+        EpochPolicy::Pairwise => Ok(vec![orbit_index]),
+        EpochPolicy::PerOrbit { .. } => Err(PropagationError::InvalidRequest(
+            "PerOrbit epoch policy is not implemented by AssistPropagator".to_string(),
+        )),
     }
 }
 
@@ -689,6 +699,27 @@ fn state_is_finite(state: &[f64; 6]) -> bool {
     state.iter().all(|value| value.is_finite())
 }
 
+fn classify_assist_error(
+    err: AssistError,
+) -> PropagationResultValue<(PropagationFailureCode, String)> {
+    let message = format!("assist-rs propagation failed: {err}");
+    match err {
+        AssistError::NoParticles
+        | AssistError::CloseEncounter
+        | AssistError::Escape
+        | AssistError::Collision
+        | AssistError::IntegrationFailed(_)
+        | AssistError::LightTimeConvergence(_) => {
+            Ok((PropagationFailureCode::IntegratorFailure, message))
+        }
+        AssistError::EphemerisError(_)
+        | AssistError::InvalidBody(_)
+        | AssistError::InvalidObservatory(_)
+        | AssistError::Io(_)
+        | AssistError::Other(_) => Err(PropagationError::Backend(message)),
+    }
+}
+
 fn row_failure_output(
     rows: usize,
     covariance_requested: bool,
@@ -724,6 +755,9 @@ fn assist_failure_message(code: PropagationFailureCode) -> String {
         PropagationFailureCode::SolverMaxIterations => {
             "assist-rs propagation reached the maximum iteration count".to_string()
         }
+        PropagationFailureCode::IntegratorFailure => {
+            "assist-rs propagation reported an integration failure".to_string()
+        }
     }
 }
 
@@ -750,7 +784,6 @@ mod tests {
     use adam_core_rs_coords::propagation::PropagationOptions;
     use adam_core_rs_coords::types::SchemaResult;
     use adam_core_rs_coords::{ObjectId, OrbitId, SchemaError, VariantId, NANOS_PER_DAY};
-    use std::cell::Cell;
 
     struct NoopProvider;
 
@@ -907,27 +940,79 @@ mod tests {
     }
 
     #[test]
-    fn provider_is_not_used_by_tdb_only_scope() {
-        let calls = Cell::new(0);
-        struct CountingProvider<'a>(&'a Cell<usize>);
-        impl TimeScaleProvider for CountingProvider<'_> {
-            fn rescale(&self, times: &TimeArray, new_scale: TimeScale) -> SchemaResult<TimeArray> {
-                self.0.set(self.0.get() + 1);
-                TimeArray::new(new_scale, times.epochs.clone())
-            }
-        }
-        let provider = CountingProvider(&calls);
+    fn default_chunk_size_uses_rows_per_rayon_thread() {
+        let rows: usize = 25;
+        let expected = rows.div_ceil(rayon::current_num_threads().max(1));
+        assert_eq!(normalized_chunk_size(None, rows), expected.max(1));
+        assert_eq!(normalized_chunk_size(Some(0), rows), 1);
+        assert_eq!(normalized_chunk_size(Some(100), rows), rows);
+    }
+
+    #[test]
+    fn per_orbit_epoch_policy_fails_loudly() {
+        let err = time_indices_for_policy(
+            &EpochPolicy::PerOrbit {
+                indices: vec![0].into_boxed_slice(),
+            },
+            0,
+            1,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, PropagationError::InvalidRequest(message) if message.contains("PerOrbit"))
+        );
+    }
+
+    #[test]
+    fn assist_setup_errors_fail_loudly() {
+        let err =
+            classify_assist_error(AssistError::Other("missing kernels".to_string())).unwrap_err();
+        assert!(
+            matches!(err, PropagationError::Backend(message) if message.contains("missing kernels"))
+        );
+    }
+
+    #[test]
+    fn assist_integration_errors_are_row_failures() {
+        let (code, message) = classify_assist_error(AssistError::Collision).unwrap();
+        assert_eq!(code, PropagationFailureCode::IntegratorFailure);
+        assert!(message.contains("collision"));
+    }
+
+    #[test]
+    #[ignore = "requires ADAM_CORE_RS_ASSIST_PLANETS_PATH and ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH"]
+    fn live_assist_propagates_with_env_kernels() {
+        let planets = std::env::var("ADAM_CORE_RS_ASSIST_PLANETS_PATH")
+            .expect("set ADAM_CORE_RS_ASSIST_PLANETS_PATH to the DE440 BSP path");
+        let asteroids = std::env::var("ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH")
+            .expect("set ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH to the DE441-n16 BSP path");
+        let ephem = assist_rs::Ephemeris::from_paths(
+            std::path::Path::new(&planets),
+            std::path::Path::new(&asteroids),
+        )
+        .expect("failed to load ASSIST ephemeris kernels");
+        let propagator = AssistPropagator::new(std::sync::Arc::new(AssistData::new(ephem)));
         let orbits = sample_orbits(
             Frame::Ecliptic,
             OriginId::Named("SUN".to_string()),
             TimeScale::Tdb,
         );
-        let targets = TimeArray::from_parts(TimeScale::Tdb, vec![60_010], vec![0]).unwrap();
-        let request =
-            PropagationRequest::new(&orbits, &targets, PropagationOptions::default()).unwrap();
-        validate_request_scope(&request, false).unwrap();
-        assert_eq!(calls.get(), 0);
-        let _ = &provider;
-        let _ = NoopProvider;
+        let targets =
+            TimeArray::from_parts(TimeScale::Tdb, vec![60_001, 60_002], vec![0, 0]).unwrap();
+        let request = PropagationRequest::new(
+            &orbits,
+            &targets,
+            PropagationOptions {
+                covariance: CovariancePropagation::None,
+                thread_limit: Some(1),
+                chunk_size: Some(1),
+                ..PropagationOptions::default()
+            },
+        )
+        .unwrap();
+        let result = propagator.propagate(&request, &NoopProvider).unwrap();
+        assert_eq!(result.orbits.len(), 2);
+        assert!(result.validity.is_valid(0));
+        assert!(result.validity.is_valid(1));
     }
 }
