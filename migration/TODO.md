@@ -1,6 +1,6 @@
 # Rust Migration TODO Tracker
 
-Last updated: 2026-05-19 (RM-STANDALONE-006 typed propagation hardening is underway; provider/Arrow validation coverage is landed and diagnostics enrichment is in local validation)
+Last updated: 2026-05-19 (RM-STANDALONE-006 typed propagation hardening is underway; provider/Arrow validation and diagnostics enrichment are landed, with typed-layer Rayon-pool overhead evaluation in local validation)
 
 ## Current Review-Derived Backlog
 
@@ -56,7 +56,7 @@ Last updated: 2026-05-19 (RM-STANDALONE-006 typed propagation hardening is under
 - [x] RM-STANDALONE-006C: added first-class Rust variant propagation metadata and wiring. `VariantId`/`OrbitVariantBatch` carry weights and covariance weights, and typed `PropagationRequest`/`PropagationResult` preserve variant metadata separately from the orbit-batch view.
 - [x] RM-STANDALONE-006D: enriched `PropagationDiagnostics` with backend convergence details, iteration counts where available, explicit failure codes, and tests for setup-error vs row-failure behavior. Two-body diagnostics now distinguish non-finite input row failures, solver max-iteration row failures, and setup errors such as unsupported covariance modes or provider failures.
 - [ ] RM-STANDALONE-006E: add adapter/provider integration tests for non-TDB propagation inputs and Python/quivr mapping through the explicit `TimeScaleProvider` boundary. Rust-side non-TDB provider tests and `OrbitVariantBatch` Arrow adapter round-trips have landed; remaining work is Python/quivr end-to-end adapter coverage once a typed PyO3 propagation adapter exists.
-- [ ] RM-STANDALONE-006F: evaluate a reusable propagation execution context/Rayon-pool strategy for hot production loops; keep the current simple per-call `thread_limit` path unless measurements show pool-build overhead matters. Initial `propagation_bench` example shows typed single-thread overhead at 1000x20 rows is measurable but small in absolute terms (`~5.5 ms` orbit output / `~7.6 ms` variant output vs `~3.3 ms` raw serial kernel), so reusable-pool evaluation remains open.
+- [x] RM-STANDALONE-006F: evaluated reusable propagation execution context/Rayon-pool strategy for hot production loops and kept the current simple `thread_limit` path. Updated `propagation_bench` compares per-call one-thread pools with the default/global Rayon pool: on the local 1000x20 diagnostic, default multi-thread global-pool typed orbit output was faster than the raw serial loop (`~3.2 ms` vs `~3.8 ms` p50), while `RAYON_NUM_THREADS=1` global/per-call modes were in the same typed-overhead band (`~6.1-6.7 ms` orbit output, `~8.6 ms` variant output). No reusable pool API is justified yet; production should prefer the default global pool and reserve `thread_limit` for diagnostics/tests.
 - [ ] RM-STANDALONE-006G: add the backend-agnostic typed `generate_ephemeris<P: Propagator>` workflow over observer/ephemeris batches so light-time, aberration, rotation, and photometry semantics are shared by 2-body and future n-body backends.
 - [ ] RM-FUTURE-001/RM-FUTURE-002: n-body / `assist-sys`+`rebound-sys` safe-wrapper propagator work remains a separate future project and should not be mixed into merge-readiness cleanup.
 

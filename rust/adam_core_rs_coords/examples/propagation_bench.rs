@@ -35,53 +35,137 @@ fn main() {
     let orbits = build_orbits(ROWS);
     let variants = build_variants(&orbits);
     let times = build_target_times(TIMES);
-    let options = PropagationOptions {
+    let per_call_pool_options = PropagationOptions {
         chunk_size: Some(64),
         thread_limit: Some(1),
         epoch_policy: EpochPolicy::CrossProduct,
         covariance: CovariancePropagation::None,
     };
+    let global_pool_options = PropagationOptions {
+        thread_limit: None,
+        ..per_call_pool_options.clone()
+    };
     let propagator = TwoBodyPropagator::default();
     let provider = NoopProvider;
 
     let raw = measure(|| raw_kernel_rows(&orbits, &times), REPEATS, WARMUP);
-    let typed_orbits = measure(
+    let typed_orbits_per_call_pool = measure(
         || {
-            let request = PropagationRequest::new(&orbits, &times, options.clone()).unwrap();
-            propagator
-                .propagate(&request, &provider)
-                .unwrap()
-                .orbits
-                .len()
+            propagate_orbits(
+                &propagator,
+                &provider,
+                &orbits,
+                &times,
+                &per_call_pool_options,
+            )
         },
         REPEATS,
         WARMUP,
     );
-    let typed_variants = measure(
+    let typed_variants_per_call_pool = measure(
         || {
-            let request =
-                PropagationRequest::new_variants(&variants, &times, options.clone()).unwrap();
-            propagator
-                .propagate(&request, &provider)
-                .unwrap()
-                .variants
-                .as_ref()
-                .unwrap()
-                .len()
+            propagate_variants(
+                &propagator,
+                &provider,
+                &variants,
+                &times,
+                &per_call_pool_options,
+            )
+        },
+        REPEATS,
+        WARMUP,
+    );
+    let typed_orbits_global_pool = measure(
+        || {
+            propagate_orbits(
+                &propagator,
+                &provider,
+                &orbits,
+                &times,
+                &global_pool_options,
+            )
+        },
+        REPEATS,
+        WARMUP,
+    );
+    let typed_variants_global_pool = measure(
+        || {
+            propagate_variants(
+                &propagator,
+                &provider,
+                &variants,
+                &times,
+                &global_pool_options,
+            )
         },
         REPEATS,
         WARMUP,
     );
 
-    println!("surface,rows,times,repeats,seconds_p50,seconds_p95,ratio_p50_vs_raw");
-    print_summary("raw_kernel_serial", raw, raw.p50);
-    print_summary("typed_orbits_single_thread", typed_orbits, raw.p50);
-    print_summary("typed_variants_single_thread", typed_variants, raw.p50);
+    let rayon_threads = rayon::current_num_threads();
+    println!("surface,rows,times,repeats,rayon_threads,seconds_p50,seconds_p95,ratio_p50_vs_raw");
+    print_summary("raw_kernel_serial", raw, raw.p50, rayon_threads);
+    print_summary(
+        "typed_orbits_per_call_pool_1_thread",
+        typed_orbits_per_call_pool,
+        raw.p50,
+        rayon_threads,
+    );
+    print_summary(
+        "typed_variants_per_call_pool_1_thread",
+        typed_variants_per_call_pool,
+        raw.p50,
+        rayon_threads,
+    );
+    print_summary(
+        "typed_orbits_global_pool",
+        typed_orbits_global_pool,
+        raw.p50,
+        rayon_threads,
+    );
+    print_summary(
+        "typed_variants_global_pool",
+        typed_variants_global_pool,
+        raw.p50,
+        rayon_threads,
+    );
 }
 
-fn print_summary(surface: &str, summary: Summary, raw_p50: f64) {
+fn propagate_orbits(
+    propagator: &TwoBodyPropagator,
+    provider: &NoopProvider,
+    orbits: &OrbitBatch,
+    times: &TimeArray,
+    options: &PropagationOptions,
+) -> usize {
+    let request = PropagationRequest::new(orbits, times, options.clone()).unwrap();
+    propagator
+        .propagate(&request, provider)
+        .unwrap()
+        .orbits
+        .len()
+}
+
+fn propagate_variants(
+    propagator: &TwoBodyPropagator,
+    provider: &NoopProvider,
+    variants: &OrbitVariantBatch,
+    times: &TimeArray,
+    options: &PropagationOptions,
+) -> usize {
+    let request = PropagationRequest::new_variants(variants, times, options.clone()).unwrap();
+    propagator
+        .propagate(&request, provider)
+        .unwrap()
+        .variants
+        .as_ref()
+        .unwrap()
+        .len()
+}
+
+fn print_summary(surface: &str, summary: Summary, raw_p50: f64, rayon_threads: usize) {
     println!(
-        "{surface},{ROWS},{TIMES},{REPEATS},{:.9},{:.9},{:.3}",
+        "{surface},{ROWS},{TIMES},{REPEATS},{rayon_threads},{:.9},{:.9},{:.3}",
         summary.p50,
         summary.p95,
         summary.p50 / raw_p50
