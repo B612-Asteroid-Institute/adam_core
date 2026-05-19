@@ -247,6 +247,9 @@ pub struct ObjectId(pub String);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariantId(pub String);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObservatoryCode(pub String);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Frame {
     Ecliptic,
@@ -475,6 +478,13 @@ impl CoordinateValues {
             _ => None,
         }
     }
+
+    pub fn spherical(&self) -> Option<&[[f64; 6]]> {
+        match self {
+            Self::Spherical(values) => Some(values),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -514,6 +524,22 @@ impl CoordinateBatch {
     ) -> SchemaResult<Self> {
         Self::new(
             CoordinateValues::Cartesian(values),
+            frame,
+            origins,
+            times,
+            covariance,
+        )
+    }
+
+    pub fn spherical(
+        values: Vec<[f64; 6]>,
+        frame: Frame,
+        origins: OriginArray,
+        times: Option<TimeArray>,
+        covariance: Option<CovarianceBatch>,
+    ) -> SchemaResult<Self> {
+        Self::new(
+            CoordinateValues::Spherical(values),
             frame,
             origins,
             times,
@@ -663,6 +689,139 @@ impl OrbitVariantBatch {
         validate_len("weights_cov", rows, self.weights_cov.len())?;
         validate_optional_finite("weights", &self.weights)?;
         validate_optional_finite("weights_cov", &self.weights_cov)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObserverBatch {
+    pub code: Vec<ObservatoryCode>,
+    pub coordinates: CoordinateBatch,
+}
+
+impl ObserverBatch {
+    pub fn new(code: Vec<ObservatoryCode>, coordinates: CoordinateBatch) -> SchemaResult<Self> {
+        let out = Self { code, coordinates };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub fn len(&self) -> usize {
+        self.coordinates.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.coordinates.is_empty()
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
+        let rows = self.coordinates.len();
+        if self.coordinates.representation() != CoordinateRepresentation::Cartesian {
+            return Err(SchemaError::InvalidRecordBatch(
+                "observer coordinates must be Cartesian".to_string(),
+            ));
+        }
+        self.coordinates.validate()?;
+        validate_len("observer.code", rows, self.code.len())?;
+        for (row, code) in self.code.iter().enumerate() {
+            if code.0.trim().is_empty() {
+                return Err(SchemaError::InvalidRecordBatch(format!(
+                    "observer code must not be empty; row {row}"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EphemerisBatch {
+    pub orbit_id: Vec<OrbitId>,
+    pub object_id: Vec<Option<ObjectId>>,
+    pub coordinates: CoordinateBatch,
+    pub predicted_magnitude_v: Option<Vec<f64>>,
+    pub alpha_deg: Option<Vec<f64>>,
+    pub light_time_days: Vec<f64>,
+    pub aberrated_coordinates: Option<CoordinateBatch>,
+    pub validity: Validity,
+}
+
+impl EphemerisBatch {
+    pub fn new(
+        orbit_id: Vec<OrbitId>,
+        object_id: Vec<Option<ObjectId>>,
+        coordinates: CoordinateBatch,
+        predicted_magnitude_v: Option<Vec<f64>>,
+        alpha_deg: Option<Vec<f64>>,
+        light_time_days: Vec<f64>,
+        aberrated_coordinates: Option<CoordinateBatch>,
+        validity: Validity,
+    ) -> SchemaResult<Self> {
+        let out = Self {
+            orbit_id,
+            object_id,
+            coordinates,
+            predicted_magnitude_v,
+            alpha_deg,
+            light_time_days,
+            aberrated_coordinates,
+            validity,
+        };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub fn len(&self) -> usize {
+        self.coordinates.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.coordinates.is_empty()
+    }
+
+    pub fn validate(&self) -> SchemaResult<()> {
+        let rows = self.coordinates.len();
+        if self.coordinates.representation() != CoordinateRepresentation::Spherical {
+            return Err(SchemaError::InvalidRecordBatch(
+                "ephemeris coordinates must be spherical".to_string(),
+            ));
+        }
+        self.coordinates.validate()?;
+        validate_len("ephemeris.orbit_id", rows, self.orbit_id.len())?;
+        validate_len("ephemeris.object_id", rows, self.object_id.len())?;
+        validate_len(
+            "ephemeris.light_time_days",
+            rows,
+            self.light_time_days.len(),
+        )?;
+        if self.validity.len() != rows {
+            return Err(SchemaError::LengthMismatch {
+                field: "ephemeris.validity".to_string(),
+                expected: rows,
+                actual: self.validity.len(),
+            });
+        }
+        if let Some(values) = &self.predicted_magnitude_v {
+            validate_len("ephemeris.predicted_magnitude_v", rows, values.len())?;
+        }
+        if let Some(values) = &self.alpha_deg {
+            validate_len("ephemeris.alpha_deg", rows, values.len())?;
+        }
+        if let Some(aberrated) = &self.aberrated_coordinates {
+            if aberrated.representation() != CoordinateRepresentation::Cartesian {
+                return Err(SchemaError::InvalidRecordBatch(
+                    "ephemeris aberrated coordinates must be Cartesian".to_string(),
+                ));
+            }
+            aberrated.validate()?;
+            if aberrated.len() != rows {
+                return Err(SchemaError::LengthMismatch {
+                    field: "ephemeris.aberrated_coordinates".to_string(),
+                    expected: rows,
+                    actual: aberrated.len(),
+                });
+            }
+        }
         Ok(())
     }
 }

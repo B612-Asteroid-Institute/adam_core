@@ -7,6 +7,7 @@
 //! `Err` for request/setup errors.
 
 mod diagnostics;
+mod ephemeris;
 mod pipeline;
 mod request;
 #[cfg(test)]
@@ -16,6 +17,10 @@ mod two_body;
 pub use diagnostics::{
     PropagationConvergence, PropagationConvergenceStatus, PropagationDiagnostics,
     PropagationFailureCode, RowOutput,
+};
+pub use ephemeris::{
+    generate_ephemeris, EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions,
+    EphemerisPhotometryOptions, EphemerisResult, EphemerisRowDiagnostic,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{

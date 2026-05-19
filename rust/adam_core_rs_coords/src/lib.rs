@@ -7,11 +7,11 @@ pub mod types;
 pub use types::{
     convert_mu_km3_s2_to_au3_day2, naif_origin_name, origin_code_mu_au3_day2, origin_mu_au3_day2,
     solar_system_barycenter_mu_au3_day2, ArrowSchemaExport, CoordinateBatch,
-    CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits, Epoch,
-    Frame as DataFrame, IntoRecordBatch, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch,
-    OriginArray, OriginId, SchemaError, TimeArray, TimeScale, TimeScaleProvider,
-    TryFromRecordBatch, Validity, VariantId, J2000_TDB_MJD, KM_PER_AU, NANOS_PER_DAY,
-    SECONDS_PER_DAY, TAI_TT_NANOS,
+    CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits, EphemerisBatch,
+    Epoch, Frame as DataFrame, IntoRecordBatch, ObjectId, ObservatoryCode, ObserverBatch,
+    OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, SchemaError, TimeArray,
+    TimeScale, TimeScaleProvider, TryFromRecordBatch, Validity, VariantId, J2000_TDB_MJD,
+    KM_PER_AU, NANOS_PER_DAY, SECONDS_PER_DAY, TAI_TT_NANOS,
 };
 
 pub mod generic;
@@ -24,10 +24,12 @@ pub use generic::{
 pub mod propagate;
 pub mod propagation;
 pub use propagation::{
-    CovariancePropagation, EpochOrder, EpochPolicy, OrbitRow, PropagationConvergence,
-    PropagationConvergenceStatus, PropagationDiagnostics, PropagationError, PropagationFailureCode,
-    PropagationOptions, PropagationRequest, PropagationResult, PropagationResultValue, Propagator,
-    PropagatorShard, RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
+    generate_ephemeris, CovariancePropagation, EphemerisDiagnostics, EphemerisFailureCode,
+    EphemerisOptions, EphemerisPhotometryOptions, EphemerisResult, EphemerisRowDiagnostic,
+    EpochOrder, EpochPolicy, OrbitRow, PropagationConvergence, PropagationConvergenceStatus,
+    PropagationDiagnostics, PropagationError, PropagationFailureCode, PropagationOptions,
+    PropagationRequest, PropagationResult, PropagationResultValue, Propagator, PropagatorShard,
+    RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
 };
 pub mod tisserand;
 pub use tisserand::tisserand_parameter_flat;

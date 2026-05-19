@@ -1,0 +1,854 @@
+use super::request::{CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest};
+use super::{PropagationError, PropagationResultValue, Propagator};
+use crate::ephemeris::generate_ephemeris_2body_row;
+use crate::photometry::{
+    calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
+    calculate_phase_angle_flat,
+};
+use crate::types::time::TimeScaleProvider;
+use crate::types::{
+    origin_mu_au3_day2, CoordinateBatch, EphemerisBatch, Frame, ObserverBatch, OriginArray,
+    OriginId, TimeArray, TimeScale, Validity, NANOS_PER_DAY,
+};
+use crate::{Epoch, OrbitBatch};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EphemerisOptions {
+    pub propagation: PropagationOptions,
+    pub lt_tol: f64,
+    pub max_iter: usize,
+    pub tol: f64,
+    pub stellar_aberration: bool,
+    pub max_lt_iter: usize,
+    pub output_time_scale: TimeScale,
+    pub include_aberrated_coordinates: bool,
+    pub photometry: EphemerisPhotometryOptions,
+}
+
+impl Default for EphemerisOptions {
+    fn default() -> Self {
+        Self {
+            propagation: PropagationOptions {
+                covariance: CovariancePropagation::None,
+                ..PropagationOptions::default()
+            },
+            lt_tol: 1.0e-12,
+            max_iter: 1_000,
+            tol: 1.0e-15,
+            stellar_aberration: false,
+            max_lt_iter: 10,
+            output_time_scale: TimeScale::Utc,
+            include_aberrated_coordinates: true,
+            photometry: EphemerisPhotometryOptions::default(),
+        }
+    }
+}
+
+impl EphemerisOptions {
+    pub fn validate(&self, orbit_rows: usize) -> PropagationResultValue<()> {
+        self.propagation.validate()?;
+        if self.propagation.epoch_policy != EpochPolicy::CrossProduct {
+            return Err(PropagationError::InvalidRequest(
+                "typed ephemeris generation currently requires CrossProduct propagation"
+                    .to_string(),
+            ));
+        }
+        if self.propagation.covariance != CovariancePropagation::None {
+            return Err(PropagationError::InvalidRequest(
+                "typed ephemeris covariance transport is not implemented yet; use covariance=None"
+                    .to_string(),
+            ));
+        }
+        if !self.lt_tol.is_finite() || self.lt_tol <= 0.0 {
+            return Err(PropagationError::InvalidRequest(
+                "EphemerisOptions.lt_tol must be finite and positive".to_string(),
+            ));
+        }
+        if self.max_iter == 0 {
+            return Err(PropagationError::InvalidRequest(
+                "EphemerisOptions.max_iter must be positive".to_string(),
+            ));
+        }
+        if !self.tol.is_finite() || self.tol <= 0.0 {
+            return Err(PropagationError::InvalidRequest(
+                "EphemerisOptions.tol must be finite and positive".to_string(),
+            ));
+        }
+        if self.max_lt_iter == 0 {
+            return Err(PropagationError::InvalidRequest(
+                "EphemerisOptions.max_lt_iter must be positive".to_string(),
+            ));
+        }
+        self.photometry.validate(orbit_rows)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct EphemerisPhotometryOptions {
+    pub predict_magnitude_v: bool,
+    pub predict_phase_angle: bool,
+    pub h_v: Option<Vec<Option<f64>>>,
+    pub g: Option<Vec<Option<f64>>>,
+}
+
+impl EphemerisPhotometryOptions {
+    fn validate(&self, orbit_rows: usize) -> PropagationResultValue<()> {
+        if self.predict_magnitude_v && (self.h_v.is_none() || self.g.is_none()) {
+            return Err(PropagationError::InvalidRequest(
+                "predict_magnitude_v requires per-orbit H_v and G values".to_string(),
+            ));
+        }
+        validate_optional_photometry_column("h_v", self.h_v.as_ref(), orbit_rows)?;
+        validate_optional_photometry_column("g", self.g.as_ref(), orbit_rows)?;
+        Ok(())
+    }
+
+    fn any_requested(&self) -> bool {
+        self.predict_magnitude_v || self.predict_phase_angle
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EphemerisFailureCode {
+    PropagationRowFailure,
+    NonFiniteObserverState,
+    LightTimeNonConvergence,
+    NonFiniteEphemerisState,
+    NonFiniteAberratedState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EphemerisRowDiagnostic {
+    pub output_row: usize,
+    pub input_orbit_index: usize,
+    pub observer_index: usize,
+    pub failure_code: Option<EphemerisFailureCode>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EphemerisDiagnostics {
+    pub rows: Vec<EphemerisRowDiagnostic>,
+}
+
+impl EphemerisDiagnostics {
+    pub fn failed_rows(&self) -> impl Iterator<Item = &EphemerisRowDiagnostic> {
+        self.rows.iter().filter(|row| row.failure_code.is_some())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EphemerisResult {
+    pub ephemeris: EphemerisBatch,
+    pub diagnostics: EphemerisDiagnostics,
+}
+
+pub fn generate_ephemeris<P: Propagator>(
+    propagator: &P,
+    orbits: &OrbitBatch,
+    observers: &ObserverBatch,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+) -> PropagationResultValue<EphemerisResult> {
+    orbits.validate()?;
+    observers.validate()?;
+    options.validate(orbits.len())?;
+    validate_ephemeris_input_contract(orbits, observers, options)?;
+
+    let observer_times = observers.coordinates.times.as_ref().ok_or_else(|| {
+        PropagationError::InvalidRequest("observer coordinates require times".to_string())
+    })?;
+    let propagation_request =
+        PropagationRequest::new(orbits, observer_times, options.propagation.clone())?;
+    let propagation = propagator.propagate(&propagation_request, provider)?;
+    let output_rows = propagation.orbits.len();
+    let observer_rows = observers.len();
+
+    let observer_output_times = rescale_output_times(
+        observer_times,
+        options.output_time_scale,
+        provider,
+        "observer output times",
+    )?;
+    let propagated_times = propagation
+        .orbits
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "propagator output is missing coordinate times".to_string(),
+            )
+        })?;
+    let propagated_states = propagation
+        .orbits
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "propagator output must be Cartesian for ephemeris generation".to_string(),
+            )
+        })?;
+    let observer_states = observers.coordinates.values.cartesian().ok_or_else(|| {
+        PropagationError::InvalidRequest(
+            "observer coordinates must be Cartesian for ephemeris generation".to_string(),
+        )
+    })?;
+
+    let mut spherical_states = Vec::with_capacity(output_rows);
+    let mut light_time_days = Vec::with_capacity(output_rows);
+    let mut aberrated_states = Vec::with_capacity(output_rows);
+    let mut aberrated_epochs = Vec::with_capacity(output_rows);
+    let mut coordinate_epochs = Vec::with_capacity(output_rows);
+    let mut spherical_origins = Vec::with_capacity(output_rows);
+    let mut aberrated_origins = Vec::with_capacity(output_rows);
+    let mut validity = Vec::with_capacity(output_rows);
+    let mut diagnostics = Vec::with_capacity(output_rows);
+    let mut object_pos_flat = Vec::with_capacity(output_rows * 3);
+    let mut observer_pos_flat = Vec::with_capacity(output_rows * 3);
+    let mut h_v_rows = Vec::with_capacity(output_rows);
+    let mut g_rows = Vec::with_capacity(output_rows);
+
+    for (output_row, propagated_state) in propagated_states.iter().copied().enumerate() {
+        let input_orbit_index = output_row / observer_rows;
+        let observer_index = output_row % observer_rows;
+        let observer_state = observer_states[observer_index];
+        let propagated_origin = &propagation.orbits.coordinates.origins.origins[output_row];
+        let observer_origin = &observers.coordinates.origins.origins[observer_index];
+        let observer_time = observer_output_times.epochs[observer_index];
+        let propagated_time = propagated_times.epochs[output_row];
+
+        let mut row_failure = if propagation.validity.is_valid(output_row) {
+            None
+        } else {
+            Some(EphemerisFailureCode::PropagationRowFailure)
+        };
+        if row_failure.is_none() && !state_is_finite(&observer_state) {
+            row_failure = Some(EphemerisFailureCode::NonFiniteObserverState);
+        }
+
+        let (spherical, light_time, aberrated) = if row_failure.is_none() {
+            let mu = origin_mu_au3_day2(propagated_origin)?;
+            generate_ephemeris_2body_row::<f64>(
+                propagated_state,
+                observer_state,
+                mu,
+                options.lt_tol,
+                options.max_iter,
+                options.tol,
+                options.stellar_aberration,
+                options.max_lt_iter,
+            )
+        } else {
+            ([f64::NAN; 6], f64::NAN, [f64::NAN; 6])
+        };
+
+        if row_failure.is_none() {
+            row_failure = ephemeris_failure_code(&spherical, light_time, &aberrated);
+        }
+
+        let valid = row_failure.is_none();
+        let emission_epoch = if light_time.is_finite() {
+            epoch_add_fractional_days(propagated_time, -light_time)
+        } else {
+            propagated_time
+        };
+
+        spherical_states.push(spherical);
+        light_time_days.push(light_time);
+        aberrated_states.push(aberrated);
+        aberrated_epochs.push(emission_epoch);
+        coordinate_epochs.push(observer_time);
+        spherical_origins.push(OriginId::Named(observers.code[observer_index].0.clone()));
+        aberrated_origins.push(propagated_origin.clone());
+        validity.push(valid);
+        diagnostics.push(EphemerisRowDiagnostic {
+            output_row,
+            input_orbit_index,
+            observer_index,
+            failure_code: row_failure,
+            message: row_failure.map(ephemeris_failure_message),
+        });
+
+        object_pos_flat.extend_from_slice(&aberrated[..3]);
+        observer_pos_flat.extend_from_slice(&observer_state[..3]);
+        h_v_rows.push(photometry_value_for_row(
+            options.photometry.h_v.as_ref(),
+            input_orbit_index,
+        ));
+        g_rows.push(photometry_value_for_row(
+            options.photometry.g.as_ref(),
+            input_orbit_index,
+        ));
+
+        if propagated_origin != observer_origin {
+            return Err(PropagationError::InvalidRequest(
+                "internal ephemeris origin mismatch after request validation".to_string(),
+            ));
+        }
+    }
+
+    let (predicted_magnitude_v, alpha_deg) = compute_photometry(
+        &options.photometry,
+        &h_v_rows,
+        &object_pos_flat,
+        &observer_pos_flat,
+        &g_rows,
+    );
+
+    let coordinates = build_ephemeris_coordinates(
+        spherical_states,
+        options.output_time_scale,
+        coordinate_epochs,
+        spherical_origins,
+    )?;
+    let aberrated_coordinates = build_aberrated_coordinates(
+        options,
+        aberrated_states,
+        propagated_times.scale,
+        aberrated_epochs,
+        aberrated_origins,
+    )?;
+    let ephemeris = EphemerisBatch::new(
+        propagation.orbits.orbit_id,
+        propagation.orbits.object_id,
+        coordinates,
+        predicted_magnitude_v,
+        alpha_deg,
+        light_time_days,
+        aberrated_coordinates,
+        Validity::from_bools(&validity),
+    )?;
+    Ok(EphemerisResult {
+        ephemeris,
+        diagnostics: EphemerisDiagnostics { rows: diagnostics },
+    })
+}
+
+fn compute_photometry(
+    options: &EphemerisPhotometryOptions,
+    h_v_rows: &[f64],
+    object_pos_flat: &[f64],
+    observer_pos_flat: &[f64],
+    g_rows: &[f64],
+) -> (Option<Vec<f64>>, Option<Vec<f64>>) {
+    match (options.predict_magnitude_v, options.predict_phase_angle) {
+        (true, true) => {
+            let (magnitude, alpha) = calculate_apparent_magnitude_v_and_phase_angle_flat(
+                h_v_rows,
+                object_pos_flat,
+                observer_pos_flat,
+                g_rows,
+            );
+            (Some(magnitude), Some(alpha))
+        }
+        (true, false) => (
+            Some(calculate_apparent_magnitude_v_flat(
+                h_v_rows,
+                object_pos_flat,
+                observer_pos_flat,
+                g_rows,
+            )),
+            None,
+        ),
+        (false, true) => (
+            None,
+            Some(calculate_phase_angle_flat(
+                object_pos_flat,
+                observer_pos_flat,
+            )),
+        ),
+        (false, false) => (None, None),
+    }
+}
+
+fn build_ephemeris_coordinates(
+    spherical_states: Vec<[f64; 6]>,
+    scale: TimeScale,
+    epochs: Vec<Epoch>,
+    origins: Vec<OriginId>,
+) -> PropagationResultValue<CoordinateBatch> {
+    CoordinateBatch::spherical(
+        spherical_states,
+        Frame::Equatorial,
+        OriginArray::new(origins),
+        Some(TimeArray::new(scale, epochs)?),
+        None,
+    )
+    .map_err(PropagationError::from)
+}
+
+fn build_aberrated_coordinates(
+    options: &EphemerisOptions,
+    aberrated_states: Vec<[f64; 6]>,
+    scale: TimeScale,
+    epochs: Vec<Epoch>,
+    origins: Vec<OriginId>,
+) -> PropagationResultValue<Option<CoordinateBatch>> {
+    if !options.include_aberrated_coordinates {
+        return Ok(None);
+    }
+    CoordinateBatch::cartesian(
+        aberrated_states,
+        Frame::Ecliptic,
+        OriginArray::new(origins),
+        Some(TimeArray::new(scale, epochs)?),
+        None,
+    )
+    .map(Some)
+    .map_err(PropagationError::from)
+}
+
+fn validate_ephemeris_input_contract(
+    orbits: &OrbitBatch,
+    observers: &ObserverBatch,
+    options: &EphemerisOptions,
+) -> PropagationResultValue<()> {
+    if orbits.coordinates.frame != Frame::Ecliptic || observers.coordinates.frame != Frame::Ecliptic
+    {
+        return Err(PropagationError::InvalidRequest(
+            "typed ephemeris generation currently requires ecliptic Cartesian orbit and observer coordinates"
+                .to_string(),
+        ));
+    }
+    if !origins_share_single_origin(&orbits.coordinates.origins, &observers.coordinates.origins) {
+        return Err(PropagationError::InvalidRequest(
+            "typed ephemeris generation requires orbit and observer coordinates in the same origin until origin-state translation is wired"
+                .to_string(),
+        ));
+    }
+    if options.photometry.any_requested()
+        && !orbits
+            .coordinates
+            .origins
+            .origins
+            .first()
+            .is_some_and(is_sun_origin)
+    {
+        return Err(PropagationError::InvalidRequest(
+            "typed ephemeris photometry requires heliocentric SUN-origin coordinates until origin-state translation is wired"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn origins_share_single_origin(left: &OriginArray, right: &OriginArray) -> bool {
+    let Some(first) = left.origins.first().or_else(|| right.origins.first()) else {
+        return true;
+    };
+    left.origins.iter().all(|origin| origin == first)
+        && right.origins.iter().all(|origin| origin == first)
+}
+
+fn is_sun_origin(origin: &OriginId) -> bool {
+    match origin {
+        OriginId::Naif(10) => true,
+        OriginId::Named(code) => code == "SUN",
+        _ => false,
+    }
+}
+
+fn rescale_output_times(
+    times: &TimeArray,
+    scale: TimeScale,
+    provider: &dyn TimeScaleProvider,
+    field: &str,
+) -> PropagationResultValue<TimeArray> {
+    let out = times.rescale_with_provider(scale, provider)?;
+    out.validate()?;
+    if out.scale != scale {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{field} provider returned {} instead of required {}",
+            out.scale.as_str(),
+            scale.as_str()
+        )));
+    }
+    if out.len() != times.len() {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{field} provider changed length from {} to {}",
+            times.len(),
+            out.len()
+        )));
+    }
+    Ok(out)
+}
+
+fn validate_optional_photometry_column(
+    field: &str,
+    values: Option<&Vec<Option<f64>>>,
+    expected: usize,
+) -> PropagationResultValue<()> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    if values.len() != expected {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{field} must have one value per orbit; expected {expected}, got {}",
+            values.len()
+        )));
+    }
+    for (row, value) in values.iter().enumerate() {
+        if value.is_some_and(|value| !value.is_finite()) {
+            return Err(PropagationError::InvalidRequest(format!(
+                "{field} row {row} must be finite when present"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn photometry_value_for_row(values: Option<&Vec<Option<f64>>>, orbit_index: usize) -> f64 {
+    values
+        .and_then(|values| values[orbit_index])
+        .unwrap_or(f64::NAN)
+}
+
+fn state_is_finite(state: &[f64; 6]) -> bool {
+    state.iter().all(|value| value.is_finite())
+}
+
+fn ephemeris_failure_code(
+    spherical: &[f64; 6],
+    light_time: f64,
+    aberrated: &[f64; 6],
+) -> Option<EphemerisFailureCode> {
+    if !light_time.is_finite() {
+        return Some(EphemerisFailureCode::LightTimeNonConvergence);
+    }
+    if !state_is_finite(spherical) {
+        return Some(EphemerisFailureCode::NonFiniteEphemerisState);
+    }
+    if !state_is_finite(aberrated) {
+        return Some(EphemerisFailureCode::NonFiniteAberratedState);
+    }
+    None
+}
+
+fn ephemeris_failure_message(code: EphemerisFailureCode) -> String {
+    match code {
+        EphemerisFailureCode::PropagationRowFailure => {
+            "initial propagation failed for this ephemeris row".to_string()
+        }
+        EphemerisFailureCode::NonFiniteObserverState => {
+            "observer state was non-finite for this ephemeris row".to_string()
+        }
+        EphemerisFailureCode::LightTimeNonConvergence => {
+            "light-time correction failed to converge for this ephemeris row".to_string()
+        }
+        EphemerisFailureCode::NonFiniteEphemerisState => {
+            "ephemeris spherical state was non-finite for this row".to_string()
+        }
+        EphemerisFailureCode::NonFiniteAberratedState => {
+            "aberrated Cartesian state was non-finite for this row".to_string()
+        }
+    }
+}
+
+fn epoch_add_fractional_days(epoch: Epoch, delta_days: f64) -> Epoch {
+    let delta_nanos = (delta_days * NANOS_PER_DAY as f64).round() as i64;
+    Epoch::new(epoch.days, epoch.nanos + delta_nanos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ephemeris::generate_ephemeris_2body_row;
+    use crate::propagation::{TwoBodyPropagator, TwoBodyPropagatorConfig};
+    use crate::types::{SchemaError, SchemaResult};
+    use crate::{ObjectId, ObservatoryCode, OrbitId};
+
+    struct NoopProvider;
+
+    impl TimeScaleProvider for NoopProvider {
+        fn rescale(&self, _times: &TimeArray, _new_scale: TimeScale) -> SchemaResult<TimeArray> {
+            Err(SchemaError::InvalidRecordBatch(
+                "test provider should not be called".to_string(),
+            ))
+        }
+    }
+
+    fn sample_times(rows: usize) -> TimeArray {
+        TimeArray::new(
+            TimeScale::Tdb,
+            (0..rows)
+                .map(|row| Epoch::new(60_000 + row as i64, 0))
+                .collect(),
+        )
+        .unwrap()
+    }
+
+    fn sample_orbits() -> OrbitBatch {
+        let coordinates = CoordinateBatch::cartesian(
+            vec![
+                [1.0, 0.2, 0.1, 0.001, 0.015, 0.0005],
+                [1.2, -0.1, 0.05, -0.002, 0.014, 0.0002],
+            ],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 2),
+            Some(sample_times(2)),
+            None,
+        )
+        .unwrap();
+        OrbitBatch::new(
+            vec![
+                OrbitId("orbit-a".to_string()),
+                OrbitId("orbit-b".to_string()),
+            ],
+            vec![Some(ObjectId("object-a".to_string())), None],
+            coordinates,
+        )
+        .unwrap()
+    }
+
+    fn sample_observers() -> ObserverBatch {
+        let coordinates = CoordinateBatch::cartesian(
+            vec![
+                [0.9, -0.2, 0.0, 0.002, 0.017, 0.0],
+                [1.1, 0.1, 0.02, -0.001, 0.016, 0.0001],
+            ],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 2),
+            Some(sample_times(2)),
+            None,
+        )
+        .unwrap();
+        ObserverBatch::new(
+            vec![
+                ObservatoryCode("500".to_string()),
+                ObservatoryCode("X05".to_string()),
+            ],
+            coordinates,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn typed_generate_ephemeris_matches_low_level_two_body_rows() {
+        let orbits = sample_orbits();
+        let observers = sample_observers();
+        let options = EphemerisOptions {
+            output_time_scale: TimeScale::Tdb,
+            photometry: EphemerisPhotometryOptions {
+                predict_magnitude_v: true,
+                predict_phase_angle: true,
+                h_v: Some(vec![Some(18.0), Some(19.0)]),
+                g: Some(vec![Some(0.15), Some(0.2)]),
+            },
+            ..EphemerisOptions::default()
+        };
+        let result = generate_ephemeris(
+            &TwoBodyPropagator::default(),
+            &orbits,
+            &observers,
+            &options,
+            &NoopProvider,
+        )
+        .unwrap();
+
+        assert_eq!(result.ephemeris.len(), 4);
+        assert_eq!(result.ephemeris.coordinates.frame, Frame::Equatorial);
+        assert_eq!(
+            result.ephemeris.coordinates.times.as_ref().unwrap().scale,
+            TimeScale::Tdb
+        );
+        assert_eq!(
+            result.ephemeris.coordinates.origins.origins[0].code(),
+            "500"
+        );
+        assert_eq!(
+            result.ephemeris.coordinates.origins.origins[1].code(),
+            "X05"
+        );
+        assert!(result
+            .ephemeris
+            .predicted_magnitude_v
+            .as_ref()
+            .unwrap()
+            .iter()
+            .all(|value| value.is_finite()));
+        assert!(result
+            .ephemeris
+            .alpha_deg
+            .as_ref()
+            .unwrap()
+            .iter()
+            .all(|value| value.is_finite()));
+        for row in 0..result.ephemeris.validity.len() {
+            assert!(result.ephemeris.validity.is_valid(row));
+        }
+
+        let propagated_request = PropagationRequest::new(
+            &orbits,
+            observers.coordinates.times.as_ref().unwrap(),
+            options.propagation.clone(),
+        )
+        .unwrap();
+        let propagated = TwoBodyPropagator::default()
+            .propagate(&propagated_request, &NoopProvider)
+            .unwrap();
+        let propagated_states = propagated.orbits.coordinates.values.cartesian().unwrap();
+        let observer_states = observers.coordinates.values.cartesian().unwrap();
+        let spherical = result.ephemeris.coordinates.values.spherical().unwrap();
+        let aberrated = result
+            .ephemeris
+            .aberrated_coordinates
+            .as_ref()
+            .unwrap()
+            .values
+            .cartesian()
+            .unwrap();
+        let mu = origin_mu_au3_day2(&OriginId::Named("SUN".to_string())).unwrap();
+        for row in 0..result.ephemeris.len() {
+            let observer_index = row % observers.len();
+            let (expected_spherical, expected_lt, expected_aberrated) =
+                generate_ephemeris_2body_row::<f64>(
+                    propagated_states[row],
+                    observer_states[observer_index],
+                    mu,
+                    options.lt_tol,
+                    options.max_iter,
+                    options.tol,
+                    options.stellar_aberration,
+                    options.max_lt_iter,
+                );
+            for column in 0..6 {
+                assert!(
+                    (spherical[row][column] - expected_spherical[column]).abs() < 1.0e-13,
+                    "spherical row {row} column {column}: {} vs {}",
+                    spherical[row][column],
+                    expected_spherical[column]
+                );
+                assert!(
+                    (aberrated[row][column] - expected_aberrated[column]).abs() < 1.0e-13,
+                    "aberrated row {row} column {column}: {} vs {}",
+                    aberrated[row][column],
+                    expected_aberrated[column]
+                );
+            }
+            assert!((result.ephemeris.light_time_days[row] - expected_lt).abs() < 1.0e-14);
+        }
+    }
+
+    #[test]
+    fn typed_generate_ephemeris_records_observer_row_failures() {
+        let orbits = sample_orbits();
+        let mut observers = sample_observers();
+        let states = observers
+            .coordinates
+            .values
+            .cartesian()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(row, state)| {
+                let mut state = *state;
+                if row == 1 {
+                    state[0] = f64::NAN;
+                }
+                state
+            })
+            .collect::<Vec<_>>();
+        observers.coordinates = CoordinateBatch::cartesian(
+            states,
+            Frame::Ecliptic,
+            observers.coordinates.origins.clone(),
+            observers.coordinates.times.clone(),
+            None,
+        )
+        .unwrap();
+
+        let options = EphemerisOptions {
+            output_time_scale: TimeScale::Tdb,
+            ..EphemerisOptions::default()
+        };
+        let result = generate_ephemeris(
+            &TwoBodyPropagator::default(),
+            &orbits,
+            &observers,
+            &options,
+            &NoopProvider,
+        )
+        .unwrap();
+
+        assert!(result.ephemeris.validity.is_valid(0));
+        assert!(!result.ephemeris.validity.is_valid(1));
+        assert!(result.ephemeris.validity.is_valid(2));
+        assert!(!result.ephemeris.validity.is_valid(3));
+        let failures = result.diagnostics.failed_rows().collect::<Vec<_>>();
+        assert_eq!(failures.len(), 2);
+        assert!(failures
+            .iter()
+            .all(|row| { row.failure_code == Some(EphemerisFailureCode::NonFiniteObserverState) }));
+    }
+
+    #[test]
+    fn typed_generate_ephemeris_rejects_origin_translation_gap() {
+        let orbits = sample_orbits();
+        let mut observers = sample_observers();
+        observers.coordinates.origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, 2);
+        let err = generate_ephemeris(
+            &TwoBodyPropagator::default(),
+            &orbits,
+            &observers,
+            &EphemerisOptions::default(),
+            &NoopProvider,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, PropagationError::InvalidRequest(message) if message.contains("same origin"))
+        );
+    }
+
+    #[test]
+    fn typed_generate_ephemeris_photometry_requires_sun_origin() {
+        let mut orbits = sample_orbits();
+        let mut observers = sample_observers();
+        orbits.coordinates.origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, 2);
+        observers.coordinates.origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, 2);
+        let options = EphemerisOptions {
+            photometry: EphemerisPhotometryOptions {
+                predict_phase_angle: true,
+                ..EphemerisPhotometryOptions::default()
+            },
+            ..EphemerisOptions::default()
+        };
+        let err = generate_ephemeris(
+            &TwoBodyPropagator::default(),
+            &orbits,
+            &observers,
+            &options,
+            &NoopProvider,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, PropagationError::InvalidRequest(message) if message.contains("SUN-origin"))
+        );
+    }
+
+    #[test]
+    fn typed_generate_ephemeris_surfaces_light_time_nonconvergence_as_row_failure() {
+        let orbits = sample_orbits();
+        let observers = sample_observers();
+        let options = EphemerisOptions {
+            output_time_scale: TimeScale::Tdb,
+            max_lt_iter: 1,
+            ..EphemerisOptions::default()
+        };
+        let result = generate_ephemeris(
+            &TwoBodyPropagator::new(TwoBodyPropagatorConfig::default()).unwrap(),
+            &orbits,
+            &observers,
+            &options,
+            &NoopProvider,
+        )
+        .unwrap();
+        assert!(!result.ephemeris.validity.is_valid(0));
+        let failures = result.diagnostics.failed_rows().collect::<Vec<_>>();
+        assert!(!failures.is_empty());
+        assert!(failures.iter().all(|row| {
+            row.failure_code == Some(EphemerisFailureCode::LightTimeNonConvergence)
+        }));
+    }
+}

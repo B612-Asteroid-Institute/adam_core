@@ -1,9 +1,11 @@
 use adam_core_rs_coords::types::{Frame, SchemaResult};
 use adam_core_rs_coords::{
-    origin_mu_au3_day2, propagate_2body_along_arc, CoordinateBatch, CovariancePropagation, Epoch,
-    EpochPolicy, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
-    PropagationOptions, PropagationRequest, Propagator, SchemaError, TimeArray, TimeScale,
-    TimeScaleProvider, TwoBodyPropagator, VariantId,
+    generate_ephemeris, generate_ephemeris_2body_row, origin_mu_au3_day2,
+    propagate_2body_along_arc, CoordinateBatch, CovariancePropagation, EphemerisOptions,
+    EphemerisPhotometryOptions, Epoch, EpochPolicy, ObjectId, ObservatoryCode, ObserverBatch,
+    OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, PropagationOptions,
+    PropagationRequest, Propagator, SchemaError, TimeArray, TimeScale, TimeScaleProvider,
+    TwoBodyPropagator, VariantId,
 };
 use std::hint::black_box;
 use std::time::Instant;
@@ -39,6 +41,7 @@ fn main() {
     let orbits = build_orbits(ROWS);
     let variants = build_variants(&orbits);
     let times = build_target_times(TIMES);
+    let observers = build_observers(&times);
     let per_call_pool_options = PropagationOptions {
         chunk_size: Some(64),
         thread_limit: Some(1),
@@ -105,9 +108,34 @@ fn main() {
         REPEATS,
         WARMUP,
     );
+    let ephemeris_options = EphemerisOptions {
+        propagation: global_pool_options.clone(),
+        output_time_scale: TimeScale::Tdb,
+        photometry: EphemerisPhotometryOptions {
+            predict_magnitude_v: true,
+            predict_phase_angle: true,
+            h_v: Some(vec![Some(18.0); ROWS]),
+            g: Some(vec![Some(0.15); ROWS]),
+        },
+        ..EphemerisOptions::default()
+    };
+    let raw_ephemeris = measure(|| raw_ephemeris_rows(&orbits, &observers), REPEATS, WARMUP);
+    let typed_ephemeris_global_pool = measure(
+        || {
+            typed_ephemeris_rows(
+                &propagator,
+                &provider,
+                &orbits,
+                &observers,
+                &ephemeris_options,
+            )
+        },
+        REPEATS,
+        WARMUP,
+    );
 
     let rayon_threads = rayon::current_num_threads();
-    println!("surface,comparison_scope,baseline,thread_mode,rows,times,repeats,rayon_threads,seconds_p50,seconds_p95,ratio_p50_vs_raw_serial");
+    println!("surface,comparison_scope,baseline,thread_mode,rows,times,repeats,rayon_threads,seconds_p50,seconds_p95,ratio_p50_vs_baseline");
     print_summary(
         "raw_kernel_serial",
         "raw_kernel_serial",
@@ -148,6 +176,22 @@ fn main() {
         raw.p50,
         rayon_threads,
     );
+    print_summary(
+        "raw_ephemeris_kernel_serial",
+        "raw_ephemeris_kernel_serial",
+        "serial",
+        raw_ephemeris,
+        raw_ephemeris.p50,
+        rayon_threads,
+    );
+    print_summary(
+        "typed_ephemeris_global_pool",
+        "raw_ephemeris_kernel_serial",
+        "default_global_rayon_pool",
+        typed_ephemeris_global_pool,
+        raw_ephemeris.p50,
+        rayon_threads,
+    );
 }
 
 fn propagate_orbits(
@@ -179,6 +223,19 @@ fn propagate_variants(
         .variants
         .as_ref()
         .unwrap()
+        .len()
+}
+
+fn typed_ephemeris_rows(
+    propagator: &TwoBodyPropagator,
+    provider: &NoopProvider,
+    orbits: &OrbitBatch,
+    observers: &ObserverBatch,
+    options: &EphemerisOptions,
+) -> usize {
+    generate_ephemeris(propagator, orbits, observers, options, provider)
+        .unwrap()
+        .ephemeris
         .len()
 }
 
@@ -290,6 +347,38 @@ fn build_target_times(rows: usize) -> TimeArray {
     .unwrap()
 }
 
+fn build_observers(times: &TimeArray) -> ObserverBatch {
+    let rows = times.len();
+    let states = (0..rows)
+        .map(|row| {
+            let offset = row as f64 * 1.0e-5;
+            [
+                0.95 + offset,
+                -0.2 + 0.5 * offset,
+                0.02,
+                0.002,
+                0.016,
+                0.0001,
+            ]
+        })
+        .collect::<Vec<_>>();
+    let coordinates = CoordinateBatch::cartesian(
+        states,
+        Frame::Ecliptic,
+        OriginArray::repeat(OriginId::Named("SUN".to_string()), rows),
+        Some(times.clone()),
+        None,
+    )
+    .unwrap();
+    ObserverBatch::new(
+        (0..rows)
+            .map(|row| ObservatoryCode(format!("obs-{row}")))
+            .collect(),
+        coordinates,
+    )
+    .unwrap()
+}
+
 fn raw_kernel_rows(orbits: &OrbitBatch, times: &TimeArray) -> usize {
     let states = orbits.coordinates.values.cartesian().unwrap();
     let orbit_times = orbits.coordinates.times.as_ref().unwrap();
@@ -304,6 +393,38 @@ fn raw_kernel_rows(orbits: &OrbitBatch, times: &TimeArray) -> usize {
         let propagated = propagate_2body_along_arc(*state, &dts, mu, MAX_ITER, TOL);
         rows += propagated.len();
         black_box(propagated);
+    }
+    rows
+}
+
+fn raw_ephemeris_rows(orbits: &OrbitBatch, observers: &ObserverBatch) -> usize {
+    let states = orbits.coordinates.values.cartesian().unwrap();
+    let orbit_times = orbits.coordinates.times.as_ref().unwrap();
+    let observer_states = observers.coordinates.values.cartesian().unwrap();
+    let observer_times = observers.coordinates.times.as_ref().unwrap();
+    let mu = origin_mu_au3_day2(&OriginId::Named("SUN".to_string())).unwrap();
+    let mut rows = 0;
+    for (orbit_index, state) in states.iter().enumerate() {
+        let dts = observer_times
+            .epochs
+            .iter()
+            .map(|epoch| epoch.mjd() - orbit_times.epochs[orbit_index].mjd())
+            .collect::<Vec<_>>();
+        let propagated = propagate_2body_along_arc(*state, &dts, mu, MAX_ITER, TOL);
+        for (propagated_state, observer_state) in propagated.iter().zip(observer_states.iter()) {
+            let row = generate_ephemeris_2body_row::<f64>(
+                *propagated_state,
+                *observer_state,
+                mu,
+                1.0e-12,
+                MAX_ITER,
+                1.0e-15,
+                false,
+                10,
+            );
+            black_box(row);
+            rows += 1;
+        }
     }
     rows
 }
