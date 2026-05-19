@@ -14,14 +14,18 @@ pub fn convert_mu_km3_s2_to_au3_day2(mu: f64) -> f64 {
 }
 
 pub fn origin_mu_au3_day2(origin: &OriginId) -> SchemaResult<f64> {
-    let code = match origin {
-        OriginId::SolarSystemBarycenter => "SOLAR_SYSTEM_BARYCENTER".to_string(),
-        OriginId::Naif(code) => naif_origin_name(*code)
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("NAIF:{code}")),
-        OriginId::Named(code) => code.clone(),
-    };
-    origin_code_mu_au3_day2(&code).ok_or(SchemaError::UnsupportedOrigin(code))
+    match origin {
+        OriginId::SolarSystemBarycenter => Ok(solar_system_barycenter_mu_au3_day2()),
+        OriginId::Naif(code) => {
+            let Some(name) = naif_origin_name(*code) else {
+                return Err(SchemaError::UnsupportedOrigin(format!("NAIF:{code}")));
+            };
+            origin_code_mu_au3_day2(name)
+                .ok_or_else(|| SchemaError::UnsupportedOrigin(name.to_string()))
+        }
+        OriginId::Named(code) => origin_code_mu_au3_day2(code)
+            .ok_or_else(|| SchemaError::UnsupportedOrigin(code.clone())),
+    }
 }
 
 pub fn origin_code_mu_au3_day2(code: &str) -> Option<f64> {

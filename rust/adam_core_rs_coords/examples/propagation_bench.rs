@@ -14,6 +14,7 @@ const REPEATS: usize = 11;
 const WARMUP: usize = 3;
 const MAX_ITER: usize = 1_000;
 const TOL: f64 = 1.0e-14;
+const COMPARISON_SCOPE: &str = "rust_internal_not_python_jax_quivr";
 
 struct NoopProvider;
 
@@ -32,6 +33,9 @@ struct Summary {
 }
 
 fn main() {
+    // Diagnostic benchmark only: compares typed Rust propagation overhead and
+    // Rayon pool modes against the raw serial Rust two-body kernel. It is not a
+    // Python/quivr/JAX comparison and should not be cited as such.
     let orbits = build_orbits(ROWS);
     let variants = build_variants(&orbits);
     let times = build_target_times(TIMES);
@@ -103,28 +107,43 @@ fn main() {
     );
 
     let rayon_threads = rayon::current_num_threads();
-    println!("surface,rows,times,repeats,rayon_threads,seconds_p50,seconds_p95,ratio_p50_vs_raw");
-    print_summary("raw_kernel_serial", raw, raw.p50, rayon_threads);
+    println!("surface,comparison_scope,baseline,thread_mode,rows,times,repeats,rayon_threads,seconds_p50,seconds_p95,ratio_p50_vs_raw_serial");
+    print_summary(
+        "raw_kernel_serial",
+        "raw_kernel_serial",
+        "serial",
+        raw,
+        raw.p50,
+        rayon_threads,
+    );
     print_summary(
         "typed_orbits_per_call_pool_1_thread",
+        "raw_kernel_serial",
+        "per_call_rayon_pool_1_thread",
         typed_orbits_per_call_pool,
         raw.p50,
         rayon_threads,
     );
     print_summary(
         "typed_variants_per_call_pool_1_thread",
+        "raw_kernel_serial",
+        "per_call_rayon_pool_1_thread",
         typed_variants_per_call_pool,
         raw.p50,
         rayon_threads,
     );
     print_summary(
         "typed_orbits_global_pool",
+        "raw_kernel_serial",
+        "default_global_rayon_pool",
         typed_orbits_global_pool,
         raw.p50,
         rayon_threads,
     );
     print_summary(
         "typed_variants_global_pool",
+        "raw_kernel_serial",
+        "default_global_rayon_pool",
         typed_variants_global_pool,
         raw.p50,
         rayon_threads,
@@ -163,9 +182,16 @@ fn propagate_variants(
         .len()
 }
 
-fn print_summary(surface: &str, summary: Summary, raw_p50: f64, rayon_threads: usize) {
+fn print_summary(
+    surface: &str,
+    baseline: &str,
+    thread_mode: &str,
+    summary: Summary,
+    raw_p50: f64,
+    rayon_threads: usize,
+) {
     println!(
-        "{surface},{ROWS},{TIMES},{REPEATS},{rayon_threads},{:.9},{:.9},{:.3}",
+        "{surface},{COMPARISON_SCOPE},{baseline},{thread_mode},{ROWS},{TIMES},{REPEATS},{rayon_threads},{:.9},{:.9},{:.3}",
         summary.p50,
         summary.p95,
         summary.p50 / raw_p50

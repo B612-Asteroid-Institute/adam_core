@@ -213,6 +213,8 @@ Acceptance criteria:
 
 Goal: make propagation and ephemeris generation a Rust-owned workflow, while keeping the execution-model changes gated on the Rust n-body backend.
 
+Status 2026-05-19: RM-STANDALONE-006 has a typed `Propagator`/`TwoBodyPropagator` surface with Rust-side provider, diagnostics, variant, and Arrow coverage. RM-STANDALONE-006A split the implementation into focused `propagation/` submodules. The diagnostic `propagation_bench` is Rust-internal only: raw serial Rust kernel vs typed Rust/pool modes, not Python/quivr/JAX evidence. Python/quivr end-to-end typed propagation parity is tracked as W12 adapter work until a typed PyO3 adapter exists.
+
 Directions:
 
 - Keep current 2-body kernels as the first `Propagator` implementation.
@@ -422,6 +424,7 @@ Directions:
   - quivr/PyArrow table conversion;
   - NumPy buffer conversion where still needed;
   - user-facing exceptions mapped from Rust errors.
+- Add explicit typed propagation adapter parity once a PyO3 adapter exists: Python/quivr `Orbits`/variants should map into the Rust-canonical `OrbitBatch`/`OrbitVariantBatch` and `PropagationRequest` contracts, including provider-owned non-TDB rescaling.
 - Avoid putting new domain behavior in `adam_core_py`.
 
 Acceptance criteria:
@@ -525,8 +528,11 @@ Exit criteria:
 | **RM-STANDALONE-004A** | M | ERFA/liberfa FFI implementation for UTC↔TAI conversion. | RM-STANDALONE-004 | Complete in `adam_core_rs_coords::types::time` via `erfars`; fixture-backed `TimeArray::rescale` covers UTC/TAI/TT/TDB and rejects UT1/GPS. |
 | **RM-STANDALONE-004B** | M | Saturate Rust time-rescale parity against existing Python `Timestamp` rescale tests. | RM-STANDALONE-004A | Complete: the fixture now mirrors the full scale-pair correctness matrix including UT1, Python verifies it against `Timestamp`, and Rust verifies it through an explicit provider boundary while provider-less UT1/GPS fail loudly. |
 | **RM-STANDALONE-005** | M | Rust SPICE service API for origin/frame/observer states. | Existing `adam_core_rs_spice` | Complete: typed service methods build on direct `spicekit` plus Rust-native `TimeArray`/`CoordinateBatch` contracts. |
-| **RM-STANDALONE-006** | L | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/004B/005 | Reuse existing Rust 2-body kernels; include covariance, variants, and Rayon-side chunk/thread controls. |
-| **RM-STANDALONE-007** | L | `assist-sys`/`rebound-sys` safe-wrapper spike and n-body parity fixture plan. | RM-STANDALONE-006 | Refines/supersedes RM-FUTURE-002; strategic blocker for OD/impact parity; requires an explicit GPL packaging/license-boundary decision before code lands. |
+| **RM-STANDALONE-006** | L | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/004B/005 | Reuse existing Rust 2-body kernels; include covariance, variants, and Rayon-side chunk/thread controls. Core trait/backend work, Rust-side provider/Arrow/diagnostics validation, benchmark framing, and module split are complete; backend-agnostic ephemeris remains RM-STANDALONE-006G. |
+| **RM-STANDALONE-006E-PY / W12** | M | Python/quivr end-to-end typed propagation adapter parity. | Typed PyO3 propagation adapter | Separate adapter task: verify quivr/Arrow mapping and provider-owned non-TDB rescaling against the Rust-canonical propagation contracts once the adapter exists. |
+| **RM-STANDALONE-006G** | L | Backend-agnostic typed `generate_ephemeris<P: Propagator>` workflow. | RM-STANDALONE-006 + observer/ephemeris typed batches | Next substantial propagation task; keeps light-time, aberration, rotation, and photometry semantics shared by 2-body and future n-body backends. |
+| **RM-STANDALONE-007A** | S | ASSIST/REBOUND GPL packaging-boundary decision. | Before RM-STANDALONE-007 code | Decide whether GPL-tainted `assist-sys`/`rebound-sys` bindings stay in a separate optional crate/package boundary mirroring `adam-assist` before implementation starts. |
+| **RM-STANDALONE-007** | L | `assist-sys`/`rebound-sys` safe-wrapper spike and n-body parity fixture plan. | RM-STANDALONE-006 + RM-STANDALONE-007A | Refines/supersedes RM-FUTURE-002; strategic blocker for OD/impact parity; requires the explicit GPL packaging/license-boundary decision before code lands. |
 | **RM-STANDALONE-008** | L | Rust-native OD/LSQ design over typed propagator and observation batches. | RM-STANDALONE-003/006/007 | Design before implementation; reuse `adam_core_rs_autodiff::Dual` where appropriate. |
 | **RM-STANDALONE-009** | M | Observation/exposure/bandpass Rust model and parsers. | RM-STANDALONE-003 | Unblocks photometry workflows. |
 | **RM-STANDALONE-010** | S | Product/export scope decision: SPK/OEM/OpenSpace/ADES/network/plotting required or optional. | RM-STANDALONE-001 | Prevents core crate dependency bloat. |
