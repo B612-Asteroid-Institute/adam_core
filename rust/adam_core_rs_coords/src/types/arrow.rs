@@ -7,8 +7,8 @@
 
 use super::{
     CoordinateBatch, CoordinateRepresentation, CovarianceBatch, CovarianceUnits, Epoch, Frame,
-    ObjectId, OrbitBatch, OrbitId, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
-    TimeScale, Validity,
+    ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, SchemaError,
+    SchemaResult, TimeArray, TimeScale, Validity, VariantId,
 };
 use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, LargeStringArray, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
@@ -23,6 +23,7 @@ const TIME_SCALE_METADATA_KEY: &str = "adam_core_time_scale";
 const COVARIANCE_METADATA_KEY: &str = "adam_core_covariance";
 const CARTESIAN_COORDINATE_SCHEMA: &str = "CoordinateBatch.cartesian.flat.v1";
 const ORBIT_SCHEMA: &str = "OrbitBatch.cartesian.flat.v1";
+const ORBIT_VARIANT_SCHEMA: &str = "OrbitVariantBatch.cartesian.flat.v1";
 
 pub trait ArrowSchemaExport {
     fn schema() -> Schema;
@@ -69,6 +70,24 @@ impl IntoRecordBatch for OrbitBatch {
 impl TryFromRecordBatch for OrbitBatch {
     fn try_from_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
         orbit_from_record_batch(batch)
+    }
+}
+
+impl ArrowSchemaExport for OrbitVariantBatch {
+    fn schema() -> Schema {
+        orbit_variant_schema(Frame::Unspecified, None, false)
+    }
+}
+
+impl IntoRecordBatch for OrbitVariantBatch {
+    fn into_record_batch(self) -> SchemaResult<RecordBatch> {
+        orbit_variant_to_record_batch(&self)
+    }
+}
+
+impl TryFromRecordBatch for OrbitVariantBatch {
+    fn try_from_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
+        orbit_variant_from_record_batch(batch)
     }
 }
 
@@ -145,6 +164,25 @@ fn orbit_schema(frame: Frame, time_scale: Option<TimeScale>, has_covariance: boo
     Schema::new_with_metadata(
         fields,
         coordinate_metadata(ORBIT_SCHEMA, frame, time_scale, has_covariance),
+    )
+}
+
+fn orbit_variant_schema(
+    frame: Frame,
+    time_scale: Option<TimeScale>,
+    has_covariance: bool,
+) -> Schema {
+    let mut fields = vec![
+        Field::new("orbit_id", DataType::LargeUtf8, false),
+        Field::new("object_id", DataType::LargeUtf8, true),
+        Field::new("variant_id", DataType::LargeUtf8, true),
+        Field::new("weights", DataType::Float64, true),
+        Field::new("weights_cov", DataType::Float64, true),
+    ];
+    fields.extend(coordinate_fields());
+    Schema::new_with_metadata(
+        fields,
+        coordinate_metadata(ORBIT_VARIANT_SCHEMA, frame, time_scale, has_covariance),
     )
 }
 
@@ -238,20 +276,47 @@ fn orbit_to_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch> {
         time_scale,
         orbits.coordinates.covariance.is_some(),
     );
-    let mut arrays: Vec<ArrayRef> = Vec::with_capacity(47);
-    arrays.push(Arc::new(LargeStringArray::from_iter_values(
-        orbits.orbit_id.iter().map(|id| id.0.as_str()),
-    )) as ArrayRef);
-    arrays.push(Arc::new(LargeStringArray::from_iter(
-        orbits
-            .object_id
-            .iter()
-            .map(|id| id.as_ref().map(|id| id.0.as_str())),
-    )) as ArrayRef);
+    let mut arrays = orbit_metadata_arrays(&orbits.orbit_id, &orbits.object_id);
     arrays.extend(coordinate_arrays(&orbits.coordinates)?);
 
     RecordBatch::try_new(Arc::new(schema), arrays)
         .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn orbit_variant_to_record_batch(variants: &OrbitVariantBatch) -> SchemaResult<RecordBatch> {
+    variants.validate()?;
+    let time_scale = variants.coordinates.times.as_ref().map(|time| time.scale);
+    let schema = orbit_variant_schema(
+        variants.coordinates.frame,
+        time_scale,
+        variants.coordinates.covariance.is_some(),
+    );
+    let mut arrays = orbit_metadata_arrays(&variants.orbit_id, &variants.object_id);
+    arrays.push(Arc::new(LargeStringArray::from_iter(
+        variants
+            .variant_id
+            .iter()
+            .map(|id| id.as_ref().map(|id| id.0.as_str())),
+    )) as ArrayRef);
+    arrays.push(Arc::new(Float64Array::from(variants.weights.clone())) as ArrayRef);
+    arrays.push(Arc::new(Float64Array::from(variants.weights_cov.clone())) as ArrayRef);
+    arrays.extend(coordinate_arrays(&variants.coordinates)?);
+
+    RecordBatch::try_new(Arc::new(schema), arrays)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn orbit_metadata_arrays(orbit_id: &[OrbitId], object_id: &[Option<ObjectId>]) -> Vec<ArrayRef> {
+    vec![
+        Arc::new(LargeStringArray::from_iter_values(
+            orbit_id.iter().map(|id| id.0.as_str()),
+        )) as ArrayRef,
+        Arc::new(LargeStringArray::from_iter(
+            object_id
+                .iter()
+                .map(|id| id.as_ref().map(|id| id.0.as_str())),
+        )) as ArrayRef,
+    ]
 }
 
 fn coordinate_from_record_batch(batch: &RecordBatch) -> SchemaResult<CoordinateBatch> {
@@ -323,6 +388,39 @@ fn coordinate_from_record_batch(batch: &RecordBatch) -> SchemaResult<CoordinateB
 }
 
 fn orbit_from_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatch> {
+    let (orbit_id, object_id) = parse_orbit_metadata(batch)?;
+    OrbitBatch::new(orbit_id, object_id, coordinate_from_record_batch(batch)?)
+}
+
+fn orbit_variant_from_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitVariantBatch> {
+    let rows = batch.num_rows();
+    let (orbit_id, object_id) = parse_orbit_metadata(batch)?;
+    let variant_id = large_string_column(batch, "variant_id")?;
+    let variant_id = (0..rows)
+        .map(|row| {
+            if variant_id.is_null(row) {
+                None
+            } else {
+                Some(VariantId(variant_id.value(row).to_string()))
+            }
+        })
+        .collect::<Vec<_>>();
+    let weights = optional_float64_values(float64_column(batch, "weights")?);
+    let weights_cov = optional_float64_values(float64_column(batch, "weights_cov")?);
+
+    OrbitVariantBatch::new(
+        orbit_id,
+        object_id,
+        variant_id,
+        weights,
+        weights_cov,
+        coordinate_from_record_batch(batch)?,
+    )
+}
+
+fn parse_orbit_metadata(
+    batch: &RecordBatch,
+) -> SchemaResult<(Vec<OrbitId>, Vec<Option<ObjectId>>)> {
     let rows = batch.num_rows();
     let orbit_id = large_string_column(batch, "orbit_id")?;
     let orbit_id = (0..rows)
@@ -348,7 +446,19 @@ fn orbit_from_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatch> {
         })
         .collect::<Vec<_>>();
 
-    OrbitBatch::new(orbit_id, object_id, coordinate_from_record_batch(batch)?)
+    Ok((orbit_id, object_id))
+}
+
+fn optional_float64_values(column: &Float64Array) -> Vec<Option<f64>> {
+    (0..column.len())
+        .map(|row| {
+            if column.is_null(row) {
+                None
+            } else {
+                Some(column.value(row))
+            }
+        })
+        .collect()
 }
 
 fn parse_time_array(
@@ -605,6 +715,40 @@ mod tests {
         assert_eq!(round_tripped.orbit_id[1].0, "orbit-2");
         assert_eq!(round_tripped.object_id[0].as_ref().unwrap().0, "object-1");
         assert!(round_tripped.object_id[1].is_none());
+        assert_eq!(round_tripped.coordinates.len(), 2);
+        assert_eq!(round_tripped.coordinates.frame, Frame::Ecliptic);
+    }
+
+    #[test]
+    fn orbit_variant_arrow_round_trip_preserves_variant_metadata() {
+        let coordinates = coordinate_batch_with_covariance();
+        let variants = OrbitVariantBatch::new(
+            vec![
+                OrbitId("orbit-1".to_string()),
+                OrbitId("orbit-2".to_string()),
+            ],
+            vec![Some(ObjectId("object-1".to_string())), None],
+            vec![Some(VariantId("variant-1".to_string())), None],
+            vec![Some(0.75), Some(0.25)],
+            vec![Some(0.5625), None],
+            coordinates,
+        )
+        .unwrap();
+        let batch = variants.into_record_batch().unwrap();
+        assert_eq!(batch.num_columns(), 50);
+        let schema = batch.schema();
+        assert_eq!(
+            schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
+            ORBIT_VARIANT_SCHEMA
+        );
+
+        let round_tripped = OrbitVariantBatch::try_from_record_batch(&batch).unwrap();
+        assert_eq!(round_tripped.orbit_id[0].0, "orbit-1");
+        assert_eq!(round_tripped.object_id[0].as_ref().unwrap().0, "object-1");
+        assert_eq!(round_tripped.variant_id[0].as_ref().unwrap().0, "variant-1");
+        assert!(round_tripped.variant_id[1].is_none());
+        assert_eq!(round_tripped.weights, vec![Some(0.75), Some(0.25)]);
+        assert_eq!(round_tripped.weights_cov, vec![Some(0.5625), None]);
         assert_eq!(round_tripped.coordinates.len(), 2);
         assert_eq!(round_tripped.coordinates.frame, Frame::Ecliptic);
     }

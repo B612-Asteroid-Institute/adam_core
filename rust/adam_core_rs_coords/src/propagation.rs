@@ -990,6 +990,7 @@ mod tests {
     use super::*;
     use crate::types::{Frame, SchemaResult};
     use crate::{CoordinateRepresentation, CovarianceUnits, NANOS_PER_DAY};
+    use std::cell::Cell;
 
     struct NoopProvider;
 
@@ -1009,6 +1010,32 @@ mod tests {
         }
     }
 
+    struct PassthroughUt1Provider {
+        calls: Cell<usize>,
+    }
+
+    impl PassthroughUt1Provider {
+        fn new() -> Self {
+            Self {
+                calls: Cell::new(0),
+            }
+        }
+    }
+
+    impl TimeScaleProvider for PassthroughUt1Provider {
+        fn rescale(&self, times: &TimeArray, new_scale: TimeScale) -> SchemaResult<TimeArray> {
+            self.calls.set(self.calls.get() + 1);
+            if times.scale != TimeScale::Ut1 || new_scale != TimeScale::Tdb {
+                return Err(SchemaError::InvalidTimeScale(format!(
+                    "test provider only handles ut1->tdb, got {}->{}",
+                    times.scale.as_str(),
+                    new_scale.as_str()
+                )));
+            }
+            TimeArray::new(TimeScale::Tdb, times.epochs.clone())
+        }
+    }
+
     fn tdb_times() -> TimeArray {
         TimeArray::from_parts(
             TimeScale::Tdb,
@@ -1022,9 +1049,18 @@ mod tests {
         TimeArray::from_parts(TimeScale::Ut1, vec![60_000, 60_010], vec![0, 0]).unwrap()
     }
 
+    fn sample_orbit_times() -> TimeArray {
+        TimeArray::from_parts(TimeScale::Tdb, vec![60_000, 60_001], vec![0, 0]).unwrap()
+    }
+
     fn sample_orbits(covariance: Option<CovarianceBatch>) -> OrbitBatch {
-        let times =
-            TimeArray::from_parts(TimeScale::Tdb, vec![60_000, 60_001], vec![0, 0]).unwrap();
+        sample_orbits_with_times(covariance, sample_orbit_times())
+    }
+
+    fn sample_orbits_with_times(
+        covariance: Option<CovarianceBatch>,
+        times: TimeArray,
+    ) -> OrbitBatch {
         let coordinates = CoordinateBatch::cartesian(
             vec![
                 [1.0, 0.2, 0.1, 0.001, 0.015, 0.0005],
@@ -1045,6 +1081,17 @@ mod tests {
             coordinates,
         )
         .unwrap()
+    }
+
+    fn assert_cartesian_states_close(left: &OrbitBatch, right: &OrbitBatch, tolerance: f64) {
+        let left_states = left.coordinates.values.cartesian().unwrap();
+        let right_states = right.coordinates.values.cartesian().unwrap();
+        assert_eq!(left_states.len(), right_states.len());
+        for (left_row, right_row) in left_states.iter().zip(right_states.iter()) {
+            for column in 0..6 {
+                assert!((left_row[column] - right_row[column]).abs() <= tolerance);
+            }
+        }
     }
 
     fn sample_variants() -> OrbitVariantBatch {
@@ -1165,6 +1212,78 @@ mod tests {
         assert_eq!(result.orbits.orbit_id[1].0, "orbit-b");
         assert_eq!(result.times.epochs[0], times.epochs[0]);
         assert_eq!(result.times.epochs[1], times.epochs[1]);
+    }
+
+    #[test]
+    fn two_body_accepts_utc_inputs_via_rust_time_rescale() {
+        let tdb_orbits = sample_orbits(None);
+        let tdb_times = tdb_times();
+        let options = PropagationOptions {
+            covariance: CovariancePropagation::None,
+            thread_limit: Some(1),
+            ..PropagationOptions::default()
+        };
+        let tdb_request =
+            PropagationRequest::new(&tdb_orbits, &tdb_times, options.clone()).unwrap();
+        let tdb_result = TwoBodyPropagator::default()
+            .propagate(&tdb_request, &NoopProvider)
+            .unwrap();
+
+        let utc_orbit_times = tdb_orbits
+            .coordinates
+            .times
+            .as_ref()
+            .unwrap()
+            .rescale(TimeScale::Utc)
+            .unwrap();
+        let utc_orbits = sample_orbits_with_times(None, utc_orbit_times);
+        let utc_times = tdb_times.rescale(TimeScale::Utc).unwrap();
+        let utc_request = PropagationRequest::new(&utc_orbits, &utc_times, options).unwrap();
+        let utc_result = TwoBodyPropagator::default()
+            .propagate(&utc_request, &NoopProvider)
+            .unwrap();
+
+        assert_eq!(utc_result.times.scale, TimeScale::Tdb);
+        assert_cartesian_states_close(&tdb_result.orbits, &utc_result.orbits, 1.0e-13);
+    }
+
+    #[test]
+    fn two_body_uses_provider_for_ut1_inputs() {
+        let tdb_orbits = sample_orbits(None);
+        let tdb_times = tdb_times();
+        let options = PropagationOptions {
+            covariance: CovariancePropagation::None,
+            thread_limit: Some(1),
+            ..PropagationOptions::default()
+        };
+        let tdb_request =
+            PropagationRequest::new(&tdb_orbits, &tdb_times, options.clone()).unwrap();
+        let tdb_result = TwoBodyPropagator::default()
+            .propagate(&tdb_request, &NoopProvider)
+            .unwrap();
+
+        let ut1_orbit_times = TimeArray::new(
+            TimeScale::Ut1,
+            tdb_orbits
+                .coordinates
+                .times
+                .as_ref()
+                .unwrap()
+                .epochs
+                .clone(),
+        )
+        .unwrap();
+        let ut1_orbits = sample_orbits_with_times(None, ut1_orbit_times);
+        let ut1_times = TimeArray::new(TimeScale::Ut1, tdb_times.epochs.clone()).unwrap();
+        let ut1_request = PropagationRequest::new(&ut1_orbits, &ut1_times, options).unwrap();
+        let provider = PassthroughUt1Provider::new();
+        let ut1_result = TwoBodyPropagator::default()
+            .propagate(&ut1_request, &provider)
+            .unwrap();
+
+        assert_eq!(provider.calls.get(), 2);
+        assert_eq!(ut1_result.times.scale, TimeScale::Tdb);
+        assert_cartesian_states_close(&tdb_result.orbits, &ut1_result.orbits, 1.0e-15);
     }
 
     #[test]
