@@ -5,8 +5,8 @@ the n-body propagation line (anything backed by ASSIST: ``Propagator``
 wrapper paths, ``dynamics.impacts``, ``orbit_determination.od``/``iod``)
 are deliberately out of scope here — those decisions are deferred until
 the n-body line is itself migrated to Rust traits backed by an ASSIST-compatible
-safe wrapper over ``assist-sys`` + ``rebound-sys`` (see RM-FUTURE-002 /
-RM-STANDALONE-007).
+GPL ``assist-rs`` harness implementing the core ``Propagator`` contracts
+(see RM-FUTURE-002 / RM-STANDALONE-007).
 
 The four surfaces measured all delegate (directly or via a tiny harness
 propagator) to Rust kernels that are already Rayon-parallel. Adding Ray

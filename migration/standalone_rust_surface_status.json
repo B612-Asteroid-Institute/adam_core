@@ -64,9 +64,9 @@
       "current_baseline": "Python Timestamp.rescale uses ERFA for UTC-TAI leap seconds, an exact TAI-TT offset, a project-local TT-TDB approximation, Astropy/IERS for UT1, and pure arithmetic MJD_TDB to ET. RM-STANDALONE-004A mirrors UTC/TAI/TT/TDB in Rust through erfars-backed ERFA calls plus project-local arithmetic; RM-STANDALONE-004B extends fixtures/tests to the full Python rescale matrix through an explicit TimeScaleProvider boundary while provider-less UT1/GPS fail loudly."
     },
     "nbody_backend": {
-      "decision": "assist_sys_rebound_sys_safe_wrapper_with_pluggable_backend_trait",
-      "source": "user clarification 2026-05-15",
-      "implication": "RM-STANDALONE-006/007 should define a backend trait before binding to raw assist-sys/rebound-sys implementation details; safe wrapper and license boundaries must be explicit."
+      "decision": "assist_rs_gpl_harness_with_pluggable_backend_trait",
+      "source": "user clarification 2026-05-15; assist-rs/GPL boundary clarification 2026-05-19",
+      "implication": "RM-STANDALONE-006/007 should keep permissive core Propagator contracts backend-generic, then adapt GPL-licensed assist-rs from a separate harness/package boundary."
     },
     "network_clients": {
       "decision": "included_in_first_standalone_scope",
@@ -238,11 +238,11 @@
       ],
       "status": "blocked_by_pluggable_rust_propagator",
       "first_scope": true,
-      "implementation_direction": "Define pluggable Rust Propagator trait; start with TwoBodyPropagator and add an ASSIST-compatible backend via a safe assist-sys/rebound-sys wrapper while retaining backend pluggability.",
+      "implementation_direction": "Define pluggable Rust Propagator trait; start with TwoBodyPropagator and add an ASSIST-compatible backend by adapting GPL-licensed assist-rs while retaining backend pluggability.",
       "dependencies": [
         "W1",
         "W3",
-        "assist_sys_rebound_sys_safe_wrapper_decision"
+        "assist_rs_gpl_harness_decision"
       ],
       "next_tasks": [
         "RM-STANDALONE-006",

@@ -83,7 +83,7 @@ The exact 507-entry list is in `migration/artifacts/adam_core_public_surface_inv
 | **W1 Core coordinate/time/orbit data model** | `time.time`; `coordinates.cartesian`, `coordinates.spherical`, `coordinates.keplerian`, `coordinates.cometary`, `coordinates.geodetics`, `coordinates.origin`, `coordinates.covariances`; `orbits.orbits`, `orbits.variants`, `orbits.classification`, `orbits.physical_parameters`; `observers.observers`, `observers.state` | 204 | Rust-native typed batches for epochs, origins, frames, coordinate representations, covariance blocks, orbit rows, observer rows, and metadata. Provide Arrow/Python adapters, not PyArrow-shaped internals. |
 | **W2 Coordinate transforms, units, residuals, variants** | `coordinates.transform`, `coordinates.units`, `coordinates.residuals`, `coordinates.variants` | 34 | Lift existing Rust kernels onto Rust-native coordinate batches. Add Rust-native unit conversions, residual arrays, covariance sampling, and variant generation. Keep SciPy/NumPy choices only in Python adapter until Rust-native linalg/parity is implemented. |
 | **W3 SPICE, frames, origins, observers** | `utils.spice_backend`, `utils.spice`, `observers.utils` | 18 | Make `adam_core_rs_spice` a reusable Rust service: kernel store, frame graph, body/frame/name lookup, origin-state cache, observer-state generation, fixed-kernel test fixtures. |
-| **W4 Dynamics and mission design** | `dynamics.kepler`, `dynamics.barker`, `dynamics.stumpff`, `dynamics.chi`, `dynamics.lagrange`, `dynamics.propagation`, `dynamics.ephemeris`, `dynamics.aberrations`, `dynamics.lambert`, `dynamics.moid`, `dynamics.tisserand`, `dynamics.impacts`, `dynamics.exceptions`, `dynamics._rust_compat`, `missions.porkchop` | 60 | Govern existing Rust helpers, then expose typed Rust APIs for two-body propagation, ephemerides, Lambert/porkchop, MOID, Tisserand, aberration, and impacts. `dynamics._rust_compat` is counted only for inventory/accounting; it is adapter shim glue to retire, not a Rust port target. Make the ASSIST-compatible n-body safe-wrapper line the strategic propagation blocker; actual published crates are raw `assist-sys` + `rebound-sys`, not a high-level `assist-rs` crate. |
+| **W4 Dynamics and mission design** | `dynamics.kepler`, `dynamics.barker`, `dynamics.stumpff`, `dynamics.chi`, `dynamics.lagrange`, `dynamics.propagation`, `dynamics.ephemeris`, `dynamics.aberrations`, `dynamics.lambert`, `dynamics.moid`, `dynamics.tisserand`, `dynamics.impacts`, `dynamics.exceptions`, `dynamics._rust_compat`, `missions.porkchop` | 60 | Govern existing Rust helpers, then expose typed Rust APIs for two-body propagation, ephemerides, Lambert/porkchop, MOID, Tisserand, aberration, and impacts. `dynamics._rust_compat` is counted only for inventory/accounting; it is adapter shim glue to retire, not a Rust port target. Make the ASSIST-compatible n-body adapter line the strategic propagation blocker; `assist-rs` is the intended GPL-licensed ASSIST/REBOUND Rust harness, and permissive core crates should depend only on backend-generic contracts. |
 | **W5 Propagator abstraction and execution model** | `propagator.propagator`, `propagator.utils`, `parallel`, `ray_cluster`, `utils.chunking`, `utils.bounded_lru` | 33 | After the Rust propagator/n-body backend exists, replace Python subclass/Ray orchestration with Rust `Propagator` traits and Rayon chunking. Do not remove current Ray dispatch for ASSIST-touching surfaces before RM-FUTURE-002 / RM-STANDALONE-007 lands and RM-WD3-001 step 3 is revisited with data. |
 | **W6 Orbit determination workflows** | `orbit_determination.gibbs`, `orbit_determination.herrick_gibbs`, `orbit_determination.gauss`, `orbit_determination.iod`, `orbit_determination.od`, `orbit_determination.least_squares`, `orbit_determination.evaluate`, `orbit_determination.outliers`, `orbit_determination.differential_correction`, `orbit_determination.orbit_fitter`, `orbit_determination.fitted_orbits` | 28 | Port after Rust data model + propagator trait exist. Build typed residual/fit/diagnostic outputs, deterministic convergence policies, root-selection policy, and covariance handling. |
 | **W7 Photometry and bandpasses** | `photometry.magnitude`, `photometry.magnitude_common`, `photometry.absolute_magnitude`, `photometry.bandpasses.api`, `photometry.bandpasses.tables`, `photometry.bandpasses.vendor`, `photometry.bandpasses.constants`, `observations.photometry` | 35 | Existing numeric magnitude kernels are Rust. Add Rust bandpass registry/data model, filter conversions, grouped absolute-magnitude workflows, and observation/exposure joins once observation data model exists. |
@@ -290,11 +290,11 @@ pub fn generate_ephemeris<P: Propagator>(
 - Use per-thread shards for Rayon dispatch. `TwoBodyPropagator` can return a zero-sized shard; any ASSIST-compatible backend should return a shard that owns its own C simulation state.
 - Reserve `Err` for setup/request errors. Per-row solver/integrator failures should be represented through `Validity` and diagnostics.
 - Add `TwoBodyPropagator` first by lifting existing kernels.
-- Add an ASSIST-compatible n-body backend via an in-tree safe wrapper over `assist-sys` + `rebound-sys`, not by assuming a high-level `assist-rs` crate exists:
-  - perturbing-body state lookup through `adam_core_rs_spice`;
-  - covariance support via `adam_core_rs_autodiff::Dual` where forward-mode AD is appropriate, Monte Carlo/sigma-point variants where variational equations are not yet available, and explicit unsupported-mode errors otherwise;
-  - chunked Rayon dispatch inside Rust.
-- Decide the ASSIST/REBOUND GPL packaging boundary before RM-STANDALONE-007 code lands; prefer keeping GPL-tainted bindings in a separate optional crate/package mirroring the current Python `adam-assist` boundary.
+- Add an ASSIST-compatible n-body backend by adapting `assist-rs` from a GPL-licensed harness crate/package to the core `Propagator` trait:
+  - keep permissive core crates free of direct `assist-rs`/ASSIST/REBOUND dependencies;
+  - use `assist-rs` `AssistData`, `Orbit`, propagation, STM/covariance, observatory, and ephemeris support where it matches the core contracts;
+  - preserve backend pluggability by mapping `assist-rs` types/errors into `PropagationRequest`/`PropagationResult`, `Validity`, and diagnostics at the harness boundary.
+- RM-STANDALONE-007A is decided: the GPL boundary is a separate `assist-rs` harness/adapter, mirroring the current Python `adam-assist` separation.
 - Rebuild impact/collision helpers on top of the same propagator trait.
 - Keep current Python Ray dispatch for ASSIST-touching surfaces until the Rust n-body backend lands; only then revisit RM-WD3-001 step 3 and replace in-process Ray defaults with data.
 
@@ -304,7 +304,7 @@ Acceptance criteria:
 - Backend-agnostic Rust `generate_ephemeris` reproduces current `dynamics.generate_ephemeris_2body` core behavior without Python for normalized same-origin ecliptic Cartesian inputs; origin/frame translation gaps fail loudly until the service/provider boundary is wired.
 - Time-scale provider integration is tested: UTC/TT inputs integrate in the backend scale and return explicitly scaled output times.
 - Per-row failure granularity is tested through `Validity` and diagnostics.
-- n-body Rust workflow reproduces representative ASSIST-backed Python outputs and performance profiles using fixture-driven tests by default, with live `assist-sys`/`rebound-sys` integration gated behind an explicit feature/env var.
+- n-body Rust workflow reproduces representative ASSIST-backed Python outputs and performance profiles using fixture-driven tests by default, with live `assist-rs` integration gated behind an explicit GPL harness feature/package boundary.
 - Ray default changes for propagation/OD/impact paths happen only after RM-FUTURE-002 / RM-STANDALONE-007 and an updated parallel profile.
 
 ### W6 — Orbit determination workflows
@@ -476,7 +476,7 @@ Scope:
 
 - Define the `Propagator` trait and backend-agnostic `generate_ephemeris` workflow.
 - Implement typed `TwoBodyPropagator`.
-- Integrate an ASSIST-compatible n-body backend through an in-tree safe wrapper over `assist-sys` + `rebound-sys`, or explicitly choose an equivalent Rust n-body path that preserves ASSIST parity.
+- Integrate an ASSIST-compatible n-body backend by adapting GPL-licensed `assist-rs` to the core `Propagator` contracts, or explicitly choose an equivalent Rust n-body path that preserves ASSIST parity.
 
 Exit criteria:
 
@@ -531,8 +531,8 @@ Exit criteria:
 | **RM-STANDALONE-006** | L | Typed `Propagator` trait and `TwoBodyPropagator` implementation. | RM-STANDALONE-003/004B/005 | Complete through the first typed ephemeris workflow: core trait/backend work, covariance, variants, Rayon controls, Rust-side provider/Arrow/diagnostics validation, benchmark framing, module split, and backend-agnostic `generate_ephemeris<P: Propagator>` are in place. |
 | **RM-STANDALONE-006E-PY / W12** | M | Python/quivr end-to-end typed propagation adapter parity. | Typed PyO3 propagation adapter | Separate adapter task: verify quivr/Arrow mapping and provider-owned non-TDB rescaling against the Rust-canonical propagation contracts once the adapter exists. |
 | **RM-STANDALONE-006G** | L | Backend-agnostic typed `generate_ephemeris<P: Propagator>` workflow. | RM-STANDALONE-006 + observer/ephemeris typed batches | Complete for normalized same-origin ecliptic Cartesian orbit/observer inputs: `ObserverBatch`/`EphemerisBatch` contracts, `EphemerisOptions`, initial propagation via `Propagator`, shared light-time/stellar-aberration/rotation/photometry semantics, explicit output time scaling, row validity, diagnostics, and local benchmark smoke. Origin/frame translation remains fail-loud until a higher-level origin-state provider is wired at the adapter/service boundary. |
-| **RM-STANDALONE-007A** | S | ASSIST/REBOUND GPL packaging-boundary decision. | Before RM-STANDALONE-007 code | Decide whether GPL-tainted `assist-sys`/`rebound-sys` bindings stay in a separate optional crate/package boundary mirroring `adam-assist` before implementation starts. |
-| **RM-STANDALONE-007** | L | `assist-sys`/`rebound-sys` safe-wrapper spike and n-body parity fixture plan. | RM-STANDALONE-006 + RM-STANDALONE-007A | Refines/supersedes RM-FUTURE-002; strategic blocker for OD/impact parity; requires the explicit GPL packaging/license-boundary decision before code lands. |
+| **RM-STANDALONE-007A** | S | ASSIST/REBOUND GPL packaging-boundary decision. | Before RM-STANDALONE-007 code | Complete: use `assist-rs` (GPL-3.0) as the ASSIST/REBOUND Rust harness and adapt it to adam-core's core `Propagator` contracts from a GPL crate/package boundary mirroring `adam-assist`. |
+| **RM-STANDALONE-007** | L | `assist-rs` GPL harness `Propagator` adapter spike and n-body parity fixture plan. | RM-STANDALONE-006 + RM-STANDALONE-007A | Refines/supersedes RM-FUTURE-002; strategic blocker for OD/impact parity; first slice should map typed propagation requests/results, time-scale handling, covariance/STM, errors, and diagnostics without rewiring Python/Ray defaults yet. |
 | **RM-STANDALONE-008** | L | Rust-native OD/LSQ design over typed propagator and observation batches. | RM-STANDALONE-003/006/007 | Design before implementation; reuse `adam_core_rs_autodiff::Dual` where appropriate. |
 | **RM-STANDALONE-009** | M | Observation/exposure/bandpass Rust model and parsers. | RM-STANDALONE-003 | Unblocks photometry workflows. |
 | **RM-STANDALONE-010** | S | Product/export scope decision: SPK/OEM/OpenSpace/ADES/network/plotting required or optional. | RM-STANDALONE-001 | Prevents core crate dependency bloat. |
@@ -543,7 +543,7 @@ Resolved on 2026-05-15:
 
 1. **Schema ownership:** Rust schemas are canonical; Python/quivr adapts through Arrow/PyO3 adapters.
 2. **Time strategy:** start with FFI to ERFA/SOFA; outline and evaluate a Rust-native replacement as the next step.
-3. **N-body backend:** ASSIST-compatible propagation remains preferred, but no high-level `assist-rs` crate exists; actual published crates are raw `assist-sys` + `rebound-sys`, so the propagator design must remain pluggable and any safe wrapper/license boundary must be explicit.
+3. **N-body backend:** ASSIST-compatible propagation remains preferred through `assist-rs` (GPL-3.0), with a GPL harness/adapter implementing adam-core's backend-generic `Propagator` contracts while permissive core crates remain pluggable and `assist-rs`-free.
 4. **Network clients:** include network clients in first standalone scope, preferably as optional net/companion functionality with fixture-testable parsers and opt-in live tests.
 5. **Plotting:** include plotting/visualization products in first standalone scope, but expect a new data/spec-oriented approach rather than direct Python plotting parity.
 6. **File/product formats:** keep SPK/OEM/ADES/OpenSpace/product exporters in first standalone planning; exact first-release cut can be decided under `RM-STANDALONE-010`.
@@ -569,6 +569,6 @@ The long-term track should remain a small but explicit standalone foundation pro
 5. implement the first ERFA/liberfa UTC↔TAI service behind the fixture — **complete**;
 6. saturate Rust time-rescale parity against the existing Python `Timestamp` rescale tests — **complete**;
 7. extend the Rust SPICE service API — **complete**;
-8. then tackle the propagator trait and RM-FUTURE-002 / RM-STANDALONE-007 `assist-sys`/`rebound-sys` safe-wrapper integration — **next**.
+8. then tackle the RM-FUTURE-002 / RM-STANDALONE-007 `assist-rs` GPL harness adapter integration — **next**.
 
 Once those foundations exist, the high-level workflow ports become tractable and testable instead of being a piecemeal translation of Python orchestration.

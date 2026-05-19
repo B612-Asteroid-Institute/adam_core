@@ -17,7 +17,7 @@ User decisions incorporated:
 
 - Rust schemas are canonical; Python/quivr adapts through Arrow/PyO3 adapters.
 - Time conversion starts with FFI to ERFA/SOFA; a Rust-native replacement should be outlined/evaluated as a follow-up.
-- ASSIST-compatible n-body propagation is preferred, but no high-level `assist-rs` crate exists; current Rust crates are raw `assist-sys` + `rebound-sys`, so propagation must be backend-pluggable and the safe wrapper/license boundary must be explicit.
+- ASSIST-compatible n-body propagation is preferred through `assist-rs` (GPL-3.0); propagation must remain backend-pluggable, with `assist-rs` adapted from a GPL harness boundary rather than pulled into permissive core crates.
 - Network clients are in first standalone scope, preferably optional/feature-gated.
 - Plotting/visualization products are in first standalone scope, but likely as data/spec output rather than a direct Python plotting port.
 
@@ -502,7 +502,7 @@ Convergence diagnostics, outlier decisions, root-selection policy, and covarianc
 
 ## 16. Propagation request/response data
 
-The data model must support the pluggable propagator design before the `assist-sys`/`rebound-sys` safe wrapper is wired. The core trait name is `Propagator` to match Python terminology and the roadmap. Under the modules-first policy, RM-STANDALONE-006 may start in a `propagation` module inside current crates; split to a future `adam_core_rs_propagation` crate only after the dependency boundary is stable and explicitly approved. The trait owns propagation only; ephemeris generation is a free workflow over a `Propagator` so light-time, aberration, frame rotation, and photometry semantics are shared across 2-body and n-body backends.
+The data model must support the pluggable propagator design before the GPL `assist-rs` harness adapter is wired. The core trait name is `Propagator` to match Python terminology and the roadmap. Under the modules-first policy, RM-STANDALONE-006 may start in a `propagation` module inside current crates; split to a future `adam_core_rs_propagation` crate only after the dependency boundary is stable and explicitly approved. The trait owns propagation only; ephemeris generation is a free workflow over a `Propagator` so light-time, aberration, frame rotation, and photometry semantics are shared across 2-body and n-body backends.
 
 ```rust
 pub enum EpochPolicy {
@@ -573,7 +573,7 @@ pub fn generate_ephemeris<P: Propagator>(
 ) -> Result<EphemerisBatch>;
 ```
 
-The first backend should wrap existing 2-body Rust kernels. The n-body backend should target an ASSIST-compatible safe wrapper over `assist-sys` + `rebound-sys`, but the trait must not encode ASSIST-specific assumptions.
+The first backend should wrap existing 2-body Rust kernels. The n-body backend should adapt `assist-rs` to the core `Propagator` contracts from a GPL harness boundary, but the trait must not encode ASSIST-specific assumptions.
 
 Important invariants for RM-STANDALONE-006:
 
@@ -676,7 +676,7 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 - Coordinate transform/covariance parity through typed batches.
 - Observer/SPICE fixtures through Rust service APIs.
 - 2-body propagator typed fixtures.
-- ASSIST-compatible n-body representative fixtures generated from today's Python `adam_assist` behavior, with live `assist-sys`/`rebound-sys` tests gated behind an explicit feature/env var.
+- ASSIST-compatible n-body representative fixtures generated from today's Python `adam_assist` behavior, with live `assist-rs` integration gated behind an explicit GPL harness feature/package boundary.
 - OD/IOD/LSQ end-to-end fixtures without Python table construction.
 - Network parser fixtures without live HTTP.
 - Product/export fixtures for SPK, OEM, ADES, and OpenSpace outputs.
@@ -689,7 +689,7 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 4. **RM-STANDALONE-005:** promote `adam_core_rs_spice` service APIs for origins, frames, and observers. **Complete.**
 5. **RM-STANDALONE-004B:** saturate Rust time-rescale parity against the existing Python `Timestamp` rescale matrix before propagation depends on `TimeArray`. **Complete.**
 6. **RM-STANDALONE-006:** define `Propagator` and backend-agnostic `generate_ephemeris`, then lift existing 2-body kernels behind the trait.
-7. **RM-STANDALONE-007:** integrate an ASSIST-compatible safe wrapper over `assist-sys` + `rebound-sys` behind the trait while keeping backend pluggability and license/package boundaries explicit.
+7. **RM-STANDALONE-007:** integrate a GPL `assist-rs` harness adapter behind the trait while keeping backend pluggability and license/package boundaries explicit.
 8. **RM-STANDALONE-008+**: port OD/IOD/LSQ and observation/photometry/product workflows on top of typed batches.
 
 ## 22. Acceptance criteria for this RFC
@@ -697,6 +697,6 @@ Downstream crates can wrap these errors but should not replace them with unstruc
 - Names and describes the canonical Rust batch types needed for standalone workflows.
 - Records Rust-schema ownership and Python/quivr adapter posture.
 - Records ERFA/SOFA FFI as the initial time strategy with a Rust-native follow-up path.
-- Keeps ASSIST-compatible n-body propagation preferred while making the actual `assist-sys`/`rebound-sys` safe-wrapper and licensing work explicit and backend-pluggable.
+- Keeps ASSIST-compatible n-body propagation preferred while making the `assist-rs` GPL harness/adaptation and licensing boundary explicit and backend-pluggable.
 - Covers covariance, variants, chunking, provenance, Arrow/Python adapters, network clients, and plotting/product outputs.
 - Defines concrete next implementation tasks and validation gates.

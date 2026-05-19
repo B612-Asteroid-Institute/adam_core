@@ -338,7 +338,7 @@ These are plausible Rust candidates, but the current evidence does not justify p
 These may be good future Rust projects, but not last-mile migration cleanup.
 
 - **Generic n-body / ASSIST propagation:** `EphemerisMixin.generate_ephemeris`, `Propagator.propagate_orbits`, `propagation_worker`, impact/collision helpers, and orbit propagation workflows.
-  - Why defer: wall-clock OD/LSQ/IOD remains dominated by `generate_ephemeris` / ASSIST propagation. Meaningful conversion likely requires an ASSIST-compatible safe wrapper over `assist-sys` + `rebound-sys` or a new Rust propagation architecture with matching parity.
+  - Why defer: wall-clock OD/LSQ/IOD remains dominated by `generate_ephemeris` / ASSIST propagation. Meaningful conversion should use the GPL-licensed `assist-rs` harness/adapter or an equivalent Rust propagation architecture with matching ASSIST parity.
 - **OD orchestration:** `fit_least_squares`, `LeastSquares.least_squares`, `evaluate_orbits`, outlier helpers, `iod`, `od`, `differential_correction`, and `OrbitFitter.initial_fit`.
   - Why defer: recent RM-WE2-004/RM-WE3-001 wins were from Python/NumPy orchestration cleanup while preserving deterministic OD behavior. Full Rust port would need ownership of propagation, residual table semantics, convergence diagnostics, and fit reporting.
 - **Impact probability/collision workflows.**
@@ -366,7 +366,7 @@ Recommendation: **do not convert these unless a separate product/architecture de
 | Dependency / behavior | Why it blocks or discourages direct Rust conversion |
 |---|---|
 | Astropy/ERFA time-scale semantics | Reimplementing time standards is high-risk; parity would require a dedicated standards suite. |
-| ASSIST / n-body propagation | Dominant wall-clock cost, but requires an ASSIST-compatible safe wrapper over `assist-sys` + `rebound-sys` or a new propagation backend rather than piecemeal wrappers. |
+| ASSIST / n-body propagation | Dominant wall-clock cost, but requires the GPL-licensed `assist-rs` harness/adapter or an equivalent propagation backend rather than piecemeal wrappers. |
 | PyArrow/quivr table ergonomics | The public API is Python table modeling; moving it to Rust would not avoid Python object construction at the boundary. |
 | Network services | Latency/error semantics are external; Rust numeric speed is irrelevant. |
 | Plotting/OpenSpace text output | Primarily formatting/UI; Python ecosystem is appropriate. |
@@ -382,7 +382,7 @@ Recommendation: **do not convert these unless a separate product/architecture de
 5. **RM-STANDALONE-ROADMAP:** Split the surface inventory into two plans: Python-interface migration ROI versus standalone Rust capability completeness.
 6. **RM-RS-DATAMODEL:** Design Rust-native coordinate/orbit/observation/time/fitted-result data models and Python/Arrow adapters.
 7. **RM-RS-TIME:** Decide the Rust-native time-scale/ERFA-equivalent strategy before porting `Timestamp` semantics.
-8. **RM-RS-PROPAGATOR-ASSIST:** Evaluate an ASSIST-compatible `assist-sys`/`rebound-sys` safe wrapper / n-body propagation as a dedicated strategic blocker, because propagation dominates OD/LSQ/IOD wall-clock and standalone Rust cannot depend on Python ASSIST orchestration.
+8. **RM-RS-PROPAGATOR-ASSIST:** Evaluate an ASSIST-compatible GPL `assist-rs` harness / n-body propagation adapter as a dedicated strategic blocker, because propagation dominates OD/LSQ/IOD wall-clock and standalone Rust cannot depend on Python ASSIST orchestration.
 9. **RM-RS-OD-WORKFLOWS:** After Rust data models and propagation are available, port OD/IOD/LSQ workflow orchestration natively.
 
 ## 8. Reporting rule for future benchmark summaries
@@ -420,7 +420,7 @@ The standalone-Rust goal **does change the long-term conversion analysis**. It d
 1. **Govern what is already Rust-backed** so the current state is auditable.
 2. **Design Rust-native data contracts** for coordinates, covariances, times, observers, detections, exposures, orbits, residuals, fitted results, ephemerides, and provenance/diagnostics.
 3. **Complete Rust SPICE/time foundations** because transforms, observers, and ephemerides depend on them.
-4. **Build the Rust propagator abstraction**, including an ASSIST-compatible `assist-sys`/`rebound-sys` safe-wrapper n-body backend or equivalent.
+4. **Build the Rust propagator abstraction**, including an ASSIST-compatible GPL `assist-rs` harness n-body backend or equivalent.
 5. **Port high-level workflows natively**: propagation, ephemeris generation, IOD, OD, least squares, impact/collision workflows, and photometry workflows.
 6. **Add optional integration layers** for network clients, text/file exporters, plotting/OpenSpace output, and Python/Arrow compatibility.
 
