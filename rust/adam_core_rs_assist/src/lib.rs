@@ -24,6 +24,9 @@ use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
+#[cfg(feature = "python")]
+mod python;
+
 const BACKEND_NAME: &str = "assist_rs";
 
 #[derive(Clone)]

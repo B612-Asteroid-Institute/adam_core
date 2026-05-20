@@ -5,9 +5,17 @@ edition = "2021"
 license = "GPL-3.0"
 publish = false
 
+[features]
+default = []
+python = ["dep:ndarray", "dep:numpy", "dep:pyo3"]
+extension-module = ["python", "pyo3/extension-module"]
+
 [dependencies]
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
 assist-rs = { git = "ssh://git@github.com/B612-Asteroid-Institute/assist-rs.git", rev = "181c341f832bd5597024d8dfbd8ddbf48f623de5", default-features = false, features = ["parallel"] }
+ndarray = { version = "0.16", optional = true }
+numpy = { version = "0.22", optional = true }
+pyo3 = { version = "0.22", optional = true }
 rayon = "1.11"
 
 [dev-dependencies]
@@ -15,3 +23,4 @@ serde_json = "1"
 
 [lib]
 path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]

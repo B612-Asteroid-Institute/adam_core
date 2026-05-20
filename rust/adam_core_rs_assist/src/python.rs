@@ -1,0 +1,356 @@
+#![allow(clippy::useless_conversion)] // PyO3 0.22 macro expansion trips this lint on generated wrappers.
+
+use crate::AssistPropagator as RustAssistPropagator;
+use adam_core_rs_coords::propagation::{
+    CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest, Propagator,
+};
+use adam_core_rs_coords::types::Frame;
+use adam_core_rs_coords::types::{SchemaResult, TimeScaleProvider};
+use adam_core_rs_coords::{
+    CoordinateBatch, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
+    SchemaError, TimeArray, TimeScale, VariantId,
+};
+use assist_rs::{AssistData, Ephemeris, Ias15AdaptiveMode, IntegratorConfig};
+use numpy::{IntoPyArray, PyReadonlyArray2};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use std::path::Path;
+use std::sync::Arc;
+
+struct PythonTimeProvider;
+
+impl TimeScaleProvider for PythonTimeProvider {
+    fn rescale(&self, times: &TimeArray, new_scale: TimeScale) -> SchemaResult<TimeArray> {
+        Err(SchemaError::InvalidRecordBatch(format!(
+            "adam_assist_rust cannot rescale {} to {} without an explicit provider",
+            times.scale.as_str(),
+            new_scale.as_str()
+        )))
+    }
+}
+
+#[pyclass]
+struct NativeAssistPropagator {
+    inner: RustAssistPropagator,
+}
+
+#[pymethods]
+impl NativeAssistPropagator {
+    #[new]
+    #[pyo3(signature = (planets_path, asteroids_path, *, min_dt=1.0e-9, initial_dt=1.0e-6, adaptive_mode=1, epsilon=1.0e-6))]
+    fn new(
+        planets_path: &str,
+        asteroids_path: &str,
+        min_dt: f64,
+        initial_dt: f64,
+        adaptive_mode: i32,
+        epsilon: f64,
+    ) -> PyResult<Self> {
+        if min_dt <= 0.0 {
+            return Err(PyValueError::new_err("min_dt must be positive"));
+        }
+        if initial_dt <= 0.0 {
+            return Err(PyValueError::new_err("initial_dt must be positive"));
+        }
+        if min_dt > initial_dt {
+            return Err(PyValueError::new_err(
+                "min_dt must be smaller than initial_dt",
+            ));
+        }
+        let adaptive_mode = parse_adaptive_mode(adaptive_mode)?;
+        let ephem = Ephemeris::from_paths(Path::new(planets_path), Path::new(asteroids_path))
+            .map_err(|err| {
+                PyRuntimeError::new_err(format!("failed to load ASSIST kernels: {err}"))
+            })?;
+        let integrator = IntegratorConfig {
+            initial_dt: Some(initial_dt),
+            min_dt: Some(min_dt),
+            adaptive_mode: Some(adaptive_mode),
+            epsilon: Some(epsilon),
+        };
+        Ok(Self {
+            inner: RustAssistPropagator::with_integrator(
+                Arc::new(AssistData::new(ephem)),
+                integrator,
+            ),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        orbit_ids,
+        object_ids,
+        states,
+        origin_codes,
+        frame,
+        time_scale,
+        time_days,
+        time_nanos,
+        target_scale,
+        target_days,
+        target_nanos,
+        covariance,
+        chunk_size=None,
+        thread_limit=None,
+        variant_ids=None,
+        weights=None,
+        weights_cov=None
+    ))]
+    fn propagate_orbits<'py>(
+        &self,
+        py: Python<'py>,
+        orbit_ids: Vec<String>,
+        object_ids: Vec<Option<String>>,
+        states: PyReadonlyArray2<'py, f64>,
+        origin_codes: Vec<String>,
+        frame: &str,
+        time_scale: &str,
+        time_days: Vec<i64>,
+        time_nanos: Vec<i64>,
+        target_scale: &str,
+        target_days: Vec<i64>,
+        target_nanos: Vec<i64>,
+        covariance: bool,
+        chunk_size: Option<usize>,
+        thread_limit: Option<usize>,
+        variant_ids: Option<Vec<Option<String>>>,
+        weights: Option<Vec<Option<f64>>>,
+        weights_cov: Option<Vec<Option<f64>>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        if covariance {
+            return Err(PyValueError::new_err(
+                "adam_assist_rust PyO3 shim currently benchmarks state propagation only; covariance=True is not implemented",
+            ));
+        }
+        let state_rows = states_from_pyarray(states)?;
+        let input_times = time_array(time_scale, time_days, time_nanos)?;
+        let target_times = time_array(target_scale, target_days, target_nanos)?;
+        let coordinates = CoordinateBatch::cartesian(
+            state_rows,
+            Frame::parse(frame).map_err(py_value_error)?,
+            OriginArray::new(origin_codes.into_iter().map(OriginId::from_code).collect()),
+            Some(input_times),
+            None,
+        )
+        .map_err(py_value_error)?;
+        let options = PropagationOptions {
+            chunk_size,
+            thread_limit,
+            epoch_policy: EpochPolicy::CrossProduct,
+            covariance: CovariancePropagation::None,
+        };
+        let result = match variant_ids {
+            Some(variant_ids) => {
+                let weights = weights
+                    .ok_or_else(|| PyValueError::new_err("variant propagation requires weights"))?;
+                let weights_cov = weights_cov.ok_or_else(|| {
+                    PyValueError::new_err("variant propagation requires weights_cov")
+                })?;
+                let variants = OrbitVariantBatch::new(
+                    orbit_ids.into_iter().map(OrbitId).collect(),
+                    object_ids
+                        .into_iter()
+                        .map(|value| value.map(ObjectId))
+                        .collect(),
+                    variant_ids
+                        .into_iter()
+                        .map(|value| value.map(VariantId))
+                        .collect(),
+                    weights,
+                    weights_cov,
+                    coordinates,
+                )
+                .map_err(py_value_error)?;
+                let request = PropagationRequest::new_variants(&variants, &target_times, options)
+                    .map_err(py_runtime_error)?;
+                py.allow_threads(|| self.inner.propagate(&request, &PythonTimeProvider))
+                    .map_err(py_runtime_error)?
+            }
+            None => {
+                let orbits = OrbitBatch::new(
+                    orbit_ids.into_iter().map(OrbitId).collect(),
+                    object_ids
+                        .into_iter()
+                        .map(|value| value.map(ObjectId))
+                        .collect(),
+                    coordinates,
+                )
+                .map_err(py_value_error)?;
+                let request = PropagationRequest::new(&orbits, &target_times, options)
+                    .map_err(py_runtime_error)?;
+                py.allow_threads(|| self.inner.propagate(&request, &PythonTimeProvider))
+                    .map_err(py_runtime_error)?
+            }
+        };
+        propagation_result_to_dict(py, &result)
+    }
+}
+
+fn parse_adaptive_mode(value: i32) -> PyResult<Ias15AdaptiveMode> {
+    match value {
+        0 => Ok(Ias15AdaptiveMode::Individual),
+        1 => Ok(Ias15AdaptiveMode::Global),
+        2 => Ok(Ias15AdaptiveMode::Prs23),
+        3 => Ok(Ias15AdaptiveMode::Aarseth85),
+        _ => Err(PyValueError::new_err(format!(
+            "adaptive_mode must be one of 0, 1, 2, or 3; got {value}"
+        ))),
+    }
+}
+
+fn states_from_pyarray(states: PyReadonlyArray2<'_, f64>) -> PyResult<Vec<[f64; 6]>> {
+    let array = states.as_array();
+    if array.ncols() != 6 {
+        return Err(PyValueError::new_err(format!(
+            "states must have shape (N, 6); got ({}, {})",
+            array.nrows(),
+            array.ncols()
+        )));
+    }
+    let mut rows = Vec::with_capacity(array.nrows());
+    for row in array.rows() {
+        rows.push([row[0], row[1], row[2], row[3], row[4], row[5]]);
+    }
+    Ok(rows)
+}
+
+fn time_array(scale: &str, days: Vec<i64>, nanos: Vec<i64>) -> PyResult<TimeArray> {
+    TimeArray::from_parts(
+        TimeScale::parse(scale).map_err(py_value_error)?,
+        days,
+        nanos,
+    )
+    .map_err(py_value_error)
+}
+
+fn propagation_result_to_dict<'py>(
+    py: Python<'py>,
+    result: &adam_core_rs_coords::propagation::PropagationResult,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new_bound(py);
+    let (orbit_ids, object_ids, variant_ids, weights, weights_cov, coordinates) =
+        if let Some(variants) = &result.variants {
+            (
+                variants
+                    .orbit_id
+                    .iter()
+                    .map(|value| value.0.clone())
+                    .collect::<Vec<_>>(),
+                variants
+                    .object_id
+                    .iter()
+                    .map(|value| value.as_ref().map(|item| item.0.clone()))
+                    .collect::<Vec<_>>(),
+                Some(
+                    variants
+                        .variant_id
+                        .iter()
+                        .map(|value| value.as_ref().map(|item| item.0.clone()))
+                        .collect::<Vec<_>>(),
+                ),
+                Some(variants.weights.clone()),
+                Some(variants.weights_cov.clone()),
+                &variants.coordinates,
+            )
+        } else {
+            (
+                result
+                    .orbits
+                    .orbit_id
+                    .iter()
+                    .map(|value| value.0.clone())
+                    .collect::<Vec<_>>(),
+                result
+                    .orbits
+                    .object_id
+                    .iter()
+                    .map(|value| value.as_ref().map(|item| item.0.clone()))
+                    .collect::<Vec<_>>(),
+                None,
+                None,
+                None,
+                &result.orbits.coordinates,
+            )
+        };
+
+    let states = coordinates.values.cartesian().ok_or_else(|| {
+        PyRuntimeError::new_err("assist propagation returned non-Cartesian coordinates")
+    })?;
+    let flat_states = states
+        .iter()
+        .flat_map(|row| row.iter().copied())
+        .collect::<Vec<_>>();
+    let shaped_states = ndarray::Array2::from_shape_vec((states.len(), 6), flat_states)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to shape states: {err}")))?;
+    let times = coordinates.times.as_ref().ok_or_else(|| {
+        PyRuntimeError::new_err("assist propagation returned coordinates without times")
+    })?;
+    let input_orbit_indices = result
+        .diagnostics
+        .convergence
+        .iter()
+        .map(|row| row.input_orbit_index)
+        .collect::<Vec<_>>();
+    let validity = (0..result.validity.len())
+        .map(|index| result.validity.is_valid(index))
+        .collect::<Vec<_>>();
+    let messages = result
+        .diagnostics
+        .convergence
+        .iter()
+        .map(|row| row.message.clone())
+        .collect::<Vec<_>>();
+
+    dict.set_item("orbit_id", orbit_ids)?;
+    dict.set_item("object_id", object_ids)?;
+    dict.set_item("variant_id", variant_ids)?;
+    dict.set_item("weights", weights)?;
+    dict.set_item("weights_cov", weights_cov)?;
+    dict.set_item("states", shaped_states.into_pyarray_bound(py))?;
+    dict.set_item(
+        "origin_codes",
+        coordinates
+            .origins
+            .origins
+            .iter()
+            .map(OriginId::code)
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item("frame", coordinates.frame.as_str())?;
+    dict.set_item("time_scale", times.scale.as_str())?;
+    dict.set_item(
+        "time_days",
+        times
+            .epochs
+            .iter()
+            .map(|epoch| epoch.days)
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item(
+        "time_nanos",
+        times
+            .epochs
+            .iter()
+            .map(|epoch| epoch.nanos)
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item("input_orbit_indices", input_orbit_indices)?;
+    dict.set_item("validity", validity)?;
+    dict.set_item("messages", messages)?;
+    Ok(dict)
+}
+
+fn py_value_error(error: impl std::fmt::Display) -> PyErr {
+    PyValueError::new_err(error.to_string())
+}
+
+fn py_runtime_error(error: impl std::fmt::Display) -> PyErr {
+    PyRuntimeError::new_err(error.to_string())
+}
+
+#[pymodule]
+fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<NativeAssistPropagator>()?;
+    Ok(())
+}
