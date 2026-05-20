@@ -213,7 +213,7 @@ Acceptance criteria:
 
 Goal: make propagation and ephemeris generation a Rust-owned workflow, while keeping the execution-model changes gated on the Rust n-body backend.
 
-Status 2026-05-19: RM-STANDALONE-006 has a typed `Propagator`/`TwoBodyPropagator` surface with Rust-side provider, diagnostics, variant, and Arrow coverage. RM-STANDALONE-006A split the implementation into focused `propagation/` submodules. The diagnostic `propagation_bench` is Rust-internal only: raw serial Rust kernel vs typed Rust/pool modes, not Python/quivr/JAX evidence. Python/quivr end-to-end typed propagation parity is tracked as W12 adapter work until a typed PyO3 adapter exists.
+Status 2026-05-20: RM-STANDALONE-006 has a typed `Propagator`/`TwoBodyPropagator` surface with Rust-side provider, diagnostics, variant, and Arrow coverage. RM-STANDALONE-006A split the implementation into focused `propagation/` submodules. The diagnostic `propagation_bench` is Rust-internal only: raw serial Rust kernel vs typed Rust/pool modes, not Python/quivr/JAX evidence. RM-STANDALONE-007B now has an excluded GPL `assist-rs` adapter skeleton plus Python `adam_assist.ASSISTPropagator` public-semantics fixtures; Rust adapter parity/benchmark work remains pending. Python/quivr end-to-end typed propagation parity is tracked as W12 adapter work until a typed PyO3 adapter exists.
 
 Directions:
 
