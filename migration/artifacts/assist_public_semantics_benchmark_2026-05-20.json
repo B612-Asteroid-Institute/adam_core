@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "benchmark_id": "assist_public_semantics_benchmark_2026-05-20",
-  "generated_at_utc": "2026-05-20T16:21:43+00:00",
+  "generated_at_utc": "2026-05-20T20:26:05+00:00",
   "packages": {
     "adam-assist": "0.3.9",
     "adam-assist-rust": "0.1.0",
@@ -29,15 +29,21 @@
     "machine": "arm64",
     "processor": "arm",
     "thread_mode": "single-process/single-thread public calls: max_processes=1; Rust thread_limit=1",
+    "size_lanes": {
+      "tiny": "small public-semantics smoke and fixture-shaped workloads",
+      "small": "historical small-n governance scale: 40 orbits \u00d7 50 epochs = 2000 output rows",
+      "large": "API-shaped large-n governance scale: 1000\u00d720 and 400\u00d750 = 20000 output rows"
+    },
     "object_lifecycle": "Propagator objects are constructed once before timed calls. Rust construction loads assist-rs kernels into AssistData; Python adam-assist loads assist.Ephem inside each propagation call.",
     "constructor_seconds": {
-      "python_adam_assist": 4.165805876255035e-06,
-      "rust_adam_assist_rust": 0.0004754159599542618
+      "python_adam_assist": 7.166992872953415e-06,
+      "rust_adam_assist_rust": 0.000515875406563282
     }
   },
   "workloads": [
     {
-      "name": "sun_ecliptic_tdb_2x2_fixture_shape",
+      "lane": "tiny",
+      "name": "tiny_sun_ecliptic_tdb_2x2_fixture_shape",
       "description": "Small public-semantics fixture-shaped SUN/ecliptic/TDB workload.",
       "input": {
         "table_type": "Orbits",
@@ -55,6 +61,11 @@
         "mjd_min": 60001.0,
         "mjd_max": 60002.0
       },
+      "workload_shape": {
+        "n_orbits": 2,
+        "n_target_times": 2,
+        "output_rows": 4
+      },
       "options": {
         "covariance": false,
         "chunk_size": 1,
@@ -63,46 +74,47 @@
       "timing_seconds": {
         "python": {
           "values": [
-            0.008303957991302013,
-            0.00866529205814004,
-            0.008543874602764845,
-            0.008364791981875896,
-            0.008122957777231932,
-            0.00789775000885129,
-            0.007650916930288076
+            0.00924733281135559,
+            0.008622374851256609,
+            0.007837125100195408,
+            0.008542625233530998,
+            0.008304540999233723,
+            0.007712666876614094,
+            0.007717750035226345
           ],
-          "p50": 0.008303957991302013,
-          "p95": 0.00862886682152748
+          "p50": 0.008304540999233723,
+          "p95": 0.009059845423325896
         },
         "rust": {
           "values": [
-            0.002090208698064089,
-            0.0019892919808626175,
-            0.0018806671723723412,
-            0.0020853341557085514,
-            0.0018389592878520489,
-            0.0017414167523384094,
-            0.0020070411264896393
+            0.0019188751466572285,
+            0.0018318751826882362,
+            0.0019892496056854725,
+            0.0020507080480456352,
+            0.0020002922974526882,
+            0.0018899161368608475,
+            0.0017682090401649475
           ],
-          "p50": 0.0019892919808626175,
-          "p95": 0.0020887463353574274
+          "p50": 0.0019188751466572285,
+          "p95": 0.0020355833228677513
         },
         "speedup": {
-          "p50_python_over_rust": 4.174328389792817,
-          "p95_python_over_rust": 4.131122422795731
+          "p50_python_over_rust": 4.327817270290163,
+          "p95_python_over_rust": 4.450736710970047
         }
       },
       "residuals": {
         "rows": 4,
         "position_abs_au": 1.3877787807814457e-17,
         "position_abs_m": 2.0760875060754636e-06,
-        "velocity_abs_au_per_day": 1.0408340855860843e-17,
-        "velocity_abs_m_per_s": 1.8021592934682844e-11,
+        "velocity_abs_au_per_day": 6.938893903907228e-18,
+        "velocity_abs_m_per_s": 1.2014395289788562e-11,
         "time_abs_ns": 0
       }
     },
     {
-      "name": "sun_ecliptic_tdb_8x8_same_epoch",
+      "lane": "tiny",
+      "name": "tiny_sun_ecliptic_tdb_8x8_same_epoch",
       "description": "Eight SUN/ecliptic/TDB orbits sharing one epoch propagated to eight epochs.",
       "input": {
         "table_type": "Orbits",
@@ -120,6 +132,11 @@
         "mjd_min": 60000.25,
         "mjd_max": 60004.0
       },
+      "workload_shape": {
+        "n_orbits": 8,
+        "n_target_times": 8,
+        "output_rows": 64
+      },
       "options": {
         "covariance": false,
         "chunk_size": 8,
@@ -128,46 +145,47 @@
       "timing_seconds": {
         "python": {
           "values": [
-            0.00800345791503787,
-            0.007371583022177219,
-            0.007652374915778637,
-            0.007640333846211433,
-            0.007631042040884495,
-            0.007942833937704563,
-            0.007604542188346386
+            0.007577542215585709,
+            0.00792591692879796,
+            0.007559332996606827,
+            0.007453958038240671,
+            0.010011416859924793,
+            0.007886374834924936,
+            0.007554290816187859
           ],
-          "p50": 0.007640333846211433,
-          "p95": 0.007985270721837879
+          "p50": 0.007577542215585709,
+          "p95": 0.009385766880586743
         },
         "rust": {
           "values": [
-            0.007056917063891888,
-            0.007053417153656483,
-            0.007326750084757805,
-            0.006869249977171421,
-            0.007194541860371828,
-            0.006925959140062332,
-            0.006868542172014713
+            0.00718387495726347,
+            0.006994584109634161,
+            0.007226041983813047,
+            0.007167165633291006,
+            0.007014042232185602,
+            0.006559583358466625,
+            0.006892624776810408
           ],
-          "p50": 0.007053417153656483,
-          "p95": 0.007287087617442012
+          "p50": 0.007014042232185602,
+          "p95": 0.007213391875848174
         },
         "speedup": {
-          "p50_python_over_rust": 1.083210262454234,
-          "p95_python_over_rust": 1.0958109935064773
+          "p50_python_over_rust": 1.0803388352602659,
+          "p95_python_over_rust": 1.3011586008535179
         }
       },
       "residuals": {
         "rows": 64,
-        "position_abs_au": 4.163336342344337e-17,
-        "position_abs_m": 6.228262518226391e-06,
+        "position_abs_au": 4.440892098500626e-16,
+        "position_abs_m": 6.643480019441483e-05,
         "velocity_abs_au_per_day": 1.0408340855860843e-17,
         "velocity_abs_m_per_s": 1.8021592934682844e-11,
         "time_abs_ns": 0
       }
     },
     {
-      "name": "ssb_equatorial_utc_8x8_same_epoch",
+      "lane": "tiny",
+      "name": "tiny_ssb_equatorial_utc_8x8_same_epoch",
       "description": "Eight SSB/equatorial/UTC public-input rows exercising origin/frame/time restoration.",
       "input": {
         "table_type": "Orbits",
@@ -185,6 +203,11 @@
         "mjd_min": 60000.25,
         "mjd_max": 60004.0
       },
+      "workload_shape": {
+        "n_orbits": 8,
+        "n_target_times": 8,
+        "output_rows": 64
+      },
       "options": {
         "covariance": false,
         "chunk_size": 8,
@@ -193,46 +216,47 @@
       "timing_seconds": {
         "python": {
           "values": [
-            0.006484250072389841,
-            0.00652208412066102,
-            0.006621959153562784,
-            0.00652550021186471,
-            0.006825124844908714,
-            0.005869582761079073,
-            0.006742125377058983
+            0.006204667035490274,
+            0.006588249932974577,
+            0.006365874782204628,
+            0.0064997500739991665,
+            0.006289792247116566,
+            0.006564042065292597,
+            0.006898208986967802
           ],
-          "p50": 0.00652550021186471,
-          "p95": 0.006800225004553795
+          "p50": 0.0064997500739991665,
+          "p95": 0.006805221270769835
         },
         "rust": {
           "values": [
-            0.007178708910942078,
-            0.0072768330574035645,
-            0.006633749697357416,
-            0.007145165931433439,
-            0.006944166962057352,
-            0.007170625030994415,
-            0.0070825000293552876
+            0.00712599977850914,
+            0.006897415965795517,
+            0.006806625053286552,
+            0.0070027499459683895,
+            0.00710699986666441,
+            0.006510667037218809,
+            0.006892917212098837
           ],
-          "p50": 0.007145165931433439,
-          "p95": 0.007247395813465118
+          "p50": 0.006897415965795517,
+          "p95": 0.007120299804955721
         },
         "speedup": {
-          "p50_python_over_rust": 0.9132748314713506,
-          "p95_python_over_rust": 0.9382991048894399
+          "p50_python_over_rust": 0.9423456706441388,
+          "p95_python_over_rust": 0.955749260169271
         }
       },
       "residuals": {
         "rows": 64,
-        "position_abs_au": 2.0816681711721685e-17,
-        "position_abs_m": 3.1141312591131953e-06,
+        "position_abs_au": 3.3306690738754696e-16,
+        "position_abs_m": 4.9826100145811125e-05,
         "velocity_abs_au_per_day": 6.938893903907228e-18,
         "velocity_abs_m_per_s": 1.2014395289788562e-11,
         "time_abs_ns": 0
       }
     },
     {
-      "name": "variant_sun_ecliptic_tdb_8x4",
+      "lane": "tiny",
+      "name": "tiny_variant_sun_ecliptic_tdb_8x4",
       "description": "Eight VariantOrbits rows propagated to four TDB epochs.",
       "input": {
         "table_type": "VariantOrbits",
@@ -251,6 +275,11 @@
         "mjd_min": 60000.25,
         "mjd_max": 60002.0
       },
+      "workload_shape": {
+        "n_orbits": 8,
+        "n_target_times": 4,
+        "output_rows": 32
+      },
       "options": {
         "covariance": false,
         "chunk_size": 8,
@@ -259,41 +288,540 @@
       "timing_seconds": {
         "python": {
           "values": [
-            0.00717029208317399,
-            0.006813541986048222,
-            0.007262167055159807,
-            0.006914542056620121,
-            0.007490041200071573,
-            0.007349290885031223,
-            0.006645041983574629
+            0.006905625108629465,
+            0.006924707908183336,
+            0.00652341591194272,
+            0.007263957988470793,
+            0.00732149975374341,
+            0.006960582919418812,
+            0.007036958355456591
           ],
-          "p50": 0.00717029208317399,
-          "p95": 0.007447816105559468
+          "p50": 0.006960582919418812,
+          "p95": 0.007304237224161625
         },
         "rust": {
           "values": [
-            0.005029416177421808,
-            0.004725917242467403,
-            0.005136833060532808,
-            0.00524137495085597,
-            0.005056750029325485,
-            0.004872665740549564,
-            0.005152625031769276
+            0.0047870841808617115,
+            0.00522908428683877,
+            0.005026166792958975,
+            0.00504441699013114,
+            0.0051020001992583275,
+            0.005145540926605463,
+            0.005382375326007605
           ],
-          "p50": 0.005056750029325485,
-          "p95": 0.005214749975129962
+          "p50": 0.0051020001992583275,
+          "p95": 0.005336388014256954
         },
         "speedup": {
-          "p50_python_over_rust": 1.4179645111171193,
-          "p95_python_over_rust": 1.4282211306542751
+          "p50_python_over_rust": 1.3642851132053395,
+          "p95_python_over_rust": 1.3687605182845155
         }
       },
       "residuals": {
         "rows": 32,
-        "position_abs_au": 2.0816681711721685e-17,
-        "position_abs_m": 3.1141312591131953e-06,
+        "position_abs_au": 4.440892098500626e-16,
+        "position_abs_m": 6.643480019441483e-05,
         "velocity_abs_au_per_day": 1.0408340855860843e-17,
         "velocity_abs_m_per_s": 1.8021592934682844e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "small",
+      "name": "small_sun_ecliptic_tdb_40x50",
+      "description": "Small-n governance-shaped native propagation: 40 SUN/ecliptic/TDB orbits by 50 target epochs.",
+      "input": {
+        "table_type": "Orbits",
+        "rows": 40,
+        "frame": "ecliptic",
+        "time_scale": "tdb",
+        "origin_codes": [
+          "SUN"
+        ],
+        "unique_input_epochs": 1
+      },
+      "target_times": {
+        "rows": 50,
+        "scale": "tdb",
+        "mjd_min": 60000.25,
+        "mjd_max": 60004.0
+      },
+      "workload_shape": {
+        "n_orbits": 40,
+        "n_target_times": 50,
+        "output_rows": 2000
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 40,
+        "max_processes": 1
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.03686208324506879,
+            0.03693445911630988,
+            0.03727745823562145,
+            0.03899975027889013,
+            0.03801404219120741,
+            0.03719733376055956,
+            0.03829633304849267
+          ],
+          "p50": 0.03727745823562145,
+          "p95": 0.0387887251097709
+        },
+        "rust": {
+          "values": [
+            0.12748337490484118,
+            0.12729333294555545,
+            0.12476849975064397,
+            0.12953166710212827,
+            0.127641917206347,
+            0.12847858387976885,
+            0.12437183409929276
+          ],
+          "p50": 0.12748337490484118,
+          "p95": 0.12921574213542045
+        },
+        "speedup": {
+          "p50_python_over_rust": 0.29241034969027824,
+          "p95_python_over_rust": 0.30018575499198547
+        }
+      },
+      "residuals": {
+        "rows": 2000,
+        "position_abs_au": 6.661338147750939e-16,
+        "position_abs_m": 9.965220029162225e-05,
+        "velocity_abs_au_per_day": 1.3877787807814457e-17,
+        "velocity_abs_m_per_s": 2.4028790579577124e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "small",
+      "name": "small_ssb_equatorial_utc_40x50",
+      "description": "Small-n public-transform propagation: 40 SSB/equatorial/UTC orbits by 50 target epochs.",
+      "input": {
+        "table_type": "Orbits",
+        "rows": 40,
+        "frame": "equatorial",
+        "time_scale": "utc",
+        "origin_codes": [
+          "SOLAR_SYSTEM_BARYCENTER"
+        ],
+        "unique_input_epochs": 1
+      },
+      "target_times": {
+        "rows": 50,
+        "scale": "utc",
+        "mjd_min": 60000.25,
+        "mjd_max": 60004.0
+      },
+      "workload_shape": {
+        "n_orbits": 40,
+        "n_target_times": 50,
+        "output_rows": 2000
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 40,
+        "max_processes": 1
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.036103957798331976,
+            0.03588445810601115,
+            0.0357054159976542,
+            0.03476062510162592,
+            0.035775750409811735,
+            0.03609341708943248,
+            0.035534124821424484
+          ],
+          "p50": 0.035775750409811735,
+          "p95": 0.03610079558566213
+        },
+        "rust": {
+          "values": [
+            0.12781691597774625,
+            0.12772058276459575,
+            0.12852054089307785,
+            0.1292165843769908,
+            0.1272856667637825,
+            0.1269707502797246,
+            0.13004987500607967
+          ],
+          "p50": 0.12781691597774625,
+          "p95": 0.12979988781735302
+        },
+        "speedup": {
+          "p50_python_over_rust": 0.279898401053899,
+          "p95_python_over_rust": 0.2781265545965733
+        }
+      },
+      "residuals": {
+        "rows": 2000,
+        "position_abs_au": 4.440892098500626e-16,
+        "position_abs_m": 6.643480019441483e-05,
+        "velocity_abs_au_per_day": 6.938893903907228e-18,
+        "velocity_abs_m_per_s": 1.2014395289788562e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "small",
+      "name": "small_variant_sun_ecliptic_tdb_40x50",
+      "description": "Small-n variant propagation: 40 VariantOrbits rows by 50 target epochs.",
+      "input": {
+        "table_type": "VariantOrbits",
+        "rows": 40,
+        "frame": "ecliptic",
+        "time_scale": "tdb",
+        "origin_codes": [
+          "SUN"
+        ],
+        "unique_input_epochs": 1,
+        "variant_rows": 40
+      },
+      "target_times": {
+        "rows": 50,
+        "scale": "tdb",
+        "mjd_min": 60000.25,
+        "mjd_max": 60004.0
+      },
+      "workload_shape": {
+        "n_orbits": 40,
+        "n_target_times": 50,
+        "output_rows": 2000
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 40,
+        "max_processes": 1
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.038138166069984436,
+            0.03879050025716424,
+            0.037400583270937204,
+            0.03812316618859768,
+            0.03841616678982973,
+            0.03751691710203886,
+            0.03784904209896922
+          ],
+          "p50": 0.03812316618859768,
+          "p95": 0.03867820021696389
+        },
+        "rust": {
+          "values": [
+            0.12637579208239913,
+            0.12757654208689928,
+            0.1264338749460876,
+            0.126758583355695,
+            0.1262318752706051,
+            0.12893458409234881,
+            0.12767645809799433
+          ],
+          "p50": 0.126758583355695,
+          "p95": 0.12855714629404247
+        },
+        "speedup": {
+          "p50_python_over_rust": 0.3007541199921818,
+          "p95_python_over_rust": 0.3008638674080174
+        }
+      },
+      "residuals": {
+        "rows": 2000,
+        "position_abs_au": 6.661338147750939e-16,
+        "position_abs_m": 9.965220029162225e-05,
+        "velocity_abs_au_per_day": 1.3877787807814457e-17,
+        "velocity_abs_m_per_s": 2.4028790579577124e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "large",
+      "name": "large_sun_ecliptic_tdb_1000x20",
+      "description": "Large-n propagate_2body-shaped native propagation: 1000 SUN/ecliptic/TDB orbits by 20 target epochs.",
+      "input": {
+        "table_type": "Orbits",
+        "rows": 1000,
+        "frame": "ecliptic",
+        "time_scale": "tdb",
+        "origin_codes": [
+          "SUN"
+        ],
+        "unique_input_epochs": 1
+      },
+      "target_times": {
+        "rows": 20,
+        "scale": "tdb",
+        "mjd_min": 60000.25,
+        "mjd_max": 60004.0
+      },
+      "workload_shape": {
+        "n_orbits": 1000,
+        "n_target_times": 20,
+        "output_rows": 20000
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 1000,
+        "max_processes": 1
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.4332561669871211,
+            0.4324832079000771,
+            0.43239125004038215,
+            0.47308416618034244,
+            0.43185762502253056,
+            0.4319060826674104,
+            0.43408900033682585
+          ],
+          "p50": 0.4324832079000771,
+          "p95": 0.4613856164272874
+        },
+        "rust": {
+          "values": [
+            1.3810270829126239,
+            1.3846065420657396,
+            1.4356313752941787,
+            1.3933699578046799,
+            1.3814193336293101,
+            1.3808450000360608,
+            1.3827186673879623
+          ],
+          "p50": 1.3827186673879623,
+          "p95": 1.422952950047329
+        },
+        "speedup": {
+          "p50_python_over_rust": 0.31277744207870106,
+          "p95_python_over_rust": 0.32424516665286873
+        }
+      },
+      "residuals": {
+        "rows": 20000,
+        "position_abs_au": 8.881784197001252e-16,
+        "position_abs_m": 0.00013286960038882967,
+        "velocity_abs_au_per_day": 4.597017211338539e-17,
+        "velocity_abs_m_per_s": 7.959536879484923e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "large",
+      "name": "large_sun_ecliptic_tdb_400x50_arc_shape",
+      "description": "Large-n arc/ephemeris-shaped native propagation: 400 SUN/ecliptic/TDB orbits by 50 target epochs.",
+      "input": {
+        "table_type": "Orbits",
+        "rows": 400,
+        "frame": "ecliptic",
+        "time_scale": "tdb",
+        "origin_codes": [
+          "SUN"
+        ],
+        "unique_input_epochs": 1
+      },
+      "target_times": {
+        "rows": 50,
+        "scale": "tdb",
+        "mjd_min": 60000.25,
+        "mjd_max": 60004.0
+      },
+      "workload_shape": {
+        "n_orbits": 400,
+        "n_target_times": 50,
+        "output_rows": 20000
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 400,
+        "max_processes": 1
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.3418195419944823,
+            0.3834889172576368,
+            0.3391370829194784,
+            0.34040054120123386,
+            0.33899470791220665,
+            0.3367619588971138,
+            0.3370635421015322
+          ],
+          "p50": 0.3391370829194784,
+          "p95": 0.3709881046786904
+        },
+        "rust": {
+          "values": [
+            1.2544318749569356,
+            1.2518885834142566,
+            1.24638683302328,
+            1.262835375033319,
+            1.252194999717176,
+            1.2571789999492466,
+            1.2535155829973519
+          ],
+          "p50": 1.2535155829973519,
+          "p95": 1.2611384625080972
+        },
+        "speedup": {
+          "p50_python_over_rust": 0.27054875704739834,
+          "p95_python_over_rust": 0.2941692095734559
+        }
+      },
+      "residuals": {
+        "rows": 20000,
+        "position_abs_au": 6.661338147750939e-16,
+        "position_abs_m": 9.965220029162225e-05,
+        "velocity_abs_au_per_day": 1.3877787807814457e-17,
+        "velocity_abs_m_per_s": 2.4028790579577124e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "large",
+      "name": "large_ssb_equatorial_utc_400x50_arc_shape",
+      "description": "Large-n public-transform propagation: 400 SSB/equatorial/UTC orbits by 50 target epochs.",
+      "input": {
+        "table_type": "Orbits",
+        "rows": 400,
+        "frame": "equatorial",
+        "time_scale": "utc",
+        "origin_codes": [
+          "SOLAR_SYSTEM_BARYCENTER"
+        ],
+        "unique_input_epochs": 1
+      },
+      "target_times": {
+        "rows": 50,
+        "scale": "utc",
+        "mjd_min": 60000.25,
+        "mjd_max": 60004.0
+      },
+      "workload_shape": {
+        "n_orbits": 400,
+        "n_target_times": 50,
+        "output_rows": 20000
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 400,
+        "max_processes": 1
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.3404336669482291,
+            0.3395232083275914,
+            0.33980683283880353,
+            0.3447727090679109,
+            0.34811870800331235,
+            0.38828020822256804,
+            0.3429200416430831
+          ],
+          "p50": 0.3429200416430831,
+          "p95": 0.37623175815679133
+        },
+        "rust": {
+          "values": [
+            1.2453557923436165,
+            1.258593583945185,
+            1.2495565409772098,
+            1.2553877918981016,
+            1.250649791676551,
+            1.2595689999870956,
+            1.2583702919073403
+          ],
+          "p50": 1.2553877918981016,
+          "p95": 1.2592763751745224
+        },
+        "speedup": {
+          "p50_python_over_rust": 0.2731586557207158,
+          "p95_python_over_rust": 0.2987682176636162
+        }
+      },
+      "residuals": {
+        "rows": 20000,
+        "position_abs_au": 5.551115123125783e-16,
+        "position_abs_m": 8.304350024301854e-05,
+        "velocity_abs_au_per_day": 6.938893903907228e-18,
+        "velocity_abs_m_per_s": 1.2014395289788562e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "large",
+      "name": "large_variant_sun_ecliptic_tdb_400x50",
+      "description": "Large-n variant propagation: 400 VariantOrbits rows by 50 target epochs.",
+      "input": {
+        "table_type": "VariantOrbits",
+        "rows": 400,
+        "frame": "ecliptic",
+        "time_scale": "tdb",
+        "origin_codes": [
+          "SUN"
+        ],
+        "unique_input_epochs": 1,
+        "variant_rows": 400
+      },
+      "target_times": {
+        "rows": 50,
+        "scale": "tdb",
+        "mjd_min": 60000.25,
+        "mjd_max": 60004.0
+      },
+      "workload_shape": {
+        "n_orbits": 400,
+        "n_target_times": 50,
+        "output_rows": 20000
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 400,
+        "max_processes": 1
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.3496533753350377,
+            0.3501622499898076,
+            0.3507897909730673,
+            0.3476599999703467,
+            0.4127046656794846,
+            0.3872622502967715,
+            0.3508714586496353
+          ],
+          "p50": 0.3507897909730673,
+          "p95": 0.40507194106467065
+        },
+        "rust": {
+          "values": [
+            1.262263750191778,
+            1.265637167263776,
+            1.2679529171437025,
+            1.2585532497614622,
+            1.2664080411195755,
+            1.2537614167667925,
+            1.2619363749399781
+          ],
+          "p50": 1.262263750191778,
+          "p95": 1.2674894543364643
+        },
+        "speedup": {
+          "p50_python_over_rust": 0.2779053038002329,
+          "p95_python_over_rust": 0.3195860444272709
+        }
+      },
+      "residuals": {
+        "rows": 20000,
+        "position_abs_au": 8.881784197001252e-16,
+        "position_abs_m": 0.00013286960038882967,
+        "velocity_abs_au_per_day": 1.3877787807814457e-17,
+        "velocity_abs_m_per_s": 2.4028790579577124e-11,
         "time_abs_ns": 0
       }
     }

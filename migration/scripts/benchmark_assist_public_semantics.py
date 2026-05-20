@@ -1,6 +1,6 @@
 """Benchmark Python adam-assist against the Rust-backed ASSIST PyO3 shim.
 
-This is the first RM-STANDALONE-007B apples-to-apples benchmark hook for
+This is the RM-STANDALONE-007B apples-to-apples benchmark hook for
 ``adam_assist.ASSISTPropagator.propagate_orbits`` public semantics. It times
 Python-callable public propagation for the Python package and the experimental
 GPL ``adam_assist_rust`` package over identical quivr orbit/time workloads and
@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import argparse
 import gc
-import json
 import hashlib
+import json
 import platform
 import statistics
 import time
@@ -52,11 +52,13 @@ PACKAGE_NAMES = (
     "rebound",
     "adam-core",
 )
+BENCHMARK_LANES = ("tiny", "small", "large")
 OrbitTable = Orbits | VariantOrbits
 
 
 @dataclass(frozen=True)
 class Workload:
+    lane: str
     name: str
     description: str
     orbits: OrbitTable
@@ -114,19 +116,27 @@ def _orbit_metadata(orbits: OrbitTable) -> dict[str, Any]:
     return data
 
 
+def _target_times(rows: int, *, scale: str) -> Timestamp:
+    return Timestamp.from_mjd(np.linspace(60000.25, 60004.0, rows), scale=scale)
+
+
 def _base_sun_ecliptic_orbits(rows: int, *, mixed_epochs: bool = False) -> Orbits:
     index = np.arange(rows, dtype=np.float64)
+    denominator = max(rows, 1)
+    theta = 2.0 * np.pi * index / denominator
+    radius = 1.05 + 0.03 * np.sin(0.37 * index)
+    speed = 0.017202124 / np.sqrt(radius)
     epoch_offsets = (index % 4) * 0.125 if mixed_epochs else np.zeros(rows)
     return Orbits.from_kwargs(
         orbit_id=[f"bench-{i:04d}" for i in range(rows)],
         object_id=[f"bench-{i:04d}" for i in range(rows)],
         coordinates=CartesianCoordinates.from_kwargs(
-            x=1.05 + 0.01 * index,
-            y=0.02 - 0.003 * index,
-            z=0.01 + 0.001 * (index % 3),
-            vx=-0.0005 + 0.00002 * index,
-            vy=0.0165 - 0.00004 * index,
-            vz=0.0002 - 0.00001 * (index % 5),
+            x=radius * np.cos(theta),
+            y=radius * np.sin(theta),
+            z=0.02 * np.sin(2.0 * theta),
+            vx=-speed * np.sin(theta),
+            vy=speed * np.cos(theta),
+            vz=0.0001 * np.cos(3.0 * theta),
             time=Timestamp.from_mjd(60000.0 + epoch_offsets, scale="tdb"),
             origin=Origin.from_kwargs(code=pa.repeat("SUN", rows)),
             frame="ecliptic",
@@ -175,7 +185,8 @@ def _variant_orbits(rows: int) -> VariantOrbits:
 def _workloads() -> list[Workload]:
     return [
         Workload(
-            name="sun_ecliptic_tdb_2x2_fixture_shape",
+            lane="tiny",
+            name="tiny_sun_ecliptic_tdb_2x2_fixture_shape",
             description="Small public-semantics fixture-shaped SUN/ecliptic/TDB workload.",
             orbits=_base_sun_ecliptic_orbits(2, mixed_epochs=True),
             times=Timestamp.from_mjd([60002.0, 60001.0], scale="tdb"),
@@ -183,15 +194,17 @@ def _workloads() -> list[Workload]:
             max_processes=1,
         ),
         Workload(
-            name="sun_ecliptic_tdb_8x8_same_epoch",
+            lane="tiny",
+            name="tiny_sun_ecliptic_tdb_8x8_same_epoch",
             description="Eight SUN/ecliptic/TDB orbits sharing one epoch propagated to eight epochs.",
             orbits=_base_sun_ecliptic_orbits(8, mixed_epochs=False),
-            times=Timestamp.from_mjd(np.linspace(60000.25, 60004.0, 8), scale="tdb"),
+            times=_target_times(8, scale="tdb"),
             chunk_size=8,
             max_processes=1,
         ),
         Workload(
-            name="ssb_equatorial_utc_8x8_same_epoch",
+            lane="tiny",
+            name="tiny_ssb_equatorial_utc_8x8_same_epoch",
             description="Eight SSB/equatorial/UTC public-input rows exercising origin/frame/time restoration.",
             orbits=_as_public_input(
                 _base_sun_ecliptic_orbits(8, mixed_epochs=False),
@@ -199,16 +212,90 @@ def _workloads() -> list[Workload]:
                 frame_out="equatorial",
                 time_scale="utc",
             ),
-            times=Timestamp.from_mjd(np.linspace(60000.25, 60004.0, 8), scale="utc"),
+            times=_target_times(8, scale="utc"),
             chunk_size=8,
             max_processes=1,
         ),
         Workload(
-            name="variant_sun_ecliptic_tdb_8x4",
+            lane="tiny",
+            name="tiny_variant_sun_ecliptic_tdb_8x4",
             description="Eight VariantOrbits rows propagated to four TDB epochs.",
             orbits=_variant_orbits(8),
             times=Timestamp.from_mjd(np.linspace(60000.25, 60002.0, 4), scale="tdb"),
             chunk_size=8,
+            max_processes=1,
+        ),
+        Workload(
+            lane="small",
+            name="small_sun_ecliptic_tdb_40x50",
+            description="Small-n governance-shaped native propagation: 40 SUN/ecliptic/TDB orbits by 50 target epochs.",
+            orbits=_base_sun_ecliptic_orbits(40, mixed_epochs=False),
+            times=_target_times(50, scale="tdb"),
+            chunk_size=40,
+            max_processes=1,
+        ),
+        Workload(
+            lane="small",
+            name="small_ssb_equatorial_utc_40x50",
+            description="Small-n public-transform propagation: 40 SSB/equatorial/UTC orbits by 50 target epochs.",
+            orbits=_as_public_input(
+                _base_sun_ecliptic_orbits(40, mixed_epochs=False),
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                frame_out="equatorial",
+                time_scale="utc",
+            ),
+            times=_target_times(50, scale="utc"),
+            chunk_size=40,
+            max_processes=1,
+        ),
+        Workload(
+            lane="small",
+            name="small_variant_sun_ecliptic_tdb_40x50",
+            description="Small-n variant propagation: 40 VariantOrbits rows by 50 target epochs.",
+            orbits=_variant_orbits(40),
+            times=_target_times(50, scale="tdb"),
+            chunk_size=40,
+            max_processes=1,
+        ),
+        Workload(
+            lane="large",
+            name="large_sun_ecliptic_tdb_1000x20",
+            description="Large-n propagate_2body-shaped native propagation: 1000 SUN/ecliptic/TDB orbits by 20 target epochs.",
+            orbits=_base_sun_ecliptic_orbits(1000, mixed_epochs=False),
+            times=_target_times(20, scale="tdb"),
+            chunk_size=1000,
+            max_processes=1,
+        ),
+        Workload(
+            lane="large",
+            name="large_sun_ecliptic_tdb_400x50_arc_shape",
+            description="Large-n arc/ephemeris-shaped native propagation: 400 SUN/ecliptic/TDB orbits by 50 target epochs.",
+            orbits=_base_sun_ecliptic_orbits(400, mixed_epochs=False),
+            times=_target_times(50, scale="tdb"),
+            chunk_size=400,
+            max_processes=1,
+        ),
+        Workload(
+            lane="large",
+            name="large_ssb_equatorial_utc_400x50_arc_shape",
+            description="Large-n public-transform propagation: 400 SSB/equatorial/UTC orbits by 50 target epochs.",
+            orbits=_as_public_input(
+                _base_sun_ecliptic_orbits(400, mixed_epochs=False),
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                frame_out="equatorial",
+                time_scale="utc",
+            ),
+            times=_target_times(50, scale="utc"),
+            chunk_size=400,
+            max_processes=1,
+        ),
+        Workload(
+            lane="large",
+            name="large_variant_sun_ecliptic_tdb_400x50",
+            description="Large-n variant propagation: 400 VariantOrbits rows by 50 target epochs.",
+            orbits=_variant_orbits(400),
+            times=_target_times(50, scale="tdb"),
+            chunk_size=400,
             max_processes=1,
         ),
     ]
@@ -316,15 +403,23 @@ def _benchmark_workload(
     python_p95 = _p95(python_timings)
     rust_p50 = statistics.median(rust_timings)
     rust_p95 = _p95(rust_timings)
+    input_rows = len(workload.orbits)
+    target_rows = len(workload.times)
     return {
+        "lane": workload.lane,
         "name": workload.name,
         "description": workload.description,
         "input": _orbit_metadata(workload.orbits),
         "target_times": {
-            "rows": len(workload.times),
+            "rows": target_rows,
             "scale": workload.times.scale,
             "mjd_min": float(workload.times.mjd().to_numpy(zero_copy_only=False).min()),
             "mjd_max": float(workload.times.mjd().to_numpy(zero_copy_only=False).max()),
+        },
+        "workload_shape": {
+            "n_orbits": input_rows,
+            "n_target_times": target_rows,
+            "output_rows": input_rows * target_rows,
         },
         "options": {
             "covariance": False,
@@ -353,6 +448,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument(
+        "--lanes",
+        nargs="+",
+        choices=(*BENCHMARK_LANES, "all"),
+        default=["all"],
+        help="Benchmark size lanes to run. Default: all lanes.",
+    )
+    parser.add_argument(
         "--skip-kernel-sha256",
         action="store_true",
         help="Skip kernel SHA256 hashing for faster local diagnostics.",
@@ -360,10 +462,23 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _selected_lanes(lanes: list[str]) -> set[str]:
+    if "all" in lanes:
+        return set(BENCHMARK_LANES)
+    return set(lanes)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     if args.repeats < 3:
         raise ValueError("--repeats must be at least 3 to report p50/p95")
+    selected_lanes = _selected_lanes(args.lanes)
+    workloads = [
+        workload for workload in _workloads() if workload.lane in selected_lanes
+    ]
+    if not workloads:
+        raise ValueError(f"No workloads selected for lanes: {sorted(selected_lanes)}")
+
     python_started = time.perf_counter()
     python_propagator = PythonASSISTPropagator()
     python_constructor_seconds = time.perf_counter() - python_started
@@ -379,10 +494,10 @@ def main(argv: list[str] | None = None) -> int:
             repeats=args.repeats,
             warmups=args.warmups,
         )
-        for workload in _workloads()
+        for workload in workloads
     ]
     artifact = {
-        "schema_version": 1,
+        "schema_version": 2,
         "benchmark_id": "assist_public_semantics_benchmark_2026-05-20",
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "packages": {name: _package_version(name) for name in PACKAGE_NAMES},
@@ -404,6 +519,11 @@ def main(argv: list[str] | None = None) -> int:
             "machine": platform.machine(),
             "processor": platform.processor(),
             "thread_mode": "single-process/single-thread public calls: max_processes=1; Rust thread_limit=1",
+            "size_lanes": {
+                "tiny": "small public-semantics smoke and fixture-shaped workloads",
+                "small": "historical small-n governance scale: 40 orbits × 50 epochs = 2000 output rows",
+                "large": "API-shaped large-n governance scale: 1000×20 and 400×50 = 20000 output rows",
+            },
             "object_lifecycle": (
                 "Propagator objects are constructed once before timed calls. Rust construction loads "
                 "assist-rs kernels into AssistData; Python adam-assist loads assist.Ephem inside each propagation call."
@@ -419,14 +539,14 @@ def main(argv: list[str] | None = None) -> int:
     args.output.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {args.output}")
     print(
-        "\n| workload | rows | p50 speedup | p95 speedup | max pos (m) | max vel (m/s) |"
+        "\n| lane | workload | rows | p50 speedup | p95 speedup | max pos (m) | max vel (m/s) |"
     )
-    print("|---|---:|---:|---:|---:|---:|")
+    print("|---|---|---:|---:|---:|---:|---:|")
     for row in results:
         timing = row["timing_seconds"]
         residuals = row["residuals"]
         print(
-            f"| {row['name']} | {residuals['rows']} | "
+            f"| {row['lane']} | {row['name']} | {residuals['rows']} | "
             f"{timing['speedup']['p50_python_over_rust']:.3f} | "
             f"{timing['speedup']['p95_python_over_rust']:.3f} | "
             f"{residuals['position_abs_m']:.6e} | "
