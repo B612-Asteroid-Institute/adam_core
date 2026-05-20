@@ -1,0 +1,103 @@
+{
+  "acceptance_target": "adam_assist.ASSISTPropagator public semantics",
+  "artifact_schema_version": 1,
+  "cases": [
+    {
+      "case_id": "sun_ecliptic_tdb_input_tdb_targets",
+      "max_position_abs_au": 2.220446049250313e-16,
+      "max_position_abs_m": 3.321740009720742e-05,
+      "max_time_abs_ns": 0,
+      "max_velocity_abs_au_per_day": 1.0408340855860843e-17,
+      "max_velocity_abs_m_per_s": 1.8021592934682844e-11,
+      "rows": 4
+    },
+    {
+      "case_id": "ssb_equatorial_tdb_input_tdb_targets",
+      "max_position_abs_au": 2.220446049250313e-16,
+      "max_position_abs_m": 3.321740009720742e-05,
+      "max_time_abs_ns": 0,
+      "max_velocity_abs_au_per_day": 5.204170427930421e-18,
+      "max_velocity_abs_m_per_s": 9.010796467341422e-12,
+      "rows": 4
+    },
+    {
+      "case_id": "sun_ecliptic_utc_input_utc_targets",
+      "max_position_abs_au": 2.220446049250313e-16,
+      "max_position_abs_m": 3.321740009720742e-05,
+      "max_time_abs_ns": 0,
+      "max_velocity_abs_au_per_day": 6.938893903907228e-18,
+      "max_velocity_abs_m_per_s": 1.2014395289788562e-11,
+      "rows": 4
+    },
+    {
+      "case_id": "variant_metadata_tdb_targets",
+      "max_position_abs_au": 1.0408340855860843e-17,
+      "max_position_abs_m": 1.5570656295565977e-06,
+      "max_time_abs_ns": 0,
+      "max_velocity_abs_au_per_day": 6.938893903907228e-18,
+      "max_velocity_abs_m_per_s": 1.2014395289788562e-11,
+      "rows": 4
+    }
+  ],
+  "fixture_id": "assist_public_semantics_fixture_2026-05-20",
+  "generated_at_utc": "2026-05-20T14:55:11+00:00",
+  "global_max": {
+    "position_abs_au": 2.220446049250313e-16,
+    "position_abs_m": 3.321740009720742e-05,
+    "time_abs_ns": 0,
+    "velocity_abs_au_per_day": 1.0408340855860843e-17,
+    "velocity_abs_m_per_s": 1.8021592934682844e-11
+  },
+  "kernels": [
+    {
+      "file_name": "de440.bsp",
+      "label": "naif_de440",
+      "sha256": "a4ce9bf9b3282becc9f4b2ac3cebe03a2ae7599981aabd7265fd8482fff7c4b5",
+      "size_bytes": 119799808
+    },
+    {
+      "file_name": "sb441-n16.bsp",
+      "label": "jpl_small_bodies_de441_n16",
+      "sha256": "919d612ce3c72a78fc7158f9120156542d0f21e6b8b052e4c1339c759747fd90",
+      "size_bytes": 645727232
+    }
+  ],
+  "observed_kernel_sha256": {
+    "asteroids": "919d612ce3c72a78fc7158f9120156542d0f21e6b8b052e4c1339c759747fd90",
+    "planets": "a4ce9bf9b3282becc9f4b2ac3cebe03a2ae7599981aabd7265fd8482fff7c4b5"
+  },
+  "packages": {
+    "adam-assist": "0.3.9",
+    "adam-core": "0.5.6",
+    "assist": "1.2.3",
+    "rebound": "4.6.0"
+  },
+  "resolved_kernel_paths": {
+    "asteroids": "/Users/aleck/Code/adam-core-rust-migration/.venv/lib/python3.13/site-packages/jpl_small_bodies_de441_n16/sb441-n16.bsp",
+    "planets": "/Users/aleck/Code/adam-core-rust-migration/.venv/lib/python3.13/site-packages/naif_de440/de440.bsp"
+  },
+  "runner": {
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/Users/aleck/Code/adam-core-rust-migration/rust/adam_core_rs_assist/Cargo.toml",
+      "live_assist_matches_public_semantics_fixture_propagation_cases",
+      "--",
+      "--ignored",
+      "--nocapture"
+    ],
+    "machine": "arm64",
+    "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "python": "3.13.3 (main, Apr  8 2025, 13:54:08) [Clang 16.0.0 (clang-1600.0.26.6)]",
+    "script": "migration/scripts/run_assist_public_semantics_residuals.py"
+  },
+  "source_fixture_schema_version": 1,
+  "thresholds": {
+    "position_abs_au": 1e-14,
+    "position_abs_m": 0.001495978707,
+    "velocity_abs_au_per_day": 1e-15,
+    "velocity_abs_m_per_s": 1.7314568368055558e-09
+  }
+}

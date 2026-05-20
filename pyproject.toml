@@ -186,6 +186,7 @@ rust-smoke = { composite = [
   "pdm run rust-develop",
   "pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py src/adam_core/coordinates/tests/test_rust_covariance_autodiff.py src/adam_core/orbit_determination/tests/test_iod.py",
 ] }
+assist-public-semantics-residuals = "python migration/scripts/run_assist_public_semantics_residuals.py"
 rust-parity-fuzz = "python -m migration.parity.parity_fuzz --seeds 8 --n 128 --output migration/artifacts/parity_fuzz.json"
 rust-parity-main = "python -m migration.parity.parity_main --threads multi-thread --speed-tiny --speed-tiny-reps 101 --speed-tiny-warmup 3 --speed-n 2000 --speed-reps 21 --speed-warmup 3 --speed-large --speed-large-reps 7 --speed-large-warmup 1 --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json --output migration/artifacts/parity_gate.json"
 rust-parity-speed = "python -m migration.parity.parity_speed --threads multi-thread --n 2000 --reps 7 --output migration/artifacts/parity_speed.json"

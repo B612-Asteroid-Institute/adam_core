@@ -1079,7 +1079,36 @@ mod tests {
     use adam_core_rs_coords::propagation::PropagationOptions;
     use adam_core_rs_coords::types::SchemaResult;
     use adam_core_rs_coords::{ObjectId, OrbitId, SchemaError, VariantId};
-    use serde_json::Value;
+    use serde_json::{json, Value};
+
+    // Local measured residuals against the frozen Python fixture on 2026-05-20:
+    // max position 2.220446049250313e-16 AU (33 micrometers), max velocity
+    // 1.0408340855860843e-17 AU/day (18 picometers/s). These assertions keep
+    // comfortable cross-build headroom while staying far tighter than the prior
+    // smoke envelope.
+    const ASSIST_FIXTURE_POSITION_TOLERANCE_AU: f64 = 1.0e-14;
+    const ASSIST_FIXTURE_VELOCITY_TOLERANCE_AU_PER_DAY: f64 = 1.0e-15;
+    const AU_METERS: f64 = 149_597_870_700.0;
+    const SECONDS_PER_DAY: f64 = 86_400.0;
+
+    #[derive(Debug, Clone)]
+    struct FixtureResidual {
+        case_id: String,
+        rows: usize,
+        max_position_abs_au: f64,
+        max_velocity_abs_au_per_day: f64,
+        max_time_abs_ns: i64,
+    }
+
+    impl FixtureResidual {
+        fn max_position_abs_m(&self) -> f64 {
+            self.max_position_abs_au * AU_METERS
+        }
+
+        fn max_velocity_abs_m_per_s(&self) -> f64 {
+            self.max_velocity_abs_au_per_day * AU_METERS / SECONDS_PER_DAY
+        }
+    }
 
     struct NoopProvider;
 
@@ -1624,7 +1653,11 @@ mod tests {
         assert_eq!(&actual, expected);
     }
 
-    fn assert_coordinates_match_fixture(actual: &CoordinateBatch, expected: &Value, case_id: &str) {
+    fn assert_coordinates_match_fixture(
+        actual: &CoordinateBatch,
+        expected: &Value,
+        case_id: &str,
+    ) -> FixtureResidual {
         let expected_coordinates = json_cartesian_coordinates(expected);
         assert_eq!(actual.frame, expected_coordinates.frame, "{case_id} frame");
         assert_eq!(
@@ -1642,17 +1675,15 @@ mod tests {
                 .collect::<Vec<_>>(),
             "{case_id} origins",
         );
-        assert_eq!(
-            actual
-                .times
-                .as_ref()
-                .expect("actual output must have times"),
-            expected_coordinates
-                .times
-                .as_ref()
-                .expect("expected output must have times"),
-            "{case_id} times",
-        );
+        let actual_times = actual
+            .times
+            .as_ref()
+            .expect("actual output must have times");
+        let expected_times = expected_coordinates
+            .times
+            .as_ref()
+            .expect("expected output must have times");
+        assert_eq!(actual_times, expected_times, "{case_id} times");
         let actual_states = actual.values.cartesian().expect("actual must be Cartesian");
         let expected_states = expected_coordinates
             .values
@@ -1669,17 +1700,129 @@ mod tests {
                 max_velocity_abs = max_velocity_abs.max((actual[axis] - expected[axis]).abs());
             }
         }
+        FixtureResidual {
+            case_id: case_id.to_string(),
+            rows: actual_states.len(),
+            max_position_abs_au: max_position_abs,
+            max_velocity_abs_au_per_day: max_velocity_abs,
+            max_time_abs_ns: max_time_abs_ns(actual_times, expected_times),
+        }
+    }
+
+    fn max_time_abs_ns(actual: &TimeArray, expected: &TimeArray) -> i64 {
+        assert_eq!(actual.scale, expected.scale);
+        actual
+            .epochs
+            .iter()
+            .zip(expected.epochs.iter())
+            .map(|(actual, expected)| {
+                ((actual.days - expected.days) as i128 * NANOS_PER_DAY as i128
+                    + (actual.nanos - expected.nanos) as i128)
+                    .abs()
+            })
+            .max()
+            .unwrap_or(0)
+            .try_into()
+            .expect("fixture time residual must fit i64 nanoseconds")
+    }
+
+    fn assert_residuals_within_acceptance(residuals: &[FixtureResidual]) {
+        let max_position_abs = residuals
+            .iter()
+            .map(|residual| residual.max_position_abs_au)
+            .fold(0.0_f64, f64::max);
+        let max_velocity_abs = residuals
+            .iter()
+            .map(|residual| residual.max_velocity_abs_au_per_day)
+            .fold(0.0_f64, f64::max);
         assert!(
-            max_position_abs <= 1.0e-9,
-            "{case_id} position max abs {max_position_abs:e} AU exceeds live fixture smoke tolerance"
+            max_position_abs <= ASSIST_FIXTURE_POSITION_TOLERANCE_AU,
+            "position max abs {max_position_abs:e} AU exceeds measured public-semantics fixture tolerance {ASSIST_FIXTURE_POSITION_TOLERANCE_AU:e} AU"
         );
         assert!(
-            max_velocity_abs <= 1.0e-10,
-            "{case_id} velocity max abs {max_velocity_abs:e} AU/day exceeds live fixture smoke tolerance"
+            max_velocity_abs <= ASSIST_FIXTURE_VELOCITY_TOLERANCE_AU_PER_DAY,
+            "velocity max abs {max_velocity_abs:e} AU/day exceeds measured public-semantics fixture tolerance {ASSIST_FIXTURE_VELOCITY_TOLERANCE_AU_PER_DAY:e} AU/day"
         );
     }
 
-    fn assert_orbits_match_fixture(actual: &OrbitBatch, expected: &Value, case_id: &str) {
+    fn write_residual_artifact(fixture: &Value, residuals: &[FixtureResidual]) {
+        let Ok(path) = std::env::var("ADAM_CORE_RS_ASSIST_RESIDUALS_PATH") else {
+            return;
+        };
+        let path = std::path::Path::new(&path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("failed to create residual artifact directory");
+        }
+        let max_position_abs_au = residuals
+            .iter()
+            .map(|residual| residual.max_position_abs_au)
+            .fold(0.0_f64, f64::max);
+        let max_velocity_abs_au_per_day = residuals
+            .iter()
+            .map(|residual| residual.max_velocity_abs_au_per_day)
+            .fold(0.0_f64, f64::max);
+        let max_time_abs_ns = residuals
+            .iter()
+            .map(|residual| residual.max_time_abs_ns)
+            .max()
+            .unwrap_or(0);
+        let cases = residuals
+            .iter()
+            .map(|residual| {
+                json!({
+                    "case_id": residual.case_id.as_str(),
+                    "rows": residual.rows,
+                    "max_position_abs_au": residual.max_position_abs_au,
+                    "max_position_abs_m": residual.max_position_abs_m(),
+                    "max_velocity_abs_au_per_day": residual.max_velocity_abs_au_per_day,
+                    "max_velocity_abs_m_per_s": residual.max_velocity_abs_m_per_s(),
+                    "max_time_abs_ns": residual.max_time_abs_ns,
+                })
+            })
+            .collect::<Vec<_>>();
+        let artifact = json!({
+            "artifact_schema_version": 1,
+            "fixture_id": fixture.get("fixture_id").cloned().unwrap_or(Value::Null),
+            "acceptance_target": fixture.get("acceptance_target").cloned().unwrap_or(Value::Null),
+            "source_fixture_schema_version": fixture.get("fixture_schema_version").cloned().unwrap_or(Value::Null),
+            "packages": fixture.get("packages").cloned().unwrap_or(Value::Null),
+            "kernels": fixture.get("kernels").cloned().unwrap_or(Value::Null),
+            "thresholds": {
+                "position_abs_au": ASSIST_FIXTURE_POSITION_TOLERANCE_AU,
+                "position_abs_m": ASSIST_FIXTURE_POSITION_TOLERANCE_AU * AU_METERS,
+                "velocity_abs_au_per_day": ASSIST_FIXTURE_VELOCITY_TOLERANCE_AU_PER_DAY,
+                "velocity_abs_m_per_s": ASSIST_FIXTURE_VELOCITY_TOLERANCE_AU_PER_DAY * AU_METERS / SECONDS_PER_DAY,
+            },
+            "global_max": {
+                "position_abs_au": max_position_abs_au,
+                "position_abs_m": max_position_abs_au * AU_METERS,
+                "velocity_abs_au_per_day": max_velocity_abs_au_per_day,
+                "velocity_abs_m_per_s": max_velocity_abs_au_per_day * AU_METERS / SECONDS_PER_DAY,
+                "time_abs_ns": max_time_abs_ns,
+            },
+            "cases": cases,
+        });
+        std::fs::write(
+            path,
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&artifact).expect("residual artifact must serialize")
+            ),
+        )
+        .expect("failed to write residual artifact");
+        println!(
+            "wrote ASSIST residual artifact {}; max position {max_position_abs_au:e} AU ({:.6e} m), max velocity {max_velocity_abs_au_per_day:e} AU/day ({:.6e} m/s), max time {max_time_abs_ns} ns",
+            path.display(),
+            max_position_abs_au * AU_METERS,
+            max_velocity_abs_au_per_day * AU_METERS / SECONDS_PER_DAY,
+        );
+    }
+
+    fn assert_orbits_match_fixture(
+        actual: &OrbitBatch,
+        expected: &Value,
+        case_id: &str,
+    ) -> FixtureResidual {
         let actual_orbit_ids = actual
             .orbit_id
             .iter()
@@ -1698,10 +1841,14 @@ mod tests {
             &actual.coordinates,
             expected.get("coordinates").unwrap(),
             case_id,
-        );
+        )
     }
 
-    fn assert_variants_match_fixture(actual: &OrbitVariantBatch, expected: &Value, case_id: &str) {
+    fn assert_variants_match_fixture(
+        actual: &OrbitVariantBatch,
+        expected: &Value,
+        case_id: &str,
+    ) -> FixtureResidual {
         let actual_orbit_ids = actual
             .orbit_id
             .iter()
@@ -1729,7 +1876,7 @@ mod tests {
             &actual.coordinates,
             expected.get("coordinates").unwrap(),
             case_id,
-        );
+        )
     }
 
     #[test]
@@ -1741,6 +1888,7 @@ mod tests {
             .get("propagation_cases")
             .and_then(Value::as_array)
             .expect("fixture must contain propagation cases");
+        let mut residuals = Vec::with_capacity(cases.len());
         for case in cases {
             let case_id = case
                 .get("case_id")
@@ -1763,11 +1911,11 @@ mod tests {
                     let orbits = json_orbits(input);
                     let request = PropagationRequest::new(&orbits, &targets, options).unwrap();
                     let result = propagator.propagate(&request, &NoopProvider).unwrap();
-                    assert_orbits_match_fixture(
+                    residuals.push(assert_orbits_match_fixture(
                         &result.orbits,
                         case.get("output_orbits").unwrap(),
                         case_id,
-                    );
+                    ));
                 }
                 "VariantOrbits" => {
                     let variants = json_variants(input);
@@ -1778,15 +1926,17 @@ mod tests {
                         .variants
                         .as_ref()
                         .expect("variant propagation should return variant batch");
-                    assert_variants_match_fixture(
+                    residuals.push(assert_variants_match_fixture(
                         actual,
                         case.get("output_orbits").unwrap(),
                         case_id,
-                    );
+                    ));
                 }
                 other => panic!("unexpected fixture table_type {other}"),
             }
         }
+        write_residual_artifact(&fixture, &residuals);
+        assert_residuals_within_acceptance(&residuals);
     }
 
     #[test]
