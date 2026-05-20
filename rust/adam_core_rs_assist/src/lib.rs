@@ -13,12 +13,15 @@ use adam_core_rs_coords::propagation::{
 use adam_core_rs_coords::types::Frame;
 use adam_core_rs_coords::{
     CoordinateBatch, CovarianceBatch, CovarianceUnits, Epoch, OrbitBatch, OrbitVariantBatch,
-    OriginArray, OriginId, TimeArray, TimeScale, TimeScaleProvider, Validity,
+    OriginArray, OriginId, TimeArray, TimeScale, TimeScaleProvider, Validity, NANOS_PER_DAY,
 };
+use assist_rs::ffi;
 use assist_rs::{
-    assist_propagate, AssistData, Error as AssistError, IntegratorConfig, Orbit as AssistOrbit,
+    assist_propagate, ecliptic_to_equatorial, equatorial_to_ecliptic, AssistData,
+    Error as AssistError, Ias15AdaptiveMode, IntegratorConfig, Orbit as AssistOrbit,
 };
 use rayon::prelude::*;
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 const BACKEND_NAME: &str = "assist_rs";
@@ -33,7 +36,7 @@ impl AssistPropagator {
     pub fn new(data: Arc<AssistData>) -> Self {
         Self {
             data,
-            integrator: IntegratorConfig::default(),
+            integrator: python_default_integrator(),
         }
     }
 
@@ -52,6 +55,9 @@ impl AssistPropagator {
     fn propagate_with_stm(
         &self,
         request: &PropagationRequest<'_>,
+        orbit_times_tdb: &TimeArray,
+        target_times_tdb: &TimeArray,
+        target_output_times: &TimeArray,
         compute_stm: bool,
     ) -> PropagationResultValue<PropagationResult> {
         validate_request_scope(request, compute_stm)?;
@@ -61,12 +67,15 @@ impl AssistPropagator {
                 "AssistPropagator requires Cartesian orbit coordinates".to_string(),
             )
         })?;
-        let orbit_times = input_coordinates
-            .times
-            .as_ref()
-            .ok_or(PropagationError::MissingOrbitTimes)?;
         let covariance = input_coordinates.covariance.as_ref();
         let include_covariance = compute_stm && covariance.is_some();
+        let normalized_states = normalize_input_states(
+            self.data.as_ref(),
+            states,
+            input_coordinates.frame,
+            &input_coordinates.origins,
+            orbit_times_tdb,
+        )?;
         let orbit_indices = (0..request.input.len()).collect::<Vec<_>>();
         let policy = request.options.epoch_policy.clone();
         let requested_chunk_size = request.options.chunk_size;
@@ -82,26 +91,35 @@ impl AssistPropagator {
                     for &orbit_index in chunk {
                         let row = orbit_row(
                             request,
-                            states,
-                            orbit_times,
+                            &normalized_states,
+                            orbit_times_tdb,
                             covariance,
                             orbit_index,
                             include_covariance,
                         );
                         let time_indices =
-                            time_indices_for_policy(&policy, orbit_index, request.times.len())?;
-                        let sorted_time_indices = sorted_time_indices(&time_indices, request.times);
+                            time_indices_for_policy(&policy, orbit_index, target_times_tdb.len())?;
+                        let sorted_time_indices =
+                            sorted_time_indices(&time_indices, target_times_tdb);
                         let sorted_times = sorted_time_indices
                             .iter()
-                            .map(|&time_index| request.times.epochs[time_index])
+                            .map(|&time_index| target_times_tdb.epochs[time_index])
                             .collect::<Vec<_>>();
                         let sorted_output = shard.propagate_one(row, &sorted_times)?;
-                        blocks.push(reorder_output(
+                        let mut block = reorder_output(
                             orbit_index,
-                            time_indices,
+                            sorted_time_indices.clone(),
                             sorted_time_indices,
                             sorted_output,
-                        )?);
+                        )?;
+                        restore_output_block(
+                            self.data.as_ref(),
+                            input_coordinates.frame,
+                            &input_coordinates.origins.origins[orbit_index],
+                            target_times_tdb,
+                            &mut block,
+                        )?;
+                        blocks.push(block);
                     }
                     Ok::<Vec<AssistOrbitBlock>, PropagationError>(blocks)
                 })
@@ -111,7 +129,7 @@ impl AssistPropagator {
             for chunk in chunk_results {
                 blocks.extend(chunk?);
             }
-            assemble_result(request, request.times, blocks)
+            assemble_result(request, target_output_times, blocks)
         })
     }
 }
@@ -137,7 +155,7 @@ impl Propagator for AssistPropagator {
     fn propagate(
         &self,
         request: &PropagationRequest<'_>,
-        _provider: &dyn TimeScaleProvider,
+        provider: &dyn TimeScaleProvider,
     ) -> PropagationResultValue<PropagationResult> {
         request.input.validate()?;
         request.times.validate()?;
@@ -147,9 +165,30 @@ impl Propagator for AssistPropagator {
                 request.options.covariance,
             ));
         }
+        let input_orbit_times = request
+            .input
+            .coordinates()
+            .times
+            .as_ref()
+            .ok_or(PropagationError::MissingOrbitTimes)?;
+        let orbit_times_tdb =
+            rescale_for_assist(input_orbit_times, provider, "orbit coordinate times")?;
+        let target_times_tdb = rescale_for_assist(request.times, provider, "target times")?;
+        let target_output_times = restore_from_assist_scale(
+            &target_times_tdb,
+            request.times.scale,
+            provider,
+            "target times",
+        )?;
         let compute_stm = request.options.covariance == CovariancePropagation::Linearized
             && request.input.coordinates().covariance.is_some();
-        self.propagate_with_stm(request, compute_stm)
+        self.propagate_with_stm(
+            request,
+            &orbit_times_tdb,
+            &target_times_tdb,
+            &target_output_times,
+            compute_stm,
+        )
     }
 }
 
@@ -287,52 +326,285 @@ struct AssistOrbitBlock {
     failure_codes: Vec<Option<PropagationFailureCode>>,
 }
 
+fn python_default_integrator() -> IntegratorConfig {
+    IntegratorConfig {
+        initial_dt: Some(1.0e-6),
+        min_dt: Some(1.0e-9),
+        adaptive_mode: Some(Ias15AdaptiveMode::Global),
+        epsilon: Some(1.0e-6),
+    }
+}
+
+fn rescale_for_assist(
+    times: &TimeArray,
+    provider: &dyn TimeScaleProvider,
+    field: &str,
+) -> PropagationResultValue<TimeArray> {
+    let rescaled = times.rescale_with_provider(TimeScale::Tdb, provider)?;
+    rescaled.validate()?;
+    if rescaled.scale != TimeScale::Tdb {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{field} provider returned {} instead of required tdb",
+            rescaled.scale.as_str()
+        )));
+    }
+    if rescaled.len() != times.len() {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{field} provider changed length from {} to {}",
+            times.len(),
+            rescaled.len()
+        )));
+    }
+    Ok(rescaled)
+}
+
+fn restore_from_assist_scale(
+    times_tdb: &TimeArray,
+    target_scale: TimeScale,
+    provider: &dyn TimeScaleProvider,
+    field: &str,
+) -> PropagationResultValue<TimeArray> {
+    let backend_times_tdb = python_backend_output_times(times_tdb)?;
+    let restored = backend_times_tdb.rescale_with_provider(target_scale, provider)?;
+    restored.validate()?;
+    if restored.scale != target_scale {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{field} provider returned {} instead of requested {}",
+            restored.scale.as_str(),
+            target_scale.as_str()
+        )));
+    }
+    if restored.len() != times_tdb.len() {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{field} provider changed length from {} to {} while restoring public output scale",
+            times_tdb.len(),
+            restored.len()
+        )));
+    }
+    Ok(restored)
+}
+
+fn python_backend_output_times(times_tdb: &TimeArray) -> PropagationResultValue<TimeArray> {
+    // Python adam-assist rebuilds propagated timestamps from f64 Julian dates
+    // returned to the public table. Preserve that caller-visible nanosecond
+    // quantization so UTC outputs match the frozen public-semantics fixture.
+    TimeArray::new(
+        TimeScale::Tdb,
+        times_tdb
+            .epochs
+            .iter()
+            .map(|epoch| {
+                let jd = epoch.mjd() + 2_400_000.5;
+                epoch_from_mjd(jd - 2_400_000.5)
+            })
+            .collect(),
+    )
+    .map_err(PropagationError::from)
+}
+
+fn epoch_from_mjd(mjd: f64) -> Epoch {
+    let days = mjd.floor() as i64;
+    let nanos = ((mjd - days as f64) * NANOS_PER_DAY as f64).round() as i64;
+    Epoch::new(days, nanos)
+}
+
 fn validate_request_scope(
     request: &PropagationRequest<'_>,
     compute_stm: bool,
 ) -> PropagationResultValue<()> {
     let coordinates = request.input.coordinates();
-    if coordinates.frame != Frame::Ecliptic {
+    if !matches!(coordinates.frame, Frame::Ecliptic | Frame::Equatorial) {
         return Err(PropagationError::InvalidRequest(format!(
-            "AssistPropagator initial scope requires ecliptic Cartesian input; got frame {}",
+            "AssistPropagator requires ecliptic or equatorial Cartesian input; got frame {}",
             coordinates.frame.as_str()
         )));
     }
     if coordinates.values.cartesian().is_none() {
         return Err(PropagationError::InvalidRequest(
-            "AssistPropagator initial scope requires Cartesian coordinates".to_string(),
+            "AssistPropagator requires Cartesian coordinates".to_string(),
         ));
     }
-    let orbit_times = coordinates
+    coordinates
         .times
         .as_ref()
         .ok_or(PropagationError::MissingOrbitTimes)?;
-    if orbit_times.scale != TimeScale::Tdb || request.times.scale != TimeScale::Tdb {
-        return Err(PropagationError::InvalidRequest(format!(
-            "AssistPropagator initial scope is TDB-only; got orbit times {} and target times {}",
-            orbit_times.scale.as_str(),
-            request.times.scale.as_str()
-        )));
-    }
     for origin in &coordinates.origins.origins {
-        if !is_heliocentric_origin(origin) {
+        if !is_supported_public_origin(origin) {
             return Err(PropagationError::InvalidRequest(format!(
-                "AssistPropagator initial scope requires heliocentric SUN origins; got {}",
+                "AssistPropagator currently supports SUN and SOLAR_SYSTEM_BARYCENTER origins; got {}",
                 origin.code()
             )));
         }
     }
-    if compute_stm && coordinates.covariance.is_none() {
+    if compute_stm && !is_native_assist_scope(coordinates.frame, &coordinates.origins) {
         return Err(PropagationError::InvalidRequest(
-            "AssistPropagator STM mode requires input covariance".to_string(),
+            "AssistPropagator linearized covariance currently requires native SUN/ecliptic input; public covariance frame/origin transforms are not implemented yet"
+                .to_string(),
         ));
     }
     Ok(())
 }
 
-fn is_heliocentric_origin(origin: &OriginId) -> bool {
+fn is_native_assist_scope(frame: Frame, origins: &OriginArray) -> bool {
+    frame == Frame::Ecliptic && origins.origins.iter().all(is_sun_origin)
+}
+
+fn is_supported_public_origin(origin: &OriginId) -> bool {
+    is_sun_origin(origin) || is_solar_system_barycenter_origin(origin)
+}
+
+fn is_sun_origin(origin: &OriginId) -> bool {
     matches!(origin, OriginId::Naif(10))
         || matches!(origin, OriginId::Named(code) if code.eq_ignore_ascii_case("SUN"))
+}
+
+fn is_solar_system_barycenter_origin(origin: &OriginId) -> bool {
+    matches!(origin, OriginId::SolarSystemBarycenter | OriginId::Naif(0))
+        || matches!(origin, OriginId::Named(code) if code.eq_ignore_ascii_case("SOLAR_SYSTEM_BARYCENTER") || code.eq_ignore_ascii_case("SSB"))
+}
+
+fn normalize_input_states(
+    data: &AssistData,
+    states: &[[f64; 6]],
+    frame: Frame,
+    origins: &OriginArray,
+    orbit_times_tdb: &TimeArray,
+) -> PropagationResultValue<Vec<[f64; 6]>> {
+    states
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(row, state)| {
+            let origin = &origins.origins[row];
+            let sun_bary_eq = if is_solar_system_barycenter_origin(origin) {
+                sun_barycentric_equatorial(data, orbit_times_tdb.epochs[row])?
+            } else {
+                [0.0; 6]
+            };
+            normalize_state_to_assist_frame(state, frame, origin, sun_bary_eq)
+        })
+        .collect()
+}
+
+fn restore_output_block(
+    data: &AssistData,
+    frame: Frame,
+    origin: &OriginId,
+    target_times_tdb: &TimeArray,
+    block: &mut AssistOrbitBlock,
+) -> PropagationResultValue<()> {
+    for (row_offset, state) in block.states.iter_mut().enumerate() {
+        let time_index = block.time_indices[row_offset];
+        let sun_bary_eq = if is_solar_system_barycenter_origin(origin) {
+            sun_barycentric_equatorial(data, target_times_tdb.epochs[time_index])?
+        } else {
+            [0.0; 6]
+        };
+        *state = restore_state_from_assist_frame(*state, frame, origin, sun_bary_eq)?;
+    }
+    Ok(())
+}
+
+fn normalize_state_to_assist_frame(
+    state: [f64; 6],
+    frame: Frame,
+    origin: &OriginId,
+    sun_bary_eq: [f64; 6],
+) -> PropagationResultValue<[f64; 6]> {
+    let state_eq = state_to_equatorial(state, frame)?;
+    let helio_eq = if is_sun_origin(origin) {
+        state_eq
+    } else if is_solar_system_barycenter_origin(origin) {
+        subtract_state(state_eq, sun_bary_eq)
+    } else {
+        return Err(PropagationError::InvalidRequest(format!(
+            "unsupported ASSIST input origin {}",
+            origin.code()
+        )));
+    };
+    Ok(equatorial_to_ecliptic(&helio_eq))
+}
+
+fn restore_state_from_assist_frame(
+    state: [f64; 6],
+    frame: Frame,
+    origin: &OriginId,
+    sun_bary_eq: [f64; 6],
+) -> PropagationResultValue<[f64; 6]> {
+    let helio_eq = ecliptic_to_equatorial(&state);
+    let state_eq = if is_sun_origin(origin) {
+        helio_eq
+    } else if is_solar_system_barycenter_origin(origin) {
+        add_state(helio_eq, sun_bary_eq)
+    } else {
+        return Err(PropagationError::InvalidRequest(format!(
+            "unsupported ASSIST output origin {}",
+            origin.code()
+        )));
+    };
+    state_from_equatorial(state_eq, frame)
+}
+
+fn state_to_equatorial(state: [f64; 6], frame: Frame) -> PropagationResultValue<[f64; 6]> {
+    match frame {
+        Frame::Equatorial => Ok(state),
+        Frame::Ecliptic => Ok(ecliptic_to_equatorial(&state)),
+        _ => Err(PropagationError::InvalidRequest(format!(
+            "AssistPropagator does not support frame {}",
+            frame.as_str()
+        ))),
+    }
+}
+
+fn state_from_equatorial(state: [f64; 6], frame: Frame) -> PropagationResultValue<[f64; 6]> {
+    match frame {
+        Frame::Equatorial => Ok(state),
+        Frame::Ecliptic => Ok(equatorial_to_ecliptic(&state)),
+        _ => Err(PropagationError::InvalidRequest(format!(
+            "AssistPropagator does not support frame {}",
+            frame.as_str()
+        ))),
+    }
+}
+
+fn sun_barycentric_equatorial(
+    data: &AssistData,
+    epoch_tdb: Epoch,
+) -> PropagationResultValue<[f64; 6]> {
+    let t = mjd_tdb_to_assist_time(epoch_tdb.mjd(), data.ephem.jd_ref());
+    let sun = data
+        .ephem
+        .get_body_state(ffi::ASSIST_BODY_SUN, t)
+        .map_err(|err| {
+            PropagationError::Backend(format!("assist-rs Sun state lookup failed: {err}"))
+        })?;
+    Ok([sun.x, sun.y, sun.z, sun.vx, sun.vy, sun.vz])
+}
+
+fn mjd_tdb_to_assist_time(mjd_tdb: f64, jd_ref: f64) -> f64 {
+    (mjd_tdb + 2_400_000.5) - jd_ref
+}
+
+fn add_state(left: [f64; 6], right: [f64; 6]) -> [f64; 6] {
+    [
+        left[0] + right[0],
+        left[1] + right[1],
+        left[2] + right[2],
+        left[3] + right[3],
+        left[4] + right[4],
+        left[5] + right[5],
+    ]
+}
+
+fn subtract_state(left: [f64; 6], right: [f64; 6]) -> [f64; 6] {
+    [
+        left[0] - right[0],
+        left[1] - right[1],
+        left[2] - right[2],
+        left[3] - right[3],
+        left[4] - right[4],
+        left[5] - right[5],
+    ]
 }
 
 fn normalized_chunk_size(chunk_size: Option<usize>, rows: usize) -> usize {
@@ -503,11 +775,34 @@ fn orbit_row<'a>(
     }
 }
 
+fn compare_blocks_for_public_output(
+    request: &PropagationRequest<'_>,
+    left: &AssistOrbitBlock,
+    right: &AssistOrbitBlock,
+) -> Ordering {
+    let left_orbit = request.input.orbit_id()[left.orbit_index].0.as_str();
+    let right_orbit = request.input.orbit_id()[right.orbit_index].0.as_str();
+    let orbit_order = left_orbit.cmp(right_orbit);
+    if orbit_order != Ordering::Equal {
+        return orbit_order;
+    }
+    let variant_id = request.input.variant_id();
+    let left_variant = variant_id
+        .and_then(|values| values[left.orbit_index].as_ref())
+        .map(|value| value.0.as_str());
+    let right_variant = variant_id
+        .and_then(|values| values[right.orbit_index].as_ref())
+        .map(|value| value.0.as_str());
+    left_variant.cmp(&right_variant)
+}
+
 fn assemble_result(
     request: &PropagationRequest<'_>,
     target_times: &TimeArray,
     blocks: Vec<AssistOrbitBlock>,
 ) -> PropagationResultValue<PropagationResult> {
+    let mut blocks = blocks;
+    blocks.sort_by(|left, right| compare_blocks_for_public_output(request, left, right));
     let output_rows = blocks.iter().map(|block| block.states.len()).sum::<usize>();
     let mut orbit_ids = Vec::with_capacity(output_rows);
     let mut object_ids = Vec::with_capacity(output_rows);
@@ -783,7 +1078,8 @@ mod tests {
     use super::*;
     use adam_core_rs_coords::propagation::PropagationOptions;
     use adam_core_rs_coords::types::SchemaResult;
-    use adam_core_rs_coords::{ObjectId, OrbitId, SchemaError, VariantId, NANOS_PER_DAY};
+    use adam_core_rs_coords::{ObjectId, OrbitId, SchemaError, VariantId};
+    use serde_json::Value;
 
     struct NoopProvider;
 
@@ -816,20 +1112,149 @@ mod tests {
         .unwrap()
     }
 
+    fn assert_state_close(actual: &[f64; 6], expected: &[f64; 6]) {
+        for (left, right) in actual.iter().zip(expected.iter()) {
+            assert!((left - right).abs() < 1.0e-14, "{actual:?} != {expected:?}");
+        }
+    }
+
     #[test]
-    fn heliocentric_origin_accepts_sun_forms_only() {
-        assert!(is_heliocentric_origin(&OriginId::Named("SUN".to_string())));
-        assert!(is_heliocentric_origin(&OriginId::Named("sun".to_string())));
-        assert!(is_heliocentric_origin(&OriginId::Naif(10)));
-        assert!(!is_heliocentric_origin(&OriginId::SolarSystemBarycenter));
-        assert!(!is_heliocentric_origin(&OriginId::Naif(0)));
-        assert!(!is_heliocentric_origin(&OriginId::Named(
+    fn python_public_integrator_defaults_are_used() {
+        let config = python_default_integrator();
+        assert_eq!(config.initial_dt, Some(1.0e-6));
+        assert_eq!(config.min_dt, Some(1.0e-9));
+        assert_eq!(config.adaptive_mode, Some(Ias15AdaptiveMode::Global));
+        assert_eq!(config.epsilon, Some(1.0e-6));
+    }
+
+    #[test]
+    fn public_origin_helpers_accept_sun_and_ssb_only() {
+        assert!(is_sun_origin(&OriginId::Named("SUN".to_string())));
+        assert!(is_sun_origin(&OriginId::Named("sun".to_string())));
+        assert!(is_sun_origin(&OriginId::Naif(10)));
+        assert!(!is_sun_origin(&OriginId::SolarSystemBarycenter));
+        assert!(is_solar_system_barycenter_origin(
+            &OriginId::SolarSystemBarycenter
+        ));
+        assert!(is_solar_system_barycenter_origin(&OriginId::Naif(0)));
+        assert!(is_solar_system_barycenter_origin(&OriginId::Named(
+            "SOLAR_SYSTEM_BARYCENTER".to_string()
+        )));
+        assert!(is_solar_system_barycenter_origin(&OriginId::Named(
+            "ssb".to_string()
+        )));
+        assert!(!is_supported_public_origin(&OriginId::Named(
             "EARTH".to_string()
         )));
     }
 
     #[test]
-    fn sorted_time_indices_preserve_caller_order_metadata() {
+    fn native_sun_ecliptic_normalization_is_identity() {
+        let state = [1.0, 0.2, -0.1, 0.001, 0.015, -0.0005];
+        let origin = OriginId::Named("SUN".to_string());
+        let normalized =
+            normalize_state_to_assist_frame(state, Frame::Ecliptic, &origin, [0.0; 6]).unwrap();
+        let restored =
+            restore_state_from_assist_frame(normalized, Frame::Ecliptic, &origin, [0.0; 6])
+                .unwrap();
+        assert_state_close(&normalized, &state);
+        assert_state_close(&restored, &state);
+    }
+
+    #[test]
+    fn ssb_equatorial_normalization_restores_public_state() {
+        let helio_ecliptic = [1.0, 0.2, -0.1, 0.001, 0.015, -0.0005];
+        let sun_bary_eq = [0.004, -0.002, 0.001, 0.00001, -0.00002, 0.00003];
+        let origin = OriginId::SolarSystemBarycenter;
+        let public_state = restore_state_from_assist_frame(
+            helio_ecliptic,
+            Frame::Equatorial,
+            &origin,
+            sun_bary_eq,
+        )
+        .unwrap();
+        let normalized =
+            normalize_state_to_assist_frame(public_state, Frame::Equatorial, &origin, sun_bary_eq)
+                .unwrap();
+        assert_state_close(&normalized, &helio_ecliptic);
+    }
+
+    #[test]
+    fn rescale_for_assist_accepts_utc_without_provider() {
+        let utc = TimeArray::from_parts(TimeScale::Utc, vec![60_000], vec![0]).unwrap();
+        let tdb = rescale_for_assist(&utc, &NoopProvider, "target times").unwrap();
+        assert_eq!(tdb.scale, TimeScale::Tdb);
+        assert_eq!(tdb.len(), utc.len());
+    }
+
+    #[test]
+    fn request_scope_accepts_public_time_origin_and_frame_semantics() {
+        let orbits = sample_orbits(
+            Frame::Equatorial,
+            OriginId::SolarSystemBarycenter,
+            TimeScale::Utc,
+        );
+        let targets = TimeArray::from_parts(TimeScale::Utc, vec![60_010], vec![0]).unwrap();
+        let request = PropagationRequest::new(
+            &orbits,
+            &targets,
+            PropagationOptions {
+                covariance: CovariancePropagation::None,
+                ..PropagationOptions::default()
+            },
+        )
+        .unwrap();
+        validate_request_scope(&request, false).unwrap();
+    }
+
+    #[test]
+    fn request_scope_rejects_unsupported_origins() {
+        let orbits = sample_orbits(
+            Frame::Ecliptic,
+            OriginId::Named("EARTH".to_string()),
+            TimeScale::Tdb,
+        );
+        let targets = TimeArray::from_parts(TimeScale::Tdb, vec![60_010], vec![0]).unwrap();
+        let request = PropagationRequest::new(
+            &orbits,
+            &targets,
+            PropagationOptions {
+                covariance: CovariancePropagation::None,
+                ..PropagationOptions::default()
+            },
+        )
+        .unwrap();
+        let err = validate_request_scope(&request, false).unwrap_err();
+        assert!(
+            matches!(err, PropagationError::InvalidRequest(message) if message.contains("SUN and SOLAR_SYSTEM_BARYCENTER"))
+        );
+    }
+
+    #[test]
+    fn request_scope_rejects_unsupported_frames() {
+        let orbits = sample_orbits(
+            Frame::Itrf93,
+            OriginId::Named("SUN".to_string()),
+            TimeScale::Tdb,
+        );
+        let targets = TimeArray::from_parts(TimeScale::Tdb, vec![60_010], vec![0]).unwrap();
+        let request = PropagationRequest::new(
+            &orbits,
+            &targets,
+            PropagationOptions {
+                covariance: CovariancePropagation::None,
+                ..PropagationOptions::default()
+            },
+        )
+        .unwrap();
+        let err = validate_request_scope(&request, false).unwrap_err();
+        assert!(
+            matches!(err, PropagationError::InvalidRequest(message) if message.contains("ecliptic or equatorial"))
+        );
+    }
+
+    #[test]
+    fn sorted_time_indices_order_by_mjd() {
         let times = sample_times(TimeScale::Tdb);
         let indices = vec![0, 1];
         let sorted = sorted_time_indices(&indices, &times);
@@ -837,58 +1262,110 @@ mod tests {
     }
 
     #[test]
-    fn covariance_flatten_round_trips_row_major_values() {
-        let values = (0..36).map(|value| value as f64).collect::<Vec<_>>();
-        let matrix = covariance_6x6(&values).unwrap();
-        assert_eq!(matrix[2][3], 15.0);
-        assert_eq!(flatten_covariance(matrix).as_slice(), values.as_slice());
+    fn restored_assist_output_times_match_python_jd_roundtrip() {
+        let utc = TimeArray::from_parts(TimeScale::Utc, vec![60_001, 60_002], vec![0, 0]).unwrap();
+        let tdb = rescale_for_assist(&utc, &NoopProvider, "target times").unwrap();
+        let restored =
+            restore_from_assist_scale(&tdb, TimeScale::Utc, &NoopProvider, "target times").unwrap();
+        assert_eq!(
+            restored.epochs,
+            vec![Epoch::new(60_001, 17_512), Epoch::new(60_002, 380)]
+        );
     }
 
     #[test]
-    fn request_scope_rejects_non_tdb_times() {
-        let orbits = sample_orbits(
+    fn assemble_result_sorts_public_output_by_orbit_variant_and_time() {
+        let coordinates = CoordinateBatch::cartesian(
+            vec![
+                [1.0, 0.0, 0.0, 0.0, 0.01, 0.0],
+                [2.0, 0.0, 0.0, 0.0, 0.02, 0.0],
+            ],
             Frame::Ecliptic,
-            OriginId::Named("SUN".to_string()),
-            TimeScale::Utc,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 2),
+            Some(TimeArray::from_parts(TimeScale::Tdb, vec![60_000, 60_000], vec![0, 0]).unwrap()),
+            None,
+        )
+        .unwrap();
+        let variants = OrbitVariantBatch::new(
+            vec![
+                OrbitId("orbit-b".to_string()),
+                OrbitId("orbit-a".to_string()),
+            ],
+            vec![None, None],
+            vec![
+                Some(VariantId("v1".to_string())),
+                Some(VariantId("v0".to_string())),
+            ],
+            vec![Some(1.0), Some(2.0)],
+            vec![Some(1.0), Some(2.0)],
+            coordinates,
+        )
+        .unwrap();
+        let targets =
+            TimeArray::from_parts(TimeScale::Tdb, vec![60_002, 60_001], vec![0, 0]).unwrap();
+        let request = PropagationRequest::new_variants(
+            &variants,
+            &targets,
+            PropagationOptions {
+                covariance: CovariancePropagation::None,
+                ..PropagationOptions::default()
+            },
+        )
+        .unwrap();
+        let block_b = AssistOrbitBlock {
+            orbit_index: 0,
+            time_indices: vec![1, 0],
+            states: vec![
+                [2.1, 0.0, 0.0, 0.0, 0.02, 0.0],
+                [2.2, 0.0, 0.0, 0.0, 0.02, 0.0],
+            ],
+            covariance: None,
+            covariance_validity: None,
+            validity: vec![true, true],
+            messages: vec![None, None],
+            iterations: vec![None, None],
+            failure_codes: vec![None, None],
+        };
+        let block_a = AssistOrbitBlock {
+            orbit_index: 1,
+            time_indices: vec![1, 0],
+            states: vec![
+                [1.1, 0.0, 0.0, 0.0, 0.01, 0.0],
+                [1.2, 0.0, 0.0, 0.0, 0.01, 0.0],
+            ],
+            covariance: None,
+            covariance_validity: None,
+            validity: vec![true, true],
+            messages: vec![None, None],
+            iterations: vec![None, None],
+            failure_codes: vec![None, None],
+        };
+        let result = assemble_result(&request, &targets, vec![block_b, block_a]).unwrap();
+        let out = result.variants.unwrap();
+        assert_eq!(
+            out.orbit_id
+                .iter()
+                .map(|value| value.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["orbit-a", "orbit-a", "orbit-b", "orbit-b"]
         );
-        let targets = TimeArray::from_parts(TimeScale::Tdb, vec![60_010], vec![0]).unwrap();
-        let request =
-            PropagationRequest::new(&orbits, &targets, PropagationOptions::default()).unwrap();
-        let err = validate_request_scope(&request, false).unwrap_err();
-        assert!(
-            matches!(err, PropagationError::InvalidRequest(message) if message.contains("TDB-only"))
+        assert_eq!(
+            out.variant_id
+                .iter()
+                .map(|value| value.as_ref().map(|id| id.0.as_str()))
+                .collect::<Vec<_>>(),
+            vec![Some("v0"), Some("v0"), Some("v1"), Some("v1")]
         );
-    }
-
-    #[test]
-    fn request_scope_rejects_non_heliocentric_origins() {
-        let orbits = sample_orbits(
-            Frame::Ecliptic,
-            OriginId::SolarSystemBarycenter,
-            TimeScale::Tdb,
-        );
-        let targets = TimeArray::from_parts(TimeScale::Tdb, vec![60_010], vec![0]).unwrap();
-        let request =
-            PropagationRequest::new(&orbits, &targets, PropagationOptions::default()).unwrap();
-        let err = validate_request_scope(&request, false).unwrap_err();
-        assert!(
-            matches!(err, PropagationError::InvalidRequest(message) if message.contains("SUN origins"))
-        );
-    }
-
-    #[test]
-    fn request_scope_rejects_non_ecliptic_frames() {
-        let orbits = sample_orbits(
-            Frame::Equatorial,
-            OriginId::Named("SUN".to_string()),
-            TimeScale::Tdb,
-        );
-        let targets = TimeArray::from_parts(TimeScale::Tdb, vec![60_010], vec![0]).unwrap();
-        let request =
-            PropagationRequest::new(&orbits, &targets, PropagationOptions::default()).unwrap();
-        let err = validate_request_scope(&request, false).unwrap_err();
-        assert!(
-            matches!(err, PropagationError::InvalidRequest(message) if message.contains("ecliptic"))
+        assert_eq!(
+            out.coordinates
+                .times
+                .as_ref()
+                .unwrap()
+                .epochs
+                .iter()
+                .map(|epoch| epoch.days)
+                .collect::<Vec<_>>(),
+            vec![60_001, 60_002, 60_001, 60_002]
         );
     }
 
@@ -979,9 +1456,14 @@ mod tests {
         assert!(message.contains("collision"));
     }
 
-    #[test]
-    #[ignore = "requires ADAM_CORE_RS_ASSIST_PLANETS_PATH and ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH"]
-    fn live_assist_propagates_with_env_kernels() {
+    fn fixture() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../migration/artifacts/assist_public_semantics_fixture_2026-05-20.json"
+        ))
+        .expect("fixture JSON must parse")
+    }
+
+    fn live_propagator_from_env() -> AssistPropagator {
         let planets = std::env::var("ADAM_CORE_RS_ASSIST_PLANETS_PATH")
             .expect("set ADAM_CORE_RS_ASSIST_PLANETS_PATH to the DE440 BSP path");
         let asteroids = std::env::var("ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH")
@@ -991,7 +1473,326 @@ mod tests {
             std::path::Path::new(&asteroids),
         )
         .expect("failed to load ASSIST ephemeris kernels");
-        let propagator = AssistPropagator::new(std::sync::Arc::new(AssistData::new(ephem)));
+        AssistPropagator::new(std::sync::Arc::new(AssistData::new(ephem)))
+    }
+
+    fn json_array<'a>(value: &'a Value, field: &str) -> &'a Vec<Value> {
+        value
+            .get(field)
+            .and_then(Value::as_array)
+            .unwrap_or_else(|| panic!("fixture field {field} must be an array"))
+    }
+
+    fn json_string_array(value: &Value, field: &str) -> Vec<String> {
+        json_array(value, field)
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .expect("fixture value must be a string")
+                    .to_string()
+            })
+            .collect()
+    }
+
+    fn json_optional_string_array(value: &Value, field: &str) -> Vec<Option<String>> {
+        json_array(value, field)
+            .iter()
+            .map(|item| item.as_str().map(str::to_string))
+            .collect()
+    }
+
+    fn json_optional_f64_array(value: &Value, field: &str) -> Vec<Option<f64>> {
+        json_array(value, field).iter().map(Value::as_f64).collect()
+    }
+
+    fn json_time_array(value: &Value) -> TimeArray {
+        let scale = TimeScale::parse(
+            value
+                .get("scale")
+                .and_then(Value::as_str)
+                .expect("fixture time must have scale"),
+        )
+        .unwrap();
+        let days = json_array(value, "days")
+            .iter()
+            .map(|item| item.as_i64().expect("fixture day must be i64"))
+            .collect::<Vec<_>>();
+        let nanos = json_array(value, "nanos")
+            .iter()
+            .map(|item| item.as_i64().expect("fixture nanos must be i64"))
+            .collect::<Vec<_>>();
+        TimeArray::from_parts(scale, days, nanos).unwrap()
+    }
+
+    fn json_states(value: &Value) -> Vec<[f64; 6]> {
+        json_array(value, "values")
+            .iter()
+            .map(|row| {
+                let row = row.as_array().expect("state row must be an array");
+                assert_eq!(row.len(), 6);
+                [
+                    row[0].as_f64().unwrap(),
+                    row[1].as_f64().unwrap(),
+                    row[2].as_f64().unwrap(),
+                    row[3].as_f64().unwrap(),
+                    row[4].as_f64().unwrap(),
+                    row[5].as_f64().unwrap(),
+                ]
+            })
+            .collect()
+    }
+
+    fn json_cartesian_coordinates(value: &Value) -> CoordinateBatch {
+        let frame = Frame::parse(
+            value
+                .get("frame")
+                .and_then(Value::as_str)
+                .expect("coordinates must have frame"),
+        )
+        .unwrap();
+        let origins = OriginArray::new(
+            json_string_array(value, "origin_codes")
+                .into_iter()
+                .map(OriginId::from_code)
+                .collect(),
+        );
+        CoordinateBatch::cartesian(
+            json_states(value),
+            frame,
+            origins,
+            Some(json_time_array(
+                value.get("time").expect("coordinates must have time"),
+            )),
+            None,
+        )
+        .unwrap()
+    }
+
+    fn json_orbits(value: &Value) -> OrbitBatch {
+        OrbitBatch::new(
+            json_string_array(value, "orbit_id")
+                .into_iter()
+                .map(OrbitId)
+                .collect(),
+            json_optional_string_array(value, "object_id")
+                .into_iter()
+                .map(|item| item.map(ObjectId))
+                .collect(),
+            json_cartesian_coordinates(value.get("coordinates").unwrap()),
+        )
+        .unwrap()
+    }
+
+    fn json_variants(value: &Value) -> OrbitVariantBatch {
+        OrbitVariantBatch::new(
+            json_string_array(value, "orbit_id")
+                .into_iter()
+                .map(OrbitId)
+                .collect(),
+            json_optional_string_array(value, "object_id")
+                .into_iter()
+                .map(|item| item.map(ObjectId))
+                .collect(),
+            json_optional_string_array(value, "variant_id")
+                .into_iter()
+                .map(|item| item.map(VariantId))
+                .collect(),
+            json_optional_f64_array(value, "weights"),
+            json_optional_f64_array(value, "weights_cov"),
+            json_cartesian_coordinates(value.get("coordinates").unwrap()),
+        )
+        .unwrap()
+    }
+
+    fn assert_string_column(actual: &[String], expected: &[String], label: &str) {
+        assert_eq!(actual, expected, "{label}");
+    }
+
+    fn assert_object_ids(actual: &[Option<ObjectId>], expected: &[Option<String>]) {
+        let actual = actual
+            .iter()
+            .map(|item| item.as_ref().map(|value| value.0.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(&actual, expected);
+    }
+
+    fn assert_variant_ids(actual: &[Option<VariantId>], expected: &[Option<String>]) {
+        let actual = actual
+            .iter()
+            .map(|item| item.as_ref().map(|value| value.0.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(&actual, expected);
+    }
+
+    fn assert_coordinates_match_fixture(actual: &CoordinateBatch, expected: &Value, case_id: &str) {
+        let expected_coordinates = json_cartesian_coordinates(expected);
+        assert_eq!(actual.frame, expected_coordinates.frame, "{case_id} frame");
+        assert_eq!(
+            actual
+                .origins
+                .origins
+                .iter()
+                .map(OriginId::code)
+                .collect::<Vec<_>>(),
+            expected_coordinates
+                .origins
+                .origins
+                .iter()
+                .map(OriginId::code)
+                .collect::<Vec<_>>(),
+            "{case_id} origins",
+        );
+        assert_eq!(
+            actual
+                .times
+                .as_ref()
+                .expect("actual output must have times"),
+            expected_coordinates
+                .times
+                .as_ref()
+                .expect("expected output must have times"),
+            "{case_id} times",
+        );
+        let actual_states = actual.values.cartesian().expect("actual must be Cartesian");
+        let expected_states = expected_coordinates
+            .values
+            .cartesian()
+            .expect("expected must be Cartesian");
+        assert_eq!(actual_states.len(), expected_states.len(), "{case_id} rows");
+        let mut max_position_abs: f64 = 0.0;
+        let mut max_velocity_abs: f64 = 0.0;
+        for (actual, expected) in actual_states.iter().zip(expected_states.iter()) {
+            for axis in 0..3 {
+                max_position_abs = max_position_abs.max((actual[axis] - expected[axis]).abs());
+            }
+            for axis in 3..6 {
+                max_velocity_abs = max_velocity_abs.max((actual[axis] - expected[axis]).abs());
+            }
+        }
+        assert!(
+            max_position_abs <= 1.0e-9,
+            "{case_id} position max abs {max_position_abs:e} AU exceeds live fixture smoke tolerance"
+        );
+        assert!(
+            max_velocity_abs <= 1.0e-10,
+            "{case_id} velocity max abs {max_velocity_abs:e} AU/day exceeds live fixture smoke tolerance"
+        );
+    }
+
+    fn assert_orbits_match_fixture(actual: &OrbitBatch, expected: &Value, case_id: &str) {
+        let actual_orbit_ids = actual
+            .orbit_id
+            .iter()
+            .map(|item| item.0.clone())
+            .collect::<Vec<_>>();
+        assert_string_column(
+            &actual_orbit_ids,
+            &json_string_array(expected, "orbit_id"),
+            "orbit_id",
+        );
+        assert_object_ids(
+            &actual.object_id,
+            &json_optional_string_array(expected, "object_id"),
+        );
+        assert_coordinates_match_fixture(
+            &actual.coordinates,
+            expected.get("coordinates").unwrap(),
+            case_id,
+        );
+    }
+
+    fn assert_variants_match_fixture(actual: &OrbitVariantBatch, expected: &Value, case_id: &str) {
+        let actual_orbit_ids = actual
+            .orbit_id
+            .iter()
+            .map(|item| item.0.clone())
+            .collect::<Vec<_>>();
+        assert_string_column(
+            &actual_orbit_ids,
+            &json_string_array(expected, "orbit_id"),
+            "orbit_id",
+        );
+        assert_object_ids(
+            &actual.object_id,
+            &json_optional_string_array(expected, "object_id"),
+        );
+        assert_variant_ids(
+            &actual.variant_id,
+            &json_optional_string_array(expected, "variant_id"),
+        );
+        assert_eq!(actual.weights, json_optional_f64_array(expected, "weights"));
+        assert_eq!(
+            actual.weights_cov,
+            json_optional_f64_array(expected, "weights_cov")
+        );
+        assert_coordinates_match_fixture(
+            &actual.coordinates,
+            expected.get("coordinates").unwrap(),
+            case_id,
+        );
+    }
+
+    #[test]
+    #[ignore = "requires ASSIST kernel env vars and compares against the frozen Python public-semantics fixture"]
+    fn live_assist_matches_public_semantics_fixture_propagation_cases() {
+        let propagator = live_propagator_from_env();
+        let fixture = fixture();
+        let cases = fixture
+            .get("propagation_cases")
+            .and_then(Value::as_array)
+            .expect("fixture must contain propagation cases");
+        for case in cases {
+            let case_id = case
+                .get("case_id")
+                .and_then(Value::as_str)
+                .expect("case must have id");
+            let input = case.get("input_orbits").unwrap();
+            let targets = json_time_array(case.get("target_times").unwrap());
+            let options = PropagationOptions {
+                covariance: CovariancePropagation::None,
+                thread_limit: Some(1),
+                chunk_size: Some(1),
+                ..PropagationOptions::default()
+            };
+            match input
+                .get("table_type")
+                .and_then(Value::as_str)
+                .expect("input must have table_type")
+            {
+                "Orbits" => {
+                    let orbits = json_orbits(input);
+                    let request = PropagationRequest::new(&orbits, &targets, options).unwrap();
+                    let result = propagator.propagate(&request, &NoopProvider).unwrap();
+                    assert_orbits_match_fixture(
+                        &result.orbits,
+                        case.get("output_orbits").unwrap(),
+                        case_id,
+                    );
+                }
+                "VariantOrbits" => {
+                    let variants = json_variants(input);
+                    let request =
+                        PropagationRequest::new_variants(&variants, &targets, options).unwrap();
+                    let result = propagator.propagate(&request, &NoopProvider).unwrap();
+                    let actual = result
+                        .variants
+                        .as_ref()
+                        .expect("variant propagation should return variant batch");
+                    assert_variants_match_fixture(
+                        actual,
+                        case.get("output_orbits").unwrap(),
+                        case_id,
+                    );
+                }
+                other => panic!("unexpected fixture table_type {other}"),
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires ADAM_CORE_RS_ASSIST_PLANETS_PATH and ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH"]
+    fn live_assist_propagates_with_env_kernels() {
+        let propagator = live_propagator_from_env();
         let orbits = sample_orbits(
             Frame::Ecliptic,
             OriginId::Named("SUN".to_string()),

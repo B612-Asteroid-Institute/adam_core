@@ -9,6 +9,7 @@ dependencies = [
  "adam_core_rs_coords",
  "assist-rs",
  "rayon",
+ "serde_json",
 ]
 
 [[package]]
