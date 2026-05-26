@@ -13,6 +13,7 @@ import argparse
 import gc
 import hashlib
 import json
+import multiprocessing as mp
 import platform
 import statistics
 import time
@@ -40,7 +41,7 @@ DEFAULT_OUTPUT = (
     REPO_ROOT
     / "migration"
     / "artifacts"
-    / "assist_public_semantics_benchmark_2026-05-20.json"
+    / "assist_public_semantics_benchmark_2026-05-26.json"
 )
 NANOS_PER_DAY = 86_400_000_000_000
 AU_METERS = 149_597_870_700.0
@@ -64,7 +65,6 @@ class Workload:
     orbits: OrbitTable
     times: Timestamp
     chunk_size: int
-    max_processes: int
 
 
 def _package_version(package_name: str) -> str | None:
@@ -191,7 +191,6 @@ def _workloads() -> list[Workload]:
             orbits=_base_sun_ecliptic_orbits(2, mixed_epochs=True),
             times=Timestamp.from_mjd([60002.0, 60001.0], scale="tdb"),
             chunk_size=1,
-            max_processes=1,
         ),
         Workload(
             lane="tiny",
@@ -200,7 +199,6 @@ def _workloads() -> list[Workload]:
             orbits=_base_sun_ecliptic_orbits(8, mixed_epochs=False),
             times=_target_times(8, scale="tdb"),
             chunk_size=8,
-            max_processes=1,
         ),
         Workload(
             lane="tiny",
@@ -214,7 +212,6 @@ def _workloads() -> list[Workload]:
             ),
             times=_target_times(8, scale="utc"),
             chunk_size=8,
-            max_processes=1,
         ),
         Workload(
             lane="tiny",
@@ -223,7 +220,6 @@ def _workloads() -> list[Workload]:
             orbits=_variant_orbits(8),
             times=Timestamp.from_mjd(np.linspace(60000.25, 60002.0, 4), scale="tdb"),
             chunk_size=8,
-            max_processes=1,
         ),
         Workload(
             lane="small",
@@ -232,7 +228,6 @@ def _workloads() -> list[Workload]:
             orbits=_base_sun_ecliptic_orbits(40, mixed_epochs=False),
             times=_target_times(50, scale="tdb"),
             chunk_size=40,
-            max_processes=1,
         ),
         Workload(
             lane="small",
@@ -246,7 +241,6 @@ def _workloads() -> list[Workload]:
             ),
             times=_target_times(50, scale="utc"),
             chunk_size=40,
-            max_processes=1,
         ),
         Workload(
             lane="small",
@@ -255,7 +249,6 @@ def _workloads() -> list[Workload]:
             orbits=_variant_orbits(40),
             times=_target_times(50, scale="tdb"),
             chunk_size=40,
-            max_processes=1,
         ),
         Workload(
             lane="large",
@@ -264,7 +257,6 @@ def _workloads() -> list[Workload]:
             orbits=_base_sun_ecliptic_orbits(1000, mixed_epochs=False),
             times=_target_times(20, scale="tdb"),
             chunk_size=1000,
-            max_processes=1,
         ),
         Workload(
             lane="large",
@@ -273,7 +265,6 @@ def _workloads() -> list[Workload]:
             orbits=_base_sun_ecliptic_orbits(400, mixed_epochs=False),
             times=_target_times(50, scale="tdb"),
             chunk_size=400,
-            max_processes=1,
         ),
         Workload(
             lane="large",
@@ -287,7 +278,6 @@ def _workloads() -> list[Workload]:
             ),
             times=_target_times(50, scale="utc"),
             chunk_size=400,
-            max_processes=1,
         ),
         Workload(
             lane="large",
@@ -296,7 +286,6 @@ def _workloads() -> list[Workload]:
             orbits=_variant_orbits(400),
             times=_target_times(50, scale="tdb"),
             chunk_size=400,
-            max_processes=1,
         ),
     ]
 
@@ -318,6 +307,13 @@ def _timed_call(
 
 def _p95(values: list[float]) -> float:
     return float(np.percentile(np.asarray(values, dtype=np.float64), 95))
+
+
+def _effective_chunk_size(workload: Workload, max_processes: int) -> int:
+    rows = max(len(workload.orbits), 1)
+    if max_processes <= 1:
+        return workload.chunk_size
+    return min(workload.chunk_size, max(1, rows // max_processes))
 
 
 def _state_residuals(actual: OrbitTable, expected: OrbitTable) -> dict[str, Any]:
@@ -376,14 +372,17 @@ def _benchmark_workload(
     rust_propagator: RustASSISTPropagator,
     repeats: int,
     warmups: int,
+    max_processes: int,
 ) -> dict[str, Any]:
+    chunk_size = _effective_chunk_size(workload, max_processes)
+
     def run_python() -> OrbitTable:
         return python_propagator.propagate_orbits(
             workload.orbits,
             workload.times,
             covariance=False,
-            max_processes=workload.max_processes,
-            chunk_size=workload.chunk_size,
+            max_processes=max_processes,
+            chunk_size=chunk_size,
         )
 
     def run_rust() -> OrbitTable:
@@ -391,8 +390,8 @@ def _benchmark_workload(
             workload.orbits,
             workload.times,
             covariance=False,
-            max_processes=workload.max_processes,
-            chunk_size=workload.chunk_size,
+            max_processes=max_processes,
+            chunk_size=chunk_size,
         )
 
     python_timings, python_output = _timed_call(
@@ -423,8 +422,15 @@ def _benchmark_workload(
         },
         "options": {
             "covariance": False,
-            "chunk_size": workload.chunk_size,
-            "max_processes": workload.max_processes,
+            "chunk_size": chunk_size,
+            "chunk_size_ceiling": workload.chunk_size,
+            "max_processes": max_processes,
+            "python_parallelism": (
+                "Ray worker processes" if max_processes > 1 else "sequential"
+            ),
+            "rust_parallelism": (
+                "Rayon thread pool" if max_processes > 1 else "single Rayon thread"
+            ),
         },
         "timing_seconds": {
             "python": {
@@ -447,6 +453,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--warmups", type=int, default=1)
+    parser.add_argument(
+        "--max-processes",
+        type=int,
+        default=mp.cpu_count(),
+        help=(
+            "Parallel worker/thread count for both implementations. Python adam-assist "
+            "uses adam-core Ray workers; adam_assist_rust maps the same public value "
+            "to a Rust Rayon thread limit. Default: multiprocessing.cpu_count()."
+        ),
+    )
     parser.add_argument(
         "--lanes",
         nargs="+",
@@ -472,6 +488,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     if args.repeats < 3:
         raise ValueError("--repeats must be at least 3 to report p50/p95")
+    if args.max_processes < 1:
+        raise ValueError("--max-processes must be at least 1")
     selected_lanes = _selected_lanes(args.lanes)
     workloads = [
         workload for workload in _workloads() if workload.lane in selected_lanes
@@ -493,12 +511,13 @@ def main(argv: list[str] | None = None) -> int:
             rust_propagator=rust_propagator,
             repeats=args.repeats,
             warmups=args.warmups,
+            max_processes=args.max_processes,
         )
         for workload in workloads
     ]
     artifact = {
-        "schema_version": 2,
-        "benchmark_id": "assist_public_semantics_benchmark_2026-05-20",
+        "schema_version": 3,
+        "benchmark_id": "assist_public_semantics_benchmark_2026-05-26",
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "packages": {name: _package_version(name) for name in PACKAGE_NAMES},
         "kernels": [
@@ -518,12 +537,27 @@ def main(argv: list[str] | None = None) -> int:
             "platform": platform.platform(),
             "machine": platform.machine(),
             "processor": platform.processor(),
-            "thread_mode": "single-process/single-thread public calls: max_processes=1; Rust thread_limit=1",
+            "cpu_count": mp.cpu_count(),
+            "thread_mode": (
+                (
+                    f"parallel public calls: max_processes={args.max_processes}; "
+                    "Python adam-assist uses Ray worker processes and adam_assist_rust "
+                    "uses the same value as its Rust Rayon thread_limit"
+                )
+                if args.max_processes > 1
+                else "single-process/single-thread public calls: max_processes=1; Rust thread_limit=1"
+            ),
             "size_lanes": {
                 "tiny": "small public-semantics smoke and fixture-shaped workloads",
                 "small": "historical small-n governance scale: 40 orbits × 50 epochs = 2000 output rows",
                 "large": "API-shaped large-n governance scale: 1000×20 and 400×50 = 20000 output rows",
             },
+            "chunking": (
+                "Each workload records a chunk_size_ceiling. Timed calls use "
+                "min(chunk_size_ceiling, max(1, n_orbits // max_processes)) so both "
+                "Python Ray and Rust Rayon receive multiple chunks when the workload has "
+                "enough orbit rows."
+            ),
             "object_lifecycle": (
                 "Propagator objects are constructed once before timed calls. Rust construction loads "
                 "assist-rs kernels into AssistData; Python adam-assist loads assist.Ephem inside each propagation call."
