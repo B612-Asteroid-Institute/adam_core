@@ -49,6 +49,9 @@ def test_observatory_band_map_covers_required_pairs():
         ("X05", "i"),
         ("X05", "z"),
         ("X05", "y"),
+        # Pan-STARRS1 wide filter (PS1.w), MPC codes F51 / F52.
+        ("F51", "w"),
+        ("F52", "w"),
     ]
     for code, band in required:
         key = f"{code}|{band}"
@@ -103,6 +106,90 @@ def test_find_suggested_filter_bands_raises_for_unknown_band_even_non_strict():
         )
 
 
+def test_map_ps1_w_resolves_for_f51_and_f52():
+    out = map_to_canonical_filter_bands(
+        ["F51", "F52"], ["w", "w"], allow_fallback_filters=False
+    )
+    assert out.tolist() == ["PS1_w", "PS1_w"]
+
+
+def test_map_w_does_not_resolve_for_non_ps1_observatories():
+    # Amateur / non-PS1 stations that report band "w" must NOT be silently
+    # mapped to PS1_w; their reported band is observatory-specific clear-glass
+    # response with no canonical mapping.
+    with pytest.raises(ValueError, match="Unable to suggest canonical filter_id"):
+        map_to_canonical_filter_bands(
+            ["C41", "C94", "J84"], ["w", "w", "w"], allow_fallback_filters=True
+        )
+
+
+def test_on_unknown_skip_returns_none_for_unmappable_rows():
+    out = map_to_canonical_filter_bands(
+        ["C41", "844", "W84"],
+        ["w", None, "g"],
+        allow_fallback_filters=True,
+        on_unknown="skip",
+    )
+    # C41|w and 844|None are not in the table or fallback set; W84|g resolves.
+    assert out.tolist() == [None, None, "DECam_g"]
+
+
+def test_on_unknown_skip_does_not_raise_with_all_unmappable():
+    out = map_to_canonical_filter_bands(
+        ["C41", "C94"],
+        ["w", "w"],
+        on_unknown="skip",
+    )
+    assert out.tolist() == [None, None]
+
+
+def test_on_unknown_skip_cooperates_with_allow_fallback_filters():
+    # Generic-band fallback still applies under on_unknown="skip".
+    out = map_to_canonical_filter_bands(
+        ["XXX", "YYY", "C41"],
+        ["g", "y", "w"],
+        allow_fallback_filters=True,
+        on_unknown="skip",
+    )
+    assert out.tolist() == ["SDSS_g", "PS1_y", None]
+
+
+def test_on_unknown_skip_with_no_fallbacks_leaves_generic_bands_unmapped():
+    # When fallbacks are off and on_unknown="skip", generic bands without an
+    # explicit observatory mapping become None rather than raising or
+    # falling back.
+    out = map_to_canonical_filter_bands(
+        ["XXX"], ["g"],
+        allow_fallback_filters=False,
+        on_unknown="skip",
+    )
+    assert out.tolist() == [None]
+
+
+def test_on_unknown_raise_is_default_behavior():
+    # Default (no on_unknown kwarg) must keep raising on unknown tuples, to
+    # preserve backward compatibility for existing callers.
+    with pytest.raises(ValueError, match="Unable to suggest canonical filter_id"):
+        map_to_canonical_filter_bands(["C41"], ["w"])
+
+
+def test_on_unknown_skip_keeps_canonical_pass_through():
+    # Rows whose band is already a known canonical filter_id are passed through
+    # regardless of on_unknown; this guards against accidental nulling of
+    # explicitly-canonical input.
+    out = map_to_canonical_filter_bands(
+        ["WHATEVER", "C41"],
+        ["LSST_g", "w"],
+        on_unknown="skip",
+    )
+    assert out.tolist() == ["LSST_g", None]
+
+
+def test_on_unknown_invalid_value_raises_immediately():
+    with pytest.raises(ValueError, match="on_unknown must be 'raise' or 'skip'"):
+        map_to_canonical_filter_bands(["W84"], ["g"], on_unknown="warn")  # type: ignore[arg-type]
+
+
 def test_bandpass_curves_are_sane():
     curves = load_bandpass_curves()
     assert len(curves) > 0
@@ -110,7 +197,7 @@ def test_bandpass_curves_are_sane():
     filter_ids = set(curves.filter_id.to_pylist())
     assert {"Bessell_U", "Bessell_B", "Bessell_R", "Bessell_I"}.issubset(filter_ids)
     assert {"SDSS_u", "SDSS_g", "SDSS_r", "SDSS_i", "SDSS_z"}.issubset(filter_ids)
-    assert {"PS1_g", "PS1_r", "PS1_i", "PS1_z", "PS1_y"}.issubset(filter_ids)
+    assert {"PS1_g", "PS1_r", "PS1_i", "PS1_z", "PS1_y", "PS1_w"}.issubset(filter_ids)
     assert {"DECam_VR", "BASS_g", "BASS_r"}.issubset(filter_ids)
 
     for wl_list, thr_list in zip(
