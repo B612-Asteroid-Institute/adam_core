@@ -116,8 +116,16 @@ def _orbit_metadata(orbits: OrbitTable) -> dict[str, Any]:
     return data
 
 
-def _target_times(rows: int, *, scale: str) -> Timestamp:
-    return Timestamp.from_mjd(np.linspace(60000.25, 60004.0, rows), scale=scale)
+def _target_times(
+    rows: int, *, scale: str, start_mjd: float = 60000.25, span_days: float = 3.75
+) -> Timestamp:
+    return Timestamp.from_mjd(
+        np.linspace(start_mjd, start_mjd + span_days, rows), scale=scale
+    )
+
+
+def _long_horizon_target_times(rows: int, *, scale: str) -> Timestamp:
+    return _target_times(rows, scale=scale, span_days=365.0)
 
 
 def _base_sun_ecliptic_orbits(rows: int, *, mixed_epochs: bool = False) -> Orbits:
@@ -287,6 +295,44 @@ def _workloads() -> list[Workload]:
             times=_target_times(50, scale="tdb"),
             chunk_size=400,
         ),
+        Workload(
+            lane="large",
+            name="large_sun_ecliptic_tdb_200x100_1yr",
+            description=(
+                "Large time-rich long-horizon native propagation: 200 SUN/ecliptic/TDB "
+                "orbits by 100 unique target epochs over 365 days."
+            ),
+            orbits=_base_sun_ecliptic_orbits(200, mixed_epochs=False),
+            times=_long_horizon_target_times(100, scale="tdb"),
+            chunk_size=200,
+        ),
+        Workload(
+            lane="large",
+            name="large_ssb_equatorial_utc_200x100_1yr",
+            description=(
+                "Large time-rich long-horizon public-transform propagation: 200 "
+                "SSB/equatorial/UTC orbits by 100 unique target epochs over 365 days."
+            ),
+            orbits=_as_public_input(
+                _base_sun_ecliptic_orbits(200, mixed_epochs=False),
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                frame_out="equatorial",
+                time_scale="utc",
+            ),
+            times=_long_horizon_target_times(100, scale="utc"),
+            chunk_size=200,
+        ),
+        Workload(
+            lane="large",
+            name="large_variant_sun_ecliptic_tdb_200x100_1yr",
+            description=(
+                "Large time-rich long-horizon variant propagation: 200 VariantOrbits "
+                "rows by 100 unique target epochs over 365 days."
+            ),
+            orbits=_variant_orbits(200),
+            times=_long_horizon_target_times(100, scale="tdb"),
+            chunk_size=200,
+        ),
     ]
 
 
@@ -404,6 +450,7 @@ def _benchmark_workload(
     rust_p95 = _p95(rust_timings)
     input_rows = len(workload.orbits)
     target_rows = len(workload.times)
+    target_mjd = workload.times.mjd().to_numpy(zero_copy_only=False)
     return {
         "lane": workload.lane,
         "name": workload.name,
@@ -411,9 +458,11 @@ def _benchmark_workload(
         "input": _orbit_metadata(workload.orbits),
         "target_times": {
             "rows": target_rows,
+            "unique_rows": len(workload.times.unique()),
             "scale": workload.times.scale,
-            "mjd_min": float(workload.times.mjd().to_numpy(zero_copy_only=False).min()),
-            "mjd_max": float(workload.times.mjd().to_numpy(zero_copy_only=False).max()),
+            "mjd_min": float(target_mjd.min()),
+            "mjd_max": float(target_mjd.max()),
+            "horizon_days": float(target_mjd.max() - target_mjd.min()),
         },
         "workload_shape": {
             "n_orbits": input_rows,
@@ -516,7 +565,7 @@ def main(argv: list[str] | None = None) -> int:
         for workload in workloads
     ]
     artifact = {
-        "schema_version": 3,
+        "schema_version": 4,
         "benchmark_id": "assist_public_semantics_benchmark_2026-05-26",
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "packages": {name: _package_version(name) for name in PACKAGE_NAMES},
@@ -550,7 +599,7 @@ def main(argv: list[str] | None = None) -> int:
             "size_lanes": {
                 "tiny": "small public-semantics smoke and fixture-shaped workloads",
                 "small": "historical small-n governance scale: 40 orbits × 50 epochs = 2000 output rows",
-                "large": "API-shaped large-n governance scale: 1000×20 and 400×50 = 20000 output rows",
+                "large": "API-shaped large-n governance scale: 1000×20, 400×50, and long-horizon 200×100 = ~20000 output rows",
             },
             "chunking": (
                 "Each workload records a chunk_size_ceiling. Timed calls use "
