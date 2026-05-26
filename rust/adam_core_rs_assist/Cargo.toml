@@ -12,7 +12,7 @@ extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
-assist-rs = { git = "ssh://git@github.com/B612-Asteroid-Institute/assist-rs.git", rev = "181c341f832bd5597024d8dfbd8ddbf48f623de5", default-features = false, features = ["parallel"] }
+assist-rs = { version = "0.1", default-features = false, features = ["parallel"] }
 ndarray = { version = "0.16", optional = true }
 numpy = { version = "0.22", optional = true }
 pyo3 = { version = "0.22", optional = true }

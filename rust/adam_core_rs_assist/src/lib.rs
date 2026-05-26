@@ -17,8 +17,9 @@ use adam_core_rs_coords::{
 };
 use assist_rs::ffi;
 use assist_rs::{
-    assist_propagate, ecliptic_to_equatorial, equatorial_to_ecliptic, AssistData,
-    Error as AssistError, Ias15AdaptiveMode, IntegratorConfig, Orbit as AssistOrbit,
+    assist_propagate, ecliptic_to_equatorial, equatorial_to_ecliptic, libassist_sys,
+    librebound_sys, AssistData, AssistSim, Error as AssistError, Ias15AdaptiveMode,
+    IntegratorConfig, Orbit as AssistOrbit, Simulation,
 };
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -85,47 +86,23 @@ impl AssistPropagator {
 
         run_with_thread_limit(request.options.thread_limit, || {
             let chunk_size = normalized_chunk_size(requested_chunk_size, request.input.len());
+            let context = AssistChunkContext {
+                data: &self.data,
+                integrator: self.integrator,
+                compute_stm,
+                request,
+                normalized_states: &normalized_states,
+                orbit_times_tdb,
+                target_times_tdb,
+                covariance,
+                include_covariance,
+                policy: &policy,
+                frame: input_coordinates.frame,
+                origins: &input_coordinates.origins,
+            };
             let chunk_results = orbit_indices
                 .par_chunks(chunk_size)
-                .map(|chunk| {
-                    let mut shard =
-                        AssistShard::new(Arc::clone(&self.data), self.integrator, compute_stm);
-                    let mut blocks = Vec::with_capacity(chunk.len());
-                    for &orbit_index in chunk {
-                        let row = orbit_row(
-                            request,
-                            &normalized_states,
-                            orbit_times_tdb,
-                            covariance,
-                            orbit_index,
-                            include_covariance,
-                        );
-                        let time_indices =
-                            time_indices_for_policy(&policy, orbit_index, target_times_tdb.len())?;
-                        let sorted_time_indices =
-                            sorted_time_indices(&time_indices, target_times_tdb);
-                        let sorted_times = sorted_time_indices
-                            .iter()
-                            .map(|&time_index| target_times_tdb.epochs[time_index])
-                            .collect::<Vec<_>>();
-                        let sorted_output = shard.propagate_one(row, &sorted_times)?;
-                        let mut block = reorder_output(
-                            orbit_index,
-                            sorted_time_indices.clone(),
-                            sorted_time_indices,
-                            sorted_output,
-                        )?;
-                        restore_output_block(
-                            self.data.as_ref(),
-                            input_coordinates.frame,
-                            &input_coordinates.origins.origins[orbit_index],
-                            target_times_tdb,
-                            &mut block,
-                        )?;
-                        blocks.push(block);
-                    }
-                    Ok::<Vec<AssistOrbitBlock>, PropagationError>(blocks)
-                })
+                .map(|chunk| propagate_assist_chunk(&context, chunk))
                 .collect::<Vec<_>>();
 
             let mut blocks = Vec::with_capacity(request.input.len());
@@ -192,6 +169,320 @@ impl Propagator for AssistPropagator {
             &target_output_times,
             compute_stm,
         )
+    }
+}
+
+struct AssistChunkContext<'a, 'request> {
+    data: &'a Arc<AssistData>,
+    integrator: IntegratorConfig,
+    compute_stm: bool,
+    request: &'a PropagationRequest<'request>,
+    normalized_states: &'a [[f64; 6]],
+    orbit_times_tdb: &'a TimeArray,
+    target_times_tdb: &'a TimeArray,
+    covariance: Option<&'a CovarianceBatch>,
+    include_covariance: bool,
+    policy: &'a EpochPolicy,
+    frame: Frame,
+    origins: &'a OriginArray,
+}
+
+#[derive(Debug, Clone)]
+struct SameEpochStateGroup {
+    epoch: Epoch,
+    time_indices: Vec<usize>,
+    sorted_time_indices: Vec<usize>,
+    orbit_indices: Vec<usize>,
+}
+
+fn propagate_assist_chunk(
+    context: &AssistChunkContext<'_, '_>,
+    chunk: &[usize],
+) -> PropagationResultValue<Vec<AssistOrbitBlock>> {
+    if context.include_covariance {
+        return propagate_assist_chunk_one_by_one(context, chunk);
+    }
+    propagate_state_only_chunk(context, chunk)
+}
+
+fn propagate_assist_chunk_one_by_one(
+    context: &AssistChunkContext<'_, '_>,
+    chunk: &[usize],
+) -> PropagationResultValue<Vec<AssistOrbitBlock>> {
+    let mut shard = AssistShard::new(
+        Arc::clone(context.data),
+        context.integrator,
+        context.compute_stm,
+    );
+    let mut blocks = Vec::with_capacity(chunk.len());
+    for &orbit_index in chunk {
+        let row = orbit_row(
+            context.request,
+            context.normalized_states,
+            context.orbit_times_tdb,
+            context.covariance,
+            orbit_index,
+            context.include_covariance,
+        );
+        let time_indices =
+            time_indices_for_policy(context.policy, orbit_index, context.target_times_tdb.len())?;
+        let sorted_time_indices = sorted_time_indices(&time_indices, context.target_times_tdb);
+        let sorted_times = sorted_time_indices
+            .iter()
+            .map(|&time_index| context.target_times_tdb.epochs[time_index])
+            .collect::<Vec<_>>();
+        let sorted_output = shard.propagate_one(row, &sorted_times)?;
+        let mut block = reorder_output(
+            orbit_index,
+            sorted_time_indices.clone(),
+            sorted_time_indices,
+            sorted_output,
+        )?;
+        restore_output_block(
+            context.data.as_ref(),
+            context.frame,
+            &context.origins.origins[orbit_index],
+            context.target_times_tdb,
+            &mut block,
+        )?;
+        blocks.push(block);
+    }
+    Ok(blocks)
+}
+
+fn propagate_state_only_chunk(
+    context: &AssistChunkContext<'_, '_>,
+    chunk: &[usize],
+) -> PropagationResultValue<Vec<AssistOrbitBlock>> {
+    let mut blocks = Vec::with_capacity(chunk.len());
+    let mut groups: Vec<SameEpochStateGroup> = Vec::new();
+
+    for &orbit_index in chunk {
+        let time_indices =
+            time_indices_for_policy(context.policy, orbit_index, context.target_times_tdb.len())?;
+        let sorted_time_indices = sorted_time_indices(&time_indices, context.target_times_tdb);
+        if !state_is_finite(&context.normalized_states[orbit_index]) {
+            blocks.push(state_only_failure_block(
+                orbit_index,
+                sorted_time_indices,
+                Some(PropagationFailureCode::NonFiniteInputState),
+                "assist-rs propagation input state was non-finite".to_string(),
+            ));
+            continue;
+        }
+        let epoch = context.orbit_times_tdb.epochs[orbit_index];
+        if let Some(group) = groups.iter_mut().find(|group| {
+            group.epoch == epoch
+                && group.time_indices == time_indices
+                && group.sorted_time_indices == sorted_time_indices
+        }) {
+            group.orbit_indices.push(orbit_index);
+        } else {
+            groups.push(SameEpochStateGroup {
+                epoch,
+                time_indices,
+                sorted_time_indices,
+                orbit_indices: vec![orbit_index],
+            });
+        }
+    }
+
+    for group in groups {
+        blocks.extend(propagate_same_epoch_state_group(context, &group)?);
+    }
+
+    Ok(blocks)
+}
+
+fn propagate_same_epoch_state_group(
+    context: &AssistChunkContext<'_, '_>,
+    group: &SameEpochStateGroup,
+) -> PropagationResultValue<Vec<AssistOrbitBlock>> {
+    if group.orbit_indices.len() < 2 {
+        return propagate_assist_chunk_one_by_one(context, &group.orbit_indices);
+    }
+
+    let sorted_times = group
+        .sorted_time_indices
+        .iter()
+        .map(|&time_index| context.target_times_tdb.epochs[time_index])
+        .collect::<Vec<_>>();
+    let states = group
+        .orbit_indices
+        .iter()
+        .map(|&orbit_index| context.normalized_states[orbit_index])
+        .collect::<Vec<_>>();
+
+    match propagate_same_epoch_states(
+        context.data.as_ref(),
+        context.integrator,
+        &states,
+        group.epoch,
+        &sorted_times,
+    ) {
+        Ok(group_states) => {
+            let mut blocks = Vec::with_capacity(group.orbit_indices.len());
+            for (group_row, orbit_index) in group.orbit_indices.iter().copied().enumerate() {
+                let sorted_output = state_only_output_from_states(group_states[group_row].clone());
+                let mut block = reorder_output(
+                    orbit_index,
+                    group.sorted_time_indices.clone(),
+                    group.sorted_time_indices.clone(),
+                    sorted_output,
+                )?;
+                restore_output_block(
+                    context.data.as_ref(),
+                    context.frame,
+                    &context.origins.origins[orbit_index],
+                    context.target_times_tdb,
+                    &mut block,
+                )?;
+                blocks.push(block);
+            }
+            Ok(blocks)
+        }
+        Err(err) => {
+            let (failure_code, message) = classify_assist_error(err)?;
+            Ok(group
+                .orbit_indices
+                .iter()
+                .map(|&orbit_index| {
+                    state_only_failure_block(
+                        orbit_index,
+                        group.sorted_time_indices.clone(),
+                        Some(failure_code),
+                        message.clone(),
+                    )
+                })
+                .collect())
+        }
+    }
+}
+
+fn propagate_same_epoch_states(
+    data: &AssistData,
+    integrator: IntegratorConfig,
+    states: &[[f64; 6]],
+    epoch: Epoch,
+    target_times: &[Epoch],
+) -> Result<Vec<Vec<[f64; 6]>>, AssistError> {
+    if states.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ephem = &data.ephem;
+    let t0 = mjd_tdb_to_assist_time(epoch.mjd(), ephem.jd_ref());
+    let sun0 = particle_state(ephem.get_body_state(ffi::ASSIST_BODY_SUN, t0)?);
+
+    let mut sim = Simulation::new()?;
+    sim.set_t(t0);
+    apply_integrator_config(&mut sim, integrator);
+    let mut asim = AssistSim::new(sim, ephem)?;
+    asim.set_forces(ffi::ASSIST_FORCES_DEFAULT);
+
+    for state in states {
+        let helio_eq = ecliptic_to_equatorial(state);
+        let bary_eq = add_state(helio_eq, sun0);
+        asim.sim_mut().add_test_particle(
+            bary_eq[0], bary_eq[1], bary_eq[2], bary_eq[3], bary_eq[4], bary_eq[5],
+        );
+    }
+
+    let mut states_by_orbit = vec![Vec::with_capacity(target_times.len()); states.len()];
+    for target_time in target_times {
+        let t_target = mjd_tdb_to_assist_time(target_time.mjd(), ephem.jd_ref());
+        asim.integrate(t_target)?;
+        let particles = asim.sim().particles();
+        if particles.len() < states.len() {
+            return Err(AssistError::Other(
+                "No particles after integration".to_string(),
+            ));
+        }
+        let sun_t = particle_state(ephem.get_body_state(ffi::ASSIST_BODY_SUN, t_target)?);
+        for (row, particle) in particles.iter().take(states.len()).enumerate() {
+            let bary_eq = [
+                particle.x,
+                particle.y,
+                particle.z,
+                particle.vx,
+                particle.vy,
+                particle.vz,
+            ];
+            states_by_orbit[row].push(equatorial_to_ecliptic(&subtract_state(bary_eq, sun_t)));
+        }
+    }
+
+    Ok(states_by_orbit)
+}
+
+fn particle_state(particle: ffi::reb_particle) -> [f64; 6] {
+    [
+        particle.x,
+        particle.y,
+        particle.z,
+        particle.vx,
+        particle.vy,
+        particle.vz,
+    ]
+}
+
+fn apply_integrator_config(sim: &mut Simulation, integrator: IntegratorConfig) {
+    if let Some(dt) = integrator.initial_dt {
+        sim.set_dt(dt);
+    }
+    if let Some(epsilon) = integrator.epsilon {
+        sim.set_ias15_epsilon(epsilon);
+    }
+    if let Some(min_dt) = integrator.min_dt {
+        sim.set_ias15_min_dt(min_dt);
+    }
+    if let Some(mode) = integrator.adaptive_mode {
+        sim.set_ias15_adaptive_mode(mode);
+    }
+}
+
+fn state_only_output_from_states(states: Vec<[f64; 6]>) -> RowOutput {
+    let mut validity = Vec::with_capacity(states.len());
+    let mut messages = Vec::with_capacity(states.len());
+    let mut failure_codes = Vec::with_capacity(states.len());
+    for state in &states {
+        let failure_code = if state_is_finite(state) {
+            None
+        } else {
+            Some(PropagationFailureCode::NonFiniteOutputState)
+        };
+        validity.push(failure_code.is_none());
+        messages.push(failure_code.map(assist_failure_message));
+        failure_codes.push(failure_code);
+    }
+    RowOutput {
+        states,
+        covariance: None,
+        covariance_validity: None,
+        validity,
+        messages,
+        backend: Some(BACKEND_NAME.to_string()),
+        iterations: vec![None; failure_codes.len()],
+        failure_codes,
+    }
+}
+
+fn state_only_failure_block(
+    orbit_index: usize,
+    time_indices: Vec<usize>,
+    failure_code: Option<PropagationFailureCode>,
+    message: String,
+) -> AssistOrbitBlock {
+    let rows = time_indices.len();
+    AssistOrbitBlock {
+        orbit_index,
+        time_indices,
+        states: vec![[f64::NAN; 6]; rows],
+        covariance: None,
+        covariance_validity: None,
+        validity: vec![false; rows],
+        messages: vec![Some(message); rows],
+        iterations: vec![None; rows],
+        failure_codes: vec![failure_code; rows],
     }
 }
 
@@ -1002,17 +1293,22 @@ fn classify_assist_error(
 ) -> PropagationResultValue<(PropagationFailureCode, String)> {
     let message = format!("assist-rs propagation failed: {err}");
     match err {
-        AssistError::NoParticles
-        | AssistError::CloseEncounter
-        | AssistError::Escape
-        | AssistError::Collision
-        | AssistError::IntegrationFailed(_)
+        AssistError::Sys(libassist_sys::Error::Reb(
+            librebound_sys::Error::NoParticles
+            | librebound_sys::Error::CloseEncounter
+            | librebound_sys::Error::Escape
+            | librebound_sys::Error::Collision
+            | librebound_sys::Error::IntegrationFailed(_),
+        ))
         | AssistError::LightTimeConvergence(_) => {
             Ok((PropagationFailureCode::IntegratorFailure, message))
         }
-        AssistError::EphemerisError(_)
+        AssistError::Sys(libassist_sys::Error::EphemerisError(_))
+        | AssistError::Sys(libassist_sys::Error::Other(_))
+        | AssistError::Sys(libassist_sys::Error::Reb(librebound_sys::Error::Other(_)))
         | AssistError::InvalidBody(_)
         | AssistError::InvalidObservatory(_)
+        | AssistError::MissingEarthOrientation(_)
         | AssistError::Io(_)
         | AssistError::Other(_) => Err(PropagationError::Backend(message)),
     }
@@ -1483,7 +1779,10 @@ mod tests {
 
     #[test]
     fn assist_integration_errors_are_row_failures() {
-        let (code, message) = classify_assist_error(AssistError::Collision).unwrap();
+        let (code, message) = classify_assist_error(AssistError::Sys(libassist_sys::Error::Reb(
+            librebound_sys::Error::Collision,
+        )))
+        .unwrap();
         assert_eq!(code, PropagationFailureCode::IntegratorFailure);
         assert!(message.contains("collision"));
     }

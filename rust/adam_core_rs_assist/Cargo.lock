@@ -110,11 +110,13 @@ checksum = "39cfaf5e440be44db5413b75b72c2a87c1f8f0627117d110264048f2969b99e9"
 
 [[package]]
 name = "assist-rs"
-version = "1.2.0"
-source = "git+ssh://git@github.com/B612-Asteroid-Institute/assist-rs.git?rev=181c341f832bd5597024d8dfbd8ddbf48f623de5#181c341f832bd5597024d8dfbd8ddbf48f623de5"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7022d35c1dd314b1d8210d2a36e5dac1647d55c128eef9d1d849373279ad36ba"
 dependencies = [
- "cc",
+ "libassist-sys",
  "libc",
+ "librebound-sys",
  "rayon",
  "serde",
  "serde_json",
@@ -781,6 +783,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "libassist-sys"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39c13d40228ce9565bdf65ec8c90193e23f7d50658d72bdc5692db4061b05e9"
+dependencies = [
+ "cc",
+ "libc",
+ "librebound-sys",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -791,6 +805,17 @@ name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
+name = "librebound-sys"
+version = "4.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82ffcf980bf1c3b88860b5cae6918b6f7058810ae3472af53b2b3a11930f04b6"
+dependencies = [
+ "cc",
+ "libc",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "log"

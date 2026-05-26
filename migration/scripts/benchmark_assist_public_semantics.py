@@ -103,6 +103,7 @@ def _arrow_to_list(values: Any) -> list[Any]:
 
 
 def _orbit_metadata(orbits: OrbitTable) -> dict[str, Any]:
+    input_mjd = orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
     data: dict[str, Any] = {
         "table_type": type(orbits).__name__,
         "rows": len(orbits),
@@ -110,6 +111,9 @@ def _orbit_metadata(orbits: OrbitTable) -> dict[str, Any]:
         "time_scale": orbits.coordinates.time.scale,
         "origin_codes": sorted(set(_arrow_to_list(orbits.coordinates.origin.code))),
         "unique_input_epochs": len(orbits.coordinates.time.unique()),
+        "input_epoch_mjd_min": float(input_mjd.min()),
+        "input_epoch_mjd_max": float(input_mjd.max()),
+        "input_epoch_horizon_days": float(input_mjd.max() - input_mjd.min()),
     }
     if isinstance(orbits, VariantOrbits):
         data["variant_rows"] = len(orbits.variant_id)
@@ -128,13 +132,29 @@ def _long_horizon_target_times(rows: int, *, scale: str) -> Timestamp:
     return _target_times(rows, scale=scale, span_days=365.0)
 
 
-def _base_sun_ecliptic_orbits(rows: int, *, mixed_epochs: bool = False) -> Orbits:
+def _unique_initial_epoch_offsets(rows: int, *, span_days: float = 30.0) -> np.ndarray:
+    if rows <= 1:
+        return np.zeros(rows)
+    return np.linspace(-span_days, -0.125, rows)
+
+
+def _base_sun_ecliptic_orbits(
+    rows: int,
+    *,
+    mixed_epochs: bool = False,
+    epoch_offsets: np.ndarray | None = None,
+) -> Orbits:
     index = np.arange(rows, dtype=np.float64)
     denominator = max(rows, 1)
     theta = 2.0 * np.pi * index / denominator
     radius = 1.05 + 0.03 * np.sin(0.37 * index)
     speed = 0.017202124 / np.sqrt(radius)
-    epoch_offsets = (index % 4) * 0.125 if mixed_epochs else np.zeros(rows)
+    if epoch_offsets is None:
+        epoch_offsets = (index % 4) * 0.125 if mixed_epochs else np.zeros(rows)
+    if len(epoch_offsets) != rows:
+        raise ValueError(
+            f"epoch_offsets must have {rows} rows; got {len(epoch_offsets)}"
+        )
     return Orbits.from_kwargs(
         orbit_id=[f"bench-{i:04d}" for i in range(rows)],
         object_id=[f"bench-{i:04d}" for i in range(rows)],
@@ -308,6 +328,43 @@ def _workloads() -> list[Workload]:
         ),
         Workload(
             lane="large",
+            name="large_sun_ecliptic_tdb_400x50_unique_input_epochs",
+            description=(
+                "Large realistic unique-input-epoch native propagation: 400 "
+                "SUN/ecliptic/TDB orbits with 400 unique initial epochs over a "
+                "30-day input span by 50 target epochs."
+            ),
+            orbits=_base_sun_ecliptic_orbits(
+                400,
+                mixed_epochs=False,
+                epoch_offsets=_unique_initial_epoch_offsets(400),
+            ),
+            times=_target_times(50, scale="tdb"),
+            chunk_size=400,
+        ),
+        Workload(
+            lane="large",
+            name="large_ssb_equatorial_utc_400x50_unique_input_epochs",
+            description=(
+                "Large realistic unique-input-epoch public-transform propagation: "
+                "400 SSB/equatorial/UTC orbits with 400 unique initial epochs "
+                "over a 30-day input span by 50 target epochs."
+            ),
+            orbits=_as_public_input(
+                _base_sun_ecliptic_orbits(
+                    400,
+                    mixed_epochs=False,
+                    epoch_offsets=_unique_initial_epoch_offsets(400),
+                ),
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                frame_out="equatorial",
+                time_scale="utc",
+            ),
+            times=_target_times(50, scale="utc"),
+            chunk_size=400,
+        ),
+        Workload(
+            lane="large",
             name="large_ssb_equatorial_utc_200x100_1yr",
             description=(
                 "Large time-rich long-horizon public-transform propagation: 200 "
@@ -320,6 +377,22 @@ def _workloads() -> list[Workload]:
                 time_scale="utc",
             ),
             times=_long_horizon_target_times(100, scale="utc"),
+            chunk_size=200,
+        ),
+        Workload(
+            lane="large",
+            name="large_sun_ecliptic_tdb_200x100_1yr_unique_input_epochs",
+            description=(
+                "Large realistic unique-input-epoch long-horizon native propagation: "
+                "200 SUN/ecliptic/TDB orbits with 200 unique initial epochs over "
+                "a 30-day input span by 100 unique target epochs over 365 days."
+            ),
+            orbits=_base_sun_ecliptic_orbits(
+                200,
+                mixed_epochs=False,
+                epoch_offsets=_unique_initial_epoch_offsets(200),
+            ),
+            times=_long_horizon_target_times(100, scale="tdb"),
             chunk_size=200,
         ),
         Workload(
@@ -565,7 +638,7 @@ def main(argv: list[str] | None = None) -> int:
         for workload in workloads
     ]
     artifact = {
-        "schema_version": 4,
+        "schema_version": 5,
         "benchmark_id": "assist_public_semantics_benchmark_2026-05-26",
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "packages": {name: _package_version(name) for name in PACKAGE_NAMES},
@@ -599,7 +672,7 @@ def main(argv: list[str] | None = None) -> int:
             "size_lanes": {
                 "tiny": "small public-semantics smoke and fixture-shaped workloads",
                 "small": "historical small-n governance scale: 40 orbits × 50 epochs = 2000 output rows",
-                "large": "API-shaped large-n governance scale: 1000×20, 400×50, and long-horizon 200×100 = ~20000 output rows",
+                "large": "API-shaped large-n governance scale: 1000×20, 400×50, long-horizon 200×100, and unique-input-epoch 400×50/200×100 = ~20000 output rows",
             },
             "chunking": (
                 "Each workload records a chunk_size_ceiling. Timed calls use "
