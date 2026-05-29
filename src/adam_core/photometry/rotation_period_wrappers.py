@@ -5,6 +5,7 @@ from collections.abc import Sequence
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
+import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
@@ -51,38 +52,22 @@ def _align_exposures_to_detections(
     return exposures.take(pa.array(idx_np, type=pa.int32()))
 
 
-def _extract_result_row(result: RotationPeriodResult) -> dict[str, object]:
-    if len(result) != 1:
-        raise ValueError("rotation-period kernel must return exactly one row")
-
-    return {
-        "period_days": result.period_days[0].as_py(),
-        "period_hours": result.period_hours[0].as_py(),
-        "frequency_cycles_per_day": result.frequency_cycles_per_day[0].as_py(),
-        "fourier_order": result.fourier_order[0].as_py(),
-        "phase_c1": result.phase_c1[0].as_py(),
-        "phase_c2": result.phase_c2[0].as_py(),
-        "residual_sigma_mag": result.residual_sigma_mag[0].as_py(),
-        "n_observations": result.n_observations[0].as_py(),
-        "n_fit_observations": result.n_fit_observations[0].as_py(),
-        "n_clipped": result.n_clipped[0].as_py(),
-        "n_filters": result.n_filters[0].as_py(),
-        "n_sessions": result.n_sessions[0].as_py(),
-        "used_session_offsets": result.used_session_offsets[0].as_py(),
-        "is_period_doubled": result.is_period_doubled[0].as_py(),
-        "is_ambiguous": result.is_ambiguous[0].as_py(),
-        "confidence_label": result.confidence_label[0].as_py(),
-        "ambiguity_reason": result.ambiguity_reason[0].as_py(),
-        "n_harmonic_near_ties": result.n_harmonic_near_ties[0].as_py(),
-        "used_grid_fallback": result.used_grid_fallback[0].as_py(),
-        "harmonic_sigma_tolerance_mag": result.harmonic_sigma_tolerance_mag[0].as_py(),
-        "lsm_period_days": result.lsm_period_days[0].as_py(),
-        "lsm_period_hours": result.lsm_period_hours[0].as_py(),
-        "lsm_frequency_cycles_per_day": result.lsm_frequency_cycles_per_day[0].as_py(),
-        "lsm_harmonic_agreement": result.lsm_harmonic_agreement[0].as_py(),
-    }
-
-
+def _align_observers_to_exposures(
+    observers,
+    exposures_full: Exposures,
+    exposures_aligned: Exposures,
+):
+    if len(observers) == len(exposures_aligned):
+        return observers
+    if len(observers) != len(exposures_full):
+        raise ValueError(
+            "internal error: aligned observers length does not match detections length"
+        )
+    idx = pc.fill_null(pc.index_in(exposures_aligned.id, value_set=exposures_full.id), -1)
+    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
+    if np.any(idx_np < 0):
+        raise ValueError("internal error: exposure alignment failed for observer mapping")
+    return observers.take(pa.array(idx_np, type=pa.int32()))
 def build_rotation_period_observations_from_detections(
     detections: PointSourceDetections,
     exposures: Exposures,
@@ -101,6 +86,11 @@ def build_rotation_period_observations_from_detections(
 
     exposures_aligned = _align_exposures_to_detections(detections, exposures)
     observers_helio = exposures_aligned.observers(frame="ecliptic", origin=OriginCodes.SUN)
+    observers_helio = _align_observers_to_exposures(
+        observers_helio,
+        exposures,
+        exposures_aligned,
+    )
     object_coords_helio = transform_coordinates(
         object_coords,
         CartesianCoordinates,
@@ -109,9 +99,7 @@ def build_rotation_period_observations_from_detections(
     )
 
     if len(observers_helio) != n_det:
-        raise ValueError(
-            "internal error: aligned observers length does not match detections length"
-        )
+        raise ValueError("internal error: aligned observers length does not match detections length")
 
     time = object_coords_helio.time.rescale("tdb")
     mag = _as_float64_nan(detections.mag)
@@ -156,6 +144,7 @@ def build_rotation_period_observations_from_detections(
             mask=~np.isfinite(mag_sigma),
             type=pa.float64(),
         ),
+        predicted_mag_v=pa.nulls(n_det, type=pa.float64()),
         filter=exposures_aligned.filter,
         session_id=session_id,
         r_au=pa.array(r_au, type=pa.float64()),
@@ -236,30 +225,7 @@ def estimate_rotation_period_from_detections_grouped(
     indices_sorted = valid_indices[order]
 
     out_object_id: list[str] = []
-    out_period_days: list[float] = []
-    out_period_hours: list[float] = []
-    out_frequency_cycles_per_day: list[float] = []
-    out_fourier_order: list[int] = []
-    out_phase_c1: list[float] = []
-    out_phase_c2: list[float] = []
-    out_residual_sigma_mag: list[float] = []
-    out_n_observations: list[int] = []
-    out_n_fit_observations: list[int] = []
-    out_n_clipped: list[int] = []
-    out_n_filters: list[int] = []
-    out_n_sessions: list[int] = []
-    out_used_session_offsets: list[bool] = []
-    out_is_period_doubled: list[bool] = []
-    out_is_ambiguous: list[bool] = []
-    out_confidence_label: list[str] = []
-    out_ambiguity_reason: list[str | None] = []
-    out_n_harmonic_near_ties: list[int] = []
-    out_used_grid_fallback: list[bool] = []
-    out_harmonic_sigma_tolerance_mag: list[float] = []
-    out_lsm_period_days: list[float | None] = []
-    out_lsm_period_hours: list[float | None] = []
-    out_lsm_frequency_cycles_per_day: list[float | None] = []
-    out_lsm_harmonic_agreement: list[bool | None] = []
+    out_results: list[RotationPeriodResult] = []
 
     i0 = 0
     n = int(ids_sorted.size)
@@ -289,77 +255,16 @@ def estimate_rotation_period_from_detections_grouped(
                 parallel_chunk_size=parallel_chunk_size,
                 **search_kwargs,
             )
-            row = _extract_result_row(result_i)
+            if len(result_i) != 1:
+                raise ValueError("rotation-period kernel must return exactly one row")
         except Exception:
             i0 = i1
             continue
 
         out_object_id.append(oid)
-        out_period_days.append(row["period_days"])
-        out_period_hours.append(row["period_hours"])
-        out_frequency_cycles_per_day.append(row["frequency_cycles_per_day"])
-        out_fourier_order.append(row["fourier_order"])
-        out_phase_c1.append(row["phase_c1"])
-        out_phase_c2.append(row["phase_c2"])
-        out_residual_sigma_mag.append(row["residual_sigma_mag"])
-        out_n_observations.append(int(row["n_observations"]))
-        out_n_fit_observations.append(int(row["n_fit_observations"]))
-        out_n_clipped.append(int(row["n_clipped"]))
-        out_n_filters.append(int(row["n_filters"]))
-        out_n_sessions.append(int(row["n_sessions"]))
-        out_used_session_offsets.append(bool(row["used_session_offsets"]))
-        out_is_period_doubled.append(bool(row["is_period_doubled"]))
-        out_is_ambiguous.append(bool(row["is_ambiguous"]))
-        out_confidence_label.append(str(row["confidence_label"]))
-        out_ambiguity_reason.append(
-            None if row["ambiguity_reason"] is None else str(row["ambiguity_reason"])
-        )
-        out_n_harmonic_near_ties.append(int(row["n_harmonic_near_ties"]))
-        out_used_grid_fallback.append(bool(row["used_grid_fallback"]))
-        out_harmonic_sigma_tolerance_mag.append(float(row["harmonic_sigma_tolerance_mag"]))
-        out_lsm_period_days.append(
-            None if row["lsm_period_days"] is None else float(row["lsm_period_days"])
-        )
-        out_lsm_period_hours.append(
-            None if row["lsm_period_hours"] is None else float(row["lsm_period_hours"])
-        )
-        out_lsm_frequency_cycles_per_day.append(
-            None
-            if row["lsm_frequency_cycles_per_day"] is None
-            else float(row["lsm_frequency_cycles_per_day"])
-        )
-        out_lsm_harmonic_agreement.append(
-            None
-            if row["lsm_harmonic_agreement"] is None
-            else bool(row["lsm_harmonic_agreement"])
-        )
+        out_results.append(result_i)
 
         i0 = i1
 
-    result = RotationPeriodResult.from_kwargs(
-        period_days=out_period_days,
-        period_hours=out_period_hours,
-        frequency_cycles_per_day=out_frequency_cycles_per_day,
-        fourier_order=out_fourier_order,
-        phase_c1=out_phase_c1,
-        phase_c2=out_phase_c2,
-        residual_sigma_mag=out_residual_sigma_mag,
-        n_observations=out_n_observations,
-        n_fit_observations=out_n_fit_observations,
-        n_clipped=out_n_clipped,
-        n_filters=out_n_filters,
-        n_sessions=out_n_sessions,
-        used_session_offsets=out_used_session_offsets,
-        is_period_doubled=out_is_period_doubled,
-        is_ambiguous=out_is_ambiguous,
-        confidence_label=out_confidence_label,
-        ambiguity_reason=out_ambiguity_reason,
-        n_harmonic_near_ties=out_n_harmonic_near_ties,
-        used_grid_fallback=out_used_grid_fallback,
-        harmonic_sigma_tolerance_mag=out_harmonic_sigma_tolerance_mag,
-        lsm_period_days=out_lsm_period_days,
-        lsm_period_hours=out_lsm_period_hours,
-        lsm_frequency_cycles_per_day=out_lsm_frequency_cycles_per_day,
-        lsm_harmonic_agreement=out_lsm_harmonic_agreement,
-    )
+    result = RotationPeriodResult.empty() if not out_results else qv.concatenate(out_results)
     return GroupedRotationPeriodResults.from_kwargs(object_id=out_object_id, result=result)

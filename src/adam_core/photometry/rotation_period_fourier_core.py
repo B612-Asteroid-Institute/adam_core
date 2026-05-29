@@ -9,6 +9,14 @@ from scipy.stats import f as f_dist
 
 from .rotation_period_types import RotationPeriodObservations
 
+LIGHT_SPEED_AU_PER_DAY = 173.14463267424034
+_HG_G_MIN = -0.25
+_HG_G_MAX = 0.95
+_HG_PHASE_MIN_DEG = 1.0
+_HG_PHASE_MAX_DEG = 120.0
+_HG_ARC_HALF_WIDTH_DEG = 0.5
+_PRIOR_SIGMA_FLOOR = 1.0e-6
+
 
 @dataclass(slots=True)
 class _FitResult:
@@ -25,6 +33,8 @@ class _FitResult:
     n_filters: int
     phase_c1_idx: int
     phase_c2_idx: int
+    sum_weights: float | None = None
+    n_local_maxima: int | None = None
 
 
 @dataclass(slots=True)
@@ -57,6 +67,39 @@ class _HarmonicAdjudication:
     selected: _FitWithPeriod
     near_tie_candidates: int
     had_near_tie: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _FourierProfile:
+    name: str
+    orders: tuple[int, ...]
+    order_selection_confidence: float
+    sigma_threshold_confidence: float
+    valid_relative_uncertainty_max: float | None
+    reliable_relative_multiplier: float | None
+    reliable_absolute_hours: float | None
+
+
+FOURIER_PROFILES: dict[str, _FourierProfile] = {
+    "vavilov_2025": _FourierProfile(
+        name="vavilov_2025",
+        orders=tuple(range(1, 11)),
+        order_selection_confidence=0.95,
+        sigma_threshold_confidence=0.90,
+        valid_relative_uncertainty_max=1.0 / 3.0,
+        reliable_relative_multiplier=None,
+        reliable_absolute_hours=None,
+    ),
+    "greenstreet_2026": _FourierProfile(
+        name="greenstreet_2026",
+        orders=(2, 3, 4, 5, 6),
+        order_selection_confidence=0.90,
+        sigma_threshold_confidence=0.95,
+        valid_relative_uncertainty_max=None,
+        reliable_relative_multiplier=2.0,
+        reliable_absolute_hours=7.0,
+    ),
+}
 
 
 def _to_numpy_1d(values: pa.Array | pa.ChunkedArray | npt.ArrayLike) -> npt.NDArray:
@@ -98,6 +141,7 @@ def _validate_inputs(
     npt.NDArray[np.object_],
     npt.NDArray[np.object_] | None,
     npt.NDArray[np.float64] | None,
+    npt.NDArray[np.float64] | None,
 ]:
     n = len(observations)
     if n == 0:
@@ -113,7 +157,6 @@ def _validate_inputs(
 
     if any(arr.shape != (n,) for arr in (time, mag, r_au, delta_au, phase_angle)):
         raise ValueError("all observation columns must be 1D and aligned")
-
     if not (
         np.all(np.isfinite(time))
         and np.all(np.isfinite(mag))
@@ -121,7 +164,9 @@ def _validate_inputs(
         and np.all(np.isfinite(delta_au))
         and np.all(np.isfinite(phase_angle))
     ):
-        raise ValueError("observations must contain finite time, mag, r_au, delta_au, and phase_angle_deg")
+        raise ValueError(
+            "observations must contain finite time, mag, r_au, delta_au, and phase_angle_deg"
+        )
     if np.any(r_au <= 0.0) or np.any(delta_au <= 0.0):
         raise ValueError("r_au and delta_au must be positive")
 
@@ -134,28 +179,50 @@ def _validate_inputs(
     )
 
     session_labels = None
-    if hasattr(observations, "session_id"):
-        session_values = _to_numpy_1d(observations.session_id)
-        if session_values.shape != (n,):
-            raise ValueError("session_id column must be 1D and aligned with observations")
-        session_labels_raw = np.asarray(session_values, dtype=object)
-        if np.any(np.asarray([value is not None for value in session_labels_raw.tolist()], dtype=bool)):
-            session_labels = np.asarray(
-                [None if value is None else str(value) for value in session_labels_raw.tolist()],
-                dtype=object,
-            )
+    session_values = _to_numpy_1d(observations.session_id)
+    if session_values.shape != (n,):
+        raise ValueError("session_id column must be 1D and aligned with observations")
+    session_labels_raw = np.asarray(session_values, dtype=object)
+    if np.any(np.asarray([value is not None for value in session_labels_raw.tolist()], dtype=bool)):
+        session_labels = np.asarray(
+            [None if value is None else str(value) for value in session_labels_raw.tolist()],
+            dtype=object,
+        )
 
     mag_sigma = None
-    if hasattr(observations, "mag_sigma"):
-        raw_sigma = np.asarray(
-            observations.mag_sigma.to_numpy(zero_copy_only=False), dtype=np.float64
-        )
-        if raw_sigma.shape != (n,):
-            raise ValueError("mag_sigma column must be 1D and aligned with observations")
-        if np.any(np.isfinite(raw_sigma)):
-            mag_sigma = raw_sigma
+    raw_sigma = np.asarray(observations.mag_sigma.to_numpy(zero_copy_only=False), dtype=np.float64)
+    if raw_sigma.shape != (n,):
+        raise ValueError("mag_sigma column must be 1D and aligned with observations")
+    if np.any(np.isfinite(raw_sigma)):
+        mag_sigma = raw_sigma
 
-    return time, mag, r_au, delta_au, phase_angle, filter_labels, session_labels, mag_sigma
+    predicted_mag_v = None
+    raw_predicted = np.asarray(
+        observations.predicted_mag_v.to_numpy(zero_copy_only=False), dtype=np.float64
+    )
+    if raw_predicted.shape != (n,):
+        raise ValueError("predicted_mag_v column must be 1D and aligned with observations")
+    if np.any(np.isfinite(raw_predicted)):
+        predicted_mag_v = raw_predicted
+
+    return (
+        time,
+        mag,
+        r_au,
+        delta_au,
+        phase_angle,
+        filter_labels,
+        session_labels,
+        mag_sigma,
+        predicted_mag_v,
+    )
+
+
+def _apply_light_time_correction(
+    time_mjd_tdb: npt.NDArray[np.float64],
+    delta_au: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    return np.asarray(time_mjd_tdb, dtype=np.float64) - np.asarray(delta_au, dtype=np.float64) / LIGHT_SPEED_AU_PER_DAY
 
 
 def _build_fixed_design(
@@ -165,21 +232,18 @@ def _build_fixed_design(
 ) -> _DesignInfo:
     unique_filters = _ordered_unique(filter_labels)
     n = len(filter_labels)
-    n_filters = len(unique_filters)
-
     cols: list[npt.NDArray[np.float64]] = [np.ones(n, dtype=np.float64)]
     for label in unique_filters[1:]:
         cols.append((filter_labels == label).astype(np.float64))
 
     if session_labels is not None:
         normalized_sessions = _normalized_string_labels(
-            session_labels,
+            np.asarray(session_labels, dtype=object),
             missing_label="__missing_session__",
         )
         for filter_label in unique_filters:
             filter_mask = filter_labels == filter_label
-            filter_sessions = normalized_sessions[filter_mask]
-            ordered_sessions = _ordered_unique(filter_sessions)
+            ordered_sessions = _ordered_unique(normalized_sessions[filter_mask])
             for session_label in ordered_sessions[1:]:
                 cols.append(
                     np.logical_and(filter_mask, normalized_sessions == session_label).astype(
@@ -187,13 +251,14 @@ def _build_fixed_design(
                     )
                 )
 
-    cols.append(np.asarray(phase_angle, dtype=np.float64))
+    phase_angle = np.asarray(phase_angle, dtype=np.float64)
+    cols.append(phase_angle)
     cols.append(np.square(phase_angle))
     fixed = np.column_stack(cols).astype(np.float64, copy=False)
     return _DesignInfo(
         fixed=fixed,
         unique_filters=unique_filters,
-        n_filters=n_filters,
+        n_filters=len(unique_filters),
         phase_c1_idx=fixed.shape[1] - 2,
         phase_c2_idx=fixed.shape[1] - 1,
     )
@@ -247,13 +312,62 @@ def _build_fourier_columns(
     frequency: float,
     fourier_order: int,
 ) -> npt.NDArray[np.float64]:
-    omega_t = 2.0 * np.pi * frequency * t_rel
-    cols = []
-    for harmonic in range(1, fourier_order + 1):
+    omega_t = 2.0 * np.pi * float(frequency) * np.asarray(t_rel, dtype=np.float64)
+    cols: list[npt.NDArray[np.float64]] = []
+    for harmonic in range(1, int(fourier_order) + 1):
         angle = harmonic * omega_t
         cols.append(np.cos(angle))
         cols.append(np.sin(angle))
     return np.column_stack(cols).astype(np.float64, copy=False)
+
+
+def _hg_phase_reduced(alpha_deg: npt.NDArray[np.float64], g_value: float) -> npt.NDArray[np.float64]:
+    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
+    tan_half = np.tan(0.5 * alpha_rad)
+    phi1 = np.exp(-3.33 * np.power(tan_half, 0.63))
+    phi2 = np.exp(-1.87 * np.power(tan_half, 1.22))
+    phase = (1.0 - g_value) * phi1 + g_value * phi2
+    phase = np.clip(phase, 1.0e-12, None)
+    return -2.5 * np.log10(phase)
+
+
+def _phase_prior_bounds(min_alpha_deg: float) -> tuple[tuple[float, float], tuple[float, float]]:
+    alpha_center = float(np.clip(min_alpha_deg, _HG_PHASE_MIN_DEG, _HG_PHASE_MAX_DEG))
+    alpha_arc = np.linspace(
+        max(_HG_PHASE_MIN_DEG, alpha_center - _HG_ARC_HALF_WIDTH_DEG),
+        min(_HG_PHASE_MAX_DEG, alpha_center + _HG_ARC_HALF_WIDTH_DEG),
+        25,
+        dtype=np.float64,
+    )
+    coeffs_min = np.polyfit(alpha_arc, _hg_phase_reduced(alpha_arc, _HG_G_MIN), deg=2)
+    coeffs_max = np.polyfit(alpha_arc, _hg_phase_reduced(alpha_arc, _HG_G_MAX), deg=2)
+    c1_min, c1_max = sorted((float(coeffs_min[1]), float(coeffs_max[1])))
+    c2_min, c2_max = sorted((float(coeffs_min[0]), float(coeffs_max[0])))
+    return (c1_min, c1_max), (c2_min, c2_max)
+
+
+def _phase_prior_rows(
+    n_par: int,
+    design_info: _DesignInfo,
+    min_phase_angle_deg: float,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    (c1_min, c1_max), (c2_min, c2_max) = _phase_prior_bounds(min_phase_angle_deg)
+    rows = np.zeros((2, n_par), dtype=np.float64)
+    rows[0, design_info.phase_c1_idx] = 1.0
+    rows[1, design_info.phase_c2_idx] = 1.0
+    target = np.asarray(
+        [0.5 * (c1_min + c1_max), 0.5 * (c2_min + c2_max)],
+        dtype=np.float64,
+    )
+    sigma = np.asarray(
+        [
+            max(0.5 * abs(c1_max - c1_min), _PRIOR_SIGMA_FLOOR),
+            max(0.5 * abs(c2_max - c2_min), _PRIOR_SIGMA_FLOOR),
+        ],
+        dtype=np.float64,
+    )
+    weights = 1.0 / np.square(sigma)
+    return rows, target, weights
 
 
 def _weighted_lstsq(
@@ -266,11 +380,37 @@ def _weighted_lstsq(
         resid = target - design @ coeffs
         rss = float(np.sum(np.square(resid)))
     else:
-        sqrt_w = np.sqrt(weights)
+        w = np.asarray(weights, dtype=np.float64)
+        sqrt_w = np.sqrt(w)
         coeffs, *_ = np.linalg.lstsq(design * sqrt_w[:, None], target * sqrt_w, rcond=None)
         resid = target - design @ coeffs
-        rss = float(np.sum(weights * np.square(resid)))
+        rss = float(np.sum(w * np.square(resid)))
     return np.asarray(coeffs, dtype=np.float64), rss, int(target.size - design.shape[1])
+
+
+def _paper_sigma(
+    residuals: npt.NDArray[np.float64],
+    weights: npt.NDArray[np.float64] | None,
+    *,
+    n_obs: int,
+    n_fit: int,
+    n_par: int,
+) -> tuple[float, float, int]:
+    df = int(n_fit - n_par)
+    if df <= 0:
+        return float("inf"), float("inf"), df
+    if weights is None:
+        rss = float(np.sum(np.square(residuals)))
+        sigma2 = rss / float(df)
+        return float(np.sqrt(max(sigma2, 0.0))), rss, df
+
+    w = np.asarray(weights, dtype=np.float64)
+    rss = float(np.sum(w * np.square(residuals)))
+    weight_sum = float(np.sum(w))
+    if weight_sum <= 0.0:
+        return float("inf"), float("inf"), df
+    sigma2 = (float(n_obs) / weight_sum) * rss / float(df)
+    return float(np.sqrt(max(sigma2, 0.0))), rss, df
 
 
 def _fit_frequency(
@@ -282,36 +422,69 @@ def _fit_frequency(
     *,
     clip_sigma: float,
     weights: npt.NDArray[np.float64] | None,
+    max_clip_iterations: int = 8,
 ) -> _FitResult | None:
-    n = len(y)
-    fixed = design_info.fixed
-    n_par = fixed.shape[1] + 2 * fourier_order
-    if n <= n_par:
+    n_obs = len(y)
+    fixed = np.asarray(design_info.fixed, dtype=np.float64)
+    n_par = int(fixed.shape[1] + 2 * int(fourier_order))
+    if n_obs <= n_par:
         return None
 
-    mask = np.ones(n, dtype=bool)
+    if weights is None:
+        weights_real = None
+    else:
+        weights_real = np.asarray(weights, dtype=np.float64)
 
-    for _ in range(3):
+    min_phase = float(np.min(fixed[:, design_info.phase_c1_idx]))
+    prior_rows, prior_target, prior_weights = _phase_prior_rows(n_par, design_info, min_phase)
+    mask = np.ones(n_obs, dtype=bool)
+
+    for _ in range(max(1, int(max_clip_iterations))):
         idx = np.flatnonzero(mask)
         if idx.size <= n_par:
             return None
         fourier = _build_fourier_columns(t_rel[idx], frequency, fourier_order)
-        design = np.concatenate([fixed[idx], fourier], axis=1)
-        target = y[idx]
-        coeffs, rss, df = _weighted_lstsq(
-            design,
-            target,
-            None if weights is None else weights[idx],
+        design_real = np.concatenate([fixed[idx], fourier], axis=1)
+        target_real = np.asarray(y[idx], dtype=np.float64)
+        design = np.vstack([design_real, prior_rows])
+        target = np.concatenate([target_real, prior_target])
+        if weights_real is None:
+            weights_aug = np.concatenate(
+                [np.ones(target_real.size, dtype=np.float64), prior_weights]
+            )
+            real_weights = None
+        else:
+            weights_aug = np.concatenate([weights_real[idx], prior_weights])
+            real_weights = weights_real[idx]
+        coeffs, _, _ = _weighted_lstsq(design, target, weights_aug)
+        residuals = target_real - design_real @ coeffs
+        sigma, rss, df = _paper_sigma(
+            residuals,
+            real_weights,
+            n_obs=n_obs,
+            n_fit=idx.size,
+            n_par=n_par,
         )
-        if df <= 0:
-            return None
-        sigma = float(np.sqrt(rss / df))
         if not np.isfinite(sigma):
             return None
-        resid = target - design @ coeffs
-        clip_mask = np.abs(resid) <= clip_sigma * sigma
+        clip_mask = np.abs(residuals) <= float(clip_sigma) * sigma
         if np.all(clip_mask):
-            break
+            return _FitResult(
+                frequency=float(frequency),
+                fourier_order=int(fourier_order),
+                coeffs=np.asarray(coeffs, dtype=np.float64),
+                residual_sigma=float(sigma),
+                rss=float(rss),
+                df=int(df),
+                n_par=int(n_par),
+                mask=mask.copy(),
+                n_fit=int(idx.size),
+                n_clipped=int(n_obs - idx.size),
+                n_filters=int(design_info.n_filters),
+                phase_c1_idx=int(design_info.phase_c1_idx),
+                phase_c2_idx=int(design_info.phase_c2_idx),
+                sum_weights=None if real_weights is None else float(np.sum(real_weights)),
+            )
         new_mask = mask.copy()
         new_mask[idx[~clip_mask]] = False
         if np.array_equal(new_mask, mask):
@@ -321,35 +494,43 @@ def _fit_frequency(
     idx = np.flatnonzero(mask)
     if idx.size <= n_par:
         return None
-
     fourier = _build_fourier_columns(t_rel[idx], frequency, fourier_order)
-    design = np.concatenate([fixed[idx], fourier], axis=1)
-    target = y[idx]
-    coeffs, rss, df = _weighted_lstsq(
-        design,
-        target,
-        None if weights is None else weights[idx],
+    design_real = np.concatenate([fixed[idx], fourier], axis=1)
+    target_real = np.asarray(y[idx], dtype=np.float64)
+    design = np.vstack([design_real, prior_rows])
+    target = np.concatenate([target_real, prior_target])
+    if weights_real is None:
+        weights_aug = np.concatenate([np.ones(target_real.size, dtype=np.float64), prior_weights])
+        real_weights = None
+    else:
+        weights_aug = np.concatenate([weights_real[idx], prior_weights])
+        real_weights = weights_real[idx]
+    coeffs, _, _ = _weighted_lstsq(design, target, weights_aug)
+    residuals = target_real - design_real @ coeffs
+    sigma, rss, df = _paper_sigma(
+        residuals,
+        real_weights,
+        n_obs=n_obs,
+        n_fit=idx.size,
+        n_par=n_par,
     )
-    if df <= 0:
-        return None
-    sigma = float(np.sqrt(rss / df))
     if not np.isfinite(sigma):
         return None
-
     return _FitResult(
         frequency=float(frequency),
         fourier_order=int(fourier_order),
         coeffs=np.asarray(coeffs, dtype=np.float64),
-        residual_sigma=sigma,
+        residual_sigma=float(sigma),
         rss=float(rss),
         df=int(df),
         n_par=int(n_par),
-        mask=mask,
+        mask=mask.copy(),
         n_fit=int(idx.size),
-        n_clipped=int(n - idx.size),
+        n_clipped=int(n_obs - idx.size),
         n_filters=int(design_info.n_filters),
         phase_c1_idx=int(design_info.phase_c1_idx),
         phase_c2_idx=int(design_info.phase_c2_idx),
+        sum_weights=None if real_weights is None else float(np.sum(real_weights)),
     )
 
 
@@ -362,53 +543,78 @@ def _fit_frequency_unclipped(
     *,
     weights: npt.NDArray[np.float64] | None,
 ) -> _FitResult | None:
-    n = len(y)
-    fixed = design_info.fixed
-    n_par = fixed.shape[1] + 2 * fourier_order
-    if n <= n_par:
+    n_obs = len(y)
+    fixed = np.asarray(design_info.fixed, dtype=np.float64)
+    n_par = int(fixed.shape[1] + 2 * int(fourier_order))
+    if n_obs <= n_par:
         return None
 
     fourier = _build_fourier_columns(t_rel, frequency, fourier_order)
-    design = np.concatenate([fixed, fourier], axis=1)
-    coeffs, rss, df = _weighted_lstsq(design, y, weights)
-    if df <= 0:
-        return None
-    sigma = float(np.sqrt(rss / df))
+    design_real = np.concatenate([fixed, fourier], axis=1)
+    target_real = np.asarray(y, dtype=np.float64)
+    min_phase = float(np.min(fixed[:, design_info.phase_c1_idx]))
+    prior_rows, prior_target, prior_weights = _phase_prior_rows(n_par, design_info, min_phase)
+    design = np.vstack([design_real, prior_rows])
+    target = np.concatenate([target_real, prior_target])
+    if weights is None:
+        weights_aug = np.concatenate([np.ones(n_obs, dtype=np.float64), prior_weights])
+        real_weights = None
+    else:
+        real_weights = np.asarray(weights, dtype=np.float64)
+        weights_aug = np.concatenate([real_weights, prior_weights])
+    coeffs, _, _ = _weighted_lstsq(design, target, weights_aug)
+    residuals = target_real - design_real @ coeffs
+    sigma, rss, df = _paper_sigma(
+        residuals,
+        real_weights,
+        n_obs=n_obs,
+        n_fit=n_obs,
+        n_par=n_par,
+    )
     if not np.isfinite(sigma):
         return None
-
     return _FitResult(
         frequency=float(frequency),
         fourier_order=int(fourier_order),
         coeffs=np.asarray(coeffs, dtype=np.float64),
-        residual_sigma=sigma,
+        residual_sigma=float(sigma),
         rss=float(rss),
         df=int(df),
         n_par=int(n_par),
-        mask=np.ones(n, dtype=bool),
-        n_fit=int(n),
+        mask=np.ones(n_obs, dtype=bool),
+        n_fit=int(n_obs),
         n_clipped=0,
         n_filters=int(design_info.n_filters),
         phase_c1_idx=int(design_info.phase_c1_idx),
         phase_c2_idx=int(design_info.phase_c2_idx),
+        sum_weights=None if real_weights is None else float(np.sum(real_weights)),
     )
 
 
-def _f_test_p_value(small: _FitResult, large: _FitResult) -> float:
-    if large.df <= 0 or small.df <= large.df:
-        return 1.0
-    if small.rss <= large.rss:
-        return 1.0
-
-    df_num = small.df - large.df
-    if df_num <= 0:
-        return 1.0
-    numerator = (small.rss - large.rss) / float(df_num)
-    denominator = large.rss / float(large.df)
-    if denominator <= 0.0 or numerator <= 0.0:
+def _f_test_confidence(small: _FitResult, large: _FitResult) -> float:
+    if large.n_par <= small.n_par:
         return 0.0
-    f_value = numerator / denominator
-    return float(f_dist.sf(f_value, df_num, large.df))
+    if not np.isfinite(small.residual_sigma) or not np.isfinite(large.residual_sigma):
+        return 0.0
+    df_small = int(small.df)
+    df_large = int(large.df)
+    if df_small <= 0 or df_large <= 0:
+        return 0.0
+    variance_small = float(small.residual_sigma) ** 2
+    variance_large = float(large.residual_sigma) ** 2
+    if variance_small <= variance_large or variance_large <= 0.0:
+        return 0.0
+    f_value = variance_small / variance_large
+    if not np.isfinite(f_value) or f_value <= 1.0:
+        return 0.0
+    # The papers describe F-tests in terms of the fitted sigma values and
+    # the number of fitted observations, so use a directional variance-ratio
+    # confidence rather than a nested-model extra-sum-of-squares test.
+    return float(f_dist.cdf(f_value, df_small, df_large))
+
+
+def _directional_f_test_confidence(small: _FitResult, large: _FitResult) -> float:
+    return _f_test_confidence(small, large)
 
 
 def _fit_bic(fit: _FitResult) -> float:
@@ -418,52 +624,82 @@ def _fit_bic(fit: _FitResult) -> float:
     return float(n * np.log(fit.rss / float(n)) + fit.n_par * np.log(float(n)))
 
 
-def _select_order(candidate_fits: dict[int, _FitResult], order_selection_p_value: float) -> _FitResult:
+def _select_order(candidate_fits: dict[int, _FitResult], required_confidence: float) -> _FitResult:
     valid_orders = sorted(candidate_fits)
     for i, order in enumerate(valid_orders):
-        small = candidate_fits[order]
-        if small is None:
-            continue
-        significant_better = False
+        candidate = candidate_fits[order]
+        significantly_worse = False
         for higher_order in valid_orders[i + 1 :]:
-            large = candidate_fits[higher_order]
-            if large is None:
-                continue
-            if _f_test_p_value(small, large) < order_selection_p_value:
-                significant_better = True
+            higher = candidate_fits[higher_order]
+            if _f_test_confidence(candidate, higher) > float(required_confidence):
+                significantly_worse = True
                 break
-        if not significant_better:
-            return small
-
-    for order in reversed(valid_orders):
-        fit = candidate_fits[order]
-        if fit is not None:
-            return fit
-    raise ValueError("no valid Fourier order fits were found")
+        if not significantly_worse:
+            return candidate
+    return candidate_fits[valid_orders[-1]]
 
 
-def _count_local_maxima(
+def _sigma_threshold_for_confidence(best_fit: _FitResult, confidence: float) -> float:
+    if best_fit.df <= 0:
+        return float("inf")
+    f_critical = float(f_dist.ppf(float(confidence), best_fit.df, best_fit.df))
+    if not np.isfinite(f_critical) or f_critical <= 0.0:
+        return float("inf")
+    return float(best_fit.residual_sigma * np.sqrt(f_critical))
+
+
+def _sigma_threshold_from_confidence(
+    best_sigma: float,
+    df: int,
+    confidence: float,
+) -> float:
+    if df <= 0:
+        return float("inf")
+    f_critical = float(f_dist.ppf(float(confidence), int(df), int(df)))
+    if not np.isfinite(f_critical) or f_critical <= 0.0:
+        return float("inf")
+    return float(float(best_sigma) * np.sqrt(f_critical))
+
+
+def _count_local_extrema(
     coeffs: npt.NDArray[np.float64],
     fourier_order: int,
     dense_points: int = 2048,
-) -> int:
+) -> tuple[int, int]:
     phase = np.linspace(0.0, 1.0, dense_points, endpoint=False)
     periodic = np.zeros_like(phase)
-    start = coeffs.size - 2 * fourier_order
-    for harmonic in range(1, fourier_order + 1):
+    start = coeffs.size - 2 * int(fourier_order)
+    for harmonic in range(1, int(fourier_order) + 1):
         idx = start + 2 * (harmonic - 1)
         periodic += coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
         periodic += coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
-
     prev_vals = np.roll(periodic, 1)
     next_vals = np.roll(periodic, -1)
     maxima = (periodic > prev_vals) & (periodic >= next_vals)
-    return int(np.count_nonzero(maxima))
+    minima = (periodic < prev_vals) & (periodic <= next_vals)
+    return int(np.count_nonzero(maxima)), int(np.count_nonzero(minima))
+
+
+def _amplitude_from_fit(
+    fit: _FitResult,
+    dense_points: int = 4096,
+) -> float:
+    phase = np.linspace(0.0, 1.0, dense_points, endpoint=False)
+    periodic = np.zeros_like(phase)
+    start = fit.coeffs.size - 2 * int(fit.fourier_order)
+    for harmonic in range(1, int(fit.fourier_order) + 1):
+        idx = start + 2 * (harmonic - 1)
+        periodic += fit.coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
+        periodic += fit.coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
+    return float(np.max(periodic) - np.min(periodic))
 
 
 def _fit_with_period(fit: _FitResult) -> _FitWithPeriod:
-    is_period_doubled = _count_local_maxima(fit.coeffs, fit.fourier_order) == 1
-    period_days = (2.0 if is_period_doubled else 1.0) / fit.frequency
+    n_maxima = fit.n_local_maxima
+    if n_maxima is None:
+        n_maxima, _ = _count_local_extrema(fit.coeffs, fit.fourier_order)
+    is_period_doubled = n_maxima == 1
+    period_days = (2.0 if is_period_doubled else 1.0) / float(fit.frequency)
     return _FitWithPeriod(
         fit=fit,
         period_days=float(period_days),
@@ -482,7 +718,7 @@ def _harmonic_relative_mismatch(
         return float("inf")
     if not np.isfinite(period_days_b) or period_days_b <= 0.0:
         return float("inf")
-    factors = np.asarray(sorted({float(factor) for factor in harmonic_period_factors}), dtype=np.float64)
+    factors = np.asarray(sorted({float(factor) for factor in harmonic_period_factors if factor > 0.0}), dtype=np.float64)
     if factors.size == 0:
         return float(abs(period_days_a - period_days_b) / period_days_b)
     return float(np.min(np.abs(period_days_a * factors - period_days_b) / period_days_b))

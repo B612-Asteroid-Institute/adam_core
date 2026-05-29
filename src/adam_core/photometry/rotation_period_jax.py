@@ -81,19 +81,26 @@ def _build_fourier_batch(
     return jnp.stack(cols, axis=2)
 
 
-@partial(jax.jit, static_argnames=("fourier_order", "max_clip_iterations"))
+@partial(
+    jax.jit,
+    static_argnames=("fourier_order", "max_clip_iterations", "has_observation_weights"),
+)
 def _evaluate_frequency_batch_jit(
     time_rel: jnp.ndarray,
     y: jnp.ndarray,
     fixed: jnp.ndarray,
     weights: jnp.ndarray,
     row_mask: jnp.ndarray,
+    prior_rows: jnp.ndarray,
+    prior_target: jnp.ndarray,
+    prior_weights: jnp.ndarray,
     frequencies: jnp.ndarray,
     frequency_valid: jnp.ndarray,
     *,
     fourier_order: int,
     clip_sigma: float,
     max_clip_iterations: int,
+    has_observation_weights: bool,
 ) -> tuple[
     jnp.ndarray,
     jnp.ndarray,
@@ -109,7 +116,7 @@ def _evaluate_frequency_batch_jit(
         frequencies,
         fourier_order=fourier_order,
     )
-    design = jnp.concatenate(
+    design_real = jnp.concatenate(
         [
             jnp.broadcast_to(
                 fixed[None, :, :],
@@ -119,29 +126,53 @@ def _evaluate_frequency_batch_jit(
         ],
         axis=2,
     )
-    n_par = design.shape[2]
+    n_par = design_real.shape[2]
     eye = jnp.eye(n_par, dtype=jnp.float64)
     target = jnp.broadcast_to(y[None, :], (frequencies.shape[0], y.shape[0]))
     active = jnp.broadcast_to(row_mask[None, :], target.shape) & frequency_valid[:, None]
+    n_obs = jnp.sum(row_mask)
+
+    prior_design = jnp.broadcast_to(
+        prior_rows[None, :, :],
+        (frequencies.shape[0], prior_rows.shape[0], prior_rows.shape[1]),
+    )
+    sqrt_prior_weights = jnp.sqrt(prior_weights)
+    prior_design_w = prior_design * sqrt_prior_weights[None, :, None]
+    prior_target_w = jnp.broadcast_to(
+        prior_target[None, :] * sqrt_prior_weights[None, :],
+        (frequencies.shape[0], prior_target.shape[0]),
+    )
 
     def solve_with_mask(active_mask: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         w_eff = jnp.where(active_mask, weights[None, :], 0.0)
         sqrt_w = jnp.sqrt(w_eff)
-        design_w = design * sqrt_w[:, :, None]
-        target_w = target * sqrt_w
+        design_real_w = design_real * sqrt_w[:, :, None]
+        target_real_w = target * sqrt_w
+        design_w = jnp.concatenate([design_real_w, prior_design_w], axis=1)
+        target_w = jnp.concatenate([target_real_w, prior_target_w], axis=1)
         xt = jnp.swapaxes(design_w, 1, 2)
         xtx = jnp.matmul(xt, design_w)
         xty = jnp.matmul(xt, target_w[:, :, None])[:, :, 0]
         coeffs = jnp.linalg.solve(
-            xtx + 1.0e-12 * eye[None, :, :],
+            xtx + 1.0e-15 * eye[None, :, :],
             xty[:, :, None],
         )[:, :, 0]
-        model = jnp.matmul(design, coeffs[:, :, None])[:, :, 0]
+        model = jnp.matmul(design_real, coeffs[:, :, None])[:, :, 0]
         resid = target - model
-        rss = jnp.sum(jnp.where(active_mask, w_eff * resid * resid, 0.0), axis=1)
         n_fit = jnp.sum(active_mask, axis=1)
         df = n_fit - n_par
-        sigma = jnp.sqrt(jnp.where(df > 0, rss / df, jnp.inf))
+        if has_observation_weights:
+            rss = jnp.sum(jnp.where(active_mask, w_eff * resid * resid, 0.0), axis=1)
+            weight_sum = jnp.sum(w_eff, axis=1)
+            sigma2 = jnp.where(
+                (df > 0) & (weight_sum > 0.0),
+                (n_obs / weight_sum) * rss / df,
+                jnp.inf,
+            )
+        else:
+            rss = jnp.sum(jnp.where(active_mask, resid * resid, 0.0), axis=1)
+            sigma2 = jnp.where(df > 0, rss / df, jnp.inf)
+        sigma = jnp.sqrt(jnp.maximum(sigma2, 0.0))
         return coeffs, resid, rss, sigma
 
     coeffs = jnp.zeros((frequencies.shape[0], n_par), dtype=jnp.float64)
@@ -184,6 +215,9 @@ def evaluate_frequency_indices_jax(
     y: npt.NDArray[np.float64],
     fixed: npt.NDArray[np.float64],
     weights: npt.NDArray[np.float64] | None,
+    prior_rows: npt.NDArray[np.float64],
+    prior_target: npt.NDArray[np.float64],
+    prior_weights: npt.NDArray[np.float64],
     frequencies: npt.NDArray[np.float64],
     sample_indices: npt.NDArray[np.int64],
     fourier_order: int,
@@ -250,11 +284,15 @@ def evaluate_frequency_indices_jax(
             jnp.asarray(fixed_pad),
             jnp.asarray(weights_pad),
             jnp.asarray(row_mask),
+            jnp.asarray(prior_rows, dtype=jnp.float64),
+            jnp.asarray(prior_target, dtype=jnp.float64),
+            jnp.asarray(prior_weights, dtype=jnp.float64),
             jnp.asarray(frequencies_batch),
             jnp.asarray(frequency_valid),
             fourier_order=int(fourier_order),
             clip_sigma=float(clip_sigma),
             max_clip_iterations=int(max_clip_iterations),
+            has_observation_weights=weights is not None,
         )
 
         scores_np = np.asarray(scores_batch, dtype=np.float64)[:valid_count]

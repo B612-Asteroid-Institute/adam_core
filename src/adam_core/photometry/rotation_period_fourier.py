@@ -5,14 +5,15 @@ from math import ceil
 
 import numpy as np
 import numpy.typing as npt
-import ray
 
-from ..ray_cluster import initialize_use_ray
 from .rotation_period_fourier_core import (
+    FOURIER_PROFILES,
     _DesignInfo,
     _FitResult,
     _FitWithPeriod,
-    _HarmonicAdjudication,
+    _FourierProfile,
+    _amplitude_from_fit,
+    _apply_light_time_correction,
     _build_fixed_design,
     _fit_bic,
     _fit_frequency,
@@ -20,45 +21,156 @@ from .rotation_period_fourier_core import (
     _fit_with_period,
     _harmonic_relative_mismatch,
     _ordered_unique,
+    _phase_prior_rows,
     _select_order,
+    _sigma_threshold_for_confidence,
     _summarize_sessions,
     _validate_inputs,
 )
 from .rotation_period_types import RotationPeriodObservations, RotationPeriodResult
 
+_DEFAULT_HARMONIC_PERIOD_FACTORS = (
+    0.5,
+    2.0 / 3.0,
+    0.75,
+    1.0,
+    4.0 / 3.0,
+    1.5,
+    2.0,
+    3.0,
+    4.0,
+)
+_LSM_MIN_PERIOD_DAYS = 0.00065
+_LSM_MAX_PERIOD_DAYS = 3.0
+_LSM_OVERSAMPLE_FACTOR = 100.0
+_LSM_DEFAULT_MAX_SAMPLES = 20000
+_LSM_DEFAULT_REFINE_SAMPLES = 2000
+_LSM_DEFAULT_REFINE_ROUNDS = 2
+_LSM_FAMILY_TOLERANCE = 0.05
+_LSM_POWER_TIE_TOLERANCE = 2.0e-4
+_SIMPLE_HARMONIC_FACTORS = (0.5, 1.0, 2.0)
+_DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
+_DEFAULT_JAX_ROW_PAD_MULTIPLE = 64
+_FOURIER_MAX_CLIP_ITERATIONS = 8
+
 
 @dataclass(slots=True)
-class _RaySearchState:
-    time_rel_ref: object
-    y_ref: object
-    design_info_ref: object
-    frequencies_ref: object
-    weights_ref: object | None
-    max_processes: int
+class _FourierCluster:
+    indices: npt.NDArray[np.int64]
+    best: _FitWithPeriod
+    period_lower_days: float
+    period_upper_days: float
+    sigma_best: float
+    raw_weight: float
 
 
-def _sample_indices_from_intervals(
-    intervals: list[tuple[int, int]],
-    stride: int,
-    n_total: int,
-) -> npt.NDArray[np.int64]:
-    if n_total <= 0:
-        return np.zeros(0, dtype=np.int64)
-    if stride <= 1 and len(intervals) == 1 and intervals[0] == (0, n_total - 1):
-        return np.arange(n_total, dtype=np.int64)
+@dataclass(slots=True)
+class _FourierSolution:
+    chosen: _FitWithPeriod
+    primary_cluster: _FourierCluster
+    sigma_threshold: float
+    clusters: list[_FourierCluster]
+    period_lower_days: float
+    period_upper_days: float
+    relative_period_uncertainty: float
+    alternate_period_days: list[float]
+    is_valid: bool
+    is_reliable: bool
+    amplitude_mag: float
+    used_session_offsets: bool
+    fit_summary: _FitResult
+    sigma_curve: npt.NDArray[np.float64]
 
-    idx_set: set[int] = set()
-    for start, end in intervals:
-        lo = max(0, min(int(start), n_total - 1))
-        hi = max(0, min(int(end), n_total - 1))
-        if hi < lo:
-            lo, hi = hi, lo
-        idx_set.add(lo)
-        idx_set.add(hi)
-        first = lo + ((stride - (lo % stride)) % stride)
-        for idx in range(first, hi + 1, max(1, stride)):
-            idx_set.add(idx)
-    return np.asarray(sorted(idx_set), dtype=np.int64)
+
+@dataclass(slots=True)
+class _LSMCandidate:
+    period_days: float
+    power: float
+    coeffs: npt.NDArray[np.float64]
+    frequency: float | None = None
+    n_maxima: int | None = None
+    n_minima: int | None = None
+    amplitude_mag: float | None = None
+
+
+@dataclass(slots=True)
+class _LSMSolution:
+    period_days: float | None
+    power: float | None
+    power_gap: float | None
+    candidate_period_days: list[float]
+    candidate_powers: list[float]
+    is_reliable: bool
+    amplitude_mag: float | None
+    n_fit_observations: int
+    n_clipped: int
+
+
+@dataclass(slots=True)
+class _LSMMethodResult:
+    best_candidate: _LSMCandidate | None
+    power_gap: float | None
+    candidate_period_days: list[float]
+    candidate_powers: list[float]
+    is_reliable: bool
+    amplitude_mag: float | None
+    n_fit_observations: int | None = None
+    n_clipped: int = 0
+
+
+@dataclass(slots=True)
+class _FourierMethodResult:
+    chosen_fit: _FitResult
+    best_period: _FitWithPeriod
+    sigma_threshold: float
+    period_lower_days: float
+    period_upper_days: float
+    relative_period_uncertainty: float
+    alternate_period_days: list[float]
+    is_valid: bool
+    is_reliable: bool
+    amplitude_mag: float
+    used_grid_fallback: bool
+
+
+@dataclass(slots=True)
+class _MethodFamily:
+    representative_period_days: float
+    fourier_cluster: _FourierCluster | None = None
+    lsm_candidate: _LSMCandidate | None = None
+    contains_fourier_primary: bool = False
+    contains_lsm_primary: bool = False
+    family_weight_fourier: float = 0.0
+    family_weight_lsm: float = 0.0
+    combined_weight: float = 0.0
+
+
+def _resolve_search_fidelity(
+    *,
+    search_fidelity: str | None,
+    search_strategy: str | None,
+) -> str:
+    if search_fidelity is not None:
+        resolved = str(search_fidelity)
+    elif search_strategy in {"surrogate_refine", "coarse_to_fine"}:
+        resolved = "validated_staged"
+    elif search_strategy == "grid":
+        resolved = "exact_grid"
+    else:
+        resolved = "validated_staged"
+    if resolved not in {"validated_staged", "exact_grid"}:
+        raise ValueError("search_fidelity must be one of {'validated_staged', 'exact_grid'}")
+    return resolved
+
+
+def _resolve_paper_profile(paper_profile: str) -> _FourierProfile:
+    if paper_profile not in FOURIER_PROFILES:
+        raise ValueError("paper_profile must be one of {'greenstreet_2026', 'vavilov_2025'}")
+    return FOURIER_PROFILES[paper_profile]
+
+
+def _paper_profile(paper_profile: str) -> _FourierProfile:
+    return _resolve_paper_profile(paper_profile)
 
 
 def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -78,128 +190,76 @@ def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return merged
 
 
-def _select_seed_indices(
-    sample_indices: npt.NDArray[np.int64],
-    scores: npt.NDArray[np.float64],
+def _sample_indices_from_intervals(
+    intervals: list[tuple[int, int]],
     *,
-    candidate_count: int,
-) -> list[int]:
+    stride: int,
+    n_total: int,
+) -> npt.NDArray[np.int64]:
+    if n_total <= 0:
+        return np.zeros(0, dtype=np.int64)
+    if not intervals:
+        intervals = [(0, n_total - 1)]
+    idx_set: set[int] = set()
+    for start, end in intervals:
+        lo = max(0, min(int(start), n_total - 1))
+        hi = max(0, min(int(end), n_total - 1))
+        if hi < lo:
+            lo, hi = hi, lo
+        idx_set.add(lo)
+        idx_set.add(hi)
+        step = max(1, int(stride))
+        first = lo + ((step - (lo % step)) % step)
+        for idx in range(first, hi + 1, step):
+            idx_set.add(idx)
+    return np.asarray(sorted(idx_set), dtype=np.int64)
+
+
+def _local_minima_positions(scores: npt.NDArray[np.float64]) -> list[int]:
     valid_positions = np.flatnonzero(np.isfinite(scores))
     if valid_positions.size == 0:
         return []
-
-    local_minima: list[int] = []
+    minima: list[int] = []
     for pos in valid_positions.tolist():
-        center = float(scores[pos])
         left = float(scores[pos - 1]) if pos > 0 and np.isfinite(scores[pos - 1]) else np.inf
+        center = float(scores[pos])
         right = (
             float(scores[pos + 1])
             if pos + 1 < len(scores) and np.isfinite(scores[pos + 1])
             else np.inf
         )
         if center <= left and center <= right:
-            local_minima.append(pos)
-
-    positions = local_minima if local_minima else valid_positions.tolist()
-    positions = sorted(positions, key=lambda pos: float(scores[pos]))
-    sample_step = 1
-    if sample_indices.size > 1:
-        sample_step = int(
-            max(
-                1,
-                round(float(np.median(np.diff(np.asarray(sample_indices, dtype=np.int64))))),
-            )
-        )
-
-    chosen: list[int] = []
-    for pos in positions:
-        idx = int(sample_indices[pos])
-        if any(abs(idx - existing) < sample_step for existing in chosen):
-            continue
-        chosen.append(idx)
-        if len(chosen) >= candidate_count:
-            break
-
-    if not chosen:
-        chosen.append(int(sample_indices[int(valid_positions[0])]))
-    return chosen
+            minima.append(pos)
+    return minima if minima else valid_positions.tolist()
 
 
 def _candidate_intervals_from_scores(
-    scores_by_order: dict[int, tuple[npt.NDArray[np.int64], npt.NDArray[np.float64]]],
+    sample_indices: npt.NDArray[np.int64],
+    scores: npt.NDArray[np.float64],
     *,
-    candidate_count: int,
-    radius: int,
     n_total: int,
-    include_harmonic_partners: bool = False,
+    radius: int,
+    candidate_count: int,
 ) -> list[tuple[int, int]]:
+    positions = _local_minima_positions(scores)
+    positions = sorted(positions, key=lambda pos: float(scores[pos]))
     intervals: list[tuple[int, int]] = []
-    for sample_indices, scores in scores_by_order.values():
-        for center in _select_seed_indices(
-            sample_indices,
-            scores,
-            candidate_count=candidate_count,
-        ):
-            centers = [center]
-            if include_harmonic_partners:
-                half_center = int(round(center / 2.0))
-                double_center = int(round(center * 2.0))
-                if 0 <= half_center < n_total:
-                    centers.append(half_center)
-                if 0 <= double_center < n_total:
-                    centers.append(double_center)
-            for active_center in centers:
-                intervals.append(
-                    (
-                        max(0, active_center - radius),
-                        min(n_total - 1, active_center + radius),
-                    )
-                )
-    merged = _merge_intervals(intervals)
-    if not merged:
-        return [(0, n_total - 1)]
-    return merged
+    chosen_centers: list[int] = []
+    stride = 1 if sample_indices.size <= 1 else int(max(1, round(float(np.median(np.diff(sample_indices))))))
+    for pos in positions:
+        center = int(sample_indices[pos])
+        if any(abs(center - existing) < stride for existing in chosen_centers):
+            continue
+        chosen_centers.append(center)
+        intervals.append((max(0, center - radius), min(n_total - 1, center + radius)))
+        if len(chosen_centers) >= int(candidate_count):
+            break
+    return _merge_intervals(intervals)
 
 
-def _build_ray_search_state(
+def _evaluate_frequency_indices_with_jax(
     *,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
-    design_info: _DesignInfo,
-    frequencies: npt.NDArray[np.float64],
-    weights: npt.NDArray[np.float64] | None,
-    max_processes: int | None,
-) -> _RaySearchState | None:
-    if max_processes is None or max_processes <= 1:
-        return None
-    use_ray = initialize_use_ray(num_cpus=max_processes)
-    if not use_ray:
-        return None
-    return _RaySearchState(
-        time_rel_ref=ray.put(np.asarray(time_rel, dtype=np.float64)),
-        y_ref=ray.put(np.asarray(y, dtype=np.float64)),
-        design_info_ref=ray.put(design_info),
-        frequencies_ref=ray.put(np.asarray(frequencies, dtype=np.float64)),
-        weights_ref=None if weights is None else ray.put(np.asarray(weights, dtype=np.float64)),
-        max_processes=int(max_processes),
-    )
-
-
-def _resolve_parallel_chunk_size(
-    sample_size: int,
-    *,
-    max_processes: int,
-    parallel_chunk_size: int | None,
-) -> int:
-    if parallel_chunk_size is not None:
-        return max(1, min(int(parallel_chunk_size), sample_size))
-    target_chunks = max(1, max_processes * 4)
-    return max(64, int(ceil(sample_size / target_chunks)))
-
-
-@ray.remote
-def _evaluate_frequency_chunk_ray(
-    time_rel: npt.NDArray[np.float64],
+    t_rel: npt.NDArray[np.float64],
     y: npt.NDArray[np.float64],
     design_info: _DesignInfo,
     frequencies: npt.NDArray[np.float64],
@@ -207,65 +267,64 @@ def _evaluate_frequency_chunk_ray(
     order: int,
     clip_sigma: float,
     weights: npt.NDArray[np.float64] | None,
-    exact_evaluation_backend: str = "numpy",
-    jax_frequency_batch_size: int = 256,
-    jax_row_pad_multiple: int = 64,
-    jax_max_clip_iterations: int = 3,
-) -> tuple[npt.NDArray[np.float64], _FitResult | None]:
-    if exact_evaluation_backend == "jax":
+    jax_frequency_batch_size: int,
+    jax_row_pad_multiple: int,
+) -> tuple[npt.NDArray[np.float64], list[_FitResult | None], _FitResult | None]:
+    try:
         from .rotation_period_jax import evaluate_frequency_indices_jax
+    except Exception as exc:  # pragma: no cover - depends on optional local JAX install
+        raise RuntimeError("exact_evaluation_backend='jax' requires JAX to be installed") from exc
 
-        jax_result = evaluate_frequency_indices_jax(
-            time_rel=np.asarray(time_rel, dtype=np.float64),
-            y=np.asarray(y, dtype=np.float64),
-            fixed=np.asarray(design_info.fixed, dtype=np.float64),
-            weights=None if weights is None else np.asarray(weights, dtype=np.float64),
-            frequencies=np.asarray(frequencies, dtype=np.float64),
-            sample_indices=np.asarray(sample_indices, dtype=np.int64),
-            fourier_order=int(order),
-            clip_sigma=float(clip_sigma),
-            jax_batch_size=int(jax_frequency_batch_size),
-            row_pad_multiple=int(jax_row_pad_multiple),
-            max_clip_iterations=int(jax_max_clip_iterations),
-        )
-        if not jax_result.best_valid:
-            return jax_result.scores, None
-        best_pos = int(np.nanargmin(jax_result.scores))
-        best_frequency = float(frequencies[int(sample_indices[best_pos])])
-        return jax_result.scores, _FitResult(
-            frequency=best_frequency,
-            fourier_order=int(order),
-            coeffs=np.asarray(jax_result.best_coeffs, dtype=np.float64),
-            residual_sigma=float(jax_result.best_sigma),
-            rss=float(jax_result.best_rss),
-            df=int(jax_result.best_df),
-            n_par=int(design_info.fixed.shape[1] + 2 * order),
-            mask=np.asarray(jax_result.best_mask, dtype=bool),
-            n_fit=int(jax_result.best_n_fit),
-            n_clipped=int(jax_result.best_n_clipped),
-            n_filters=int(design_info.n_filters),
-            phase_c1_idx=int(design_info.phase_c1_idx),
-            phase_c2_idx=int(design_info.phase_c2_idx),
-        )
+    n_par = int(design_info.fixed.shape[1] + 2 * int(order))
+    min_phase = float(np.min(design_info.fixed[:, design_info.phase_c1_idx]))
+    prior_rows, prior_target, prior_weights = _phase_prior_rows(
+        n_par,
+        design_info,
+        min_phase,
+    )
+    result = evaluate_frequency_indices_jax(
+        time_rel=t_rel,
+        y=y,
+        fixed=design_info.fixed,
+        weights=weights,
+        prior_rows=prior_rows,
+        prior_target=prior_target,
+        prior_weights=prior_weights,
+        frequencies=frequencies,
+        sample_indices=sample_indices,
+        fourier_order=int(order),
+        clip_sigma=float(clip_sigma),
+        jax_batch_size=int(jax_frequency_batch_size),
+        row_pad_multiple=int(jax_row_pad_multiple),
+        max_clip_iterations=_FOURIER_MAX_CLIP_ITERATIONS,
+    )
+    scores = np.asarray(result.scores, dtype=np.float64)
+    fits: list[_FitResult | None] = [None] * int(sample_indices.size)
+    finite_positions = np.flatnonzero(np.isfinite(scores))
+    if not result.best_valid or finite_positions.size == 0:
+        return scores, fits, None
 
-    scores = np.full(sample_indices.shape, np.nan, dtype=np.float64)
-    best_fit: _FitResult | None = None
-    for pos, idx in enumerate(sample_indices.tolist()):
-        fit = _fit_frequency(
-            time_rel,
-            y,
-            design_info,
-            float(frequencies[int(idx)]),
-            int(order),
-            clip_sigma=clip_sigma,
-            weights=weights,
-        )
-        if fit is None:
-            continue
-        scores[pos] = float(fit.residual_sigma)
-        if best_fit is None or fit.residual_sigma < best_fit.residual_sigma:
-            best_fit = fit
-    return scores, best_fit
+    best_pos = int(finite_positions[int(np.argmin(scores[finite_positions]))])
+    best_index = int(sample_indices[best_pos])
+    best_mask = np.asarray(result.best_mask, dtype=bool)
+    best_fit = _FitResult(
+        frequency=float(frequencies[best_index]),
+        fourier_order=int(order),
+        coeffs=np.asarray(result.best_coeffs, dtype=np.float64),
+        residual_sigma=float(result.best_sigma),
+        rss=float(result.best_rss),
+        df=int(result.best_df),
+        n_par=int(n_par),
+        mask=best_mask,
+        n_fit=int(result.best_n_fit),
+        n_clipped=int(result.best_n_clipped),
+        n_filters=int(design_info.n_filters),
+        phase_c1_idx=int(design_info.phase_c1_idx),
+        phase_c2_idx=int(design_info.phase_c2_idx),
+        sum_weights=None if weights is None else float(np.sum(np.asarray(weights, dtype=np.float64)[best_mask])),
+    )
+    fits[best_pos] = best_fit
+    return scores, fits, best_fit
 
 
 def _evaluate_frequency_indices(
@@ -279,100 +338,31 @@ def _evaluate_frequency_indices(
     clip_sigma: float,
     weights: npt.NDArray[np.float64] | None,
     exact: bool,
-    ray_state: _RaySearchState | None = None,
-    parallel_chunk_size: int | None = None,
-    exact_evaluation_backend: str = "numpy",
-    jax_frequency_batch_size: int = 256,
-    jax_row_pad_multiple: int = 64,
-    jax_max_clip_iterations: int = 3,
-) -> tuple[npt.NDArray[np.float64], _FitResult | None]:
-    use_ray_exact = (
-        exact
-        and ray_state is not None
-        and sample_indices.size >= max(128, ray_state.max_processes * 32)
-    )
-
-    if exact and exact_evaluation_backend == "jax" and not use_ray_exact:
-        from .rotation_period_jax import evaluate_frequency_indices_jax
-
-        jax_result = evaluate_frequency_indices_jax(
-            time_rel=np.asarray(t_rel, dtype=np.float64),
-            y=np.asarray(y, dtype=np.float64),
-            fixed=np.asarray(design_info.fixed, dtype=np.float64),
-            weights=None if weights is None else np.asarray(weights, dtype=np.float64),
-            frequencies=np.asarray(frequencies, dtype=np.float64),
-            sample_indices=np.asarray(sample_indices, dtype=np.int64),
-            fourier_order=int(order),
-            clip_sigma=float(clip_sigma),
-            jax_batch_size=int(jax_frequency_batch_size),
-            row_pad_multiple=int(jax_row_pad_multiple),
-            max_clip_iterations=int(jax_max_clip_iterations),
+    exact_evaluation_backend: str,
+    jax_frequency_batch_size: int,
+    jax_row_pad_multiple: int,
+) -> tuple[npt.NDArray[np.float64], list[_FitResult | None], _FitResult | None]:
+    if exact and exact_evaluation_backend == "jax":
+        return _evaluate_frequency_indices_with_jax(
+            t_rel=t_rel,
+            y=y,
+            design_info=design_info,
+            frequencies=frequencies,
+            sample_indices=sample_indices,
+            order=order,
+            clip_sigma=clip_sigma,
+            weights=weights,
+            jax_frequency_batch_size=jax_frequency_batch_size,
+            jax_row_pad_multiple=jax_row_pad_multiple,
         )
-        if not jax_result.best_valid:
-            return jax_result.scores, None
-        best_pos = int(np.nanargmin(jax_result.scores))
-        best_frequency = float(frequencies[int(sample_indices[best_pos])])
-        return jax_result.scores, _FitResult(
-            frequency=best_frequency,
-            fourier_order=int(order),
-            coeffs=np.asarray(jax_result.best_coeffs, dtype=np.float64),
-            residual_sigma=float(jax_result.best_sigma),
-            rss=float(jax_result.best_rss),
-            df=int(jax_result.best_df),
-            n_par=int(design_info.fixed.shape[1] + 2 * order),
-            mask=np.asarray(jax_result.best_mask, dtype=bool),
-            n_fit=int(jax_result.best_n_fit),
-            n_clipped=int(jax_result.best_n_clipped),
-            n_filters=int(design_info.n_filters),
-            phase_c1_idx=int(design_info.phase_c1_idx),
-            phase_c2_idx=int(design_info.phase_c2_idx),
-        )
-
-    if use_ray_exact:
-        chunk_size = _resolve_parallel_chunk_size(
-            int(sample_indices.size),
-            max_processes=ray_state.max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-        )
-        chunks = [
-            np.asarray(sample_indices[start : start + chunk_size], dtype=np.int64)
-            for start in range(0, int(sample_indices.size), chunk_size)
-        ]
-        futures = [
-            _evaluate_frequency_chunk_ray.remote(
-                ray_state.time_rel_ref,
-                ray_state.y_ref,
-                ray_state.design_info_ref,
-                ray_state.frequencies_ref,
-                chunk,
-                int(order),
-                float(clip_sigma),
-                ray_state.weights_ref,
-                exact_evaluation_backend,
-                int(jax_frequency_batch_size),
-                int(jax_row_pad_multiple),
-                int(jax_max_clip_iterations),
-            )
-            for chunk in chunks
-        ]
-        score_parts: list[npt.NDArray[np.float64]] = []
-        best_fit: _FitResult | None = None
-        for chunk_scores, chunk_best in ray.get(futures):
-            score_parts.append(np.asarray(chunk_scores, dtype=np.float64))
-            if chunk_best is not None and (
-                best_fit is None or chunk_best.residual_sigma < best_fit.residual_sigma
-            ):
-                best_fit = chunk_best
-        if score_parts:
-            return np.concatenate(score_parts), best_fit
-        return np.full(sample_indices.shape, np.nan, dtype=np.float64), None
 
     scores = np.full(sample_indices.shape, np.nan, dtype=np.float64)
+    fits: list[_FitResult | None] = [None] * int(sample_indices.size)
     best_fit: _FitResult | None = None
     for pos, idx in enumerate(sample_indices.tolist()):
         frequency = float(frequencies[int(idx)])
-        if exact:
-            fit = _fit_frequency(
+        fit = (
+            _fit_frequency(
                 t_rel,
                 y,
                 design_info,
@@ -381,8 +371,8 @@ def _evaluate_frequency_indices(
                 clip_sigma=clip_sigma,
                 weights=weights,
             )
-        else:
-            fit = _fit_frequency_unclipped(
+            if exact
+            else _fit_frequency_unclipped(
                 t_rel,
                 y,
                 design_info,
@@ -390,946 +380,1278 @@ def _evaluate_frequency_indices(
                 int(order),
                 weights=weights,
             )
-        if fit is not None:
-            scores[pos] = float(fit.residual_sigma)
-            if best_fit is None or fit.residual_sigma < best_fit.residual_sigma:
-                best_fit = fit
-    return scores, best_fit
+        )
+        fits[pos] = fit
+        if fit is None:
+            continue
+        scores[pos] = float(fit.residual_sigma)
+        if best_fit is None or fit.residual_sigma < best_fit.residual_sigma:
+            best_fit = fit
+    return scores, fits, best_fit
 
 
-def _run_period_search_grid(
+def _search_best_fit(
     *,
-    time_rel: npt.NDArray[np.float64],
+    t_rel: npt.NDArray[np.float64],
     y: npt.NDArray[np.float64],
-    phase_angle: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    session_labels: npt.NDArray[np.object_] | None,
-    weights: npt.NDArray[np.float64] | None,
-    orders: list[int],
+    design_info: _DesignInfo,
     frequencies: npt.NDArray[np.float64],
+    order: int,
     clip_sigma: float,
-    order_selection_p_value: float,
-    max_processes: int | None,
-    parallel_chunk_size: int | None,
+    weights: npt.NDArray[np.float64] | None,
+    search_fidelity: str,
     exact_evaluation_backend: str,
     jax_frequency_batch_size: int,
     jax_row_pad_multiple: int,
-    jax_max_clip_iterations: int,
-) -> _FitResult:
-    design_info = _build_fixed_design(filter_labels, session_labels, phase_angle)
-    ray_state = _build_ray_search_state(
-        time_rel=time_rel,
-        y=y,
-        design_info=design_info,
-        frequencies=frequencies,
-        weights=weights,
-        max_processes=max_processes,
-    )
-    candidate_fits: dict[int, _FitResult] = {}
-    sample_indices = np.arange(frequencies.size, dtype=np.int64)
-    for order in orders:
-        scores, best_fit = _evaluate_frequency_indices(
-            t_rel=time_rel,
+) -> _FitResult | None:
+    n_total = int(frequencies.size)
+    if n_total == 0:
+        return None
+    if search_fidelity == "exact_grid" or n_total <= 2048:
+        sample_indices = np.arange(n_total, dtype=np.int64)
+        _, _, best_fit = _evaluate_frequency_indices(
+            t_rel=t_rel,
             y=y,
             design_info=design_info,
             frequencies=frequencies,
             sample_indices=sample_indices,
-            order=int(order),
+            order=order,
             clip_sigma=clip_sigma,
             weights=weights,
             exact=True,
-            ray_state=ray_state,
-            parallel_chunk_size=parallel_chunk_size,
             exact_evaluation_backend=exact_evaluation_backend,
             jax_frequency_batch_size=jax_frequency_batch_size,
             jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
         )
-        if best_fit is not None:
-            candidate_fits[int(order)] = best_fit
+        return best_fit
 
+    coarse_stride = max(1, int(ceil(n_total / 1024.0)))
+    coarse_indices = np.arange(0, n_total, coarse_stride, dtype=np.int64)
+    if coarse_indices[-1] != n_total - 1:
+        coarse_indices = np.concatenate([coarse_indices, np.asarray([n_total - 1], dtype=np.int64)])
+    coarse_scores, _, _ = _evaluate_frequency_indices(
+        t_rel=t_rel,
+        y=y,
+        design_info=design_info,
+        frequencies=frequencies,
+        sample_indices=coarse_indices,
+        order=order,
+        clip_sigma=clip_sigma,
+        weights=weights,
+        exact=False,
+        exact_evaluation_backend=exact_evaluation_backend,
+        jax_frequency_batch_size=jax_frequency_batch_size,
+        jax_row_pad_multiple=jax_row_pad_multiple,
+    )
+    intervals = _candidate_intervals_from_scores(
+        coarse_indices,
+        coarse_scores,
+        n_total=n_total,
+        radius=max(8, 4 * coarse_stride),
+        candidate_count=12,
+    )
+    final_indices = _sample_indices_from_intervals(intervals, stride=1, n_total=n_total)
+    _, _, best_fit = _evaluate_frequency_indices(
+        t_rel=t_rel,
+        y=y,
+        design_info=design_info,
+        frequencies=frequencies,
+        sample_indices=final_indices,
+        order=order,
+        clip_sigma=clip_sigma,
+        weights=weights,
+        exact=True,
+        exact_evaluation_backend=exact_evaluation_backend,
+        jax_frequency_batch_size=jax_frequency_batch_size,
+        jax_row_pad_multiple=jax_row_pad_multiple,
+    )
+    if best_fit is not None:
+        return best_fit
+    fallback_indices = np.arange(n_total, dtype=np.int64)
+    _, _, best_fit = _evaluate_frequency_indices(
+        t_rel=t_rel,
+        y=y,
+        design_info=design_info,
+        frequencies=frequencies,
+        sample_indices=fallback_indices,
+        order=order,
+        clip_sigma=clip_sigma,
+        weights=weights,
+        exact=True,
+        exact_evaluation_backend=exact_evaluation_backend,
+        jax_frequency_batch_size=jax_frequency_batch_size,
+        jax_row_pad_multiple=jax_row_pad_multiple,
+    )
+    return best_fit
+
+
+def _evaluate_full_order_curve(
+    *,
+    t_rel: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+    design_info: _DesignInfo,
+    frequencies: npt.NDArray[np.float64],
+    order: int,
+    clip_sigma: float,
+    weights: npt.NDArray[np.float64] | None,
+    exact_evaluation_backend: str,
+    jax_frequency_batch_size: int,
+    jax_row_pad_multiple: int,
+) -> tuple[npt.NDArray[np.float64], list[_FitResult | None]]:
+    sample_indices = np.arange(int(frequencies.size), dtype=np.int64)
+    scores, fits, _ = _evaluate_frequency_indices(
+        t_rel=t_rel,
+        y=y,
+        design_info=design_info,
+        frequencies=frequencies,
+        sample_indices=sample_indices,
+        order=order,
+        clip_sigma=clip_sigma,
+        weights=weights,
+        exact=True,
+        exact_evaluation_backend=exact_evaluation_backend,
+        jax_frequency_batch_size=jax_frequency_batch_size,
+        jax_row_pad_multiple=jax_row_pad_multiple,
+    )
+    full_fits: list[_FitResult | None] = [None] * int(frequencies.size)
+    for idx, fit in zip(sample_indices.tolist(), fits, strict=True):
+        full_fits[int(idx)] = fit
+    return scores, full_fits
+
+
+def _build_frequency_grid(
+    *,
+    span_days: float,
+    min_rotations_in_span: float,
+    max_frequency_cycles_per_day: float,
+    frequency_grid_scale: float,
+) -> npt.NDArray[np.float64]:
+    f_min = float(min_rotations_in_span / span_days)
+    f_max = float(max_frequency_cycles_per_day)
+    if not np.isfinite(f_min) or f_min <= 0.0:
+        raise ValueError("derived minimum frequency is invalid")
+    if f_max <= f_min:
+        raise ValueError("max_frequency_cycles_per_day must exceed the minimum searchable frequency")
+    n_freq = max(int(ceil(float(frequency_grid_scale) * span_days * (f_max - f_min)) + 1), 2)
+    return np.linspace(f_min, f_max, n_freq, dtype=np.float64)
+
+
+def _weights_from_sigma(mag_sigma: npt.NDArray[np.float64] | None) -> npt.NDArray[np.float64] | None:
+    if mag_sigma is None:
+        return None
+    sigma = np.asarray(mag_sigma, dtype=np.float64)
+    if sigma.ndim != 1 or sigma.size == 0:
+        return None
+    if not np.all(np.isfinite(sigma)) or np.any(sigma <= 0.0):
+        return None
+    return 1.0 / np.square(sigma)
+
+
+def _cluster_fourier_solutions(
+    *,
+    fits: list[_FitResult | None],
+    accepted_indices: npt.NDArray[np.int64],
+    sigma_threshold: float,
+    frequencies: npt.NDArray[np.float64] | None = None,
+) -> list[_FourierCluster]:
+    if accepted_indices.size == 0:
+        return []
+    best_sigma = float(
+        min(
+            fits[int(idx)].residual_sigma
+            for idx in accepted_indices.tolist()
+            if fits[int(idx)] is not None
+        )
+    )
+    fit_items: list[tuple[int, _FitWithPeriod, float, float]] = []
+    for idx in accepted_indices.tolist():
+        fit = fits[int(idx)]
+        if fit is None:
+            continue
+        fit_with_period = _fit_with_period(fit)
+        center_frequency = float(fit.frequency)
+        if frequencies is None:
+            period_lower_days = float(fit_with_period.period_days)
+            period_upper_days = float(fit_with_period.period_days)
+        else:
+            left_frequency = float(frequencies[int(idx - 1)]) if idx > 0 else center_frequency
+            right_frequency = (
+                float(frequencies[int(idx + 1)]) if int(idx) + 1 < len(frequencies) else center_frequency
+            )
+            frequency_half_step = 0.5 * max(
+                abs(center_frequency - left_frequency),
+                abs(right_frequency - center_frequency),
+            )
+            factor = 2.0 if fit_with_period.is_period_doubled else 1.0
+            low_edge_frequency = max(center_frequency - frequency_half_step, np.finfo(np.float64).eps)
+            high_edge_frequency = center_frequency + frequency_half_step
+            edge_periods = np.asarray(
+                [factor / high_edge_frequency, factor / low_edge_frequency],
+                dtype=np.float64,
+            )
+            period_lower_days = float(np.min(edge_periods))
+            period_upper_days = float(np.max(edge_periods))
+        fit_items.append((int(idx), fit_with_period, period_lower_days, period_upper_days))
+    if not fit_items:
+        return []
+    fit_items.sort(key=lambda item: (item[2], item[3], item[0]))
+    clusters: list[_FourierCluster] = []
+    denom = float(max(sigma_threshold - best_sigma, 0.0))
+    merged_items: list[list[tuple[int, _FitWithPeriod, float, float]]] = [[fit_items[0]]]
+    for item in fit_items[1:]:
+        current_lower = float(item[2])
+        previous_group = merged_items[-1]
+        previous_upper = max(float(group_item[3]) for group_item in previous_group)
+        if current_lower <= previous_upper + 1.0e-12:
+            previous_group.append(item)
+        else:
+            merged_items.append([item])
+    for group_items in merged_items:
+        group_indices = np.asarray([item[0] for item in group_items], dtype=np.int64)
+        group_fits = [item[1] for item in group_items]
+        best = min(group_fits, key=lambda item: float(item.fit.residual_sigma))
+        period_lower_days = float(min(item[2] for item in group_items))
+        period_upper_days = float(max(item[3] for item in group_items))
+        if denom > 0.0:
+            raw_weight = max(0.0, 1.0 - (float(best.fit.residual_sigma) - best_sigma) / denom)
+        else:
+            raw_weight = 1.0 if abs(float(best.fit.residual_sigma) - best_sigma) <= 1.0e-12 else 0.0
+        clusters.append(
+            _FourierCluster(
+                indices=group_indices,
+                best=best,
+                period_lower_days=period_lower_days,
+                period_upper_days=period_upper_days,
+                sigma_best=float(best.fit.residual_sigma),
+                raw_weight=float(raw_weight),
+            )
+        )
+    return sorted(clusters, key=lambda cluster: float(cluster.sigma_best))
+
+
+def _relative_period_uncertainty(period_days: float, lower_days: float, upper_days: float) -> float:
+    if not np.isfinite(period_days) or period_days <= 0.0:
+        return float("inf")
+    return float(max(abs(period_days - lower_days), abs(upper_days - period_days)) / period_days)
+
+
+def _max_cluster_period_deviation(period_days: float, clusters: list[_FourierCluster]) -> float:
+    if not np.isfinite(period_days) or period_days <= 0.0 or not clusters:
+        return float("inf")
+    return float(
+        max(
+            max(
+                abs(float(cluster.period_lower_days) - period_days),
+                abs(float(cluster.period_upper_days) - period_days),
+            )
+            for cluster in clusters
+        )
+    )
+
+
+def _derive_fourier_solution(
+    *,
+    t_rel: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+    design_info: _DesignInfo,
+    frequencies: npt.NDArray[np.float64],
+    weights: npt.NDArray[np.float64] | None,
+    clip_sigma: float,
+    profile: _FourierProfile,
+    search_fidelity: str,
+    exact_evaluation_backend: str,
+    jax_frequency_batch_size: int,
+    jax_row_pad_multiple: int,
+    used_session_offsets: bool,
+    fourier_orders: tuple[int, ...] | None,
+) -> _FourierSolution:
+    orders = tuple(sorted({int(order) for order in (fourier_orders or profile.orders)}))
+    if not orders:
+        raise ValueError("fourier order set must be non-empty")
+
+    candidate_fits: dict[int, _FitResult] = {}
+    for order in orders:
+        fit = _search_best_fit(
+            t_rel=t_rel,
+            y=y,
+            design_info=design_info,
+            frequencies=frequencies,
+            order=int(order),
+            clip_sigma=clip_sigma,
+            weights=weights,
+            search_fidelity=search_fidelity,
+            exact_evaluation_backend=exact_evaluation_backend,
+            jax_frequency_batch_size=jax_frequency_batch_size,
+            jax_row_pad_multiple=jax_row_pad_multiple,
+        )
+        if fit is not None:
+            candidate_fits[int(order)] = fit
     if not candidate_fits:
         raise ValueError("no valid rotation-period fit could be found")
 
-    return _select_order(candidate_fits, order_selection_p_value)
-
-
-def _run_period_search_surrogate_refine(
-    *,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
-    phase_angle: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    session_labels: npt.NDArray[np.object_] | None,
-    weights: npt.NDArray[np.float64] | None,
-    orders: list[int],
-    frequencies: npt.NDArray[np.float64],
-    clip_sigma: float,
-    order_selection_p_value: float,
-    max_processes: int | None,
-    parallel_chunk_size: int | None,
-    exact_evaluation_backend: str,
-    jax_frequency_batch_size: int,
-    jax_row_pad_multiple: int,
-    jax_max_clip_iterations: int,
-) -> _FitResult:
-    design_info = _build_fixed_design(filter_labels, session_labels, phase_angle)
-    ray_state = _build_ray_search_state(
-        time_rel=time_rel,
+    chosen_order_fit = _select_order(candidate_fits, profile.order_selection_confidence)
+    sigma_curve, fits = _evaluate_full_order_curve(
+        t_rel=t_rel,
         y=y,
         design_info=design_info,
         frequencies=frequencies,
+        order=int(chosen_order_fit.fourier_order),
+        clip_sigma=clip_sigma,
         weights=weights,
-        max_processes=max_processes,
+        exact_evaluation_backend=exact_evaluation_backend,
+        jax_frequency_batch_size=jax_frequency_batch_size,
+        jax_row_pad_multiple=jax_row_pad_multiple,
     )
-    n_total = int(frequencies.size)
-    coarse_stride = max(1, n_total // 256)
-    if coarse_stride <= 1:
-        return _run_period_search_grid(
-            time_rel=time_rel,
-            y=y,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            session_labels=session_labels,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-
-    coarse_indices = _sample_indices_from_intervals(
-        [(0, n_total - 1)],
-        coarse_stride,
-        n_total,
-    )
-    surrogate_scores: dict[int, tuple[npt.NDArray[np.int64], npt.NDArray[np.float64]]] = {}
-    for order in orders:
-        scores, _ = _evaluate_frequency_indices(
-            t_rel=time_rel,
-            y=y,
-            design_info=design_info,
-            frequencies=frequencies,
-            sample_indices=coarse_indices,
-            order=int(order),
+    if not np.any(np.isfinite(sigma_curve)):
+        raise ValueError("failed to evaluate Fourier sigma curve")
+    best_idx = int(np.nanargmin(sigma_curve))
+    best_fit = fits[best_idx]
+    if best_fit is None:
+        raise ValueError("best Fourier fit is unavailable")
+    best_with_period = _fit_with_period(best_fit)
+    sigma_threshold = float(_sigma_threshold_for_confidence(best_fit, profile.sigma_threshold_confidence))
+    accepted_indices = np.flatnonzero(np.isfinite(sigma_curve) & (sigma_curve <= sigma_threshold))
+    if accepted_indices.size == 0:
+        accepted_indices = np.asarray([best_idx], dtype=np.int64)
+    for idx in accepted_indices.tolist():
+        if fits[int(idx)] is not None:
+            continue
+        fits[int(idx)] = _fit_frequency(
+            t_rel,
+            y,
+            design_info,
+            float(frequencies[int(idx)]),
+            int(chosen_order_fit.fourier_order),
             clip_sigma=clip_sigma,
             weights=weights,
-            exact=False,
-            ray_state=ray_state,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
         )
-        surrogate_scores[int(order)] = (coarse_indices, scores)
-
-    intervals = _candidate_intervals_from_scores(
-        surrogate_scores,
-        candidate_count=5,
-        radius=max(1, 4 * coarse_stride),
-        n_total=n_total,
-    )
-    medium_stride = max(1, coarse_stride // 4)
-    if medium_stride < coarse_stride:
-        medium_indices = _sample_indices_from_intervals(intervals, medium_stride, n_total)
-        medium_scores: dict[int, tuple[npt.NDArray[np.int64], npt.NDArray[np.float64]]] = {}
-        for order in orders:
-            scores, _ = _evaluate_frequency_indices(
-                t_rel=time_rel,
-                y=y,
-                design_info=design_info,
-                frequencies=frequencies,
-                sample_indices=medium_indices,
-                order=int(order),
-                clip_sigma=clip_sigma,
-                weights=weights,
-                exact=True,
-                ray_state=ray_state,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
-            )
-            medium_scores[int(order)] = (medium_indices, scores)
-        intervals = _candidate_intervals_from_scores(
-            medium_scores,
-            candidate_count=4,
-            radius=max(1, 3 * medium_stride),
-            n_total=n_total,
-        )
-
-    final_indices = _sample_indices_from_intervals(intervals, 1, n_total)
-    candidate_fits: dict[int, _FitResult] = {}
-    for order in orders:
-        scores, best_fit = _evaluate_frequency_indices(
-            t_rel=time_rel,
-            y=y,
-            design_info=design_info,
-            frequencies=frequencies,
-            sample_indices=final_indices,
-            order=int(order),
-            clip_sigma=clip_sigma,
-            weights=weights,
-            exact=True,
-            ray_state=ray_state,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-        if best_fit is not None:
-            candidate_fits[int(order)] = best_fit
-
-    if not candidate_fits:
-        return _run_period_search_grid(
-            time_rel=time_rel,
-            y=y,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            session_labels=session_labels,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-
-    return _select_order(candidate_fits, order_selection_p_value)
-
-
-def _run_period_search(
-    *,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
-    phase_angle: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    session_labels: npt.NDArray[np.object_] | None,
-    weights: npt.NDArray[np.float64] | None,
-    orders: list[int],
-    frequencies: npt.NDArray[np.float64],
-    clip_sigma: float,
-    order_selection_p_value: float,
-    search_strategy: str,
-    max_processes: int | None,
-    parallel_chunk_size: int | None,
-    exact_evaluation_backend: str,
-    jax_frequency_batch_size: int,
-    jax_row_pad_multiple: int,
-    jax_max_clip_iterations: int,
-) -> _FitResult:
-    if search_strategy == "grid":
-        return _run_period_search_grid(
-            time_rel=time_rel,
-            y=y,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            session_labels=session_labels,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-    if search_strategy == "surrogate_refine":
-        return _run_period_search_surrogate_refine(
-            time_rel=time_rel,
-            y=y,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            session_labels=session_labels,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-    if search_strategy == "coarse_to_fine":
-        # Compatibility alias: coarse_to_fine was removed as a distinct path
-        # after accuracy/runtime audits showed no advantage over surrogate_refine.
-        return _run_period_search_surrogate_refine(
-            time_rel=time_rel,
-            y=y,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            session_labels=session_labels,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-    raise ValueError("unknown search_strategy")
-
-
-def _fit_with_period_key(fit_with_period: _FitWithPeriod) -> tuple[int, int, int]:
-    return (
-        int(fit_with_period.fit.fourier_order),
-        int(round(float(fit_with_period.fit.frequency) * 1.0e12)),
-        int(fit_with_period.is_period_doubled),
-    )
-
-
-def _adjudicate_harmonic_aliases(
-    *,
-    chosen_fit: _FitResult,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
-    design_info: _DesignInfo,
-    weights: npt.NDArray[np.float64] | None,
-    orders: list[int],
-    frequencies: npt.NDArray[np.float64],
-    clip_sigma: float,
-    order_selection_p_value: float,
-    harmonic_period_factors: tuple[float, ...],
-    harmonic_sigma_tolerance_mag: float,
-    harmonic_identity_tolerance: float,
-    harmonic_refinement_window: int,
-    max_processes: int | None,
-    parallel_chunk_size: int | None,
-    exact_evaluation_backend: str,
-    jax_frequency_batch_size: int,
-    jax_row_pad_multiple: int,
-    jax_max_clip_iterations: int,
-) -> _HarmonicAdjudication:
-    if frequencies.size == 0:
-        selected = _fit_with_period(chosen_fit)
-        return _HarmonicAdjudication(
-            selected=selected,
-            near_tie_candidates=0,
-            had_near_tie=False,
-        )
-
-    selected_seed = _fit_with_period(chosen_fit)
-    candidates: list[_FitWithPeriod] = [selected_seed]
-    period_factors = sorted({1.0, *[float(factor) for factor in harmonic_period_factors if factor > 0.0]})
-    frequencies_min = float(frequencies[0])
-    frequencies_max = float(frequencies[-1])
-    ray_state = _build_ray_search_state(
-        time_rel=time_rel,
-        y=y,
-        design_info=design_info,
+    clusters = _cluster_fourier_solutions(
+        fits=fits,
+        accepted_indices=accepted_indices,
+        sigma_threshold=sigma_threshold,
         frequencies=frequencies,
-        weights=weights,
-        max_processes=max_processes,
     )
-
-    for factor in period_factors:
-        target_period_days = selected_seed.period_days * float(factor)
-        if not np.isfinite(target_period_days) or target_period_days <= 0.0:
-            continue
-        target_frequency = 1.0 / target_period_days
-        if target_frequency < frequencies_min or target_frequency > frequencies_max:
-            continue
-
-        idx_center = int(np.searchsorted(frequencies, target_frequency))
-        idx_center = min(max(idx_center, 0), int(frequencies.size - 1))
-        lo = max(0, idx_center - harmonic_refinement_window)
-        hi = min(int(frequencies.size - 1), idx_center + harmonic_refinement_window)
-        if hi < lo:
-            continue
-
-        sample_indices = np.arange(lo, hi + 1, dtype=np.int64)
-        order_fits: dict[int, _FitResult] = {}
-        for order in orders:
-            _, best_fit = _evaluate_frequency_indices(
-                t_rel=time_rel,
-                y=y,
-                design_info=design_info,
-                frequencies=frequencies,
-                sample_indices=sample_indices,
-                order=int(order),
-                clip_sigma=clip_sigma,
-                weights=weights,
-                exact=True,
-                ray_state=ray_state,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
+    if not clusters:
+        clusters = [
+            _FourierCluster(
+                indices=np.asarray([best_idx], dtype=np.int64),
+                best=best_with_period,
+                period_lower_days=float(best_with_period.period_days),
+                period_upper_days=float(best_with_period.period_days),
+                sigma_best=float(best_fit.residual_sigma),
+                raw_weight=1.0,
             )
-            if best_fit is not None:
-                order_fits[int(order)] = best_fit
-
-        if not order_fits:
-            continue
-
-        factor_fit = _select_order(order_fits, order_selection_p_value)
-        candidates.append(_fit_with_period(factor_fit))
-
-    unique: dict[tuple[int, int, int], _FitWithPeriod] = {}
-    for candidate in candidates:
-        key = _fit_with_period_key(candidate)
-        current = unique.get(key)
-        if current is None or candidate.fit.residual_sigma < current.fit.residual_sigma:
-            unique[key] = candidate
-    candidates = list(unique.values())
-
-    sigma_best = float(min(candidate.fit.residual_sigma for candidate in candidates))
-    tolerance = float(max(0.0, harmonic_sigma_tolerance_mag))
-    within_tol = [
-        candidate
-        for candidate in candidates
-        if candidate.fit.residual_sigma <= sigma_best + tolerance + 1.0e-12
+        ]
+    primary_cluster = next(
+        (cluster for cluster in clusters if best_idx in set(cluster.indices.tolist())),
+        clusters[0],
+    )
+    period_lower_days = float(primary_cluster.period_lower_days)
+    period_upper_days = float(primary_cluster.period_upper_days)
+    relative_uncertainty = _relative_period_uncertainty(
+        best_with_period.period_days,
+        period_lower_days,
+        period_upper_days,
+    )
+    alternate_period_days = [
+        float(cluster.best.period_days)
+        for cluster in clusters
+        if cluster is not primary_cluster
     ]
-    selected = min(
-        within_tol,
-        key=lambda candidate: (
-            int(candidate.fit.fourier_order),
-            float(candidate.fit.residual_sigma),
-            abs(candidate.period_days - selected_seed.period_days),
-        ),
-    )
-    near_tie_candidates = 0
-    for candidate in candidates:
-        if (
-            int(candidate.fit.fourier_order) == int(selected.fit.fourier_order)
-            and abs(float(candidate.fit.frequency) - float(selected.fit.frequency)) <= 1.0e-12
-            and bool(candidate.is_period_doubled) == bool(selected.is_period_doubled)
-        ):
-            continue
+    amplitude_mag = float(_amplitude_from_fit(best_fit))
 
-        sigma_delta = float(candidate.fit.residual_sigma - selected.fit.residual_sigma)
-        if sigma_delta > tolerance + 1.0e-12:
-            continue
+    is_valid = True
+    if profile.valid_relative_uncertainty_max is not None:
+        is_valid = bool(relative_uncertainty <= float(profile.valid_relative_uncertainty_max))
 
-        mismatch = abs(candidate.period_days - selected.period_days) / selected.period_days
-        if mismatch <= harmonic_identity_tolerance:
-            continue
-
-        near_tie_candidates += 1
-
-    return _HarmonicAdjudication(
-        selected=selected,
-        near_tie_candidates=int(near_tie_candidates),
-        had_near_tie=bool(near_tie_candidates > 0),
-    )
-
-
-def _count_nonharmonic_near_ties(
-    *,
-    selected: _FitWithPeriod,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
-    design_info: _DesignInfo,
-    weights: npt.NDArray[np.float64] | None,
-    orders: list[int],
-    frequencies: npt.NDArray[np.float64],
-    clip_sigma: float,
-    harmonic_period_factors: tuple[float, ...],
-    harmonic_sigma_tolerance_mag: float,
-    harmonic_identity_tolerance: float,
-    max_processes: int | None,
-    parallel_chunk_size: int | None,
-    exact_evaluation_backend: str,
-    jax_frequency_batch_size: int,
-    jax_row_pad_multiple: int,
-    jax_max_clip_iterations: int,
-    global_near_tie_max_samples: int,
-    global_near_tie_candidate_count: int,
-    global_near_tie_refinement_window: int,
-) -> int:
-    n_total = int(frequencies.size)
-    if n_total == 0:
-        return 0
-
-    candidate_count = max(1, int(global_near_tie_candidate_count))
-    max_samples = max(64, int(global_near_tie_max_samples))
-    stride = max(1, int(ceil(n_total / max_samples)))
-    sample_indices = np.arange(0, n_total, stride, dtype=np.int64)
-    if sample_indices[-1] != n_total - 1:
-        sample_indices = np.concatenate(
-            (sample_indices, np.asarray([n_total - 1], dtype=np.int64))
-        )
-
-    ray_state = _build_ray_search_state(
-        time_rel=time_rel,
-        y=y,
-        design_info=design_info,
-        frequencies=frequencies,
-        weights=weights,
-        max_processes=max_processes,
-    )
-    scores_by_order: dict[int, tuple[npt.NDArray[np.int64], npt.NDArray[np.float64]]] = {}
-    for order in orders:
-        scores, _ = _evaluate_frequency_indices(
-            t_rel=time_rel,
-            y=y,
-            design_info=design_info,
-            frequencies=frequencies,
-            sample_indices=sample_indices,
-            order=int(order),
-            clip_sigma=clip_sigma,
-            weights=weights,
-            exact=False,
-            ray_state=ray_state,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-        scores_by_order[int(order)] = (sample_indices, scores)
-
-    if not scores_by_order:
-        return 0
-
-    intervals = _candidate_intervals_from_scores(
-        scores_by_order,
-        candidate_count=max(candidate_count, 4),
-        radius=max(1, int(global_near_tie_refinement_window)),
-        n_total=n_total,
-        include_harmonic_partners=True,
-    )
-    exact_indices = _sample_indices_from_intervals(intervals, stride=1, n_total=n_total)
-    if exact_indices.size == 0:
-        return 0
-
-    sigma_tolerance = float(max(0.0, harmonic_sigma_tolerance_mag))
-    sigma_threshold = float(selected.fit.residual_sigma + sigma_tolerance + 1.0e-12)
-    selected_key = _fit_with_period_key(selected)
-    tie_keys: set[tuple[int, int, int]] = set()
-    max_candidates_per_order = max(candidate_count * 4, 12)
-
-    for order in orders:
-        scores, _ = _evaluate_frequency_indices(
-            t_rel=time_rel,
-            y=y,
-            design_info=design_info,
-            frequencies=frequencies,
-            sample_indices=exact_indices,
-            order=int(order),
-            clip_sigma=clip_sigma,
-            weights=weights,
-            exact=True,
-            ray_state=ray_state,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-        valid_positions = np.flatnonzero(np.isfinite(scores) & (scores <= sigma_threshold))
-        if valid_positions.size == 0:
-            continue
-        sorted_positions = valid_positions[np.argsort(scores[valid_positions])]
-        for pos in sorted_positions[:max_candidates_per_order].tolist():
-            idx = int(exact_indices[int(pos)])
-            frequency = float(frequencies[idx])
-            fit = _fit_frequency(
-                time_rel,
-                y,
-                design_info,
-                frequency,
-                int(order),
-                clip_sigma=clip_sigma,
-                weights=weights,
+    is_reliable = is_valid
+    if profile.reliable_relative_multiplier is not None and profile.reliable_absolute_hours is not None:
+        uncertainty_days = _max_cluster_period_deviation(best_with_period.period_days, clusters)
+        is_reliable = bool(
+            uncertainty_days <= max(
+                float(profile.reliable_relative_multiplier) * best_with_period.period_days,
+                float(profile.reliable_absolute_hours) / 24.0,
             )
-            if fit is None:
-                continue
-            candidate = _fit_with_period(fit)
-            key = _fit_with_period_key(candidate)
-            if key == selected_key or key in tie_keys:
-                continue
-            sigma_delta = float(candidate.fit.residual_sigma - selected.fit.residual_sigma)
-            if sigma_delta > sigma_tolerance + 1.0e-12:
-                continue
-            relative_mismatch = abs(candidate.period_days - selected.period_days) / selected.period_days
-            if relative_mismatch <= harmonic_identity_tolerance:
-                continue
-            tie_keys.add(key)
-            if len(tie_keys) >= candidate_count:
-                return int(len(tie_keys))
+        )
 
-    return int(len(tie_keys))
+    return _FourierSolution(
+        chosen=best_with_period,
+        primary_cluster=primary_cluster,
+        sigma_threshold=sigma_threshold,
+        clusters=clusters,
+        period_lower_days=period_lower_days,
+        period_upper_days=period_upper_days,
+        relative_period_uncertainty=relative_uncertainty,
+        alternate_period_days=alternate_period_days,
+        is_valid=bool(is_valid),
+        is_reliable=bool(is_reliable),
+        amplitude_mag=amplitude_mag,
+        used_session_offsets=bool(used_session_offsets),
+        fit_summary=best_fit,
+        sigma_curve=sigma_curve,
+    )
 
 
-def _count_window_alias_near_ties(
+def _band_intercept_design(filter_labels: npt.NDArray[np.object_]) -> tuple[npt.NDArray[np.float64], list[str]]:
+    unique_filters = _ordered_unique(filter_labels)
+    n = len(filter_labels)
+    cols: list[npt.NDArray[np.float64]] = [np.ones(n, dtype=np.float64)]
+    for label in unique_filters[1:]:
+        cols.append((filter_labels == label).astype(np.float64))
+    return np.column_stack(cols).astype(np.float64, copy=False), unique_filters
+
+
+def _weighted_fit_with_clipping(
     *,
-    selected: _FitWithPeriod,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
+    design: npt.NDArray[np.float64],
+    target: npt.NDArray[np.float64],
+    weights: npt.NDArray[np.float64] | None,
+    clip_sigma: float,
+    max_iterations: int = 6,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
+    mask = np.ones(target.shape[0], dtype=bool)
+    for _ in range(max(1, int(max_iterations))):
+        idx = np.flatnonzero(mask)
+        if idx.size <= design.shape[1]:
+            break
+        design_use = design[idx]
+        target_use = target[idx]
+        if weights is None:
+            coeffs, *_ = np.linalg.lstsq(design_use, target_use, rcond=None)
+            residuals = target_use - design_use @ coeffs
+        else:
+            w_use = np.asarray(weights[idx], dtype=np.float64)
+            sqrt_w = np.sqrt(w_use)
+            coeffs, *_ = np.linalg.lstsq(design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None)
+            residuals = target_use - design_use @ coeffs
+        sigma = float(np.std(residuals, ddof=max(1, design_use.shape[1])))
+        if not np.isfinite(sigma) or sigma <= 0.0:
+            break
+        keep = np.abs(residuals) <= float(clip_sigma) * sigma
+        if np.all(keep):
+            return np.asarray(coeffs, dtype=np.float64), mask
+        new_mask = mask.copy()
+        new_mask[idx[~keep]] = False
+        if np.array_equal(new_mask, mask):
+            break
+        mask = new_mask
+    idx = np.flatnonzero(mask)
+    design_use = design[idx]
+    target_use = target[idx]
+    if weights is None:
+        coeffs, *_ = np.linalg.lstsq(design_use, target_use, rcond=None)
+    else:
+        w_use = np.asarray(weights[idx], dtype=np.float64)
+        sqrt_w = np.sqrt(w_use)
+        coeffs, *_ = np.linalg.lstsq(design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None)
+    return np.asarray(coeffs, dtype=np.float64), mask
+
+
+def _prepare_lsm_inputs(
+    *,
+    mag: npt.NDArray[np.float64],
+    reduced_mag: npt.NDArray[np.float64],
+    predicted_mag_v: npt.NDArray[np.float64] | None,
     phase_angle: npt.NDArray[np.float64],
     filter_labels: npt.NDArray[np.object_],
-    session_labels: npt.NDArray[np.object_] | None,
     weights: npt.NDArray[np.float64] | None,
-    orders: list[int],
-    frequencies: npt.NDArray[np.float64],
-    clip_sigma: float,
-    order_selection_p_value: float,
-    harmonic_period_factors: tuple[float, ...],
-    harmonic_sigma_tolerance_mag: float,
-    harmonic_identity_tolerance: float,
-    max_processes: int | None,
-    parallel_chunk_size: int | None,
-    exact_evaluation_backend: str,
-    jax_frequency_batch_size: int,
-    jax_row_pad_multiple: int,
-    jax_max_clip_iterations: int,
-    window_alias_frequency_offsets: tuple[float, ...],
-    window_alias_refinement_window: int,
-) -> int:
-    if frequencies.size == 0:
-        return 0
-
-    offsets = sorted(
-        {
-            float(abs(offset))
-            for offset in window_alias_frequency_offsets
-            if np.isfinite(offset) and float(offset) > 0.0
-        }
-    )
-    if not offsets:
-        return 0
-
-    f_min = float(frequencies[0])
-    f_max = float(frequencies[-1])
-    selected_frequency = float(selected.fit.frequency)
-    target_periods: list[float] = []
-    for offset in offsets:
-        for sign in (-1.0, 1.0):
-            alias_frequency = abs(selected_frequency + sign * offset)
-            if alias_frequency <= 0.0 or alias_frequency < f_min or alias_frequency > f_max:
-                continue
-            target_periods.append(float(1.0 / alias_frequency))
-    if not target_periods:
-        return 0
-
-    sigma_tolerance = float(max(0.0, harmonic_sigma_tolerance_mag))
-    selected_key = _fit_with_period_key(selected)
-    seen_keys: set[tuple[int, int, int]] = set()
-    near_ties = 0
-    for target_period in target_periods:
-        alias_fit = _run_period_search_targeted_grid(
-            time_rel=time_rel,
-            y=y,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            session_labels=session_labels,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            target_period_days=[float(target_period)],
-            target_window_indices=max(1, int(window_alias_refinement_window)),
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.object_],
+    npt.NDArray[np.float64] | None,
+    int,
+    npt.NDArray[np.bool_],
+]:
+    n_obs = int(mag.shape[0])
+    active_mask = np.ones(n_obs, dtype=bool)
+    if predicted_mag_v is not None and np.all(np.isfinite(predicted_mag_v)):
+        corrected = np.asarray(mag, dtype=np.float64) - np.asarray(predicted_mag_v, dtype=np.float64)
+    else:
+        fixed_design, _ = _band_intercept_design(filter_labels)
+        phase_cols = np.column_stack(
+            [fixed_design, np.asarray(phase_angle, dtype=np.float64), np.square(phase_angle)]
         )
-        if alias_fit is None:
-            continue
-        alias_candidate = _fit_with_period(alias_fit)
-        alias_key = _fit_with_period_key(alias_candidate)
-        if alias_key == selected_key or alias_key in seen_keys:
-            continue
-        seen_keys.add(alias_key)
-        sigma_delta = float(alias_candidate.fit.residual_sigma - selected.fit.residual_sigma)
-        if sigma_delta > sigma_tolerance + 1.0e-12:
-            continue
-        relative_mismatch = abs(alias_candidate.period_days - selected.period_days) / selected.period_days
-        if relative_mismatch <= harmonic_identity_tolerance:
-            continue
-        near_ties += 1
-    return int(near_ties)
+        coeffs, mask = _weighted_fit_with_clipping(
+            design=phase_cols,
+            target=np.asarray(reduced_mag, dtype=np.float64),
+            weights=weights,
+            clip_sigma=3.0,
+        )
+        trend = phase_cols @ coeffs
+        corrected = np.asarray(reduced_mag, dtype=np.float64) - trend
+        if not np.all(mask):
+            active_mask &= np.asarray(mask, dtype=bool)
+            corrected = corrected[mask]
+            filter_labels = filter_labels[mask]
+            weights = None if weights is None else np.asarray(weights[mask], dtype=np.float64)
+
+    corrected = np.asarray(corrected, dtype=np.float64) - float(np.median(corrected))
+    mean = float(np.mean(corrected))
+    sigma = float(np.std(corrected))
+    if not np.isfinite(sigma) or sigma <= 0.0:
+        keep = np.ones(corrected.shape[0], dtype=bool)
+    else:
+        keep = np.abs(corrected - mean) <= 3.0 * sigma
+    corrected = corrected[keep]
+    filter_labels = filter_labels[keep]
+    clipped = int(np.count_nonzero(~keep))
+    if weights is not None:
+        weights = np.asarray(weights[keep], dtype=np.float64)
+    if np.any(~active_mask):
+        surviving = np.flatnonzero(active_mask)
+        final_mask = np.zeros(n_obs, dtype=bool)
+        final_mask[surviving[keep]] = True
+    else:
+        final_mask = np.asarray(keep, dtype=bool)
+    return corrected, filter_labels, weights, clipped, final_mask
 
 
-def _estimate_lsm_frequency(
+def _lsm_frequency_grid(
     *,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
+    span_days: float,
+    max_samples: int,
+) -> npt.NDArray[np.float64]:
+    f_min = 1.0 / _LSM_MAX_PERIOD_DAYS
+    f_max = 1.0 / _LSM_MIN_PERIOD_DAYS
+    ideal_count = int(ceil(_LSM_OVERSAMPLE_FACTOR * span_days * (f_max - f_min)) + 1)
+    n_samples = max(256, min(int(max_samples), ideal_count))
+    return np.linspace(f_min, f_max, n_samples, dtype=np.float64)
+
+
+def _lsm_design(
+    *,
+    t_rel: npt.NDArray[np.float64],
+    filter_labels: npt.NDArray[np.object_],
+    frequency: float,
+    order: int = 2,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    intercepts, _ = _band_intercept_design(filter_labels)
+    omega = 2.0 * np.pi * float(frequency) * np.asarray(t_rel, dtype=np.float64)
+    periodic_cols: list[npt.NDArray[np.float64]] = []
+    for harmonic in range(1, int(order) + 1):
+        angle = harmonic * omega
+        periodic_cols.append(np.cos(angle))
+        periodic_cols.append(np.sin(angle))
+    periodic = np.column_stack(periodic_cols).astype(np.float64, copy=False)
+    return intercepts, np.concatenate([intercepts, periodic], axis=1)
+
+
+def _weighted_chi2(
+    residuals: npt.NDArray[np.float64],
+    weights: npt.NDArray[np.float64] | None,
+) -> float:
+    if weights is None:
+        return float(np.sum(np.square(residuals)))
+    w = np.asarray(weights, dtype=np.float64)
+    return float(np.sum(w * np.square(residuals)))
+
+
+def _fit_lsm_frequency(
+    *,
+    t_rel: npt.NDArray[np.float64],
+    corrected: npt.NDArray[np.float64],
     filter_labels: npt.NDArray[np.object_],
     weights: npt.NDArray[np.float64] | None,
-    f_min: float,
-    f_max: float,
+    frequency: float,
+) -> tuple[float, npt.NDArray[np.float64]]:
+    flat_design, full_design = _lsm_design(
+        t_rel=t_rel,
+        filter_labels=filter_labels,
+        frequency=frequency,
+        order=2,
+    )
+    if weights is None:
+        flat_coeffs, *_ = np.linalg.lstsq(flat_design, corrected, rcond=None)
+        flat_resid = corrected - flat_design @ flat_coeffs
+        coeffs, *_ = np.linalg.lstsq(full_design, corrected, rcond=None)
+        resid = corrected - full_design @ coeffs
+    else:
+        w = np.asarray(weights, dtype=np.float64)
+        sqrt_w = np.sqrt(w)
+        flat_coeffs, *_ = np.linalg.lstsq(flat_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None)
+        flat_resid = corrected - flat_design @ flat_coeffs
+        coeffs, *_ = np.linalg.lstsq(full_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None)
+        resid = corrected - full_design @ coeffs
+    chi2_0 = _weighted_chi2(flat_resid, weights)
+    chi2 = _weighted_chi2(resid, weights)
+    if chi2_0 <= 0.0:
+        power = 0.0
+    else:
+        power = max(0.0, 1.0 - chi2 / chi2_0)
+    return float(power), np.asarray(coeffs, dtype=np.float64)
+
+
+def _periodic_extrema_counts_from_coeffs(coeffs: npt.NDArray[np.float64], order: int = 2) -> tuple[int, int]:
+    phase = np.linspace(0.0, 1.0, 2048, endpoint=False)
+    periodic = np.zeros_like(phase)
+    start = coeffs.size - 2 * int(order)
+    for harmonic in range(1, int(order) + 1):
+        idx = start + 2 * (harmonic - 1)
+        periodic += coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
+        periodic += coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
+    prev_vals = np.roll(periodic, 1)
+    next_vals = np.roll(periodic, -1)
+    maxima = (periodic > prev_vals) & (periodic >= next_vals)
+    minima = (periodic < prev_vals) & (periodic <= next_vals)
+    return int(np.count_nonzero(maxima)), int(np.count_nonzero(minima))
+
+
+def _amplitude_from_lsm_coeffs(coeffs: npt.NDArray[np.float64], order: int = 2) -> float:
+    phase = np.linspace(0.0, 1.0, 4096, endpoint=False)
+    periodic = np.zeros_like(phase)
+    start = coeffs.size - 2 * int(order)
+    for harmonic in range(1, int(order) + 1):
+        idx = start + 2 * (harmonic - 1)
+        periodic += coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
+        periodic += coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
+    return float(np.max(periodic) - np.min(periodic))
+
+
+def _local_maxima_indices(values: npt.NDArray[np.float64]) -> npt.NDArray[np.int64]:
+    if values.size == 0:
+        return np.zeros(0, dtype=np.int64)
+    maxima: list[int] = []
+    for idx in range(values.size):
+        left = float(values[idx - 1]) if idx > 0 else -np.inf
+        center = float(values[idx])
+        right = float(values[idx + 1]) if idx + 1 < values.size else -np.inf
+        if center >= left and center > right:
+            maxima.append(idx)
+    return np.asarray(maxima, dtype=np.int64)
+
+
+def _estimate_lsm_solution(
+    *,
+    t_rel: npt.NDArray[np.float64],
+    mag: npt.NDArray[np.float64],
+    reduced_mag: npt.NDArray[np.float64],
+    predicted_mag_v: npt.NDArray[np.float64] | None,
+    phase_angle: npt.NDArray[np.float64],
+    filter_labels: npt.NDArray[np.object_],
+    weights: npt.NDArray[np.float64] | None,
     lsm_max_frequency_samples: int,
     lsm_refine_samples: int,
     lsm_refine_rounds: int,
-) -> float | None:
-    if time_rel.size < 5:
-        return None
-    if lsm_max_frequency_samples < 8 or lsm_refine_samples < 8:
-        return None
-    if not np.isfinite(f_min) or not np.isfinite(f_max) or f_min <= 0.0 or f_max <= f_min:
-        return None
-
-    try:
-        from astropy.timeseries import LombScargle, LombScargleMultiband
-    except Exception:
-        return None
-
-    dy = None
-    if weights is not None:
-        with np.errstate(divide="ignore", invalid="ignore"):
-            dy_candidate = 1.0 / np.sqrt(np.asarray(weights, dtype=np.float64))
-        if np.all(np.isfinite(dy_candidate)) and np.all(dy_candidate > 0.0):
-            dy = dy_candidate
-
-    unique_filters = _ordered_unique(np.asarray(filter_labels, dtype=object))
-    try:
-        if len(unique_filters) > 1:
-            bands = np.asarray(
-                [str(value) for value in np.asarray(filter_labels, dtype=object).tolist()],
-                dtype=object,
-            )
-            model = LombScargleMultiband(
-                np.asarray(time_rel, dtype=np.float64),
-                np.asarray(y, dtype=np.float64),
-                bands,
-                dy=dy,
-            )
-        else:
-            model = LombScargle(
-                np.asarray(time_rel, dtype=np.float64),
-                np.asarray(y, dtype=np.float64),
-                dy=dy,
-            )
-    except Exception:
-        return None
-
-    coarse_n = int(max(256, lsm_max_frequency_samples))
-    coarse_frequencies = np.linspace(f_min, f_max, coarse_n, dtype=np.float64)
-    try:
-        power = np.asarray(model.power(coarse_frequencies), dtype=np.float64)
-    except Exception:
-        return None
-    finite = np.isfinite(power)
-    if not np.any(finite):
-        return None
-    best_idx = int(np.argmax(np.where(finite, power, -np.inf)))
-    best_frequency = float(coarse_frequencies[best_idx])
-    coarse_step = float((f_max - f_min) / max(coarse_n - 1, 1))
-
-    current_half_width = max(coarse_step * 4.0, coarse_step)
-    for _ in range(int(max(0, lsm_refine_rounds))):
-        lo = max(f_min, best_frequency - current_half_width)
-        hi = min(f_max, best_frequency + current_half_width)
-        if hi <= lo:
-            break
-        refine_frequencies = np.linspace(lo, hi, int(max(16, lsm_refine_samples)), dtype=np.float64)
-        try:
-            refine_power = np.asarray(model.power(refine_frequencies), dtype=np.float64)
-        except Exception:
-            break
-        finite_refine = np.isfinite(refine_power)
-        if not np.any(finite_refine):
-            break
-        refine_idx = int(np.argmax(np.where(finite_refine, refine_power, -np.inf)))
-        best_frequency = float(refine_frequencies[refine_idx])
-        current_half_width = max((hi - lo) / 8.0, coarse_step / 4.0)
-
-    return float(best_frequency)
-
-
-def _run_period_search_targeted_grid(
-    *,
-    time_rel: npt.NDArray[np.float64],
-    y: npt.NDArray[np.float64],
-    phase_angle: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    session_labels: npt.NDArray[np.object_] | None,
-    weights: npt.NDArray[np.float64] | None,
-    orders: list[int],
-    frequencies: npt.NDArray[np.float64],
-    target_period_days: list[float],
-    target_window_indices: int,
-    clip_sigma: float,
-    order_selection_p_value: float,
-    max_processes: int | None,
-    parallel_chunk_size: int | None,
-    exact_evaluation_backend: str,
-    jax_frequency_batch_size: int,
-    jax_row_pad_multiple: int,
-    jax_max_clip_iterations: int,
-) -> _FitResult | None:
-    if frequencies.size == 0 or target_window_indices <= 0:
-        return None
-
-    design_info = _build_fixed_design(filter_labels, session_labels, phase_angle)
-    ray_state = _build_ray_search_state(
-        time_rel=time_rel,
-        y=y,
-        design_info=design_info,
-        frequencies=frequencies,
+) -> _LSMSolution:
+    corrected, filter_lsm, weights_lsm, clipped, keep_mask = _prepare_lsm_inputs(
+        mag=mag,
+        reduced_mag=reduced_mag,
+        predicted_mag_v=predicted_mag_v,
+        phase_angle=phase_angle,
+        filter_labels=np.asarray(filter_labels, dtype=object),
         weights=weights,
-        max_processes=max_processes,
+    )
+    if corrected.size < 8:
+        return _LSMSolution(
+            period_days=None,
+            power=None,
+            power_gap=None,
+            candidate_period_days=[],
+            candidate_powers=[],
+            is_reliable=False,
+            amplitude_mag=None,
+            n_fit_observations=int(corrected.size),
+            n_clipped=int(clipped),
+        )
+
+    time_lsm = np.asarray(t_rel[keep_mask], dtype=np.float64)
+    if time_lsm.size != corrected.size:
+        raise ValueError("internal error: LSM masking produced misaligned time and magnitude arrays")
+    span_days = float(np.max(time_lsm) - np.min(time_lsm))
+    span_days = max(span_days, 1.0e-6)
+    frequencies = _lsm_frequency_grid(span_days=span_days, max_samples=lsm_max_frequency_samples)
+
+    powers = np.full(frequencies.shape, np.nan, dtype=np.float64)
+    coeffs_by_index: list[npt.NDArray[np.float64] | None] = [None] * int(frequencies.size)
+    for idx, frequency in enumerate(frequencies.tolist()):
+        power, coeffs = _fit_lsm_frequency(
+            t_rel=time_lsm,
+            corrected=corrected,
+            filter_labels=filter_lsm,
+            weights=weights_lsm,
+            frequency=float(frequency),
+        )
+        powers[idx] = float(power)
+        coeffs_by_index[idx] = coeffs
+
+    local_maxima = _local_maxima_indices(powers)
+    survivors: list[_LSMCandidate] = []
+    for idx in local_maxima.tolist():
+        coeffs = coeffs_by_index[int(idx)]
+        if coeffs is None:
+            continue
+        n_maxima, n_minima = _periodic_extrema_counts_from_coeffs(coeffs, order=2)
+        if n_maxima != 2 or n_minima != 2:
+            continue
+        survivors.append(
+            _LSMCandidate(
+                period_days=float(1.0 / frequencies[int(idx)]),
+                power=float(powers[int(idx)]),
+                coeffs=np.asarray(coeffs, dtype=np.float64),
+            )
+        )
+
+    survivors.sort(key=lambda candidate: float(candidate.power), reverse=True)
+    if not survivors:
+        return _LSMSolution(
+            period_days=None,
+            power=None,
+            power_gap=None,
+            candidate_period_days=[],
+            candidate_powers=[],
+            is_reliable=False,
+            amplitude_mag=None,
+            n_fit_observations=int(corrected.size),
+            n_clipped=int(clipped),
+        )
+
+    best_power = float(survivors[0].power)
+    tied_survivors = [
+        candidate
+        for candidate in survivors
+        if best_power - float(candidate.power) <= _LSM_POWER_TIE_TOLERANCE
+    ]
+    best = max(tied_survivors, key=lambda candidate: float(candidate.period_days))
+    ordered_survivors = [best] + [candidate for candidate in survivors if candidate is not best]
+    second_power = float(ordered_survivors[1].power) if len(ordered_survivors) >= 2 else 0.0
+    power_gap = float(best.power - second_power) if len(ordered_survivors) >= 2 else float(best.power)
+    amplitude_mag = float(_amplitude_from_lsm_coeffs(best.coeffs, order=2))
+    is_reliable = bool(best.power >= 0.1 and power_gap >= 0.02)
+    return _LSMSolution(
+        period_days=float(best.period_days),
+        power=float(best.power),
+        power_gap=float(power_gap),
+        candidate_period_days=[float(candidate.period_days) for candidate in ordered_survivors[:12]],
+        candidate_powers=[float(candidate.power) for candidate in ordered_survivors[:12]],
+        is_reliable=is_reliable,
+        amplitude_mag=amplitude_mag,
+        n_fit_observations=int(corrected.size),
+        n_clipped=int(clipped),
     )
 
-    n_total = int(frequencies.size)
-    f_min = float(frequencies[0])
-    f_max = float(frequencies[-1])
-    index_set: set[int] = set()
-    for period_days in target_period_days:
-        if not np.isfinite(period_days) or period_days <= 0.0:
-            continue
-        frequency = 1.0 / float(period_days)
-        if frequency < f_min or frequency > f_max:
-            continue
-        idx_center = int(np.searchsorted(frequencies, frequency))
-        idx_center = min(max(idx_center, 0), n_total - 1)
-        lo = max(0, idx_center - target_window_indices)
-        hi = min(n_total - 1, idx_center + target_window_indices)
-        for idx in range(lo, hi + 1):
-            index_set.add(idx)
 
-    if not index_set:
-        return None
-
-    sample_indices = np.asarray(sorted(index_set), dtype=np.int64)
-    candidate_fits: dict[int, _FitResult] = {}
-    for order in orders:
-        _, best_fit = _evaluate_frequency_indices(
-            t_rel=time_rel,
-            y=y,
-            design_info=design_info,
-            frequencies=frequencies,
-            sample_indices=sample_indices,
-            order=int(order),
-            clip_sigma=clip_sigma,
-            weights=weights,
-            exact=True,
-            ray_state=ray_state,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
+def _run_lsm(
+    *,
+    t_rel: npt.NDArray[np.float64],
+    mag: npt.NDArray[np.float64],
+    reduced_mag: npt.NDArray[np.float64],
+    predicted_mag_v: npt.NDArray[np.float64] | None,
+    phase_angle: npt.NDArray[np.float64],
+    filter_labels: npt.NDArray[np.object_],
+    weights: npt.NDArray[np.float64] | None,
+    lsm_max_frequency_samples: int,
+    lsm_refine_samples: int,
+    lsm_refine_rounds: int,
+) -> _LSMMethodResult:
+    solution = _estimate_lsm_solution(
+        t_rel=t_rel,
+        mag=mag,
+        reduced_mag=reduced_mag,
+        predicted_mag_v=predicted_mag_v,
+        phase_angle=phase_angle,
+        filter_labels=filter_labels,
+        weights=weights,
+        lsm_max_frequency_samples=lsm_max_frequency_samples,
+        lsm_refine_samples=lsm_refine_samples,
+        lsm_refine_rounds=lsm_refine_rounds,
+    )
+    best_candidate: _LSMCandidate | None = None
+    if solution.period_days is not None and solution.power is not None:
+        frequency = 1.0 / float(solution.period_days)
+        amplitude_mag = solution.amplitude_mag
+        best_candidate = _LSMCandidate(
+            frequency=float(frequency),
+            period_days=float(solution.period_days),
+            power=float(solution.power),
+            coeffs=np.zeros(4, dtype=np.float64),
+            n_maxima=2 if solution.is_reliable else None,
+            n_minima=2 if solution.is_reliable else None,
+            amplitude_mag=None if amplitude_mag is None else float(amplitude_mag),
         )
-        if best_fit is not None:
-            candidate_fits[int(order)] = best_fit
+    return _LSMMethodResult(
+        best_candidate=best_candidate,
+        power_gap=None if solution.power_gap is None else float(solution.power_gap),
+        candidate_period_days=list(solution.candidate_period_days),
+        candidate_powers=list(solution.candidate_powers),
+        is_reliable=bool(solution.is_reliable),
+        amplitude_mag=None if solution.amplitude_mag is None else float(solution.amplitude_mag),
+        n_fit_observations=int(solution.n_fit_observations),
+        n_clipped=int(solution.n_clipped),
+    )
 
-    if not candidate_fits:
-        return None
-    return _select_order(candidate_fits, order_selection_p_value)
+
+def _build_fourier_result(
+    *,
+    chosen_fit: _FitResult,
+    order_grid_results: dict[int, tuple[npt.NDArray[np.float64], dict[int, _FitResult]]],
+    frequencies: npt.NDArray[np.float64],
+    profile: _FourierProfile,
+    used_grid_fallback: bool,
+) -> _FourierMethodResult:
+    scores, fits_by_index = order_grid_results[int(chosen_fit.fourier_order)]
+    sigma_threshold = float(_sigma_threshold_for_confidence(chosen_fit, profile.sigma_threshold_confidence))
+    accepted_indices = np.flatnonzero(np.isfinite(scores) & (scores <= sigma_threshold))
+    if accepted_indices.size == 0:
+        accepted_indices = np.asarray(
+            [int(np.nanargmin(np.asarray(scores, dtype=np.float64)))],
+            dtype=np.int64,
+        )
+    fits: list[_FitResult | None] = [fits_by_index.get(int(idx)) for idx in range(len(frequencies))]
+    clusters = _cluster_fourier_solutions(
+        fits=fits,
+        accepted_indices=accepted_indices,
+        sigma_threshold=sigma_threshold,
+        frequencies=frequencies,
+    )
+    best_period = _fit_with_period(chosen_fit)
+    primary = next(
+        (
+            cluster
+            for cluster in clusters
+            if any(
+                fits_by_index.get(int(idx)) is chosen_fit
+                or (
+                    fits_by_index.get(int(idx)) is not None
+                    and abs(float(fits_by_index[int(idx)].frequency) - float(chosen_fit.frequency)) <= 1.0e-12
+                )
+                for idx in cluster.indices.tolist()
+            )
+        ),
+        clusters[0],
+    )
+    relative_uncertainty = _relative_period_uncertainty(
+        best_period.period_days,
+        float(primary.period_lower_days),
+        float(primary.period_upper_days),
+    )
+    alternate_period_days = [
+        float(cluster.best.period_days)
+        for cluster in clusters
+        if cluster is not primary
+    ]
+    is_valid = True
+    if profile.valid_relative_uncertainty_max is not None:
+        is_valid = bool(relative_uncertainty <= float(profile.valid_relative_uncertainty_max))
+    is_reliable = is_valid
+    if profile.reliable_relative_multiplier is not None and profile.reliable_absolute_hours is not None:
+        uncertainty_days = _max_cluster_period_deviation(best_period.period_days, clusters)
+        is_reliable = bool(
+            uncertainty_days <= max(
+                float(profile.reliable_relative_multiplier) * best_period.period_days,
+                float(profile.reliable_absolute_hours) / 24.0,
+            )
+        )
+    return _FourierMethodResult(
+        chosen_fit=chosen_fit,
+        best_period=best_period,
+        sigma_threshold=sigma_threshold,
+        period_lower_days=float(primary.period_lower_days),
+        period_upper_days=float(primary.period_upper_days),
+        relative_period_uncertainty=float(relative_uncertainty),
+        alternate_period_days=alternate_period_days,
+        is_valid=bool(is_valid),
+        is_reliable=bool(is_reliable),
+        amplitude_mag=float(_amplitude_from_fit(chosen_fit)),
+        used_grid_fallback=bool(used_grid_fallback),
+    )
+
+
+def _normalize_method_weights(raw_weights: list[float]) -> list[float]:
+    total = float(sum(max(0.0, weight) for weight in raw_weights))
+    if total <= 0.0:
+        return [0.0 for _ in raw_weights]
+    return [float(max(0.0, weight) / total) for weight in raw_weights]
+
+
+def _best_harmonic_factor(
+    period_a: float,
+    period_b: float,
+    harmonic_period_factors: tuple[float, ...],
+) -> tuple[float, float]:
+    if period_a <= 0.0 or period_b <= 0.0 or not np.isfinite(period_a) or not np.isfinite(period_b):
+        return 1.0, float("inf")
+    best_factor = 1.0
+    best_mismatch = float("inf")
+    for factor in harmonic_period_factors:
+        mismatch = float(abs(period_a * factor - period_b) / max(abs(period_b), np.finfo(np.float64).eps))
+        if mismatch < best_mismatch:
+            best_mismatch = mismatch
+            best_factor = float(factor)
+    return float(best_factor), float(best_mismatch)
+
+
+def _is_simple_harmonic_factor(factor: float) -> bool:
+    return any(abs(float(factor) - simple) <= 1.0e-12 for simple in _SIMPLE_HARMONIC_FACTORS)
+
+
+def _family_match(period_a: float, period_b: float, harmonic_period_factors: tuple[float, ...]) -> bool:
+    return _harmonic_relative_mismatch(
+        period_a,
+        period_b,
+        harmonic_period_factors=harmonic_period_factors,
+    ) <= _LSM_FAMILY_TOLERANCE
+
+
+def _build_hybrid_families(
+    *,
+    fourier_solution: _FourierSolution,
+    lsm_solution: _LSMSolution,
+    harmonic_period_factors: tuple[float, ...],
+) -> list[_MethodFamily]:
+    families: list[_MethodFamily] = []
+    fourier_primary_period = float(fourier_solution.chosen.period_days)
+    lsm_primary_period = None if lsm_solution.period_days is None else float(lsm_solution.period_days)
+
+    for cluster in fourier_solution.clusters:
+        period = float(cluster.best.period_days)
+        match = next(
+            (
+                family
+                for family in families
+                if _family_match(period, family.representative_period_days, harmonic_period_factors)
+            ),
+            None,
+        )
+        if match is None:
+            match = _MethodFamily(representative_period_days=period)
+            families.append(match)
+        if match.fourier_cluster is None or cluster.raw_weight > match.fourier_cluster.raw_weight:
+            match.fourier_cluster = cluster
+            match.representative_period_days = period
+        if _family_match(period, fourier_primary_period, harmonic_period_factors):
+            match.contains_fourier_primary = True
+
+    lsm_candidates = [
+        _LSMCandidate(period_days=float(period), power=float(power), coeffs=np.zeros(4, dtype=np.float64))
+        for period, power in zip(lsm_solution.candidate_period_days, lsm_solution.candidate_powers, strict=True)
+    ]
+    for candidate in lsm_candidates:
+        period = float(candidate.period_days)
+        match = next(
+            (
+                family
+                for family in families
+                if _family_match(period, family.representative_period_days, harmonic_period_factors)
+            ),
+            None,
+        )
+        if match is None:
+            match = _MethodFamily(representative_period_days=period)
+            families.append(match)
+        if match.lsm_candidate is None or candidate.power > match.lsm_candidate.power:
+            match.lsm_candidate = candidate
+        if lsm_primary_period is not None and _family_match(period, lsm_primary_period, harmonic_period_factors):
+            match.contains_lsm_primary = True
+
+    fourier_raw = [0.0 if family.fourier_cluster is None else float(family.fourier_cluster.raw_weight) for family in families]
+    lsm_best_power = max((float(candidate.power) for candidate in lsm_candidates), default=0.0)
+    lsm_raw = [
+        0.0
+        if family.lsm_candidate is None or lsm_best_power <= 0.0
+        else float(family.lsm_candidate.power) / lsm_best_power
+        for family in families
+    ]
+    fourier_norm = _normalize_method_weights(fourier_raw)
+    lsm_norm = _normalize_method_weights(lsm_raw)
+    for family, wf, wl in zip(families, fourier_norm, lsm_norm, strict=True):
+        family.family_weight_fourier = float(wf)
+        family.family_weight_lsm = float(wl)
+        family.combined_weight = float(0.5 * wf + 0.5 * wl)
+    families.sort(key=lambda family: float(family.combined_weight), reverse=True)
+    return families
+
+
+def _data_sufficiency_gate(
+    *,
+    filter_labels: npt.NDArray[np.object_],
+    amplitude_mag: float | None,
+) -> bool:
+    if amplitude_mag is None or not np.isfinite(amplitude_mag) or amplitude_mag < 0.1:
+        return False
+    unique_filters = _ordered_unique(filter_labels)
+    counts = sorted(
+        [int(np.count_nonzero(filter_labels == label)) for label in unique_filters],
+        reverse=True,
+    )
+    if len(counts) >= 2:
+        return bool(counts[0] >= 30 and counts[1] >= 30)
+    return bool(counts and counts[0] >= 30)
+
+
+def _single_method_decision_confidence_label(*, is_reliable: bool, is_valid: bool) -> str:
+    if is_reliable:
+        return "high"
+    if is_valid:
+        return "medium"
+    return "low"
+
+
+def _hybrid_decision_confidence_label(
+    *,
+    selected_method_reliable: bool,
+    selected_method_valid: bool,
+    agreement_class: str,
+    selected_period_is_method_primary: bool,
+    selected_has_unresolved_alternates: bool,
+) -> str:
+    if not selected_method_valid or not selected_method_reliable:
+        return "low"
+    if agreement_class == "consensus":
+        if not selected_period_is_method_primary or selected_has_unresolved_alternates:
+            return "medium"
+        return "high"
+    if agreement_class == "method_dominant":
+        return "medium"
+    if agreement_class == "weak_consensus":
+        return "medium"
+    return "low"
+
+
+def _periods_close(period_a: float | None, period_b: float | None) -> bool:
+    if period_a is None or period_b is None:
+        return False
+    if not np.isfinite(period_a) or not np.isfinite(period_b):
+        return False
+    return bool(abs(float(period_a) - float(period_b)) <= 1.0e-10 * max(1.0, abs(period_a), abs(period_b)))
+
+
+def _primary_from_method(
+    *,
+    method_mode: str,
+    fourier_solution: _FourierSolution,
+    lsm_solution: _LSMSolution,
+    families: list[_MethodFamily],
+    harmonic_period_factors: tuple[float, ...],
+    filter_labels: npt.NDArray[np.object_],
+) -> dict[str, object]:
+    if method_mode == "fourier":
+        amplitude_mag = float(fourier_solution.amplitude_mag)
+        decision_confidence_label = _single_method_decision_confidence_label(
+            is_reliable=bool(fourier_solution.is_reliable),
+            is_valid=bool(fourier_solution.is_valid),
+        )
+        return {
+            "primary_method": "fourier",
+            "period_days": float(fourier_solution.chosen.period_days),
+            "period_lower_days": float(fourier_solution.period_lower_days),
+            "period_upper_days": float(fourier_solution.period_upper_days),
+            "relative_period_uncertainty": float(fourier_solution.relative_period_uncertainty),
+            "alternate_period_days": list(fourier_solution.alternate_period_days),
+            "decision_confidence_label": decision_confidence_label,
+            "is_valid": bool(fourier_solution.is_valid),
+            "is_reliable": bool(
+                fourier_solution.is_reliable
+                and _data_sufficiency_gate(filter_labels=filter_labels, amplitude_mag=amplitude_mag)
+                and decision_confidence_label != "low"
+            ),
+            "method_agreement_class": None,
+            "decision_margin": None,
+            "decision_support_count": 1,
+            "winner_contains_fourier_primary": True,
+            "winner_contains_lsm_primary": False,
+            "family_weight_fourier": 1.0,
+            "family_weight_lsm": 0.0,
+            "selected_method_amplitude_mag": amplitude_mag,
+        }
+
+    if method_mode == "lsm":
+        period_days = lsm_solution.period_days
+        if period_days is None:
+            return {
+                "primary_method": "lsm",
+                "period_days": float("nan"),
+                "period_lower_days": None,
+                "period_upper_days": None,
+                "relative_period_uncertainty": None,
+                "alternate_period_days": [],
+                "decision_confidence_label": "low",
+                "is_valid": False,
+                "is_reliable": False,
+                "method_agreement_class": None,
+                "decision_margin": None,
+                "decision_support_count": 0,
+                "winner_contains_fourier_primary": False,
+                "winner_contains_lsm_primary": False,
+                "family_weight_fourier": 0.0,
+                "family_weight_lsm": 1.0,
+                "selected_method_amplitude_mag": None,
+            }
+        amplitude_mag = lsm_solution.amplitude_mag
+        decision_confidence_label = _single_method_decision_confidence_label(
+            is_reliable=bool(lsm_solution.is_reliable),
+            is_valid=bool(period_days is not None),
+        )
+        alternate_periods = list(lsm_solution.candidate_period_days[1:])
+        return {
+            "primary_method": "lsm",
+            "period_days": float(period_days),
+            "period_lower_days": None,
+            "period_upper_days": None,
+            "relative_period_uncertainty": None,
+            "alternate_period_days": alternate_periods,
+            "decision_confidence_label": decision_confidence_label,
+            "is_valid": bool(period_days is not None),
+            "is_reliable": bool(
+                lsm_solution.is_reliable
+                and _data_sufficiency_gate(filter_labels=filter_labels, amplitude_mag=amplitude_mag)
+                and decision_confidence_label != "low"
+            ),
+            "method_agreement_class": None,
+            "decision_margin": None,
+            "decision_support_count": 1,
+            "winner_contains_fourier_primary": False,
+            "winner_contains_lsm_primary": True,
+            "family_weight_fourier": 0.0,
+            "family_weight_lsm": 1.0,
+            "selected_method_amplitude_mag": amplitude_mag,
+        }
+
+    if not families:
+        raise ValueError("hybrid mode requires at least one method family")
+    ordered_candidates = sorted(
+        families,
+        key=lambda family: float(family.combined_weight),
+        reverse=True,
+    )
+    winner = ordered_candidates[0]
+    runner_up_weight = max(
+        (
+            float(candidate.combined_weight)
+            for candidate in ordered_candidates
+            if candidate is not winner
+        ),
+        default=0.0,
+    )
+    winner_weight = float(winner.combined_weight)
+    support_count = int(winner.fourier_cluster is not None) + int(winner.lsm_candidate is not None)
+    fourier_weight = float(winner.family_weight_fourier)
+    lsm_weight = float(winner.family_weight_lsm)
+
+    if winner.fourier_cluster is not None and (
+        winner.lsm_candidate is None or fourier_weight >= lsm_weight
+    ):
+        selected_method = "fourier"
+        selected_cluster = winner.fourier_cluster
+        period_days = float(selected_cluster.best.period_days)
+        period_lower_days = float(selected_cluster.period_lower_days)
+        period_upper_days = float(selected_cluster.period_upper_days)
+        relative_uncertainty = _relative_period_uncertainty(
+            period_days,
+            period_lower_days,
+            period_upper_days,
+        )
+        alternate_period_days = [
+            float(cluster.best.period_days)
+            for cluster in fourier_solution.clusters
+            if cluster is not selected_cluster
+        ]
+        selected_method_reliable = bool(fourier_solution.is_reliable)
+        selected_method_valid = bool(fourier_solution.is_valid)
+        selected_amplitude = float(fourier_solution.amplitude_mag)
+        selected_period_is_method_primary = bool(selected_cluster is fourier_solution.primary_cluster)
+        selected_has_unresolved_alternates = bool(alternate_period_days)
+    elif winner.lsm_candidate is not None:
+        selected_method = "lsm"
+        selected_candidate = winner.lsm_candidate
+        period_days = float(selected_candidate.period_days)
+        period_lower_days = None
+        period_upper_days = None
+        relative_uncertainty = None
+        alternate_period_days = [
+            float(candidate_period)
+            for candidate_period in lsm_solution.candidate_period_days
+            if not _periods_close(float(candidate_period), period_days)
+        ]
+        selected_method_reliable = bool(lsm_solution.is_reliable)
+        selected_method_valid = bool(np.isfinite(period_days) and period_days > 0.0)
+        selected_amplitude = None if lsm_solution.amplitude_mag is None else float(lsm_solution.amplitude_mag)
+        selected_period_is_method_primary = _periods_close(lsm_solution.period_days, period_days)
+        selected_has_unresolved_alternates = bool(alternate_period_days)
+    else:
+        raise ValueError("winning family has no method support")
+
+    gap = float(max(0.0, winner_weight - runner_up_weight))
+    if support_count == 2:
+        agreement_class = "consensus" if gap >= 0.25 else "weak_consensus"
+    elif selected_method_reliable:
+        agreement_class = "method_dominant"
+    else:
+        agreement_class = "conflict"
+
+    decision_confidence_label = _hybrid_decision_confidence_label(
+        selected_method_reliable=bool(selected_method_reliable),
+        selected_method_valid=bool(selected_method_valid),
+        agreement_class=agreement_class,
+        selected_period_is_method_primary=bool(selected_period_is_method_primary),
+        selected_has_unresolved_alternates=bool(selected_has_unresolved_alternates),
+    )
+
+    is_reliable = bool(
+        selected_method_reliable
+        and _data_sufficiency_gate(filter_labels=filter_labels, amplitude_mag=selected_amplitude)
+        and decision_confidence_label != "low"
+    )
+
+    return {
+        "primary_method": selected_method,
+        "period_days": float(period_days),
+        "period_lower_days": None if period_lower_days is None else float(period_lower_days),
+        "period_upper_days": None if period_upper_days is None else float(period_upper_days),
+        "relative_period_uncertainty": (
+            None if relative_uncertainty is None else float(relative_uncertainty)
+        ),
+        "alternate_period_days": alternate_period_days,
+        "decision_confidence_label": decision_confidence_label,
+        "is_valid": bool(selected_method_valid),
+        "is_reliable": bool(is_reliable),
+        "method_agreement_class": agreement_class,
+        "decision_margin": float(gap),
+        "decision_support_count": int(support_count),
+        "winner_contains_fourier_primary": bool(winner.contains_fourier_primary),
+        "winner_contains_lsm_primary": bool(winner.contains_lsm_primary),
+        "family_weight_fourier": float(fourier_weight),
+        "family_weight_lsm": float(lsm_weight),
+        "selected_method_amplitude_mag": selected_amplitude,
+    }
 
 
 def estimate_rotation_period(
     observations: RotationPeriodObservations,
     *,
-    fourier_orders: tuple[int, ...] = (2, 3, 4),
+    method_mode: str = "hybrid",
+    paper_profile: str = "greenstreet_2026",
+    search_fidelity: str | None = None,
+    search_strategy: str | None = None,
+    fourier_orders: tuple[int, ...] | None = None,
     clip_sigma: float = 3.0,
-    order_selection_p_value: float = 0.05,
     min_rotations_in_span: float = 2.0,
     max_frequency_cycles_per_day: float = 1000.0,
     frequency_grid_scale: float = 30.0,
-    search_strategy: str = "surrogate_refine",
     exact_evaluation_backend: str = "numpy",
+    jax_frequency_batch_size: int = _DEFAULT_JAX_FREQUENCY_BATCH_SIZE,
+    jax_row_pad_multiple: int = _DEFAULT_JAX_ROW_PAD_MULTIPLE,
     max_processes: int | None = None,
     parallel_chunk_size: int | None = None,
-    jax_frequency_batch_size: int = 256,
-    jax_row_pad_multiple: int = 64,
-    jax_max_clip_iterations: int = 3,
     session_mode: str = "auto",
     auto_session_min_observations_per_group: int = 6,
     auto_session_max_period_to_session_span_ratio: float = 1.0,
     auto_session_bic_improvement: float = 10.0,
-    enable_harmonic_adjudication: bool = True,
-    harmonic_period_factors: tuple[float, ...] = (
-        0.5,
-        2.0 / 3.0,
-        0.75,
-        1.0,
-        4.0 / 3.0,
-        1.5,
-        2.0,
-        3.0,
-        4.0,
-    ),
-    harmonic_sigma_tolerance_mag: float = 0.05,
-    harmonic_identity_tolerance: float = 0.02,
-    harmonic_refinement_window: int = 8,
-    harmonic_grid_fallback_on_near_tie: bool = True,
-    grid_fallback_refinement_window: int = 64,
-    enable_global_near_tie_check: bool = True,
-    global_near_tie_max_samples: int = 4096,
-    global_near_tie_candidate_count: int = 8,
-    global_near_tie_refinement_window: int = 8,
-    enable_window_alias_check: bool = True,
-    window_alias_frequency_offsets: tuple[float, ...] = (1.0, 2.0),
-    window_alias_refinement_window: int = 16,
-    enable_lsm_crosscheck: bool = True,
-    lsm_harmonic_tolerance: float = 0.05,
-    lsm_max_frequency_samples: int = 4096,
-    lsm_refine_samples: int = 512,
-    lsm_refine_rounds: int = 2,
+    harmonic_period_factors: tuple[float, ...] = _DEFAULT_HARMONIC_PERIOD_FACTORS,
+    lsm_max_frequency_samples: int = _LSM_DEFAULT_MAX_SAMPLES,
+    lsm_refine_samples: int = _LSM_DEFAULT_REFINE_SAMPLES,
+    lsm_refine_rounds: int = _LSM_DEFAULT_REFINE_ROUNDS,
 ) -> RotationPeriodResult:
-    """
-    Estimate a rotation period from reduced photometric observations using a
-    high-order Fourier search.
-
-    Default compute path rationale:
-    - `search_strategy="surrogate_refine"` is the expected efficient default for
-      wide searches because it keeps paper-like coverage while avoiding exhaustive
-      evaluation of every sampled frequency.
-    - `fourier_orders=(2,3,4)` is the expected robust default for this pipeline:
-      it reduces high-order overfitting and alias preference while preserving
-      recovery accuracy on synthetic and real fixtures.
-    - `exact_evaluation_backend="numpy"` is the expected efficient default for
-      one-off/library calls because JAX has nontrivial first-call compile overhead.
-      Use `exact_evaluation_backend="jax"` in warm, repeated workloads.
-    """
+    del max_processes, parallel_chunk_size
+    if method_mode not in {"fourier", "lsm", "hybrid"}:
+        raise ValueError("method_mode must be one of {'fourier', 'lsm', 'hybrid'}")
     if clip_sigma <= 0.0:
         raise ValueError("clip_sigma must be positive")
-    if order_selection_p_value <= 0.0 or order_selection_p_value >= 1.0:
-        raise ValueError("order_selection_p_value must be in (0, 1)")
     if min_rotations_in_span <= 0.0:
         raise ValueError("min_rotations_in_span must be positive")
     if max_frequency_cycles_per_day <= 0.0:
         raise ValueError("max_frequency_cycles_per_day must be positive")
     if frequency_grid_scale <= 0.0:
         raise ValueError("frequency_grid_scale must be positive")
-    if search_strategy not in {"grid", "surrogate_refine", "coarse_to_fine"}:
-        raise ValueError(
-            "search_strategy must be one of {'grid', 'surrogate_refine', 'coarse_to_fine'}"
-        )
-    if exact_evaluation_backend not in {"numpy", "jax"}:
-        raise ValueError("exact_evaluation_backend must be one of {'numpy', 'jax'}")
-    if max_processes is not None and max_processes <= 0:
-        raise ValueError("max_processes must be positive when provided")
-    if parallel_chunk_size is not None and parallel_chunk_size <= 0:
-        raise ValueError("parallel_chunk_size must be positive when provided")
-    if jax_frequency_batch_size <= 0:
-        raise ValueError("jax_frequency_batch_size must be positive")
-    if jax_row_pad_multiple <= 0:
-        raise ValueError("jax_row_pad_multiple must be positive")
-    if jax_max_clip_iterations <= 0:
-        raise ValueError("jax_max_clip_iterations must be positive")
     if session_mode not in {"ignore", "use", "auto"}:
         raise ValueError("session_mode must be one of {'ignore', 'use', 'auto'}")
     if auto_session_min_observations_per_group <= 0:
@@ -1338,44 +1660,17 @@ def estimate_rotation_period(
         raise ValueError("auto_session_max_period_to_session_span_ratio must be positive")
     if auto_session_bic_improvement < 0.0:
         raise ValueError("auto_session_bic_improvement must be non-negative")
-    if harmonic_sigma_tolerance_mag < 0.0:
-        raise ValueError("harmonic_sigma_tolerance_mag must be non-negative")
-    if harmonic_identity_tolerance < 0.0:
-        raise ValueError("harmonic_identity_tolerance must be non-negative")
-    if harmonic_refinement_window < 0:
-        raise ValueError("harmonic_refinement_window must be non-negative")
-    if grid_fallback_refinement_window <= 0:
-        raise ValueError("grid_fallback_refinement_window must be positive")
-    if global_near_tie_max_samples <= 0:
-        raise ValueError("global_near_tie_max_samples must be positive")
-    if global_near_tie_candidate_count <= 0:
-        raise ValueError("global_near_tie_candidate_count must be positive")
-    if global_near_tie_refinement_window < 0:
-        raise ValueError("global_near_tie_refinement_window must be non-negative")
-    if window_alias_refinement_window <= 0:
-        raise ValueError("window_alias_refinement_window must be positive")
-    if lsm_harmonic_tolerance < 0.0:
-        raise ValueError("lsm_harmonic_tolerance must be non-negative")
-    if lsm_max_frequency_samples <= 0:
-        raise ValueError("lsm_max_frequency_samples must be positive")
-    if lsm_refine_samples <= 0:
-        raise ValueError("lsm_refine_samples must be positive")
-    if lsm_refine_rounds < 0:
-        raise ValueError("lsm_refine_rounds must be non-negative")
-
-    orders = sorted({int(order) for order in fourier_orders})
-    if not orders:
-        raise ValueError("fourier_orders must be non-empty")
-    if any(order < 2 for order in orders):
-        raise ValueError("fourier_orders must be >= 2")
-    if len(harmonic_period_factors) == 0:
-        raise ValueError("harmonic_period_factors must be non-empty")
-    if any(float(factor) <= 0.0 for factor in harmonic_period_factors):
-        raise ValueError("harmonic_period_factors must all be positive")
-    if len(window_alias_frequency_offsets) == 0:
-        raise ValueError("window_alias_frequency_offsets must be non-empty")
-    if any(float(offset) <= 0.0 for offset in window_alias_frequency_offsets):
-        raise ValueError("window_alias_frequency_offsets must all be positive")
+    if exact_evaluation_backend not in {"numpy", "jax"}:
+        raise ValueError("exact_evaluation_backend must be one of {'numpy', 'jax'}")
+    if jax_frequency_batch_size <= 0:
+        raise ValueError("jax_frequency_batch_size must be positive")
+    if jax_row_pad_multiple <= 0:
+        raise ValueError("jax_row_pad_multiple must be positive")
+    resolved_fidelity = _resolve_search_fidelity(
+        search_fidelity=search_fidelity,
+        search_strategy=search_strategy,
+    )
+    profile = _resolve_paper_profile(paper_profile)
 
     (
         time,
@@ -1386,376 +1681,218 @@ def estimate_rotation_period(
         filter_labels,
         session_labels,
         mag_sigma,
+        predicted_mag_v,
     ) = _validate_inputs(observations)
 
-    y = mag - 5.0 * np.log10(r_au * delta_au)
-    time_rel = time - float(np.min(time))
-    span = float(np.max(time_rel) - np.min(time_rel))
-    if not np.isfinite(span) or span <= 0.0:
+    time_lt = _apply_light_time_correction(time, delta_au)
+    t_rel = np.asarray(time_lt - float(np.min(time_lt)), dtype=np.float64)
+    span_days = float(np.max(t_rel) - np.min(t_rel))
+    if not np.isfinite(span_days) or span_days <= 0.0:
         raise ValueError("observation time span must be positive")
-
-    f_min = float(min_rotations_in_span / span)
-    f_max = float(max_frequency_cycles_per_day)
-    if not np.isfinite(f_min) or f_min <= 0.0:
-        raise ValueError("derived minimum frequency is invalid")
-    if f_max <= f_min:
-        raise ValueError("max_frequency_cycles_per_day must exceed the minimum searchable frequency")
-
-    n_freq = int(ceil(frequency_grid_scale * span * (f_max - f_min)) + 1)
-    n_freq = max(n_freq, 2)
-    frequencies = np.linspace(f_min, f_max, n_freq, dtype=np.float64)
-
-    valid_sigma = mag_sigma is not None and np.all(np.isfinite(mag_sigma)) and np.all(mag_sigma > 0.0)
-    weights = None if not valid_sigma else 1.0 / np.square(np.asarray(mag_sigma, dtype=np.float64))
-    session_summary = _summarize_sessions(time, filter_labels, session_labels)
-
-    baseline = _run_period_search(
-        time_rel=time_rel,
-        y=y,
-        phase_angle=phase_angle,
-        filter_labels=filter_labels,
-        session_labels=None,
-        weights=weights,
-        orders=orders,
-        frequencies=frequencies,
-        clip_sigma=clip_sigma,
-        order_selection_p_value=order_selection_p_value,
-        search_strategy=search_strategy,
-        max_processes=max_processes,
-        parallel_chunk_size=parallel_chunk_size,
-        exact_evaluation_backend=exact_evaluation_backend,
-        jax_frequency_batch_size=jax_frequency_batch_size,
-        jax_row_pad_multiple=jax_row_pad_multiple,
-        jax_max_clip_iterations=jax_max_clip_iterations,
+    reduced_mag = np.asarray(mag - 5.0 * np.log10(r_au * delta_au), dtype=np.float64)
+    weights = _weights_from_sigma(mag_sigma)
+    session_summary = _summarize_sessions(time_lt, filter_labels, session_labels)
+    frequencies = _build_frequency_grid(
+        span_days=span_days,
+        min_rotations_in_span=min_rotations_in_span,
+        max_frequency_cycles_per_day=max_frequency_cycles_per_day,
+        frequency_grid_scale=frequency_grid_scale,
     )
-    chosen = baseline
+
+    base_design = _build_fixed_design(filter_labels, None, phase_angle)
+    baseline_fourier = _derive_fourier_solution(
+        t_rel=t_rel,
+        y=reduced_mag,
+        design_info=base_design,
+        frequencies=frequencies,
+        weights=weights,
+        clip_sigma=clip_sigma,
+        profile=profile,
+        search_fidelity=resolved_fidelity,
+        exact_evaluation_backend=exact_evaluation_backend,
+        jax_frequency_batch_size=int(jax_frequency_batch_size),
+        jax_row_pad_multiple=int(jax_row_pad_multiple),
+        used_session_offsets=False,
+        fourier_orders=fourier_orders,
+    )
+    fourier_solution = baseline_fourier
     used_session_offsets = False
 
-    if session_mode == "use":
-        if session_labels is not None:
-            chosen = _run_period_search(
-                time_rel=time_rel,
-                y=y,
-                phase_angle=phase_angle,
-                filter_labels=filter_labels,
-                session_labels=session_labels,
-                weights=weights,
-                orders=orders,
-                frequencies=frequencies,
-                clip_sigma=clip_sigma,
-                order_selection_p_value=order_selection_p_value,
-                search_strategy=search_strategy,
-                max_processes=max_processes,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
-            )
-            used_session_offsets = True
-    elif session_mode == "auto" and session_labels is not None and session_summary.n_sessions >= 2:
-        baseline_period_days = 1.0 / baseline.frequency
-        session_eligible = (
-            session_summary.min_group_count >= auto_session_min_observations_per_group
-            and session_summary.median_session_span_days > 0.0
-            and baseline_period_days
-            <= (
-                auto_session_max_period_to_session_span_ratio
-                * session_summary.median_session_span_days
-            )
+    if session_labels is not None and session_mode in {"use", "auto"}:
+        session_design = _build_fixed_design(filter_labels, session_labels, phase_angle)
+        session_fourier = _derive_fourier_solution(
+            t_rel=t_rel,
+            y=reduced_mag,
+            design_info=session_design,
+            frequencies=frequencies,
+            weights=weights,
+            clip_sigma=clip_sigma,
+            profile=profile,
+            search_fidelity=resolved_fidelity,
+            exact_evaluation_backend=exact_evaluation_backend,
+            jax_frequency_batch_size=int(jax_frequency_batch_size),
+            jax_row_pad_multiple=int(jax_row_pad_multiple),
+            used_session_offsets=True,
+            fourier_orders=fourier_orders,
         )
-        if session_eligible:
-            session_fit = _run_period_search(
-                time_rel=time_rel,
-                y=y,
-                phase_angle=phase_angle,
-                filter_labels=filter_labels,
-                session_labels=session_labels,
-                weights=weights,
-                orders=orders,
-                frequencies=frequencies,
-                clip_sigma=clip_sigma,
-                order_selection_p_value=order_selection_p_value,
-                search_strategy=search_strategy,
-                max_processes=max_processes,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
+        if session_mode == "use":
+            fourier_solution = session_fourier
+            used_session_offsets = True
+        else:
+            session_eligible = bool(
+                session_summary.n_sessions >= 2
+                and session_summary.min_group_count >= auto_session_min_observations_per_group
+                and session_summary.median_session_span_days > 0.0
+                and session_fourier.chosen.period_days
+                <= auto_session_max_period_to_session_span_ratio * session_summary.median_session_span_days
             )
-            if _fit_bic(session_fit) + auto_session_bic_improvement < _fit_bic(baseline):
-                chosen = session_fit
+            if session_eligible and (
+                _fit_bic(session_fourier.fit_summary) + auto_session_bic_improvement
+                < _fit_bic(baseline_fourier.fit_summary)
+            ):
+                fourier_solution = session_fourier
                 used_session_offsets = True
 
-    active_session_labels = session_labels if used_session_offsets else None
-    design_info_active = _build_fixed_design(filter_labels, active_session_labels, phase_angle)
-    adjudication = _HarmonicAdjudication(
-        selected=_fit_with_period(chosen),
-        near_tie_candidates=0,
-        had_near_tie=False,
+    lsm_solution = _LSMSolution(
+        period_days=None,
+        power=None,
+        power_gap=None,
+        candidate_period_days=[],
+        candidate_powers=[],
+        is_reliable=False,
+        amplitude_mag=None,
+        n_fit_observations=0,
+        n_clipped=0,
     )
-    if enable_harmonic_adjudication:
-        adjudication = _adjudicate_harmonic_aliases(
-            chosen_fit=chosen,
-            time_rel=time_rel,
-            y=y,
-            design_info=design_info_active,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            harmonic_period_factors=harmonic_period_factors,
-            harmonic_sigma_tolerance_mag=harmonic_sigma_tolerance_mag,
-            harmonic_identity_tolerance=harmonic_identity_tolerance,
-            harmonic_refinement_window=harmonic_refinement_window,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-
-    lsm_frequency: float | None = None
-    if enable_lsm_crosscheck:
-        lsm_frequency = _estimate_lsm_frequency(
-            time_rel=time_rel,
-            y=y,
+    if method_mode in {"lsm", "hybrid"}:
+        lsm_result = _run_lsm(
+            t_rel=t_rel,
+            mag=mag,
+            reduced_mag=reduced_mag,
+            predicted_mag_v=predicted_mag_v,
+            phase_angle=phase_angle,
             filter_labels=filter_labels,
             weights=weights,
-            f_min=f_min,
-            f_max=f_max,
             lsm_max_frequency_samples=lsm_max_frequency_samples,
             lsm_refine_samples=lsm_refine_samples,
             lsm_refine_rounds=lsm_refine_rounds,
         )
+        lsm_solution = _LSMSolution(
+            period_days=None if lsm_result.best_candidate is None else float(lsm_result.best_candidate.period_days),
+            power=None if lsm_result.best_candidate is None else float(lsm_result.best_candidate.power),
+            power_gap=None if lsm_result.power_gap is None else float(lsm_result.power_gap),
+            candidate_period_days=list(lsm_result.candidate_period_days),
+            candidate_powers=list(lsm_result.candidate_powers),
+            is_reliable=bool(lsm_result.is_reliable),
+            amplitude_mag=None if lsm_result.amplitude_mag is None else float(lsm_result.amplitude_mag),
+            n_fit_observations=int(len(observations))
+            if lsm_result.n_fit_observations is None
+            else int(lsm_result.n_fit_observations),
+            n_clipped=int(lsm_result.n_clipped),
+        )
 
-    def _compute_lsm_summary(
-        current_period_days: float,
-    ) -> tuple[float | None, float | None, float | None, bool | None]:
-        if lsm_frequency is None or not np.isfinite(lsm_frequency) or lsm_frequency <= 0.0:
-            return None, None, None, None
-        lsm_period_days_local = float(1.0 / lsm_frequency)
-        lsm_period_hours_local = float(lsm_period_days_local * 24.0)
-        lsm_mismatch = _harmonic_relative_mismatch(
-            current_period_days,
-            lsm_period_days_local,
+    families = (
+        _build_hybrid_families(
+            fourier_solution=fourier_solution,
+            lsm_solution=lsm_solution,
             harmonic_period_factors=harmonic_period_factors,
         )
-        lsm_agreement_local = bool(lsm_mismatch <= lsm_harmonic_tolerance)
-        return (
-            lsm_period_days_local,
-            lsm_period_hours_local,
-            float(lsm_frequency),
-            lsm_agreement_local,
-        )
-
-    (
-        lsm_period_days,
-        lsm_period_hours,
-        lsm_frequency_cycles_per_day,
-        lsm_harmonic_agreement,
-    ) = _compute_lsm_summary(adjudication.selected.period_days)
-
-    used_grid_fallback = False
-    if (
-        harmonic_grid_fallback_on_near_tie
-        and search_strategy != "grid"
-        and (
-            adjudication.had_near_tie
-            or (enable_lsm_crosscheck and lsm_harmonic_agreement is False)
-        )
-    ):
-        target_periods = [
-            float(adjudication.selected.period_days * factor)
-            for factor in sorted({1.0, *[float(value) for value in harmonic_period_factors]})
-            if float(adjudication.selected.period_days * factor) > 0.0
-        ]
-        grid_fit = _run_period_search_targeted_grid(
-            time_rel=time_rel,
-            y=y,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            session_labels=active_session_labels,
-            weights=weights,
-            orders=orders,
-            frequencies=frequencies,
-            target_period_days=target_periods,
-            target_window_indices=grid_fallback_refinement_window,
-            clip_sigma=clip_sigma,
-            order_selection_p_value=order_selection_p_value,
-            max_processes=max_processes,
-            parallel_chunk_size=parallel_chunk_size,
-            exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=jax_frequency_batch_size,
-            jax_row_pad_multiple=jax_row_pad_multiple,
-            jax_max_clip_iterations=jax_max_clip_iterations,
-        )
-        if grid_fit is None:
-            grid_fit = _run_period_search_grid(
-                time_rel=time_rel,
-                y=y,
-                phase_angle=phase_angle,
-                filter_labels=filter_labels,
-                session_labels=active_session_labels,
-                weights=weights,
-                orders=orders,
-                frequencies=frequencies,
-                clip_sigma=clip_sigma,
-                order_selection_p_value=order_selection_p_value,
-                max_processes=max_processes,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
-            )
-        used_grid_fallback = True
-        if enable_harmonic_adjudication:
-            adjudication = _adjudicate_harmonic_aliases(
-                chosen_fit=grid_fit,
-                time_rel=time_rel,
-                y=y,
-                design_info=design_info_active,
-                weights=weights,
-                orders=orders,
-                frequencies=frequencies,
-                clip_sigma=clip_sigma,
-                order_selection_p_value=order_selection_p_value,
-                harmonic_period_factors=harmonic_period_factors,
-                harmonic_sigma_tolerance_mag=harmonic_sigma_tolerance_mag,
-                harmonic_identity_tolerance=harmonic_identity_tolerance,
-                harmonic_refinement_window=harmonic_refinement_window,
-                max_processes=max_processes,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
-            )
-        else:
-            adjudication = _HarmonicAdjudication(
-                selected=_fit_with_period(grid_fit),
-                near_tie_candidates=0,
-                had_near_tie=False,
-            )
-        (
-            lsm_period_days,
-            lsm_period_hours,
-            lsm_frequency_cycles_per_day,
-            lsm_harmonic_agreement,
-        ) = _compute_lsm_summary(adjudication.selected.period_days)
-
-    chosen = adjudication.selected.fit
-    is_period_doubled = bool(adjudication.selected.is_period_doubled)
-    period_days = float(adjudication.selected.period_days)
-    period_hours = float(adjudication.selected.period_hours)
-
-    nonharmonic_near_ties = 0
-    window_alias_near_ties = 0
-    prelim_ambiguous = adjudication.had_near_tie or (
-        enable_lsm_crosscheck and lsm_harmonic_agreement is False
+        if method_mode == "hybrid"
+        else []
     )
-    if not prelim_ambiguous:
-        if enable_global_near_tie_check:
-            nonharmonic_near_ties = _count_nonharmonic_near_ties(
-                selected=adjudication.selected,
-                time_rel=time_rel,
-                y=y,
-                design_info=design_info_active,
-                weights=weights,
-                orders=orders,
-                frequencies=frequencies,
-                clip_sigma=clip_sigma,
-                harmonic_period_factors=harmonic_period_factors,
-                harmonic_sigma_tolerance_mag=harmonic_sigma_tolerance_mag,
-                harmonic_identity_tolerance=harmonic_identity_tolerance,
-                max_processes=max_processes,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
-                global_near_tie_max_samples=global_near_tie_max_samples,
-                global_near_tie_candidate_count=global_near_tie_candidate_count,
-                global_near_tie_refinement_window=global_near_tie_refinement_window,
-            )
-        if enable_window_alias_check:
-            window_alias_near_ties = _count_window_alias_near_ties(
-                selected=adjudication.selected,
-                time_rel=time_rel,
-                y=y,
-                phase_angle=phase_angle,
-                filter_labels=filter_labels,
-                session_labels=active_session_labels,
-                weights=weights,
-                orders=orders,
-                frequencies=frequencies,
-                clip_sigma=clip_sigma,
-                order_selection_p_value=order_selection_p_value,
-                harmonic_period_factors=harmonic_period_factors,
-                harmonic_sigma_tolerance_mag=harmonic_sigma_tolerance_mag,
-                harmonic_identity_tolerance=harmonic_identity_tolerance,
-                max_processes=max_processes,
-                parallel_chunk_size=parallel_chunk_size,
-                exact_evaluation_backend=exact_evaluation_backend,
-                jax_frequency_batch_size=jax_frequency_batch_size,
-                jax_row_pad_multiple=jax_row_pad_multiple,
-                jax_max_clip_iterations=jax_max_clip_iterations,
-                window_alias_frequency_offsets=window_alias_frequency_offsets,
-                window_alias_refinement_window=window_alias_refinement_window,
-            )
 
-    ambiguity_reasons: list[str] = []
-    if adjudication.had_near_tie:
-        ambiguity_reasons.append("harmonic_near_tie")
-    if enable_lsm_crosscheck and lsm_harmonic_agreement is False:
-        ambiguity_reasons.append("lsm_disagreement")
-    if nonharmonic_near_ties > 0:
-        ambiguity_reasons.append("global_near_tie")
-    if window_alias_near_ties > 0:
-        ambiguity_reasons.append("window_alias_near_tie")
-    is_ambiguous = len(ambiguity_reasons) > 0
-    if not is_ambiguous:
-        confidence_label = "high"
-    elif adjudication.had_near_tie:
-        # Distinguish harmonic alias uncertainty from other ambiguity sources.
-        confidence_label = "harmonic_ambiguous"
+    primary = _primary_from_method(
+        method_mode=method_mode,
+        fourier_solution=fourier_solution,
+        lsm_solution=lsm_solution,
+        families=families,
+        harmonic_period_factors=harmonic_period_factors,
+        filter_labels=filter_labels,
+    )
+    primary_method = str(primary["primary_method"])
+    period_days = float(primary["period_days"])
+    period_hours = float(period_days * 24.0)
+    selected_period_lower_days = (
+        None if primary["period_lower_days"] is None else float(primary["period_lower_days"])
+    )
+    selected_period_upper_days = (
+        None if primary["period_upper_days"] is None else float(primary["period_upper_days"])
+    )
+    selected_relative_uncertainty = (
+        None
+        if primary["relative_period_uncertainty"] is None
+        else float(primary["relative_period_uncertainty"])
+    )
+    alternate_period_days = [float(value) for value in primary["alternate_period_days"]]
+
+    if primary_method == "fourier":
+        n_fit_observations = int(fourier_solution.fit_summary.n_fit)
+        n_clipped = int(fourier_solution.fit_summary.n_clipped)
+        is_period_doubled = bool(fourier_solution.chosen.is_period_doubled)
     else:
-        confidence_label = "ambiguous"
-    ambiguity_reason = ",".join(ambiguity_reasons) if ambiguity_reasons else None
+        n_fit_observations = int(lsm_solution.n_fit_observations)
+        n_clipped = int(lsm_solution.n_clipped)
+        is_period_doubled = False
 
-    n_obs = int(len(observations))
-    n_fit = int(chosen.n_fit)
-    n_clipped = int(chosen.n_clipped)
-    n_filters = int(chosen.n_filters)
-    n_sessions = int(session_summary.n_sessions)
+    frequency_cycles_per_day = (
+        float("nan") if not np.isfinite(period_days) or period_days <= 0.0 else float(1.0 / period_days)
+    )
 
     return RotationPeriodResult.from_kwargs(
         period_days=[period_days],
         period_hours=[period_hours],
-        frequency_cycles_per_day=[chosen.frequency],
-        fourier_order=[chosen.fourier_order],
-        phase_c1=[float(chosen.coeffs[chosen.phase_c1_idx])],
-        phase_c2=[float(chosen.coeffs[chosen.phase_c2_idx])],
-        residual_sigma_mag=[float(chosen.residual_sigma)],
-        n_observations=[n_obs],
-        n_fit_observations=[n_fit],
+        frequency_cycles_per_day=[frequency_cycles_per_day],
+        primary_method=[primary_method],
+        paper_profile=[profile.name],
+        decision_confidence_label=[str(primary["decision_confidence_label"])],
+        is_valid=[bool(primary["is_valid"])],
+        is_reliable=[bool(primary["is_reliable"])],
+        period_lower_days=[selected_period_lower_days],
+        period_upper_days=[selected_period_upper_days],
+        relative_period_uncertainty=[selected_relative_uncertainty],
+        alternate_period_days=[alternate_period_days],
+        fourier_period_days=[float(fourier_solution.chosen.period_days)],
+        fourier_order=[int(fourier_solution.fit_summary.fourier_order)],
+        fourier_sigma_threshold=[float(fourier_solution.sigma_threshold)],
+        fourier_phase_c1=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c1_idx])],
+        fourier_phase_c2=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c2_idx])],
+        residual_sigma_mag=[float(fourier_solution.fit_summary.residual_sigma)],
+        fourier_is_valid=[bool(fourier_solution.is_valid)],
+        fourier_is_reliable=[bool(fourier_solution.is_reliable)],
+        fourier_alternate_period_days=[list(fourier_solution.alternate_period_days)],
+        lsm_period_days=[None if lsm_solution.period_days is None else float(lsm_solution.period_days)],
+        lsm_power=[None if lsm_solution.power is None else float(lsm_solution.power)],
+        lsm_power_gap=[None if lsm_solution.power_gap is None else float(lsm_solution.power_gap)],
+        lsm_candidate_period_days=[list(lsm_solution.candidate_period_days)],
+        lsm_candidate_powers=[list(lsm_solution.candidate_powers)],
+        lsm_is_reliable=[bool(lsm_solution.is_reliable)],
+        method_agreement_class=[primary["method_agreement_class"]],
+        decision_margin=[None if primary["decision_margin"] is None else float(primary["decision_margin"])],
+        decision_support_count=[
+            None if primary["decision_support_count"] is None else int(primary["decision_support_count"])
+        ],
+        winner_contains_fourier_primary=[
+            None
+            if primary["winner_contains_fourier_primary"] is None
+            else bool(primary["winner_contains_fourier_primary"])
+        ],
+        winner_contains_lsm_primary=[
+            None
+            if primary["winner_contains_lsm_primary"] is None
+            else bool(primary["winner_contains_lsm_primary"])
+        ],
+        family_weight_fourier=[
+            None if primary["family_weight_fourier"] is None else float(primary["family_weight_fourier"])
+        ],
+        family_weight_lsm=[
+            None if primary["family_weight_lsm"] is None else float(primary["family_weight_lsm"])
+        ],
+        n_observations=[int(len(observations))],
+        n_fit_observations=[n_fit_observations],
         n_clipped=[n_clipped],
-        n_filters=[n_filters],
-        n_sessions=[n_sessions],
+        n_filters=[int(len(_ordered_unique(filter_labels)))],
+        n_sessions=[int(session_summary.n_sessions)],
         used_session_offsets=[bool(used_session_offsets)],
         is_period_doubled=[bool(is_period_doubled)],
-        is_ambiguous=[bool(is_ambiguous)],
-        confidence_label=[confidence_label],
-        ambiguity_reason=[ambiguity_reason],
-        n_harmonic_near_ties=[int(adjudication.near_tie_candidates)],
-        used_grid_fallback=[bool(used_grid_fallback)],
-        harmonic_sigma_tolerance_mag=[float(harmonic_sigma_tolerance_mag)],
-        lsm_period_days=[lsm_period_days],
-        lsm_period_hours=[lsm_period_hours],
-        lsm_frequency_cycles_per_day=[lsm_frequency_cycles_per_day],
-        lsm_harmonic_agreement=[lsm_harmonic_agreement],
+        used_grid_fallback=[False],
     )
