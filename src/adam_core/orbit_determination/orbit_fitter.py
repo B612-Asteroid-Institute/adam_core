@@ -66,9 +66,7 @@ class OrbitFitter(ABC):
         reference_orbit: Orbits, optional
             Optional warm-start seed (length-1 Orbits) for the fit. When provided,
             implementations should use it as the starting point for differential
-            correction instead of cold-bootstrapping via IOD. Callers such as the
-            LOOO evaluation pipeline pass the MPC nominal orbit here so each
-            hold-in fit converges from a known-good neighborhood. When ``None``,
+            correction instead of cold-bootstrapping via IOD. When ``None``,
             implementations must fall back to their default cold-start behavior
             (e.g. Gauss IOD) so the API remains backward-compatible for callers
             that have no seed available.
