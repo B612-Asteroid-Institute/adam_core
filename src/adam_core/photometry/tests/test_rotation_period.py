@@ -278,7 +278,15 @@ def test_hybrid_method_dominant_class():
 
     assert _scalar(result.primary_method[0]) == "fourier"
     assert _scalar(result.method_agreement_class[0]) in {"consensus", "weak_consensus"}
-    assert bool(_scalar(result.is_reliable[0])) is True
+    # Per D1 the verdict is one of the three categorical states and the
+    # reliability_code is the matching ordinal; is_reliable is derived from it.
+    verdict = _scalar(result.period_verdict[0])
+    assert verdict in {"single_period", "period_family", "insufficient_data"}
+    assert _scalar(result.reliability_code[0]) in {"1", "2", "3"}
+    assert bool(_scalar(result.is_reliable[0])) is (verdict == "single_period")
+    assert bool(_scalar(result.is_valid[0])) is (
+        verdict in {"single_period", "period_family"}
+    )
 
 
 def test_hybrid_unreliable_lsm_branch_does_not_displace_fourier(monkeypatch):
@@ -372,6 +380,7 @@ def test_hybrid_can_return_winning_family_representative_not_method_primary():
         amplitude_mag=0.3,
         n_fit_observations=60,
         n_clipped=0,
+        false_alarm_probability=1.0e-4,
     )
     family_primary = _MethodFamily(
         representative_period_days=0.10,
@@ -390,6 +399,8 @@ def test_hybrid_can_return_winning_family_representative_not_method_primary():
         combined_weight=0.9,
     )
 
+    # Times that fold to ~full phase coverage over many rotations at P=0.20 d.
+    t_rel = np.linspace(0.0, 2.0, 60, dtype=np.float64)
     primary = _primary_from_method(
         method_mode="hybrid",
         fourier_solution=fourier_solution,
@@ -397,6 +408,10 @@ def test_hybrid_can_return_winning_family_representative_not_method_primary():
         families=[family_primary, family_alternate],
         harmonic_period_factors=(0.5, 1.0, 2.0),
         filter_labels=np.asarray(["g"] * 30 + ["r"] * 30, dtype=object),
+        t_rel=t_rel,
+        span_days=2.0,
+        min_rotations_in_span=2.0,
+        residual_sigma_mag=0.02,
     )
 
     assert primary["primary_method"] == "fourier"
@@ -404,7 +419,15 @@ def test_hybrid_can_return_winning_family_representative_not_method_primary():
     assert primary["winner_contains_fourier_primary"] is False
     assert primary["winner_contains_lsm_primary"] is True
     assert primary["method_agreement_class"] == "consensus"
-    assert primary["decision_confidence_label"] == "medium"
+    # Two credible families survive (n_significant_aliases == 2), so even though
+    # Fourier and LSM agree on the winning family the alias gate demotes the
+    # verdict to period_family / reliability_code "2" (D1 "believe the family").
+    assert primary["period_verdict"] == "period_family"
+    assert primary["reliability_code"] == "2"
+    assert primary["is_reliable"] is False
+    assert primary["is_valid"] is True
+    assert "dual_method_agree" in primary["confidence_flags"]
+    assert "conflicting_aliases" in primary["insufficiency_reasons"]
 
 
 @pytest.mark.parametrize("search_fidelity", ["validated_staged", "exact_grid"])

@@ -53,6 +53,30 @@ _DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
 _DEFAULT_JAX_ROW_PAD_MULTIPLE = 64
 _FOURIER_MAX_CLIP_ITERATIONS = 8
 
+# --- D1 confidence-contract thresholds (bead rp-e4a.6) ---------------------
+# Initial values per the D1 contract; the calibration study (bead rp-e4a.13)
+# will tune these on a held-out split of the standard-candle set, so treat the
+# values below as provisional defaults rather than validated cut points.
+# False-alarm-probability ceiling for accepting an LSM/hybrid peak as signal.
+FAP_SIGNIFICANT = 0.01
+# Minimum fraction of rotational-phase bins that must be occupied to clear the
+# signal gate (family-level) and to be eligible for ``single_period``.
+PHASE_COVERAGE_MIN_FAMILY = 0.5
+PHASE_COVERAGE_MIN_SINGLE = 0.7
+# Minimum amplitude-to-noise ratio (amplitude_mag / residual_sigma_mag).
+AMPLITUDE_SNR_MIN = 3.0
+# Number of rotational-phase bins used to compute ``phase_coverage_fraction``.
+_PHASE_COVERAGE_N_BINS = 20
+
+_VERDICT_SINGLE = "single_period"
+_VERDICT_FAMILY = "period_family"
+_VERDICT_INSUFFICIENT = "insufficient_data"
+_RELIABILITY_BY_VERDICT = {
+    _VERDICT_SINGLE: "3",
+    _VERDICT_FAMILY: "2",
+    _VERDICT_INSUFFICIENT: "1",
+}
+
 
 @dataclass(slots=True)
 class _FourierCluster:
@@ -104,6 +128,7 @@ class _LSMSolution:
     amplitude_mag: float | None
     n_fit_observations: int
     n_clipped: int
+    false_alarm_probability: float | None = None
 
 
 @dataclass(slots=True)
@@ -116,6 +141,7 @@ class _LSMMethodResult:
     amplitude_mag: float | None
     n_fit_observations: int | None = None
     n_clipped: int = 0
+    false_alarm_probability: float | None = None
 
 
 @dataclass(slots=True)
@@ -1019,6 +1045,56 @@ def _local_maxima_indices(values: npt.NDArray[np.float64]) -> npt.NDArray[np.int
     return np.asarray(maxima, dtype=np.int64)
 
 
+def _lsm_false_alarm_probability(
+    *,
+    time_lsm: npt.NDArray[np.float64],
+    corrected: npt.NDArray[np.float64],
+    weights: npt.NDArray[np.float64] | None,
+    best_frequency: float,
+) -> float | None:
+    """Astropy Baluev false-alarm probability for the LSM peak frequency.
+
+    Computes the Lomb-Scargle periodogram on the trend-corrected magnitudes and
+    returns the analytic Baluev FAP of the peak power. Returns ``None`` when the
+    FAP cannot be evaluated (too few points, degenerate inputs, or an Astropy
+    failure) so the caller can treat it as "no significant peak".
+    """
+    if not np.isfinite(best_frequency) or best_frequency <= 0.0:
+        return None
+    times = np.asarray(time_lsm, dtype=np.float64)
+    values = np.asarray(corrected, dtype=np.float64)
+    if times.size < 4 or values.size != times.size:
+        return None
+    # Convert fit weights (1/sigma^2) back to per-point uncertainties when present.
+    dy: npt.NDArray[np.float64] | None = None
+    if weights is not None:
+        w = np.asarray(weights, dtype=np.float64)
+        if w.shape == values.shape and np.all(np.isfinite(w)) and np.all(w > 0.0):
+            dy = 1.0 / np.sqrt(w)
+    try:
+        from astropy.timeseries import LombScargle  # type: ignore[import-untyped]
+
+        # Astropy only implements an analytic FAP for the single-term (nterms=1)
+        # periodogram, so the signal gate asks the standard question "is the
+        # strongest periodicity in this data significant?". A doubly-peaked
+        # rotation puts most single-term power at 2x the LSM frequency, so take
+        # the more significant of (LSM peak, global periodogram peak).
+        model = LombScargle(times, values, dy=dy) if dy is not None else LombScargle(times, values)
+        power_at_best = float(model.power(float(best_frequency)))
+        frequency_grid, power_grid = model.autopower(
+            minimum_frequency=float(best_frequency) / 4.0,
+            maximum_frequency=float(best_frequency) * 4.0,
+            samples_per_peak=5,
+        )
+        power_peak = max(power_at_best, float(np.max(power_grid)))
+        fap = float(model.false_alarm_probability(power_peak, method="baluev"))
+    except Exception:
+        return None
+    if not np.isfinite(fap):
+        return None
+    return float(min(max(fap, 0.0), 1.0))
+
+
 def _estimate_lsm_solution(
     *,
     t_rel: npt.NDArray[np.float64],
@@ -1115,7 +1191,21 @@ def _estimate_lsm_solution(
     second_power = float(ordered_survivors[1].power) if len(ordered_survivors) >= 2 else 0.0
     power_gap = float(best.power - second_power) if len(ordered_survivors) >= 2 else float(best.power)
     amplitude_mag = float(_amplitude_from_lsm_coeffs(best.coeffs, order=2))
-    is_reliable = bool(best.power >= 0.1 and power_gap >= 0.02)
+    best_frequency = 1.0 / float(best.period_days) if best.period_days > 0.0 else float("nan")
+    false_alarm_probability = _lsm_false_alarm_probability(
+        time_lsm=time_lsm,
+        corrected=corrected,
+        weights=weights_lsm,
+        best_frequency=best_frequency,
+    )
+    # Keep power/power_gap as diagnostics; the false-alarm probability is the
+    # validated significance gate (D1). ``None`` FAP fails the gate.
+    is_reliable = bool(
+        best.power >= 0.1
+        and power_gap >= 0.02
+        and false_alarm_probability is not None
+        and false_alarm_probability <= FAP_SIGNIFICANT
+    )
     return _LSMSolution(
         period_days=float(best.period_days),
         power=float(best.power),
@@ -1126,6 +1216,7 @@ def _estimate_lsm_solution(
         amplitude_mag=amplitude_mag,
         n_fit_observations=int(corrected.size),
         n_clipped=int(clipped),
+        false_alarm_probability=false_alarm_probability,
     )
 
 
@@ -1176,6 +1267,11 @@ def _run_lsm(
         amplitude_mag=None if solution.amplitude_mag is None else float(solution.amplitude_mag),
         n_fit_observations=int(solution.n_fit_observations),
         n_clipped=int(solution.n_clipped),
+        false_alarm_probability=(
+            None
+            if solution.false_alarm_probability is None
+            else float(solution.false_alarm_probability)
+        ),
     )
 
 
@@ -1358,13 +1454,8 @@ def _build_hybrid_families(
     return families
 
 
-def _data_sufficiency_gate(
-    *,
-    filter_labels: npt.NDArray[np.object_],
-    amplitude_mag: float | None,
-) -> bool:
-    if amplitude_mag is None or not np.isfinite(amplitude_mag) or amplitude_mag < 0.1:
-        return False
+def _observation_count_sufficient(filter_labels: npt.NDArray[np.object_]) -> bool:
+    """Replicate the legacy observation-count guard (top filter[s] >= 30 obs)."""
     unique_filters = _ordered_unique(filter_labels)
     counts = sorted(
         [int(np.count_nonzero(filter_labels == label)) for label in unique_filters],
@@ -1375,33 +1466,152 @@ def _data_sufficiency_gate(
     return bool(counts and counts[0] >= 30)
 
 
-def _single_method_decision_confidence_label(*, is_reliable: bool, is_valid: bool) -> str:
-    if is_reliable:
-        return "high"
-    if is_valid:
-        return "medium"
-    return "low"
-
-
-def _hybrid_decision_confidence_label(
+def _phase_coverage_fraction(
     *,
-    selected_method_reliable: bool,
-    selected_method_valid: bool,
-    agreement_class: str,
-    selected_period_is_method_primary: bool,
-    selected_has_unresolved_alternates: bool,
-) -> str:
-    if not selected_method_valid or not selected_method_reliable:
-        return "low"
-    if agreement_class == "consensus":
-        if not selected_period_is_method_primary or selected_has_unresolved_alternates:
-            return "medium"
-        return "high"
-    if agreement_class == "method_dominant":
-        return "medium"
-    if agreement_class == "weak_consensus":
-        return "medium"
-    return "low"
+    times: npt.NDArray[np.float64],
+    period_days: float,
+    n_bins: int = _PHASE_COVERAGE_N_BINS,
+) -> float | None:
+    """Fraction of rotational-phase bins occupied at ``period_days``.
+
+    Folds the observation times to the chosen period, bins the phase onto
+    ``[0, 1)`` and returns the fraction of bins that contain >= 1 observation.
+    Returns ``None`` when the period or times are degenerate.
+    """
+    if not np.isfinite(period_days) or period_days <= 0.0:
+        return None
+    t = np.asarray(times, dtype=np.float64)
+    if t.size == 0 or n_bins <= 0:
+        return None
+    phase = np.mod(t / float(period_days), 1.0)
+    bin_index = np.floor(phase * int(n_bins)).astype(np.int64)
+    bin_index = np.clip(bin_index, 0, int(n_bins) - 1)
+    occupied = int(np.unique(bin_index).size)
+    return float(occupied) / float(n_bins)
+
+
+def _amplitude_snr(amplitude_mag: float | None, residual_sigma_mag: float | None) -> float | None:
+    """``amplitude_mag / residual_sigma_mag`` with division/None guards."""
+    if amplitude_mag is None or residual_sigma_mag is None:
+        return None
+    if not np.isfinite(amplitude_mag) or not np.isfinite(residual_sigma_mag):
+        return None
+    if residual_sigma_mag <= 0.0:
+        return None
+    return float(amplitude_mag) / float(residual_sigma_mag)
+
+
+def _classify_confidence(
+    *,
+    primary_method: str,
+    amplitude_snr: float | None,
+    phase_coverage_fraction: float | None,
+    n_rotations_spanned: float | None,
+    min_rotations_in_span: float,
+    lsm_false_alarm_probability: float | None,
+    n_significant_aliases: int | None,
+    is_period_doubled: bool,
+    observation_count_sufficient: bool,
+    is_reliable: bool,
+    is_valid: bool,
+    cross_method_agree: bool | None,
+) -> tuple[str, str, list[str], list[str]]:
+    """Single deterministic verdict (D1 §"decision tree").
+
+    Returns ``(period_verdict, reliability_code, confidence_flags,
+    insufficiency_reasons)``.  ``cross_method_agree`` is ``None`` for
+    single-method modes; ``True``/``False`` for hybrid.
+    """
+    flags: list[str] = []
+    reasons: list[str] = []
+
+    uses_fap = primary_method in {"lsm", "hybrid"}
+
+    # ---- 1. Signal gate ----------------------------------------------------
+    if amplitude_snr is None or not np.isfinite(amplitude_snr) or amplitude_snr < AMPLITUDE_SNR_MIN:
+        reasons.append("amplitude_below_noise")
+    if (
+        phase_coverage_fraction is None
+        or not np.isfinite(phase_coverage_fraction)
+        or phase_coverage_fraction < PHASE_COVERAGE_MIN_FAMILY
+    ):
+        reasons.append("phase_coverage_low")
+    if (
+        n_rotations_spanned is None
+        or not np.isfinite(n_rotations_spanned)
+        or n_rotations_spanned < float(min_rotations_in_span)
+    ):
+        reasons.append("spans_too_few_rotations")
+    if not observation_count_sufficient:
+        reasons.append("too_few_observations")
+    if uses_fap and (
+        lsm_false_alarm_probability is None
+        or not np.isfinite(lsm_false_alarm_probability)
+        or lsm_false_alarm_probability > FAP_SIGNIFICANT
+    ):
+        reasons.append("no_significant_peak")
+
+    if reasons:
+        return _VERDICT_INSUFFICIENT, _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT], flags, reasons
+
+    # Signal present -> record positive flags.
+    if uses_fap and lsm_false_alarm_probability is not None and lsm_false_alarm_probability <= FAP_SIGNIFICANT:
+        flags.append("fap_significant")
+    if phase_coverage_fraction is not None and phase_coverage_fraction >= PHASE_COVERAGE_MIN_SINGLE:
+        flags.append("good_phase_coverage")
+    if n_rotations_spanned is not None and n_rotations_spanned >= 2.0 * float(min_rotations_in_span):
+        flags.append("multi_night")
+    if not is_period_doubled:
+        flags.append("two_max_two_min")
+
+    # ---- 2. Alias gate -----------------------------------------------------
+    n_aliases = 0 if n_significant_aliases is None else int(n_significant_aliases)
+    alias_ambiguous = n_aliases >= 2
+    single_max_ambiguous = bool(is_period_doubled)
+    good_coverage_for_single = bool(
+        phase_coverage_fraction is not None and phase_coverage_fraction >= PHASE_COVERAGE_MIN_SINGLE
+    )
+
+    eligible_single = (not alias_ambiguous) and (not single_max_ambiguous) and good_coverage_for_single
+    if alias_ambiguous:
+        reasons.append("conflicting_aliases")
+    if single_max_ambiguous:
+        reasons.append("single_max_alias")
+    if not good_coverage_for_single and not alias_ambiguous and not single_max_ambiguous:
+        reasons.append("phase_coverage_low")
+
+    # ---- 3. Precision gate -------------------------------------------------
+    # Greenstreet reliable (uncertainty <= max(2P, 7h)) -> code "3" eligible.
+    # Vavilov valid-but-not-reliable -> at most period_family / "2".
+    if eligible_single and is_reliable:
+        verdict = _VERDICT_SINGLE
+    elif is_valid:
+        verdict = _VERDICT_FAMILY
+    else:
+        # Signal exists but neither precision criterion met: believe the family.
+        verdict = _VERDICT_FAMILY
+        if "no_precision" not in reasons:
+            reasons.append("no_precision")
+
+    # ---- 4. Cross-method (hybrid only) ------------------------------------
+    if cross_method_agree is True:
+        flags.append("dual_method_agree")
+        if is_reliable and eligible_single:
+            verdict = _VERDICT_SINGLE
+    elif cross_method_agree is False:
+        # Disagreement caps at period_family.
+        if verdict == _VERDICT_SINGLE:
+            verdict = _VERDICT_FAMILY
+            if "conflicting_aliases" not in reasons:
+                reasons.append("conflicting_aliases")
+
+    # LSM-primary results have no validated uncertainty interval (D2): cap at family.
+    if primary_method == "lsm" and verdict == _VERDICT_SINGLE:
+        verdict = _VERDICT_FAMILY
+        if "no_precision" not in reasons:
+            reasons.append("no_precision")
+
+    return verdict, _RELIABILITY_BY_VERDICT[verdict], flags, reasons
 
 
 def _periods_close(period_a: float | None, period_b: float | None) -> bool:
@@ -1412,6 +1622,32 @@ def _periods_close(period_a: float | None, period_b: float | None) -> bool:
     return bool(abs(float(period_a) - float(period_b)) <= 1.0e-10 * max(1.0, abs(period_a), abs(period_b)))
 
 
+def _verdict_diagnostics(
+    *,
+    period_days: float,
+    amplitude_mag: float | None,
+    residual_sigma_mag: float | None,
+    n_significant_aliases: int | None,
+    t_rel: npt.NDArray[np.float64],
+    span_days: float,
+) -> dict[str, object]:
+    """Compute the D1 numeric verdict diagnostics for the chosen period."""
+    if np.isfinite(period_days) and period_days > 0.0:
+        n_rotations_spanned: float | None = float(span_days) / float(period_days)
+        phase_coverage_fraction = _phase_coverage_fraction(times=t_rel, period_days=float(period_days))
+    else:
+        n_rotations_spanned = None
+        phase_coverage_fraction = None
+    return {
+        "amplitude_snr": _amplitude_snr(amplitude_mag, residual_sigma_mag),
+        "phase_coverage_fraction": phase_coverage_fraction,
+        "n_rotations_spanned": n_rotations_spanned,
+        "n_significant_aliases": (
+            None if n_significant_aliases is None else int(n_significant_aliases)
+        ),
+    }
+
+
 def _primary_from_method(
     *,
     method_mode: str,
@@ -1420,12 +1656,37 @@ def _primary_from_method(
     families: list[_MethodFamily],
     harmonic_period_factors: tuple[float, ...],
     filter_labels: npt.NDArray[np.object_],
+    t_rel: npt.NDArray[np.float64],
+    span_days: float,
+    min_rotations_in_span: float,
+    residual_sigma_mag: float | None,
 ) -> dict[str, object]:
+    observation_count_sufficient = _observation_count_sufficient(filter_labels)
+    n_fourier_aliases = int(len(fourier_solution.clusters))
+
     if method_mode == "fourier":
         amplitude_mag = float(fourier_solution.amplitude_mag)
-        decision_confidence_label = _single_method_decision_confidence_label(
+        diagnostics = _verdict_diagnostics(
+            period_days=float(fourier_solution.chosen.period_days),
+            amplitude_mag=amplitude_mag,
+            residual_sigma_mag=residual_sigma_mag,
+            n_significant_aliases=n_fourier_aliases,
+            t_rel=t_rel,
+            span_days=span_days,
+        )
+        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = _classify_confidence(
+            primary_method="fourier",
+            amplitude_snr=diagnostics["amplitude_snr"],
+            phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
+            n_rotations_spanned=diagnostics["n_rotations_spanned"],
+            min_rotations_in_span=min_rotations_in_span,
+            lsm_false_alarm_probability=None,
+            n_significant_aliases=n_fourier_aliases,
+            is_period_doubled=bool(fourier_solution.chosen.is_period_doubled),
+            observation_count_sufficient=observation_count_sufficient,
             is_reliable=bool(fourier_solution.is_reliable),
             is_valid=bool(fourier_solution.is_valid),
+            cross_method_agree=None,
         )
         return {
             "primary_method": "fourier",
@@ -1434,13 +1695,12 @@ def _primary_from_method(
             "period_upper_days": float(fourier_solution.period_upper_days),
             "relative_period_uncertainty": float(fourier_solution.relative_period_uncertainty),
             "alternate_period_days": list(fourier_solution.alternate_period_days),
-            "decision_confidence_label": decision_confidence_label,
-            "is_valid": bool(fourier_solution.is_valid),
-            "is_reliable": bool(
-                fourier_solution.is_reliable
-                and _data_sufficiency_gate(filter_labels=filter_labels, amplitude_mag=amplitude_mag)
-                and decision_confidence_label != "low"
-            ),
+            "period_verdict": period_verdict,
+            "reliability_code": reliability_code,
+            "confidence_flags": confidence_flags,
+            "insufficiency_reasons": insufficiency_reasons,
+            "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
+            "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
             "method_agreement_class": None,
             "decision_margin": None,
             "decision_support_count": 1,
@@ -1449,6 +1709,7 @@ def _primary_from_method(
             "family_weight_fourier": 1.0,
             "family_weight_lsm": 0.0,
             "selected_method_amplitude_mag": amplitude_mag,
+            **diagnostics,
         }
 
     if method_mode == "lsm":
@@ -1461,7 +1722,10 @@ def _primary_from_method(
                 "period_upper_days": None,
                 "relative_period_uncertainty": None,
                 "alternate_period_days": [],
-                "decision_confidence_label": "low",
+                "period_verdict": _VERDICT_INSUFFICIENT,
+                "reliability_code": _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT],
+                "confidence_flags": [],
+                "insufficiency_reasons": ["no_significant_peak"],
                 "is_valid": False,
                 "is_reliable": False,
                 "method_agreement_class": None,
@@ -1472,11 +1736,34 @@ def _primary_from_method(
                 "family_weight_fourier": 0.0,
                 "family_weight_lsm": 1.0,
                 "selected_method_amplitude_mag": None,
+                "amplitude_snr": None,
+                "phase_coverage_fraction": None,
+                "n_rotations_spanned": None,
+                "n_significant_aliases": 0,
             }
         amplitude_mag = lsm_solution.amplitude_mag
-        decision_confidence_label = _single_method_decision_confidence_label(
+        n_lsm_aliases = int(len(lsm_solution.candidate_period_days))
+        diagnostics = _verdict_diagnostics(
+            period_days=float(period_days),
+            amplitude_mag=amplitude_mag,
+            residual_sigma_mag=residual_sigma_mag,
+            n_significant_aliases=n_lsm_aliases,
+            t_rel=t_rel,
+            span_days=span_days,
+        )
+        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = _classify_confidence(
+            primary_method="lsm",
+            amplitude_snr=diagnostics["amplitude_snr"],
+            phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
+            n_rotations_spanned=diagnostics["n_rotations_spanned"],
+            min_rotations_in_span=min_rotations_in_span,
+            lsm_false_alarm_probability=lsm_solution.false_alarm_probability,
+            n_significant_aliases=n_lsm_aliases,
+            is_period_doubled=False,
+            observation_count_sufficient=observation_count_sufficient,
             is_reliable=bool(lsm_solution.is_reliable),
-            is_valid=bool(period_days is not None),
+            is_valid=True,
+            cross_method_agree=None,
         )
         alternate_periods = list(lsm_solution.candidate_period_days[1:])
         return {
@@ -1486,13 +1773,12 @@ def _primary_from_method(
             "period_upper_days": None,
             "relative_period_uncertainty": None,
             "alternate_period_days": alternate_periods,
-            "decision_confidence_label": decision_confidence_label,
-            "is_valid": bool(period_days is not None),
-            "is_reliable": bool(
-                lsm_solution.is_reliable
-                and _data_sufficiency_gate(filter_labels=filter_labels, amplitude_mag=amplitude_mag)
-                and decision_confidence_label != "low"
-            ),
+            "period_verdict": period_verdict,
+            "reliability_code": reliability_code,
+            "confidence_flags": confidence_flags,
+            "insufficiency_reasons": insufficiency_reasons,
+            "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
+            "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
             "method_agreement_class": None,
             "decision_margin": None,
             "decision_support_count": 1,
@@ -1501,6 +1787,7 @@ def _primary_from_method(
             "family_weight_fourier": 0.0,
             "family_weight_lsm": 1.0,
             "selected_method_amplitude_mag": amplitude_mag,
+            **diagnostics,
         }
 
     if not families:
@@ -1524,6 +1811,7 @@ def _primary_from_method(
     fourier_weight = float(winner.family_weight_fourier)
     lsm_weight = float(winner.family_weight_lsm)
 
+    selected_cluster: _FourierCluster | None = None
     if winner.fourier_cluster is not None and (
         winner.lsm_candidate is None or fourier_weight >= lsm_weight
     ):
@@ -1545,8 +1833,6 @@ def _primary_from_method(
         selected_method_reliable = bool(fourier_solution.is_reliable)
         selected_method_valid = bool(fourier_solution.is_valid)
         selected_amplitude = float(fourier_solution.amplitude_mag)
-        selected_period_is_method_primary = bool(selected_cluster is fourier_solution.primary_cluster)
-        selected_has_unresolved_alternates = bool(alternate_period_days)
     elif winner.lsm_candidate is not None:
         selected_method = "lsm"
         selected_candidate = winner.lsm_candidate
@@ -1562,8 +1848,6 @@ def _primary_from_method(
         selected_method_reliable = bool(lsm_solution.is_reliable)
         selected_method_valid = bool(np.isfinite(period_days) and period_days > 0.0)
         selected_amplitude = None if lsm_solution.amplitude_mag is None else float(lsm_solution.amplitude_mag)
-        selected_period_is_method_primary = _periods_close(lsm_solution.period_days, period_days)
-        selected_has_unresolved_alternates = bool(alternate_period_days)
     else:
         raise ValueError("winning family has no method support")
 
@@ -1575,18 +1859,39 @@ def _primary_from_method(
     else:
         agreement_class = "conflict"
 
-    decision_confidence_label = _hybrid_decision_confidence_label(
-        selected_method_reliable=bool(selected_method_reliable),
-        selected_method_valid=bool(selected_method_valid),
-        agreement_class=agreement_class,
-        selected_period_is_method_primary=bool(selected_period_is_method_primary),
-        selected_has_unresolved_alternates=bool(selected_has_unresolved_alternates),
+    # The selected family carries both methods (support_count == 2) -> Fourier and
+    # LSM agree on the rotational family; that drives the cross-method upgrade/cap.
+    cross_method_agree = bool(support_count == 2)
+    # is_period_doubled flag belongs to the Fourier solution; LSM survivors are
+    # required to be two-max/two-min so doubling only applies to a Fourier winner.
+    selected_is_period_doubled = bool(
+        selected_method == "fourier"
+        and selected_cluster is not None
+        and selected_cluster.best.is_period_doubled
     )
+    n_hybrid_aliases = int(len(families))
 
-    is_reliable = bool(
-        selected_method_reliable
-        and _data_sufficiency_gate(filter_labels=filter_labels, amplitude_mag=selected_amplitude)
-        and decision_confidence_label != "low"
+    diagnostics = _verdict_diagnostics(
+        period_days=float(period_days),
+        amplitude_mag=selected_amplitude,
+        residual_sigma_mag=residual_sigma_mag,
+        n_significant_aliases=n_hybrid_aliases,
+        t_rel=t_rel,
+        span_days=span_days,
+    )
+    period_verdict, reliability_code, confidence_flags, insufficiency_reasons = _classify_confidence(
+        primary_method="hybrid" if selected_method == "fourier" else "lsm",
+        amplitude_snr=diagnostics["amplitude_snr"],
+        phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
+        n_rotations_spanned=diagnostics["n_rotations_spanned"],
+        min_rotations_in_span=min_rotations_in_span,
+        lsm_false_alarm_probability=lsm_solution.false_alarm_probability,
+        n_significant_aliases=n_hybrid_aliases,
+        is_period_doubled=selected_is_period_doubled,
+        observation_count_sufficient=observation_count_sufficient,
+        is_reliable=bool(selected_method_reliable),
+        is_valid=bool(selected_method_valid),
+        cross_method_agree=cross_method_agree,
     )
 
     return {
@@ -1598,9 +1903,12 @@ def _primary_from_method(
             None if relative_uncertainty is None else float(relative_uncertainty)
         ),
         "alternate_period_days": alternate_period_days,
-        "decision_confidence_label": decision_confidence_label,
-        "is_valid": bool(selected_method_valid),
-        "is_reliable": bool(is_reliable),
+        "period_verdict": period_verdict,
+        "reliability_code": reliability_code,
+        "confidence_flags": confidence_flags,
+        "insufficiency_reasons": insufficiency_reasons,
+        "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
+        "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
         "method_agreement_class": agreement_class,
         "decision_margin": float(gap),
         "decision_support_count": int(support_count),
@@ -1609,6 +1917,7 @@ def _primary_from_method(
         "family_weight_fourier": float(fourier_weight),
         "family_weight_lsm": float(lsm_weight),
         "selected_method_amplitude_mag": selected_amplitude,
+        **diagnostics,
     }
 
 
@@ -1783,6 +2092,11 @@ def estimate_rotation_period(
             if lsm_result.n_fit_observations is None
             else int(lsm_result.n_fit_observations),
             n_clipped=int(lsm_result.n_clipped),
+            false_alarm_probability=(
+                None
+                if lsm_result.false_alarm_probability is None
+                else float(lsm_result.false_alarm_probability)
+            ),
         )
 
     families = (
@@ -1802,6 +2116,10 @@ def estimate_rotation_period(
         families=families,
         harmonic_period_factors=harmonic_period_factors,
         filter_labels=filter_labels,
+        t_rel=t_rel,
+        span_days=span_days,
+        min_rotations_in_span=min_rotations_in_span,
+        residual_sigma_mag=float(fourier_solution.fit_summary.residual_sigma),
     )
     primary_method = str(primary["primary_method"])
     period_days = float(primary["period_days"])
@@ -1838,7 +2156,10 @@ def estimate_rotation_period(
         frequency_cycles_per_day=[frequency_cycles_per_day],
         primary_method=[primary_method],
         paper_profile=[profile.name],
-        decision_confidence_label=[str(primary["decision_confidence_label"])],
+        period_verdict=[str(primary["period_verdict"])],
+        reliability_code=[str(primary["reliability_code"])],
+        confidence_flags=[list(primary["confidence_flags"])],
+        insufficiency_reasons=[list(primary["insufficiency_reasons"])],
         is_valid=[bool(primary["is_valid"])],
         is_reliable=[bool(primary["is_reliable"])],
         period_lower_days=[selected_period_lower_days],
@@ -1860,6 +2181,11 @@ def estimate_rotation_period(
         lsm_candidate_period_days=[list(lsm_solution.candidate_period_days)],
         lsm_candidate_powers=[list(lsm_solution.candidate_powers)],
         lsm_is_reliable=[bool(lsm_solution.is_reliable)],
+        lsm_false_alarm_probability=[
+            None
+            if lsm_solution.false_alarm_probability is None
+            else float(lsm_solution.false_alarm_probability)
+        ],
         method_agreement_class=[primary["method_agreement_class"]],
         decision_margin=[None if primary["decision_margin"] is None else float(primary["decision_margin"])],
         decision_support_count=[
@@ -1880,6 +2206,18 @@ def estimate_rotation_period(
         ],
         family_weight_lsm=[
             None if primary["family_weight_lsm"] is None else float(primary["family_weight_lsm"])
+        ],
+        phase_coverage_fraction=[
+            None
+            if primary["phase_coverage_fraction"] is None
+            else float(primary["phase_coverage_fraction"])
+        ],
+        n_rotations_spanned=[
+            None if primary["n_rotations_spanned"] is None else float(primary["n_rotations_spanned"])
+        ],
+        amplitude_snr=[None if primary["amplitude_snr"] is None else float(primary["amplitude_snr"])],
+        n_significant_aliases=[
+            None if primary["n_significant_aliases"] is None else int(primary["n_significant_aliases"])
         ],
         n_observations=[int(len(observations))],
         n_fit_observations=[n_fit_observations],
