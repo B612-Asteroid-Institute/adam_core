@@ -157,9 +157,6 @@ def estimate_rotation_period_from_detections(
     detections: PointSourceDetections,
     exposures: Exposures,
     object_coords: CartesianCoordinates,
-    *,
-    max_processes: int | None = None,
-    parallel_chunk_size: int | None = None,
     **search_kwargs,
 ) -> RotationPeriodResult:
     observations = build_rotation_period_observations_from_detections(
@@ -173,8 +170,6 @@ def estimate_rotation_period_from_detections(
 
     return _estimate_rotation_period(
         observations,
-        max_processes=max_processes,
-        parallel_chunk_size=parallel_chunk_size,
         **search_kwargs,
     )
 
@@ -184,9 +179,6 @@ def estimate_rotation_period_from_detections_grouped(
     exposures: Exposures,
     object_coords: CartesianCoordinates,
     object_ids: pa.Array | pa.ChunkedArray | Sequence[str | None],
-    *,
-    max_processes: int | None = None,
-    parallel_chunk_size: int | None = None,
     **search_kwargs,
 ) -> GroupedRotationPeriodResults:
     n_det = len(detections)
@@ -251,8 +243,6 @@ def estimate_rotation_period_from_detections_grouped(
 
             result_i = _estimate_rotation_period(
                 observations_i,
-                max_processes=max_processes,
-                parallel_chunk_size=parallel_chunk_size,
                 **search_kwargs,
             )
             if len(result_i) != 1:

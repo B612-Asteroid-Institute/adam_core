@@ -130,7 +130,6 @@ class _FourierMethodResult:
     is_valid: bool
     is_reliable: bool
     amplitude_mag: float
-    used_grid_fallback: bool
 
 
 @dataclass(slots=True)
@@ -1186,7 +1185,6 @@ def _build_fourier_result(
     order_grid_results: dict[int, tuple[npt.NDArray[np.float64], dict[int, _FitResult]]],
     frequencies: npt.NDArray[np.float64],
     profile: _FourierProfile,
-    used_grid_fallback: bool,
 ) -> _FourierMethodResult:
     scores, fits_by_index = order_grid_results[int(chosen_fit.fourier_order)]
     sigma_threshold = float(_sigma_threshold_for_confidence(chosen_fit, profile.sigma_threshold_confidence))
@@ -1252,7 +1250,6 @@ def _build_fourier_result(
         is_valid=bool(is_valid),
         is_reliable=bool(is_reliable),
         amplitude_mag=float(_amplitude_from_fit(chosen_fit)),
-        used_grid_fallback=bool(used_grid_fallback),
     )
 
 
@@ -1630,8 +1627,6 @@ def estimate_rotation_period(
     exact_evaluation_backend: str = "numpy",
     jax_frequency_batch_size: int = _DEFAULT_JAX_FREQUENCY_BATCH_SIZE,
     jax_row_pad_multiple: int = _DEFAULT_JAX_ROW_PAD_MULTIPLE,
-    max_processes: int | None = None,
-    parallel_chunk_size: int | None = None,
     session_mode: str = "auto",
     auto_session_min_observations_per_group: int = 6,
     auto_session_max_period_to_session_span_ratio: float = 1.0,
@@ -1641,7 +1636,6 @@ def estimate_rotation_period(
     lsm_refine_samples: int = _LSM_DEFAULT_REFINE_SAMPLES,
     lsm_refine_rounds: int = _LSM_DEFAULT_REFINE_ROUNDS,
 ) -> RotationPeriodResult:
-    del max_processes, parallel_chunk_size
     if method_mode not in {"fourier", "lsm", "hybrid"}:
         raise ValueError("method_mode must be one of {'fourier', 'lsm', 'hybrid'}")
     if clip_sigma <= 0.0:
@@ -1894,5 +1888,4 @@ def estimate_rotation_period(
         n_sessions=[int(session_summary.n_sessions)],
         used_session_offsets=[bool(used_session_offsets)],
         is_period_doubled=[bool(is_period_doubled)],
-        used_grid_fallback=[False],
     )

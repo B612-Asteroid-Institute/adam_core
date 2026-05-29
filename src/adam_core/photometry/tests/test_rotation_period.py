@@ -210,7 +210,6 @@ def test_fourier_accepted_solution_clustering_produces_interval_and_alternates()
         order_grid_results={2: (scores, fits_by_index)},
         frequencies=frequencies,
         profile=_paper_profile("greenstreet_2026"),
-        used_grid_fallback=False,
     )
 
     assert result.period_lower_days <= result.best_period.period_days <= result.period_upper_days

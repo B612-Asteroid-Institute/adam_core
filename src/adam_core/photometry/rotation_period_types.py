@@ -58,7 +58,6 @@ class RotationPeriodResult(qv.Table):
     n_sessions = qv.Int64Column()
     used_session_offsets = qv.BooleanColumn()
     is_period_doubled = qv.BooleanColumn()
-    used_grid_fallback = qv.BooleanColumn()
 
 
 class GroupedRotationPeriodResults(qv.Table):
