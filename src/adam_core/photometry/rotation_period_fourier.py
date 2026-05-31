@@ -68,6 +68,23 @@ AMPLITUDE_SNR_MIN = 3.0
 # Number of rotational-phase bins used to compute ``phase_coverage_fraction``.
 _PHASE_COVERAGE_N_BINS = 20
 
+# --- Cheap pre-solve insufficiency thresholds (bead rp-e4a.19) -------------
+# Period-INDEPENDENT screening run before the Fourier/LSM search so obviously
+# under-determined / degenerate inputs can early-exit instead of building a
+# frequency grid (or hanging on a single-night span).  Provisional values; the
+# calibration study (bead rp-e4a.13) may retune them.
+# Hard floor on the number of observations regardless of model size.
+MIN_OBS = 8
+# Extra observations required beyond the baseline free-parameter count
+# (n_filters + 2*min_order + 2 phase terms) for the fit to be over-determined.
+PRE_SOLVE_OBS_MARGIN = 2
+# Robust-scatter-to-noise floor: fire ``amplitude_below_noise`` only when the
+# distance-reduced magnitude scatter is clearly below the photometric noise.
+AMP_SNR_FLOOR = 1.5
+# Absolute mag scatter floor (mag) used when mag_sigma is entirely null, so the
+# amplitude check stays conservative rather than firing on quiet-but-real data.
+PRE_SOLVE_ABS_SCATTER_FLOOR = 0.02
+
 _VERDICT_SINGLE = "single_period"
 _VERDICT_FAMILY = "period_family"
 _VERDICT_INSUFFICIENT = "insufficient_data"
@@ -1930,6 +1947,133 @@ def _primary_from_method(
     }
 
 
+def _pre_solve_insufficiency(
+    *,
+    n_obs: int,
+    filter_labels: npt.NDArray[np.object_],
+    span_days: float,
+    reduced_mag: npt.NDArray[np.float64],
+    mag_sigma: npt.NDArray[np.float64] | None,
+    min_order: int,
+    min_rotations_in_span: float,
+    max_frequency_cycles_per_day: float,
+) -> list[str]:
+    """Cheap, period-INDEPENDENT insufficiency screen (bead rp-e4a.19).
+
+    Returns the subset of D1 ``insufficiency_reasons`` that are detectable
+    without running the search; an empty list means the input looks solvable.
+    Reason strings match the full-path ``_classify_confidence`` so the early
+    and full verdicts stay consistent.
+    """
+    reasons: list[str] = []
+
+    # --- too_few_observations: below model size + margin, or below hard floor.
+    n_filters = int(len(_ordered_unique(filter_labels)))
+    baseline_free_params = n_filters + 2 * int(min_order) + 2
+    if n_obs < MIN_OBS or n_obs < baseline_free_params + PRE_SOLVE_OBS_MARGIN:
+        reasons.append("too_few_observations")
+
+    # --- insufficient_time_span: zero span, or a degenerate frequency grid
+    # (f_min >= f_max) that would otherwise make _build_frequency_grid raise.
+    f_min = (
+        float("inf")
+        if not np.isfinite(span_days) or span_days <= 0.0
+        else float(min_rotations_in_span) / float(span_days)
+    )
+    if not np.isfinite(span_days) or span_days <= 0.0 or f_min >= float(max_frequency_cycles_per_day):
+        reasons.append("insufficient_time_span")
+
+    # --- amplitude_below_noise: robust scatter (1.4826*MAD) of the reduced
+    # magnitude below ~AMP_SNR_FLOOR x the noise level.  Conservative: only fire
+    # when there is clearly no signal.
+    y = np.asarray(reduced_mag, dtype=np.float64)
+    if y.size > 0 and np.all(np.isfinite(y)):
+        robust_scatter = 1.4826 * float(np.median(np.abs(y - np.median(y))))
+        if mag_sigma is not None:
+            finite_sigma = np.asarray(mag_sigma, dtype=np.float64)
+            finite_sigma = finite_sigma[np.isfinite(finite_sigma)]
+            noise_level = (
+                float(np.median(finite_sigma)) if finite_sigma.size > 0 else PRE_SOLVE_ABS_SCATTER_FLOOR
+            )
+        else:
+            noise_level = PRE_SOLVE_ABS_SCATTER_FLOOR
+        if robust_scatter < AMP_SNR_FLOOR * noise_level:
+            reasons.append("amplitude_below_noise")
+
+    return reasons
+
+
+def _insufficient_result(
+    *,
+    reasons: list[str],
+    method_mode: str,
+    profile: _FourierProfile,
+    observations: RotationPeriodObservations,
+    filter_labels: npt.NDArray[np.object_],
+    session_labels: npt.NDArray[np.object_] | None,
+    time_lt: npt.NDArray[np.float64],
+) -> RotationPeriodResult:
+    """Build the one-row ``insufficient_data`` result for the early-exit path.
+
+    Mirrors the LSM-no-period branch of ``_primary_from_method``: NaN period /
+    frequency, ``None`` for every nullable diagnostic, and the same D1 verdict
+    fields.  All non-nullable columns are populated so the row is valid.
+    """
+    session_summary = _summarize_sessions(time_lt, filter_labels, session_labels)
+    primary_method = method_mode if method_mode in {"fourier", "lsm", "hybrid"} else "none"
+    return RotationPeriodResult.from_kwargs(
+        period_days=[float("nan")],
+        period_hours=[float("nan")],
+        frequency_cycles_per_day=[float("nan")],
+        primary_method=[primary_method],
+        paper_profile=[profile.name],
+        period_verdict=[_VERDICT_INSUFFICIENT],
+        reliability_code=[_RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT]],
+        confidence_flags=[[]],
+        insufficiency_reasons=[list(reasons)],
+        is_valid=[False],
+        is_reliable=[False],
+        period_lower_days=[None],
+        period_upper_days=[None],
+        relative_period_uncertainty=[None],
+        alternate_period_days=[[]],
+        fourier_period_days=[None],
+        fourier_order=[None],
+        fourier_sigma_threshold=[None],
+        fourier_phase_c1=[None],
+        fourier_phase_c2=[None],
+        residual_sigma_mag=[None],
+        fourier_is_valid=[None],
+        fourier_is_reliable=[None],
+        fourier_alternate_period_days=[[]],
+        lsm_period_days=[None],
+        lsm_power=[None],
+        lsm_power_gap=[None],
+        lsm_candidate_period_days=[[]],
+        lsm_candidate_powers=[[]],
+        lsm_is_reliable=[None],
+        lsm_false_alarm_probability=[None],
+        method_agreement_class=[None],
+        decision_margin=[None],
+        decision_support_count=[None],
+        winner_contains_fourier_primary=[None],
+        winner_contains_lsm_primary=[None],
+        family_weight_fourier=[None],
+        family_weight_lsm=[None],
+        phase_coverage_fraction=[None],
+        n_rotations_spanned=[None],
+        amplitude_snr=[None],
+        n_significant_aliases=[None],
+        n_observations=[int(len(observations))],
+        n_fit_observations=[0],
+        n_clipped=[0],
+        n_filters=[int(len(_ordered_unique(filter_labels)))],
+        n_sessions=[int(session_summary.n_sessions)],
+        used_session_offsets=[False],
+        is_period_doubled=[False],
+    )
+
+
 def estimate_rotation_period(
     observations: RotationPeriodObservations,
     *,
@@ -1942,6 +2086,7 @@ def estimate_rotation_period(
     min_rotations_in_span: float = 2.0,
     max_frequency_cycles_per_day: float = 1000.0,
     frequency_grid_scale: float = 30.0,
+    early_exit_on_insufficient: bool = False,
     exact_evaluation_backend: str = "numpy",
     jax_frequency_batch_size: int = _DEFAULT_JAX_FREQUENCY_BATCH_SIZE,
     jax_row_pad_multiple: int = _DEFAULT_JAX_ROW_PAD_MULTIPLE,
@@ -1999,9 +2144,36 @@ def estimate_rotation_period(
     time_lt = _apply_light_time_correction(time, delta_au)
     t_rel = np.asarray(time_lt - float(np.min(time_lt)), dtype=np.float64)
     span_days = float(np.max(t_rel) - np.min(t_rel))
+    reduced_mag = np.asarray(mag - 5.0 * np.log10(r_au * delta_au), dtype=np.float64)
+
+    # Cheap, period-independent insufficiency screen (bead rp-e4a.19).  When the
+    # caller opts in, an under-determined / degenerate input early-exits with the
+    # standard ``insufficient_data`` verdict instead of building the grid (which
+    # can hang or raise on single-night spans).
+    if early_exit_on_insufficient:
+        pre_solve_reasons = _pre_solve_insufficiency(
+            n_obs=int(len(observations)),
+            filter_labels=filter_labels,
+            span_days=span_days,
+            reduced_mag=reduced_mag,
+            mag_sigma=mag_sigma,
+            min_order=int(min(profile.orders)),
+            min_rotations_in_span=min_rotations_in_span,
+            max_frequency_cycles_per_day=max_frequency_cycles_per_day,
+        )
+        if pre_solve_reasons:
+            return _insufficient_result(
+                reasons=pre_solve_reasons,
+                method_mode=method_mode,
+                profile=profile,
+                observations=observations,
+                filter_labels=filter_labels,
+                session_labels=session_labels,
+                time_lt=time_lt,
+            )
+
     if not np.isfinite(span_days) or span_days <= 0.0:
         raise ValueError("observation time span must be positive")
-    reduced_mag = np.asarray(mag - 5.0 * np.log10(r_au * delta_au), dtype=np.float64)
     weights = _weights_from_sigma(mag_sigma)
     session_summary = _summarize_sessions(time_lt, filter_labels, session_labels)
     frequencies = _build_frequency_grid(

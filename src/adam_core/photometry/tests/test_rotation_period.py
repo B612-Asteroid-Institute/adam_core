@@ -430,6 +430,43 @@ def test_hybrid_can_return_winning_family_representative_not_method_primary():
     assert "conflicting_aliases" in primary["insufficiency_reasons"]
 
 
+def test_early_exit_on_insufficient_matches_full_path_verdict():
+    # Deliberately no-signal data: flat, noise-only reduced magnitudes over a
+    # multi-night span. The robust scatter is below the photometric noise, so
+    # both the cheap pre-check and the full solve flag amplitude_below_noise.
+    n = 40
+    mjd = np.linspace(60000.0, 60003.0, n, dtype=np.float64)
+    time = Timestamp.from_mjd(mjd, scale="tdb")
+    filters = np.asarray(["LSST_r"] * n, dtype=object)
+    rng = np.random.default_rng(2026)
+    mag = 18.0 + rng.normal(0.0, 0.005, size=n)
+    observations = RotationPeriodObservations.from_kwargs(
+        time=time,
+        mag=pa.array(mag, type=pa.float64()),
+        mag_sigma=pa.array(np.full(n, 0.05, dtype=np.float64), type=pa.float64()),
+        filter=pa.array(filters.tolist(), type=pa.large_string()),
+        r_au=pa.array(np.full(n, 2.0, dtype=np.float64), type=pa.float64()),
+        delta_au=pa.array(np.full(n, 1.5, dtype=np.float64), type=pa.float64()),
+        phase_angle_deg=pa.array(np.full(n, 12.0, dtype=np.float64), type=pa.float64()),
+    )
+
+    early = estimate_rotation_period(
+        observations, method_mode="fourier", early_exit_on_insufficient=True
+    )
+    assert isinstance(early, RotationPeriodResult)
+    assert len(early) == 1
+    assert _scalar(early.period_verdict[0]) == "insufficient_data"
+    assert np.isnan(float(_scalar(early.period_days[0])))
+    assert bool(_scalar(early.is_valid[0])) is False
+    assert "amplitude_below_noise" in early.insufficiency_reasons[0].as_py()
+
+    # Same input without the fast path must reach the SAME verdict.
+    full = estimate_rotation_period(
+        observations, method_mode="fourier", early_exit_on_insufficient=False
+    )
+    assert _scalar(full.period_verdict[0]) == "insufficient_data"
+
+
 @pytest.mark.parametrize("search_fidelity", ["validated_staged", "exact_grid"])
 def test_fourier_search_fidelities_match(search_fidelity: str):
     observations = _make_rotation_observations()
