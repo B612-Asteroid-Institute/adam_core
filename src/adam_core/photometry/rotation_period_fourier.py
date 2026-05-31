@@ -544,6 +544,14 @@ def _evaluate_full_order_curve(
     return scores, full_fits
 
 
+# Hard cap on the Fourier frequency-grid size. n_freq grows as
+# frequency_grid_scale * span_days * f_max, so a multi-apparition (multi-year) span
+# would explode it into the millions and dominate runtime. The cap only bites on such
+# pathological spans (single-apparition inputs stay far below it); when it bites the
+# grid is merely coarser and the staged search still refines around peaks.
+_FOURIER_MAX_FREQUENCY_SAMPLES = 200_000
+
+
 def _build_frequency_grid(
     *,
     span_days: float,
@@ -558,6 +566,7 @@ def _build_frequency_grid(
     if f_max <= f_min:
         raise ValueError("max_frequency_cycles_per_day must exceed the minimum searchable frequency")
     n_freq = max(int(ceil(float(frequency_grid_scale) * span_days * (f_max - f_min)) + 1), 2)
+    n_freq = min(n_freq, _FOURIER_MAX_FREQUENCY_SAMPLES)
     return np.linspace(f_min, f_max, n_freq, dtype=np.float64)
 
 
