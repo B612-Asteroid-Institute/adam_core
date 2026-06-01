@@ -9,6 +9,7 @@ import pytest
 import adam_core.photometry.rotation_period_fourier as rotation_period_fourier
 from ...time import Timestamp
 from ..rotation_period_fourier import (
+    MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
     _FourierCluster,
     _FourierSolution,
     _LSMCandidate,
@@ -17,6 +18,7 @@ from ..rotation_period_fourier import (
     _MethodFamily,
     _best_harmonic_factor,
     _build_fourier_result,
+    _build_frequency_grid,
     _is_simple_harmonic_factor,
     _paper_profile,
     _primary_from_method,
@@ -526,3 +528,59 @@ def test_numpy_and_jax_exact_paths_match():
 
     assert float(_scalar(numpy_result.period_days[0])) == pytest.approx(float(_scalar(jax_result.period_days[0])), rel=1.0e-8)
     assert int(_scalar(numpy_result.fourier_order[0])) == int(_scalar(jax_result.fourier_order[0]))
+
+
+def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
+    # rp-e4a.22 step 2: the cap raises f_min so the longest searched period is
+    # bounded; default (None) leaves the floor at min_rotations_in_span / span.
+    # A long span pushes the natural f_min below the cap floor so the cap bites.
+    span_days = 100.0
+    uncapped = _build_frequency_grid(
+        span_days=span_days,
+        min_rotations_in_span=2.0,
+        max_frequency_cycles_per_day=120.0,
+        frequency_grid_scale=40.0,
+    )
+    capped = _build_frequency_grid(
+        span_days=span_days,
+        min_rotations_in_span=2.0,
+        max_frequency_cycles_per_day=120.0,
+        frequency_grid_scale=40.0,
+        max_search_period_hours=72.0,
+    )
+    assert float(uncapped[0]) == pytest.approx(2.0 / span_days)  # 0.02 cyc/day
+    assert float(capped[0]) == pytest.approx(24.0 / 72.0)  # raised floor 0.333
+    assert float(capped[0]) > float(uncapped[0])
+
+    # rp-e4a.22 step 1: a single_period verdict at a period beyond
+    # MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS is downgraded to period_family while the
+    # reported period value is preserved.
+    observations = _make_rotation_observations()
+    long_period_days = (MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS + 24.0) / 24.0
+    real_primary = rotation_period_fourier._primary_from_method
+
+    def fake_primary(**kwargs):
+        primary = real_primary(**kwargs)
+        primary["period_days"] = long_period_days
+        primary["period_verdict"] = "single_period"
+        primary["reliability_code"] = "3"
+        primary["insufficiency_reasons"] = []
+        primary["is_valid"] = True
+        primary["is_reliable"] = True
+        return primary
+
+    monkeypatch.setattr(rotation_period_fourier, "_primary_from_method", fake_primary)
+    result = estimate_rotation_period(
+        observations,
+        method_mode="fourier",
+        search_fidelity="exact_grid",
+        max_frequency_cycles_per_day=120.0,
+        frequency_grid_scale=40.0,
+    )
+
+    assert _scalar(result.period_verdict[0]) == "period_family"
+    assert _scalar(result.reliability_code[0]) == "2"
+    assert bool(_scalar(result.is_reliable[0])) is False
+    assert "period_implausibly_long" in list(result.insufficiency_reasons[0].as_py())
+    # The recovered period value itself is still reported, only downgraded.
+    assert float(_scalar(result.period_hours[0])) == pytest.approx(long_period_days * 24.0)

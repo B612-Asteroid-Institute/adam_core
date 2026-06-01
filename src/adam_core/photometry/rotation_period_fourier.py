@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from typing import cast
 
 import numpy as np
 import numpy.typing as npt
@@ -67,6 +68,12 @@ PHASE_COVERAGE_MIN_SINGLE = 0.7
 AMPLITUDE_SNR_MIN = 3.0
 # Number of rotational-phase bins used to compute ``phase_coverage_fraction``.
 _PHASE_COVERAGE_N_BINS = 20
+# Longest period a ``single_period`` verdict may claim (bead rp-e4a.22 step 1).
+# Recovered periods beyond this are treated as low-frequency drift fit as
+# rotation rather than a real spin, so the confidence (not the value) is
+# downgraded to ``period_family``. rp-e4a.13 may recalibrate; max real candle
+# period across 327 LCDB+DAMIT reliable objects is 67.5h.
+MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS = 96.0
 
 # --- Cheap pre-solve insufficiency thresholds (bead rp-e4a.19) -------------
 # Period-INDEPENDENT screening run before the Fourier/LSM search so obviously
@@ -575,9 +582,13 @@ def _build_frequency_grid(
     min_rotations_in_span: float,
     max_frequency_cycles_per_day: float,
     frequency_grid_scale: float,
+    max_search_period_hours: float | None = None,
 ) -> npt.NDArray[np.float64]:
     f_min = float(min_rotations_in_span / span_days)
     f_max = float(max_frequency_cycles_per_day)
+    if max_search_period_hours is not None:
+        # f is cycles/day, so raising f_min caps the LONGEST searched period.
+        f_min = max(f_min, 24.0 / float(max_search_period_hours))
     if not np.isfinite(f_min) or f_min <= 0.0:
         raise ValueError("derived minimum frequency is invalid")
     if f_max <= f_min:
@@ -2086,6 +2097,7 @@ def estimate_rotation_period(
     min_rotations_in_span: float = 2.0,
     max_frequency_cycles_per_day: float = 1000.0,
     frequency_grid_scale: float = 30.0,
+    max_search_period_hours: float | None = None,
     early_exit_on_insufficient: bool = False,
     exact_evaluation_backend: str = "numpy",
     jax_frequency_batch_size: int = _DEFAULT_JAX_FREQUENCY_BATCH_SIZE,
@@ -2109,6 +2121,8 @@ def estimate_rotation_period(
         raise ValueError("max_frequency_cycles_per_day must be positive")
     if frequency_grid_scale <= 0.0:
         raise ValueError("frequency_grid_scale must be positive")
+    if max_search_period_hours is not None and max_search_period_hours <= 0.0:
+        raise ValueError("max_search_period_hours must be positive when set")
     if session_mode not in {"ignore", "use", "auto"}:
         raise ValueError("session_mode must be one of {'ignore', 'use', 'auto'}")
     if auto_session_min_observations_per_group <= 0:
@@ -2181,6 +2195,7 @@ def estimate_rotation_period(
         min_rotations_in_span=min_rotations_in_span,
         max_frequency_cycles_per_day=max_frequency_cycles_per_day,
         frequency_grid_scale=frequency_grid_scale,
+        max_search_period_hours=max_search_period_hours,
     )
 
     base_design = _build_fixed_design(filter_labels, None, phase_angle)
@@ -2305,6 +2320,25 @@ def estimate_rotation_period(
     primary_method = str(primary["primary_method"])
     period_days = float(primary["period_days"])
     period_hours = float(period_days * 24.0)
+
+    # Long-period confidence guardrail (bead rp-e4a.22 step 1).  A
+    # ``single_period`` claim at an implausibly long period is almost always
+    # low-frequency drift fit as rotation; keep the reported value but downgrade
+    # confidence to ``period_family``.
+    if (
+        str(primary["period_verdict"]) == _VERDICT_SINGLE
+        and np.isfinite(period_hours)
+        and period_hours > MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS
+    ):
+        primary["period_verdict"] = _VERDICT_FAMILY
+        primary["reliability_code"] = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
+        downgrade_reasons = list(cast("list[str]", primary["insufficiency_reasons"]))
+        if "period_implausibly_long" not in downgrade_reasons:
+            downgrade_reasons.append("period_implausibly_long")
+        primary["insufficiency_reasons"] = downgrade_reasons
+        primary["is_valid"] = True
+        primary["is_reliable"] = False
+
     selected_period_lower_days = (
         None if primary["period_lower_days"] is None else float(primary["period_lower_days"])
     )
