@@ -2104,7 +2104,6 @@ def estimate_rotation_period(
     jax_row_pad_multiple: int = _DEFAULT_JAX_ROW_PAD_MULTIPLE,
     session_mode: str = "auto",
     auto_session_min_observations_per_group: int = 6,
-    auto_session_max_period_to_session_span_ratio: float = 1.0,
     auto_session_bic_improvement: float = 10.0,
     harmonic_period_factors: tuple[float, ...] = _DEFAULT_HARMONIC_PERIOD_FACTORS,
     lsm_max_frequency_samples: int = _LSM_DEFAULT_MAX_SAMPLES,
@@ -2127,8 +2126,6 @@ def estimate_rotation_period(
         raise ValueError("session_mode must be one of {'ignore', 'use', 'auto'}")
     if auto_session_min_observations_per_group <= 0:
         raise ValueError("auto_session_min_observations_per_group must be positive")
-    if auto_session_max_period_to_session_span_ratio <= 0.0:
-        raise ValueError("auto_session_max_period_to_session_span_ratio must be positive")
     if auto_session_bic_improvement < 0.0:
         raise ValueError("auto_session_bic_improvement must be non-negative")
     if exact_evaluation_backend not in {"numpy", "jax"}:
@@ -2238,12 +2235,18 @@ def estimate_rotation_period(
             fourier_solution = session_fourier
             used_session_offsets = True
         else:
+            # Per-session magnitude offsets are identifiable once there are a few
+            # sessions that each carry enough points; the BIC test below then
+            # decides whether the offsets are actually warranted.  We deliberately
+            # do NOT gate on period-vs-session-span: multi-night campaigns
+            # legitimately recover periods far longer than a single night's
+            # session, and withholding the offsets there lets large inter-session
+            # magnitude steps be fit as spurious low-frequency "rotation"
+            # (rp-e4a.22).
             session_eligible = bool(
                 session_summary.n_sessions >= 2
                 and session_summary.min_group_count >= auto_session_min_observations_per_group
                 and session_summary.median_session_span_days > 0.0
-                and session_fourier.chosen.period_days
-                <= auto_session_max_period_to_session_span_ratio * session_summary.median_session_span_days
             )
             if session_eligible and (
                 _fit_bic(session_fourier.fit_summary) + auto_session_bic_improvement
