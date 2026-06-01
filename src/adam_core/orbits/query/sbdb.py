@@ -17,6 +17,7 @@ from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
 from ...coordinates.origin import Origin
 from ...time import Timestamp
+from ..non_gravitational_parameters import NonGravitationalParameters
 from ..orbits import Orbits
 from ..physical_parameters import PhysicalParameters
 
@@ -237,15 +238,17 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
     orbit_ids = np.array(orbit_ids, dtype="object")
     object_ids = np.array(object_ids, dtype="object")
     classes = np.array(classes)
-    # Legacy astroquery path does not request phys-par; fill with nulls.
+    # Legacy astroquery path does not request phys-par or model_pars; fill with nulls.
     phys_rows = [(None, None, None, None)] * len(results)
     physical_parameters = _physical_parameters_from_sbdb(phys_rows)
+    nongrav = NonGravitationalParameters.nulls(len(results))
 
     return Orbits.from_kwargs(
         orbit_id=orbit_ids,
         object_id=object_ids,
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
+        non_gravitational_parameters=nongrav,
     )
 
 
@@ -482,6 +485,97 @@ def _physical_parameters_from_sbdb(
     )
 
 
+def _empty_nongrav_row() -> dict[str, Any]:
+    return {
+        "source": None,
+        "model": None,
+        "solution_dimension": None,
+        "parameter_count": None,
+        "estimated_parameter_names": None,
+        "A1": None,
+        "A1_sigma": None,
+        "A2": None,
+        "A2_sigma": None,
+        "A3": None,
+        "A3_sigma": None,
+        "DT": None,
+        "DT_sigma": None,
+        "R0": None,
+        "R0_sigma": None,
+        "ALN": None,
+        "ALN_sigma": None,
+        "NK": None,
+        "NK_sigma": None,
+        "NM": None,
+        "NM_sigma": None,
+        "NN": None,
+        "NN_sigma": None,
+        "AMRAT": None,
+        "AMRAT_sigma": None,
+        "RHO": None,
+        "RHO_sigma": None,
+    }
+
+
+def _sbdb_nongrav_row(payload: dict[str, Any]) -> dict[str, Any]:
+    row = _empty_nongrav_row()
+    orbit = payload.get("orbit") or {}
+    model_pars = orbit.get("model_pars") or []
+    if not model_pars:
+        return row
+
+    row["source"] = "SBDB"
+    cov = orbit.get("covariance")
+    if isinstance(cov, dict) and isinstance(cov.get("labels"), list):
+        row["solution_dimension"] = len(cov["labels"])
+
+    estimated: list[tuple[int, str]] = []
+    names_seen: set[str] = set()
+    for param in model_pars:
+        if not isinstance(param, dict):
+            continue
+        name = param.get("name")
+        if name is None:
+            continue
+        name = str(name)
+        names_seen.add(name)
+
+        value = _sbdb_phys_par_value(param)
+        sigma = _sbdb_phys_par_sigma(param)
+        if name in row:
+            row[name] = value
+        sigma_key = f"{name}_sigma"
+        if sigma_key in row:
+            row[sigma_key] = sigma
+
+        if str(param.get("kind")) == "EST":
+            estimated.append((int(param.get("n", 0) or 0), name))
+
+    if estimated:
+        estimated.sort()
+        row["parameter_count"] = len(estimated)
+        row["estimated_parameter_names"] = ",".join(name for _, name in estimated)
+
+    if "AMRAT" in names_seen:
+        row["model"] = "srp"
+    elif "DT" in names_seen or "A3" in names_seen:
+        row["model"] = "cometary"
+    elif any(name in names_seen for name in ("A1", "A2", "ALN", "NK", "NM", "NN", "R0")):
+        row["model"] = "nongrav"
+
+    return row
+
+
+def _non_gravitational_parameters_from_sbdb(
+    rows: list[dict[str, Any]],
+) -> NonGravitationalParameters:
+    if not rows:
+        return NonGravitationalParameters.nulls(0)
+
+    columns = {key: [row.get(key) for row in rows] for key in _empty_nongrav_row()}
+    return NonGravitationalParameters.from_kwargs(**columns)
+
+
 def _orbits_from_sbdb_payloads(
     ids: list[str],
     payloads: list[dict[str, Any]],
@@ -501,6 +595,7 @@ def _orbits_from_sbdb_payloads(
     orbit_ids: list[str] = []
     object_ids: list[str] = []
     phys_rows: list[tuple[float | None, float | None, float | None, float | None]] = []
+    nongrav_rows: list[dict[str, Any]] = []
 
     coords_cometary = np.zeros((len(payloads), 6), dtype=np.float64)
     covariances_sbdb = np.zeros((len(payloads), 6, 6), dtype=np.float64)
@@ -585,6 +680,7 @@ def _orbits_from_sbdb_payloads(
         coords_cometary[i, 5] = tp_mjd
 
         phys_rows.append(_sbdb_phys_par_from_payload(payload))
+        nongrav_rows.append(_sbdb_nongrav_row(payload))
 
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
     times = Timestamp.from_jd(times_jd, scale="tdb")
@@ -604,11 +700,13 @@ def _orbits_from_sbdb_payloads(
     )
 
     physical_parameters = _physical_parameters_from_sbdb(phys_rows)
+    nongrav = _non_gravitational_parameters_from_sbdb(nongrav_rows)
     return Orbits.from_kwargs(
         orbit_id=np.array(orbit_ids, dtype="object"),
         object_id=np.array(object_ids, dtype="object"),
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
+        non_gravitational_parameters=nongrav,
     )
 
 

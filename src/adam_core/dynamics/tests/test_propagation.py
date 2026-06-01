@@ -11,6 +11,7 @@ from astropy import units as u
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...orbits import Orbits
+from ...orbits.non_gravitational_parameters import NonGravitationalParameters
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
@@ -501,6 +502,58 @@ def test_propagate_2body_preserves_physical_parameters():
 
     np.testing.assert_allclose(have_H, expected_H)
     np.testing.assert_allclose(have_G, expected_G)
+
+
+def test_propagate_2body_rejects_non_gravitational_parameters():
+    t0 = Timestamp.from_mjd([60000.0, 60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1", "o2"],
+        object_id=["o1", "o2"],
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            source=["SBDB", "NEOCC"],
+            model=["nongrav", "yarkovsky"],
+            solution_dimension=[7, 7],
+            parameter_count=[1, 1],
+            estimated_parameter_names=["A2", "A2"],
+            A1=[None, None],
+            A1_sigma=[None, None],
+            A2=[-8.72e-14, -2.90e-14],
+            A2_sigma=[3.07e-14, None],
+            A3=[None, None],
+            A3_sigma=[None, None],
+            DT=[None, None],
+            DT_sigma=[None, None],
+            R0=[1.0, None],
+            R0_sigma=[None, None],
+            ALN=[1.0, None],
+            ALN_sigma=[None, None],
+            NK=[0.0, None],
+            NK_sigma=[None, None],
+            NM=[2.0, None],
+            NM_sigma=[None, None],
+            NN=[None, None],
+            NN_sigma=[None, None],
+            AMRAT=[None, 0.0],
+            AMRAT_sigma=[None, None],
+            RHO=[None, None],
+            RHO_sigma=[None, None],
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.2],
+            y=[0.0, 0.1],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.017, 0.015],
+            vz=[0.0, 0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    times = Timestamp.from_mjd([60000.0, 60001.0], scale="tdb")
+    with pytest.raises(ValueError, match="does not support non-gravitational"):
+        propagate_2body(orbits, times)
 
 
 def test_propagate_2body_does_not_include_padded_rows() -> None:

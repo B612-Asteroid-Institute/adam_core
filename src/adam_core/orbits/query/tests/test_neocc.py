@@ -2,7 +2,12 @@ from pathlib import Path
 
 import numpy as np
 
-from ..neocc import _parse_oef, _physical_parameters_from_neocc, query_neocc
+from ..neocc import (
+    _non_gravitational_parameters_from_neocc,
+    _parse_oef,
+    _physical_parameters_from_neocc,
+    query_neocc,
+)
 
 TESTDATA_DIR = Path(__file__).parent / "testdata" / "neocc"
 
@@ -150,6 +155,8 @@ def test_query_neocc(mocker):
     assert orbits.physical_parameters.G[0].as_py() == 0.150
     assert orbits.physical_parameters.H_v[1].as_py() == 28.912
     assert orbits.physical_parameters.G[1].as_py() == 0.150
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert orbits.non_gravitational_parameters.A2[1].as_py() is None
 
     # Verify the mock was called with correct parameters
     requests.get.assert_has_calls(
@@ -231,6 +238,33 @@ def test__physical_parameters_from_neocc_magnitude_empty() -> None:
     assert len(phys) == 1
     assert np.isnan(phys.H_v[0].as_py())
     assert np.isnan(phys.G[0].as_py())
+
+
+def test__parse_oef_99942_ke1_nongrav() -> None:
+    result = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
+
+    assert result["nongrav"]["model_used"] == 1
+    assert result["nongrav"]["parameter_count"] == 2
+    assert result["nongrav"]["dimension"] == 7
+    assert result["nongrav"]["solve_for_parameter_codes"] == [2]
+    assert result["nongrav"]["vector"] == [0.0, -2.90010329254113e-04]
+    assert result["covariance"].shape == (6, 6)
+    assert result["covariance_full"].shape == (7, 7)
+    assert result["correlation_full"].shape == (7, 7)
+
+
+def test__non_gravitational_parameters_from_neocc_yarkovsky() -> None:
+    data = _parse_oef((TESTDATA_DIR / "101955.ke1").read_text())
+    nongrav = _non_gravitational_parameters_from_neocc(data)
+
+    assert len(nongrav) == 1
+    assert nongrav.source[0].as_py() == "NEOCC"
+    assert nongrav.model[0].as_py() == "yarkovsky"
+    assert nongrav.solution_dimension[0].as_py() == 7
+    assert nongrav.parameter_count[0].as_py() == 2
+    assert nongrav.estimated_parameter_names[0].as_py() == "A2"
+    assert nongrav.AMRAT[0].as_py() == 0.0
+    assert np.isclose(nongrav.A2[0].as_py(), -4.60477568857430e-14)
 
 
 def test_real_neocc_oef_files_parse_without_error() -> None:

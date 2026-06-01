@@ -12,8 +12,10 @@ from astroquery.jplsbdb import SBDB
 from ..sbdb import (
     NotFoundError,
     _convert_SBDB_covariances,
+    _non_gravitational_parameters_from_sbdb,
     _orbits_from_sbdb_payloads,
     _physical_parameters_from_sbdb,
+    _sbdb_nongrav_row,
     _sbdb_phys_par_from_payload,
     query_sbdb,
     query_sbdb_new,
@@ -329,6 +331,26 @@ def test__physical_parameters_from_sbdb_two_rows() -> None:
     assert np.isnan(tbl.G_sigma[0].as_py()) and tbl.G_sigma[1].as_py() == 0.05
 
 
+def test__sbdb_nongrav_row_extracts_supported_fields() -> None:
+    payload = _load_sbdb_fixture_payload("99942_phys.json")
+    row = _sbdb_nongrav_row(payload)
+    assert row["source"] == "SBDB"
+    assert row["solution_dimension"] == 8
+    assert row["parameter_count"] == 2
+    assert row["estimated_parameter_names"] == "A1,A2"
+    assert row["A1"] == 5.0e-13
+    assert row["A2"] == -2.901766637153165e-14
+    assert row["ALN"] == 1.0
+    assert row["NK"] == 0.0
+    assert row["NM"] == 2.0
+    assert row["R0"] == 1.0
+
+
+def test__non_gravitational_parameters_from_sbdb_empty() -> None:
+    tbl = _non_gravitational_parameters_from_sbdb([])
+    assert len(tbl) == 0
+
+
 def test_query_sbdb_new_physical_parameters_from_phys_par() -> None:
     # SBDB returns H, G (and optional sigmas) when phys-par=1; V-band per JPL/MPC convention.
     payload = _load_sbdb_fixture_payload("2001VB.json")
@@ -386,6 +408,25 @@ def test_query_sbdb_new_physical_parameters_missing_phys_par_fills_nan() -> None
     assert orbits.physical_parameters is not None
     assert np.isnan(orbits.physical_parameters.H_v[0].as_py())
     assert np.isnan(orbits.physical_parameters.G[0].as_py())
+
+
+def test_query_sbdb_new_populates_non_gravitational_parameters() -> None:
+    payload = _load_sbdb_fixture_payload("67P_phys.json")
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["67P"], timeout_s=1.0, max_attempts=1)
+
+    assert len(orbits) == 1
+    assert orbits.non_gravitational_parameters.model[0].as_py() == "cometary"
+    assert orbits.non_gravitational_parameters.solution_dimension[0].as_py() == 10
+    assert orbits.non_gravitational_parameters.A1[0].as_py() == 1.042451026100725e-9
+    assert orbits.non_gravitational_parameters.A2[0].as_py() == -6.739627582388806e-11
+    assert orbits.non_gravitational_parameters.A3[0].as_py() == 2.960945433454094e-10
+    assert orbits.non_gravitational_parameters.DT[0].as_py() == 45.68888251286532
 
 
 def test_real_sbdb_payloads_parse_without_error() -> None:

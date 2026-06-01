@@ -3,6 +3,7 @@ import pyarrow.compute as pc
 import pytest
 
 from ...coordinates import CartesianCoordinates, Origin, SphericalCoordinates
+from ...orbits.non_gravitational_parameters import NonGravitationalParameters
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
@@ -53,6 +54,42 @@ def test_VariantOrbits_collapse_by_object_id():
             H_v=[15.0, 15.0, 15.0, 17.5, 17.5, 17.5],
             G=[0.15, 0.15, 0.15, 0.25, 0.25, 0.25],
         ),
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            source=["SBDB", "SBDB", "SBDB", "NEOCC", "NEOCC", "NEOCC"],
+            model=[
+                "nongrav",
+                "nongrav",
+                "nongrav",
+                "yarkovsky",
+                "yarkovsky",
+                "yarkovsky",
+            ],
+            solution_dimension=[7, 7, 7, 7, 7, 7],
+            parameter_count=[1, 1, 1, 1, 1, 1],
+            estimated_parameter_names=["A2", "A2", "A2", "A2", "A2", "A2"],
+            A1=[None] * 6,
+            A1_sigma=[None] * 6,
+            A2=[1e-13, 1e-13, 1e-13, -2e-14, -2e-14, -2e-14],
+            A2_sigma=[None] * 6,
+            A3=[None] * 6,
+            A3_sigma=[None] * 6,
+            DT=[None] * 6,
+            DT_sigma=[None] * 6,
+            R0=[None] * 6,
+            R0_sigma=[None] * 6,
+            ALN=[None] * 6,
+            ALN_sigma=[None] * 6,
+            NK=[None] * 6,
+            NK_sigma=[None] * 6,
+            NM=[None] * 6,
+            NM_sigma=[None] * 6,
+            NN=[None] * 6,
+            NN_sigma=[None] * 6,
+            AMRAT=[None] * 6,
+            AMRAT_sigma=[None] * 6,
+            RHO=[None] * 6,
+            RHO_sigma=[None] * 6,
+        ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
             y=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
@@ -96,6 +133,8 @@ def test_VariantOrbits_collapse_by_object_id():
     assert obj1.physical_parameters.G[0].as_py() == 0.15
     assert obj2.physical_parameters.H_v[0].as_py() == 17.5
     assert obj2.physical_parameters.G[0].as_py() == 0.25
+    assert obj1.non_gravitational_parameters.A2[0].as_py() == 1e-13
+    assert obj2.non_gravitational_parameters.A2[0].as_py() == -2e-14
 
     # Check that covariance matrices are computed correctly
     # For obj1, the variance should be approximately 0.00667 for each component

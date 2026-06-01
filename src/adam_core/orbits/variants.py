@@ -18,6 +18,7 @@ from ..observers.observers import Observers
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
 from .ephemeris import Ephemeris
+from .non_gravitational_parameters import NonGravitationalParameters
 from .orbits import Orbits
 from .physical_parameters import PhysicalParameters
 
@@ -30,6 +31,7 @@ class VariantOrbits(qv.Table):
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = CartesianCoordinates.as_column()
     physical_parameters = PhysicalParameters.as_column(nullable=True)
+    non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
 
     @classmethod
     def create(
@@ -97,6 +99,9 @@ class VariantOrbits(qv.Table):
             weights_cov=variant_coordinates.weight_cov,
             coordinates=variant_coordinates.sample,
             physical_parameters=orbits.physical_parameters.take(
+                variant_coordinates.index
+            ),
+            non_gravitational_parameters=orbits.non_gravitational_parameters.take(
                 variant_coordinates.index
             ),
         )
@@ -219,6 +224,9 @@ class VariantOrbits(qv.Table):
                 orbit_id=[uuid.uuid4().hex],
                 object_id=[object_id],
                 physical_parameters=object_variants.physical_parameters.take([0]),
+                non_gravitational_parameters=object_variants.non_gravitational_parameters.take(
+                    [0]
+                ),
                 coordinates=CartesianCoordinates.from_kwargs(
                     x=[mean[0]],
                     y=[mean[1]],

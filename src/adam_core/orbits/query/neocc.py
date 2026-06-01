@@ -8,9 +8,26 @@ import requests
 from adam_core.coordinates.covariances import _upper_triangular_to_full
 
 from ...coordinates import CoordinateCovariances, KeplerianCoordinates, Origin
+from ..non_gravitational_parameters import NonGravitationalParameters
 from ...orbits import Orbits
 from ...time import Timestamp
 from ..physical_parameters import PhysicalParameters
+
+
+def _upper_triangular_to_full_dimension(
+    upper_triangular: npt.NDArray[np.float64],
+    dimension: int,
+) -> npt.NDArray[np.float64]:
+    expected = dimension * (dimension + 1) // 2
+    if len(upper_triangular) != expected:
+        raise ValueError(
+            f"Upper triangular matrix for dimension {dimension} should have {expected} elements, got {len(upper_triangular)}"
+        )
+
+    full = np.zeros((dimension, dimension), dtype=np.float64)
+    full[np.triu_indices(dimension)] = upper_triangular
+    full[np.tril_indices(dimension, -1)] = full.T[np.tril_indices(dimension, -1)]
+    return full
 
 
 def _parse_oef(data: str) -> Dict[str, Any]:
@@ -119,6 +136,22 @@ def _parse_oef(data: str) -> Dict[str, Any]:
                 "G": float(mag_data[1]),
             }
 
+    # Parse non-gravitational metadata.
+    for line in lines:
+        if line.strip().startswith("LSP"):
+            lsp = [int(value) for value in line.split()[1:]]
+            result["nongrav"] = {
+                "model_used": lsp[0] if len(lsp) > 0 else None,
+                "parameter_count": lsp[1] if len(lsp) > 1 else None,
+                "dimension": lsp[2] if len(lsp) > 2 else 6,
+                "solve_for_parameter_codes": lsp[3:] if len(lsp) > 3 else [],
+            }
+        if line.strip().startswith("NGR"):
+            ngr = [float(value) for value in line.split()[1:]]
+            if "nongrav" not in result:
+                result["nongrav"] = {}
+            result["nongrav"]["vector"] = ngr
+
     # Parse derived parameters (marked with !)
     derived = {}
     for line in lines:
@@ -137,15 +170,14 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         if line.strip().startswith("COV"):
             cov_matrix.extend([float(x) for x in line.split()[1:]])
     if cov_matrix:
-        # Upper triangular matrix with order
-        # (1,1)   (1,2)   (1,3)
-        # (1,4)   (1,5)   (1,6)
-        # (2,2)   (2,3)   (2,4)
-        # (2,5)   (2,6)   (3,3)
-        # (3,4)   (3,5)   (3,6)
-        # (4,4)   (4,5)   (4,6)
-        # (5,5)   (5,6)   (6,6)
-        result["covariance"] = _upper_triangular_to_full(np.array(cov_matrix))
+        dimension = result.get("nongrav", {}).get("dimension", 6)
+        if dimension == 6:
+            result["covariance_full"] = _upper_triangular_to_full(np.array(cov_matrix))
+        else:
+            result["covariance_full"] = _upper_triangular_to_full_dimension(
+                np.array(cov_matrix), dimension
+            )
+        result["covariance"] = result["covariance_full"][:6, :6]
 
     # Parse correlation matrix
     cor_matrix = []
@@ -153,7 +185,14 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         if line.strip().startswith("COR"):
             cor_matrix.extend([float(x) for x in line.split()[1:]])
     if cor_matrix:
-        result["correlation"] = _upper_triangular_to_full(np.array(cor_matrix))
+        dimension = result.get("nongrav", {}).get("dimension", 6)
+        if dimension == 6:
+            result["correlation_full"] = _upper_triangular_to_full(np.array(cor_matrix))
+        else:
+            result["correlation_full"] = _upper_triangular_to_full_dimension(
+                np.array(cor_matrix), dimension
+            )
+        result["correlation"] = result["correlation_full"][:6, :6]
 
     return result
 
@@ -180,6 +219,68 @@ def _physical_parameters_from_neocc(data: Dict[str, Any]) -> PhysicalParameters:
         H_v_sigma=[np.nan],
         G=[np.nan],
         G_sigma=[np.nan],
+    )
+
+
+def _solve_for_codes_to_names(codes: list[int]) -> list[str]:
+    mapping = {
+        1: "AMRAT",
+        2: "A2",
+        3: "A1",
+        4: "A3",
+        5: "DT",
+    }
+    return [mapping[code] for code in codes if code in mapping]
+
+
+def _non_gravitational_parameters_from_neocc(
+    data: Dict[str, Any],
+) -> NonGravitationalParameters:
+    info = data.get("nongrav") or {}
+    if not info:
+        return NonGravitationalParameters.nulls(1)
+
+    vector = info.get("vector") or []
+    amrat = float(vector[0]) if len(vector) > 0 else None
+    # NEOCC OEF documents the Yarkovsky parameter in 1E-10 au/day^2.
+    a2 = float(vector[1]) * 1e-10 if len(vector) > 1 else None
+
+    solve_for = _solve_for_codes_to_names(info.get("solve_for_parameter_codes") or [])
+    model_used = info.get("model_used")
+    model = None
+    if model_used == 1:
+        model = "yarkovsky"
+    elif model_used not in (None, 0):
+        model = f"neocc-model-{model_used}"
+
+    return NonGravitationalParameters.from_kwargs(
+        source=["NEOCC"],
+        model=[model],
+        solution_dimension=[info.get("dimension")],
+        parameter_count=[info.get("parameter_count")],
+        estimated_parameter_names=[",".join(solve_for) if solve_for else None],
+        A1=[None],
+        A1_sigma=[None],
+        A2=[a2],
+        A2_sigma=[None],
+        A3=[None],
+        A3_sigma=[None],
+        DT=[None],
+        DT_sigma=[None],
+        R0=[None],
+        R0_sigma=[None],
+        ALN=[None],
+        ALN_sigma=[None],
+        NK=[None],
+        NK_sigma=[None],
+        NM=[None],
+        NM_sigma=[None],
+        NN=[None],
+        NN_sigma=[None],
+        AMRAT=[amrat],
+        AMRAT_sigma=[None],
+        RHO=[None],
+        RHO_sigma=[None],
     )
 
 
@@ -244,6 +345,7 @@ def query_neocc(
                 )
 
             phys = _physical_parameters_from_neocc(data)
+            nongrav = _non_gravitational_parameters_from_neocc(data)
 
             orbit = Orbits.from_kwargs(
                 orbit_id=[data["object_id"]],
@@ -267,6 +369,7 @@ def query_neocc(
                     origin=Origin.from_kwargs(code=["SUN"]),
                 ).to_cartesian(),
                 physical_parameters=phys,
+                non_gravitational_parameters=nongrav,
             )
             orbits = qv.concatenate([orbits, orbit])
 

@@ -20,6 +20,7 @@ adam_core
    api/propagator
    api/time
    api/utils
+   non_grav_support
 
 Indices and tables
 ==================

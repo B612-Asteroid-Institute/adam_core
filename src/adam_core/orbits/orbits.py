@@ -8,6 +8,7 @@ import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from .classification import calc_orbit_class
+from .non_gravitational_parameters import NonGravitationalParameters
 from .physical_parameters import PhysicalParameters
 
 if TYPE_CHECKING:
@@ -22,6 +23,7 @@ class Orbits(qv.Table):
     object_id = qv.LargeStringColumn(nullable=True)
     coordinates = CartesianCoordinates.as_column()
     physical_parameters = PhysicalParameters.as_column(nullable=True)
+    non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
 
     def group_by_orbit_id(self) -> Iterable[Tuple[str, "Orbits"]]:
         """
