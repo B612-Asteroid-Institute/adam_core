@@ -257,10 +257,16 @@ def build_observatory_band_map(out_dir: Path) -> ObservatoryBandMap:
         mappings.append(("X05", band, f"LSST_{band}"))
     mappings.append(("X05", "Y", "LSST_y"))  # pragmatic alias
 
-    # ATLAS (multiple MPC codes share the same c/o passbands)
+    # ATLAS (multiple MPC codes share the same c/o passbands).
+    # MPC obs80 ingests ATLAS observations with a leading "A" filter prefix
+    # ("Ao"/"Ac"); the native ATLAS exposure index uses just "o"/"c". Adding
+    # explicit aliases here means ``native_band_for`` can resolve both forms
+    # to the same canonical filter_id without per-station regex normalization.
     for code in ["T08", "T05", "M22", "W68"]:
         mappings.append((code, "c", "ATLAS_c"))
         mappings.append((code, "o", "ATLAS_o"))
+        mappings.append((code, "Ac", "ATLAS_c"))
+        mappings.append((code, "Ao", "ATLAS_o"))
 
     # Kitt Peak-Bok (V00): BASS / Bok-90Prime g/r.
     mappings.append(("V00", "g", "BASS_g"))

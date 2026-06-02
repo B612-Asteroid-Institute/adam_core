@@ -111,6 +111,62 @@ def load_observatory_band_map() -> ObservatoryBandMap:
     return ObservatoryBandMap.from_parquet(path)
 
 
+def native_band_for(observatory_code: str, reported_band: str) -> str | None:
+    """Map ``(observatory_code, reported_band)`` to the vendor-native band string
+    used by that observatory's exposure index.
+
+    Useful for callers that need to compare against a vendor's *native*
+    exposure-metadata ``filter`` column (e.g. the cutouts engine matching
+    against an ATLAS or ZTF native exposure index). The vendor index uses
+    short native band strings (``o``, ``c``, ``g``, ...) while MPC obs80
+    submissions of the same observations often carry vendor-prefixed forms
+    (``Ao``, ``Ac``, ``Lg``, ...). This helper resolves either form to the
+    canonical native band.
+
+    Resolution order:
+
+    1. ``(observatory_code, reported_band)`` is looked up directly in
+       :class:`ObservatoryBandMap`. The mapping table includes both the
+       native form (e.g. ``T05|o``) and known MPC-prefixed aliases (e.g.
+       ``T05|Ao``), both mapped to the same canonical ``filter_id``.
+    2. The canonical ``filter_id`` is split on its first underscore and the
+       suffix is returned: ``ATLAS_o`` -> ``o``, ``ZTF_g`` -> ``g``,
+       ``DECam_VR`` -> ``VR``.
+    3. Returns ``None`` if the ``(code, band)`` pair has no canonical entry.
+
+    Parameters
+    ----------
+    observatory_code : str
+        MPC observatory code (e.g. ``"T05"``, ``"I41"``, ``"X05"``).
+    reported_band : str
+        Filter/band string as reported by the source (MPC submission or
+        vendor-native). Examples: ``"o"``, ``"Ao"``, ``"g"``, ``"Lg"``.
+
+    Returns
+    -------
+    native_band : str | None
+        Canonical vendor-native band string, or ``None`` if the pair has no
+        mapping.
+    """
+    if not observatory_code or not reported_band:
+        return None
+    mapping = load_observatory_band_map()
+    key = f"{observatory_code}|{reported_band}"
+    idx_arr = pc.index_in(pa.array([key], type=pa.large_string()), value_set=mapping.key)
+    idx_val = idx_arr[0].as_py()
+    if idx_val is None:
+        return None
+    filter_id = mapping.filter_id[idx_val].as_py()
+    if not filter_id:
+        return None
+    # filter_id is ``"Vendor_band"``; the native band is the suffix after the
+    # first underscore. Filter ids without an underscore (none today, but
+    # defensive) fall through unchanged.
+    if "_" in filter_id:
+        return filter_id.split("_", 1)[1]
+    return filter_id
+
+
 @lru_cache(maxsize=1)
 def load_asteroid_templates() -> AsteroidTemplates:
     path = _DATA_DIR.joinpath(_TEMPLATES_FILE)

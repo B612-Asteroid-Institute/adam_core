@@ -11,6 +11,7 @@ from adam_core.photometry.bandpasses import (
     load_bandpass_curves,
     load_observatory_band_map,
     map_to_canonical_filter_bands,
+    native_band_for,
 )
 
 
@@ -52,10 +53,55 @@ def test_observatory_band_map_covers_required_pairs():
         # Pan-STARRS1 wide filter (PS1.w), MPC codes F51 / F52.
         ("F51", "w"),
         ("F52", "w"),
+        # MPC-prefixed ATLAS bands ("Ao"/"Ac") at every ATLAS site. The
+        # native equivalents ("o"/"c") are tested above; both forms must
+        # resolve so vendor exposure-index lookups work for both native
+        # ATLAS rows and MPC obs80 ingestions of the same observations.
+        ("T05", "Ao"),
+        ("T05", "Ac"),
+        ("T08", "Ao"),
+        ("T08", "Ac"),
+        ("M22", "Ao"),
+        ("M22", "Ac"),
+        ("W68", "Ao"),
+        ("W68", "Ac"),
     ]
     for code, band in required:
         key = f"{code}|{band}"
         assert bool(pc.any(pc.equal(mapping.key, key)).as_py())
+
+
+def test_native_band_for_native_passthrough():
+    """For already-native band strings, ``native_band_for`` returns the same
+    string unchanged."""
+    assert native_band_for("T05", "o") == "o"
+    assert native_band_for("T08", "c") == "c"
+    assert native_band_for("I41", "g") == "g"
+    assert native_band_for("I41", "r") == "r"
+    assert native_band_for("X05", "y") == "y"
+    assert native_band_for("W84", "VR") == "VR"
+
+
+def test_native_band_for_mpc_prefixed_atlas():
+    """MPC obs80 ingests ATLAS observations with a leading "A" prefix
+    ("Ao"/"Ac"); the native form is "o"/"c". ``native_band_for`` must
+    resolve both equivalently at every ATLAS site.
+    """
+    for code in ("T05", "T08", "M22", "W68"):
+        assert native_band_for(code, "Ao") == "o"
+        assert native_band_for(code, "Ac") == "c"
+
+
+def test_native_band_for_unknown_returns_none():
+    """Unmapped (observatory, band) pairs return None rather than raising.
+    Callers (e.g. cutouts engine) can fall back to passing the original
+    reported band, omitting the filter from a search, or surfacing a
+    warning.
+    """
+    assert native_band_for("XXX", "g") is None
+    assert native_band_for("T05", "bogus") is None
+    assert native_band_for("", "o") is None
+    assert native_band_for("T05", "") is None
 
 
 def test_map_to_canonical_filter_bands_strict_happy_path():
