@@ -2,6 +2,7 @@ import logging
 from typing import List, Literal, Optional, Tuple
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
@@ -199,6 +200,123 @@ def prepare_propagated_variants(
     return prepared_variants
 
 
+def _cluster_sorted_times(
+    times_mjd: npt.NDArray[np.float64], cluster_gap_days: float
+) -> List[npt.NDArray[np.int64]]:
+    """
+    Split sorted event times into clusters using a fixed time-gap threshold.
+    """
+    if len(times_mjd) == 0:
+        return []
+
+    sorted_idx = np.argsort(times_mjd)
+    sorted_times = times_mjd[sorted_idx]
+    split_points = np.where(np.diff(sorted_times) > cluster_gap_days)[0] + 1
+    clusters = np.split(sorted_idx, split_points)
+    return [cluster.astype(np.int64) for cluster in clusters if len(cluster) > 0]
+
+
+def _select_collision_cluster(
+    impacts: CollisionEvent,
+    focus_body: Optional[Literal["EARTH", "MOON"]] = None,
+    cluster_gap_days: float = 30.0,
+    cluster_index: Optional[int] = None,
+    cluster_selection: Literal["densest", "earliest"] = "densest",
+    cluster_padding: float = 0.0,
+) -> CollisionEvent:
+    """
+    Select one temporal collision cluster for plotting.
+    """
+    if len(impacts) == 0:
+        return impacts
+
+    body_codes = impacts.collision_object.code.to_numpy(zero_copy_only=False)
+    available_bodies = sorted(set(body_codes.tolist()))
+
+    if focus_body is None:
+        selected_body = "MOON" if "MOON" in available_bodies else available_bodies[0]
+    else:
+        if focus_body not in available_bodies:
+            raise ValueError(
+                f"Requested focus_body '{focus_body}' not found in collision events: {available_bodies}"
+            )
+        selected_body = focus_body
+
+    stopping_condition = impacts.stopping_condition.to_numpy(zero_copy_only=False)
+    rho = impacts.collision_coordinates.rho.to_numpy(zero_copy_only=False)
+    times_mjd = impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    variant_ids = impacts.variant_id.to_numpy(zero_copy_only=False)
+
+    body_mask = body_codes == selected_body
+    close_approach_mask = np.logical_and(body_mask, np.logical_not(stopping_condition))
+    candidate_mask = close_approach_mask if np.any(close_approach_mask) else body_mask
+
+    candidate_indices = np.flatnonzero(candidate_mask)
+    if len(candidate_indices) == 0:
+        return impacts
+
+    # Keep one event per variant (closest event) to avoid over-weighting variants
+    # that trigger multiple threshold crossings.
+    closest_indices_by_variant: dict[str, int] = {}
+    closest_rho_by_variant: dict[str, float] = {}
+    for idx in candidate_indices:
+        variant_id = variant_ids[idx]
+        event_rho = rho[idx]
+        previous_rho = closest_rho_by_variant.get(variant_id)
+        if previous_rho is None or event_rho < previous_rho:
+            closest_rho_by_variant[variant_id] = event_rho
+            closest_indices_by_variant[variant_id] = idx
+
+    closest_indices = np.array(list(closest_indices_by_variant.values()), dtype=int)
+    closest_times_mjd = times_mjd[closest_indices]
+    clusters = _cluster_sorted_times(closest_times_mjd, cluster_gap_days=cluster_gap_days)
+    if len(clusters) == 0:
+        return impacts
+
+    if cluster_index is not None:
+        if cluster_index < 0 or cluster_index >= len(clusters):
+            raise ValueError(
+                f"cluster_index={cluster_index} is out of range for {len(clusters)} detected clusters."
+            )
+        selected_cluster_idx = cluster_index
+    elif cluster_selection == "densest":
+        selected_cluster_idx = max(
+            range(len(clusters)),
+            key=lambda i: (len(clusters[i]), -np.min(closest_times_mjd[clusters[i]])),
+        )
+    elif cluster_selection == "earliest":
+        selected_cluster_idx = min(
+            range(len(clusters)), key=lambda i: np.min(closest_times_mjd[clusters[i]])
+        )
+    else:
+        raise ValueError(
+            f"Unknown cluster_selection '{cluster_selection}'. Expected 'densest' or 'earliest'."
+        )
+
+    selected_cluster = clusters[selected_cluster_idx]
+    start_mjd = np.min(closest_times_mjd[selected_cluster]) - cluster_padding / 60 / 24
+    end_mjd = np.max(closest_times_mjd[selected_cluster]) + cluster_padding / 60 / 24
+
+    cluster_filtered = impacts.apply_mask(
+        pc.and_(
+            pc.greater_equal(impacts.coordinates.time.mjd(), start_mjd),
+            pc.less_equal(impacts.coordinates.time.mjd(), end_mjd),
+        )
+    )
+
+    logger.info(
+        "Selected cluster %d/%d for %s: %.6f to %.6f MJD (%d events).",
+        selected_cluster_idx + 1,
+        len(clusters),
+        selected_body,
+        start_mjd,
+        end_mjd,
+        len(cluster_filtered),
+    )
+
+    return cluster_filtered
+
+
 def _closest_event_time_window(
     impacts: CollisionEvent,
     focus_body: Optional[Literal["EARTH", "MOON"]] = None,
@@ -287,6 +405,11 @@ def generate_impact_visualization_data(
     propagator: Propagator,
     time_step: float = 5,
     time_range: float = 60,
+    cluster_mode: Literal["off", "auto"] = "auto",
+    cluster_gap_days: float = 30.0,
+    cluster_index: Optional[int] = None,
+    cluster_selection: Literal["densest", "earliest"] = "densest",
+    cluster_padding: float = 0.0,
     window_mode: Literal["event_range", "closest_approach"] = "event_range",
     focus_body: Optional[Literal["EARTH", "MOON"]] = None,
     window_percentiles: Tuple[float, float] = (10.0, 90.0),
@@ -315,6 +438,18 @@ def generate_impact_visualization_data(
         The time step to use for the propagation.
     time_range: float
         The time range to use for the propagation.
+    cluster_mode: Literal["off", "auto"]
+        Whether to apply collision-date clustering before plotting.
+    cluster_gap_days: float
+        Maximum separation between neighboring events (days) before starting
+        a new cluster.
+    cluster_index: Optional[int]
+        Explicit cluster index to visualize (0-based). If None, cluster_selection
+        is used.
+    cluster_selection: Literal["densest", "earliest"]
+        Cluster selection strategy when cluster_index is not provided.
+    cluster_padding: float
+        Extra padding (minutes) added around selected cluster bounds.
     window_mode: Literal["event_range", "closest_approach"]
         Time window selection mode. "event_range" uses full first/last event range
         with time_range padding. "closest_approach" focuses on closest events.
@@ -349,21 +484,39 @@ def generate_impact_visualization_data(
             "CollisionEvents visualizations are currently supported for the Earth and Moon."
         )
 
-    if len(impacts) == 0:
+    if cluster_mode == "off":
+        impacts_for_visualization = impacts
+    elif cluster_mode == "auto":
+        impacts_for_visualization = _select_collision_cluster(
+            impacts,
+            focus_body=focus_body,
+            cluster_gap_days=cluster_gap_days,
+            cluster_index=cluster_index,
+            cluster_selection=cluster_selection,
+            cluster_padding=cluster_padding,
+        )
+    else:
+        raise ValueError(
+            f"Unknown cluster_mode '{cluster_mode}'. Expected 'off' or 'auto'."
+        )
+
+    if len(impacts_for_visualization) == 0:
         raise ValueError(
             "No collision events found. Provide impacts/close-approaches to visualize."
         )
 
     effective_time_step = time_step
     if window_mode == "event_range":
-        event_times = impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+        event_times = impacts_for_visualization.coordinates.time.mjd().to_numpy(
+            zero_copy_only=False
+        )
         first_impact_time = np.min(event_times)
         last_impact_time = np.max(event_times)
         start_mjd = first_impact_time - time_range / 60 / 24
         end_mjd = last_impact_time + time_range / 60 / 24
     elif window_mode == "closest_approach":
         start_mjd, end_mjd = _closest_event_time_window(
-            impacts,
+            impacts_for_visualization,
             focus_body=focus_body,
             window_percentiles=window_percentiles,
             window_padding=window_padding,
@@ -388,7 +541,9 @@ def generate_impact_visualization_data(
         effective_time_step / 60 / 24,
     )
     mjds = mjds - np.mod(mjds, effective_time_step / 60 / 24)
-    propagation_times = Timestamp.from_mjd(mjds, scale=impacts.coordinates.time.scale)
+    propagation_times = Timestamp.from_mjd(
+        mjds, scale=impacts_for_visualization.coordinates.time.scale
+    )
 
     # Propagate the variants to the propagation times
     propagated_variants = propagator.propagate_orbits(
@@ -426,7 +581,9 @@ def generate_impact_visualization_data(
         ),
     )
 
-    propagated_variants = prepare_propagated_variants(propagated_variants, impacts)
+    propagated_variants = prepare_propagated_variants(
+        propagated_variants, impacts_for_visualization
+    )
 
     for k, v in propagated_variants.items():
         propagated_variants[k] = v.sort_by(
@@ -470,7 +627,7 @@ def add_earth(
     coastlines: bool = True,
     origin: OriginCodes = OriginCodes.EARTH,
     frame: str = "ecliptic",
-    show: bool = True,
+    show: Optional[bool] = None,
 ) -> Tuple[go.Surface, List[go.Scatter3d]]:
     """
     Add the Earth to the plot.
@@ -485,8 +642,9 @@ def add_earth(
         The origin of the plot.
     frame: str, optional
         The frame of the plot.
-    show: bool, optional
-        Whether to show the Earth by default.
+    show: Optional[bool], optional
+        Optional explicit visibility for Earth traces. If None, visibility is
+        not overridden and can be controlled by legend interaction.
 
     Returns
     -------
@@ -546,12 +704,13 @@ def add_earth(
                     mode="lines",
                     line=dict(color="white", width=2),
                     showlegend=False,
-                    visible=show,
                     legendgroup="Earth",
                 )
             )
+            if show is not None:
+                surface_traces[-1].visible = show
 
-    earth_surface = go.Surface(
+    earth_surface_kwargs = dict(
         x=x,
         y=y,
         z=z,
@@ -561,8 +720,11 @@ def add_earth(
         name="Earth",
         legendgroup="Earth",
         showlegend=True,
-        visible=show,
     )
+    if show is not None:
+        earth_surface_kwargs["visible"] = show
+
+    earth_surface = go.Surface(**earth_surface_kwargs)
     return earth_surface, surface_traces
 
 
@@ -570,7 +732,7 @@ def add_moon(
     time: Timestamp,
     origin: OriginCodes = OriginCodes.EARTH,
     frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
-    show: bool = True,
+    show: Optional[bool] = None,
 ) -> go.Surface:
     """
     Add the Moon to the plot.
@@ -597,7 +759,7 @@ def add_moon(
     )
     x, y, z = create_sphere(MOON_RADIUS_KM, offset=lunar_state.r[0] * KM_P_AU)
 
-    return go.Surface(
+    moon_surface_kwargs = dict(
         x=x,
         y=y,
         z=z,
@@ -606,8 +768,11 @@ def add_moon(
         showscale=False,
         name="Moon",
         showlegend=True,
-        visible=show,
     )
+    if show is not None:
+        moon_surface_kwargs["visible"] = show
+
+    return go.Surface(**moon_surface_kwargs)
 
 
 def _sample_variant_group(
@@ -681,6 +846,12 @@ def plot_impact_simulation(
     show_moon: bool = True,
     sample_impactors: Optional[float] = None,
     sample_non_impactors: Optional[float] = None,
+    cluster_mode: Literal["off", "auto"] = "auto",
+    cluster_gap_days: float = 30.0,
+    cluster_index: Optional[int] = None,
+    cluster_selection: Literal["densest", "earliest"] = "densest",
+    cluster_padding: float = 0.0,
+    focus_body: Optional[Literal["EARTH", "MOON"]] = None,
     height: Optional[int] = None,
     width: Optional[int] = None,
 ) -> go.Figure:
@@ -717,6 +888,18 @@ def plot_impact_simulation(
         Randomly sample the impactors for plotting. Should be between 0 and 1.
     sample_non_impactors: Optional[float], optional
         Randomly sample the non-impactors for plotting. Should be between 0 and 1.
+    cluster_mode: Literal["off", "auto"]
+        Whether to apply collision-date clustering before plot statistics.
+    cluster_gap_days: float
+        Maximum time gap (days) used when splitting event clusters.
+    cluster_index: Optional[int]
+        Explicit cluster index to plot (0-based). If None, cluster_selection is used.
+    cluster_selection: Literal["densest", "earliest"]
+        Cluster selection strategy when cluster_index is not provided.
+    cluster_padding: float
+        Extra padding (minutes) around selected cluster bounds.
+    focus_body: Optional[Literal["EARTH", "MOON"]]
+        Body used for cluster selection heuristics.
     height: int, optional
         The height of the plot.
     width: int, optional
@@ -727,6 +910,22 @@ def plot_impact_simulation(
     go.Figure
         The impact simulation plot.
     """
+    if cluster_mode == "off":
+        impacts_for_plot = impacts
+    elif cluster_mode == "auto":
+        impacts_for_plot = _select_collision_cluster(
+            impacts,
+            focus_body=focus_body,
+            cluster_gap_days=cluster_gap_days,
+            cluster_index=cluster_index,
+            cluster_selection=cluster_selection,
+            cluster_padding=cluster_padding,
+        )
+    else:
+        raise ValueError(
+            f"Unknown cluster_mode '{cluster_mode}'. Expected 'off' or 'auto'."
+        )
+
     propagation_times_isot = propagation_times.to_astropy().isot
 
     all_variant_ids = set()
@@ -734,7 +933,9 @@ def plot_impact_simulation(
         all_variant_ids.update(variants_group.orbit_id.unique().to_pylist())
     num_variants = max(len(all_variant_ids), 1)
 
-    collision_bodies = sorted(set(impacts.collision_object.code.unique().to_pylist()))
+    collision_bodies = sorted(
+        set(impacts_for_plot.collision_object.code.unique().to_pylist())
+    )
     sampled_variants = {}
     for k, v in propagated_variants.items():
         group_type, _, _, _ = _group_plot_config(k)
@@ -753,8 +954,8 @@ def plot_impact_simulation(
     for i, time in enumerate(propagation_times):
 
         # 1. Get all impacts up to the current time
-        all_impacts_up_to_current_time = impacts.apply_mask(
-            pc.less_equal(impacts.coordinates.time.mjd(), time.mjd()[0])
+        all_impacts_up_to_current_time = impacts_for_plot.apply_mask(
+            pc.less_equal(impacts_for_plot.coordinates.time.mjd(), time.mjd()[0])
         )
 
         body_event_counts = {}
@@ -837,7 +1038,6 @@ def plot_impact_simulation(
                         showscale=False,
                     ),
                     name=name,
-                    visible=True,
                     showlegend=True,
                 )
             )
@@ -858,15 +1058,17 @@ def plot_impact_simulation(
                         showscale=False,
                     ),
                     name="Best-Fit Orbit",
-                    visible=True,
                     showlegend=True,
                 )
             )
 
-        earth_surface, surface_traces = add_earth(time, show=show_earth)
-        data.append(earth_surface)
-        data.extend(surface_traces)
-        data.append(add_moon(time, show=show_moon))
+        if show_earth:
+            earth_surface, surface_traces = add_earth(time, show=None)
+            data.append(earth_surface)
+            data.extend(surface_traces)
+
+        if show_moon:
+            data.append(add_moon(time, show=None))
 
         text = f"{prefix}Time: {propagation_times_isot[i]}"
         for body_name, counts in body_event_counts.items():
