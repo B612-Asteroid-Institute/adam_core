@@ -10,12 +10,6 @@ import adam_core.photometry.rotation_period_fourier as rotation_period_fourier
 from ...time import Timestamp
 from ..rotation_period_fourier import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
-    _FourierCluster,
-    _FourierSolution,
-    _LSMCandidate,
-    _LSMMethodResult,
-    _LSMSolution,
-    _MethodFamily,
     _best_harmonic_factor,
     _build_fourier_result,
     _build_frequency_grid,
@@ -26,7 +20,6 @@ from ..rotation_period_fourier import (
 )
 from ..rotation_period_fourier_core import (
     _FitResult,
-    _FitWithPeriod,
     _build_fixed_design,
     _directional_f_test_confidence,
     _fit_frequency,
@@ -252,184 +245,6 @@ def test_harmonic_factor_classifies_simple_vs_alias_ratios():
     assert alias_mismatch == pytest.approx(0.0)
     assert alias_factor == pytest.approx(2.0 / 3.0)
     assert _is_simple_harmonic_factor(alias_factor) is False
-
-
-def test_hybrid_consensus_class():
-    observations = _make_rotation_observations()
-    result = estimate_rotation_period(
-        observations,
-        method_mode="hybrid",
-        search_fidelity="exact_grid",
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-
-    assert _scalar(result.primary_method[0]) in {"fourier", "lsm"}
-    assert _scalar(result.method_agreement_class[0]) in {"consensus", "weak_consensus"}
-
-
-def test_hybrid_method_dominant_class():
-    observations = _make_rotation_observations(single_peaked=True)
-    result = estimate_rotation_period(
-        observations,
-        method_mode="hybrid",
-        search_fidelity="exact_grid",
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-
-    assert _scalar(result.primary_method[0]) == "fourier"
-    assert _scalar(result.method_agreement_class[0]) in {"consensus", "weak_consensus"}
-    # Per D1 the verdict is one of the three categorical states and the
-    # reliability_code is the matching ordinal; is_reliable is derived from it.
-    verdict = _scalar(result.period_verdict[0])
-    assert verdict in {"single_period", "period_family", "insufficient_data"}
-    assert _scalar(result.reliability_code[0]) in {"1", "2", "3"}
-    assert bool(_scalar(result.is_reliable[0])) is (verdict == "single_period")
-    assert bool(_scalar(result.is_valid[0])) is (
-        verdict in {"single_period", "period_family"}
-    )
-
-
-def test_hybrid_unreliable_lsm_branch_does_not_displace_fourier(monkeypatch):
-    observations = _make_rotation_observations()
-
-    def fake_run_lsm(**kwargs):  # noqa: ARG001
-        return _LSMMethodResult(
-            best_candidate=_LSMCandidate(
-                frequency=20.0,
-                period_days=0.05,
-                power=0.8,
-                coeffs=np.zeros(4, dtype=np.float64),
-                n_maxima=2,
-                n_minima=2,
-                amplitude_mag=0.2,
-            ),
-            power_gap=0.05,
-            candidate_period_days=[0.05],
-            candidate_powers=[0.8],
-            is_reliable=False,
-            amplitude_mag=0.2,
-        )
-
-    monkeypatch.setattr(rotation_period_fourier, "_run_lsm", fake_run_lsm)
-    result = estimate_rotation_period(
-        observations,
-        method_mode="hybrid",
-        search_fidelity="exact_grid",
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-
-    assert _scalar(result.primary_method[0]) == "fourier"
-    assert _scalar(result.method_agreement_class[0]) == "method_dominant"
-
-
-def test_hybrid_can_return_winning_family_representative_not_method_primary():
-    primary_fit = _fit_template(frequency=10.0, fourier_order=2, rss=1.0, df=40)
-    alternate_fit = _fit_template(frequency=5.0, fourier_order=2, rss=1.1, df=40)
-    primary_period = _FitWithPeriod(
-        fit=primary_fit,
-        period_days=0.10,
-        period_hours=2.4,
-        is_period_doubled=False,
-    )
-    alternate_period = _FitWithPeriod(
-        fit=alternate_fit,
-        period_days=0.20,
-        period_hours=4.8,
-        is_period_doubled=False,
-    )
-    primary_cluster = _FourierCluster(
-        indices=np.asarray([0], dtype=np.int64),
-        best=primary_period,
-        period_lower_days=0.099,
-        period_upper_days=0.101,
-        sigma_best=1.0,
-        raw_weight=0.2,
-    )
-    alternate_cluster = _FourierCluster(
-        indices=np.asarray([1], dtype=np.int64),
-        best=alternate_period,
-        period_lower_days=0.199,
-        period_upper_days=0.201,
-        sigma_best=1.1,
-        raw_weight=0.8,
-    )
-    fourier_solution = _FourierSolution(
-        chosen=primary_period,
-        primary_cluster=primary_cluster,
-        sigma_threshold=1.2,
-        clusters=[primary_cluster, alternate_cluster],
-        period_lower_days=0.099,
-        period_upper_days=0.101,
-        relative_period_uncertainty=0.01,
-        alternate_period_days=[0.20],
-        is_valid=True,
-        is_reliable=True,
-        amplitude_mag=0.3,
-        used_session_offsets=False,
-        fit_summary=primary_fit,
-        sigma_curve=np.asarray([1.0, 1.1], dtype=np.float64),
-    )
-    lsm_solution = _LSMSolution(
-        period_days=0.20,
-        power=0.9,
-        power_gap=0.2,
-        candidate_period_days=[0.20],
-        candidate_powers=[0.9],
-        is_reliable=True,
-        amplitude_mag=0.3,
-        n_fit_observations=60,
-        n_clipped=0,
-        false_alarm_probability=1.0e-4,
-    )
-    family_primary = _MethodFamily(
-        representative_period_days=0.10,
-        fourier_cluster=primary_cluster,
-        contains_fourier_primary=True,
-        family_weight_fourier=0.1,
-        combined_weight=0.05,
-    )
-    family_alternate = _MethodFamily(
-        representative_period_days=0.20,
-        fourier_cluster=alternate_cluster,
-        lsm_candidate=_LSMCandidate(period_days=0.20, power=0.9, coeffs=np.zeros(4, dtype=np.float64)),
-        contains_lsm_primary=True,
-        family_weight_fourier=1.0,
-        family_weight_lsm=0.8,
-        combined_weight=0.9,
-    )
-
-    # Times that fold to ~full phase coverage over many rotations at P=0.20 d.
-    t_rel = np.linspace(0.0, 2.0, 60, dtype=np.float64)
-    primary = _primary_from_method(
-        method_mode="hybrid",
-        fourier_solution=fourier_solution,
-        lsm_solution=lsm_solution,
-        families=[family_primary, family_alternate],
-        harmonic_period_factors=(0.5, 1.0, 2.0),
-        filter_labels=np.asarray(["g"] * 30 + ["r"] * 30, dtype=object),
-        t_rel=t_rel,
-        span_days=2.0,
-        min_rotations_in_span=2.0,
-        residual_sigma_mag=0.02,
-    )
-
-    assert primary["primary_method"] == "fourier"
-    assert primary["period_days"] == pytest.approx(0.20)
-    assert primary["winner_contains_fourier_primary"] is False
-    assert primary["winner_contains_lsm_primary"] is True
-    assert primary["method_agreement_class"] == "consensus"
-    # Two credible families survive (n_significant_aliases == 2), so even though
-    # Fourier and LSM agree on the winning family the alias gate demotes the
-    # verdict to period_family / reliability_code "2" (D1 "believe the family").
-    assert primary["period_verdict"] == "period_family"
-    assert primary["reliability_code"] == "2"
-    assert primary["is_reliable"] is False
-    assert primary["is_valid"] is True
-    assert "dual_method_agree" in primary["confidence_flags"]
-    assert "conflicting_aliases" in primary["insufficiency_reasons"]
 
 
 def test_early_exit_on_insufficient_matches_full_path_verdict():

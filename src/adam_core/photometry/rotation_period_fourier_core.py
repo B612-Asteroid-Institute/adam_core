@@ -701,19 +701,3 @@ def _fit_with_period(fit: _FitResult) -> _FitWithPeriod:
         period_hours=float(period_days * 24.0),
         is_period_doubled=bool(is_period_doubled),
     )
-
-
-def _harmonic_relative_mismatch(
-    period_days_a: float,
-    period_days_b: float,
-    *,
-    harmonic_period_factors: tuple[float, ...],
-) -> float:
-    if not np.isfinite(period_days_a) or period_days_a <= 0.0:
-        return float("inf")
-    if not np.isfinite(period_days_b) or period_days_b <= 0.0:
-        return float("inf")
-    factors = np.asarray(sorted({float(factor) for factor in harmonic_period_factors if factor > 0.0}), dtype=np.float64)
-    if factors.size == 0:
-        return float(abs(period_days_a - period_days_b) / period_days_b)
-    return float(np.min(np.abs(period_days_a * factors - period_days_b) / period_days_b))

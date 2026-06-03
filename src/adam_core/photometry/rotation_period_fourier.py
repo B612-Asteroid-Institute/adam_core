@@ -20,7 +20,6 @@ from .rotation_period_fourier_core import (
     _fit_frequency,
     _fit_frequency_unclipped,
     _fit_with_period,
-    _harmonic_relative_mismatch,
     _ordered_unique,
     _phase_prior_rows,
     _select_order,
@@ -30,24 +29,12 @@ from .rotation_period_fourier_core import (
 )
 from .rotation_period_types import RotationPeriodObservations, RotationPeriodResult
 
-_DEFAULT_HARMONIC_PERIOD_FACTORS = (
-    0.5,
-    2.0 / 3.0,
-    0.75,
-    1.0,
-    4.0 / 3.0,
-    1.5,
-    2.0,
-    3.0,
-    4.0,
-)
 _LSM_MIN_PERIOD_DAYS = 0.00065
 _LSM_MAX_PERIOD_DAYS = 3.0
 _LSM_OVERSAMPLE_FACTOR = 100.0
 _LSM_DEFAULT_MAX_SAMPLES = 20000
 _LSM_DEFAULT_REFINE_SAMPLES = 2000
 _LSM_DEFAULT_REFINE_ROUNDS = 2
-_LSM_FAMILY_TOLERANCE = 0.05
 _LSM_POWER_TIE_TOLERANCE = 2.0e-4
 _SIMPLE_HARMONIC_FACTORS = (0.5, 1.0, 2.0)
 _DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
@@ -58,7 +45,7 @@ _FOURIER_MAX_CLIP_ITERATIONS = 8
 # Initial values per the D1 contract; the calibration study (bead rp-e4a.13)
 # will tune these on a held-out split of the standard-candle set, so treat the
 # values below as provisional defaults rather than validated cut points.
-# False-alarm-probability ceiling for accepting an LSM/hybrid peak as signal.
+# False-alarm-probability ceiling for accepting an LSM peak as signal.
 FAP_SIGNIFICANT = 0.01
 # Minimum fraction of rotational-phase bins that must be occupied to clear the
 # signal gate (family-level) and to be eligible for ``single_period``.
@@ -180,18 +167,6 @@ class _FourierMethodResult:
     is_valid: bool
     is_reliable: bool
     amplitude_mag: float
-
-
-@dataclass(slots=True)
-class _MethodFamily:
-    representative_period_days: float
-    fourier_cluster: _FourierCluster | None = None
-    lsm_candidate: _LSMCandidate | None = None
-    contains_fourier_primary: bool = False
-    contains_lsm_primary: bool = False
-    family_weight_fourier: float = 0.0
-    family_weight_lsm: float = 0.0
-    combined_weight: float = 0.0
 
 
 def _resolve_search_fidelity(
@@ -1386,13 +1361,6 @@ def _build_fourier_result(
     )
 
 
-def _normalize_method_weights(raw_weights: list[float]) -> list[float]:
-    total = float(sum(max(0.0, weight) for weight in raw_weights))
-    if total <= 0.0:
-        return [0.0 for _ in raw_weights]
-    return [float(max(0.0, weight) / total) for weight in raw_weights]
-
-
 def _best_harmonic_factor(
     period_a: float,
     period_b: float,
@@ -1412,83 +1380,6 @@ def _best_harmonic_factor(
 
 def _is_simple_harmonic_factor(factor: float) -> bool:
     return any(abs(float(factor) - simple) <= 1.0e-12 for simple in _SIMPLE_HARMONIC_FACTORS)
-
-
-def _family_match(period_a: float, period_b: float, harmonic_period_factors: tuple[float, ...]) -> bool:
-    return _harmonic_relative_mismatch(
-        period_a,
-        period_b,
-        harmonic_period_factors=harmonic_period_factors,
-    ) <= _LSM_FAMILY_TOLERANCE
-
-
-def _build_hybrid_families(
-    *,
-    fourier_solution: _FourierSolution,
-    lsm_solution: _LSMSolution,
-    harmonic_period_factors: tuple[float, ...],
-) -> list[_MethodFamily]:
-    families: list[_MethodFamily] = []
-    fourier_primary_period = float(fourier_solution.chosen.period_days)
-    lsm_primary_period = None if lsm_solution.period_days is None else float(lsm_solution.period_days)
-
-    for cluster in fourier_solution.clusters:
-        period = float(cluster.best.period_days)
-        match = next(
-            (
-                family
-                for family in families
-                if _family_match(period, family.representative_period_days, harmonic_period_factors)
-            ),
-            None,
-        )
-        if match is None:
-            match = _MethodFamily(representative_period_days=period)
-            families.append(match)
-        if match.fourier_cluster is None or cluster.raw_weight > match.fourier_cluster.raw_weight:
-            match.fourier_cluster = cluster
-            match.representative_period_days = period
-        if _family_match(period, fourier_primary_period, harmonic_period_factors):
-            match.contains_fourier_primary = True
-
-    lsm_candidates = [
-        _LSMCandidate(period_days=float(period), power=float(power), coeffs=np.zeros(4, dtype=np.float64))
-        for period, power in zip(lsm_solution.candidate_period_days, lsm_solution.candidate_powers, strict=True)
-    ]
-    for candidate in lsm_candidates:
-        period = float(candidate.period_days)
-        match = next(
-            (
-                family
-                for family in families
-                if _family_match(period, family.representative_period_days, harmonic_period_factors)
-            ),
-            None,
-        )
-        if match is None:
-            match = _MethodFamily(representative_period_days=period)
-            families.append(match)
-        if match.lsm_candidate is None or candidate.power > match.lsm_candidate.power:
-            match.lsm_candidate = candidate
-        if lsm_primary_period is not None and _family_match(period, lsm_primary_period, harmonic_period_factors):
-            match.contains_lsm_primary = True
-
-    fourier_raw = [0.0 if family.fourier_cluster is None else float(family.fourier_cluster.raw_weight) for family in families]
-    lsm_best_power = max((float(candidate.power) for candidate in lsm_candidates), default=0.0)
-    lsm_raw = [
-        0.0
-        if family.lsm_candidate is None or lsm_best_power <= 0.0
-        else float(family.lsm_candidate.power) / lsm_best_power
-        for family in families
-    ]
-    fourier_norm = _normalize_method_weights(fourier_raw)
-    lsm_norm = _normalize_method_weights(lsm_raw)
-    for family, wf, wl in zip(families, fourier_norm, lsm_norm, strict=True):
-        family.family_weight_fourier = float(wf)
-        family.family_weight_lsm = float(wl)
-        family.combined_weight = float(0.5 * wf + 0.5 * wl)
-    families.sort(key=lambda family: float(family.combined_weight), reverse=True)
-    return families
 
 
 def _observation_count_sufficient(filter_labels: npt.NDArray[np.object_]) -> bool:
@@ -1551,18 +1442,16 @@ def _classify_confidence(
     observation_count_sufficient: bool,
     is_reliable: bool,
     is_valid: bool,
-    cross_method_agree: bool | None,
 ) -> tuple[str, str, list[str], list[str]]:
     """Single deterministic verdict (D1 §"decision tree").
 
     Returns ``(period_verdict, reliability_code, confidence_flags,
-    insufficiency_reasons)``.  ``cross_method_agree`` is ``None`` for
-    single-method modes; ``True``/``False`` for hybrid.
+    insufficiency_reasons)``.
     """
     flags: list[str] = []
     reasons: list[str] = []
 
-    uses_fap = primary_method in {"lsm", "hybrid"}
+    uses_fap = primary_method == "lsm"
 
     # ---- 1. Signal gate ----------------------------------------------------
     if amplitude_snr is None or not np.isfinite(amplitude_snr) or amplitude_snr < AMPLITUDE_SNR_MIN:
@@ -1630,18 +1519,6 @@ def _classify_confidence(
         if "no_precision" not in reasons:
             reasons.append("no_precision")
 
-    # ---- 4. Cross-method (hybrid only) ------------------------------------
-    if cross_method_agree is True:
-        flags.append("dual_method_agree")
-        if is_reliable and eligible_single:
-            verdict = _VERDICT_SINGLE
-    elif cross_method_agree is False:
-        # Disagreement caps at period_family.
-        if verdict == _VERDICT_SINGLE:
-            verdict = _VERDICT_FAMILY
-            if "conflicting_aliases" not in reasons:
-                reasons.append("conflicting_aliases")
-
     # LSM-primary results have no validated uncertainty interval (D2): cap at family.
     if primary_method == "lsm" and verdict == _VERDICT_SINGLE:
         verdict = _VERDICT_FAMILY
@@ -1649,14 +1526,6 @@ def _classify_confidence(
             reasons.append("no_precision")
 
     return verdict, _RELIABILITY_BY_VERDICT[verdict], flags, reasons
-
-
-def _periods_close(period_a: float | None, period_b: float | None) -> bool:
-    if period_a is None or period_b is None:
-        return False
-    if not np.isfinite(period_a) or not np.isfinite(period_b):
-        return False
-    return bool(abs(float(period_a) - float(period_b)) <= 1.0e-10 * max(1.0, abs(period_a), abs(period_b)))
 
 
 def _verdict_diagnostics(
@@ -1690,8 +1559,6 @@ def _primary_from_method(
     method_mode: str,
     fourier_solution: _FourierSolution,
     lsm_solution: _LSMSolution,
-    families: list[_MethodFamily],
-    harmonic_period_factors: tuple[float, ...],
     filter_labels: npt.NDArray[np.object_],
     t_rel: npt.NDArray[np.float64],
     span_days: float,
@@ -1723,7 +1590,6 @@ def _primary_from_method(
             observation_count_sufficient=observation_count_sufficient,
             is_reliable=bool(fourier_solution.is_reliable),
             is_valid=bool(fourier_solution.is_valid),
-            cross_method_agree=None,
         )
         return {
             "primary_method": "fourier",
@@ -1738,13 +1604,6 @@ def _primary_from_method(
             "insufficiency_reasons": insufficiency_reasons,
             "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
             "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
-            "method_agreement_class": None,
-            "decision_margin": None,
-            "decision_support_count": 1,
-            "winner_contains_fourier_primary": True,
-            "winner_contains_lsm_primary": False,
-            "family_weight_fourier": 1.0,
-            "family_weight_lsm": 0.0,
             "selected_method_amplitude_mag": amplitude_mag,
             **diagnostics,
         }
@@ -1765,13 +1624,6 @@ def _primary_from_method(
                 "insufficiency_reasons": ["no_significant_peak"],
                 "is_valid": False,
                 "is_reliable": False,
-                "method_agreement_class": None,
-                "decision_margin": None,
-                "decision_support_count": 0,
-                "winner_contains_fourier_primary": False,
-                "winner_contains_lsm_primary": False,
-                "family_weight_fourier": 0.0,
-                "family_weight_lsm": 1.0,
                 "selected_method_amplitude_mag": None,
                 "amplitude_snr": None,
                 "phase_coverage_fraction": None,
@@ -1800,7 +1652,6 @@ def _primary_from_method(
             observation_count_sufficient=observation_count_sufficient,
             is_reliable=bool(lsm_solution.is_reliable),
             is_valid=True,
-            cross_method_agree=None,
         )
         alternate_periods = list(lsm_solution.candidate_period_days[1:])
         return {
@@ -1816,146 +1667,11 @@ def _primary_from_method(
             "insufficiency_reasons": insufficiency_reasons,
             "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
             "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
-            "method_agreement_class": None,
-            "decision_margin": None,
-            "decision_support_count": 1,
-            "winner_contains_fourier_primary": False,
-            "winner_contains_lsm_primary": True,
-            "family_weight_fourier": 0.0,
-            "family_weight_lsm": 1.0,
             "selected_method_amplitude_mag": amplitude_mag,
             **diagnostics,
         }
 
-    if not families:
-        raise ValueError("hybrid mode requires at least one method family")
-    ordered_candidates = sorted(
-        families,
-        key=lambda family: float(family.combined_weight),
-        reverse=True,
-    )
-    winner = ordered_candidates[0]
-    runner_up_weight = max(
-        (
-            float(candidate.combined_weight)
-            for candidate in ordered_candidates
-            if candidate is not winner
-        ),
-        default=0.0,
-    )
-    winner_weight = float(winner.combined_weight)
-    support_count = int(winner.fourier_cluster is not None) + int(winner.lsm_candidate is not None)
-    fourier_weight = float(winner.family_weight_fourier)
-    lsm_weight = float(winner.family_weight_lsm)
-
-    selected_cluster: _FourierCluster | None = None
-    if winner.fourier_cluster is not None and (
-        winner.lsm_candidate is None or fourier_weight >= lsm_weight
-    ):
-        selected_method = "fourier"
-        selected_cluster = winner.fourier_cluster
-        period_days = float(selected_cluster.best.period_days)
-        period_lower_days = float(selected_cluster.period_lower_days)
-        period_upper_days = float(selected_cluster.period_upper_days)
-        relative_uncertainty = _relative_period_uncertainty(
-            period_days,
-            period_lower_days,
-            period_upper_days,
-        )
-        alternate_period_days = [
-            float(cluster.best.period_days)
-            for cluster in fourier_solution.clusters
-            if cluster is not selected_cluster
-        ]
-        selected_method_reliable = bool(fourier_solution.is_reliable)
-        selected_method_valid = bool(fourier_solution.is_valid)
-        selected_amplitude = float(fourier_solution.amplitude_mag)
-    elif winner.lsm_candidate is not None:
-        selected_method = "lsm"
-        selected_candidate = winner.lsm_candidate
-        period_days = float(selected_candidate.period_days)
-        period_lower_days = None
-        period_upper_days = None
-        relative_uncertainty = None
-        alternate_period_days = [
-            float(candidate_period)
-            for candidate_period in lsm_solution.candidate_period_days
-            if not _periods_close(float(candidate_period), period_days)
-        ]
-        selected_method_reliable = bool(lsm_solution.is_reliable)
-        selected_method_valid = bool(np.isfinite(period_days) and period_days > 0.0)
-        selected_amplitude = None if lsm_solution.amplitude_mag is None else float(lsm_solution.amplitude_mag)
-    else:
-        raise ValueError("winning family has no method support")
-
-    gap = float(max(0.0, winner_weight - runner_up_weight))
-    if support_count == 2:
-        agreement_class = "consensus" if gap >= 0.25 else "weak_consensus"
-    elif selected_method_reliable:
-        agreement_class = "method_dominant"
-    else:
-        agreement_class = "conflict"
-
-    # The selected family carries both methods (support_count == 2) -> Fourier and
-    # LSM agree on the rotational family; that drives the cross-method upgrade/cap.
-    cross_method_agree = bool(support_count == 2)
-    # is_period_doubled flag belongs to the Fourier solution; LSM survivors are
-    # required to be two-max/two-min so doubling only applies to a Fourier winner.
-    selected_is_period_doubled = bool(
-        selected_method == "fourier"
-        and selected_cluster is not None
-        and selected_cluster.best.is_period_doubled
-    )
-    n_hybrid_aliases = int(len(families))
-
-    diagnostics = _verdict_diagnostics(
-        period_days=float(period_days),
-        amplitude_mag=selected_amplitude,
-        residual_sigma_mag=residual_sigma_mag,
-        n_significant_aliases=n_hybrid_aliases,
-        t_rel=t_rel,
-        span_days=span_days,
-    )
-    period_verdict, reliability_code, confidence_flags, insufficiency_reasons = _classify_confidence(
-        primary_method="hybrid" if selected_method == "fourier" else "lsm",
-        amplitude_snr=diagnostics["amplitude_snr"],
-        phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
-        n_rotations_spanned=diagnostics["n_rotations_spanned"],
-        min_rotations_in_span=min_rotations_in_span,
-        lsm_false_alarm_probability=lsm_solution.false_alarm_probability,
-        n_significant_aliases=n_hybrid_aliases,
-        is_period_doubled=selected_is_period_doubled,
-        observation_count_sufficient=observation_count_sufficient,
-        is_reliable=bool(selected_method_reliable),
-        is_valid=bool(selected_method_valid),
-        cross_method_agree=cross_method_agree,
-    )
-
-    return {
-        "primary_method": selected_method,
-        "period_days": float(period_days),
-        "period_lower_days": None if period_lower_days is None else float(period_lower_days),
-        "period_upper_days": None if period_upper_days is None else float(period_upper_days),
-        "relative_period_uncertainty": (
-            None if relative_uncertainty is None else float(relative_uncertainty)
-        ),
-        "alternate_period_days": alternate_period_days,
-        "period_verdict": period_verdict,
-        "reliability_code": reliability_code,
-        "confidence_flags": confidence_flags,
-        "insufficiency_reasons": insufficiency_reasons,
-        "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
-        "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
-        "method_agreement_class": agreement_class,
-        "decision_margin": float(gap),
-        "decision_support_count": int(support_count),
-        "winner_contains_fourier_primary": bool(winner.contains_fourier_primary),
-        "winner_contains_lsm_primary": bool(winner.contains_lsm_primary),
-        "family_weight_fourier": float(fourier_weight),
-        "family_weight_lsm": float(lsm_weight),
-        "selected_method_amplitude_mag": selected_amplitude,
-        **diagnostics,
-    }
+    raise ValueError(f"unknown method_mode: {method_mode!r}")
 
 
 def _pre_solve_insufficiency(
@@ -2031,7 +1747,7 @@ def _insufficient_result(
     fields.  All non-nullable columns are populated so the row is valid.
     """
     session_summary = _summarize_sessions(time_lt, filter_labels, session_labels)
-    primary_method = method_mode if method_mode in {"fourier", "lsm", "hybrid"} else "none"
+    primary_method = method_mode if method_mode in {"fourier", "lsm"} else "none"
     return RotationPeriodResult.from_kwargs(
         period_days=[float("nan")],
         period_hours=[float("nan")],
@@ -2064,13 +1780,6 @@ def _insufficient_result(
         lsm_candidate_powers=[[]],
         lsm_is_reliable=[None],
         lsm_false_alarm_probability=[None],
-        method_agreement_class=[None],
-        decision_margin=[None],
-        decision_support_count=[None],
-        winner_contains_fourier_primary=[None],
-        winner_contains_lsm_primary=[None],
-        family_weight_fourier=[None],
-        family_weight_lsm=[None],
         phase_coverage_fraction=[None],
         n_rotations_spanned=[None],
         amplitude_snr=[None],
@@ -2088,7 +1797,7 @@ def _insufficient_result(
 def estimate_rotation_period(
     observations: RotationPeriodObservations,
     *,
-    method_mode: str = "hybrid",
+    method_mode: str = "fourier",
     paper_profile: str = "greenstreet_2026",
     search_fidelity: str | None = None,
     search_strategy: str | None = None,
@@ -2105,13 +1814,12 @@ def estimate_rotation_period(
     session_mode: str = "auto",
     auto_session_min_observations_per_group: int = 6,
     auto_session_bic_improvement: float = 10.0,
-    harmonic_period_factors: tuple[float, ...] = _DEFAULT_HARMONIC_PERIOD_FACTORS,
     lsm_max_frequency_samples: int = _LSM_DEFAULT_MAX_SAMPLES,
     lsm_refine_samples: int = _LSM_DEFAULT_REFINE_SAMPLES,
     lsm_refine_rounds: int = _LSM_DEFAULT_REFINE_ROUNDS,
 ) -> RotationPeriodResult:
-    if method_mode not in {"fourier", "lsm", "hybrid"}:
-        raise ValueError("method_mode must be one of {'fourier', 'lsm', 'hybrid'}")
+    if method_mode not in {"fourier", "lsm"}:
+        raise ValueError("method_mode must be one of {'fourier', 'lsm'}")
     if clip_sigma <= 0.0:
         raise ValueError("clip_sigma must be positive")
     if min_rotations_in_span <= 0.0:
@@ -2266,7 +1974,7 @@ def estimate_rotation_period(
         n_fit_observations=0,
         n_clipped=0,
     )
-    if method_mode in {"lsm", "hybrid"}:
+    if method_mode == "lsm":
         lsm_result = _run_lsm(
             t_rel=t_rel,
             mag=mag,
@@ -2298,22 +2006,10 @@ def estimate_rotation_period(
             ),
         )
 
-    families = (
-        _build_hybrid_families(
-            fourier_solution=fourier_solution,
-            lsm_solution=lsm_solution,
-            harmonic_period_factors=harmonic_period_factors,
-        )
-        if method_mode == "hybrid"
-        else []
-    )
-
     primary = _primary_from_method(
         method_mode=method_mode,
         fourier_solution=fourier_solution,
         lsm_solution=lsm_solution,
-        families=families,
-        harmonic_period_factors=harmonic_period_factors,
         filter_labels=filter_labels,
         t_rel=t_rel,
         span_days=span_days,
@@ -2403,27 +2099,6 @@ def estimate_rotation_period(
             None
             if lsm_solution.false_alarm_probability is None
             else float(lsm_solution.false_alarm_probability)
-        ],
-        method_agreement_class=[primary["method_agreement_class"]],
-        decision_margin=[None if primary["decision_margin"] is None else float(primary["decision_margin"])],
-        decision_support_count=[
-            None if primary["decision_support_count"] is None else int(primary["decision_support_count"])
-        ],
-        winner_contains_fourier_primary=[
-            None
-            if primary["winner_contains_fourier_primary"] is None
-            else bool(primary["winner_contains_fourier_primary"])
-        ],
-        winner_contains_lsm_primary=[
-            None
-            if primary["winner_contains_lsm_primary"] is None
-            else bool(primary["winner_contains_lsm_primary"])
-        ],
-        family_weight_fourier=[
-            None if primary["family_weight_fourier"] is None else float(primary["family_weight_fourier"])
-        ],
-        family_weight_lsm=[
-            None if primary["family_weight_lsm"] is None else float(primary["family_weight_lsm"])
         ],
         phase_coverage_fraction=[
             None
