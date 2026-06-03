@@ -214,7 +214,7 @@ def _resolve_search_fidelity(
 
 def _resolve_paper_profile(paper_profile: str) -> _FourierProfile:
     if paper_profile not in FOURIER_PROFILES:
-        raise ValueError("paper_profile must be one of {'greenstreet_2026', 'vavilov_2025'}")
+        raise ValueError("paper_profile must be 'greenstreet_2026'")
     return FOURIER_PROFILES[paper_profile]
 
 

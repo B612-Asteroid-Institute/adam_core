@@ -80,16 +80,11 @@ class _FourierProfile:
     reliable_absolute_hours: float | None
 
 
+# Single MVP solver profile, built off the Greenstreet (2026) rotation-period method:
+# search Fourier orders 2-6, pick the order by F-test at 90% confidence, cluster aliases
+# at the 95% sigma threshold, and call a period "reliable" when its uncertainty is within
+# max(2P, 7h). (An experimental second profile was dropped for the MVP — one profile only.)
 FOURIER_PROFILES: dict[str, _FourierProfile] = {
-    "vavilov_2025": _FourierProfile(
-        name="vavilov_2025",
-        orders=tuple(range(1, 11)),
-        order_selection_confidence=0.95,
-        sigma_threshold_confidence=0.90,
-        valid_relative_uncertainty_max=1.0 / 3.0,
-        reliable_relative_multiplier=None,
-        reliable_absolute_hours=None,
-    ),
     "greenstreet_2026": _FourierProfile(
         name="greenstreet_2026",
         orders=(2, 3, 4, 5, 6),
