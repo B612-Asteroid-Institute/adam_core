@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 
 import numpy as np
 import pyarrow as pa
@@ -10,19 +9,13 @@ import adam_core.photometry.rotation_period_fourier as rotation_period_fourier
 from ...time import Timestamp
 from ..rotation_period_fourier import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
-    _best_harmonic_factor,
-    _build_fourier_result,
     _build_frequency_grid,
-    _is_simple_harmonic_factor,
     _observation_count_sufficient,
-    _paper_profile,
     estimate_rotation_period,
 )
 from ..rotation_period_fourier_core import (
     _FitResult,
-    _build_fixed_design,
     _directional_f_test_confidence,
-    _fit_frequency,
     _select_order,
     _sigma_threshold_from_confidence,
 )
@@ -113,7 +106,6 @@ def _fit_template(
         n_filters=1,
         phase_c1_idx=1,
         phase_c2_idx=2,
-        sum_weights=float(df + 3 + 2 * fourier_order),
         n_local_maxima=2,
     )
 
@@ -170,47 +162,6 @@ def test_lsm_single_peak_candidates_are_rejected():
     assert bool(_scalar(result.lsm_is_reliable[0])) is False
 
 
-def test_fourier_accepted_solution_clustering_produces_interval_and_alternates():
-    observations = _make_rotation_observations()
-    time = np.asarray(observations.time.rescale("tdb").mjd().to_numpy(False), dtype=np.float64)
-    mag = np.asarray(observations.mag.to_numpy(zero_copy_only=False), dtype=np.float64)
-    phase_angle = np.asarray(observations.phase_angle_deg.to_numpy(zero_copy_only=False), dtype=np.float64)
-    filter_labels = np.asarray(observations.filter.to_numpy(zero_copy_only=False), dtype=object)
-    weights = np.full(len(observations), 1.0 / 0.03**2, dtype=np.float64)
-    time_rel = time - time.min()
-    y = mag - 5.0 * np.log10(
-        np.asarray(observations.r_au.to_numpy(zero_copy_only=False), dtype=np.float64)
-        * np.asarray(observations.delta_au.to_numpy(zero_copy_only=False), dtype=np.float64)
-    )
-    design_info = _build_fixed_design(filter_labels, None, phase_angle)
-    fit_a = _fit_frequency(time_rel, y, design_info, 50.0, 2, clip_sigma=3.0, weights=weights)
-    fit_b = _fit_frequency(time_rel, y, design_info, 33.3333333333, 2, clip_sigma=3.0, weights=weights)
-    assert fit_a is not None
-    assert fit_b is not None
-
-    frequencies = np.linspace(30.0, 55.0, 8, dtype=np.float64)
-    scores = np.full(frequencies.shape, 0.30, dtype=np.float64)
-    fits_by_index = {
-        1: replace(fit_a, residual_sigma=0.05, frequency=float(frequencies[1]), n_local_maxima=2),
-        2: replace(fit_a, residual_sigma=0.051, frequency=float(frequencies[2]), n_local_maxima=2),
-        5: replace(fit_b, residual_sigma=0.053, frequency=float(frequencies[5]), n_local_maxima=2),
-        6: replace(fit_b, residual_sigma=0.054, frequency=float(frequencies[6]), n_local_maxima=2),
-    }
-    scores[1] = 0.05
-    scores[2] = 0.051
-    scores[5] = 0.053
-    scores[6] = 0.054
-    result = _build_fourier_result(
-        chosen_fit=fits_by_index[1],
-        order_grid_results={2: (scores, fits_by_index)},
-        frequencies=frequencies,
-        profile=_paper_profile("greenstreet_2026"),
-    )
-
-    assert result.period_lower_days <= result.best_period.period_days <= result.period_upper_days
-    assert len(result.alternate_period_days) == 1
-
-
 def test_lsm_with_predicted_magnitude_matches_offline_approximation():
     observations_offline = _make_rotation_observations(include_predicted=False)
     observations_pred = _make_rotation_observations(include_predicted=True)
@@ -225,26 +176,6 @@ def test_lsm_with_predicted_magnitude_matches_offline_approximation():
     assert _scalar(result_pred.period_lower_days[0]) is None
     assert _scalar(result_pred.period_upper_days[0]) is None
     assert _scalar(result_pred.relative_period_uncertainty[0]) is None
-
-
-def test_harmonic_factor_classifies_simple_vs_alias_ratios():
-    simple_factor, simple_mismatch = _best_harmonic_factor(
-        4.0,
-        2.0,
-        harmonic_period_factors=(0.5, 2.0 / 3.0, 1.0, 1.5, 2.0),
-    )
-    assert simple_mismatch == pytest.approx(0.0)
-    assert simple_factor == pytest.approx(0.5)
-    assert _is_simple_harmonic_factor(simple_factor) is True
-
-    alias_factor, alias_mismatch = _best_harmonic_factor(
-        6.0,
-        4.0,
-        harmonic_period_factors=(0.5, 2.0 / 3.0, 1.0, 1.5, 2.0),
-    )
-    assert alias_mismatch == pytest.approx(0.0)
-    assert alias_factor == pytest.approx(2.0 / 3.0)
-    assert _is_simple_harmonic_factor(alias_factor) is False
 
 
 def test_observation_count_sufficient_gates_on_dominant_band():

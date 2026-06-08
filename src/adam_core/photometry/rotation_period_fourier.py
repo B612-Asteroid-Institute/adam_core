@@ -36,7 +36,6 @@ _LSM_DEFAULT_MAX_SAMPLES = 20000
 _LSM_DEFAULT_REFINE_SAMPLES = 2000
 _LSM_DEFAULT_REFINE_ROUNDS = 2
 _LSM_POWER_TIE_TOLERANCE = 2.0e-4
-_SIMPLE_HARMONIC_FACTORS = (0.5, 1.0, 2.0)
 _DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
 _DEFAULT_JAX_ROW_PAD_MULTIPLE = 64
 _FOURIER_MAX_CLIP_ITERATIONS = 8
@@ -159,20 +158,6 @@ class _LSMMethodResult:
     false_alarm_probability: float | None = None
 
 
-@dataclass(slots=True)
-class _FourierMethodResult:
-    chosen_fit: _FitResult
-    best_period: _FitWithPeriod
-    sigma_threshold: float
-    period_lower_days: float
-    period_upper_days: float
-    relative_period_uncertainty: float
-    alternate_period_days: list[float]
-    is_valid: bool
-    is_reliable: bool
-    amplitude_mag: float
-
-
 def _resolve_search_fidelity(
     *,
     search_fidelity: str | None,
@@ -195,10 +180,6 @@ def _resolve_paper_profile(paper_profile: str) -> _FourierProfile:
     if paper_profile not in FOURIER_PROFILES:
         raise ValueError("paper_profile must be 'greenstreet_2026'")
     return FOURIER_PROFILES[paper_profile]
-
-
-def _paper_profile(paper_profile: str) -> _FourierProfile:
-    return _resolve_paper_profile(paper_profile)
 
 
 def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -349,7 +330,6 @@ def _evaluate_frequency_indices_with_jax(
         n_filters=int(design_info.n_filters),
         phase_c1_idx=int(design_info.phase_c1_idx),
         phase_c2_idx=int(design_info.phase_c2_idx),
-        sum_weights=None if weights is None else float(np.sum(np.asarray(weights, dtype=np.float64)[best_mask])),
     )
     fits[best_pos] = best_fit
     return scores, fits, best_fit
@@ -1289,101 +1269,6 @@ def _run_lsm(
             else float(solution.false_alarm_probability)
         ),
     )
-
-
-def _build_fourier_result(
-    *,
-    chosen_fit: _FitResult,
-    order_grid_results: dict[int, tuple[npt.NDArray[np.float64], dict[int, _FitResult]]],
-    frequencies: npt.NDArray[np.float64],
-    profile: _FourierProfile,
-) -> _FourierMethodResult:
-    scores, fits_by_index = order_grid_results[int(chosen_fit.fourier_order)]
-    sigma_threshold = float(_sigma_threshold_for_confidence(chosen_fit, profile.sigma_threshold_confidence))
-    accepted_indices = np.flatnonzero(np.isfinite(scores) & (scores <= sigma_threshold))
-    if accepted_indices.size == 0:
-        accepted_indices = np.asarray(
-            [int(np.nanargmin(np.asarray(scores, dtype=np.float64)))],
-            dtype=np.int64,
-        )
-    fits: list[_FitResult | None] = [fits_by_index.get(int(idx)) for idx in range(len(frequencies))]
-    clusters = _cluster_fourier_solutions(
-        fits=fits,
-        accepted_indices=accepted_indices,
-        sigma_threshold=sigma_threshold,
-        frequencies=frequencies,
-    )
-    best_period = _fit_with_period(chosen_fit)
-    primary = next(
-        (
-            cluster
-            for cluster in clusters
-            if any(
-                fits_by_index.get(int(idx)) is chosen_fit
-                or (
-                    fits_by_index.get(int(idx)) is not None
-                    and abs(float(fits_by_index[int(idx)].frequency) - float(chosen_fit.frequency)) <= 1.0e-12
-                )
-                for idx in cluster.indices.tolist()
-            )
-        ),
-        clusters[0],
-    )
-    relative_uncertainty = _relative_period_uncertainty(
-        best_period.period_days,
-        float(primary.period_lower_days),
-        float(primary.period_upper_days),
-    )
-    alternate_period_days = [
-        float(cluster.best.period_days)
-        for cluster in clusters
-        if cluster is not primary
-    ]
-    is_valid = True
-    if profile.valid_relative_uncertainty_max is not None:
-        is_valid = bool(relative_uncertainty <= float(profile.valid_relative_uncertainty_max))
-    is_reliable = is_valid
-    if profile.reliable_relative_multiplier is not None and profile.reliable_absolute_hours is not None:
-        uncertainty_days = _max_cluster_period_deviation(best_period.period_days, clusters)
-        is_reliable = bool(
-            uncertainty_days <= max(
-                float(profile.reliable_relative_multiplier) * best_period.period_days,
-                float(profile.reliable_absolute_hours) / 24.0,
-            )
-        )
-    return _FourierMethodResult(
-        chosen_fit=chosen_fit,
-        best_period=best_period,
-        sigma_threshold=sigma_threshold,
-        period_lower_days=float(primary.period_lower_days),
-        period_upper_days=float(primary.period_upper_days),
-        relative_period_uncertainty=float(relative_uncertainty),
-        alternate_period_days=alternate_period_days,
-        is_valid=bool(is_valid),
-        is_reliable=bool(is_reliable),
-        amplitude_mag=float(_amplitude_from_fit(chosen_fit)),
-    )
-
-
-def _best_harmonic_factor(
-    period_a: float,
-    period_b: float,
-    harmonic_period_factors: tuple[float, ...],
-) -> tuple[float, float]:
-    if period_a <= 0.0 or period_b <= 0.0 or not np.isfinite(period_a) or not np.isfinite(period_b):
-        return 1.0, float("inf")
-    best_factor = 1.0
-    best_mismatch = float("inf")
-    for factor in harmonic_period_factors:
-        mismatch = float(abs(period_a * factor - period_b) / max(abs(period_b), np.finfo(np.float64).eps))
-        if mismatch < best_mismatch:
-            best_mismatch = mismatch
-            best_factor = float(factor)
-    return float(best_factor), float(best_mismatch)
-
-
-def _is_simple_harmonic_factor(factor: float) -> bool:
-    return any(abs(float(factor) - simple) <= 1.0e-12 for simple in _SIMPLE_HARMONIC_FACTORS)
 
 
 def _observation_count_sufficient(filter_labels: npt.NDArray[np.object_]) -> bool:

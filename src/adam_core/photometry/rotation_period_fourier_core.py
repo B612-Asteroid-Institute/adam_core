@@ -33,14 +33,12 @@ class _FitResult:
     n_filters: int
     phase_c1_idx: int
     phase_c2_idx: int
-    sum_weights: float | None = None
     n_local_maxima: int | None = None
 
 
 @dataclass(slots=True)
 class _DesignInfo:
     fixed: npt.NDArray[np.float64]
-    unique_filters: list[str]
     n_filters: int
     phase_c1_idx: int
     phase_c2_idx: int
@@ -60,13 +58,6 @@ class _FitWithPeriod:
     period_days: float
     period_hours: float
     is_period_doubled: bool
-
-
-@dataclass(slots=True)
-class _HarmonicAdjudication:
-    selected: _FitWithPeriod
-    near_tie_candidates: int
-    had_near_tie: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,7 +243,6 @@ def _build_fixed_design(
     fixed = np.column_stack(cols).astype(np.float64, copy=False)
     return _DesignInfo(
         fixed=fixed,
-        unique_filters=unique_filters,
         n_filters=len(unique_filters),
         phase_c1_idx=fixed.shape[1] - 2,
         phase_c2_idx=fixed.shape[1] - 1,
@@ -478,7 +468,6 @@ def _fit_frequency(
                 n_filters=int(design_info.n_filters),
                 phase_c1_idx=int(design_info.phase_c1_idx),
                 phase_c2_idx=int(design_info.phase_c2_idx),
-                sum_weights=None if real_weights is None else float(np.sum(real_weights)),
             )
         new_mask = mask.copy()
         new_mask[idx[~clip_mask]] = False
@@ -525,7 +514,6 @@ def _fit_frequency(
         n_filters=int(design_info.n_filters),
         phase_c1_idx=int(design_info.phase_c1_idx),
         phase_c2_idx=int(design_info.phase_c2_idx),
-        sum_weights=None if real_weights is None else float(np.sum(real_weights)),
     )
 
 
@@ -582,7 +570,6 @@ def _fit_frequency_unclipped(
         n_filters=int(design_info.n_filters),
         phase_c1_idx=int(design_info.phase_c1_idx),
         phase_c2_idx=int(design_info.phase_c2_idx),
-        sum_weights=None if real_weights is None else float(np.sum(real_weights)),
     )
 
 
