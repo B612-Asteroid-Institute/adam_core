@@ -260,8 +260,9 @@ def build_observatory_band_map(out_dir: Path) -> ObservatoryBandMap:
     # ATLAS (multiple MPC codes share the same c/o passbands).
     # MPC obs80 ingests ATLAS observations with a leading "A" filter prefix
     # ("Ao"/"Ac"); the native ATLAS exposure index uses just "o"/"c". Adding
-    # explicit aliases here means ``native_band_for`` can resolve both forms
-    # to the same canonical filter_id without per-station regex normalization.
+    # explicit alias entries here means ``map_to_canonical_filter_bands``
+    # resolves both forms to the same canonical ``ATLAS_o``/``ATLAS_c`` id
+    # without per-station regex normalization.
     for code in ["T08", "T05", "M22", "W68"]:
         mappings.append((code, "c", "ATLAS_c"))
         mappings.append((code, "o", "ATLAS_o"))

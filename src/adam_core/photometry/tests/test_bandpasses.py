@@ -11,7 +11,6 @@ from adam_core.photometry.bandpasses import (
     load_bandpass_curves,
     load_observatory_band_map,
     map_to_canonical_filter_bands,
-    native_band_for,
 )
 
 
@@ -71,65 +70,36 @@ def test_observatory_band_map_covers_required_pairs():
         assert bool(pc.any(pc.equal(mapping.key, key)).as_py())
 
 
-def test_native_band_for_native_passthrough():
-    """For already-native band strings, ``native_band_for`` returns the same
-    string unchanged."""
-    assert native_band_for("T05", "o") == "o"
-    assert native_band_for("T08", "c") == "c"
-    assert native_band_for("I41", "g") == "g"
-    assert native_band_for("I41", "r") == "r"
-    assert native_band_for("X05", "y") == "y"
-    assert native_band_for("W84", "VR") == "VR"
-
-
-def test_native_band_for_mpc_prefixed_atlas():
-    """MPC obs80 ingests ATLAS observations with a leading "A" prefix
-    ("Ao"/"Ac"); the native form is "o"/"c". ``native_band_for`` must
-    resolve both equivalently at every ATLAS site.
+def test_map_to_canonical_filter_bands_resolves_mpc_prefixed_atlas_aliases():
+    """MPC obs80 ingests ATLAS observations with a leading "A" filter
+    prefix (``Ao``/``Ac``); the native ATLAS exposure index uses just
+    ``o``/``c``. ``map_to_canonical_filter_bands`` must resolve both
+    forms to the same canonical ``ATLAS_o``/``ATLAS_c`` id at every
+    ATLAS site so downstream consumers don't need per-station regex
+    normalization to handle the prefixed encoding.
     """
-    for code in ("T05", "T08", "M22", "W68"):
-        assert native_band_for(code, "Ao") == "o"
-        assert native_band_for(code, "Ac") == "c"
+    atlas_codes = ["T05", "T05", "T08", "T08", "M22", "M22", "W68", "W68"]
+    atlas_bands = ["Ao", "Ac", "Ao", "Ac", "Ao", "Ac", "Ao", "Ac"]
+    resolved = map_to_canonical_filter_bands(
+        atlas_codes, atlas_bands, allow_fallback_filters=False
+    )
+    assert resolved.tolist() == [
+        "ATLAS_o",
+        "ATLAS_c",
+        "ATLAS_o",
+        "ATLAS_c",
+        "ATLAS_o",
+        "ATLAS_c",
+        "ATLAS_o",
+        "ATLAS_c",
+    ]
 
-
-def test_native_band_for_unknown_returns_none():
-    """Unmapped (observatory, band) pairs return None rather than raising.
-    Callers (e.g. cutouts engine) can fall back to passing the original
-    reported band, omitting the filter from a search, or surfacing a
-    warning.
-    """
-    assert native_band_for("XXX", "g") is None
-    assert native_band_for("T05", "bogus") is None
-    assert native_band_for("", "o") is None
-    assert native_band_for("T05", "") is None
-
-
-def test_native_band_for_lsst_mpc_ades_prefixed_forms():
-    """For X05 (LSST), MPC/ADES submissions can use ``Lg``/``Lr``/...
-    or ``LSST_g``/``LSST_r``/... encodings. ``native_band_for`` must
-    resolve all of these to the native single-letter band so the
-    cutouts engine joins against the native LSST exposure index.
-
-    This is the same normalization
-    :func:`_normalize_reported_band_for_station` already does for the
-    existing :func:`map_to_canonical_filter_bands` path; the test pins
-    that we delegate to it rather than reimplementing the prefix logic.
-    """
-    # Native pass-through still works.
-    assert native_band_for("X05", "g") == "g"
-    assert native_band_for("X05", "r") == "r"
-    # MPC obs80 'L'-prefixed single-letter encodings.
-    assert native_band_for("X05", "Lu") == "u"
-    assert native_band_for("X05", "Lg") == "g"
-    assert native_band_for("X05", "Lr") == "r"
-    assert native_band_for("X05", "Li") == "i"
-    assert native_band_for("X05", "Lz") == "z"
-    assert native_band_for("X05", "Ly") == "y"
-    # Vendor-prefixed full forms.
-    assert native_band_for("X05", "LSST_g") == "g"
-    assert native_band_for("X05", "LSST_r") == "r"
-    # Pragmatic alias: "Y" (uppercase) -> "y".
-    assert native_band_for("X05", "Y") == "y"
+    # And the native (non-prefixed) form still resolves at the same
+    # sites -- both encodings yield the same canonical id.
+    resolved_native = map_to_canonical_filter_bands(
+        atlas_codes, [b[1:] for b in atlas_bands], allow_fallback_filters=False
+    )
+    assert resolved_native.tolist() == resolved.tolist()
 
 
 def test_map_to_canonical_filter_bands_strict_happy_path():

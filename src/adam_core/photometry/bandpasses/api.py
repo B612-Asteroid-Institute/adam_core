@@ -111,69 +111,6 @@ def load_observatory_band_map() -> ObservatoryBandMap:
     return ObservatoryBandMap.from_parquet(path)
 
 
-def native_band_for(observatory_code: str, reported_band: str) -> str | None:
-    """Map ``(observatory_code, reported_band)`` to the vendor-native band string
-    used by that observatory's exposure index.
-
-    Useful for callers that need to compare against a vendor's *native*
-    exposure-metadata ``filter`` column (e.g. the cutouts engine matching
-    against an ATLAS or ZTF native exposure index). The vendor index uses
-    short native band strings (``o``, ``c``, ``g``, ...) while MPC obs80
-    submissions of the same observations often carry vendor-prefixed forms
-    (``Ao``, ``Ac``, ``Lg``, ``LSST_g``, ...). This helper resolves either
-    form to the canonical native band.
-
-    Implementation: delegates to :func:`map_to_canonical_filter_bands` so
-    the same MPC/ADES normalization logic that powers existing callers
-    (LSST ``Lg``/``LSST_g`` prefix stripping via
-    :func:`_normalize_reported_band_for_station`, ATLAS ``Ao``/``Ac``
-    alias resolution via the observatory band map, canonical ``filter_id``
-    pass-through) applies uniformly. The native band is then extracted as
-    the suffix of the canonical ``Vendor_band`` id.
-
-    Parameters
-    ----------
-    observatory_code : str
-        MPC observatory code (e.g. ``"T05"``, ``"I41"``, ``"X05"``).
-    reported_band : str
-        Filter/band string as reported by the source (MPC submission or
-        vendor-native). Examples: ``"o"``, ``"Ao"``, ``"g"``, ``"Lg"``,
-        ``"LSST_g"``.
-
-    Returns
-    -------
-    native_band : str | None
-        Canonical vendor-native band string, or ``None`` if the pair has no
-        vendored mapping. Generic-band fallbacks (``g`` -> ``SDSS_g`` etc.)
-        are intentionally disabled here because the caller (cutouts engine)
-        needs the actual vendor's native band, not a guessed one.
-    """
-    if not observatory_code or not reported_band:
-        return None
-    try:
-        canonical_arr = map_to_canonical_filter_bands(
-            observatory_codes=[str(observatory_code)],
-            bands=[str(reported_band)],
-            allow_fallback_filters=False,
-            on_unknown="skip",
-        )
-    except Exception:
-        # Defensive: any unexpected error in the canonical resolver should
-        # surface as "unknown" to the caller, not propagate.
-        return None
-    filter_id = canonical_arr[0]
-    if filter_id is None or not filter_id:
-        return None
-    # filter_id is ``"Vendor_band"``; native band is the suffix after the
-    # first underscore (``ATLAS_o`` -> ``o``, ``LSST_g`` -> ``g``,
-    # ``DECam_VR`` -> ``VR``). Filter ids without an underscore (none
-    # today, but defensive) fall through unchanged.
-    filter_id = str(filter_id)
-    if "_" in filter_id:
-        return filter_id.split("_", 1)[1]
-    return filter_id
-
-
 @lru_cache(maxsize=1)
 def load_asteroid_templates() -> AsteroidTemplates:
     path = _DATA_DIR.joinpath(_TEMPLATES_FILE)

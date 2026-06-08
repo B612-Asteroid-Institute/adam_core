@@ -22,7 +22,6 @@ from .api import (
     load_observatory_band_map,
     load_template_integrals,
     map_to_canonical_filter_bands,
-    native_band_for,
     register_custom_template,
 )
 from .tables import (
@@ -45,7 +44,6 @@ __all__ = [
     "load_template_integrals",
     # Utilities
     "map_to_canonical_filter_bands",
-    "native_band_for",
     "assert_filter_ids_have_curves",
     "get_integrals",
     "compute_mix_integrals",
