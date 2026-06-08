@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib.resources import files
-from typing import Final, Iterable
+from typing import Final, Iterable, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -227,6 +227,7 @@ def map_to_canonical_filter_bands(
     bands: pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str],
     *,
     allow_fallback_filters: bool = True,
+    on_unknown: Literal["raise", "skip"] = "raise",
 ) -> npt.NDArray[np.object_]:
     """
     Suggest canonical (vendored) bandpass filter IDs for a set of observations.
@@ -255,11 +256,30 @@ def map_to_canonical_filter_bands(
           y         -> PS1_y
         If False, raise if any row would require those fallbacks. Canonical `filter_id`
         inputs are always passed through. Defaults to True.
+    on_unknown : Literal["raise", "skip"], optional
+        Behavior when a row cannot be resolved to a vendored canonical filter_id
+        through pass-through, the observatory-band mapping table, or the generic
+        u/g/r/i/z/y fallback set (if enabled).
+          "raise" (default): raise ``ValueError`` listing the unresolvable
+              ``observatory_code|band`` pairs. Backward-compatible with prior
+              behavior; the returned ndarray is dense with no None entries.
+          "skip":  leave unresolvable rows as ``None`` in the returned ndarray
+              and do not raise. Callers must tolerate None entries (typically by
+              skipping bandpass-dependent computation for those rows). Useful for
+              ingest pipelines (e.g. precovery against MPC astrometry) where some
+              fraction of rows genuinely have no canonical bandpass — amateur
+              "clear" / unfiltered reports, observatory codes whose reported band
+              is not in the vendored mapping table, etc. — and the right behavior
+              is to keep those rows in the dataset while marking them as not
+              photometrically gated.
 
     Returns
     -------
     ndarray
-        Canonical vendored `filter_id` strings.
+        Canonical vendored `filter_id` strings. When ``on_unknown="skip"`` the
+        ndarray dtype remains ``object`` and may contain ``None`` entries for
+        rows that could not be resolved; otherwise every entry is a non-empty
+        string.
     """
     codes = _to_string_array(observatory_codes)
     b = _to_string_array(bands)
@@ -330,9 +350,15 @@ def map_to_canonical_filter_bands(
                 out[j] = fb
                 used_fallback[j] = True
 
-    # Validate outputs are all present and correspond to known vendored curves.
+    # Identify unresolved rows. With on_unknown="raise" this is a hard error;
+    # with on_unknown="skip" we leave None entries in the output and let the
+    # caller handle them.
+    if on_unknown not in ("raise", "skip"):
+        raise ValueError(
+            f"on_unknown must be 'raise' or 'skip'; got {on_unknown!r}"
+        )
     missing_out = np.nonzero(out == None)[0]  # noqa: E711
-    if len(missing_out) > 0:
+    if on_unknown == "raise" and len(missing_out) > 0:
         codes_np = np.asarray(
             codes.to_numpy(zero_copy_only=False), dtype=object
         ).astype(str)
@@ -342,30 +368,45 @@ def map_to_canonical_filter_bands(
         )
 
     if (not allow_fallback_filters) and np.any(used_fallback):
-        codes_np = np.asarray(
-            codes.to_numpy(zero_copy_only=False), dtype=object
-        ).astype(str)
-        fallback_pairs = [
-            f"{codes_np[i]}|{str(b_np[i])}"
-            for i in np.nonzero(used_fallback)[0].tolist()
-        ]
-        raise ValueError(
-            "No non-fallback mapping found for: "
-            + ", ".join(fallback_pairs)
-            + ". Set allow_fallback_filters=True to allow SDSS/PS1 fallbacks."
-        )
+        fallback_indices = np.nonzero(used_fallback)[0]
+        if on_unknown == "skip":
+            # Caller asked for lenient handling, so treat fallback-needed rows the
+            # same way as truly-unmappable rows: null them out rather than
+            # raising. This keeps `on_unknown="skip"` consistent across all
+            # not-cleanly-resolvable cases (no obs mapping, or fallback needed
+            # but disabled).
+            for j in fallback_indices.tolist():
+                out[j] = None
+                used_fallback[j] = False
+        else:
+            codes_np = np.asarray(
+                codes.to_numpy(zero_copy_only=False), dtype=object
+            ).astype(str)
+            fallback_pairs = [
+                f"{codes_np[i]}|{str(b_np[i])}"
+                for i in fallback_indices.tolist()
+            ]
+            raise ValueError(
+                "No non-fallback mapping found for: "
+                + ", ".join(fallback_pairs)
+                + ". Set allow_fallback_filters=True to allow SDSS/PS1 fallbacks."
+            )
 
-    # Final guarantee: every output has a curve.
-    out_arr = pa.array(out.tolist(), type=pa.large_string())
-    out_idx = pc.fill_null(pc.index_in(out_arr, value_set=curves.filter_id), -1)
-    out_idx_np = np.asarray(out_idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(out_idx_np < 0):
-        bad = np.unique(
-            np.asarray(out, dtype=object)[out_idx_np < 0].astype(str)
-        ).tolist()
-        raise ValueError(
-            "Suggested filter_id(s) do not have vendored curves: " + repr(bad)
+    # Final guarantee: every non-None output has a corresponding vendored curve.
+    # Under on_unknown="skip" None entries are passed through untouched here.
+    non_none_mask = out != None  # noqa: E711
+    if np.any(non_none_mask):
+        out_non_none = np.asarray(out, dtype=object)[non_none_mask]
+        out_arr = pa.array(out_non_none.tolist(), type=pa.large_string())
+        out_idx = pc.fill_null(pc.index_in(out_arr, value_set=curves.filter_id), -1)
+        out_idx_np = np.asarray(
+            out_idx.to_numpy(zero_copy_only=False), dtype=np.int32
         )
+        if np.any(out_idx_np < 0):
+            bad = np.unique(out_non_none[out_idx_np < 0].astype(str)).tolist()
+            raise ValueError(
+                "Suggested filter_id(s) do not have vendored curves: " + repr(bad)
+            )
 
     return np.asarray(out, dtype=object)
 

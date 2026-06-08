@@ -1,9 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Optional, Tuple
 
 import pyarrow as pa
 
+from ..orbits.orbits import Orbits
 from .evaluate import FittedOrbitMembers, FittedOrbits, OrbitDeterminationObservations
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class OrbitFitter(ABC):
         self,
         object_id: str | pa.LargeStringScalar,
         observations: OrbitDeterminationObservations,
+        reference_orbit: Optional[Orbits] = None,
     ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
         """Initial orbit fit for a single object.
 
@@ -61,6 +63,13 @@ class OrbitFitter(ABC):
             id of the object we are fitting for to be used in the output
         observations: OrbitDeterminationObservations
             observations to fit, assuming all observations correspond to the same object
+        reference_orbit: Orbits, optional
+            Optional warm-start seed (length-1 Orbits) for the fit. When provided,
+            implementations should use it as the starting point for differential
+            correction instead of cold-bootstrapping via IOD. When ``None``,
+            implementations must fall back to their default cold-start behavior
+            (e.g. Gauss IOD) so the API remains backward-compatible for callers
+            that have no seed available.
 
         Returns:
         --------
