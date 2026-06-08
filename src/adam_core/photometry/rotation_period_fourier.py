@@ -1867,6 +1867,61 @@ def estimate_rotation_period(
     lsm_refine_samples: int = _LSM_DEFAULT_REFINE_SAMPLES,
     lsm_refine_rounds: int = _LSM_DEFAULT_REFINE_ROUNDS,
 ) -> RotationPeriodResult:
+    """Estimate an asteroid rotation period with a measured confidence verdict.
+
+    Fits the distance-reduced, light-time-corrected photometry with a
+    truncated-harmonic Fourier model (the MVP default) or a Lomb-Scargle
+    periodogram, searches a frequency grid, clusters harmonic aliases, and
+    classifies the outcome against the D1 confidence contract rather than
+    emitting a bare point estimate.
+
+    Parameters
+    ----------
+    observations : RotationPeriodObservations
+        One row per photometric measurement: time, magnitude, optional
+        uncertainty, filter, optional session id, and observing geometry
+        (``r_au`` / ``delta_au`` / ``phase_angle_deg``).
+    method_mode : {"fourier", "lsm"}, default "fourier"
+        Primary estimator. ``"fourier"`` does multi-order F-test selection with
+        alias clustering and a validated uncertainty interval; ``"lsm"`` is a fast
+        Lomb-Scargle backup capped at ``period_family`` (no validated interval, per
+        the D2 policy).
+    paper_profile : str, default "greenstreet_2026"
+        Solver configuration profile (Fourier orders, F-test/cluster confidences,
+        reliability window). Only ``"greenstreet_2026"`` is shipped.
+    search_fidelity : {"validated_staged", "exact_grid"}, optional
+        Frequency-search strategy; defaults to ``"validated_staged"`` (coarse pass
+        refined with exact evaluations). ``"exact_grid"`` evaluates every grid
+        frequency.
+    session_mode : {"ignore", "use", "auto"}, default "auto"
+        Per-session magnitude-offset handling. ``"auto"`` adopts offsets only when
+        a BIC test clears ``auto_session_bic_improvement``.
+    exact_evaluation_backend : {"numpy", "jax"}, default "numpy"
+        Backend for exact frequency fits; ``"jax"`` is faster on large grids and
+        gives identical results (imported lazily, so ``"numpy"`` needs no JAX).
+    early_exit_on_insufficient : bool, default False
+        When True, screen obviously under-determined inputs before building the
+        grid and return ``insufficient_data`` early.
+    min_rotations_in_span, max_frequency_cycles_per_day, frequency_grid_scale, max_search_period_hours, clip_sigma : float
+        Frequency-grid and fit knobs: lower frequency bound (rotations spanned),
+        upper bound, grid oversampling, optional period ceiling, and the
+        sigma-clipping threshold.
+
+    Returns
+    -------
+    RotationPeriodResult
+        A one-row table. Headline fields: ``period_verdict`` (``single_period`` /
+        ``period_family`` / ``insufficient_data``), ``reliability_code`` (``"3"`` /
+        ``"2"`` / ``"1"``, mapping to the LCDB U code), ``confidence_flags`` and
+        ``insufficiency_reasons`` -- plus the recovered ``period_hours`` /
+        ``period_days``, the per-method blocks, and diagnostics.
+
+    Raises
+    ------
+    ValueError
+        If ``method_mode`` / ``session_mode`` / ``exact_evaluation_backend`` is
+        invalid or a numeric knob is non-positive.
+    """
     if method_mode not in {"fourier", "lsm"}:
         raise ValueError("method_mode must be one of {'fourier', 'lsm'}")
     if clip_sigma <= 0.0:
