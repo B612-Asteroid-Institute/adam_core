@@ -1429,6 +1429,25 @@ def _amplitude_snr(amplitude_mag: float | None, residual_sigma_mag: float | None
     return float(amplitude_mag) / float(residual_sigma_mag)
 
 
+def _below_min(value: float | None, threshold: float) -> bool:
+    """True when ``value`` is missing, non-finite, or strictly below ``threshold``.
+
+    Mirrors the ``x is None or not np.isfinite(x) or x < t`` idiom so that both
+    ``None`` and ``NaN`` (and -inf) fail the gate identically.  The ``is None``
+    short-circuit is required because ``np.isfinite(None)`` raises.
+    """
+    return value is None or not np.isfinite(value) or value < threshold
+
+
+def _at_least(value: float | None, threshold: float) -> bool:
+    """True when ``value`` is present and ``>= threshold`` (None or NaN -> False).
+
+    Reproduces the ``x is not None and x >= t`` checks: a present-but-non-finite
+    value behaves as before (``NaN >= t`` is ``False``, ``+inf >= t`` is ``True``).
+    """
+    return value is not None and value >= threshold
+
+
 def _classify_confidence(
     *,
     primary_method: str,
@@ -1447,68 +1466,82 @@ def _classify_confidence(
 
     Returns ``(period_verdict, reliability_code, confidence_flags,
     insufficiency_reasons)``.
+
+    The signal gate, positive flags, and alias gate are expressed as ordered
+    ``(condition, label)`` tables -- the tuple order *is* the emission order,
+    which is part of the D1 contract (the flags/reasons lists are compared by
+    membership AND order).  The early-return, the precision gate, its
+    ``no_precision`` de-dup guards, and the LSM family-cap are kept verbatim
+    because they carry the subtle, stateful behavior.
     """
     flags: list[str] = []
     reasons: list[str] = []
 
     uses_fap = primary_method == "lsm"
-
-    # ---- 1. Signal gate ----------------------------------------------------
-    if amplitude_snr is None or not np.isfinite(amplitude_snr) or amplitude_snr < AMPLITUDE_SNR_MIN:
-        reasons.append("amplitude_below_noise")
-    if (
-        phase_coverage_fraction is None
-        or not np.isfinite(phase_coverage_fraction)
-        or phase_coverage_fraction < PHASE_COVERAGE_MIN_FAMILY
-    ):
-        reasons.append("phase_coverage_low")
-    if (
-        n_rotations_spanned is None
-        or not np.isfinite(n_rotations_spanned)
-        or n_rotations_spanned < float(min_rotations_in_span)
-    ):
-        reasons.append("spans_too_few_rotations")
-    if not observation_count_sufficient:
-        reasons.append("too_few_observations")
-    if uses_fap and (
+    min_rotations = float(min_rotations_in_span)
+    fap_insignificant = (
         lsm_false_alarm_probability is None
         or not np.isfinite(lsm_false_alarm_probability)
         or lsm_false_alarm_probability > FAP_SIGNIFICANT
-    ):
-        reasons.append("no_significant_peak")
+    )
+
+    # ---- 1. Signal gate ----------------------------------------------------
+    # Each row is (failed?, reason), appended in source order.  Any hit -> early
+    # insufficient_data return, so alias/precision reasons never co-occur with a
+    # signal-gate insufficiency.
+    signal_gate: tuple[tuple[bool, str], ...] = (
+        (_below_min(amplitude_snr, AMPLITUDE_SNR_MIN), "amplitude_below_noise"),
+        (_below_min(phase_coverage_fraction, PHASE_COVERAGE_MIN_FAMILY), "phase_coverage_low"),
+        (_below_min(n_rotations_spanned, min_rotations), "spans_too_few_rotations"),
+        (not observation_count_sufficient, "too_few_observations"),
+        (uses_fap and fap_insignificant, "no_significant_peak"),
+    )
+    for failed, reason in signal_gate:
+        if failed:
+            reasons.append(reason)
 
     if reasons:
         return _VERDICT_INSUFFICIENT, _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT], flags, reasons
 
-    # Signal present -> record positive flags.
-    if uses_fap and lsm_false_alarm_probability is not None and lsm_false_alarm_probability <= FAP_SIGNIFICANT:
-        flags.append("fap_significant")
-    if phase_coverage_fraction is not None and phase_coverage_fraction >= PHASE_COVERAGE_MIN_SINGLE:
-        flags.append("good_phase_coverage")
-    if n_rotations_spanned is not None and n_rotations_spanned >= 2.0 * float(min_rotations_in_span):
-        flags.append("multi_night")
-    if not is_period_doubled:
-        flags.append("two_max_two_min")
+    # Signal present -> record positive flags (each row is (present?, flag)).
+    good_coverage_for_single = _at_least(phase_coverage_fraction, PHASE_COVERAGE_MIN_SINGLE)
+    positive_flags: tuple[tuple[bool, str], ...] = (
+        (
+            uses_fap
+            and lsm_false_alarm_probability is not None
+            and lsm_false_alarm_probability <= FAP_SIGNIFICANT,
+            "fap_significant",
+        ),
+        (good_coverage_for_single, "good_phase_coverage"),
+        (_at_least(n_rotations_spanned, 2.0 * min_rotations), "multi_night"),
+        (not is_period_doubled, "two_max_two_min"),
+    )
+    for present, flag in positive_flags:
+        if present:
+            flags.append(flag)
 
     # ---- 2. Alias gate -----------------------------------------------------
     n_aliases = 0 if n_significant_aliases is None else int(n_significant_aliases)
     alias_ambiguous = n_aliases >= 2
     single_max_ambiguous = bool(is_period_doubled)
-    good_coverage_for_single = bool(
-        phase_coverage_fraction is not None and phase_coverage_fraction >= PHASE_COVERAGE_MIN_SINGLE
-    )
-
     eligible_single = (not alias_ambiguous) and (not single_max_ambiguous) and good_coverage_for_single
-    if alias_ambiguous:
-        reasons.append("conflicting_aliases")
-    if single_max_ambiguous:
-        reasons.append("single_max_alias")
-    if not good_coverage_for_single and not alias_ambiguous and not single_max_ambiguous:
-        reasons.append("phase_coverage_low")
+
+    alias_gate: tuple[tuple[bool, str], ...] = (
+        (alias_ambiguous, "conflicting_aliases"),
+        (single_max_ambiguous, "single_max_alias"),
+        (
+            not good_coverage_for_single and not alias_ambiguous and not single_max_ambiguous,
+            "phase_coverage_low",
+        ),
+    )
+    for failed, reason in alias_gate:
+        if failed:
+            reasons.append(reason)
 
     # ---- 3. Precision gate -------------------------------------------------
-    # Greenstreet reliable (uncertainty <= max(2P, 7h)) -> code "3" eligible.
-    # Vavilov valid-but-not-reliable -> at most period_family / "2".
+    # Greenstreet reliable (uncertainty <= max(2P, 7h)) -> code "3" eligible;
+    # valid-but-not-reliable -> at most period_family / "2".  (Kept verbatim --
+    # this is the subtle, stateful part of the contract.)
     if eligible_single and is_reliable:
         verdict = _VERDICT_SINGLE
     elif is_valid:
