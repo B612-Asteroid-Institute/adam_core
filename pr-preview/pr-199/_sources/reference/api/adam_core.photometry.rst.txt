@@ -1,0 +1,25 @@
+adam\_core.photometry package
+=============================
+
+.. automodule:: adam_core.photometry
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.photometry.bandpasses
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.photometry.absolute_magnitude
+   adam_core.photometry.magnitude
+   adam_core.photometry.magnitude_common
