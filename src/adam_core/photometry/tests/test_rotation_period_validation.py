@@ -137,7 +137,10 @@ def test_zero_false_confidence() -> None:
     Current state (xfail): the fast committed gold set has exactly one offender,
     1627 Ivar (a ~5/3 alias the solver reports with high confidence); the slow set
     additionally contains 3295 Murakami. Every other committed ``single_period``
-    call is correct. These are the known harmonic-alias floor (rp-e4a.13).
+    call is correct. These are the known harmonic-alias floor; Ivar is an order-6
+    overfit at the alias (a finer grid or capping order each recover it but regress
+    objects that genuinely need order 6, e.g. 511 Davida), so the fix belongs in
+    order selection, not a single knob (rp-e4a.13).
 
     Note on the metric: this flags only calls wrong AFTER harmonic adjustment, so a
     clean 2x/0.5x ``single_period`` would pass here. The D1 contract treats 2x/0.5x
