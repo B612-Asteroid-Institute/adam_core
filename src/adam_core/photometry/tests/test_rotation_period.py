@@ -14,8 +14,8 @@ from ..rotation_period_fourier import (
     _build_fourier_result,
     _build_frequency_grid,
     _is_simple_harmonic_factor,
+    _observation_count_sufficient,
     _paper_profile,
-    _primary_from_method,
     estimate_rotation_period,
 )
 from ..rotation_period_fourier_core import (
@@ -245,6 +245,30 @@ def test_harmonic_factor_classifies_simple_vs_alias_ratios():
     assert alias_mismatch == pytest.approx(0.0)
     assert alias_factor == pytest.approx(2.0 / 3.0)
     assert _is_simple_harmonic_factor(alias_factor) is False
+
+
+def test_observation_count_sufficient_gates_on_dominant_band():
+    # The signal-gate observation count fires on the MOST-POPULATED band (the
+    # jointly-fit shape is carried by the richest band + per-band offsets), not on
+    # the top two bands each clearing the floor.
+    def labels(counts: dict[str, int]) -> np.ndarray:
+        out: list[str] = []
+        for band, n in counts.items():
+            out.extend([band] * n)
+        return np.asarray(out, dtype=object)
+
+    # Single-band semantics are preserved exactly: >= 30 passes, < 30 fails.
+    assert _observation_count_sufficient(labels({"R": 30})) is True
+    assert _observation_count_sufficient(labels({"R": 29})) is False
+    # The fix: a single-band-dominant lightcurve (Beate-like {C: 457, R: 27})
+    # passes even though the secondary band has < 30 -- the legacy top-two rule
+    # wrongly rejected this as too_few_observations.
+    assert _observation_count_sufficient(labels({"C": 457, "R": 27})) is True
+    # Genuinely sparse data stays insufficient: no band reaches the floor.
+    assert _observation_count_sufficient(labels({"R": 22})) is False
+    # Balanced-but-thin multi-band (no single band >= 30) is deliberately kept
+    # out -- the regime most exposed to harmonic-alias confusion.
+    assert _observation_count_sufficient(labels({"g": 12, "r": 12, "i": 12})) is False
 
 
 def test_early_exit_on_insufficient_matches_full_path_verdict():

@@ -53,6 +53,10 @@ PHASE_COVERAGE_MIN_FAMILY = 0.5
 PHASE_COVERAGE_MIN_SINGLE = 0.7
 # Minimum amplitude-to-noise ratio (amplitude_mag / residual_sigma_mag).
 AMPLITUDE_SNR_MIN = 3.0
+# Minimum observations in the best-sampled band for the jointly-fit shape to be
+# credibly constrained (signal-gate floor; preserves the legacy per-band 30).
+# Candidate for the rp-e4a.13 recalibration.
+OBSERVATION_COUNT_MIN = 30
 # Number of rotational-phase bins used to compute ``phase_coverage_fraction``.
 _PHASE_COVERAGE_N_BINS = 20
 # Longest period a ``single_period`` verdict may claim (bead rp-e4a.22 step 1).
@@ -1383,15 +1387,27 @@ def _is_simple_harmonic_factor(factor: float) -> bool:
 
 
 def _observation_count_sufficient(filter_labels: npt.NDArray[np.object_]) -> bool:
-    """Replicate the legacy observation-count guard (top filter[s] >= 30 obs)."""
+    """Whether the best-sampled band is a credible lightcurve for the joint fit.
+
+    The solver fits every photometric band JOINTLY (one shared rotational shape
+    plus a per-band magnitude offset), so a secondary band contributes a single
+    offset parameter, not its own count requirement. We therefore gate on the
+    most-populated band, not on the top two each clearing the floor. The legacy
+    two-band rule (``counts[0] >= 30 and counts[1] >= 30``) silently demanded 60
+    observations total and let a thin secondary band veto a richly-sampled
+    primary one, wrongly rejecting single-band-dominant lightcurves -- e.g. 1043
+    Beate ({C: 457, R: 27}): 457 points carry the shape, yet R=27 < 30 failed the
+    old guard.
+
+    For a single-band lightcurve this reduces to ``counts[0] >= OBSERVATION_COUNT_MIN``,
+    identical to the legacy single-band branch, so genuinely sparse objects stay
+    ``insufficient_data``. The relaxation is monotonic (it can only remove the
+    ``too_few_observations`` reason); the amplitude-SNR, phase-coverage, alias,
+    and Fourier fit-quality gates still apply downstream to any admitted object.
+    """
     unique_filters = _ordered_unique(filter_labels)
-    counts = sorted(
-        [int(np.count_nonzero(filter_labels == label)) for label in unique_filters],
-        reverse=True,
-    )
-    if len(counts) >= 2:
-        return bool(counts[0] >= 30 and counts[1] >= 30)
-    return bool(counts and counts[0] >= 30)
+    counts = [int(np.count_nonzero(filter_labels == label)) for label in unique_filters]
+    return bool(counts and max(counts) >= OBSERVATION_COUNT_MIN)
 
 
 def _phase_coverage_fraction(
