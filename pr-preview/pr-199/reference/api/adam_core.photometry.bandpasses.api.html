@@ -438,46 +438,6 @@ service.</p>
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="adam_core.photometry.bandpasses.api.native_band_for">
-<span class="sig-prename descclassname"><span class="pre">adam_core.photometry.bandpasses.api.</span></span><span class="sig-name descname"><span class="pre">native_band_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observatory_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">reported_band</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/photometry/bandpasses/api.html#native_band_for"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.photometry.bandpasses.api.native_band_for" title="Link to this definition">¶</a></dt>
-<dd><p>Map <code class="docutils literal notranslate"><span class="pre">(observatory_code,</span> <span class="pre">reported_band)</span></code> to the vendor-native band string
-used by that observatory’s exposure index.</p>
-<p>Useful for callers that need to compare against a vendor’s <em>native</em>
-exposure-metadata <code class="docutils literal notranslate"><span class="pre">filter</span></code> column (e.g. the cutouts engine matching
-against an ATLAS or ZTF native exposure index). The vendor index uses
-short native band strings (<code class="docutils literal notranslate"><span class="pre">o</span></code>, <code class="docutils literal notranslate"><span class="pre">c</span></code>, <code class="docutils literal notranslate"><span class="pre">g</span></code>, …) while MPC obs80
-submissions of the same observations often carry vendor-prefixed forms
-(<code class="docutils literal notranslate"><span class="pre">Ao</span></code>, <code class="docutils literal notranslate"><span class="pre">Ac</span></code>, <code class="docutils literal notranslate"><span class="pre">Lg</span></code>, <code class="docutils literal notranslate"><span class="pre">LSST_g</span></code>, …). This helper resolves either
-form to the canonical native band.</p>
-<p>Implementation: delegates to <a class="reference internal" href="#adam_core.photometry.bandpasses.api.map_to_canonical_filter_bands" title="adam_core.photometry.bandpasses.api.map_to_canonical_filter_bands"><code class="xref py py-func docutils literal notranslate"><span class="pre">map_to_canonical_filter_bands()</span></code></a> so
-the same MPC/ADES normalization logic that powers existing callers
-(LSST <code class="docutils literal notranslate"><span class="pre">Lg</span></code>/<code class="docutils literal notranslate"><span class="pre">LSST_g</span></code> prefix stripping via
-<code class="xref py py-func docutils literal notranslate"><span class="pre">_normalize_reported_band_for_station()</span></code>, ATLAS <code class="docutils literal notranslate"><span class="pre">Ao</span></code>/<code class="docutils literal notranslate"><span class="pre">Ac</span></code>
-alias resolution via the observatory band map, canonical <code class="docutils literal notranslate"><span class="pre">filter_id</span></code>
-pass-through) applies uniformly. The native band is then extracted as
-the suffix of the canonical <code class="docutils literal notranslate"><span class="pre">Vendor_band</span></code> id.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>observatory_code</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC observatory code (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;T05&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;I41&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;X05&quot;</span></code>).</p></li>
-<li><p><strong>reported_band</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Filter/band string as reported by the source (MPC submission or
-vendor-native). Examples: <code class="docutils literal notranslate"><span class="pre">&quot;o&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;Ao&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;g&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;Lg&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;LSST_g&quot;</span></code>.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>native_band</strong> – Canonical vendor-native band string, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the pair has no
-vendored mapping. Generic-band fallbacks (<code class="docutils literal notranslate"><span class="pre">g</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">SDSS_g</span></code> etc.)
-are intentionally disabled here because the caller (cutouts engine)
-needs the actual vendor’s native band, not a guessed one.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a> | None</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="adam_core.photometry.bandpasses.api.load_asteroid_templates">
 <span class="sig-prename descclassname"><span class="pre">adam_core.photometry.bandpasses.api.</span></span><span class="sig-name descname"><span class="pre">load_asteroid_templates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.AsteroidTemplates" title="adam_core.photometry.bandpasses.tables.AsteroidTemplates"><span class="pre">AsteroidTemplates</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/photometry/bandpasses/api.html#load_asteroid_templates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.photometry.bandpasses.api.load_asteroid_templates" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -673,7 +633,6 @@ cannot be extended at runtime without recompilation.</p></li>
 <li><a class="reference internal" href="#">adam_core.photometry.bandpasses.api module</a><ul>
 <li><a class="reference internal" href="#adam_core.photometry.bandpasses.api.load_bandpass_curves"><code class="docutils literal notranslate"><span class="pre">load_bandpass_curves()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.photometry.bandpasses.api.load_observatory_band_map"><code class="docutils literal notranslate"><span class="pre">load_observatory_band_map()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.photometry.bandpasses.api.native_band_for"><code class="docutils literal notranslate"><span class="pre">native_band_for()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.photometry.bandpasses.api.load_asteroid_templates"><code class="docutils literal notranslate"><span class="pre">load_asteroid_templates()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.photometry.bandpasses.api.load_template_integrals"><code class="docutils literal notranslate"><span class="pre">load_template_integrals()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.photometry.bandpasses.api.map_to_canonical_filter_bands"><code class="docutils literal notranslate"><span class="pre">map_to_canonical_filter_bands()</span></code></a></li>
@@ -694,7 +653,7 @@ cannot be extended at runtime without recompilation.</p></li>
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=15650a56"></script>
+</div><script src="../../_static/documentation_options.js?v=61069a03"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -678,8 +678,9 @@
     <span class="c1"># ATLAS (multiple MPC codes share the same c/o passbands).</span>
     <span class="c1"># MPC obs80 ingests ATLAS observations with a leading &quot;A&quot; filter prefix</span>
     <span class="c1"># (&quot;Ao&quot;/&quot;Ac&quot;); the native ATLAS exposure index uses just &quot;o&quot;/&quot;c&quot;. Adding</span>
-    <span class="c1"># explicit aliases here means ``native_band_for`` can resolve both forms</span>
-    <span class="c1"># to the same canonical filter_id without per-station regex normalization.</span>
+    <span class="c1"># explicit alias entries here means ``map_to_canonical_filter_bands``</span>
+    <span class="c1"># resolves both forms to the same canonical ``ATLAS_o``/``ATLAS_c`` id</span>
+    <span class="c1"># without per-station regex normalization.</span>
     <span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;T08&quot;</span><span class="p">,</span> <span class="s2">&quot;T05&quot;</span><span class="p">,</span> <span class="s2">&quot;M22&quot;</span><span class="p">,</span> <span class="s2">&quot;W68&quot;</span><span class="p">]:</span>
         <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">code</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;ATLAS_c&quot;</span><span class="p">))</span>
         <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">code</span><span class="p">,</span> <span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="s2">&quot;ATLAS_o&quot;</span><span class="p">))</span>
@@ -939,7 +940,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=15650a56"></script>
+</div><script src="../../../../_static/documentation_options.js?v=61069a03"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
