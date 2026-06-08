@@ -118,22 +118,39 @@ def test_validation_fixture_schema(fixture_name: str) -> None:
 
 
 @pytest.mark.xfail(
-    reason="solver not yet calibrated to the D4 honesty bar; flips to pass after "
-    "rp-e4a.13 threshold tightening",
+    reason="harmonic-alias floor: 1 of 5 fast-set single_period calls is a confident "
+    "alias -- 1627 Ivar (P_rec=7.99h vs P_true=4.795h, ~5/3x truth). This is the "
+    "documented ~1.5-2% irreducible alias false-confidence rate (full LCDB+DAMIT "
+    "candle set: 0.884 strict single_period precision); a threshold tightening that "
+    "demoted Ivar would also demote correct single_period calls. Flips to a real pass "
+    "after the rp-e4a.13 alias-detection calibration.",
     strict=False,
 )
 def test_zero_false_confidence() -> None:
     """No committed fixture may be confidently wrong (D4 headline gate).
 
-    Collects every fixture labelled ``single_period`` whose harmonic-adjusted
-    error exceeds the fixture tolerance -- a confident call on a harmonic alias.
-    The list must be empty.
+    Collects every fast-set fixture labelled ``single_period`` whose
+    harmonic-adjusted error exceeds the fixture tolerance -- a confident call on a
+    period that is not even a harmonic of the truth -- and requires the list to be
+    empty.
+
+    Current state (xfail): the fast committed gold set has exactly one offender,
+    1627 Ivar (a ~5/3 alias the solver reports with high confidence); the slow set
+    additionally contains 3295 Murakami. Every other committed ``single_period``
+    call is correct. These are the known harmonic-alias floor (rp-e4a.13).
+
+    Note on the metric: this flags only calls wrong AFTER harmonic adjustment, so a
+    clean 2x/0.5x ``single_period`` would pass here. The D1 contract treats 2x/0.5x
+    single_period as the worst failure, so a future tightening should switch this to
+    the strict ``within_tolerance`` metric -- a contract-semantics decision left to
+    review.
     """
     # Iterate the fast default set only so the gate stays cheap; the known
     # offender (1627 Ivar) is in this set. Slow fixtures are covered by the
     # profile-marked schema gate.
     fixtures = [n for n in _ALL_FIXTURES if not _is_slow(n)]
     offenders: list[str] = []
+    n_single = 0
     for fixture_name in fixtures:
         if fixture_name == "__NO_FIXTURES__":
             pytest.skip("No rotation-period validation fixtures found on disk.")
@@ -143,6 +160,7 @@ def test_zero_false_confidence() -> None:
         verdict = str(result.period_verdict[0].as_py())
         if verdict != "single_period":
             continue
+        n_single += 1
         p_rec = float(result.period_hours[0].as_py())
         p_true = float(meta["expected_hours"])
         tol_pct = float(meta["tolerance_fraction"]) * 100.0
@@ -154,8 +172,14 @@ def test_zero_false_confidence() -> None:
                 f"(tol={tol_pct:.2f}%) alias={alias_bucket(best_factor)}"
             )
 
+    n_correct = n_single - len(offenders)
+    precision = n_correct / n_single if n_single else float("nan")
+    print(
+        f"\nD4 fast-set single_period precision: {n_correct}/{n_single} = "
+        f"{precision:.3f} (bar: >= 0.90)"
+    )
     if offenders:
-        print("\nFalse-confidence offenders:")
+        print("False-confidence offenders:")
         for line in offenders:
             print(f"  {line}")
     assert offenders == [], f"{len(offenders)} confident-but-wrong fixture(s)"
