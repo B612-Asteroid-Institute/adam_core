@@ -541,19 +541,16 @@
 <span class="sd">    against an ATLAS or ZTF native exposure index). The vendor index uses</span>
 <span class="sd">    short native band strings (``o``, ``c``, ``g``, ...) while MPC obs80</span>
 <span class="sd">    submissions of the same observations often carry vendor-prefixed forms</span>
-<span class="sd">    (``Ao``, ``Ac``, ``Lg``, ...). This helper resolves either form to the</span>
-<span class="sd">    canonical native band.</span>
+<span class="sd">    (``Ao``, ``Ac``, ``Lg``, ``LSST_g``, ...). This helper resolves either</span>
+<span class="sd">    form to the canonical native band.</span>
 
-<span class="sd">    Resolution order:</span>
-
-<span class="sd">    1. ``(observatory_code, reported_band)`` is looked up directly in</span>
-<span class="sd">       :class:`ObservatoryBandMap`. The mapping table includes both the</span>
-<span class="sd">       native form (e.g. ``T05|o``) and known MPC-prefixed aliases (e.g.</span>
-<span class="sd">       ``T05|Ao``), both mapped to the same canonical ``filter_id``.</span>
-<span class="sd">    2. The canonical ``filter_id`` is split on its first underscore and the</span>
-<span class="sd">       suffix is returned: ``ATLAS_o`` -&gt; ``o``, ``ZTF_g`` -&gt; ``g``,</span>
-<span class="sd">       ``DECam_VR`` -&gt; ``VR``.</span>
-<span class="sd">    3. Returns ``None`` if the ``(code, band)`` pair has no canonical entry.</span>
+<span class="sd">    Implementation: delegates to :func:`map_to_canonical_filter_bands` so</span>
+<span class="sd">    the same MPC/ADES normalization logic that powers existing callers</span>
+<span class="sd">    (LSST ``Lg``/``LSST_g`` prefix stripping via</span>
+<span class="sd">    :func:`_normalize_reported_band_for_station`, ATLAS ``Ao``/``Ac``</span>
+<span class="sd">    alias resolution via the observatory band map, canonical ``filter_id``</span>
+<span class="sd">    pass-through) applies uniformly. The native band is then extracted as</span>
+<span class="sd">    the suffix of the canonical ``Vendor_band`` id.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -561,28 +558,38 @@
 <span class="sd">        MPC observatory code (e.g. ``&quot;T05&quot;``, ``&quot;I41&quot;``, ``&quot;X05&quot;``).</span>
 <span class="sd">    reported_band : str</span>
 <span class="sd">        Filter/band string as reported by the source (MPC submission or</span>
-<span class="sd">        vendor-native). Examples: ``&quot;o&quot;``, ``&quot;Ao&quot;``, ``&quot;g&quot;``, ``&quot;Lg&quot;``.</span>
+<span class="sd">        vendor-native). Examples: ``&quot;o&quot;``, ``&quot;Ao&quot;``, ``&quot;g&quot;``, ``&quot;Lg&quot;``,</span>
+<span class="sd">        ``&quot;LSST_g&quot;``.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    native_band : str | None</span>
 <span class="sd">        Canonical vendor-native band string, or ``None`` if the pair has no</span>
-<span class="sd">        mapping.</span>
+<span class="sd">        vendored mapping. Generic-band fallbacks (``g`` -&gt; ``SDSS_g`` etc.)</span>
+<span class="sd">        are intentionally disabled here because the caller (cutouts engine)</span>
+<span class="sd">        needs the actual vendor&#39;s native band, not a guessed one.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">observatory_code</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">reported_band</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">mapping</span> <span class="o">=</span> <span class="n">load_observatory_band_map</span><span class="p">()</span>
-    <span class="n">key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">observatory_code</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="n">reported_band</span><span class="si">}</span><span class="s2">&quot;</span>
-    <span class="n">idx_arr</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">index_in</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">key</span><span class="p">],</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">()),</span> <span class="n">value_set</span><span class="o">=</span><span class="n">mapping</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
-    <span class="n">idx_val</span> <span class="o">=</span> <span class="n">idx_arr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">idx_val</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">canonical_arr</span> <span class="o">=</span> <span class="n">map_to_canonical_filter_bands</span><span class="p">(</span>
+            <span class="n">observatory_codes</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">observatory_code</span><span class="p">)],</span>
+            <span class="n">bands</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">reported_band</span><span class="p">)],</span>
+            <span class="n">allow_fallback_filters</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">on_unknown</span><span class="o">=</span><span class="s2">&quot;skip&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="c1"># Defensive: any unexpected error in the canonical resolver should</span>
+        <span class="c1"># surface as &quot;unknown&quot; to the caller, not propagate.</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">filter_id</span> <span class="o">=</span> <span class="n">mapping</span><span class="o">.</span><span class="n">filter_id</span><span class="p">[</span><span class="n">idx_val</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">filter_id</span><span class="p">:</span>
+    <span class="n">filter_id</span> <span class="o">=</span> <span class="n">canonical_arr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">filter_id</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">filter_id</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="c1"># filter_id is ``&quot;Vendor_band&quot;``; the native band is the suffix after the</span>
-    <span class="c1"># first underscore. Filter ids without an underscore (none today, but</span>
-    <span class="c1"># defensive) fall through unchanged.</span>
+    <span class="c1"># filter_id is ``&quot;Vendor_band&quot;``; native band is the suffix after the</span>
+    <span class="c1"># first underscore (``ATLAS_o`` -&gt; ``o``, ``LSST_g`` -&gt; ``g``,</span>
+    <span class="c1"># ``DECam_VR`` -&gt; ``VR``). Filter ids without an underscore (none</span>
+    <span class="c1"># today, but defensive) fall through unchanged.</span>
+    <span class="n">filter_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">filter_id</span><span class="p">)</span>
     <span class="k">if</span> <span class="s2">&quot;_&quot;</span> <span class="ow">in</span> <span class="n">filter_id</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">filter_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">filter_id</span></div>
@@ -1245,7 +1252,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=f4446475"></script>
+</div><script src="../../../../_static/documentation_options.js?v=15650a56"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
