@@ -104,6 +104,34 @@ def test_native_band_for_unknown_returns_none():
     assert native_band_for("T05", "") is None
 
 
+def test_native_band_for_lsst_mpc_ades_prefixed_forms():
+    """For X05 (LSST), MPC/ADES submissions can use ``Lg``/``Lr``/...
+    or ``LSST_g``/``LSST_r``/... encodings. ``native_band_for`` must
+    resolve all of these to the native single-letter band so the
+    cutouts engine joins against the native LSST exposure index.
+
+    This is the same normalization
+    :func:`_normalize_reported_band_for_station` already does for the
+    existing :func:`map_to_canonical_filter_bands` path; the test pins
+    that we delegate to it rather than reimplementing the prefix logic.
+    """
+    # Native pass-through still works.
+    assert native_band_for("X05", "g") == "g"
+    assert native_band_for("X05", "r") == "r"
+    # MPC obs80 'L'-prefixed single-letter encodings.
+    assert native_band_for("X05", "Lu") == "u"
+    assert native_band_for("X05", "Lg") == "g"
+    assert native_band_for("X05", "Lr") == "r"
+    assert native_band_for("X05", "Li") == "i"
+    assert native_band_for("X05", "Lz") == "z"
+    assert native_band_for("X05", "Ly") == "y"
+    # Vendor-prefixed full forms.
+    assert native_band_for("X05", "LSST_g") == "g"
+    assert native_band_for("X05", "LSST_r") == "r"
+    # Pragmatic alias: "Y" (uppercase) -> "y".
+    assert native_band_for("X05", "Y") == "y"
+
+
 def test_map_to_canonical_filter_bands_strict_happy_path():
     resolved = map_to_canonical_filter_bands(
         ["W84", "I41", "X05"],

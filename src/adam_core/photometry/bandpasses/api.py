@@ -120,19 +120,16 @@ def native_band_for(observatory_code: str, reported_band: str) -> str | None:
     against an ATLAS or ZTF native exposure index). The vendor index uses
     short native band strings (``o``, ``c``, ``g``, ...) while MPC obs80
     submissions of the same observations often carry vendor-prefixed forms
-    (``Ao``, ``Ac``, ``Lg``, ...). This helper resolves either form to the
-    canonical native band.
+    (``Ao``, ``Ac``, ``Lg``, ``LSST_g``, ...). This helper resolves either
+    form to the canonical native band.
 
-    Resolution order:
-
-    1. ``(observatory_code, reported_band)`` is looked up directly in
-       :class:`ObservatoryBandMap`. The mapping table includes both the
-       native form (e.g. ``T05|o``) and known MPC-prefixed aliases (e.g.
-       ``T05|Ao``), both mapped to the same canonical ``filter_id``.
-    2. The canonical ``filter_id`` is split on its first underscore and the
-       suffix is returned: ``ATLAS_o`` -> ``o``, ``ZTF_g`` -> ``g``,
-       ``DECam_VR`` -> ``VR``.
-    3. Returns ``None`` if the ``(code, band)`` pair has no canonical entry.
+    Implementation: delegates to :func:`map_to_canonical_filter_bands` so
+    the same MPC/ADES normalization logic that powers existing callers
+    (LSST ``Lg``/``LSST_g`` prefix stripping via
+    :func:`_normalize_reported_band_for_station`, ATLAS ``Ao``/``Ac``
+    alias resolution via the observatory band map, canonical ``filter_id``
+    pass-through) applies uniformly. The native band is then extracted as
+    the suffix of the canonical ``Vendor_band`` id.
 
     Parameters
     ----------
@@ -140,28 +137,38 @@ def native_band_for(observatory_code: str, reported_band: str) -> str | None:
         MPC observatory code (e.g. ``"T05"``, ``"I41"``, ``"X05"``).
     reported_band : str
         Filter/band string as reported by the source (MPC submission or
-        vendor-native). Examples: ``"o"``, ``"Ao"``, ``"g"``, ``"Lg"``.
+        vendor-native). Examples: ``"o"``, ``"Ao"``, ``"g"``, ``"Lg"``,
+        ``"LSST_g"``.
 
     Returns
     -------
     native_band : str | None
         Canonical vendor-native band string, or ``None`` if the pair has no
-        mapping.
+        vendored mapping. Generic-band fallbacks (``g`` -> ``SDSS_g`` etc.)
+        are intentionally disabled here because the caller (cutouts engine)
+        needs the actual vendor's native band, not a guessed one.
     """
     if not observatory_code or not reported_band:
         return None
-    mapping = load_observatory_band_map()
-    key = f"{observatory_code}|{reported_band}"
-    idx_arr = pc.index_in(pa.array([key], type=pa.large_string()), value_set=mapping.key)
-    idx_val = idx_arr[0].as_py()
-    if idx_val is None:
+    try:
+        canonical_arr = map_to_canonical_filter_bands(
+            observatory_codes=[str(observatory_code)],
+            bands=[str(reported_band)],
+            allow_fallback_filters=False,
+            on_unknown="skip",
+        )
+    except Exception:
+        # Defensive: any unexpected error in the canonical resolver should
+        # surface as "unknown" to the caller, not propagate.
         return None
-    filter_id = mapping.filter_id[idx_val].as_py()
-    if not filter_id:
+    filter_id = canonical_arr[0]
+    if filter_id is None or not filter_id:
         return None
-    # filter_id is ``"Vendor_band"``; the native band is the suffix after the
-    # first underscore. Filter ids without an underscore (none today, but
-    # defensive) fall through unchanged.
+    # filter_id is ``"Vendor_band"``; native band is the suffix after the
+    # first underscore (``ATLAS_o`` -> ``o``, ``LSST_g`` -> ``g``,
+    # ``DECam_VR`` -> ``VR``). Filter ids without an underscore (none
+    # today, but defensive) fall through unchanged.
+    filter_id = str(filter_id)
     if "_" in filter_id:
         return filter_id.split("_", 1)[1]
     return filter_id
