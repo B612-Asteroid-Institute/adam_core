@@ -13,6 +13,7 @@ from .rotation_period_fourier_core import (
     _FitResult,
     _FitWithPeriod,
     _FourierProfile,
+    _SessionSummary,
     _amplitude_from_fit,
     _apply_light_time_correction,
     _build_fixed_design,
@@ -1688,6 +1689,99 @@ def _insufficient_result(
     )
 
 
+def _assemble_result(
+    *,
+    primary: dict[str, object],
+    fourier_solution: _FourierSolution,
+    lsm_solution: _LSMSolution,
+    profile: _FourierProfile,
+    observations: RotationPeriodObservations,
+    filter_labels: npt.NDArray[np.object_],
+    session_summary: _SessionSummary,
+    used_session_offsets: bool,
+) -> RotationPeriodResult:
+    """Serialize the selected solution and D1 verdict into the one-row result table."""
+    primary_method = str(primary["primary_method"])
+    period_days = float(primary["period_days"])
+    period_hours = float(period_days * 24.0)
+    frequency_cycles_per_day = (
+        float("nan") if not np.isfinite(period_days) or period_days <= 0.0 else float(1.0 / period_days)
+    )
+
+    selected_period_lower_days = _none_or_float(primary["period_lower_days"])
+    selected_period_upper_days = _none_or_float(primary["period_upper_days"])
+    selected_relative_uncertainty = (
+        None
+        if primary["relative_period_uncertainty"] is None
+        else float(primary["relative_period_uncertainty"])
+    )
+    alternate_period_days = [float(value) for value in primary["alternate_period_days"]]
+
+    if primary_method == "fourier":
+        n_fit_observations = int(fourier_solution.fit_summary.n_fit)
+        n_clipped = int(fourier_solution.fit_summary.n_clipped)
+        is_period_doubled = bool(fourier_solution.chosen.is_period_doubled)
+    else:
+        n_fit_observations = int(lsm_solution.n_fit_observations)
+        n_clipped = int(lsm_solution.n_clipped)
+        is_period_doubled = False
+
+    return RotationPeriodResult.from_kwargs(
+        period_days=[period_days],
+        period_hours=[period_hours],
+        frequency_cycles_per_day=[frequency_cycles_per_day],
+        primary_method=[primary_method],
+        paper_profile=[profile.name],
+        period_verdict=[str(primary["period_verdict"])],
+        reliability_code=[str(primary["reliability_code"])],
+        confidence_flags=[list(primary["confidence_flags"])],
+        insufficiency_reasons=[list(primary["insufficiency_reasons"])],
+        is_valid=[bool(primary["is_valid"])],
+        is_reliable=[bool(primary["is_reliable"])],
+        period_lower_days=[selected_period_lower_days],
+        period_upper_days=[selected_period_upper_days],
+        relative_period_uncertainty=[selected_relative_uncertainty],
+        alternate_period_days=[alternate_period_days],
+        fourier_period_days=[float(fourier_solution.chosen.period_days)],
+        fourier_order=[int(fourier_solution.fit_summary.fourier_order)],
+        fourier_sigma_threshold=[float(fourier_solution.sigma_threshold)],
+        fourier_phase_c1=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c1_idx])],
+        fourier_phase_c2=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c2_idx])],
+        residual_sigma_mag=[float(fourier_solution.fit_summary.residual_sigma)],
+        fourier_is_valid=[bool(fourier_solution.is_valid)],
+        fourier_is_reliable=[bool(fourier_solution.is_reliable)],
+        fourier_alternate_period_days=[list(fourier_solution.alternate_period_days)],
+        lsm_period_days=[_none_or_float(lsm_solution.period_days)],
+        lsm_power=[_none_or_float(lsm_solution.power)],
+        lsm_power_gap=[_none_or_float(lsm_solution.power_gap)],
+        lsm_candidate_period_days=[list(lsm_solution.candidate_period_days)],
+        lsm_candidate_powers=[list(lsm_solution.candidate_powers)],
+        lsm_is_reliable=[bool(lsm_solution.is_reliable)],
+        lsm_false_alarm_probability=[
+            None
+            if lsm_solution.false_alarm_probability is None
+            else float(lsm_solution.false_alarm_probability)
+        ],
+        phase_coverage_fraction=[
+            None
+            if primary["phase_coverage_fraction"] is None
+            else float(primary["phase_coverage_fraction"])
+        ],
+        n_rotations_spanned=[_none_or_float(primary["n_rotations_spanned"])],
+        amplitude_snr=[_none_or_float(primary["amplitude_snr"])],
+        n_significant_aliases=[
+            None if primary["n_significant_aliases"] is None else int(primary["n_significant_aliases"])
+        ],
+        n_observations=[int(len(observations))],
+        n_fit_observations=[n_fit_observations],
+        n_clipped=[n_clipped],
+        n_filters=[int(len(_ordered_unique(filter_labels)))],
+        n_sessions=[int(session_summary.n_sessions)],
+        used_session_offsets=[bool(used_session_offsets)],
+        is_period_doubled=[bool(is_period_doubled)],
+    )
+
+
 def estimate_rotation_period(
     observations: RotationPeriodObservations,
     *,
@@ -1947,7 +2041,6 @@ def estimate_rotation_period(
         min_rotations_in_span=min_rotations_in_span,
         residual_sigma_mag=float(fourier_solution.fit_summary.residual_sigma),
     )
-    primary_method = str(primary["primary_method"])
     period_days = float(primary["period_days"])
     period_hours = float(period_days * 24.0)
 
@@ -1969,79 +2062,13 @@ def estimate_rotation_period(
         primary["is_valid"] = True
         primary["is_reliable"] = False
 
-    selected_period_lower_days = _none_or_float(primary["period_lower_days"])
-    selected_period_upper_days = _none_or_float(primary["period_upper_days"])
-    selected_relative_uncertainty = (
-        None
-        if primary["relative_period_uncertainty"] is None
-        else float(primary["relative_period_uncertainty"])
-    )
-    alternate_period_days = [float(value) for value in primary["alternate_period_days"]]
-
-    if primary_method == "fourier":
-        n_fit_observations = int(fourier_solution.fit_summary.n_fit)
-        n_clipped = int(fourier_solution.fit_summary.n_clipped)
-        is_period_doubled = bool(fourier_solution.chosen.is_period_doubled)
-    else:
-        n_fit_observations = int(lsm_solution.n_fit_observations)
-        n_clipped = int(lsm_solution.n_clipped)
-        is_period_doubled = False
-
-    frequency_cycles_per_day = (
-        float("nan") if not np.isfinite(period_days) or period_days <= 0.0 else float(1.0 / period_days)
-    )
-
-    return RotationPeriodResult.from_kwargs(
-        period_days=[period_days],
-        period_hours=[period_hours],
-        frequency_cycles_per_day=[frequency_cycles_per_day],
-        primary_method=[primary_method],
-        paper_profile=[profile.name],
-        period_verdict=[str(primary["period_verdict"])],
-        reliability_code=[str(primary["reliability_code"])],
-        confidence_flags=[list(primary["confidence_flags"])],
-        insufficiency_reasons=[list(primary["insufficiency_reasons"])],
-        is_valid=[bool(primary["is_valid"])],
-        is_reliable=[bool(primary["is_reliable"])],
-        period_lower_days=[selected_period_lower_days],
-        period_upper_days=[selected_period_upper_days],
-        relative_period_uncertainty=[selected_relative_uncertainty],
-        alternate_period_days=[alternate_period_days],
-        fourier_period_days=[float(fourier_solution.chosen.period_days)],
-        fourier_order=[int(fourier_solution.fit_summary.fourier_order)],
-        fourier_sigma_threshold=[float(fourier_solution.sigma_threshold)],
-        fourier_phase_c1=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c1_idx])],
-        fourier_phase_c2=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c2_idx])],
-        residual_sigma_mag=[float(fourier_solution.fit_summary.residual_sigma)],
-        fourier_is_valid=[bool(fourier_solution.is_valid)],
-        fourier_is_reliable=[bool(fourier_solution.is_reliable)],
-        fourier_alternate_period_days=[list(fourier_solution.alternate_period_days)],
-        lsm_period_days=[_none_or_float(lsm_solution.period_days)],
-        lsm_power=[_none_or_float(lsm_solution.power)],
-        lsm_power_gap=[_none_or_float(lsm_solution.power_gap)],
-        lsm_candidate_period_days=[list(lsm_solution.candidate_period_days)],
-        lsm_candidate_powers=[list(lsm_solution.candidate_powers)],
-        lsm_is_reliable=[bool(lsm_solution.is_reliable)],
-        lsm_false_alarm_probability=[
-            None
-            if lsm_solution.false_alarm_probability is None
-            else float(lsm_solution.false_alarm_probability)
-        ],
-        phase_coverage_fraction=[
-            None
-            if primary["phase_coverage_fraction"] is None
-            else float(primary["phase_coverage_fraction"])
-        ],
-        n_rotations_spanned=[_none_or_float(primary["n_rotations_spanned"])],
-        amplitude_snr=[_none_or_float(primary["amplitude_snr"])],
-        n_significant_aliases=[
-            None if primary["n_significant_aliases"] is None else int(primary["n_significant_aliases"])
-        ],
-        n_observations=[int(len(observations))],
-        n_fit_observations=[n_fit_observations],
-        n_clipped=[n_clipped],
-        n_filters=[int(len(_ordered_unique(filter_labels)))],
-        n_sessions=[int(session_summary.n_sessions)],
-        used_session_offsets=[bool(used_session_offsets)],
-        is_period_doubled=[bool(is_period_doubled)],
+    return _assemble_result(
+        primary=primary,
+        fourier_solution=fourier_solution,
+        lsm_solution=lsm_solution,
+        profile=profile,
+        observations=observations,
+        filter_labels=filter_labels,
+        session_summary=session_summary,
+        used_session_offsets=used_session_offsets,
     )
