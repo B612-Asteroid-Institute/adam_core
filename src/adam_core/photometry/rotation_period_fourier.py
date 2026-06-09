@@ -176,6 +176,10 @@ def _resolve_search_fidelity(
     return resolved
 
 
+def _none_or_float(value: float | None) -> float | None:
+    return None if value is None else float(value)
+
+
 def _resolve_paper_profile(paper_profile: str) -> _FourierProfile:
     if paper_profile not in FOURIER_PROFILES:
         raise ValueError("paper_profile must be 'greenstreet_2026'")
@@ -1252,15 +1256,15 @@ def _run_lsm(
             coeffs=np.zeros(4, dtype=np.float64),
             n_maxima=2 if solution.is_reliable else None,
             n_minima=2 if solution.is_reliable else None,
-            amplitude_mag=None if amplitude_mag is None else float(amplitude_mag),
+            amplitude_mag=_none_or_float(amplitude_mag),
         )
     return _LSMMethodResult(
         best_candidate=best_candidate,
-        power_gap=None if solution.power_gap is None else float(solution.power_gap),
+        power_gap=_none_or_float(solution.power_gap),
         candidate_period_days=list(solution.candidate_period_days),
         candidate_powers=list(solution.candidate_powers),
         is_reliable=bool(solution.is_reliable),
-        amplitude_mag=None if solution.amplitude_mag is None else float(solution.amplitude_mag),
+        amplitude_mag=_none_or_float(solution.amplitude_mag),
         n_fit_observations=int(solution.n_fit_observations),
         n_clipped=int(solution.n_clipped),
         false_alarm_probability=(
@@ -1979,11 +1983,11 @@ def estimate_rotation_period(
         lsm_solution = _LSMSolution(
             period_days=None if lsm_result.best_candidate is None else float(lsm_result.best_candidate.period_days),
             power=None if lsm_result.best_candidate is None else float(lsm_result.best_candidate.power),
-            power_gap=None if lsm_result.power_gap is None else float(lsm_result.power_gap),
+            power_gap=_none_or_float(lsm_result.power_gap),
             candidate_period_days=list(lsm_result.candidate_period_days),
             candidate_powers=list(lsm_result.candidate_powers),
             is_reliable=bool(lsm_result.is_reliable),
-            amplitude_mag=None if lsm_result.amplitude_mag is None else float(lsm_result.amplitude_mag),
+            amplitude_mag=_none_or_float(lsm_result.amplitude_mag),
             n_fit_observations=int(len(observations))
             if lsm_result.n_fit_observations is None
             else int(lsm_result.n_fit_observations),
@@ -2027,12 +2031,8 @@ def estimate_rotation_period(
         primary["is_valid"] = True
         primary["is_reliable"] = False
 
-    selected_period_lower_days = (
-        None if primary["period_lower_days"] is None else float(primary["period_lower_days"])
-    )
-    selected_period_upper_days = (
-        None if primary["period_upper_days"] is None else float(primary["period_upper_days"])
-    )
+    selected_period_lower_days = _none_or_float(primary["period_lower_days"])
+    selected_period_upper_days = _none_or_float(primary["period_upper_days"])
     selected_relative_uncertainty = (
         None
         if primary["relative_period_uncertainty"] is None
@@ -2078,9 +2078,9 @@ def estimate_rotation_period(
         fourier_is_valid=[bool(fourier_solution.is_valid)],
         fourier_is_reliable=[bool(fourier_solution.is_reliable)],
         fourier_alternate_period_days=[list(fourier_solution.alternate_period_days)],
-        lsm_period_days=[None if lsm_solution.period_days is None else float(lsm_solution.period_days)],
-        lsm_power=[None if lsm_solution.power is None else float(lsm_solution.power)],
-        lsm_power_gap=[None if lsm_solution.power_gap is None else float(lsm_solution.power_gap)],
+        lsm_period_days=[_none_or_float(lsm_solution.period_days)],
+        lsm_power=[_none_or_float(lsm_solution.power)],
+        lsm_power_gap=[_none_or_float(lsm_solution.power_gap)],
         lsm_candidate_period_days=[list(lsm_solution.candidate_period_days)],
         lsm_candidate_powers=[list(lsm_solution.candidate_powers)],
         lsm_is_reliable=[bool(lsm_solution.is_reliable)],
@@ -2094,10 +2094,8 @@ def estimate_rotation_period(
             if primary["phase_coverage_fraction"] is None
             else float(primary["phase_coverage_fraction"])
         ],
-        n_rotations_spanned=[
-            None if primary["n_rotations_spanned"] is None else float(primary["n_rotations_spanned"])
-        ],
-        amplitude_snr=[None if primary["amplitude_snr"] is None else float(primary["amplitude_snr"])],
+        n_rotations_spanned=[_none_or_float(primary["n_rotations_spanned"])],
+        amplitude_snr=[_none_or_float(primary["amplitude_snr"])],
         n_significant_aliases=[
             None if primary["n_significant_aliases"] is None else int(primary["n_significant_aliases"])
         ],
