@@ -1,0 +1,7 @@
+adam\_core.orbits.spice\_kernel module
+======================================
+
+.. automodule:: adam_core.orbits.spice_kernel
+   :members:
+   :show-inheritance:
+   :undoc-members:

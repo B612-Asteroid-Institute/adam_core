@@ -1,0 +1,7 @@
+adam\_core.photometry.rotation\_period\_types module
+====================================================
+
+.. automodule:: adam_core.photometry.rotation_period_types
+   :members:
+   :show-inheritance:
+   :undoc-members:

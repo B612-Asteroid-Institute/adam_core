@@ -1,0 +1,7 @@
+adam\_core.orbits.openspace.lua module
+======================================
+
+.. automodule:: adam_core.orbits.openspace.lua
+   :members:
+   :show-inheritance:
+   :undoc-members:

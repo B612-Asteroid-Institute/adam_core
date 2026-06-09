@@ -1,0 +1,15 @@
+adam\_core.missions package
+===========================
+
+.. automodule:: adam_core.missions
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.missions.porkchop
