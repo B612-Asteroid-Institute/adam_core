@@ -145,19 +145,6 @@ class _LSMSolution:
     false_alarm_probability: float | None = None
 
 
-@dataclass(slots=True)
-class _LSMMethodResult:
-    best_candidate: _LSMCandidate | None
-    power_gap: float | None
-    candidate_period_days: list[float]
-    candidate_powers: list[float]
-    is_reliable: bool
-    amplitude_mag: float | None
-    n_fit_observations: int | None = None
-    n_clipped: int = 0
-    false_alarm_probability: float | None = None
-
-
 def _resolve_search_fidelity(
     *,
     search_fidelity: str | None,
@@ -1220,61 +1207,6 @@ def _estimate_lsm_solution(
     )
 
 
-def _run_lsm(
-    *,
-    t_rel: npt.NDArray[np.float64],
-    mag: npt.NDArray[np.float64],
-    reduced_mag: npt.NDArray[np.float64],
-    predicted_mag_v: npt.NDArray[np.float64] | None,
-    phase_angle: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    weights: npt.NDArray[np.float64] | None,
-    lsm_max_frequency_samples: int,
-    lsm_refine_samples: int,
-    lsm_refine_rounds: int,
-) -> _LSMMethodResult:
-    solution = _estimate_lsm_solution(
-        t_rel=t_rel,
-        mag=mag,
-        reduced_mag=reduced_mag,
-        predicted_mag_v=predicted_mag_v,
-        phase_angle=phase_angle,
-        filter_labels=filter_labels,
-        weights=weights,
-        lsm_max_frequency_samples=lsm_max_frequency_samples,
-        lsm_refine_samples=lsm_refine_samples,
-        lsm_refine_rounds=lsm_refine_rounds,
-    )
-    best_candidate: _LSMCandidate | None = None
-    if solution.period_days is not None and solution.power is not None:
-        frequency = 1.0 / float(solution.period_days)
-        amplitude_mag = solution.amplitude_mag
-        best_candidate = _LSMCandidate(
-            frequency=float(frequency),
-            period_days=float(solution.period_days),
-            power=float(solution.power),
-            coeffs=np.zeros(4, dtype=np.float64),
-            n_maxima=2 if solution.is_reliable else None,
-            n_minima=2 if solution.is_reliable else None,
-            amplitude_mag=_none_or_float(amplitude_mag),
-        )
-    return _LSMMethodResult(
-        best_candidate=best_candidate,
-        power_gap=_none_or_float(solution.power_gap),
-        candidate_period_days=list(solution.candidate_period_days),
-        candidate_powers=list(solution.candidate_powers),
-        is_reliable=bool(solution.is_reliable),
-        amplitude_mag=_none_or_float(solution.amplitude_mag),
-        n_fit_observations=int(solution.n_fit_observations),
-        n_clipped=int(solution.n_clipped),
-        false_alarm_probability=(
-            None
-            if solution.false_alarm_probability is None
-            else float(solution.false_alarm_probability)
-        ),
-    )
-
-
 def _observation_count_sufficient(filter_labels: npt.NDArray[np.object_]) -> bool:
     """Whether the best-sampled band is a credible lightcurve for the joint fit.
 
@@ -1968,7 +1900,7 @@ def estimate_rotation_period(
         n_clipped=0,
     )
     if method_mode == "lsm":
-        lsm_result = _run_lsm(
+        lsm_solution = _estimate_lsm_solution(
             t_rel=t_rel,
             mag=mag,
             reduced_mag=reduced_mag,
@@ -1979,24 +1911,6 @@ def estimate_rotation_period(
             lsm_max_frequency_samples=lsm_max_frequency_samples,
             lsm_refine_samples=lsm_refine_samples,
             lsm_refine_rounds=lsm_refine_rounds,
-        )
-        lsm_solution = _LSMSolution(
-            period_days=None if lsm_result.best_candidate is None else float(lsm_result.best_candidate.period_days),
-            power=None if lsm_result.best_candidate is None else float(lsm_result.best_candidate.power),
-            power_gap=_none_or_float(lsm_result.power_gap),
-            candidate_period_days=list(lsm_result.candidate_period_days),
-            candidate_powers=list(lsm_result.candidate_powers),
-            is_reliable=bool(lsm_result.is_reliable),
-            amplitude_mag=_none_or_float(lsm_result.amplitude_mag),
-            n_fit_observations=int(len(observations))
-            if lsm_result.n_fit_observations is None
-            else int(lsm_result.n_fit_observations),
-            n_clipped=int(lsm_result.n_clipped),
-            false_alarm_probability=(
-                None
-                if lsm_result.false_alarm_probability is None
-                else float(lsm_result.false_alarm_probability)
-            ),
         )
 
     primary = _primary_from_method(
