@@ -1,0 +1,9 @@
+[workspace]
+members = [
+  "rust/adam_core_rs_autodiff",
+  "rust/adam_core_rs_coords",
+  "rust/adam_core_rs_orbit_determination",
+  "rust/adam_core_rs_spice",
+  "rust/adam_core_py",
+]
+resolver = "2"

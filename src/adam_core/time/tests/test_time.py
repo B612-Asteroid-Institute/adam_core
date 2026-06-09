@@ -1,4 +1,6 @@
+import json
 import warnings
+from pathlib import Path
 
 import astropy.time
 import astropy.units
@@ -758,6 +760,41 @@ def test_Timestamp_rescale_roundtrip():
     # Previous bugged output values
     assert t2.days.to_pylist() != [59004, 40004, 39999]
     assert t2.nanos.to_pylist() != [86400 * 1e9, 86400 * 1e9, 86400 * 1e9]
+
+
+def test_time_scale_fixture_matches_current_timestamp_contract():
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "time_scale_rescale_fixture_2026-05-15.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+
+    for case_group in ["cases", "rescale_correctness_cases"]:
+        for case in fixture[case_group]:
+            original = Timestamp.from_kwargs(
+                days=case["input"]["days"],
+                nanos=case["input"]["nanos"],
+                scale=case["from_scale"],
+            )
+            rescaled = original.rescale(case["to_scale"])
+            assert rescaled.days.to_pylist() == case["output"]["days"]
+            assert rescaled.nanos.to_pylist() == case["output"]["nanos"]
+            assert rescaled.scale == case["to_scale"]
+
+    tdb_case = fixture["tdb_et_cases"]
+    tdb = Timestamp.from_kwargs(
+        days=tdb_case["tdb"]["days"],
+        nanos=tdb_case["tdb"]["nanos"],
+        scale="tdb",
+    )
+    npt.assert_allclose(
+        np.array(tdb.et().to_pylist()),
+        np.array(tdb_case["et_seconds"]),
+        rtol=0,
+        atol=1e-9,
+    )
 
 
 # Data for testing and benchmarking rescale functions

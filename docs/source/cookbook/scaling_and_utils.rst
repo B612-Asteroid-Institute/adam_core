@@ -45,4 +45,3 @@ Related Reference
 
 * :doc:`../reference/api/adam_core.ray_cluster`
 * :doc:`../reference/api/adam_core.utils`
-

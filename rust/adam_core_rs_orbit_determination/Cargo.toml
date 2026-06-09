@@ -1,0 +1,6 @@
+[package]
+name = "adam_core_rs_orbit_determination"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]

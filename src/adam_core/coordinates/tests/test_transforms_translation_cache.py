@@ -56,16 +56,15 @@ def test_mpc_observer_state_cache_avoids_recompute(monkeypatch):
     import adam_core.observers.state as state_mod
 
     calls = {"n": 0}
-    pxform_orig = state_mod.sp.pxform
+    batch_orig = state_mod._query_pxform_itrf93_batch
 
-    def _pxform_counted(*args, **kwargs):
+    def _batch_counted(*args, **kwargs):
         calls["n"] += 1
-        return pxform_orig(*args, **kwargs)
+        return batch_orig(*args, **kwargs)
 
-    monkeypatch.setattr(state_mod.sp, "pxform", _pxform_counted)
+    monkeypatch.setattr(state_mod, "_query_pxform_itrf93_batch", _batch_counted)
 
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
-    # Call through get_observer_state path by constructing Observers twice
     from adam_core.observers import Observers
 
     _ = Observers.from_code("X05", t)

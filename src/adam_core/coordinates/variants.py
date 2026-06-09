@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Generic, Literal, Optional, Protocol, TypeVar
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
 
@@ -37,6 +38,114 @@ class VariantCoordinatesTable(Generic[T], Protocol):
 
     @property
     def weight_cov(self) -> pa.lib.DoubleArray: ...
+
+
+def _coordinate_dimensions(coordinates: types.CoordinateType) -> list[str]:
+    if isinstance(coordinates, CartesianCoordinates):
+        return ["x", "y", "z", "vx", "vy", "vz"]
+    if isinstance(coordinates, SphericalCoordinates):
+        return ["rho", "lon", "lat", "vrho", "vlon", "vlat"]
+    if isinstance(coordinates, KeplerianCoordinates):
+        return ["a", "e", "i", "raan", "ap", "M"]
+    if isinstance(coordinates, CometaryCoordinates):
+        return ["q", "e", "i", "raan", "ap", "tp"]
+    raise ValueError(f"Unsupported coordinate type: {type(coordinates)}")
+
+
+def _sample_coordinate_row(
+    mean: npt.NDArray[np.float64],
+    cov: npt.NDArray[np.float64],
+    method: Literal["auto", "sigma-point", "monte-carlo"],
+    num_samples: int,
+    alpha: float,
+    beta: float,
+    kappa: float,
+    seed: Optional[int],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    if np.any(np.isnan(cov)):
+        raise ValueError(
+            "Cannot sample coordinate covariances when some covariance elements are undefined."
+        )
+    if np.any(np.isnan(mean)):
+        raise ValueError(
+            "Cannot sample coordinate covariances when some coordinate dimensions are undefined."
+        )
+
+    if method == "sigma-point":
+        return sample_covariance_sigma_points(
+            mean, cov, alpha=alpha, beta=beta, kappa=kappa
+        )
+
+    if method == "monte-carlo":
+        return sample_covariance_random(mean, cov, num_samples=num_samples, seed=seed)
+
+    if method != "auto":
+        raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
+
+    # Sample with sigma points.
+    samples, weights, weights_cov = sample_covariance_sigma_points(
+        mean, cov, alpha=alpha, beta=beta, kappa=kappa
+    )
+
+    # Check if the sigma point sampling is good enough by seeing if we can
+    # recover the mean and covariance from the sigma points.
+    mean_sg = weighted_mean(samples, weights)
+    cov_sg = weighted_covariance(mean_sg, samples, weights_cov)
+
+    # If the sigma point sampling is not good enough, then sample with monte carlo.
+    # Though it is not guaranteed that monte carlo will actually be better.
+    diff_mean = np.abs(mean_sg - mean)
+    diff_cov = np.abs(cov_sg - cov)
+    if np.any(diff_mean >= 1e-12) or np.any(diff_cov >= 1e-12):
+        # Preserve the historical auto-mode behavior: the user-supplied seed is
+        # not threaded into the Monte Carlo fallback.
+        return sample_covariance_random(mean, cov, num_samples=num_samples)
+
+    return samples, weights, weights_cov
+
+
+def _sample_coordinate_rows(
+    means: npt.NDArray[np.float64],
+    covariances: npt.NDArray[np.float64],
+    method: Literal["auto", "sigma-point", "monte-carlo"],
+    num_samples: int,
+    alpha: float,
+    beta: float,
+    kappa: float,
+    seed: Optional[int],
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.int64],
+]:
+    samples_blocks: list[npt.NDArray[np.float64]] = []
+    weights_blocks: list[npt.NDArray[np.float64]] = []
+    weights_cov_blocks: list[npt.NDArray[np.float64]] = []
+    index_blocks: list[npt.NDArray[np.int64]] = []
+
+    for row_index, (mean, cov) in enumerate(zip(means, covariances)):
+        samples, weights, weights_cov = _sample_coordinate_row(
+            mean,
+            cov,
+            method=method,
+            num_samples=num_samples,
+            alpha=alpha,
+            beta=beta,
+            kappa=kappa,
+            seed=seed,
+        )
+        samples_blocks.append(samples)
+        weights_blocks.append(weights)
+        weights_cov_blocks.append(weights_cov)
+        index_blocks.append(np.full(len(samples), row_index, dtype=np.int64))
+
+    return (
+        np.concatenate(samples_blocks),
+        np.concatenate(weights_blocks),
+        np.concatenate(weights_cov_blocks),
+        np.concatenate(index_blocks),
+    )
 
 
 def create_coordinate_variants(
@@ -95,7 +204,8 @@ def create_coordinate_variants(
         If the input coordinates are not supported.
     """
 
-    if coordinates.covariance.is_all_nan():
+    covariances = coordinates.covariance.to_matrix()
+    if np.all(np.isnan(covariances)):
         raise ValueError(
             "Cannot sample coordinate covariances when covariances are all undefined."
         )
@@ -106,81 +216,28 @@ def create_coordinate_variants(
         weight = qv.Float64Column()
         weight_cov = qv.Float64Column()
 
-    if isinstance(coordinates, CartesianCoordinates):
-        dimensions = ["x", "y", "z", "vx", "vy", "vz"]
-    elif isinstance(coordinates, SphericalCoordinates):
-        dimensions = ["rho", "lon", "lat", "vrho", "vlon", "vlat"]
-    elif isinstance(coordinates, KeplerianCoordinates):
-        dimensions = ["a", "e", "i", "raan", "ap", "M"]
-    elif isinstance(coordinates, CometaryCoordinates):
-        dimensions = ["q", "e", "i", "raan", "ap", "tp"]
-    else:
-        raise ValueError(f"Unsupported coordinate type: {type(coordinates)}")
+    dimensions = _coordinate_dimensions(coordinates)
+    means = coordinates.values
+    samples, weights, weights_cov, index = _sample_coordinate_rows(
+        means,
+        covariances,
+        method=method,
+        num_samples=num_samples,
+        alpha=alpha,
+        beta=beta,
+        kappa=kappa,
+        seed=seed,
+    )
+    take_index = pa.array(index, type=pa.int64())
 
-    variants_list = []
-    for i, coordinate_i in enumerate(coordinates):
-
-        mean = coordinate_i.values[0]
-        cov = coordinate_i.covariance.to_matrix()[0]
-
-        if np.any(np.isnan(cov)):
-            raise ValueError(
-                "Cannot sample coordinate covariances when some covariance elements are undefined."
-            )
-        if np.any(np.isnan(mean)):
-            raise ValueError(
-                "Cannot sample coordinate covariances when some coordinate dimensions are undefined."
-            )
-
-        if method == "sigma-point":
-            samples, W, W_cov = sample_covariance_sigma_points(
-                mean, cov, alpha=alpha, beta=beta, kappa=kappa
-            )
-
-        elif method == "monte-carlo":
-            samples, W, W_cov = sample_covariance_random(
-                mean, cov, num_samples=num_samples, seed=seed
-            )
-
-        elif method == "auto":
-            # Sample with sigma points
-            samples, W, W_cov = sample_covariance_sigma_points(
-                mean, cov, alpha=alpha, beta=beta, kappa=kappa
-            )
-
-            # Check if the sigma point sampling is good enough by seeing if we can
-            # recover the mean and covariance from the sigma points
-            mean_sg = weighted_mean(samples, W)
-            cov_sg = weighted_covariance(mean_sg, samples, W_cov)
-
-            # If the sigma point sampling is not good enough, then sample with monte carlo
-            # Though it is not guaranteed that monte carlo will actually be better
-            diff_mean = np.abs(mean_sg - mean)
-            diff_cov = np.abs(cov_sg - cov)
-            if np.any(diff_mean >= 1e-12) or np.any(diff_cov >= 1e-12):
-                samples, W, W_cov = sample_covariance_random(
-                    mean, cov, num_samples=num_samples
-                )
-
-        else:
-            raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
-
-        variants_list.append(
-            VariantCoordinates.from_kwargs(
-                index=np.full(len(samples), i),
-                sample=coordinates.from_kwargs(
-                    origin=qv.concatenate(
-                        [coordinate_i.origin for i in range(len(samples))]
-                    ),
-                    time=qv.concatenate(
-                        [coordinate_i.time for i in range(len(samples))]
-                    ),
-                    frame=coordinate_i.frame,
-                    **{dim: samples[:, i] for i, dim in enumerate(dimensions)},
-                ),
-                weight=W,
-                weight_cov=W_cov,
-            )
-        )
-
-    return qv.concatenate(variants_list)
+    return VariantCoordinates.from_kwargs(
+        index=index,
+        sample=coordinates.from_kwargs(
+            origin=coordinates.origin.take(take_index),
+            time=coordinates.time.take(take_index),
+            frame=coordinates.frame,
+            **{dim: samples[:, dim_index] for dim_index, dim in enumerate(dimensions)},
+        ),
+        weight=weights,
+        weight_cov=weights_cov,
+    )

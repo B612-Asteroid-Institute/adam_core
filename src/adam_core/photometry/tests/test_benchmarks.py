@@ -6,12 +6,16 @@ from ...coordinates.origin import Origin
 from ...observers.observers import Observers
 from ...time import Timestamp
 from ..magnitude import (
-    JAX_CHUNK_SIZE,
     calculate_apparent_magnitude_v,
     calculate_apparent_magnitude_v_and_phase_angle,
     calculate_phase_angle,
     convert_magnitude,
 )
+
+# Historical padding size carried over from the JAX chunked-vmap era of
+# this benchmark harness. Kept as a local constant so the round-trip
+# comparisons in this file stay numerically comparable to prior runs.
+JAX_CHUNK_SIZE = 2048
 
 
 def _padded_size(n: int, pad_to: int) -> int:

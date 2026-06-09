@@ -3,9 +3,13 @@ from __future__ import annotations
 import numpy as np
 import quivr as qv
 
+from .._rust import cartesian_to_spherical_numpy
 from ..time import Timestamp
 from . import cartesian, cometary, keplerian
-from .covariances import CoordinateCovariances, transform_covariances_jacobian
+from .covariances import (
+    CoordinateCovariances,
+    rust_covariance_transform,
+)
 from .origin import Origin
 
 __all__ = [
@@ -14,7 +18,6 @@ __all__ = [
 
 
 class SphericalCoordinates(qv.Table):
-
     rho = qv.Float64Column(nullable=True)
     lon = qv.Float64Column(nullable=True)
     lat = qv.Float64Column(nullable=True)
@@ -134,17 +137,21 @@ class SphericalCoordinates(qv.Table):
         )
 
     def to_cartesian(self) -> cartesian.CartesianCoordinates:
-        from .transform import _spherical_to_cartesian, spherical_to_cartesian
-
-        coords_cartesian = spherical_to_cartesian(self.values)
-        coords_cartesian = np.array(coords_cartesian)
+        from .transform import spherical_to_cartesian
 
         if not self.covariance.is_all_nan():
             covariances_spherical = self.covariance.to_matrix()
-            covariances_cartesian = transform_covariances_jacobian(
-                self.values, covariances_spherical, _spherical_to_cartesian
+            rust_result = rust_covariance_transform(
+                self.values,
+                covariances_spherical,
+                "spherical",
+                "cartesian",
+                frame_in=self.frame,
+                frame_out=self.frame,
             )
+            coords_cartesian, covariances_cartesian = rust_result
         else:
+            coords_cartesian = np.array(spherical_to_cartesian(self.values))
             covariances_cartesian = np.empty(
                 (len(coords_cartesian), 6, 6), dtype=np.float64
             )
@@ -169,17 +176,25 @@ class SphericalCoordinates(qv.Table):
     def from_cartesian(
         cls, cartesian: cartesian.CartesianCoordinates
     ) -> "SphericalCoordinates":
-        from .transform import _cartesian_to_spherical, cartesian_to_spherical
-
-        coords_spherical = cartesian_to_spherical(cartesian.values)
-        coords_spherical = np.array(coords_spherical)
+        coords_spherical = None
+        covariances_spherical = None
 
         if not cartesian.covariance.is_all_nan():
             cartesian_covariances = cartesian.covariance.to_matrix()
-            covariances_spherical = transform_covariances_jacobian(
-                cartesian.values, cartesian_covariances, _cartesian_to_spherical
+            rust_result = rust_covariance_transform(
+                cartesian.values,
+                cartesian_covariances,
+                "cartesian",
+                "spherical",
+                frame_in=cartesian.frame,
+                frame_out=cartesian.frame,
             )
-        else:
+            coords_spherical, covariances_spherical = rust_result
+
+        if coords_spherical is None:
+            coords_spherical = cartesian_to_spherical_numpy(cartesian.values)
+
+        if covariances_spherical is None:
             covariances_spherical = np.empty(
                 (len(coords_spherical), 6, 6), dtype=np.float64
             )

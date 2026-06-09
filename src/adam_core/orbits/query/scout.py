@@ -198,7 +198,7 @@ def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
     """
     url = "https://ssd-api.jpl.nasa.gov/scout.api?tdes={}&orbits=1"
 
-    variant_orbits = VariantOrbits.empty()
+    variant_orbits_list: list[VariantOrbits] = []
     for object_id in ids:
         response = requests.get(url.format(object_id))
         response.raise_for_status()
@@ -209,7 +209,10 @@ def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
         data = list(map(list, zip(*data)))
         table = pa.Table.from_arrays(data, schema=ScoutOrbit.schema)
         scout_orbits = ScoutOrbit.from_pyarrow(table)
-        object_variants = scout_orbits_to_variant_orbits(object_id, scout_orbits)
-        variant_orbits = qv.concatenate([variant_orbits, object_variants])
+        variant_orbits_list.append(
+            scout_orbits_to_variant_orbits(object_id, scout_orbits)
+        )
 
-    return variant_orbits
+    if not variant_orbits_list:
+        return VariantOrbits.empty()
+    return qv.concatenate(variant_orbits_list)

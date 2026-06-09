@@ -27,6 +27,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 *_version.py
+# This is a source helper, not a generated runtime version module.
+!migration/scripts/write_maturin_version.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -75,6 +77,7 @@ __pypackages__/
 
 .env
 .venv
+.legacy-venv
 env/
 venv/
 ENV/
@@ -116,3 +119,13 @@ pdm.lock
 
 # working scratch files
 .scratch*
+
+# Rust build output
+target/
+**/target/
+
+# Per-run benchmark output (baseline is committed; current-run is ephemeral).
+migration/artifacts/rust_latency_current.json
+# Stale live-legacy bench artifact (superseded by rust_latency_baseline.json +
+# migration/artifacts/history/rust_vs_legacy_final_snapshot_*.json).
+migration/artifacts/rust_benchmark_gate.json

@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import spiceypy as sp
 
 from ...coordinates.origin import OriginCodes
 from ...time import Timestamp
@@ -15,6 +14,7 @@ from ...utils.spice import (
     register_spice_kernel,
     unregister_spice_kernel,
 )
+from ...utils.spice_backend import get_backend
 from ..observers import Observers
 from ..state import get_observer_state
 
@@ -54,7 +54,7 @@ def test_jwst_as_observer(jwst_kernel):
     assert jwst_observer_state.origin.code[0].as_py() == "SUN"
 
     # Get JWST state using the direct spice function
-    jwst_id = sp.bodn2c("JWST")
+    jwst_id = get_backend().bodn2c("JWST")
     jwst_direct_state = get_spice_body_state(
         jwst_id, test_time, frame="ecliptic", origin=OriginCodes.SUN
     )

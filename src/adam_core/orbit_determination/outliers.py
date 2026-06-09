@@ -7,6 +7,20 @@ from .differential_correction import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers
 
 
+def _lowest_probability_observation_index(orbit_members: FittedOrbitMembers) -> int:
+    min_probability = pc.min(orbit_members.residuals.probability).as_py()
+    probabilities = orbit_members.residuals.probability.to_numpy(zero_copy_only=False)
+    candidate_indices = np.flatnonzero(probabilities == min_probability)
+    if len(candidate_indices) == 1:
+        return int(candidate_indices[0])
+    if len(candidate_indices) == 0:
+        raise ValueError("Could not identify a lowest-probability observation.")
+
+    residual_values = orbit_members.residuals.to_array()[candidate_indices]
+    residual_norms = np.nansum(residual_values * residual_values, axis=1)
+    return int(candidate_indices[residual_norms.argmax()])
+
+
 def calculate_max_outliers(
     num_obs: int, min_obs: int, contamination_percentage: float
 ) -> int:
@@ -39,8 +53,7 @@ def calculate_max_outliers(
     ), "Contamination percentage must be between 0 and 100."
 
     max_outliers = num_obs * (contamination_percentage / 100)
-    outliers = np.min([max_outliers, num_obs - min_obs]).astype(int)
-    return outliers
+    return int(min(max_outliers, num_obs - min_obs))
 
 
 def remove_lowest_probability_observation(
@@ -73,26 +86,16 @@ def remove_lowest_probability_observation(
     ).as_py(), "Observations must contain all orbit member observations"
 
     # Find the worst outlier (the observation that has the lowest probability of
-    # drawing a more extreme residual than the one observed)
-    worst_outlier = orbit_members.apply_mask(
-        pc.equal(
-            orbit_members.residuals.probability,
-            pc.min(orbit_members.residuals.probability),
-        )
-    )
-
-    if len(worst_outlier) > 1:
-        # If there are multiple worst outliers (which would be quite unlikely),
-        # then remove the outlier with the highest squared residual value
-        index = np.nansum(worst_outlier.residuals.to_array() ** 2, axis=1).argmax()
-        worst_outlier = worst_outlier.take([index])
+    # drawing a more extreme residual than the one observed). If there are
+    # multiple worst outliers, remove the one with the highest squared residual.
+    outlier_index = _lowest_probability_observation_index(orbit_members)
 
     # Grab the observation ID of the worst outlier
-    obs_id = worst_outlier.obs_id[0].as_py()
+    obs_id = orbit_members.obs_id[outlier_index].as_py()
 
     # Grab the surviving observation IDs
-    obs_ids = orbit_members.apply_mask(
-        pc.invert(pc.equal(orbit_members.obs_id, obs_id))
-    ).obs_id
+    obs_ids = pc.filter(
+        orbit_members.obs_id, pc.not_equal(orbit_members.obs_id, obs_id)
+    )
 
     return obs_id, observations.apply_mask(pc.is_in(observations.id, obs_ids))

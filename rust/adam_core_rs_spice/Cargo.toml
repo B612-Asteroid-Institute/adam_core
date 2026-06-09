@@ -1,0 +1,12 @@
+[package]
+name = "adam_core_rs_spice"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+adam_core_rs_coords = { path = "../adam_core_rs_coords" }
+spicekit = "0.2.2"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
