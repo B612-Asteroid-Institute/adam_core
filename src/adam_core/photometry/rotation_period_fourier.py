@@ -1424,6 +1424,38 @@ def _verdict_diagnostics(
     }
 
 
+def _primary_result(
+    *,
+    primary_method: str,
+    period_days: float,
+    period_lower_days: float | None,
+    period_upper_days: float | None,
+    relative_period_uncertainty: float | None,
+    alternate_period_days: list[float],
+    verdict: tuple[str, str, list[str], list[str]],
+    selected_method_amplitude_mag: float | None,
+    diagnostics: dict[str, object],
+) -> dict[str, object]:
+    """Assemble the per-method result dict (one key set + one is_valid/is_reliable rule)."""
+    period_verdict, reliability_code, confidence_flags, insufficiency_reasons = verdict
+    return {
+        "primary_method": primary_method,
+        "period_days": period_days,
+        "period_lower_days": period_lower_days,
+        "period_upper_days": period_upper_days,
+        "relative_period_uncertainty": relative_period_uncertainty,
+        "alternate_period_days": alternate_period_days,
+        "period_verdict": period_verdict,
+        "reliability_code": reliability_code,
+        "confidence_flags": confidence_flags,
+        "insufficiency_reasons": insufficiency_reasons,
+        "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
+        "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
+        "selected_method_amplitude_mag": selected_method_amplitude_mag,
+        **diagnostics,
+    }
+
+
 def _primary_from_method(
     *,
     method_mode: str,
@@ -1461,45 +1493,42 @@ def _primary_from_method(
             is_reliable=bool(fourier_solution.is_reliable),
             is_valid=bool(fourier_solution.is_valid),
         )
-        return {
-            "primary_method": "fourier",
-            "period_days": float(fourier_solution.chosen.period_days),
-            "period_lower_days": float(fourier_solution.period_lower_days),
-            "period_upper_days": float(fourier_solution.period_upper_days),
-            "relative_period_uncertainty": float(fourier_solution.relative_period_uncertainty),
-            "alternate_period_days": list(fourier_solution.alternate_period_days),
-            "period_verdict": period_verdict,
-            "reliability_code": reliability_code,
-            "confidence_flags": confidence_flags,
-            "insufficiency_reasons": insufficiency_reasons,
-            "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
-            "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
-            "selected_method_amplitude_mag": amplitude_mag,
-            **diagnostics,
-        }
+        return _primary_result(
+            primary_method="fourier",
+            period_days=float(fourier_solution.chosen.period_days),
+            period_lower_days=float(fourier_solution.period_lower_days),
+            period_upper_days=float(fourier_solution.period_upper_days),
+            relative_period_uncertainty=float(fourier_solution.relative_period_uncertainty),
+            alternate_period_days=list(fourier_solution.alternate_period_days),
+            verdict=(period_verdict, reliability_code, confidence_flags, insufficiency_reasons),
+            selected_method_amplitude_mag=amplitude_mag,
+            diagnostics=diagnostics,
+        )
 
     if method_mode == "lsm":
         period_days = lsm_solution.period_days
         if period_days is None:
-            return {
-                "primary_method": "lsm",
-                "period_days": float("nan"),
-                "period_lower_days": None,
-                "period_upper_days": None,
-                "relative_period_uncertainty": None,
-                "alternate_period_days": [],
-                "period_verdict": _VERDICT_INSUFFICIENT,
-                "reliability_code": _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT],
-                "confidence_flags": [],
-                "insufficiency_reasons": ["no_significant_peak"],
-                "is_valid": False,
-                "is_reliable": False,
-                "selected_method_amplitude_mag": None,
-                "amplitude_snr": None,
-                "phase_coverage_fraction": None,
-                "n_rotations_spanned": None,
-                "n_significant_aliases": 0,
-            }
+            return _primary_result(
+                primary_method="lsm",
+                period_days=float("nan"),
+                period_lower_days=None,
+                period_upper_days=None,
+                relative_period_uncertainty=None,
+                alternate_period_days=[],
+                verdict=(
+                    _VERDICT_INSUFFICIENT,
+                    _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT],
+                    [],
+                    ["no_significant_peak"],
+                ),
+                selected_method_amplitude_mag=None,
+                diagnostics={
+                    "amplitude_snr": None,
+                    "phase_coverage_fraction": None,
+                    "n_rotations_spanned": None,
+                    "n_significant_aliases": 0,
+                },
+            )
         amplitude_mag = lsm_solution.amplitude_mag
         n_lsm_aliases = int(len(lsm_solution.candidate_period_days))
         diagnostics = _verdict_diagnostics(
@@ -1524,22 +1553,17 @@ def _primary_from_method(
             is_valid=True,
         )
         alternate_periods = list(lsm_solution.candidate_period_days[1:])
-        return {
-            "primary_method": "lsm",
-            "period_days": float(period_days),
-            "period_lower_days": None,
-            "period_upper_days": None,
-            "relative_period_uncertainty": None,
-            "alternate_period_days": alternate_periods,
-            "period_verdict": period_verdict,
-            "reliability_code": reliability_code,
-            "confidence_flags": confidence_flags,
-            "insufficiency_reasons": insufficiency_reasons,
-            "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
-            "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
-            "selected_method_amplitude_mag": amplitude_mag,
-            **diagnostics,
-        }
+        return _primary_result(
+            primary_method="lsm",
+            period_days=float(period_days),
+            period_lower_days=None,
+            period_upper_days=None,
+            relative_period_uncertainty=None,
+            alternate_period_days=alternate_periods,
+            verdict=(period_verdict, reliability_code, confidence_flags, insufficiency_reasons),
+            selected_method_amplitude_mag=amplitude_mag,
+            diagnostics=diagnostics,
+        )
 
     raise ValueError(f"unknown method_mode: {method_mode!r}")
 
