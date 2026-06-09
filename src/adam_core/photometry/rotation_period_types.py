@@ -21,7 +21,7 @@ class RotationPeriodResult(qv.Table):
     period_hours = qv.Float64Column()
     frequency_cycles_per_day = qv.Float64Column()
     primary_method = qv.LargeStringColumn()
-    paper_profile = qv.LargeStringColumn()
+    profile = qv.LargeStringColumn()
     period_verdict = qv.LargeStringColumn()
     reliability_code = qv.LargeStringColumn()
     confidence_flags = qv.LargeListColumn(pa.large_string(), nullable=True)

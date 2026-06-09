@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .rotation_period_fourier_core import (
-    FOURIER_PROFILES,
+    PROFILES,
     _DesignInfo,
     _FitResult,
     _FitWithPeriod,
@@ -168,10 +168,10 @@ def _none_or_float(value: float | None) -> float | None:
     return None if value is None else float(value)
 
 
-def _resolve_paper_profile(paper_profile: str) -> _FourierProfile:
-    if paper_profile not in FOURIER_PROFILES:
-        raise ValueError("paper_profile must be 'greenstreet_2026'")
-    return FOURIER_PROFILES[paper_profile]
+def _resolve_profile(profile: str) -> _FourierProfile:
+    if profile not in PROFILES:
+        raise ValueError("profile must be 'default'")
+    return PROFILES[profile]
 
 
 def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -1648,7 +1648,7 @@ def _insufficient_result(
         period_hours=[float("nan")],
         frequency_cycles_per_day=[float("nan")],
         primary_method=[primary_method],
-        paper_profile=[profile.name],
+        profile=[profile.name],
         period_verdict=[_VERDICT_INSUFFICIENT],
         reliability_code=[_RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT]],
         confidence_flags=[[]],
@@ -1731,7 +1731,7 @@ def _assemble_result(
         period_hours=[period_hours],
         frequency_cycles_per_day=[frequency_cycles_per_day],
         primary_method=[primary_method],
-        paper_profile=[profile.name],
+        profile=[profile.name],
         period_verdict=[str(primary["period_verdict"])],
         reliability_code=[str(primary["reliability_code"])],
         confidence_flags=[list(primary["confidence_flags"])],
@@ -1786,7 +1786,7 @@ def estimate_rotation_period(
     observations: RotationPeriodObservations,
     *,
     method_mode: str = "fourier",
-    paper_profile: str = "greenstreet_2026",
+    profile: str = "default",
     search_fidelity: str | None = None,
     search_strategy: str | None = None,
     fourier_orders: tuple[int, ...] | None = None,
@@ -1797,8 +1797,6 @@ def estimate_rotation_period(
     max_search_period_hours: float | None = None,
     early_exit_on_insufficient: bool = False,
     exact_evaluation_backend: str = "numpy",
-    jax_frequency_batch_size: int = _DEFAULT_JAX_FREQUENCY_BATCH_SIZE,
-    jax_row_pad_multiple: int = _DEFAULT_JAX_ROW_PAD_MULTIPLE,
     session_mode: str = "auto",
     auto_session_min_observations_per_group: int = 6,
     auto_session_bic_improvement: float = 10.0,
@@ -1825,9 +1823,9 @@ def estimate_rotation_period(
         alias clustering and a validated uncertainty interval; ``"lsm"`` is a fast
         Lomb-Scargle backup capped at ``period_family`` (no validated interval, per
         the D2 policy).
-    paper_profile : str, default "greenstreet_2026"
+    profile : str, default "default"
         Solver configuration profile (Fourier orders, F-test/cluster confidences,
-        reliability window). Only ``"greenstreet_2026"`` is shipped.
+        reliability window). Only ``"default"`` is shipped.
     search_fidelity : {"validated_staged", "exact_grid"}, optional
         Frequency-search strategy; defaults to ``"validated_staged"`` (coarse pass
         refined with exact evaluations). ``"exact_grid"`` evaluates every grid
@@ -1881,15 +1879,11 @@ def estimate_rotation_period(
         raise ValueError("auto_session_bic_improvement must be non-negative")
     if exact_evaluation_backend not in {"numpy", "jax"}:
         raise ValueError("exact_evaluation_backend must be one of {'numpy', 'jax'}")
-    if jax_frequency_batch_size <= 0:
-        raise ValueError("jax_frequency_batch_size must be positive")
-    if jax_row_pad_multiple <= 0:
-        raise ValueError("jax_row_pad_multiple must be positive")
     resolved_fidelity = _resolve_search_fidelity(
         search_fidelity=search_fidelity,
         search_strategy=search_strategy,
     )
-    profile = _resolve_paper_profile(paper_profile)
+    resolved_profile = _resolve_profile(profile)
 
     (
         time,
@@ -1919,7 +1913,7 @@ def estimate_rotation_period(
             span_days=span_days,
             reduced_mag=reduced_mag,
             mag_sigma=mag_sigma,
-            min_order=int(min(profile.orders)),
+            min_order=int(min(resolved_profile.orders)),
             min_rotations_in_span=min_rotations_in_span,
             max_frequency_cycles_per_day=max_frequency_cycles_per_day,
         )
@@ -1927,7 +1921,7 @@ def estimate_rotation_period(
             return _insufficient_result(
                 reasons=pre_solve_reasons,
                 method_mode=method_mode,
-                profile=profile,
+                profile=resolved_profile,
                 observations=observations,
                 filter_labels=filter_labels,
                 session_labels=session_labels,
@@ -1954,11 +1948,11 @@ def estimate_rotation_period(
         frequencies=frequencies,
         weights=weights,
         clip_sigma=clip_sigma,
-        profile=profile,
+        profile=resolved_profile,
         search_fidelity=resolved_fidelity,
         exact_evaluation_backend=exact_evaluation_backend,
-        jax_frequency_batch_size=int(jax_frequency_batch_size),
-        jax_row_pad_multiple=int(jax_row_pad_multiple),
+        jax_frequency_batch_size=_DEFAULT_JAX_FREQUENCY_BATCH_SIZE,
+        jax_row_pad_multiple=_DEFAULT_JAX_ROW_PAD_MULTIPLE,
         used_session_offsets=False,
         fourier_orders=fourier_orders,
     )
@@ -1974,11 +1968,11 @@ def estimate_rotation_period(
             frequencies=frequencies,
             weights=weights,
             clip_sigma=clip_sigma,
-            profile=profile,
+            profile=resolved_profile,
             search_fidelity=resolved_fidelity,
             exact_evaluation_backend=exact_evaluation_backend,
-            jax_frequency_batch_size=int(jax_frequency_batch_size),
-            jax_row_pad_multiple=int(jax_row_pad_multiple),
+            jax_frequency_batch_size=_DEFAULT_JAX_FREQUENCY_BATCH_SIZE,
+            jax_row_pad_multiple=_DEFAULT_JAX_ROW_PAD_MULTIPLE,
             used_session_offsets=True,
             fourier_orders=fourier_orders,
         )
@@ -2066,7 +2060,7 @@ def estimate_rotation_period(
         primary=primary,
         fourier_solution=fourier_solution,
         lsm_solution=lsm_solution,
-        profile=profile,
+        profile=resolved_profile,
         observations=observations,
         filter_labels=filter_labels,
         session_summary=session_summary,

@@ -136,7 +136,7 @@ def test_fourier_single_peak_is_doubled():
     result = estimate_rotation_period(
         observations,
         method_mode="fourier",
-        paper_profile="greenstreet_2026",
+        profile="default",
         search_fidelity="exact_grid",
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,

@@ -75,9 +75,9 @@ class _FourierProfile:
 # search Fourier orders 2-6, pick the order by F-test at 90% confidence, cluster aliases
 # at the 95% sigma threshold, and call a period "reliable" when its uncertainty is within
 # max(2P, 7h). (An experimental second profile was dropped for the MVP — one profile only.)
-FOURIER_PROFILES: dict[str, _FourierProfile] = {
-    "greenstreet_2026": _FourierProfile(
-        name="greenstreet_2026",
+PROFILES: dict[str, _FourierProfile] = {
+    "default": _FourierProfile(
+        name="default",
         orders=(2, 3, 4, 5, 6),
         order_selection_confidence=0.90,
         sigma_threshold_confidence=0.95,
