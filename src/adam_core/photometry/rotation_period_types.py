@@ -1,7 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyarrow as pa
 import quivr as qv
 
 from ..time import Timestamp
+
+if TYPE_CHECKING:
+    from ..coordinates.cartesian import CartesianCoordinates
+    from ..observations.detections import PointSourceDetections
+    from ..observations.exposures import Exposures
 
 
 class RotationPeriodObservations(qv.Table):
@@ -14,6 +23,37 @@ class RotationPeriodObservations(qv.Table):
     r_au = qv.Float64Column()
     delta_au = qv.Float64Column()
     phase_angle_deg = qv.Float64Column()
+
+    @classmethod
+    def from_point_source_observations(
+        cls,
+        detections: PointSourceDetections,
+        exposures: Exposures,
+        object_coords: CartesianCoordinates,
+    ) -> RotationPeriodObservations:
+        """Build observations from adam_core point-source detections + exposures.
+
+        Links this table to the core adam_core observation primitives: one row per
+        ``PointSourceDetections`` entry, with ``filter`` and the per-exposure
+        observing geometry (heliocentric distance ``r_au``, observer distance
+        ``delta_au``, and solar ``phase_angle_deg``) derived from the aligned
+        ``Exposures`` and the object's heliocentric ``CartesianCoordinates``.
+
+        ``object_coords`` must be heliocentric (origin=SUN) and the same length and
+        order as ``detections``; ``detections.exposure_id`` is used to align each
+        detection to its exposure. ``mag`` / ``r_au`` / ``delta_au`` /
+        ``phase_angle_deg`` must be finite (and the distances positive) or a
+        ``ValueError`` is raised.
+        """
+        # Lazy import avoids a module-load cycle (rotation_period_wrappers imports
+        # this module); the geometry pipeline lives in that adapter module.
+        from .rotation_period_wrappers import (
+            build_rotation_period_observations_from_detections,
+        )
+
+        return build_rotation_period_observations_from_detections(
+            detections, exposures, object_coords
+        )
 
 
 class RotationPeriodResult(qv.Table):

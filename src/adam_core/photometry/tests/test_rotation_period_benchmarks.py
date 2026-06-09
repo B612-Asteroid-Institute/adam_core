@@ -148,3 +148,32 @@ def test_exact_and_staged_reference_match_on_same_case(monkeypatch):
             grouped_staged.result.period_days[idx].as_py(),
             rel=0.05,
         )
+
+
+def test_from_point_source_observations_classmethod_matches_wrapper(monkeypatch):
+    # RotationPeriodObservations.from_point_source_observations is the explicit
+    # constructor linking the table to the adam_core observation primitives; it
+    # delegates to build_rotation_period_observations_from_detections, so the two
+    # must produce identical observations from the same detections/exposures/coords.
+    detections, exposures, object_coords, observers, _ = _make_detection_bundle()
+
+    def fake_observers(self, *args, **kwargs):  # noqa: ARG001
+        return observers
+
+    monkeypatch.setattr(Exposures, "observers", fake_observers)
+
+    from ..rotation_period_types import RotationPeriodObservations
+    from ..rotation_period_wrappers import (
+        build_rotation_period_observations_from_detections,
+    )
+
+    via_method = RotationPeriodObservations.from_point_source_observations(
+        detections, exposures, object_coords
+    )
+    via_wrapper = build_rotation_period_observations_from_detections(
+        detections, exposures, object_coords
+    )
+
+    assert isinstance(via_method, RotationPeriodObservations)
+    assert len(via_method) == len(detections)
+    assert via_method.table.equals(via_wrapper.table)
