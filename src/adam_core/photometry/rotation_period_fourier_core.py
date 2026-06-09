@@ -424,51 +424,51 @@ def _fit_frequency(
     prior_rows, prior_target, prior_weights = _phase_prior_rows(n_par, design_info, min_phase)
     mask = np.ones(n_obs, dtype=bool)
 
-    for _ in range(max(1, int(max_clip_iterations))):
-        idx = np.flatnonzero(mask)
-        if idx.size <= n_par:
-            return None
+    def _solve(idx: npt.NDArray[np.int64]):
+        """Weighted, prior-augmented Fourier fit at the unmasked rows ``idx``."""
         fourier = _build_fourier_columns(t_rel[idx], frequency, fourier_order)
         design_real = np.concatenate([fixed[idx], fourier], axis=1)
         target_real = np.asarray(y[idx], dtype=np.float64)
         design = np.vstack([design_real, prior_rows])
         target = np.concatenate([target_real, prior_target])
         if weights_real is None:
-            weights_aug = np.concatenate(
-                [np.ones(target_real.size, dtype=np.float64), prior_weights]
-            )
+            weights_aug = np.concatenate([np.ones(target_real.size, dtype=np.float64), prior_weights])
             real_weights = None
         else:
             weights_aug = np.concatenate([weights_real[idx], prior_weights])
             real_weights = weights_real[idx]
         coeffs, _, _ = _weighted_lstsq(design, target, weights_aug)
         residuals = target_real - design_real @ coeffs
-        sigma, rss, df = _paper_sigma(
-            residuals,
-            real_weights,
-            n_obs=n_obs,
-            n_fit=idx.size,
-            n_par=n_par,
+        sigma, rss, df = _paper_sigma(residuals, real_weights, n_obs=n_obs, n_fit=idx.size, n_par=n_par)
+        return coeffs, residuals, sigma, rss, df
+
+    def _result(idx: npt.NDArray[np.int64], coeffs, sigma: float, rss: float, df: int) -> _FitResult:
+        return _FitResult(
+            frequency=float(frequency),
+            fourier_order=int(fourier_order),
+            coeffs=np.asarray(coeffs, dtype=np.float64),
+            residual_sigma=float(sigma),
+            rss=float(rss),
+            df=int(df),
+            n_par=int(n_par),
+            mask=mask.copy(),
+            n_fit=int(idx.size),
+            n_clipped=int(n_obs - idx.size),
+            n_filters=int(design_info.n_filters),
+            phase_c1_idx=int(design_info.phase_c1_idx),
+            phase_c2_idx=int(design_info.phase_c2_idx),
         )
+
+    for _ in range(max(1, int(max_clip_iterations))):
+        idx = np.flatnonzero(mask)
+        if idx.size <= n_par:
+            return None
+        coeffs, residuals, sigma, rss, df = _solve(idx)
         if not np.isfinite(sigma):
             return None
         clip_mask = np.abs(residuals) <= float(clip_sigma) * sigma
         if np.all(clip_mask):
-            return _FitResult(
-                frequency=float(frequency),
-                fourier_order=int(fourier_order),
-                coeffs=np.asarray(coeffs, dtype=np.float64),
-                residual_sigma=float(sigma),
-                rss=float(rss),
-                df=int(df),
-                n_par=int(n_par),
-                mask=mask.copy(),
-                n_fit=int(idx.size),
-                n_clipped=int(n_obs - idx.size),
-                n_filters=int(design_info.n_filters),
-                phase_c1_idx=int(design_info.phase_c1_idx),
-                phase_c2_idx=int(design_info.phase_c2_idx),
-            )
+            return _result(idx, coeffs, sigma, rss, df)
         new_mask = mask.copy()
         new_mask[idx[~clip_mask]] = False
         if np.array_equal(new_mask, mask):
@@ -478,43 +478,10 @@ def _fit_frequency(
     idx = np.flatnonzero(mask)
     if idx.size <= n_par:
         return None
-    fourier = _build_fourier_columns(t_rel[idx], frequency, fourier_order)
-    design_real = np.concatenate([fixed[idx], fourier], axis=1)
-    target_real = np.asarray(y[idx], dtype=np.float64)
-    design = np.vstack([design_real, prior_rows])
-    target = np.concatenate([target_real, prior_target])
-    if weights_real is None:
-        weights_aug = np.concatenate([np.ones(target_real.size, dtype=np.float64), prior_weights])
-        real_weights = None
-    else:
-        weights_aug = np.concatenate([weights_real[idx], prior_weights])
-        real_weights = weights_real[idx]
-    coeffs, _, _ = _weighted_lstsq(design, target, weights_aug)
-    residuals = target_real - design_real @ coeffs
-    sigma, rss, df = _paper_sigma(
-        residuals,
-        real_weights,
-        n_obs=n_obs,
-        n_fit=idx.size,
-        n_par=n_par,
-    )
+    coeffs, residuals, sigma, rss, df = _solve(idx)
     if not np.isfinite(sigma):
         return None
-    return _FitResult(
-        frequency=float(frequency),
-        fourier_order=int(fourier_order),
-        coeffs=np.asarray(coeffs, dtype=np.float64),
-        residual_sigma=float(sigma),
-        rss=float(rss),
-        df=int(df),
-        n_par=int(n_par),
-        mask=mask.copy(),
-        n_fit=int(idx.size),
-        n_clipped=int(n_obs - idx.size),
-        n_filters=int(design_info.n_filters),
-        phase_c1_idx=int(design_info.phase_c1_idx),
-        phase_c2_idx=int(design_info.phase_c2_idx),
-    )
+    return _result(idx, coeffs, sigma, rss, df)
 
 
 def _fit_frequency_unclipped(
