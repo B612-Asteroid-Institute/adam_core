@@ -59,12 +59,20 @@ AMPLITUDE_SNR_MIN = 3.0
 OBSERVATION_COUNT_MIN = 30
 # Number of rotational-phase bins used to compute ``phase_coverage_fraction``.
 _PHASE_COVERAGE_N_BINS = 20
-# Longest period a ``single_period`` verdict may claim (bead rp-e4a.22 step 1).
-# Recovered periods beyond this are treated as low-frequency drift fit as
-# rotation rather than a real spin, so the confidence (not the value) is
-# downgraded to ``period_family``. rp-e4a.13 may recalibrate; max real candle
-# period across 327 LCDB+DAMIT reliable objects is 67.5h.
-MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS = 96.0
+# Longest period a ``single_period`` verdict may claim. Beyond this the recovered
+# value is kept but the confidence is downgraded to ``period_family``: a very long
+# period from night-cadence photometry is far more often low-frequency drift
+# (airmass / phase-angle / calibration) fit as rotation than a real spin, and
+# genuinely slow rotators in this regime are usually non-principal-axis tumblers
+# for which a single period is the wrong model anyway.
+# 240h (10 days) clears the well-sampled slow-rotator tail with margin -- the
+# project candle set tops out at 67.5h and the slow-rotator gap sits near ~50h
+# (Pravec & Harris 2000) -- while staying below the rare >1000h super-slow class
+# (e.g. 288 Glauke ~1170h; Erasmus et al. 2021), which needs dedicated multi-week
+# baselines this solver does not assume. It is paired with the span /
+# min_rotations_in_span checks, so a long period is only ever called
+# single_period when the baseline actually spans enough cycles to constrain it.
+MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS = 240.0
 
 # --- Cheap pre-solve insufficiency thresholds (bead rp-e4a.19) -------------
 # Period-INDEPENDENT screening run before the Fourier/LSM search so obviously
