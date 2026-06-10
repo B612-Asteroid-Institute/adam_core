@@ -11,6 +11,17 @@ from .magnitude import (
     convert_magnitude,
     predict_magnitudes,
 )
+from .rotation_period_fourier import estimate_rotation_period
+from .rotation_period_types import (
+    GroupedRotationPeriodResults,
+    RotationPeriodObservations,
+    RotationPeriodResult,
+)
+from .rotation_period_wrappers import (
+    build_rotation_period_observations_from_detections,
+    estimate_rotation_period_from_detections,
+    estimate_rotation_period_from_detections_grouped,
+)
 
 __all__ = [
     # Simple magnitude system
@@ -23,4 +34,12 @@ __all__ = [
     "estimate_absolute_magnitude_v_from_detections",
     "estimate_absolute_magnitude_v_from_detections_grouped",
     "GroupedPhysicalParameters",
+    # Rotation-period analysis
+    "build_rotation_period_observations_from_detections",
+    "estimate_rotation_period",
+    "estimate_rotation_period_from_detections",
+    "estimate_rotation_period_from_detections_grouped",
+    "RotationPeriodObservations",
+    "RotationPeriodResult",
+    "GroupedRotationPeriodResults",
 ]
