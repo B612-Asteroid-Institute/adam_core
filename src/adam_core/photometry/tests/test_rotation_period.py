@@ -15,9 +15,8 @@ from ..rotation_period_fourier import (
 )
 from ..rotation_period_fourier_core import (
     _FitResult,
-    _directional_f_test_confidence,
+    _f_test_confidence,
     _select_order,
-    _sigma_threshold_from_confidence,
 )
 from ..rotation_period_types import RotationPeriodObservations, RotationPeriodResult
 
@@ -100,30 +99,17 @@ def _fit_template(
         rss=float(rss),
         df=int(df),
         n_par=3 + 2 * fourier_order,
-        mask=np.ones(df + 3 + 2 * fourier_order, dtype=bool),
         n_fit=int(df + 3 + 2 * fourier_order),
         n_clipped=0,
-        n_filters=1,
         phase_c1_idx=1,
         phase_c2_idx=2,
-        n_local_maxima=2,
     )
-
-
-def test_directional_f_test_confidence_and_sigma_threshold():
-    small = _fit_template(frequency=20.0, fourier_order=2, rss=30.0, df=20)
-    large = _fit_template(frequency=20.0, fourier_order=3, rss=12.0, df=18)
-    confidence = _directional_f_test_confidence(small, large)
-    assert 0.90 < confidence < 1.0
-
-    sigma_threshold = _sigma_threshold_from_confidence(0.05, 18, 0.95)
-    assert sigma_threshold > 0.05
 
 
 def test_profile_specific_order_selection_thresholds():
     small = _fit_template(frequency=20.0, fourier_order=2, rss=30.0, df=20)
     better = _fit_template(frequency=20.0, fourier_order=3, rss=14.0, df=18)
-    confidence = _directional_f_test_confidence(small, better)
+    confidence = _f_test_confidence(small, better)
     assert 0.90 < confidence < 0.95
 
     candidates = {2: small, 3: better}

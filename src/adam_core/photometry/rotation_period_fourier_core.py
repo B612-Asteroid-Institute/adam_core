@@ -27,13 +27,10 @@ class _FitResult:
     rss: float
     df: int
     n_par: int
-    mask: npt.NDArray[np.bool_]
     n_fit: int
     n_clipped: int
-    n_filters: int
     phase_c1_idx: int
     phase_c2_idx: int
-    n_local_maxima: int | None = None
 
 
 @dataclass(slots=True)
@@ -48,7 +45,6 @@ class _DesignInfo:
 class _SessionSummary:
     n_sessions: int
     min_group_count: int
-    median_group_count: float
     median_session_span_days: float
 
 
@@ -258,7 +254,6 @@ def _summarize_sessions(
         return _SessionSummary(
             n_sessions=0,
             min_group_count=0,
-            median_group_count=0.0,
             median_session_span_days=0.0,
         )
 
@@ -283,9 +278,6 @@ def _summarize_sessions(
     return _SessionSummary(
         n_sessions=len(unique_sessions),
         min_group_count=min(group_counts) if group_counts else 0,
-        median_group_count=float(np.median(np.asarray(group_counts, dtype=np.float64)))
-        if group_counts
-        else 0.0,
         median_session_span_days=float(np.median(np.asarray(spans, dtype=np.float64)))
         if spans
         else 0.0,
@@ -359,18 +351,13 @@ def _weighted_lstsq(
     design: npt.NDArray[np.float64],
     target: npt.NDArray[np.float64],
     weights: npt.NDArray[np.float64] | None,
-) -> tuple[npt.NDArray[np.float64], float, int]:
+) -> npt.NDArray[np.float64]:
     if weights is None:
         coeffs, *_ = np.linalg.lstsq(design, target, rcond=None)
-        resid = target - design @ coeffs
-        rss = float(np.sum(np.square(resid)))
     else:
-        w = np.asarray(weights, dtype=np.float64)
-        sqrt_w = np.sqrt(w)
+        sqrt_w = np.sqrt(np.asarray(weights, dtype=np.float64))
         coeffs, *_ = np.linalg.lstsq(design * sqrt_w[:, None], target * sqrt_w, rcond=None)
-        resid = target - design @ coeffs
-        rss = float(np.sum(w * np.square(resid)))
-    return np.asarray(coeffs, dtype=np.float64), rss, int(target.size - design.shape[1])
+    return np.asarray(coeffs, dtype=np.float64)
 
 
 def _paper_sigma(
@@ -437,7 +424,7 @@ def _fit_frequency(
         else:
             weights_aug = np.concatenate([weights_real[idx], prior_weights])
             real_weights = weights_real[idx]
-        coeffs, _, _ = _weighted_lstsq(design, target, weights_aug)
+        coeffs = _weighted_lstsq(design, target, weights_aug)
         residuals = target_real - design_real @ coeffs
         sigma, rss, df = _paper_sigma(residuals, real_weights, n_obs=n_obs, n_fit=idx.size, n_par=n_par)
         return coeffs, residuals, sigma, rss, df
@@ -451,10 +438,8 @@ def _fit_frequency(
             rss=float(rss),
             df=int(df),
             n_par=int(n_par),
-            mask=mask.copy(),
             n_fit=int(idx.size),
             n_clipped=int(n_obs - idx.size),
-            n_filters=int(design_info.n_filters),
             phase_c1_idx=int(design_info.phase_c1_idx),
             phase_c2_idx=int(design_info.phase_c2_idx),
         )
@@ -512,7 +497,7 @@ def _fit_frequency_unclipped(
     else:
         real_weights = np.asarray(weights, dtype=np.float64)
         weights_aug = np.concatenate([real_weights, prior_weights])
-    coeffs, _, _ = _weighted_lstsq(design, target, weights_aug)
+    coeffs = _weighted_lstsq(design, target, weights_aug)
     residuals = target_real - design_real @ coeffs
     sigma, rss, df = _paper_sigma(
         residuals,
@@ -531,10 +516,8 @@ def _fit_frequency_unclipped(
         rss=float(rss),
         df=int(df),
         n_par=int(n_par),
-        mask=np.ones(n_obs, dtype=bool),
         n_fit=int(n_obs),
         n_clipped=0,
-        n_filters=int(design_info.n_filters),
         phase_c1_idx=int(design_info.phase_c1_idx),
         phase_c2_idx=int(design_info.phase_c2_idx),
     )
@@ -560,10 +543,6 @@ def _f_test_confidence(small: _FitResult, large: _FitResult) -> float:
     # the number of fitted observations, so use a directional variance-ratio
     # confidence rather than a nested-model extra-sum-of-squares test.
     return float(f_dist.cdf(f_value, df_small, df_large))
-
-
-def _directional_f_test_confidence(small: _FitResult, large: _FitResult) -> float:
-    return _f_test_confidence(small, large)
 
 
 def _fit_bic(fit: _FitResult) -> float:
@@ -595,19 +574,6 @@ def _sigma_threshold_for_confidence(best_fit: _FitResult, confidence: float) -> 
     if not np.isfinite(f_critical) or f_critical <= 0.0:
         return float("inf")
     return float(best_fit.residual_sigma * np.sqrt(f_critical))
-
-
-def _sigma_threshold_from_confidence(
-    best_sigma: float,
-    df: int,
-    confidence: float,
-) -> float:
-    if df <= 0:
-        return float("inf")
-    f_critical = float(f_dist.ppf(float(confidence), int(df), int(df)))
-    if not np.isfinite(f_critical) or f_critical <= 0.0:
-        return float("inf")
-    return float(float(best_sigma) * np.sqrt(f_critical))
 
 
 def _count_local_extrema(
@@ -644,9 +610,7 @@ def _amplitude_from_fit(
 
 
 def _fit_with_period(fit: _FitResult) -> _FitWithPeriod:
-    n_maxima = fit.n_local_maxima
-    if n_maxima is None:
-        n_maxima, _ = _count_local_extrema(fit.coeffs, fit.fourier_order)
+    n_maxima, _ = _count_local_extrema(fit.coeffs, fit.fourier_order)
     is_period_doubled = n_maxima == 1
     period_days = (2.0 if is_period_doubled else 1.0) / float(fit.frequency)
     return _FitWithPeriod(

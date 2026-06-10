@@ -34,8 +34,6 @@ _LSM_MIN_PERIOD_DAYS = 0.00065
 _LSM_MAX_PERIOD_DAYS = 3.0
 _LSM_OVERSAMPLE_FACTOR = 100.0
 _LSM_DEFAULT_MAX_SAMPLES = 20000
-_LSM_DEFAULT_REFINE_SAMPLES = 2000
-_LSM_DEFAULT_REFINE_ROUNDS = 2
 _LSM_POWER_TIE_TOLERANCE = 2.0e-4
 _DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
 _DEFAULT_JAX_ROW_PAD_MULTIPLE = 64
@@ -108,7 +106,6 @@ class _FourierCluster:
     period_lower_days: float
     period_upper_days: float
     sigma_best: float
-    raw_weight: float
 
 
 @dataclass(slots=True)
@@ -134,10 +131,6 @@ class _LSMCandidate:
     period_days: float
     power: float
     coeffs: npt.NDArray[np.float64]
-    frequency: float | None = None
-    n_maxima: int | None = None
-    n_minima: int | None = None
-    amplitude_mag: float | None = None
 
 
 @dataclass(slots=True)
@@ -154,19 +147,8 @@ class _LSMSolution:
     false_alarm_probability: float | None = None
 
 
-def _resolve_search_fidelity(
-    *,
-    search_fidelity: str | None,
-    search_strategy: str | None,
-) -> str:
-    if search_fidelity is not None:
-        resolved = str(search_fidelity)
-    elif search_strategy in {"surrogate_refine", "coarse_to_fine"}:
-        resolved = "validated_staged"
-    elif search_strategy == "grid":
-        resolved = "exact_grid"
-    else:
-        resolved = "validated_staged"
+def _resolve_search_fidelity(search_fidelity: str | None) -> str:
+    resolved = "validated_staged" if search_fidelity is None else str(search_fidelity)
     if resolved not in {"validated_staged", "exact_grid"}:
         raise ValueError("search_fidelity must be one of {'validated_staged', 'exact_grid'}")
     return resolved
@@ -315,7 +297,6 @@ def _evaluate_frequency_indices_with_jax(
 
     best_pos = int(finite_positions[int(np.argmin(scores[finite_positions]))])
     best_index = int(sample_indices[best_pos])
-    best_mask = np.asarray(result.best_mask, dtype=bool)
     best_fit = _FitResult(
         frequency=float(frequencies[best_index]),
         fourier_order=int(order),
@@ -324,10 +305,8 @@ def _evaluate_frequency_indices_with_jax(
         rss=float(result.best_rss),
         df=int(result.best_df),
         n_par=int(n_par),
-        mask=best_mask,
         n_fit=int(result.best_n_fit),
         n_clipped=int(result.best_n_clipped),
-        n_filters=int(design_info.n_filters),
         phase_c1_idx=int(design_info.phase_c1_idx),
         phase_c2_idx=int(design_info.phase_c2_idx),
     )
@@ -572,18 +551,10 @@ def _cluster_fourier_solutions(
     *,
     fits: list[_FitResult | None],
     accepted_indices: npt.NDArray[np.int64],
-    sigma_threshold: float,
     frequencies: npt.NDArray[np.float64] | None = None,
 ) -> list[_FourierCluster]:
     if accepted_indices.size == 0:
         return []
-    best_sigma = float(
-        min(
-            fits[int(idx)].residual_sigma
-            for idx in accepted_indices.tolist()
-            if fits[int(idx)] is not None
-        )
-    )
     fit_items: list[tuple[int, _FitWithPeriod, float, float]] = []
     for idx in accepted_indices.tolist():
         fit = fits[int(idx)]
@@ -617,7 +588,6 @@ def _cluster_fourier_solutions(
         return []
     fit_items.sort(key=lambda item: (item[2], item[3], item[0]))
     clusters: list[_FourierCluster] = []
-    denom = float(max(sigma_threshold - best_sigma, 0.0))
     merged_items: list[list[tuple[int, _FitWithPeriod, float, float]]] = [[fit_items[0]]]
     for item in fit_items[1:]:
         current_lower = float(item[2])
@@ -633,10 +603,6 @@ def _cluster_fourier_solutions(
         best = min(group_fits, key=lambda item: float(item.fit.residual_sigma))
         period_lower_days = float(min(item[2] for item in group_items))
         period_upper_days = float(max(item[3] for item in group_items))
-        if denom > 0.0:
-            raw_weight = max(0.0, 1.0 - (float(best.fit.residual_sigma) - best_sigma) / denom)
-        else:
-            raw_weight = 1.0 if abs(float(best.fit.residual_sigma) - best_sigma) <= 1.0e-12 else 0.0
         clusters.append(
             _FourierCluster(
                 indices=group_indices,
@@ -644,7 +610,6 @@ def _cluster_fourier_solutions(
                 period_lower_days=period_lower_days,
                 period_upper_days=period_upper_days,
                 sigma_best=float(best.fit.residual_sigma),
-                raw_weight=float(raw_weight),
             )
         )
     return sorted(clusters, key=lambda cluster: float(cluster.sigma_best))
@@ -749,7 +714,6 @@ def _derive_fourier_solution(
     clusters = _cluster_fourier_solutions(
         fits=fits,
         accepted_indices=accepted_indices,
-        sigma_threshold=sigma_threshold,
         frequencies=frequencies,
     )
     if not clusters:
@@ -760,7 +724,6 @@ def _derive_fourier_solution(
                 period_lower_days=float(best_with_period.period_days),
                 period_upper_days=float(best_with_period.period_days),
                 sigma_best=float(best_fit.residual_sigma),
-                raw_weight=1.0,
             )
         ]
     primary_cluster = next(
@@ -1077,7 +1040,7 @@ def _lsm_false_alarm_probability(
         # the more significant of (LSM peak, global periodogram peak).
         model = LombScargle(times, values, dy=dy) if dy is not None else LombScargle(times, values)
         power_at_best = float(model.power(float(best_frequency)))
-        frequency_grid, power_grid = model.autopower(
+        _, power_grid = model.autopower(
             minimum_frequency=float(best_frequency) / 4.0,
             maximum_frequency=float(best_frequency) * 4.0,
             samples_per_peak=5,
@@ -1101,8 +1064,6 @@ def _estimate_lsm_solution(
     filter_labels: npt.NDArray[np.object_],
     weights: npt.NDArray[np.float64] | None,
     lsm_max_frequency_samples: int,
-    lsm_refine_samples: int,
-    lsm_refine_rounds: int,
 ) -> _LSMSolution:
     corrected, filter_lsm, weights_lsm, clipped, keep_mask = _prepare_lsm_inputs(
         mag=mag,
@@ -1796,7 +1757,6 @@ def estimate_rotation_period(
     method_mode: str = "fourier",
     profile: str = "default",
     search_fidelity: str | None = None,
-    search_strategy: str | None = None,
     fourier_orders: tuple[int, ...] | None = None,
     clip_sigma: float = 3.0,
     min_rotations_in_span: float = 2.0,
@@ -1809,8 +1769,6 @@ def estimate_rotation_period(
     auto_session_min_observations_per_group: int = 6,
     auto_session_bic_improvement: float = 10.0,
     lsm_max_frequency_samples: int = _LSM_DEFAULT_MAX_SAMPLES,
-    lsm_refine_samples: int = _LSM_DEFAULT_REFINE_SAMPLES,
-    lsm_refine_rounds: int = _LSM_DEFAULT_REFINE_ROUNDS,
 ) -> RotationPeriodResult:
     """Estimate an asteroid rotation period with a measured confidence verdict.
 
@@ -1887,10 +1845,7 @@ def estimate_rotation_period(
         raise ValueError("auto_session_bic_improvement must be non-negative")
     if exact_evaluation_backend not in {"numpy", "jax"}:
         raise ValueError("exact_evaluation_backend must be one of {'numpy', 'jax'}")
-    resolved_fidelity = _resolve_search_fidelity(
-        search_fidelity=search_fidelity,
-        search_strategy=search_strategy,
-    )
+    resolved_fidelity = _resolve_search_fidelity(search_fidelity)
     resolved_profile = _resolve_profile(profile)
 
     (
@@ -2032,8 +1987,6 @@ def estimate_rotation_period(
             filter_labels=filter_labels,
             weights=weights,
             lsm_max_frequency_samples=lsm_max_frequency_samples,
-            lsm_refine_samples=lsm_refine_samples,
-            lsm_refine_rounds=lsm_refine_rounds,
         )
 
     primary = _primary_from_method(

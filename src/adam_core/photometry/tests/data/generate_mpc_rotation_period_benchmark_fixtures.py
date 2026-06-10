@@ -201,7 +201,7 @@ def _write_fixture(
         max_frequency_cycles_per_day=case.max_frequency_cycles_per_day,
         min_rotations_in_span=case.min_rotations_in_span,
         session_mode=case.session_mode,
-        search_strategy="grid",
+        search_fidelity="exact_grid",
     )
 
     np.savez_compressed(
