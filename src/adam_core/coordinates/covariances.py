@@ -478,6 +478,86 @@ def transform_covariances_jacobian(
     return covariances
 
 
+def transform_solved_state_covariances_jacobian(
+    coords: np.ndarray,
+    covariances: list[np.ndarray | None],
+    _func: Callable,
+    **kwargs,
+) -> list[np.ndarray | None]:
+    """
+    Transform full solved-state covariance matrices with a block Jacobian.
+
+    The first six parameters are assumed to be orbital coordinates transformed by
+    `_func`. Any additional solved parameters are treated as identity dimensions, so
+    orbital/non-gravitational cross-covariance terms are preserved.
+    """
+    if len(covariances) != len(coords):
+        raise ValueError("coords and covariances must have the same length.")
+
+    jacobian = calc_jacobian(coords, _func, **kwargs)
+    transformed: list[np.ndarray | None] = []
+    for jacobian_i, covariance_i in zip(jacobian, covariances):
+        if covariance_i is None:
+            transformed.append(None)
+            continue
+
+        covariance_i = np.asarray(covariance_i, dtype=np.float64)
+        dimension = covariance_i.shape[0]
+        if covariance_i.ndim != 2 or dimension != covariance_i.shape[1]:
+            raise ValueError("Solved-state covariance must be a square matrix.")
+        if dimension < 6:
+            raise ValueError("Solved-state covariance must be at least 6x6.")
+
+        jacobian_full = np.eye(dimension, dtype=np.float64)
+        jacobian_full[:6, :6] = jacobian_i
+        transformed.append(jacobian_full @ covariance_i @ jacobian_full.T)
+
+    return transformed
+
+
+def transform_solved_state_covariances_linear(
+    transform_matrices: np.ndarray,
+    covariances: list[np.ndarray | None],
+) -> list[np.ndarray | None]:
+    """
+    Transform full solved-state covariance matrices with a known linear 6x6 orbital transform.
+
+    Parameters
+    ----------
+    transform_matrices : `~numpy.ndarray`
+        Either a single `(6, 6)` matrix or an `(N, 6, 6)` array of matrices applied to
+        the orbital block of each solved-state covariance.
+    covariances : list of `~numpy.ndarray | None`
+        Solved-state covariance matrices. The first six dimensions are transformed and any
+        remaining solved parameters are preserved via an identity block.
+    """
+    matrices = np.asarray(transform_matrices, dtype=np.float64)
+    if matrices.shape == (6, 6):
+        matrices = np.repeat(matrices.reshape(1, 6, 6), len(covariances), axis=0)
+    if matrices.ndim != 3 or matrices.shape[1:] != (6, 6):
+        raise ValueError(
+            "transform_matrices must have shape (6, 6) or (N, 6, 6) for solved-state covariance transforms."
+        )
+    if len(matrices) != len(covariances):
+        raise ValueError("Number of transform matrices must match number of covariances.")
+
+    transformed: list[np.ndarray | None] = []
+    for matrix, covariance in zip(matrices, covariances):
+        if covariance is None:
+            transformed.append(None)
+            continue
+        covariance = np.asarray(covariance, dtype=np.float64)
+        dimension = covariance.shape[0]
+        if covariance.ndim != 2 or dimension != covariance.shape[1]:
+            raise ValueError("Solved-state covariance must be a square matrix.")
+        if dimension < 6:
+            raise ValueError("Solved-state covariance must be at least 6x6.")
+        matrix_full = np.eye(dimension, dtype=np.float64)
+        matrix_full[:6, :6] = matrix
+        transformed.append(matrix_full @ covariance @ matrix_full.T)
+    return transformed
+
+
 def _upper_triangular_to_full(
     upper_triangular: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:

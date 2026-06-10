@@ -14,12 +14,17 @@ import requests
 from astroquery.jplsbdb import SBDB
 
 from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
+from ...coordinates.covariances import (
+    CoordinateCovariances,
+    sigmas_to_covariances,
+    transform_solved_state_covariances_jacobian,
+)
 from ...coordinates.origin import Origin
 from ...time import Timestamp
 from ..non_gravitational_parameters import NonGravitationalParameters
 from ..orbits import Orbits
 from ..physical_parameters import PhysicalParameters
+from ..solved_state_covariances import ORBITAL_PARAMETER_NAMES, SolvedStateCovariances
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +111,24 @@ def _convert_SBDB_covariances(
     covariances[:, 5, 5] = sbdb_covariances[:, 2, 2]  # sigma_tptp
 
     return covariances
+
+
+def _convert_sbdb_solved_state_covariance(
+    covariance: np.ndarray,
+    labels: list[str],
+) -> tuple[np.ndarray, list[str]]:
+    if covariance.shape[0] != covariance.shape[1]:
+        raise ValueError("SBDB solved-state covariance must be square.")
+    if covariance.shape[0] != len(labels):
+        raise ValueError("SBDB solved-state covariance labels must match matrix size.")
+    if len(labels) < 6:
+        raise ValueError("SBDB solved-state covariance must include at least 6 labels.")
+
+    orbit_permutation = [1, 0, 5, 3, 4, 2]
+    extra_indices = list(range(6, len(labels)))
+    permutation = orbit_permutation + extra_indices
+    parameter_names = ["q", "e", "i", "raan", "ap", "tp"] + [labels[i] for i in extra_indices]
+    return covariance[np.ix_(permutation, permutation)], parameter_names
 
 
 def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
@@ -252,7 +275,7 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
     )
 
 
-def query_sbdb(ids: npt.ArrayLike) -> Orbits:
+def query_sbdb(ids: npt.ArrayLike, *, include_nongrav: bool = True) -> Orbits:
     """
     Query JPL's Small-Body Database (SBDB) for orbits. The epoch at
     which the orbits are returned are near the epoch as published by the
@@ -277,7 +300,8 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     NotFoundError: If any of the queries object IDs are not found.
     """
     results = _get_sbdb_elements(ids)
-    return _orbits_from_sbdb_results(ids, results)
+    orbits = _orbits_from_sbdb_results(ids, results)
+    return orbits if include_nongrav else orbits.without_non_gravitational_parameters()
 
 
 def _sbdb_api_get_json(
@@ -596,6 +620,8 @@ def _orbits_from_sbdb_payloads(
     object_ids: list[str] = []
     phys_rows: list[tuple[float | None, float | None, float | None, float | None]] = []
     nongrav_rows: list[dict[str, Any]] = []
+    solved_state_covariances: list[np.ndarray | None] = []
+    solved_state_parameter_names: list[list[str] | None] = []
 
     coords_cometary = np.zeros((len(payloads), 6), dtype=np.float64)
     covariances_sbdb = np.zeros((len(payloads), 6, 6), dtype=np.float64)
@@ -617,6 +643,8 @@ def _orbits_from_sbdb_payloads(
 
         cov = orbit.get("covariance")
         cov_matrix: np.ndarray | None = None
+        solved_state_covariance: np.ndarray | None = None
+        solved_state_parameter_name: list[str] | None = None
         if isinstance(cov, dict) and cov.get("data") is not None:
             labels = cov.get("labels")
             if isinstance(labels, list):
@@ -631,6 +659,13 @@ def _orbits_from_sbdb_payloads(
             if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
                 raise ValueError("Expected SBDB covariance matrix to be at least 6x6.")
             cov_matrix = data[:6, :6]
+            solved_state_covariance, solved_state_parameter_name = (
+                _convert_sbdb_solved_state_covariance(
+                    data, [str(label) for label in labels]
+                )
+                if isinstance(labels, list) and len(labels) == data.shape[0]
+                else (None, None)
+            )
 
             # If covariance provides elements, prefer them (and the covariance epoch).
             if "elements" in cov and cov["elements"] is not None:
@@ -681,6 +716,8 @@ def _orbits_from_sbdb_payloads(
 
         phys_rows.append(_sbdb_phys_par_from_payload(payload))
         nongrav_rows.append(_sbdb_nongrav_row(payload))
+        solved_state_covariances.append(solved_state_covariance)
+        solved_state_parameter_names.append(solved_state_parameter_name)
 
     covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
     times = Timestamp.from_jd(times_jd, scale="tdb")
@@ -698,6 +735,27 @@ def _orbits_from_sbdb_payloads(
         origin=origin,
         frame="ecliptic",
     )
+    from ...coordinates.transform import _cometary_to_cartesian
+
+    solved_state_covariances_cartesian = transform_solved_state_covariances_jacobian(
+        coordinates.values,
+        solved_state_covariances,
+        _cometary_to_cartesian,
+        in_axes=(0, 0, 0, None, None),
+        out_axes=0,
+        t0=coordinates.time.to_numpy(),
+        mu=coordinates.origin.mu(),
+        max_iter=100,
+        tol=1e-15,
+    )
+    solved_state_parameter_names_cartesian = []
+    for names in solved_state_parameter_names:
+        if names is None:
+            solved_state_parameter_names_cartesian.append(None)
+        else:
+            solved_state_parameter_names_cartesian.append(
+                list(ORBITAL_PARAMETER_NAMES) + names[6:]
+            )
 
     physical_parameters = _physical_parameters_from_sbdb(phys_rows)
     nongrav = _non_gravitational_parameters_from_sbdb(nongrav_rows)
@@ -707,6 +765,9 @@ def _orbits_from_sbdb_payloads(
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
         non_gravitational_parameters=nongrav,
+        solved_state_covariance=SolvedStateCovariances.from_matrix(
+            solved_state_covariances_cartesian, solved_state_parameter_names_cartesian
+        ),
     )
 
 
@@ -769,6 +830,7 @@ def query_sbdb_new(
     max_attempts: int = 5,
     allow_missing: bool = False,
     orbit_id_from_input: bool = False,
+    include_nongrav: bool = True,
 ) -> Orbits:
     """
     Query JPL SBDB for orbits using direct HTTP requests (new implementation).
@@ -821,14 +883,16 @@ def query_sbdb_new(
             orbits = orbits.set_column(
                 "orbit_id", pa.array(kept_ids, type=pa.large_string())
             )
-        return orbits
+        return (
+            orbits if include_nongrav else orbits.without_non_gravitational_parameters()
+        )
 
     orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
     if orbit_id_from_input:
         orbits = orbits.set_column(
             "orbit_id", pa.array(obj_ids, type=pa.large_string())
         )
-    return orbits
+    return orbits if include_nongrav else orbits.without_non_gravitational_parameters()
 
 
 class NotFoundError(Exception):

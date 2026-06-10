@@ -445,6 +445,13 @@ class EphemerisMixin:
         propagated_orbits_aberrated = Orbits.from_kwargs(
             orbit_id=propagated_orbits_barycentric.orbit_id,
             object_id=propagated_orbits_barycentric.object_id,
+            physical_parameters=propagated_orbits_barycentric.physical_parameters,
+            non_gravitational_parameters=(
+                propagated_orbits_barycentric.non_gravitational_parameters
+            ),
+            solved_state_covariance=(
+                propagated_orbits_barycentric.solved_state_covariance
+            ),
             coordinates=CartesianCoordinates.from_kwargs(
                 x=propagated_orbits_aberrated[:, 0],
                 y=propagated_orbits_aberrated[:, 1],
@@ -555,6 +562,7 @@ class EphemerisMixin:
         seed: Optional[int] = None,
         predict_magnitudes: bool = True,
         predict_phase_angle: bool = False,
+        include_nongrav: bool = True,
     ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -597,6 +605,9 @@ class EphemerisMixin:
             isinstance(orbits, Orbits)
         ), "Covariance is not supported for VariantOrbits"
 
+        if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+            orbits = orbits.without_non_gravitational_parameters()
+
         # Check if we need to propagate orbit variants so we can propagate covariance
         # matrices
         ephemeris: Ephemeris = Ephemeris.empty()
@@ -609,6 +620,7 @@ class EphemerisMixin:
                 method=covariance_method,
                 num_samples=num_samples,
                 seed=seed,
+                include_nongrav=include_nongrav,
             )
 
         if max_processes is None:
@@ -875,6 +887,7 @@ class Propagator(ABC, EphemerisMixin):
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
+        include_nongrav: bool = True,
     ) -> Union[Orbits, VariantOrbits]:
         """
         Propagate each orbit in orbits to each time in times.
@@ -938,6 +951,8 @@ class Propagator(ABC, EphemerisMixin):
             times_ref = ray.put(times)
 
             if not isinstance(orbits, ObjectRef):
+                if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+                    orbits = orbits.without_non_gravitational_parameters()
                 input_is_variants = isinstance(orbits, VariantOrbits)
                 orbits_ref = ray.put(orbits)
             else:
@@ -946,6 +961,9 @@ class Propagator(ABC, EphemerisMixin):
                 # check its length for chunking and determine
                 # if we need to propagate variants
                 orbits = ray.get(orbits_ref)
+                if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+                    orbits = orbits.without_non_gravitational_parameters()
+                    orbits_ref = ray.put(orbits)
                 input_is_variants = isinstance(orbits, VariantOrbits)
 
             if covariance is True and input_is_variants:
@@ -971,6 +989,7 @@ class Propagator(ABC, EphemerisMixin):
                     method=covariance_method,
                     num_samples=num_samples,
                     seed=seed,
+                    include_nongrav=include_nongrav,
                 )
 
                 variants_ref = ray.put(variants)
@@ -1042,6 +1061,8 @@ class Propagator(ABC, EphemerisMixin):
                     propagated_variants = None
 
         else:
+            if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+                orbits = orbits.without_non_gravitational_parameters()
             propagated = self._propagate_orbits(orbits, times)
 
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
@@ -1050,6 +1071,7 @@ class Propagator(ABC, EphemerisMixin):
                     method=covariance_method,
                     num_samples=num_samples,
                     seed=seed,
+                    include_nongrav=include_nongrav,
                 )
 
                 propagated_variants = self._propagate_orbits(variants, times)

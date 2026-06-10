@@ -427,6 +427,27 @@ def test_query_sbdb_new_populates_non_gravitational_parameters() -> None:
     assert orbits.non_gravitational_parameters.A2[0].as_py() == -6.739627582388806e-11
     assert orbits.non_gravitational_parameters.A3[0].as_py() == 2.960945433454094e-10
     assert orbits.non_gravitational_parameters.DT[0].as_py() == 45.68888251286532
+    assert orbits.solved_state_covariance.dimension[0].as_py() == 10
+    assert (
+        orbits.solved_state_covariance.parameter_names[0].as_py()
+        == "x,y,z,vx,vy,vz,A1,A2,A3,DT"
+    )
+
+
+def test_query_sbdb_new_include_nongrav_false_strips_nongrav() -> None:
+    payload = _load_sbdb_fixture_payload("67P_phys.json")
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(
+            ["67P"], timeout_s=1.0, max_attempts=1, include_nongrav=False
+        )
+
+    assert orbits.non_gravitational_parameters.A1[0].as_py() is None
+    assert orbits.solved_state_covariance.dimension[0].as_py() is None
 
 
 def test_real_sbdb_payloads_parse_without_error() -> None:
@@ -445,6 +466,14 @@ def test_real_sbdb_payloads_parse_without_error() -> None:
         assert len(orbits) == 1
         assert orbits.coordinates is not None
         assert orbits.physical_parameters is not None
+        if orbits.non_gravitational_parameters.solution_dimension[0].as_py() not in (
+            None,
+            6,
+        ):
+            assert (
+                orbits.solved_state_covariance.dimension[0].as_py()
+                == orbits.non_gravitational_parameters.solution_dimension[0].as_py()
+            )
 
 
 @contextmanager

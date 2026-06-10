@@ -78,30 +78,6 @@ _propagate_2body_vmap = jit(
 )
 
 
-def _orbits_have_non_gravitational_parameters(orbits: Orbits) -> bool:
-    nongrav = orbits.non_gravitational_parameters
-    if len(orbits) == 0:
-        return False
-
-    value_fields = (
-        "A1",
-        "A2",
-        "A3",
-        "DT",
-        "R0",
-        "ALN",
-        "NK",
-        "NM",
-        "NN",
-        "AMRAT",
-        "RHO",
-    )
-    for field in value_fields:
-        if any(value is not None for value in getattr(nongrav, field).to_pylist()):
-            return True
-    return False
-
-
 def _propagate_2body_serial(
     orbits: Orbits,
     times: Timestamp,
@@ -191,6 +167,9 @@ def _propagate_2body_serial(
         object_id=object_ids_,
         physical_parameters=physical_parameters_,
         non_gravitational_parameters=non_gravitational_parameters_,
+        solved_state_covariance=orbits.solved_state_covariance.take(
+            np.repeat(np.arange(len(orbits), dtype=np.int64), n_times)
+        ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=orbits_propagated[:, 0],
             y=orbits_propagated[:, 1],
@@ -228,6 +207,7 @@ def propagate_2body(
     max_iter: int = 1000,
     tol: float = 1e-14,
     *,
+    include_nongrav: bool = True,
     max_processes: Optional[int] = 1,
     chunk_size: int = 100,
 ) -> Orbits:
@@ -253,7 +233,10 @@ def propagate_2body(
     orbits : `~adam_core.orbits.orbits.Orbits` (N*M)
         Orbits propagated to each MJD.
     """
-    if _orbits_have_non_gravitational_parameters(orbits):
+    if not include_nongrav:
+        orbits = orbits.without_non_gravitational_parameters()
+
+    if orbits.has_non_gravitational_parameters():
         raise ValueError(
             "propagate_2body does not support non-gravitational accelerations. "
             "Use an n-body propagator such as adam_assist.ASSISTPropagator for "

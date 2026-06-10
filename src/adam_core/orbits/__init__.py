@@ -4,12 +4,14 @@
 from .ephemeris import Ephemeris
 from .non_gravitational_parameters import NonGravitationalParameters
 from .orbits import Orbits
+from .solved_state_covariances import SolvedStateCovariances
 from .variants import VariantOrbits
 
 __all__ = [
     "Ephemeris",
     "NonGravitationalParameters",
     "Orbits",
+    "SolvedStateCovariances",
     "VariantOrbits",
     "VariantEphemeris",
 ]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal, Optional, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -15,10 +15,14 @@ from ..utils.chunking import process_in_chunks
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
-from .geodetics import GeodeticCoordinates
+from .geodetics import GeodeticCoordinates, WGS84
 from .keplerian import KeplerianCoordinates
 from .origin import OriginCodes
 from .spherical import SphericalCoordinates
+from .covariances import (
+    transform_solved_state_covariances_jacobian,
+    transform_solved_state_covariances_linear,
+)
 
 config.update("jax_enable_x64", True)
 
@@ -38,9 +42,207 @@ CoordinatesClasses = (
     GeodeticCoordinates,
 )
 
+REPRESENTATION_PARAMETER_NAMES = {
+    CartesianCoordinates: ("x", "y", "z", "vx", "vy", "vz"),
+    CometaryCoordinates: ("q", "e", "i", "raan", "ap", "tp"),
+    KeplerianCoordinates: ("a", "e", "i", "raan", "ap", "M"),
+    SphericalCoordinates: ("rho", "lon", "lat", "vrho", "vlon", "vlat"),
+    GeodeticCoordinates: ("alt", "lon", "lat", "vup", "veast", "vnorth"),
+}
+
 
 Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 FLOAT_TOLERANCE = 1e-15
+SOLVED_STATE_CARTESIAN_PARAMETER_NAMES = ("x", "y", "z", "vx", "vy", "vz")
+
+if TYPE_CHECKING:
+    from ..orbits.solved_state_covariances import SolvedStateCovariances
+
+
+def _rename_solved_state_parameter_names(
+    solved_state_covariances: "SolvedStateCovariances",
+    orbital_parameter_names: tuple[str, str, str, str, str, str],
+) -> list[list[str] | None]:
+    renamed: list[list[str] | None] = []
+    for parameter_names in solved_state_covariances.parameter_names_list():
+        if len(parameter_names) == 0:
+            renamed.append(None)
+            continue
+        renamed.append(list(orbital_parameter_names) + parameter_names[6:])
+    return renamed
+
+
+def _transform_solved_state_covariances_to_cartesian(
+    coords: types.CoordinateType,
+    solved_state_covariances: "SolvedStateCovariances",
+) -> "SolvedStateCovariances":
+    from ..orbits.solved_state_covariances import SolvedStateCovariances
+
+    if solved_state_covariances.is_all_null():
+        return solved_state_covariances
+
+    covariances = solved_state_covariances.to_matrix()
+    if isinstance(coords, CartesianCoordinates):
+        return SolvedStateCovariances.from_matrix(
+            covariances,
+            _rename_solved_state_parameter_names(
+                solved_state_covariances, SOLVED_STATE_CARTESIAN_PARAMETER_NAMES
+            ),
+        )
+    if isinstance(coords, CometaryCoordinates):
+        transformed = transform_solved_state_covariances_jacobian(
+            coords.values,
+            covariances,
+            _cometary_to_cartesian,
+            in_axes=(0, 0, 0, None, None),
+            out_axes=0,
+            t0=coords.time.to_numpy(),
+            mu=coords.origin.mu(),
+            max_iter=100,
+            tol=1e-15,
+        )
+    elif isinstance(coords, KeplerianCoordinates):
+        transformed = transform_solved_state_covariances_jacobian(
+            coords.values,
+            covariances,
+            _keplerian_to_cartesian_a,
+            in_axes=(0, 0, None, None),
+            out_axes=0,
+            mu=coords.origin.mu(),
+            max_iter=1000,
+            tol=1e-15,
+        )
+    elif isinstance(coords, SphericalCoordinates):
+        transformed = transform_solved_state_covariances_jacobian(
+            coords.values,
+            covariances,
+            _spherical_to_cartesian,
+        )
+    else:
+        raise ValueError(
+            f"Solved-state covariance transforms to Cartesian are not supported for {type(coords)}"
+        )
+    return SolvedStateCovariances.from_matrix(
+        transformed,
+        _rename_solved_state_parameter_names(
+            solved_state_covariances, SOLVED_STATE_CARTESIAN_PARAMETER_NAMES
+        ),
+    )
+
+
+def _transform_solved_state_covariances_from_cartesian(
+    cartesian: CartesianCoordinates,
+    solved_state_covariances: "SolvedStateCovariances",
+    representation_out: type[types.CoordinateType],
+) -> "SolvedStateCovariances":
+    from ..orbits.solved_state_covariances import SolvedStateCovariances
+
+    if solved_state_covariances.is_all_null():
+        return solved_state_covariances
+
+    covariances = solved_state_covariances.to_matrix()
+    parameter_names_out = _rename_solved_state_parameter_names(
+        solved_state_covariances, REPRESENTATION_PARAMETER_NAMES[representation_out]
+    )
+    if representation_out is CartesianCoordinates:
+        return SolvedStateCovariances.from_matrix(covariances, parameter_names_out)
+    if representation_out is CometaryCoordinates:
+        transformed = transform_solved_state_covariances_jacobian(
+            cartesian.values,
+            covariances,
+            _cartesian_to_cometary,
+            in_axes=(0, 0, 0),
+            out_axes=0,
+            t0=cartesian.time.to_numpy(),
+            mu=cartesian.origin.mu(),
+        )
+    elif representation_out is KeplerianCoordinates:
+        transformed = transform_solved_state_covariances_jacobian(
+            cartesian.values,
+            covariances,
+            _cartesian_to_keplerian6,
+            in_axes=(0, 0, 0),
+            out_axes=0,
+            t0=cartesian.time.to_numpy(),
+            mu=cartesian.origin.mu(),
+        )
+    elif representation_out is SphericalCoordinates:
+        transformed = transform_solved_state_covariances_jacobian(
+            cartesian.values,
+            covariances,
+            _cartesian_to_spherical,
+        )
+    elif representation_out is GeodeticCoordinates:
+        transformed = transform_solved_state_covariances_jacobian(
+            cartesian.values,
+            covariances,
+            _cartesian_to_geodetic,
+            a=WGS84.a,
+            f=WGS84.f,
+        )
+    else:
+        raise ValueError(
+            f"Solved-state covariance transforms from Cartesian are not supported for {representation_out}"
+        )
+    return SolvedStateCovariances.from_matrix(transformed, parameter_names_out)
+
+
+def _rotation_matrices_to_frame(
+    coords: CartesianCoordinates, frame_out: Literal["ecliptic", "equatorial", "itrf93"]
+) -> np.ndarray:
+    if frame_out == "ecliptic" and coords.frame == "equatorial":
+        return np.repeat(TRANSFORM_EQ2EC.reshape(1, 6, 6), len(coords), axis=0)
+    if frame_out == "equatorial" and coords.frame == "ecliptic":
+        return np.repeat(TRANSFORM_EC2EQ.reshape(1, 6, 6), len(coords), axis=0)
+    if frame_out == coords.frame:
+        return np.repeat(np.eye(6).reshape(1, 6, 6), len(coords), axis=0)
+    if frame_out == "itrf93" and coords.frame != "itrf93" or (
+        frame_out != "itrf93" and coords.frame == "itrf93"
+    ):
+        from ..utils.spice import setup_SPICE
+        from ..constants import KM_P_AU, S_P_DAY
+
+        setup_SPICE()
+        if frame_out == "itrf93":
+            frame_spice_out = "ITRF93"
+        elif frame_out == "ecliptic":
+            frame_spice_out = "ECLIPJ2000"
+        elif frame_out == "equatorial":
+            frame_spice_out = "J2000"
+        else:
+            raise ValueError("Unsupported frame: {}".format(frame_out))
+
+        frame_in = coords.frame
+        if frame_in == "itrf93":
+            frame_spice_in = "ITRF93"
+        elif frame_in == "ecliptic":
+            frame_spice_in = "ECLIPJ2000"
+        elif frame_in == "equatorial":
+            frame_spice_in = "J2000"
+        else:
+            raise ValueError("Unsupported frame: {}".format(frame_in))
+
+        matrices = np.zeros((len(coords), 6, 6), dtype=np.float64)
+        rotation_unit_conversion = np.zeros((6, 6))
+        rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
+        rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
+        unique_times = coords.time.unique()
+        for time in unique_times:
+            time_mask = pc.and_(
+                pc.equal(coords.time.days, time.days[0]),
+                pc.equal(coords.time.nanos, time.nanos[0]),
+            ).to_numpy(zero_copy_only=False)
+            rotation_matrix_6x6_kms = sp.sxform(
+                frame_spice_in, frame_spice_out, time.et().to_numpy(zero_copy_only=False)[0]
+            )
+            rotation_matrix_6x6_aud = (
+                np.linalg.inv(rotation_unit_conversion)
+                @ rotation_matrix_6x6_kms
+                @ rotation_unit_conversion
+            )
+            matrices[time_mask] = rotation_matrix_6x6_aud
+        return matrices
+    raise ValueError("Unsupported frame transform.")
 
 
 @jit
@@ -1678,7 +1880,8 @@ def transform_coordinates(
     representation_out: Optional[type[types.CoordinateType]] = None,
     frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,
     origin_out: Optional[OriginCodes] = None,
-) -> types.CoordinateType:
+    solved_state_covariances: Optional["SolvedStateCovariances"] = None,
+) -> types.CoordinateType | tuple[types.CoordinateType, "SolvedStateCovariances"]:
     """
     Transform coordinates between frames ('ecliptic', 'equatorial', 'itrf93'), origins,
     and/or representations ('cartesian', 'spherical', 'keplerian', 'cometary').
@@ -1700,11 +1903,17 @@ def transform_coordinates(
         or a str of an observatory code, but the output origin (this kwarg) should always be an
         `~adam_core.coordinates.origin.OriginCodes`. If you are looking to generate ephemerides
         for an observatory, please use a `~adam_core.propagator.propagator.Propagator` instead.
+    solved_state_covariances : `~adam_core.orbits.solved_state_covariances.SolvedStateCovariances`, optional
+        Optional solved-state covariance matrices paired row-by-row with `coords`. When supplied,
+        the returned value is a `(coordinates, solved_state_covariances)` tuple with the full
+        `6+k` covariance transformed alongside the coordinate representation/frame changes.
 
     Returns
     -------
     coords_out : `~adam_core.coordinates.Coordinates`
         Coordinates in desired output representation and frame.
+    solved_state_covariances_out : optional
+        Returned only when `solved_state_covariances` is provided.
 
     Raises
     ------
@@ -1725,6 +1934,8 @@ def transform_coordinates(
 
     if origin_out is not None and not isinstance(origin_out, OriginCodes):
         raise TypeError("Unsupported origin_out type: {}".format(type(origin_out)))
+    if solved_state_covariances is not None and len(solved_state_covariances) != len(coords):
+        raise ValueError("solved_state_covariances must have the same length as coords.")
 
     if representation_out is None:
         representation_out_ = coords.__class__
@@ -1756,9 +1967,16 @@ def transform_coordinates(
     # also can be checked for equality.
     if type(coords) is representation_out_:
         if coord_frame == frame_out and np.all(coord_origin == origin_out):
-            return coords
+            if solved_state_covariances is None:
+                return coords
+            return coords, solved_state_covariances
 
+    solved_state_covariances_ = solved_state_covariances
     if not isinstance(coords, CartesianCoordinates):
+        if solved_state_covariances_ is not None:
+            solved_state_covariances_ = _transform_solved_state_covariances_to_cartesian(
+                coords, solved_state_covariances_
+            )
         cartesian = coords.to_cartesian()
     else:
         cartesian = coords
@@ -1769,11 +1987,31 @@ def transform_coordinates(
 
     # Rotate coordinates to new frame (if different from current)
     if cartesian.frame != frame_out:
+        if solved_state_covariances_ is not None:
+            from ..orbits.solved_state_covariances import SolvedStateCovariances
+
+            solved_state_covariances_ = SolvedStateCovariances.from_matrix(
+                transform_solved_state_covariances_linear(
+                    _rotation_matrices_to_frame(cartesian, frame_out),
+                    solved_state_covariances_.to_matrix(),
+                ),
+                solved_state_covariances_.parameter_names_list(),
+            )
         cartesian = cartesian_to_frame(cartesian, frame_out)
 
     # You might think this should be 'isinstance', but no! We're
     # checking whether the input is a particular class variable, not
     # an instance of a class.
     if representation_out_ is CartesianCoordinates:
-        return cartesian
-    return representation_out_.from_cartesian(cartesian)
+        if solved_state_covariances_ is None:
+            return cartesian
+        return cartesian, solved_state_covariances_
+    coords_out = representation_out_.from_cartesian(cartesian)
+    if solved_state_covariances_ is None:
+        return coords_out
+    return (
+        coords_out,
+        _transform_solved_state_covariances_from_cartesian(
+            cartesian, solved_state_covariances_, representation_out_
+        ),
+    )

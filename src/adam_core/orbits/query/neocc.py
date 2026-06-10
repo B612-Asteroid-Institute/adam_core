@@ -5,13 +5,17 @@ import numpy.typing as npt
 import quivr as qv
 import requests
 
-from adam_core.coordinates.covariances import _upper_triangular_to_full
+from adam_core.coordinates.covariances import (
+    _upper_triangular_to_full,
+    transform_solved_state_covariances_jacobian,
+)
 
 from ...coordinates import CoordinateCovariances, KeplerianCoordinates, Origin
 from ..non_gravitational_parameters import NonGravitationalParameters
 from ...orbits import Orbits
 from ...time import Timestamp
 from ..physical_parameters import PhysicalParameters
+from ..solved_state_covariances import ORBITAL_PARAMETER_NAMES, SolvedStateCovariances
 
 
 def _upper_triangular_to_full_dimension(
@@ -288,6 +292,8 @@ def query_neocc(
     object_ids: Union[List, npt.ArrayLike],
     orbit_type: Literal["ke", "eq"] = "ke",
     orbit_epoch: Literal["middle", "present-day"] = "present-day",
+    *,
+    include_nongrav: bool = True,
 ) -> Orbits:
     """
     Query ESA's Near-Earth Object Coordination Centre (NEOCC) database for orbital elements of the specified NEOs.
@@ -346,31 +352,56 @@ def query_neocc(
 
             phys = _physical_parameters_from_neocc(data)
             nongrav = _non_gravitational_parameters_from_neocc(data)
+            solve_for = _solve_for_codes_to_names(
+                (data.get("nongrav") or {}).get("solve_for_parameter_codes") or []
+            )
+            parameter_names = ["a", "e", "i", "raan", "ap", "M"] + solve_for
+            solved_covariance_native = data.get("covariance_full")
+
+            keplerian_coordinates = KeplerianCoordinates.from_kwargs(
+                a=[data["elements"]["a"]],
+                e=[data["elements"]["e"]],
+                i=[data["elements"]["i"]],
+                raan=[data["elements"]["node"]],
+                ap=[data["elements"]["peri"]],
+                M=[data["elements"]["M"]],
+                time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
+                covariance=CoordinateCovariances.from_matrix(
+                    data["covariance"].reshape(
+                        1,
+                        6,
+                        6,
+                    )
+                ),
+                frame="ecliptic",
+                origin=Origin.from_kwargs(code=["SUN"]),
+            )
+            from ...coordinates.transform import _keplerian_to_cartesian_a
+
+            solved_covariance_cartesian = transform_solved_state_covariances_jacobian(
+                keplerian_coordinates.values,
+                [solved_covariance_native],
+                _keplerian_to_cartesian_a,
+                in_axes=(0, 0, None, None),
+                out_axes=0,
+                mu=keplerian_coordinates.origin.mu(),
+                max_iter=1000,
+                tol=1e-15,
+            )
 
             orbit = Orbits.from_kwargs(
                 orbit_id=[data["object_id"]],
                 object_id=[data["object_id"]],
-                coordinates=KeplerianCoordinates.from_kwargs(
-                    a=[data["elements"]["a"]],
-                    e=[data["elements"]["e"]],
-                    i=[data["elements"]["i"]],
-                    raan=[data["elements"]["node"]],
-                    ap=[data["elements"]["peri"]],
-                    M=[data["elements"]["M"]],
-                    time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
-                    covariance=CoordinateCovariances.from_matrix(
-                        data["covariance"].reshape(
-                            1,
-                            6,
-                            6,
-                        )
-                    ),
-                    frame="ecliptic",
-                    origin=Origin.from_kwargs(code=["SUN"]),
-                ).to_cartesian(),
+                coordinates=keplerian_coordinates.to_cartesian(),
                 physical_parameters=phys,
                 non_gravitational_parameters=nongrav,
+                solved_state_covariance=SolvedStateCovariances.from_matrix(
+                    solved_covariance_cartesian,
+                    [list(ORBITAL_PARAMETER_NAMES) + solve_for]
+                    if solved_covariance_native is not None
+                    else [None],
+                ),
             )
             orbits = qv.concatenate([orbits, orbit])
 
-    return orbits
+    return orbits if include_nongrav else orbits.without_non_gravitational_parameters()

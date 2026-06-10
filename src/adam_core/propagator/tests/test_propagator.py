@@ -17,6 +17,7 @@ from ...coordinates.transform import transform_coordinates
 from ...observations.exposures import Exposures
 from ...observers.observers import Observers
 from ...orbits.ephemeris import Ephemeris
+from ...orbits.non_gravitational_parameters import NonGravitationalParameters
 from ...orbits.orbits import Orbits
 from ...orbits.physical_parameters import PhysicalParameters
 from ...orbits.variants import VariantEphemeris, VariantOrbits
@@ -618,13 +619,69 @@ def test_propagator_multiple_workers_ray():
     time_ref = ray.put(times)
 
     have = prop.propagate_orbits(orbits_ref, time_ref, max_processes=4)
-
     assert len(have) == len(orbits) * len(times)
 
     observers_ref = ray.put(observers)
     have = prop.generate_ephemeris(orbits_ref, observers_ref, max_processes=4)
 
     assert len(have) == len(orbits) * len(times)
+
+
+def test_propagate_orbits_include_nongrav_false_strips_nongrav():
+    prop = MockPropagator()
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            source=["SBDB"],
+            model=["nongrav"],
+            solution_dimension=[7],
+            parameter_count=[1],
+            estimated_parameter_names=["A2"],
+            A1=[None],
+            A1_sigma=[None],
+            A2=[-2.9e-14],
+            A2_sigma=[1e-15],
+            A3=[None],
+            A3_sigma=[None],
+            DT=[None],
+            DT_sigma=[None],
+            R0=[None],
+            R0_sigma=[None],
+            ALN=[None],
+            ALN_sigma=[None],
+            NK=[None],
+            NK_sigma=[None],
+            NM=[None],
+            NM_sigma=[None],
+            NN=[None],
+            NN_sigma=[None],
+            AMRAT=[None],
+            AMRAT_sigma=[None],
+            RHO=[None],
+            RHO_sigma=[None],
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=Timestamp.from_mjd([60000], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    propagated = prop.propagate_orbits(
+        orbits,
+        Timestamp.from_mjd([60001], scale="tdb"),
+        include_nongrav=False,
+    )
+
+    assert propagated.non_gravitational_parameters.A2[0].as_py() is None
+    assert propagated.solved_state_covariance.dimension[0].as_py() is None
 
 
 def test_propagate_orbits_multiple_workers_ray_variant_orbits_input():

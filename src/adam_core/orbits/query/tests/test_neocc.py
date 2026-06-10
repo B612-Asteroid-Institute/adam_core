@@ -149,6 +149,7 @@ def test_query_neocc(mocker):
     assert orbits.coordinates.time.scale == "tt"
     assert np.all(~np.isnan(orbits.coordinates.values))
     assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
+    assert orbits.solved_state_covariance.dimension.to_pylist() == [6, 6]
     # Physical parameters from OEF MAG (H, G); no uncertainties in NEOCC OEF
     assert orbits.physical_parameters is not None
     assert orbits.physical_parameters.H_v[0].as_py() == 24.047
@@ -190,6 +191,7 @@ def test_query_neocc(mocker):
     assert orbits.coordinates.time.scale == "tt"
     assert np.all(~np.isnan(orbits.coordinates.values))
     assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
+    assert orbits.solved_state_covariance.dimension.to_pylist() == [6, 6]
 
     # Verify the mock was called with correct parameters
     requests.get.assert_has_calls(
@@ -265,6 +267,46 @@ def test__non_gravitational_parameters_from_neocc_yarkovsky() -> None:
     assert nongrav.estimated_parameter_names[0].as_py() == "A2"
     assert nongrav.AMRAT[0].as_py() == 0.0
     assert np.isclose(nongrav.A2[0].as_py(), -4.60477568857430e-14)
+
+
+def test_query_neocc_preserves_full_solved_state_covariance(mocker):
+    response_text = (TESTDATA_DIR / "99942.ke1").read_text()
+
+    def mock_get(url, params):
+        mock = mocker.MagicMock()
+        mock.status_code = 200
+        mock.text = response_text
+        return mock
+
+    mocker.patch("requests.get", side_effect=mock_get)
+    orbits = query_neocc(["99942"], orbit_type="ke", orbit_epoch="present-day")
+
+    assert orbits.solved_state_covariance.dimension[0].as_py() == 7
+    assert (
+        orbits.solved_state_covariance.parameter_names[0].as_py()
+        == "x,y,z,vx,vy,vz,A2"
+    )
+    covariance = orbits.solved_state_covariance.to_matrix()[0]
+    assert covariance is not None
+    assert covariance.shape == (7, 7)
+
+
+def test_query_neocc_include_nongrav_false_strips_nongrav(mocker):
+    response_text = (TESTDATA_DIR / "99942.ke1").read_text()
+
+    def mock_get(url, params):
+        mock = mocker.MagicMock()
+        mock.status_code = 200
+        mock.text = response_text
+        return mock
+
+    mocker.patch("requests.get", side_effect=mock_get)
+    orbits = query_neocc(
+        ["99942"], orbit_type="ke", orbit_epoch="present-day", include_nongrav=False
+    )
+
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert orbits.solved_state_covariance.dimension[0].as_py() is None
 
 
 def test_real_neocc_oef_files_parse_without_error() -> None:
