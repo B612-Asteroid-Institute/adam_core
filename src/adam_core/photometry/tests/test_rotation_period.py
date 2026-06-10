@@ -354,3 +354,43 @@ def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
     assert "period_implausibly_long" in list(result.insufficiency_reasons[0].as_py())
     # The recovered period value itself is still reported, only downgraded.
     assert float(_scalar(result.period_hours[0])) == pytest.approx(long_period_days * 24.0)
+
+
+def test_subharmonic_alias_below_grid_is_capped_to_family():
+    # True period 20 h but the 30 h span (min_rotations_in_span=2) puts f_true
+    # below the grid floor, so the solver locks onto the in-grid 2x alias (~10 h).
+    # The lightcurve carries an odd 1st harmonic that genuinely distinguishes P
+    # from P/2, so the sub-harmonic guardrail must refuse a confident single_period
+    # and cap at period_family rather than emit the 0.5x alias (the cardinal D1
+    # failure).
+    rng = np.random.default_rng(7)
+    p_true_d = 20.0 / 24.0
+    n = 180
+    t = np.sort(rng.uniform(0.0, 30.0 / 24.0, size=n)) + 60500.0
+    omega = 2.0 * np.pi / p_true_d
+    dt = t - t[0]
+    rot = (
+        0.20 * np.cos(2.0 * omega * dt)
+        + 0.10 * np.cos(4.0 * omega * dt + 0.4)
+        + 0.05 * np.cos(omega * dt + 1.1)
+    )
+    mag = 18.0 + rot + rng.normal(0.0, 0.01, size=n)
+    obs = RotationPeriodObservations.from_kwargs(
+        time=Timestamp.from_mjd(pa.array(t, type=pa.float64()), scale="tdb"),
+        mag=pa.array(mag, type=pa.float64()),
+        mag_sigma=pa.array(np.full(n, 0.01), type=pa.float64()),
+        predicted_mag_v=pa.nulls(n, type=pa.float64()),
+        filter=pa.array(["r"] * n, type=pa.large_string()),
+        session_id=pa.nulls(n, type=pa.large_string()),
+        r_au=pa.array(np.full(n, 1.0), type=pa.float64()),
+        delta_au=pa.array(np.full(n, 1.0), type=pa.float64()),
+        phase_angle_deg=pa.array(np.linspace(5.0, 5.4, n), type=pa.float64()),
+    )
+    result = estimate_rotation_period(
+        obs, search_fidelity="exact_grid", max_frequency_cycles_per_day=50.0
+    )
+    # The recovered value is the in-grid 0.5x alias (~10 h) -- kept, but the
+    # verdict is hedged, not a confident single_period.
+    assert float(_scalar(result.period_hours[0])) == pytest.approx(10.0, rel=0.1)
+    assert _scalar(result.period_verdict[0]) == "period_family"
+    assert "subharmonic_unresolved" in list(result.insufficiency_reasons[0].as_py())

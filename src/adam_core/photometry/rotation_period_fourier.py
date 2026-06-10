@@ -1966,6 +1966,7 @@ def estimate_rotation_period(
     )
     fourier_solution = baseline_fourier
     used_session_offsets = False
+    chosen_design = base_design
 
     if session_labels is not None and session_mode in {"use", "auto"}:
         session_design = _build_fixed_design(filter_labels, session_labels, phase_angle)
@@ -1987,6 +1988,7 @@ def estimate_rotation_period(
         if session_mode == "use":
             fourier_solution = session_fourier
             used_session_offsets = True
+            chosen_design = session_design
         else:
             # Per-session magnitude offsets are identifiable once there are a few
             # sessions that each carry enough points; the BIC test below then
@@ -2007,6 +2009,7 @@ def estimate_rotation_period(
             ):
                 fourier_solution = session_fourier
                 used_session_offsets = True
+                chosen_design = session_design
 
     lsm_solution = _LSMSolution(
         period_days=None,
@@ -2063,6 +2066,51 @@ def estimate_rotation_period(
         primary["insufficiency_reasons"] = downgrade_reasons
         primary["is_valid"] = True
         primary["is_reliable"] = False
+
+    # Sub-harmonic confidence guardrail.  When the span is short enough that the
+    # recovered period sits at the long-period edge of the search grid -- fewer
+    # than ~4 rotations spanned, so HALF the recovered frequency falls below the
+    # grid floor -- the true period may be the unsearched 2x period and the
+    # recovered value its 0.5x alias (the cardinal D1 failure: a confident
+    # harmonic alias).  The in-grid alias clusters cannot catch this because the
+    # competing period was never searched.  So fit explicitly at f/2 (the doubled
+    # period, below the floor); if that fit is statistically competitive with the
+    # chosen one (within the cluster acceptance band), the two periods are
+    # indistinguishable and a single_period verdict is capped at period_family.
+    if (
+        str(primary["primary_method"]) == "fourier"
+        and str(primary["period_verdict"]) == _VERDICT_SINGLE
+        and np.isfinite(period_days)
+        and period_days > 0.0
+        and 0.5 / period_days < float(frequencies[0])
+    ):
+        # Give the doubled period FULL model capacity (max order): folding a true
+        # single period at 2P yields two near-identical cycles that any even-only
+        # model fits trivially, so only a higher-order fit can pick up the
+        # odd-harmonic asymmetry that genuinely distinguishes a real 2P from a 0.5x
+        # alias.  If that fit then explains the data STRICTLY better than the chosen
+        # in-grid fit (despite its extra parameters and the df penalty in
+        # residual_sigma), the recovered period is the alias.
+        half_fit = _fit_frequency(
+            t_rel,
+            reduced_mag,
+            chosen_design,
+            0.5 / period_days,
+            int(max(resolved_profile.orders)),
+            clip_sigma=clip_sigma,
+            weights=weights,
+        )
+        if half_fit is not None and float(half_fit.residual_sigma) < float(
+            fourier_solution.fit_summary.residual_sigma
+        ):
+            primary["period_verdict"] = _VERDICT_FAMILY
+            primary["reliability_code"] = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
+            downgrade_reasons = list(cast("list[str]", primary["insufficiency_reasons"]))
+            if "subharmonic_unresolved" not in downgrade_reasons:
+                downgrade_reasons.append("subharmonic_unresolved")
+            primary["insufficiency_reasons"] = downgrade_reasons
+            primary["is_valid"] = True
+            primary["is_reliable"] = False
 
     return _assemble_result(
         primary=primary,
