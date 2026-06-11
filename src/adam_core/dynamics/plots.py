@@ -179,10 +179,11 @@ def prepare_propagated_variants(
         close_approach_variant_ids = set(
             close_approaches_on_colliding_body.variant_id.unique().to_pylist()
         )
-        impacting_variant_ids_for_body = set(
-            impacts_on_colliding_body.variant_id.unique().to_pylist()
-        )
-        close_approach_variant_ids.difference_update(impacting_variant_ids_for_body)
+        # Exclude variants with a stopping impact on ANY body: they are
+        # rendered in that body's Impacting group (with post-impact positions
+        # clamped to the surface), and rendering the same variant a second
+        # time here would show contradictory raw post-impact positions.
+        close_approach_variant_ids.difference_update(impact_variant_ids)
 
         if close_approach_variant_ids:
             close_approach_variant_ids_arrow = pa.array(
@@ -207,15 +208,38 @@ def _closest_event_time_window(
 ) -> tuple[float, float]:
     """
     Compute a focused visualization window centered on closest events.
+
+    The window brackets the per-variant closest-event times between
+    `window_percentiles` (so up to the trimmed percentile tails of variants
+    reach their closest event outside the window) and then extends both sides
+    by `window_padding`, which is in minutes.
     """
     if len(impacts) == 0:
         raise ValueError("No collision events available for visualization.")
 
     body_codes = impacts.collision_object.code.to_numpy(zero_copy_only=False)
     available_bodies = sorted(set(body_codes.tolist()))
+    stopping_condition = impacts.stopping_condition.to_numpy(zero_copy_only=False)
 
     if focus_body is None:
-        selected_body = "MOON" if "MOON" in available_bodies else available_bodies[0]
+        # Prefer a body with actual (stopping) impacts, then the Moon, then
+        # whatever body has events.
+        bodies_with_stopping_impacts = sorted(
+            set(body_codes[stopping_condition.astype(bool)].tolist())
+        )
+        if bodies_with_stopping_impacts:
+            selected_body = bodies_with_stopping_impacts[0]
+        elif "MOON" in available_bodies:
+            selected_body = "MOON"
+        else:
+            selected_body = available_bodies[0]
+        if len(available_bodies) > 1:
+            logger.warning(
+                "Collision events exist for multiple bodies (%s) and no "
+                "focus_body was specified; focusing the window on %s.",
+                ", ".join(available_bodies),
+                selected_body,
+            )
     else:
         if focus_body not in available_bodies:
             raise ValueError(
@@ -223,7 +247,6 @@ def _closest_event_time_window(
             )
         selected_body = focus_body
 
-    stopping_condition = impacts.stopping_condition.to_numpy(zero_copy_only=False)
     rho = impacts.collision_coordinates.rho.to_numpy(zero_copy_only=False)
     times_mjd = impacts.coordinates.time.mjd().to_numpy(zero_copy_only=False)
     variant_ids = impacts.variant_id.to_numpy(zero_copy_only=False)
@@ -319,7 +342,10 @@ def generate_impact_visualization_data(
         Time window selection mode. "event_range" uses full first/last event range
         with time_range padding. "closest_approach" focuses on closest events.
     focus_body: Optional[Literal["EARTH", "MOON"]]
-        Body used by closest_approach window mode. Defaults to MOON if present.
+        Body used by closest_approach window mode. Defaults to a body with
+        stopping impacts, then MOON if present, then the first body with
+        events; a warning is logged when multiple bodies have events and no
+        focus_body is given.
     window_percentiles: Tuple[float, float]
         Percentiles used to bracket closest-event times in closest_approach mode.
     window_padding: float
@@ -373,6 +399,15 @@ def generate_impact_visualization_data(
             window_minutes = (end_mjd - start_mjd) * 24 * 60
             auto_time_step = max(min_time_step, window_minutes / (target_frames - 1))
             effective_time_step = max(time_step, auto_time_step)
+            if effective_time_step != time_step:
+                logger.warning(
+                    "time_step=%.3f min was coarsened to %.3f min to keep the "
+                    "frame count near target_frames=%d; pass target_frames=None "
+                    "to disable auto-scaling.",
+                    time_step,
+                    effective_time_step,
+                    target_frames,
+                )
     else:
         raise ValueError(
             f"Unknown window_mode '{window_mode}'. Expected 'event_range' or 'closest_approach'."

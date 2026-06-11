@@ -434,6 +434,43 @@ def test_query_sbdb_new_populates_non_gravitational_parameters() -> None:
     )
 
 
+def test_query_sbdb_new_solved_state_covariance_values() -> None:
+    payload = _load_sbdb_fixture_payload("99942_phys.json")
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["99942"], timeout_s=1.0, max_attempts=1)
+
+    solved = orbits.solved_state_covariance.to_matrix()[0]
+    assert solved.shape == (8, 8)
+    assert (
+        orbits.solved_state_covariance.parameter_names[0].as_py()
+        == "x,y,z,vx,vy,vz,A1,A2"
+    )
+    # The leading 6x6 block must equal the coordinate covariance: both are
+    # transformed cometary -> Cartesian through the same Jacobian. A broken
+    # permutation or unit scaling would fail this.
+    npt.assert_allclose(
+        solved[:6, :6],
+        orbits.coordinates.covariance.to_matrix()[0],
+        rtol=1e-10,
+    )
+    # The A1/A2 diagonal entries are invariant under the orbital-block
+    # Jacobian and must agree with the payload's own sigma fields, which SBDB
+    # reports in canonical au/d^2.
+    npt.assert_allclose(np.sqrt(solved[6, 6]), 4.892e-13, rtol=1e-3)
+    npt.assert_allclose(np.sqrt(solved[7, 7]), 1.859e-16, rtol=1e-3)
+    npt.assert_allclose(
+        orbits.non_gravitational_parameters.A1_sigma[0].as_py(), 4.892e-13, rtol=1e-3
+    )
+    npt.assert_allclose(
+        orbits.non_gravitational_parameters.A2_sigma[0].as_py(), 1.859e-16, rtol=1e-3
+    )
+
+
 def test_query_sbdb_new_include_nongrav_false_strips_nongrav() -> None:
     payload = _load_sbdb_fixture_payload("67P_phys.json")
 

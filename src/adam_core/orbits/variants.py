@@ -32,7 +32,6 @@ from .solved_state_covariances import (
     ORBITAL_PARAMETER_NAMES,
     SolvedStateCovariances,
     build_solved_state,
-    parse_parameter_names,
 )
 
 
@@ -44,26 +43,45 @@ def _sample_covariance(
     alpha: float,
     beta: float,
     kappa: float,
-    seed: Optional[int],
+    seed,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    # Sample in a whitened basis: solved-state covariances mix orbital
+    # variances (~1e-8) with non-grav variances (~1e-26). At that conditioning
+    # both scipy's PSD factorization and sqrtm truncate the small eigenvalues,
+    # silently producing zero spread in the non-grav dimensions.
+    mean = np.asarray(mean, dtype=np.float64)
+    cov = np.asarray(cov, dtype=np.float64)
+    scales = np.sqrt(np.diag(cov))
+    scales[scales == 0.0] = 1.0
+    whitened_cov = cov / np.outer(scales, scales)
+    whitened_mean = np.zeros_like(mean)
+
     if method == "sigma-point":
-        return sample_covariance_sigma_points(
-            mean, cov, alpha=alpha, beta=beta, kappa=kappa
-        )
-    if method == "monte-carlo":
-        return sample_covariance_random(mean, cov, num_samples=num_samples, seed=seed)
-    if method == "auto":
         samples, weights, weights_cov = sample_covariance_sigma_points(
-            mean, cov, alpha=alpha, beta=beta, kappa=kappa
+            whitened_mean, whitened_cov, alpha=alpha, beta=beta, kappa=kappa
+        )
+    elif method == "monte-carlo":
+        samples, weights, weights_cov = sample_covariance_random(
+            whitened_mean, whitened_cov, num_samples=num_samples, seed=seed
+        )
+    elif method == "auto":
+        samples, weights, weights_cov = sample_covariance_sigma_points(
+            whitened_mean, whitened_cov, alpha=alpha, beta=beta, kappa=kappa
         )
         mean_sg = weighted_mean(samples, weights)
         cov_sg = weighted_covariance(mean_sg, samples, weights_cov)
-        if np.any(np.abs(mean_sg - mean) >= 1e-12) or np.any(
-            np.abs(cov_sg - cov) >= 1e-12
+        # In the whitened basis every variance is ~1, so an absolute tolerance
+        # is meaningful for all dimensions.
+        if np.any(np.abs(mean_sg - whitened_mean) >= 1e-12) or np.any(
+            np.abs(cov_sg - whitened_cov) >= 1e-12
         ):
-            return sample_covariance_random(mean, cov, num_samples=num_samples, seed=seed)
-        return samples, weights, weights_cov
-    raise ValueError(f"Unknown covariance sampling method: {method}")
+            samples, weights, weights_cov = sample_covariance_random(
+                whitened_mean, whitened_cov, num_samples=num_samples, seed=seed
+            )
+    else:
+        raise ValueError(f"Unknown covariance sampling method: {method}")
+
+    return mean + samples * scales, weights, weights_cov
 
 
 def _nongrav_columns_dict() -> dict[str, list[object]]:
@@ -84,11 +102,10 @@ def _append_nongrav_variant_rows(
         name: getattr(base, name)[row_index].as_py()
         for name in NonGravitationalParameters.schema.names
     }
-    nongrav_names = [name for name in parameter_names if name in NON_GRAVITATIONAL_PARAMETER_NAMES]
     for sample in samples:
         row = dict(base_row)
         for offset, name in enumerate(parameter_names):
-            if name in nongrav_names:
+            if name in NON_GRAVITATIONAL_PARAMETER_NAMES:
                 row[name] = float(sample[offset])
         for name in columns:
             columns[name].append(row.get(name))
@@ -124,6 +141,15 @@ def _joint_sample_variants(
     solved_covariances = orbits.solved_state_covariance.to_matrix()
     solved_names = orbits.solved_state_covariance.parameter_names_list()
 
+    # Spawn an independent child seed per orbit: reusing the same seed for
+    # every orbit would draw identical underlying normals, perfectly
+    # correlating the variants across orbits.
+    if seed is not None:
+        child_seeds = np.random.SeedSequence(seed).spawn(len(orbits))
+        orbit_seeds = [np.random.default_rng(child) for child in child_seeds]
+    else:
+        orbit_seeds = [None] * len(orbits)
+
     orbit_id_rows: list[str] = []
     object_id_rows: list[object] = []
     variant_id_rows: list[str] = []
@@ -148,12 +174,22 @@ def _joint_sample_variants(
                 "Solved-state covariance parameter ordering must begin with x,y,z,vx,vy,vz."
             )
 
+        orbit_id = orbit.orbit_id[0].as_py()
+        object_id = orbit.object_id[0].as_py()
+
         mean = build_solved_state(
             orbit.coordinates.values[0],
             orbit.non_gravitational_parameters,
             0,
             parameter_names,
         )
+        if not (
+            np.all(np.isfinite(mean)) and np.all(np.isfinite(solved_covariance))
+        ):
+            raise ValueError(
+                f"Solved-state covariance sampling requires finite mean and "
+                f"covariance values for orbit {orbit_id}."
+            )
         samples, weights, weights_cov = _sample_covariance(
             mean,
             solved_covariance,
@@ -162,10 +198,8 @@ def _joint_sample_variants(
             alpha=alpha,
             beta=beta,
             kappa=kappa,
-            seed=seed,
+            seed=orbit_seeds[orbit_index],
         )
-        orbit_id = orbit.orbit_id[0].as_py()
-        object_id = orbit.object_id[0].as_py()
         for sample_index in range(len(samples)):
             orbit_id_rows.append(orbit_id)
             object_id_rows.append(object_id)
@@ -228,6 +262,13 @@ class VariantOrbits(qv.Table):
     non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
     solved_state_covariance = SolvedStateCovariances.as_column(nullable=True)
 
+    def has_non_gravitational_parameters(self) -> bool:
+        """
+        Return True if any variant carries a non-zero non-gravitational
+        parameter value.
+        """
+        return self.non_gravitational_parameters.has_values()
+
     def without_non_gravitational_parameters(self) -> "VariantOrbits":
         return self.set_column(
             "non_gravitational_parameters",
@@ -268,7 +309,9 @@ class VariantOrbits(qv.Table):
         If the covariance matrix is not well behaved then monte-carlo sampling will be used.
 
         When sampling with monte-carlo, 10k samples are drawn. Sigma-point sampling draws 13 samples
-        for 6-dimensional coordinates.
+        for 6-dimensional coordinates. Orbits that carry a solved-state covariance are jointly
+        sampled in the full 6+k dimensional solved state (orbital state plus non-gravitational
+        parameters), in which case sigma-point sampling draws 2*(6+k)+1 samples per orbit.
 
         Parameters
         ----------
@@ -285,24 +328,64 @@ class VariantOrbits(qv.Table):
             Prior knowledge of the distribution when generating sigma points usually set to 2 for a Gaussian.
         kappa : float, optional
             Secondary scaling parameter when generating sigma points usually set to 0.
+        seed : int, optional
+            Seed for reproducible monte-carlo sampling. Each orbit receives an
+            independent child seed spawned from this value.
+        include_nongrav : bool, optional
+            If True (default), orbits with a solved-state covariance are jointly sampled
+            in the full 6+k dimensional state. If False, the non-gravitational parameter
+            and solved-state covariance columns are stripped and only the 6x6 coordinate
+            covariance is sampled.
 
         Returns
         -------
         variants_orbits : '~adam_core.orbits.variants.VariantOrbits'
-            The variant orbits.
+            The variant orbits. When the input mixes orbits with and without solved-state
+            covariances, variants for the solved-state orbits are returned first, so row
+            order does not necessarily follow the input orbit order.
         """
         if not include_nongrav:
             orbits = orbits.without_non_gravitational_parameters()
 
         if not orbits.solved_state_covariance.is_all_null():
-            return _joint_sample_variants(
-                orbits,
+            solved_mask = pc.is_valid(orbits.solved_state_covariance.dimension)
+            if pc.all(solved_mask).as_py():
+                return _joint_sample_variants(
+                    orbits,
+                    method=method,
+                    num_samples=num_samples,
+                    alpha=alpha,
+                    beta=beta,
+                    kappa=kappa,
+                    seed=seed,
+                )
+            # Mixed coverage: jointly sample the orbits that have a solved-state
+            # covariance and route the rest through the 6D coordinate path.
+            joint_variants = _joint_sample_variants(
+                orbits.apply_mask(solved_mask),
                 method=method,
                 num_samples=num_samples,
                 alpha=alpha,
                 beta=beta,
                 kappa=kappa,
                 seed=seed,
+            )
+            coordinate_only_variants = cls.create(
+                orbits.apply_mask(pc.invert(solved_mask)),
+                method=method,
+                num_samples=num_samples,
+                alpha=alpha,
+                beta=beta,
+                kappa=kappa,
+                seed=seed,
+                include_nongrav=include_nongrav,
+            )
+            combined = qv.concatenate([joint_variants, coordinate_only_variants])
+            return combined.set_column(
+                "variant_id",
+                pa.array(
+                    np.arange(len(combined)).astype(str), type=pa.large_string()
+                ),
             )
 
         variant_coordinates: VariantCoordinatesTable = create_coordinate_variants(
@@ -497,7 +580,14 @@ class VariantOrbits(qv.Table):
                 ),
             )
             if not object_variants.solved_state_covariance.is_all_null():
-                parameter_names = object_variants.solved_state_covariance.parameter_names_list()[0]
+                # All variants of an object must share the same solved-state
+                # parameter set; take the names from the first non-null row.
+                names_list = (
+                    object_variants.solved_state_covariance.parameter_names_list()
+                )
+                non_null_names = [names for names in names_list if names]
+                parameter_names = non_null_names[0]
+                assert all(names == parameter_names for names in non_null_names)
                 full_samples = np.asarray(
                     [
                         build_solved_state(

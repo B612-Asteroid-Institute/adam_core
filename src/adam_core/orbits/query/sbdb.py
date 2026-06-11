@@ -123,7 +123,14 @@ def _convert_sbdb_solved_state_covariance(
         raise ValueError("SBDB solved-state covariance labels must match matrix size.")
     if len(labels) < 6:
         raise ValueError("SBDB solved-state covariance must include at least 6 labels.")
+    if list(labels[:6]) != ["e", "q", "tp", "node", "peri", "i"]:
+        raise ValueError(
+            "Expected SBDB covariance labels to start with "
+            f"['e', 'q', 'tp', 'node', 'peri', 'i'], got {labels[:6]}."
+        )
 
+    # Reorder SBDB's (e, q, tp, node, peri, i) basis into our cometary order
+    # (q, e, i, raan, ap, tp); extra solved parameters keep their positions.
     orbit_permutation = [1, 0, 5, 3, 4, 2]
     extra_indices = list(range(6, len(labels)))
     permutation = orbit_permutation + extra_indices
@@ -289,6 +296,11 @@ def query_sbdb(ids: npt.ArrayLike, *, include_nongrav: bool = True) -> Orbits:
     ----------
     ids : list
         List of object IDs to query.
+    include_nongrav : bool, optional
+        Accepted for signature compatibility with `query_sbdb_new`. The legacy
+        astroquery path never populates the non-gravitational parameter
+        columns, so this flag is effectively a no-op here; use
+        `query_sbdb_new` for non-grav support.
 
     Returns
     -------
@@ -573,6 +585,8 @@ def _sbdb_nongrav_row(payload: dict[str, Any]) -> dict[str, Any]:
             row[sigma_key] = sigma
 
         if str(param.get("kind")) == "EST":
+            # `n` is SBDB's position in the solve vector; sorting on it keeps
+            # estimated_parameter_names aligned with the covariance label order.
             estimated.append((int(param.get("n", 0) or 0), name))
 
     if estimated:
@@ -659,13 +673,19 @@ def _orbits_from_sbdb_payloads(
             if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
                 raise ValueError("Expected SBDB covariance matrix to be at least 6x6.")
             cov_matrix = data[:6, :6]
-            solved_state_covariance, solved_state_parameter_name = (
-                _convert_sbdb_solved_state_covariance(
-                    data, [str(label) for label in labels]
+            if isinstance(labels, list) and len(labels) == data.shape[0]:
+                solved_state_covariance, solved_state_parameter_name = (
+                    _convert_sbdb_solved_state_covariance(
+                        data, [str(label) for label in labels]
+                    )
                 )
-                if isinstance(labels, list) and len(labels) == data.shape[0]
-                else (None, None)
-            )
+            else:
+                logger.warning(
+                    "SBDB covariance labels for object %s are missing or do not "
+                    "match the matrix size; discarding the full solved-state "
+                    "covariance.",
+                    obj_id,
+                )
 
             # If covariance provides elements, prefer them (and the covariance epoch).
             if "elements" in cov and cov["elements"] is not None:
@@ -853,6 +873,10 @@ def query_sbdb_new(
     orbit_id_from_input : bool, optional
         If True, set the returned `Orbits.orbit_id` values to the input IDs (after any missing
         filtering). This is useful when callers need to map rows back to the requested identifiers.
+    include_nongrav : bool, optional
+        If True (default), populate the non-gravitational parameter and solved-state
+        covariance columns from the SBDB model parameters and full covariance.
+        If False, those columns are returned null.
     """
     # Normalize ids into a list of strings while preserving the caller's order.
     if isinstance(ids, (str, bytes)):

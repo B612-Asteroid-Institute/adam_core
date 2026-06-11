@@ -187,60 +187,64 @@ def _transform_solved_state_covariances_from_cartesian(
     return SolvedStateCovariances.from_matrix(transformed, parameter_names_out)
 
 
+def _spice_frame_name(frame: Literal["ecliptic", "equatorial", "itrf93"]) -> str:
+    if frame == "itrf93":
+        return "ITRF93"
+    if frame == "ecliptic":
+        return "ECLIPJ2000"
+    if frame == "equatorial":
+        return "J2000"
+    raise ValueError("Unsupported frame: {}".format(frame))
+
+
+def _sxform_rotation_matrix_aud(
+    frame_spice_in: str, frame_spice_out: str, et: float
+) -> np.ndarray:
+    """
+    Build the 6x6 state rotation between two SPICE frames at the given ephemeris
+    time. SPICE's sxform works in km and km/s while our states are in au and
+    au/d, so the matrix is conjugated by the unit conversion.
+    """
+    from ..constants import KM_P_AU, S_P_DAY
+
+    rotation_matrix_6x6_kms = sp.sxform(frame_spice_in, frame_spice_out, et)
+    rotation_unit_conversion = np.zeros((6, 6))
+    rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
+    rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
+    return (
+        np.linalg.inv(rotation_unit_conversion)
+        @ rotation_matrix_6x6_kms
+        @ rotation_unit_conversion
+    )
+
+
 def _rotation_matrices_to_frame(
     coords: CartesianCoordinates, frame_out: Literal["ecliptic", "equatorial", "itrf93"]
 ) -> np.ndarray:
+    if frame_out == coords.frame:
+        return np.repeat(np.eye(6).reshape(1, 6, 6), len(coords), axis=0)
     if frame_out == "ecliptic" and coords.frame == "equatorial":
         return np.repeat(TRANSFORM_EQ2EC.reshape(1, 6, 6), len(coords), axis=0)
     if frame_out == "equatorial" and coords.frame == "ecliptic":
         return np.repeat(TRANSFORM_EC2EQ.reshape(1, 6, 6), len(coords), axis=0)
-    if frame_out == coords.frame:
-        return np.repeat(np.eye(6).reshape(1, 6, 6), len(coords), axis=0)
-    if frame_out == "itrf93" and coords.frame != "itrf93" or (
-        frame_out != "itrf93" and coords.frame == "itrf93"
-    ):
+    if (frame_out == "itrf93") != (coords.frame == "itrf93"):
         from ..utils.spice import setup_SPICE
-        from ..constants import KM_P_AU, S_P_DAY
 
         setup_SPICE()
-        if frame_out == "itrf93":
-            frame_spice_out = "ITRF93"
-        elif frame_out == "ecliptic":
-            frame_spice_out = "ECLIPJ2000"
-        elif frame_out == "equatorial":
-            frame_spice_out = "J2000"
-        else:
-            raise ValueError("Unsupported frame: {}".format(frame_out))
-
-        frame_in = coords.frame
-        if frame_in == "itrf93":
-            frame_spice_in = "ITRF93"
-        elif frame_in == "ecliptic":
-            frame_spice_in = "ECLIPJ2000"
-        elif frame_in == "equatorial":
-            frame_spice_in = "J2000"
-        else:
-            raise ValueError("Unsupported frame: {}".format(frame_in))
+        frame_spice_in = _spice_frame_name(coords.frame)
+        frame_spice_out = _spice_frame_name(frame_out)
 
         matrices = np.zeros((len(coords), 6, 6), dtype=np.float64)
-        rotation_unit_conversion = np.zeros((6, 6))
-        rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
-        rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
-        unique_times = coords.time.unique()
-        for time in unique_times:
+        for time in coords.time.unique():
             time_mask = pc.and_(
                 pc.equal(coords.time.days, time.days[0]),
                 pc.equal(coords.time.nanos, time.nanos[0]),
             ).to_numpy(zero_copy_only=False)
-            rotation_matrix_6x6_kms = sp.sxform(
-                frame_spice_in, frame_spice_out, time.et().to_numpy(zero_copy_only=False)[0]
+            matrices[time_mask] = _sxform_rotation_matrix_aud(
+                frame_spice_in,
+                frame_spice_out,
+                time.et().to_numpy(zero_copy_only=False)[0],
             )
-            rotation_matrix_6x6_aud = (
-                np.linalg.inv(rotation_unit_conversion)
-                @ rotation_matrix_6x6_kms
-                @ rotation_unit_conversion
-            )
-            matrices[time_mask] = rotation_matrix_6x6_aud
         return matrices
     raise ValueError("Unsupported frame transform.")
 
@@ -1771,27 +1775,8 @@ def apply_time_varying_rotation(
 
     assert len(pc.unique(coords.origin.code)) == 1
 
-    # Transform to geocentric coordinates in the input frame
-    if frame_out == "itrf93":
-        frame_spice_out = "ITRF93"
-    elif frame_out == "ecliptic":
-        frame_spice_out = "ECLIPJ2000"
-    elif frame_out == "equatorial":
-        frame_spice_out = "J2000"
-    else:
-        raise ValueError("Unsupported frame: {}".format(frame_out))
-
-    frame_in = coords.frame
-    if frame_in == "itrf93":
-        frame_spice_in = "ITRF93"
-    elif frame_in == "ecliptic":
-        frame_spice_in = "ECLIPJ2000"
-    elif frame_in == "equatorial":
-        frame_spice_in = "J2000"
-    else:
-        raise ValueError("Unsupported frame: {}".format(frame_in))
-
-    from ..constants import KM_P_AU, S_P_DAY
+    frame_spice_out = _spice_frame_name(frame_out)
+    frame_spice_in = _spice_frame_name(coords.frame)
 
     # Loop over unique times and then rotate each coordinate
     coords_rotated = CartesianCoordinates.empty()
@@ -1810,22 +1795,10 @@ def apply_time_varying_rotation(
         # Store the indices so we can use to sort the coordinates later
         indices.extend(indices_time.to_pylist())
 
-        # The units of the transformation matrix are km and km/s and while
-        # our states are in au and au/d. So we need to convert the transformation
-        # matrix to the correct units.
-        rotation_matrix_6x6_kms = sp.sxform(
-            frame_spice_in, frame_spice_out, time.et().to_numpy(zero_copy_only=False)[0]
-        )
-
-        # Compute unit conversion matrix to convert from km to au and km/s to au/d
-        rotation_unit_conversion = np.zeros((6, 6))
-        rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
-        rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
-
-        rotation_matrix_6x6_aud = (
-            np.linalg.inv(rotation_unit_conversion)
-            @ rotation_matrix_6x6_kms
-            @ rotation_unit_conversion
+        rotation_matrix_6x6_aud = _sxform_rotation_matrix_aud(
+            frame_spice_in,
+            frame_spice_out,
+            time.et().to_numpy(zero_copy_only=False)[0],
         )
 
         # Rotate the coordinates

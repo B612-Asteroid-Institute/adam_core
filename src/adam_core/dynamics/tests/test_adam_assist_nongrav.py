@@ -4,11 +4,28 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from adam_assist.propagator import (
-    ASSISTPropagator,
-    _configure_assist_non_gravitational_forces,
-    _extract_assist_particle_params,
+# NOTE: the underscore helpers are adam-assist private API and only exist in
+# versions with non-gravitational force support; the adam-assist minimum pin
+# in pyproject.toml should be bumped once such a release exists. The
+# helper-level tests in this file arguably belong in the adam-assist repo.
+assist_propagator = pytest.importorskip(
+    "adam_assist.propagator", reason="adam-assist is not installed"
 )
+ASSISTPropagator = assist_propagator.ASSISTPropagator
+_configure_assist_non_gravitational_forces = getattr(
+    assist_propagator, "_configure_assist_non_gravitational_forces", None
+)
+_extract_assist_particle_params = getattr(
+    assist_propagator, "_extract_assist_particle_params", None
+)
+if (
+    _configure_assist_non_gravitational_forces is None
+    or _extract_assist_particle_params is None
+):
+    pytest.skip(
+        "installed adam-assist does not include non-gravitational force support",
+        allow_module_level=True,
+    )
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin

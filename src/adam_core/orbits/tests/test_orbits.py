@@ -1,6 +1,10 @@
 import numpy as np
 
-from ...coordinates import CartesianCoordinates
+from ...coordinates import (
+    CartesianCoordinates,
+    CoordinateCovariances,
+    KeplerianCoordinates,
+)
 from ...coordinates.origin import Origin
 from ...orbits.non_gravitational_parameters import NonGravitationalParameters
 from ...orbits.solved_state_covariances import SolvedStateCovariances
@@ -102,7 +106,7 @@ def test_orbits_without_non_gravitational_parameters():
     assert stripped.solved_state_covariance.dimension[0].as_py() is None
 
 
-def test_orbits_to_keplerian_include_nongrav_flag():
+def test_orbits_solved_state_covariance_to_keplerian():
     orbits = Orbits.from_kwargs(
         orbit_id=["1"],
         object_id=["Test Orbit"],
@@ -148,12 +152,25 @@ def test_orbits_to_keplerian_include_nongrav_flag():
             time=Timestamp.from_mjd([59000.0], scale="tdb"),
             origin=Origin.from_kwargs(code=["SUN"]),
             frame="ecliptic",
+            covariance=CoordinateCovariances.from_matrix(
+                np.eye(6).reshape(1, 6, 6)
+            ),
         ),
     )
 
-    coords_only = orbits.to_keplerian(include_nongrav=False)
-    coords_with_nongrav, solved = orbits.to_keplerian(include_nongrav=True)
+    coords = orbits.to_keplerian()
+    solved = orbits.solved_state_covariance_to(KeplerianCoordinates)
 
-    assert coords_only.frame == "ecliptic"
+    assert isinstance(coords, KeplerianCoordinates)
+    assert coords.frame == "ecliptic"
     assert solved.dimension[0].as_py() == 7
     assert solved.parameter_names[0].as_py() == "a,e,i,raan,ap,M,A2"
+    # The solved-state covariance fixture's orbital block is the identity, the
+    # same as the coordinate covariance, so the transformed orbital block must
+    # match the independently transformed 6x6 coordinate covariance.
+    np.testing.assert_allclose(
+        solved.to_orbital_covariances().to_matrix(),
+        coords.covariance.to_matrix(),
+        rtol=1e-12,
+        atol=0,
+    )

@@ -556,6 +556,63 @@ def test_propagate_2body_rejects_non_gravitational_parameters():
         propagate_2body(orbits, times)
 
 
+def test_propagate_2body_allows_zero_valued_non_gravitational_parameters():
+    # A parameter solved to exactly zero exerts no force, so gravity-only
+    # 2-body propagation of such an orbit is still exact and must not raise.
+    t0 = Timestamp.from_mjd([60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            source=["NEOCC"],
+            model=["yarkovsky"],
+            solution_dimension=[6],
+            parameter_count=[0],
+            estimated_parameter_names=[None],
+            A1=[None],
+            A1_sigma=[None],
+            A2=[0.0],
+            A2_sigma=[None],
+            A3=[None],
+            A3_sigma=[None],
+            DT=[None],
+            DT_sigma=[None],
+            R0=[None],
+            R0_sigma=[None],
+            ALN=[None],
+            ALN_sigma=[None],
+            NK=[None],
+            NK_sigma=[None],
+            NM=[None],
+            NM_sigma=[None],
+            NN=[None],
+            NN_sigma=[None],
+            AMRAT=[0.0],
+            AMRAT_sigma=[None],
+            RHO=[None],
+            RHO_sigma=[None],
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    propagated = propagate_2body(
+        orbits, Timestamp.from_mjd([60000.0, 60001.0], scale="tdb")
+    )
+
+    assert len(propagated) == 2
+    assert propagated.non_gravitational_parameters.AMRAT[0].as_py() == 0.0
+
+
 def test_propagate_2body_include_nongrav_false_strips_nongrav():
     t0 = Timestamp.from_mjd([60000.0], scale="tdb")
     orbits = Orbits.from_kwargs(

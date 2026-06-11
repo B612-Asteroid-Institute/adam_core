@@ -58,6 +58,7 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+docs/source/reference/api/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -115,8 +116,3 @@ pdm.lock
 
 # working scratch files
 .scratch*
-
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key

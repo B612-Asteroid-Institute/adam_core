@@ -34,11 +34,12 @@ NEOCC
 MPCQ
 ~~~~
 
-- The installed ``mpcq`` package exposes orbit-side ``a1``, ``a2``, and ``a3``
-  columns on ``MPCOrbits``.
-- ``MPCOrbits.orbits()`` now maps those values into
-  ``adam_core.Orbits.non_gravitational_parameters`` using the canonical
-  ``A1/A2/A3`` fields.
+- ``mpcq`` versions with non-grav support expose orbit-side ``a1``, ``a2``,
+  and ``a3`` columns on ``MPCOrbits``, and ``MPCOrbits.orbits()`` maps those
+  values into ``adam_core.Orbits.non_gravitational_parameters`` using the
+  canonical ``A1/A2/A3`` fields.
+- This handoff requires a companion ``mpcq`` release; older versions do not
+  carry the columns.
 
 Canonical MVP Schema
 --------------------
@@ -61,19 +62,42 @@ Canonical units
 - ``AMRAT``: m^2 / kg
 - ``RHO``: kg / m^3
 
-Current Covariance Boundary
----------------------------
+Solved-State Covariances
+------------------------
 
-The current covariance machinery in ``adam_core`` remains 6D and tied to the
-orbital state vector only.
+In addition to the 6x6 coordinate covariance, orbits can carry the full
+``(6 + k) x (6 + k)`` solved-state covariance — the orbital state plus the
+fitted non-gravitational parameters, including their cross-covariances:
 
-For the MVP:
+- ``adam_core.orbits.SolvedStateCovariances`` stores the full matrices along
+  with the per-row parameter names (the first six entries are always the
+  orbital basis).
+- ``transform_coordinates(..., solved_state_covariances=...)`` transforms the
+  full matrix alongside representation and frame changes: the orbital block is
+  transformed with the coordinate Jacobian while the extra parameter
+  dimensions (and their cross-covariances) are preserved through an identity
+  block. ``Orbits.solved_state_covariance_to`` is the orbit-level convenience
+  wrapper.
+- ``VariantOrbits.create`` jointly samples the full ``6 + k`` state for orbits
+  that carry a solved-state covariance (sampling is done in a whitened basis
+  so the ~1e-26-scale non-grav variances are not lost to numerical
+  truncation), and ``collapse``/``collapse_by_object_id`` rebuild the full
+  matrix from the variants.
+- The SBDB and NEOCC importers populate the column from the full fitted
+  covariance, converted to canonical units.
 
-- Larger solved-state dimensions are preserved as metadata.
-- Source importers continue to use the leading orbital 6x6 block for
-  coordinate covariance.
-- Cross-covariances between orbital and non-grav parameters are not yet
-  propagated through coordinate transforms or variant collapse.
+Current limits:
+
+- Propagated outputs do not carry an epoch-updated solved-state covariance:
+  the matrix is epoch-specific and propagating the full ``6 + k`` covariance
+  is not yet implemented, so ``propagate_2body`` nulls the column on its
+  output while preserving the (time-invariant) non-grav parameter values.
+- The 6x6 ``coordinates.covariance`` and the leading block of the solved-state
+  covariance are stored separately; importers keep them consistent at
+  ingestion, but downstream code that modifies one is responsible for the
+  other.
+- NEOCC solved states are decoded only for the Yarkovsky model
+  (``AMRAT``/``A2``); other models are preserved as metadata with a warning.
 
 Two-Body Note
 -------------
@@ -85,9 +109,13 @@ silently propagating them with a gravity-only model.
 ASSIST Boundary
 ---------------
 
-``adam_assist`` currently supports propagation when the usable estimated
-non-gravitational parameters are limited to Marsden-style ``A1``, ``A2``,
-and ``A3``.
+``adam_assist`` versions with non-grav support handle propagation when the
+usable estimated non-gravitational parameters are limited to Marsden-style
+``A1``, ``A2``, and ``A3``. This requires a companion ``adam_assist``
+release; ``adam_core`` itself only carries the parameters through its
+``Propagator`` interface (propagators that do not declare
+``supports_non_gravitational_forces`` log a warning when handed non-grav
+orbits).
 
 - Fixed metadata that accompanies those models, such as SBDB Marsden constants
   (for example ``R0``, ``ALN``, ``NK``, ``NM``) or a non-estimated

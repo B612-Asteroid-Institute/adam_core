@@ -619,6 +619,7 @@ def test_propagator_multiple_workers_ray():
     time_ref = ray.put(times)
 
     have = prop.propagate_orbits(orbits_ref, time_ref, max_processes=4)
+
     assert len(have) == len(orbits) * len(times)
 
     observers_ref = ray.put(observers)
@@ -627,9 +628,8 @@ def test_propagator_multiple_workers_ray():
     assert len(have) == len(orbits) * len(times)
 
 
-def test_propagate_orbits_include_nongrav_false_strips_nongrav():
-    prop = MockPropagator()
-    orbits = Orbits.from_kwargs(
+def _make_nongrav_orbits() -> Orbits:
+    return Orbits.from_kwargs(
         orbit_id=["o1"],
         object_id=["o1"],
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
@@ -674,6 +674,11 @@ def test_propagate_orbits_include_nongrav_false_strips_nongrav():
         ),
     )
 
+
+def test_propagate_orbits_include_nongrav_false_strips_nongrav():
+    prop = MockPropagator()
+    orbits = _make_nongrav_orbits()
+
     propagated = prop.propagate_orbits(
         orbits,
         Timestamp.from_mjd([60001], scale="tdb"),
@@ -682,6 +687,84 @@ def test_propagate_orbits_include_nongrav_false_strips_nongrav():
 
     assert propagated.non_gravitational_parameters.A2[0].as_py() is None
     assert propagated.solved_state_covariance.dimension[0].as_py() is None
+
+
+def test_propagate_orbits_include_nongrav_true_preserves_columns():
+    prop = MockPropagator()
+    orbits = _make_nongrav_orbits()
+
+    propagated = prop.propagate_orbits(
+        orbits,
+        Timestamp.from_mjd([60001], scale="tdb"),
+    )
+
+    np.testing.assert_allclose(
+        propagated.non_gravitational_parameters.A2[0].as_py(), -2.9e-14
+    )
+    assert (
+        propagated.non_gravitational_parameters.estimated_parameter_names[0].as_py()
+        == "A2"
+    )
+
+
+def test_propagate_orbits_warns_when_propagator_lacks_nongrav_support(caplog):
+    import logging
+
+    times = Timestamp.from_mjd([60001], scale="tdb")
+    orbits = _make_nongrav_orbits()
+
+    with caplog.at_level(logging.WARNING, logger="adam_core.propagator.propagator"):
+        MockPropagator().propagate_orbits(orbits, times)
+    assert any(
+        "non-gravitational" in record.message for record in caplog.records
+    )
+
+    # No warning for orbits without non-grav parameters.
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="adam_core.propagator.propagator"):
+        MockPropagator().propagate_orbits(
+            orbits.without_non_gravitational_parameters(), times
+        )
+    assert not any(
+        "non-gravitational" in record.message for record in caplog.records
+    )
+
+    # No warning when the propagator declares non-grav support.
+    class NongravMockPropagator(MockPropagator):
+        supports_non_gravitational_forces = True
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="adam_core.propagator.propagator"):
+        NongravMockPropagator().propagate_orbits(orbits, times)
+    assert not any(
+        "non-gravitational" in record.message for record in caplog.records
+    )
+
+
+def test_generate_ephemeris_include_nongrav_false_strips_before_backend():
+    class RecordingMockPropagator(MockPropagator):
+        def _generate_ephemeris(self, orbits, observers):
+            self.received_orbits = orbits
+            return super()._generate_ephemeris(orbits, observers)
+
+    orbits = _make_nongrav_orbits()
+    observers = Observers.from_code(
+        "X05", Timestamp.from_mjd([60001], scale="tdb")
+    )
+
+    prop = RecordingMockPropagator()
+    prop.generate_ephemeris(
+        orbits, observers, include_nongrav=False, predict_magnitudes=False
+    )
+    assert prop.received_orbits.non_gravitational_parameters.A2[0].as_py() is None
+
+    prop = RecordingMockPropagator()
+    prop.generate_ephemeris(
+        orbits, observers, include_nongrav=True, predict_magnitudes=False
+    )
+    assert (
+        prop.received_orbits.non_gravitational_parameters.A2[0].as_py() is not None
+    )
 
 
 def test_propagate_orbits_multiple_workers_ray_variant_orbits_input():

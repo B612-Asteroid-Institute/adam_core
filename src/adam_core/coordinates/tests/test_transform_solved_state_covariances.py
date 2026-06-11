@@ -52,6 +52,15 @@ def test_transform_coordinates_roundtrip_cometary_preserves_solved_state_covaria
     assert solved_cartesian.dimension[0].as_py() == 7
     assert solved_cartesian.parameter_names[0].as_py() == "x,y,z,vx,vy,vz,A2"
     assert solved_roundtrip.parameter_names[0].as_py() == "q,e,i,raan,ap,tp,A2"
+    # The one-way transformed orbital block must match the independently
+    # transformed 6x6 coordinate covariance (same Jacobian) — without this,
+    # a no-op covariance transform would still pass the roundtrip checks.
+    np.testing.assert_allclose(
+        solved_cartesian.to_orbital_covariances().to_matrix(),
+        cartesian.covariance.to_matrix(),
+        rtol=1e-12,
+        atol=0,
+    )
     np.testing.assert_allclose(
         solved.to_orbital_covariances().to_matrix(),
         coords.covariance.to_matrix(),
@@ -121,6 +130,14 @@ def test_transform_coordinates_roundtrip_keplerian_preserves_9x9_solved_state_co
     assert solved_cartesian.dimension[0].as_py() == 9
     assert solved_cartesian.parameter_names[0].as_py() == "x,y,z,vx,vy,vz,A1,A2,A3"
     assert solved_roundtrip.parameter_names[0].as_py() == "a,e,i,raan,ap,M,A1,A2,A3"
+    # One-way check: the transformed orbital block must match the 6x6
+    # coordinate covariance transformed through the standard path.
+    np.testing.assert_allclose(
+        solved_cartesian.to_orbital_covariances().to_matrix(),
+        cartesian.covariance.to_matrix(),
+        rtol=1e-12,
+        atol=0,
+    )
     np.testing.assert_allclose(
         solved.to_orbital_covariances().to_matrix(),
         coords.covariance.to_matrix(),
@@ -180,6 +197,15 @@ def test_transform_coordinates_frame_rotation_preserves_solved_state_covariance(
     )
 
     assert solved_rotated.parameter_names[0].as_py() == "x,y,z,vx,vy,vz,A2"
+    # One-way check: the rotated orbital block must match the independently
+    # rotated 6x6 coordinate covariance. A no-op rotation of the solved-state
+    # covariance would pass the roundtrip assertions below but fail here.
+    np.testing.assert_allclose(
+        solved_rotated.to_orbital_covariances().to_matrix(),
+        rotated.covariance.to_matrix(),
+        rtol=1e-12,
+        atol=0,
+    )
     np.testing.assert_allclose(
         solved.to_orbital_covariances().to_matrix(),
         coords.covariance.to_matrix(),

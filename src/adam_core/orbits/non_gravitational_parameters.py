@@ -1,4 +1,21 @@
+import pyarrow.compute as pc
 import quivr as qv
+
+# Fields that hold non-gravitational parameter values (as opposed to
+# sigmas or solution metadata).
+NON_GRAVITATIONAL_VALUE_FIELDS = (
+    "A1",
+    "A2",
+    "A3",
+    "DT",
+    "R0",
+    "ALN",
+    "NK",
+    "NM",
+    "NN",
+    "AMRAT",
+    "RHO",
+)
 
 
 class NonGravitationalParameters(qv.Table):
@@ -48,6 +65,22 @@ class NonGravitationalParameters(qv.Table):
     AMRAT_sigma = qv.Float64Column(nullable=True)
     RHO = qv.Float64Column(nullable=True)
     RHO_sigma = qv.Float64Column(nullable=True)
+
+    def has_values(self) -> bool:
+        """
+        Return True if any row has a non-zero non-gravitational parameter value.
+
+        Parameters that are explicitly solved to zero are treated as absent:
+        they exert no force, so a gravity-only propagation of such an orbit is
+        still exact.
+        """
+        if len(self) == 0:
+            return False
+        for field in NON_GRAVITATIONAL_VALUE_FIELDS:
+            values = pc.drop_null(getattr(self, field))
+            if len(values) > 0 and pc.any(pc.not_equal(values, 0.0)).as_py():
+                return True
+        return False
 
     @classmethod
     def nulls(cls, length: int) -> "NonGravitationalParameters":

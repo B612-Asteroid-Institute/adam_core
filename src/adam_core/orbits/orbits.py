@@ -9,6 +9,7 @@ import quivr as qv
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.cometary import CometaryCoordinates
 from ..coordinates.keplerian import KeplerianCoordinates
+from ..coordinates.origin import OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
 from .classification import calc_orbit_class
@@ -61,27 +62,13 @@ class Orbits(qv.Table):
         return calc_orbit_class(keplerian)
 
     def has_non_gravitational_parameters(self) -> bool:
-        nongrav = self.non_gravitational_parameters
-        if len(self) == 0:
-            return False
+        """
+        Return True if any orbit carries a non-zero non-gravitational parameter value.
 
-        value_fields = (
-            "A1",
-            "A2",
-            "A3",
-            "DT",
-            "R0",
-            "ALN",
-            "NK",
-            "NM",
-            "NN",
-            "AMRAT",
-            "RHO",
-        )
-        for field in value_fields:
-            if any(value is not None for value in getattr(nongrav, field).to_pylist()):
-                return True
-        return False
+        Parameters that are explicitly solved to zero are treated as absent: they
+        exert no force, so a gravity-only propagation of such an orbit is still exact.
+        """
+        return self.non_gravitational_parameters.has_values()
 
     def without_non_gravitational_parameters(self) -> "Orbits":
         return self.set_column(
@@ -93,6 +80,10 @@ class Orbits(qv.Table):
         )
 
     def with_non_gravitational_parameters(self, enabled: bool = True) -> "Orbits":
+        """
+        Return self unchanged if `enabled` is True, otherwise a copy with the
+        non-gravitational parameter and solved-state covariance columns nulled.
+        """
         if enabled:
             return self
         return self.without_non_gravitational_parameters()
@@ -104,34 +95,53 @@ class Orbits(qv.Table):
         ],
         *,
         frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,
-        origin_out=None,
-        include_nongrav: bool = True,
+        origin_out: Optional[OriginCodes] = None,
     ):
-        solved_covariance = (
-            self.solved_state_covariance if include_nongrav else None
-        )
+        """
+        Transform this orbit's coordinates to another representation, frame,
+        and/or origin. The solved-state covariances are not transformed; use
+        `solved_state_covariance_to` for that.
+        """
         return transform_coordinates(
             self.coordinates,
             representation_out=representation_out,
             frame_out=frame_out,
             origin_out=origin_out,
-            solved_state_covariances=solved_covariance,
         )
 
-    def to_keplerian(self, *, include_nongrav: bool = True):
-        return self.coordinates_to(
-            KeplerianCoordinates, include_nongrav=include_nongrav
+    def solved_state_covariance_to(
+        self,
+        representation_out: type[
+            CartesianCoordinates | KeplerianCoordinates | CometaryCoordinates | SphericalCoordinates
+        ],
+        *,
+        frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,
+        origin_out: Optional[OriginCodes] = None,
+    ) -> SolvedStateCovariances:
+        """
+        Transform the solved-state covariances to another coordinate
+        representation, frame, and/or origin. The leading 6x6 orbital block is
+        transformed alongside the coordinates; extra solved parameters and
+        their cross-covariances are preserved. Rows without a solved-state
+        covariance remain null.
+        """
+        _, solved = transform_coordinates(
+            self.coordinates,
+            representation_out=representation_out,
+            frame_out=frame_out,
+            origin_out=origin_out,
+            solved_state_covariances=self.solved_state_covariance,
         )
+        return solved
 
-    def to_cometary(self, *, include_nongrav: bool = True):
-        return self.coordinates_to(
-            CometaryCoordinates, include_nongrav=include_nongrav
-        )
+    def to_keplerian(self) -> KeplerianCoordinates:
+        return self.coordinates_to(KeplerianCoordinates)
 
-    def to_spherical(self, *, include_nongrav: bool = True):
-        return self.coordinates_to(
-            SphericalCoordinates, include_nongrav=include_nongrav
-        )
+    def to_cometary(self) -> CometaryCoordinates:
+        return self.coordinates_to(CometaryCoordinates)
+
+    def to_spherical(self) -> SphericalCoordinates:
+        return self.coordinates_to(SphericalCoordinates)
 
     def preview(self, propagator: "Propagator") -> None:
         """

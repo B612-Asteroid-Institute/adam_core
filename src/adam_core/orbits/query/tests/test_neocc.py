@@ -263,10 +263,35 @@ def test__non_gravitational_parameters_from_neocc_yarkovsky() -> None:
     assert nongrav.source[0].as_py() == "NEOCC"
     assert nongrav.model[0].as_py() == "yarkovsky"
     assert nongrav.solution_dimension[0].as_py() == 7
-    assert nongrav.parameter_count[0].as_py() == 2
+    # parameter_count counts the estimated parameters, matching SBDB semantics.
+    assert nongrav.parameter_count[0].as_py() == 1
     assert nongrav.estimated_parameter_names[0].as_py() == "A2"
     assert nongrav.AMRAT[0].as_py() == 0.0
     assert np.isclose(nongrav.A2[0].as_py(), -4.60477568857430e-14)
+    # sigma(A2) comes from the OEF covariance diagonal (RMS 2.40555E-06 in
+    # 1e-10 au/d^2 units) converted to canonical au/d^2.
+    assert np.isclose(nongrav.A2_sigma[0].as_py(), 2.40555e-16, rtol=1e-4)
+
+
+def test__non_gravitational_parameters_from_neocc_unsupported_model(caplog) -> None:
+    import logging
+
+    data = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
+    # Rewrite the parsed solution as an unsupported cometary-style model
+    # solving for A1 (code 3): the (AMRAT, A2) vector decoding does not apply.
+    data["nongrav"]["model_used"] = 2
+    data["nongrav"]["solve_for_parameter_codes"] = [3]
+
+    with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.neocc"):
+        nongrav = _non_gravitational_parameters_from_neocc(data)
+
+    assert any("unsupported" in record.message for record in caplog.records)
+    assert nongrav.model[0].as_py() == "neocc-model-2"
+    assert nongrav.estimated_parameter_names[0].as_py() == "A1"
+    # Values must not be mislabeled from the (AMRAT, A2) positional layout.
+    assert nongrav.AMRAT[0].as_py() is None
+    assert nongrav.A2[0].as_py() is None
+    assert nongrav.A1[0].as_py() is None
 
 
 def test_query_neocc_preserves_full_solved_state_covariance(mocker):
@@ -289,6 +314,30 @@ def test_query_neocc_preserves_full_solved_state_covariance(mocker):
     covariance = orbits.solved_state_covariance.to_matrix()[0]
     assert covariance is not None
     assert covariance.shape == (7, 7)
+
+    # The leading 6x6 block must match the coordinate covariance: both are
+    # transformed Keplerian -> Cartesian through the same Jacobian.
+    np.testing.assert_allclose(
+        covariance[:6, :6],
+        orbits.coordinates.covariance.to_matrix()[0],
+        rtol=1e-10,
+    )
+    # sigma(A2) in canonical au/d^2: the OEF RMS line gives 2.32321E-06 in
+    # 1e-10 au/d^2 units. The A2 diagonal is invariant under the orbital-block
+    # Jacobian, so this also verifies the unit scaling of the covariance.
+    np.testing.assert_allclose(np.sqrt(covariance[6, 6]), 2.32321e-16, rtol=1e-4)
+    np.testing.assert_allclose(
+        orbits.non_gravitational_parameters.A2_sigma[0].as_py(),
+        2.32321e-16,
+        rtol=1e-4,
+    )
+    # parameter_count counts the estimated parameters.
+    estimated = orbits.non_gravitational_parameters.estimated_parameter_names[
+        0
+    ].as_py()
+    assert orbits.non_gravitational_parameters.parameter_count[0].as_py() == len(
+        estimated.split(",")
+    )
 
 
 def test_query_neocc_include_nongrav_false_strips_nongrav(mocker):
