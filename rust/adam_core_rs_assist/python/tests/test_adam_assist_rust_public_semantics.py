@@ -29,6 +29,31 @@ def _same_epoch_orbits() -> Orbits:
     )
 
 
+def _bench_0079_unique_epoch_orbit() -> Orbits:
+    rows = 200
+    index = 79.0
+    theta = 2.0 * np.pi * index / rows
+    radius = 1.05 + 0.03 * np.sin(0.37 * index)
+    speed = 0.017202124 / np.sqrt(radius)
+    epoch_offset = np.linspace(-30.0, -0.125, rows)[int(index)]
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[radius * np.cos(theta)],
+        y=[radius * np.sin(theta)],
+        z=[0.02 * np.sin(2.0 * theta)],
+        vx=[-speed * np.sin(theta)],
+        vy=[speed * np.cos(theta)],
+        vz=[0.0001 * np.cos(3.0 * theta)],
+        time=Timestamp.from_mjd([60000.0 + epoch_offset], scale="tdb"),
+        origin=Origin.from_kwargs(code=["SUN"]),
+        frame="ecliptic",
+    )
+    return Orbits.from_kwargs(
+        orbit_id=["bench-0079"],
+        object_id=["bench-0079"],
+        coordinates=coordinates,
+    )
+
+
 def test_same_epoch_multi_orbit_fast_path_matches_python_public() -> None:
     python_assist = pytest.importorskip("adam_assist")
     orbits = _same_epoch_orbits()
@@ -56,5 +81,37 @@ def test_same_epoch_multi_orbit_fast_path_matches_python_public() -> None:
         actual.coordinates.values,
         expected.coordinates.values,
         atol=1.0e-13,
+        rtol=0,
+    )
+
+
+def test_unique_epoch_long_horizon_regression_matches_python_public() -> None:
+    python_assist = pytest.importorskip("adam_assist")
+    orbits = _bench_0079_unique_epoch_orbit()
+    times = Timestamp.from_mjd([60365.25], scale="tdb")
+
+    expected = python_assist.ASSISTPropagator().propagate_orbits(
+        orbits,
+        times,
+        max_processes=1,
+        chunk_size=10,
+    )
+    actual = RustASSISTPropagator().propagate_orbits(
+        orbits,
+        times,
+        max_processes=1,
+        chunk_size=10,
+    )
+
+    np.testing.assert_allclose(
+        actual.coordinates.values[:, :3],
+        expected.coordinates.values[:, :3],
+        atol=3.0e-13,
+        rtol=0,
+    )
+    np.testing.assert_allclose(
+        actual.coordinates.values[:, 3:],
+        expected.coordinates.values[:, 3:],
+        atol=3.0e-13,
         rtol=0,
     )

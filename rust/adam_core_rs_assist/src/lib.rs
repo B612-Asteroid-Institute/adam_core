@@ -12,14 +12,14 @@ use adam_core_rs_coords::propagation::{
 };
 use adam_core_rs_coords::types::Frame;
 use adam_core_rs_coords::{
-    CoordinateBatch, CovarianceBatch, CovarianceUnits, Epoch, OrbitBatch, OrbitVariantBatch,
-    OriginArray, OriginId, TimeArray, TimeScale, TimeScaleProvider, Validity, NANOS_PER_DAY,
+    rotate_ecliptic_to_equatorial6, rotate_equatorial_to_ecliptic6, CoordinateBatch,
+    CovarianceBatch, CovarianceUnits, Epoch, OrbitBatch, OrbitVariantBatch, OriginArray, OriginId,
+    TimeArray, TimeScale, TimeScaleProvider, Validity, NANOS_PER_DAY,
 };
 use assist_rs::ffi;
 use assist_rs::{
-    assist_propagate, ecliptic_to_equatorial, equatorial_to_ecliptic, libassist_sys,
-    librebound_sys, AssistData, AssistSim, Error as AssistError, Ias15AdaptiveMode,
-    IntegratorConfig, Orbit as AssistOrbit, Simulation,
+    assist_propagate, libassist_sys, librebound_sys, AssistData, AssistSim, Error as AssistError,
+    Ias15AdaptiveMode, IntegratorConfig, Orbit as AssistOrbit, Simulation,
 };
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -298,10 +298,6 @@ fn propagate_same_epoch_state_group(
     context: &AssistChunkContext<'_, '_>,
     group: &SameEpochStateGroup,
 ) -> PropagationResultValue<Vec<AssistOrbitBlock>> {
-    if group.orbit_indices.len() < 2 {
-        return propagate_assist_chunk_one_by_one(context, &group.orbit_indices);
-    }
-
     let sorted_times = group
         .sorted_time_indices
         .iter()
@@ -380,7 +376,7 @@ fn propagate_same_epoch_states(
     asim.set_forces(ffi::ASSIST_FORCES_DEFAULT);
 
     for state in states {
-        let helio_eq = ecliptic_to_equatorial(state);
+        let helio_eq = rotate_ecliptic_to_equatorial6(state);
         let bary_eq = add_state(helio_eq, sun0);
         asim.sim_mut().add_test_particle(
             bary_eq[0], bary_eq[1], bary_eq[2], bary_eq[3], bary_eq[4], bary_eq[5],
@@ -407,7 +403,9 @@ fn propagate_same_epoch_states(
                 particle.vy,
                 particle.vz,
             ];
-            states_by_orbit[row].push(equatorial_to_ecliptic(&subtract_state(bary_eq, sun_t)));
+            states_by_orbit[row].push(rotate_equatorial_to_ecliptic6(&subtract_state(
+                bary_eq, sun_t,
+            )));
         }
     }
 
@@ -816,7 +814,7 @@ fn normalize_state_to_assist_frame(
             origin.code()
         )));
     };
-    Ok(equatorial_to_ecliptic(&helio_eq))
+    Ok(rotate_equatorial_to_ecliptic6(&helio_eq))
 }
 
 fn restore_state_from_assist_frame(
@@ -825,7 +823,7 @@ fn restore_state_from_assist_frame(
     origin: &OriginId,
     sun_bary_eq: [f64; 6],
 ) -> PropagationResultValue<[f64; 6]> {
-    let helio_eq = ecliptic_to_equatorial(&state);
+    let helio_eq = rotate_ecliptic_to_equatorial6(&state);
     let state_eq = if is_sun_origin(origin) {
         helio_eq
     } else if is_solar_system_barycenter_origin(origin) {
@@ -842,7 +840,7 @@ fn restore_state_from_assist_frame(
 fn state_to_equatorial(state: [f64; 6], frame: Frame) -> PropagationResultValue<[f64; 6]> {
     match frame {
         Frame::Equatorial => Ok(state),
-        Frame::Ecliptic => Ok(ecliptic_to_equatorial(&state)),
+        Frame::Ecliptic => Ok(rotate_ecliptic_to_equatorial6(&state)),
         _ => Err(PropagationError::InvalidRequest(format!(
             "AssistPropagator does not support frame {}",
             frame.as_str()
@@ -853,7 +851,7 @@ fn state_to_equatorial(state: [f64; 6], frame: Frame) -> PropagationResultValue<
 fn state_from_equatorial(state: [f64; 6], frame: Frame) -> PropagationResultValue<[f64; 6]> {
     match frame {
         Frame::Equatorial => Ok(state),
-        Frame::Ecliptic => Ok(equatorial_to_ecliptic(&state)),
+        Frame::Ecliptic => Ok(rotate_equatorial_to_ecliptic6(&state)),
         _ => Err(PropagationError::InvalidRequest(format!(
             "AssistPropagator does not support frame {}",
             frame.as_str()
