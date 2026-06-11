@@ -320,9 +320,10 @@ Recommendation: **do not port these solely for migration completeness.** Port on
 
 These are plausible Rust candidates, but the current evidence does not justify porting them as cleanup work.
 
-- `coordinates.covariances.*` and `coordinates.variants.create_coordinate_variants(...)`.
-  - Current evidence: recent RM-WE2-003 win came from batching PyArrow assembly while preserving SciPy `sqrtm` and NumPy/BLAS weighted statistics.
-  - Recommendation: keep Python/NumPy/SciPy unless profiling shows linalg kernels, not table orchestration, are the bottleneck.
+- `coordinates.covariances.*`, `coordinates.variants.create_coordinate_variants(...)`, and orbit-level `VariantOrbits.create` / `collapse`.
+  - Current Python-interface evidence: recent RM-WE2-003 win came from batching PyArrow assembly while preserving SciPy `sqrtm` and NumPy/BLAS weighted statistics.
+  - Standalone-Rust update (2026-05-28): the original surface chart covered variant modules only coarsely. RM-STANDALONE-007B now makes the specific `VariantOrbits.create`/collapse gap explicit and adds Rust-native sampled covariance helpers for sigma points, Monte Carlo, `auto`, and propagated-variant collapse under the typed batch model.
+  - Recommendation: keep Python/NumPy/SciPy for current public Python table assembly where faster, but use the Rust typed sampler/collapse path for Rust-native propagation workflows and benchmark it separately from the propagation-only state claim.
 - Higher-level coordinate transform dispatcher cases not already covered.
   - Recommendation: add only when a specific public path is promoted to Rust-default or appears in slow-row audit.
 - `Timestamp` vector operations, cache/key helpers, and time-scale conversion wrappers.
@@ -409,7 +410,7 @@ The standalone-Rust goal **does change the long-term conversion analysis**. It d
 | Timestamp/time scales | Keep Python/Astropy/ERFA for current API. | Needs a Rust time strategy or dependency with explicit ERFA/leap-second parity policy. |
 | ASSIST/n-body propagation | Defer as future perf architecture work. | Strategic blocker for standalone OD/IOD/impact workflows. |
 | OD/IOD/LSQ orchestration | Keep Python after local NumPy/PyArrow cleanup until propagation changes. | Port natively after Rust data model + propagator traits exist. |
-| Covariance/variants/statistics | Keep public Python NumPy/SciPy/BLAS where faster. | Provide Rust-native equivalents for Rust workflows, even if Python wrappers continue using NumPy. |
+| Covariance/variants/statistics | Keep public Python NumPy/SciPy/BLAS where faster; the GPL ASSIST shim now uses Rust sampled covariance only after one top-level Python call. | Provide Rust-native equivalents for Rust workflows, now explicitly including `VariantOrbits.create` sampling and collapse semantics. |
 | SPICE/NAIF wrappers | Gate wiring; CSpice parity mostly owned by spicekit. | Complete Rust-side backend API, kernel lifecycle, body/frame lookup, and fixture governance. |
 | Network/query clients | Not useful for numeric speedup. | Optional feature crates or companion tools if standalone means end-to-end catalog/query functionality. |
 | Plotting/OpenSpace/OEM/SPK/text exporters | Keep Python for current ecosystem ergonomics. | Implement as optional exporters if required by standalone product scope; not part of numerical core. |

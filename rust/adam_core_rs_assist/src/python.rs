@@ -2,13 +2,16 @@
 
 use crate::AssistPropagator as RustAssistPropagator;
 use adam_core_rs_coords::propagation::{
-    CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest, Propagator,
+    CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest, PropagationResult,
+    Propagator,
 };
 use adam_core_rs_coords::types::Frame;
 use adam_core_rs_coords::types::{SchemaResult, TimeScaleProvider};
 use adam_core_rs_coords::{
-    CoordinateBatch, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
-    SchemaError, TimeArray, TimeScale, VariantId,
+    collapse_propagated_variants_to_orbits, create_sampled_orbit_variants, CoordinateBatch,
+    CoordinateRepresentation, CovarianceBatch, CovarianceUnits, ObjectId, OrbitBatch, OrbitId,
+    OrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId, SchemaError, TimeArray,
+    TimeScale, VariantId,
 };
 use assist_rs::{AssistData, Ephemeris, Ias15AdaptiveMode, IntegratorConfig};
 use numpy::{IntoPyArray, PyReadonlyArray2};
@@ -91,6 +94,10 @@ impl NativeAssistPropagator {
         target_days,
         target_nanos,
         covariance,
+        covariances=None,
+        covariance_method="monte-carlo",
+        num_samples=1000,
+        seed=None,
         chunk_size=None,
         thread_limit=None,
         variant_ids=None,
@@ -112,26 +119,29 @@ impl NativeAssistPropagator {
         target_days: Vec<i64>,
         target_nanos: Vec<i64>,
         covariance: bool,
+        covariances: Option<PyReadonlyArray2<'py, f64>>,
+        covariance_method: &str,
+        num_samples: usize,
+        seed: Option<u64>,
         chunk_size: Option<usize>,
         thread_limit: Option<usize>,
         variant_ids: Option<Vec<Option<String>>>,
         weights: Option<Vec<Option<f64>>>,
         weights_cov: Option<Vec<Option<f64>>>,
     ) -> PyResult<Bound<'py, PyDict>> {
-        if covariance {
-            return Err(PyValueError::new_err(
-                "adam_assist_rust PyO3 shim currently benchmarks state propagation only; covariance=True is not implemented",
-            ));
-        }
         let state_rows = states_from_pyarray(states)?;
         let input_times = time_array(time_scale, time_days, time_nanos)?;
         let target_times = time_array(target_scale, target_days, target_nanos)?;
+        let covariance_batch = match covariances {
+            Some(covariances) => Some(covariance_from_pyarray(covariances, state_rows.len())?),
+            None => None,
+        };
         let coordinates = CoordinateBatch::cartesian(
             state_rows,
             Frame::parse(frame).map_err(py_value_error)?,
             OriginArray::new(origin_codes.into_iter().map(OriginId::from_code).collect()),
             Some(input_times),
-            None,
+            covariance_batch,
         )
         .map_err(py_value_error)?;
         let options = PropagationOptions {
@@ -142,6 +152,11 @@ impl NativeAssistPropagator {
         };
         let result = match variant_ids {
             Some(variant_ids) => {
+                if covariance {
+                    return Err(PyValueError::new_err(
+                        "covariance=True is not supported for VariantOrbits",
+                    ));
+                }
                 let weights = weights
                     .ok_or_else(|| PyValueError::new_err("variant propagation requires weights"))?;
                 let weights_cov = weights_cov.ok_or_else(|| {
@@ -177,13 +192,77 @@ impl NativeAssistPropagator {
                     coordinates,
                 )
                 .map_err(py_value_error)?;
-                let request = PropagationRequest::new(&orbits, &target_times, options)
-                    .map_err(py_runtime_error)?;
-                py.allow_threads(|| self.inner.propagate(&request, &PythonTimeProvider))
-                    .map_err(py_runtime_error)?
+                if covariance {
+                    propagate_with_sampled_covariance(
+                        py,
+                        &self.inner,
+                        &orbits,
+                        &target_times,
+                        options,
+                        covariance_method,
+                        num_samples,
+                        seed,
+                    )?
+                } else {
+                    let request = PropagationRequest::new(&orbits, &target_times, options)
+                        .map_err(py_runtime_error)?;
+                    py.allow_threads(|| self.inner.propagate(&request, &PythonTimeProvider))
+                        .map_err(py_runtime_error)?
+                }
             }
         };
         propagation_result_to_dict(py, &result)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn propagate_with_sampled_covariance(
+    py: Python<'_>,
+    propagator: &RustAssistPropagator,
+    orbits: &OrbitBatch,
+    target_times: &TimeArray,
+    mut options: PropagationOptions,
+    covariance_method: &str,
+    num_samples: usize,
+    seed: Option<u64>,
+) -> PyResult<PropagationResult> {
+    let method = parse_covariance_method(covariance_method)?;
+    if orbits.coordinates.covariance.is_none() {
+        return Err(PyValueError::new_err(
+            "covariance=True requires input coordinate covariance rows",
+        ));
+    }
+    options.covariance = CovariancePropagation::None;
+    let variant_samples =
+        create_sampled_orbit_variants(orbits, method, num_samples, seed, 1.0, 0.0, 0.0)
+            .map_err(py_value_error)?;
+    let nominal_request =
+        PropagationRequest::new(orbits, target_times, options.clone()).map_err(py_runtime_error)?;
+    let nominal = py
+        .allow_threads(|| propagator.propagate(&nominal_request, &PythonTimeProvider))
+        .map_err(py_runtime_error)?;
+    let variant_request =
+        PropagationRequest::new_variants(&variant_samples.variants, target_times, options)
+            .map_err(py_runtime_error)?;
+    let propagated_variants = py
+        .allow_threads(|| propagator.propagate(&variant_request, &PythonTimeProvider))
+        .map_err(py_runtime_error)?;
+    collapse_propagated_variants_to_orbits(
+        &nominal,
+        &propagated_variants,
+        &variant_samples.source_orbit_indices,
+    )
+    .map_err(py_runtime_error)
+}
+
+fn parse_covariance_method(value: &str) -> PyResult<OrbitVariantSamplingMethod> {
+    match value {
+        "auto" => Ok(OrbitVariantSamplingMethod::Auto),
+        "sigma-point" => Ok(OrbitVariantSamplingMethod::SigmaPoint),
+        "monte-carlo" => Ok(OrbitVariantSamplingMethod::MonteCarlo),
+        other => Err(PyValueError::new_err(format!(
+            "covariance_method must be one of 'auto', 'sigma-point', or 'monte-carlo'; got {other:?}"
+        ))),
     }
 }
 
@@ -220,6 +299,27 @@ fn time_array(scale: &str, days: Vec<i64>, nanos: Vec<i64>) -> PyResult<TimeArra
         TimeScale::parse(scale).map_err(py_value_error)?,
         days,
         nanos,
+    )
+    .map_err(py_value_error)
+}
+
+fn covariance_from_pyarray(
+    covariances: PyReadonlyArray2<'_, f64>,
+    rows: usize,
+) -> PyResult<CovarianceBatch> {
+    let array = covariances.as_array();
+    if array.nrows() != rows || array.ncols() != 36 {
+        return Err(PyValueError::new_err(format!(
+            "covariances must have shape ({rows}, 36); got ({}, {})",
+            array.nrows(),
+            array.ncols()
+        )));
+    }
+    CovarianceBatch::new(
+        rows,
+        6,
+        array.iter().copied().collect(),
+        CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
     )
     .map_err(py_value_error)
 }
@@ -308,6 +408,17 @@ fn propagation_result_to_dict<'py>(
     dict.set_item("weights", weights)?;
     dict.set_item("weights_cov", weights_cov)?;
     dict.set_item("states", shaped_states.into_pyarray_bound(py))?;
+    match &coordinates.covariance {
+        Some(covariance) => {
+            let shaped_covariance = ndarray::Array2::from_shape_vec(
+                (covariance.rows, covariance.dimension * covariance.dimension),
+                covariance.values_row_major.clone(),
+            )
+            .map_err(|err| PyRuntimeError::new_err(format!("failed to shape covariance: {err}")))?;
+            dict.set_item("covariances", shaped_covariance.into_pyarray_bound(py))?;
+        }
+        None => dict.set_item("covariances", py.None())?,
+    }
     dict.set_item(
         "origin_codes",
         coordinates

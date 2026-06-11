@@ -173,10 +173,14 @@ Directions:
 - Wrap existing transform kernels with `CoordinateBatch` inputs/outputs.
 - Keep representation/frame/origin transforms as a single high-level Rust call path.
 - Add covariance propagation as a first-class batch operation, including NaN policy.
-- Port coordinate variants/sigma-point generation natively only after data-model and linalg choices are settled:
-  - use `faer` or another Rust linalg backend for matrix square roots/eigendecomposition if parity and performance justify replacing SciPy `sqrtm`;
-  - otherwise keep Python adapter-specific behavior while Rust workflows use a simpler validated Rust covariance sampler.
+- Track coordinate/orbit variant sampling explicitly, not only at module level:
+  - `VariantOrbits.create` decomposes into covariance sampling, variant metadata assembly, variant propagation, and collapse;
+  - the first Rust-native standalone slice now covers sigma-point sampling, Monte Carlo sampling, `auto` selection, and propagated-variant collapse for Cartesian orbit batches inside `rust/adam_core_rs_coords::variant_sampling`;
+  - Python/quivr `coordinates.variants.create_coordinate_variants` may still keep SciPy/NumPy/BLAS when that is the faster Python boundary, while Rust workflows use the typed sampler directly.
+- Use `faer` or another Rust linalg backend for future matrix square roots/eigendecomposition only when parity/performance justify replacing the current small fixed-dimension sampler.
 - Add unit conversions as tiny Rust helpers because they compose in Rust workflows, even if they do not matter for Python speed.
+
+Status 2026-05-28: the original surface registry tracked `adam_core.coordinates.variants` and `adam_core.orbits.variants` coarsely, but did not call out `VariantOrbits.create` / `collapse` as their own parity gap. RM-STANDALONE-007B makes that gap explicit and wires Rust-native sampled covariance through the GPL ASSIST PyO3 boundary with one top-level Python call.
 
 Acceptance criteria:
 
@@ -213,7 +217,7 @@ Acceptance criteria:
 
 Goal: make propagation and ephemeris generation a Rust-owned workflow, while keeping the execution-model changes gated on the Rust n-body backend.
 
-Status 2026-05-20: RM-STANDALONE-006 has a typed `Propagator`/`TwoBodyPropagator` surface with Rust-side provider, diagnostics, variant, and Arrow coverage. RM-STANDALONE-006A split the implementation into focused `propagation/` submodules. The diagnostic `propagation_bench` is Rust-internal only: raw serial Rust kernel vs typed Rust/pool modes, not Python/quivr/JAX evidence. RM-STANDALONE-007B now has an excluded GPL `assist-rs` adapter skeleton plus Python `adam_assist.ASSISTPropagator` public-semantics fixtures; Rust adapter parity/benchmark work remains pending. Python/quivr end-to-end typed propagation parity is tracked as W12 adapter work until a typed PyO3 adapter exists.
+Status 2026-05-28: RM-STANDALONE-006 has a typed `Propagator`/`TwoBodyPropagator` surface with Rust-side provider, diagnostics, variant, and Arrow coverage. RM-STANDALONE-006A split the implementation into focused `propagation/` submodules. The diagnostic `propagation_bench` is Rust-internal only: raw serial Rust kernel vs typed Rust/pool modes, not Python/quivr/JAX evidence. RM-STANDALONE-007B now has an excluded GPL `assist-rs` adapter with Python `adam_assist.ASSISTPropagator` public-semantics fixtures, schema-v5 propagation-only benchmarks, and first sampled-covariance parity wiring via Rust-native `VariantOrbits.create`/collapse equivalents. Python/quivr end-to-end typed propagation parity is tracked as W12 adapter work until a typed PyO3 adapter exists.
 
 Directions:
 

@@ -2,9 +2,9 @@
 
 This package is the GPL Python boundary for benchmarking the private
 ``assist-rs`` adapter against the public ``adam_assist.ASSISTPropagator``
-semantics. It intentionally starts with propagation only; ephemeris,
-collision, and covariance-public-API parity remain separate RM-STANDALONE-007B
-work items.
+semantics. It currently covers public orbit propagation plus sampled covariance
+expansion/collapse; ephemeris and collision parity remain separate
+RM-STANDALONE-007B work items.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import numpy as np
 import numpy.typing as npt
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
+from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import Origin
 from adam_core.orbits.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
@@ -83,6 +84,13 @@ def _physical_parameters_for_output(orbits: OrbitTable, result: dict[str, Any]) 
 
 def _coordinates_from_result(result: dict[str, Any]) -> CartesianCoordinates:
     states = np.asarray(result["states"], dtype=np.float64)
+    covariances = result.get("covariances")
+    covariance = None
+    if covariances is not None:
+        covariance_rows = np.asarray(covariances, dtype=np.float64).reshape(
+            states.shape[0], 6, 6
+        )
+        covariance = CoordinateCovariances.from_matrix(covariance_rows)
     return CartesianCoordinates.from_kwargs(
         x=states[:, 0],
         y=states[:, 1],
@@ -90,6 +98,7 @@ def _coordinates_from_result(result: dict[str, Any]) -> CartesianCoordinates:
         vx=states[:, 3],
         vy=states[:, 4],
         vz=states[:, 5],
+        covariance=covariance,
         time=_output_times(result),
         origin=Origin.from_kwargs(code=result["origin_codes"]),
         frame=result["frame"],
@@ -145,15 +154,16 @@ class ASSISTPropagator:
         max_processes: int | None = 1,
         seed: int | None = None,
     ) -> OrbitTable:
-        del covariance_method, num_samples, seed
-        if covariance:
-            raise NotImplementedError(
-                "adam_assist_rust currently benchmarks state propagation only; covariance=True is not implemented"
-            )
+        if covariance and isinstance(orbits, VariantOrbits):
+            raise AssertionError("Covariance is not supported for VariantOrbits")
         sorted_times = times.sort_by(["days", "nanos"])
         result = self._propagate_orbits_native(
             orbits,
             sorted_times,
+            covariance=covariance,
+            covariance_method=covariance_method,
+            num_samples=num_samples,
+            seed=seed,
             chunk_size=chunk_size,
             thread_limit=max_processes,
         )
@@ -175,6 +185,10 @@ class ASSISTPropagator:
         orbits: OrbitTable,
         times: Timestamp,
         *,
+        covariance: bool,
+        covariance_method: Literal["auto", "sigma-point", "monte-carlo"],
+        num_samples: int,
+        seed: int | None,
         chunk_size: int | None,
         thread_limit: int | None,
     ) -> OrbitTable:
@@ -187,6 +201,8 @@ class ASSISTPropagator:
         variant_ids: list[str | None] | None
         weights: list[float | None] | None
         weights_cov: list[float | None] | None
+        native_covariances: npt.NDArray[np.float64] | None = None
+        native_covariance = False
         if isinstance(orbits, VariantOrbits):
             variant_ids = _optional_string_column_to_list(orbits.variant_id)
             weights = _optional_float_column_to_list(orbits.weights)
@@ -195,6 +211,12 @@ class ASSISTPropagator:
             variant_ids = None
             weights = None
             weights_cov = None
+            if covariance and not coordinates.covariance.is_all_nan():
+                native_covariance = True
+                native_covariances = np.ascontiguousarray(
+                    coordinates.covariance.to_matrix().reshape(len(orbits), 36),
+                    dtype=np.float64,
+                )
 
         native_result = self._native.propagate_orbits(
             _string_column_to_list(orbits.orbit_id),
@@ -208,7 +230,11 @@ class ASSISTPropagator:
             target_scale,
             target_days,
             target_nanos,
-            False,
+            native_covariance,
+            covariances=native_covariances,
+            covariance_method=covariance_method,
+            num_samples=num_samples,
+            seed=seed,
             chunk_size=chunk_size,
             thread_limit=thread_limit,
             variant_ids=variant_ids,

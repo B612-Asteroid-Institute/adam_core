@@ -46,6 +46,13 @@ pub use residuals::{compute_residuals_chi2_flat, ResidualsChi2Output, ResidualsE
 pub mod weighted;
 pub use weighted::{weighted_covariance_flat, weighted_mean_flat};
 
+pub mod variant_sampling;
+pub use variant_sampling::{
+    collapse_propagated_variants_to_orbits, create_monte_carlo_orbit_variants,
+    create_sampled_orbit_variants, create_sigma_point_orbit_variants, OrbitVariantSamples,
+    OrbitVariantSamplingMethod,
+};
+
 pub mod abs_mag;
 pub use abs_mag::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, AbsMagFit};
 
