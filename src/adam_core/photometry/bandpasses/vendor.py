@@ -63,12 +63,17 @@ def _default_svo_bandpass_specs() -> tuple[_SvoBandpassSpec, ...]:
         _SvoBandpassSpec("SDSS_r", "SDSS", "r", "SLOAN/SDSS.r"),
         _SvoBandpassSpec("SDSS_i", "SDSS", "i", "SLOAN/SDSS.i"),
         _SvoBandpassSpec("SDSS_z", "SDSS", "z", "SLOAN/SDSS.z"),
-        # Pan-STARRS1 (PS1) grizy
+        # Pan-STARRS1 (PS1) grizy + w. The PS1 w filter (~ g+r+i wide) is a
+        # real, calibrated bandpass used by PS1's moving-object discovery pipeline
+        # (MPC codes F51 / F52). Other observatories that report band "w" in MPC
+        # astrometry are typically using an unfiltered / clear-glass configuration
+        # whose response is detector-specific; those are NOT mapped to PS1_w.
         _SvoBandpassSpec("PS1_g", "PS1", "g", "PAN-STARRS/PS1.g"),
         _SvoBandpassSpec("PS1_r", "PS1", "r", "PAN-STARRS/PS1.r"),
         _SvoBandpassSpec("PS1_i", "PS1", "i", "PAN-STARRS/PS1.i"),
         _SvoBandpassSpec("PS1_z", "PS1", "z", "PAN-STARRS/PS1.z"),
         _SvoBandpassSpec("PS1_y", "PS1", "y", "PAN-STARRS/PS1.y"),
+        _SvoBandpassSpec("PS1_w", "PS1", "w", "PAN-STARRS/PS1.w"),
         # ZTF
         _SvoBandpassSpec("ZTF_g", "ZTF", "g", "Palomar/ZTF.g"),
         _SvoBandpassSpec("ZTF_r", "ZTF", "r", "Palomar/ZTF.r"),
@@ -260,6 +265,14 @@ def build_observatory_band_map(out_dir: Path) -> ObservatoryBandMap:
     # Kitt Peak-Bok (V00): BASS / Bok-90Prime g/r.
     mappings.append(("V00", "g", "BASS_g"))
     mappings.append(("V00", "r", "BASS_r"))
+
+    # Pan-STARRS1 (F51, F52): the survey reports band "w" for its wide-filter
+    # moving-object discovery imaging. This is a real, calibrated PS1 bandpass
+    # (PAN-STARRS/PS1.w in SVO). Amateur / non-PS1 observatories that report
+    # band "w" are intentionally NOT mapped here; their reported band is
+    # observatory-specific clear-glass response and has no canonical mapping.
+    for code in ["F51", "F52"]:
+        mappings.append((code, "w", "PS1_w"))
 
     obs_codes, bands, filter_ids = zip(*mappings)
     keys = [f"{c}|{b}" for c, b in zip(obs_codes, bands)]

@@ -9,6 +9,7 @@ import ray
 from jax import jit, lax, vmap
 from ray import ObjectRef
 
+from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import (
     CoordinateCovariances,
@@ -29,6 +30,19 @@ from ..ray_cluster import initialize_use_ray
 from ..utils.chunking import process_in_chunks
 from ..utils.iter import _iterate_chunks
 from .aberrations import _add_light_time, add_stellar_aberration
+from .exceptions import DynamicsNumericalError
+
+_TRANSFORM_EC2EQ = jnp.asarray(c.TRANSFORM_EC2EQ, dtype=jnp.float64)
+
+
+@jit
+def _rotate_cartesian_state_ec2eq(state_ec: jnp.ndarray) -> jnp.ndarray:
+    """
+    Rotate a 6D Cartesian state from ecliptic J2000 to equatorial J2000.
+    """
+    pos_eq = _TRANSFORM_EC2EQ @ state_ec[0:3]
+    vel_eq = _TRANSFORM_EC2EQ @ state_ec[3:6]
+    return jnp.concatenate([pos_eq, vel_eq])
 
 
 @jit
@@ -120,8 +134,14 @@ def _generate_ephemeris_2body(
         topocentric_coordinates,
     )
 
-    # Convert to spherical coordinates
-    ephemeris_spherical = _cartesian_to_spherical(topocentric_coordinates)
+    # Convert to spherical coordinates in the equatorial frame.
+    #
+    # `topocentric_coordinates` is in the same (ecliptic) inertial frame as the inputs.
+    # Rotating the Cartesian state and then converting avoids an expensive
+    # spherical->cartesian->spherical round-trip later in the public wrapper.
+    ephemeris_spherical = _cartesian_to_spherical(
+        _rotate_cartesian_state_ec2eq(topocentric_coordinates)
+    )
 
     return ephemeris_spherical, light_time, propagated_orbits_aberrated
 
@@ -134,6 +154,39 @@ _generate_ephemeris_2body_vmap = jit(
         out_axes=(0, 0, 0),
     )
 )
+
+
+def _first_non_finite(values: np.ndarray) -> Optional[int]:
+    bad = np.flatnonzero(~np.isfinite(values))
+    return int(bad[0]) if bad.size > 0 else None
+
+
+def _raise_ephemeris_numerical_error(
+    *,
+    reason: str,
+    row_index: int,
+    orbit_id: str,
+    object_id: str,
+    observation_time: float,
+    light_time: Optional[float],
+    max_iter: int,
+    tol: float,
+    lt_tol: float,
+) -> None:
+    raise DynamicsNumericalError(
+        stage="ephemeris",
+        reason=reason,
+        context={
+            "row_index": row_index,
+            "orbit_id": orbit_id,
+            "object_id": object_id,
+            "observation_time_mjd_tdb": float(observation_time),
+            "light_time_days": None if light_time is None else float(light_time),
+            "max_iter": int(max_iter),
+            "tol": float(tol),
+            "lt_tol": float(lt_tol),
+        },
+    )
 
 
 def _generate_ephemeris_2body_serial(
@@ -301,32 +354,85 @@ def generate_ephemeris_2body(
     ), "Orbits and observers must be paired and orbits must be propagated to observer times."
 
     # Transform both the orbits and observers to the barycenter if they are not already.
-    propagated_orbits_barycentric = propagated_orbits.set_column(
-        "coordinates",
-        transform_coordinates(
-            propagated_orbits.coordinates,
-            CartesianCoordinates,
-            frame_out="ecliptic",
-            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
-        ),
-    )
-    observers_barycentric = observers.set_column(
-        "coordinates",
-        transform_coordinates(
-            observers.coordinates,
-            CartesianCoordinates,
-            frame_out="ecliptic",
-            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
-        ),
-    )
+    #
+    # Fast path: common workload uses SUN/ecliptic for both, on an aligned time grid.
+    # In that case we can compute the SUN->SSB translation vectors once and apply them
+    # to both orbits and observers (strictly equivalent, but avoids duplicate work).
+    propagated_orbits_barycentric = None
+    observers_barycentric = None
+    try:
+        po = propagated_orbits.coordinates
+        obc = observers.coordinates
+        po_origin = po.origin.code.to_numpy(zero_copy_only=False)
+        ob_origin = obc.origin.code.to_numpy(zero_copy_only=False)
+        if (
+            str(po.frame) == "ecliptic"
+            and str(obc.frame) == "ecliptic"
+            and np.all(po_origin == OriginCodes.SUN.name)
+            and np.all(ob_origin == OriginCodes.SUN.name)
+        ):
+            t_po = po.time.rescale("tdb")
+            t_ob = obc.time.rescale("tdb")
+            same_time = np.array_equal(
+                t_po.days.to_numpy(zero_copy_only=False),
+                t_ob.days.to_numpy(zero_copy_only=False),
+            ) and np.array_equal(
+                t_po.nanos.to_numpy(zero_copy_only=False),
+                t_ob.nanos.to_numpy(zero_copy_only=False),
+            )
+            if same_time:
+                from ..utils.spice import get_perturber_state
+
+                sun_wrt_ssb = get_perturber_state(
+                    OriginCodes.SUN,
+                    t_po,
+                    frame="ecliptic",
+                    origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+                ).values
+                coords_po = po.translate(
+                    sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name
+                )
+                coords_ob = obc.translate(
+                    sun_wrt_ssb, OriginCodes.SOLAR_SYSTEM_BARYCENTER.name
+                )
+                propagated_orbits_barycentric = propagated_orbits.set_column(
+                    "coordinates", coords_po
+                )
+                observers_barycentric = observers.set_column("coordinates", coords_ob)
+    except Exception:
+        propagated_orbits_barycentric = None
+        observers_barycentric = None
+
+    if propagated_orbits_barycentric is None or observers_barycentric is None:
+        propagated_orbits_barycentric = propagated_orbits.set_column(
+            "coordinates",
+            transform_coordinates(
+                propagated_orbits.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            ),
+        )
+        observers_barycentric = observers.set_column(
+            "coordinates",
+            transform_coordinates(
+                observers.coordinates,
+                CartesianCoordinates,
+                frame_out="ecliptic",
+                origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            ),
+        )
 
     observer_coordinates = observers_barycentric.coordinates.values
     observer_codes = observers_barycentric.code.to_numpy(zero_copy_only=False)
     mu = observers_barycentric.coordinates.origin.mu()
     times = propagated_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
-    # Define chunk size
-    chunk_size = 200
+    # Inner (JAX) batch size.
+    #
+    # This controls the shape of the vmapped JAX kernel inside each process/worker.
+    # Larger batches reduce Python loop overhead significantly for large workloads.
+    chunk_size = 2000
 
     # Process in chunks
     ephemeris_spherical = np.empty((num_entries, 6), dtype=np.float64)
@@ -352,9 +458,82 @@ def generate_ephemeris_2body(
                 stellar_aberration,
             )
         )
-        ephemeris_spherical[start : start + valid] = np.asarray(ephemeris_chunk)[:valid]
-        light_time[start : start + valid] = np.asarray(light_time_chunk)[:valid]
-        aberrated_orbits[start : start + valid] = np.asarray(aberrated_chunk)[:valid]
+        eph_np = np.asarray(ephemeris_chunk, dtype=np.float64)[:valid]
+        lt_np = np.asarray(light_time_chunk, dtype=np.float64)[:valid]
+        aberrated_np = np.asarray(aberrated_chunk, dtype=np.float64)[:valid]
+
+        bad_lt = _first_non_finite(lt_np)
+        if bad_lt is not None:
+            abs_idx = start + bad_lt
+            _raise_ephemeris_numerical_error(
+                reason="non_finite_light_time",
+                row_index=abs_idx,
+                orbit_id=str(
+                    propagated_orbits_barycentric.orbit_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
+                ),
+                object_id=str(
+                    propagated_orbits_barycentric.object_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
+                ),
+                observation_time=float(times_chunk[bad_lt]),
+                light_time=float(lt_np[bad_lt]),
+                max_iter=max_iter,
+                tol=tol,
+                lt_tol=lt_tol,
+            )
+
+        bad_eph = _first_non_finite(eph_np)
+        if bad_eph is not None:
+            abs_idx = start + bad_eph
+            _raise_ephemeris_numerical_error(
+                reason="non_finite_ephemeris_state",
+                row_index=abs_idx,
+                orbit_id=str(
+                    propagated_orbits_barycentric.orbit_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
+                ),
+                object_id=str(
+                    propagated_orbits_barycentric.object_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
+                ),
+                observation_time=float(times_chunk[bad_eph]),
+                light_time=float(lt_np[bad_eph]),
+                max_iter=max_iter,
+                tol=tol,
+                lt_tol=lt_tol,
+            )
+
+        bad_aberrated = _first_non_finite(aberrated_np)
+        if bad_aberrated is not None:
+            abs_idx = start + bad_aberrated
+            _raise_ephemeris_numerical_error(
+                reason="non_finite_aberrated_state",
+                row_index=abs_idx,
+                orbit_id=str(
+                    propagated_orbits_barycentric.orbit_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
+                ),
+                object_id=str(
+                    propagated_orbits_barycentric.object_id.to_numpy(
+                        zero_copy_only=False
+                    )[abs_idx]
+                ),
+                observation_time=float(times_chunk[bad_aberrated]),
+                light_time=float(lt_np[bad_aberrated]),
+                max_iter=max_iter,
+                tol=tol,
+                lt_tol=lt_tol,
+            )
+
+        ephemeris_spherical[start : start + valid] = eph_np
+        light_time[start : start + valid] = lt_np
+        aberrated_orbits[start : start + valid] = aberrated_np
         start += valid
 
     if start != num_entries:
@@ -363,6 +542,27 @@ def generate_ephemeris_2body(
         )
 
     # Compute emission times by subtracting light-time (in days) from the observation times.
+    bad_light_time = _first_non_finite(light_time)
+    if bad_light_time is not None:
+        _raise_ephemeris_numerical_error(
+            reason="non_finite_light_time_before_emission_time",
+            row_index=bad_light_time,
+            orbit_id=str(
+                propagated_orbits_barycentric.orbit_id.to_numpy(zero_copy_only=False)[
+                    bad_light_time
+                ]
+            ),
+            object_id=str(
+                propagated_orbits_barycentric.object_id.to_numpy(zero_copy_only=False)[
+                    bad_light_time
+                ]
+            ),
+            observation_time=float(times[bad_light_time]),
+            light_time=float(light_time[bad_light_time]),
+            max_iter=max_iter,
+            tol=tol,
+            lt_tol=lt_tol,
+        )
     emission_times = propagated_orbits_barycentric.coordinates.time.add_fractional_days(
         pa.array(-light_time)
     )
@@ -414,13 +614,7 @@ def generate_ephemeris_2body(
         vlat=ephemeris_spherical[:, 5],
         covariance=covariances_spherical,
         origin=Origin.from_kwargs(code=observer_codes),
-        frame="ecliptic",
-    )
-
-    # Rotate the spherical coordinates from the ecliptic frame
-    # to the equatorial frame
-    spherical_coordinates = transform_coordinates(
-        spherical_coordinates, SphericalCoordinates, frame_out="equatorial"
+        frame="equatorial",
     )
 
     ephemeris = Ephemeris.from_kwargs(
@@ -452,6 +646,10 @@ def generate_ephemeris_2body(
         return ephemeris
 
     # Transform object and observer coordinates to heliocentric for photometry.
+    if aberrated_coordinates is None:
+        raise RuntimeError(
+            "Internal error: aberrated coordinates are required for photometry but were not computed."
+        )
     aberrated_heliocentric = transform_coordinates(
         aberrated_coordinates,
         CartesianCoordinates,

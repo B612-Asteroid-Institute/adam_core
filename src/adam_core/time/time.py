@@ -32,6 +32,7 @@ in the expected tens-of-microseconds range (~14.6–21.8 µs for a sampled subse
 
 from __future__ import annotations
 
+import hashlib
 from typing import Callable
 
 import astropy.time
@@ -83,6 +84,51 @@ class Timestamp(qv.Table):
 
     def seconds(self) -> pa.Int64Array:
         return pc.divide(self.nanos, 1_000_000_000)
+
+    def key(self, *, scale: str | None = "tdb") -> np.ndarray:
+        """
+        Return an int64 key for each timestamp: (days * NANOS_IN_DAY + nanos).
+
+        This is useful for fast grouping/uniquing and as a stable cache key when paired
+        with a specific time scale.
+        """
+        if len(self) == 0:
+            return np.empty(0, dtype=np.int64)
+
+        t = self if scale is None else self.rescale(scale)
+        days = t.days.to_numpy(zero_copy_only=False).astype(np.int64)
+        nanos = t.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
+        return days * _NANOS_IN_DAY + nanos
+
+    def signature(self, *, scale: str | None = "tdb") -> tuple[int, int, int, int]:
+        """
+        Return a cheap signature for this Timestamp array.
+
+        The signature is (n, first_key, last_key, sum_mod) where keys are produced by `key()`.
+        """
+        n = int(len(self))
+        if n == 0:
+            return 0, 0, 0, 0
+
+        key = self.key(scale=scale)
+        first = int(key[0])
+        last = int(key[-1])
+        sum_mod = int(np.sum(key, dtype=np.int64) & np.int64(0x7FFF_FFFF_FFFF_FFFF))
+        return n, first, last, sum_mod
+
+    def cache_digest(self, *, scale: str | None = "tdb") -> int:
+        """
+        Return an order-sensitive 64-bit digest of timestamp keys.
+
+        This is intended for cache keys where row alignment matters.
+        """
+        if len(self) == 0:
+            return 0
+
+        key = np.asarray(self.key(scale=scale), dtype="<i8")
+        payload = np.ascontiguousarray(key).view(np.uint8)
+        digest = hashlib.blake2b(payload, digest_size=8).digest()
+        return int.from_bytes(digest, byteorder="little", signed=False)
 
     def mjd(self) -> pa.lib.DoubleArray:
         return pc.add(self.days, self.fractional_days())

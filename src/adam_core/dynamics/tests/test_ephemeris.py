@@ -11,11 +11,14 @@ from astropy import units as u
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
+from ...dynamics.exceptions import DynamicsNumericalError
 from ...observers import Observers
 from ...orbits import Orbits
 from ...photometry import calculate_phase_angle
 from ...time import Timestamp
+from ...utils import spice as spice_mod
 from ...utils.helpers.orbits import make_real_orbits
+from .. import ephemeris as ephemeris_module
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
 
@@ -273,6 +276,98 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
+def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(
+    monkeypatch,
+) -> None:
+    """
+    When both orbits and observers are heliocentric and share an aligned time grid, the
+    barycentric translation vectors should be computed once and reused.
+    """
+    spice_mod.clear_spkez_cache()
+
+    calls = {"n": 0}
+    orig = spice_mod.get_perturber_state
+
+    def _counted(*args, **kwargs):
+        calls["n"] += 1
+        return orig(*args, **kwargs)
+
+    monkeypatch.setattr(spice_mod, "get_perturber_state", _counted)
+
+    t = Timestamp.from_mjd([60000.0, 60000.5, 60001.0], scale="tdb")
+    origin_sun = Origin.from_kwargs(code=["SUN"] * 3)
+    orbits_sun = Orbits.from_kwargs(
+        orbit_id=["o1"] * 3,
+        object_id=["o1"] * 3,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0, 2.0, 2.0],
+            y=[0.0, 0.0, 0.0],
+            z=[0.0, 0.0, 0.0],
+            vx=[0.0, 0.0, 0.0],
+            vy=[0.0, 0.0, 0.0],
+            vz=[0.0, 0.0, 0.0],
+            time=t,
+            origin=origin_sun,
+            frame="ecliptic",
+        ),
+    )
+    observers_sun = Observers.from_kwargs(
+        code=["500"] * 3,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.0, 1.0],
+            y=[0.0, 0.0, 0.0],
+            z=[0.0, 0.0, 0.0],
+            vx=[0.0, 0.0, 0.0],
+            vy=[0.0, 0.0, 0.0],
+            vz=[0.0, 0.0, 0.0],
+            time=t,
+            origin=origin_sun,
+            frame="ecliptic",
+        ),
+    )
+
+    eph_fast = generate_ephemeris_2body(
+        orbits_sun, observers_sun, predict_magnitudes=False
+    )
+    assert int(calls["n"]) == 1
+
+    # Reference: pre-transform inputs to SSB so the internal origin transform is a no-op.
+    from ...coordinates.origin import OriginCodes
+    from ...coordinates.transform import transform_coordinates
+
+    orbits_ssb = orbits_sun.set_column(
+        "coordinates",
+        transform_coordinates(
+            orbits_sun.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    observers_ssb = observers_sun.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers_sun.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    eph_ref = generate_ephemeris_2body(
+        orbits_ssb, observers_ssb, predict_magnitudes=False
+    )
+
+    np.testing.assert_allclose(
+        eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=0.0
+    )
+    np.testing.assert_allclose(
+        eph_fast.light_time.to_numpy(),
+        eph_ref.light_time.to_numpy(),
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
 def test_generate_ephemeris_2body_phase_angle_enabled() -> None:
     # Simple opposition geometry in heliocentric coordinates: object at 2 AU on +x,
     # observer at 1 AU on +x.
@@ -502,3 +597,63 @@ def test_generate_ephemeris_2body_ray_matches_serial() -> None:
     )
 
     ray.shutdown()  # type: ignore[name-defined]
+
+
+def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> None:
+    t = Timestamp.from_mjd([60000.0], scale="tdb")
+    origin_ssb = Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"])
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["obj1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=t,
+            origin=origin_ssb,
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=t,
+            origin=origin_ssb,
+            frame="ecliptic",
+        ),
+    )
+
+    def _bad_ephemeris_vmap(
+        propagated_chunk,
+        times_chunk,
+        observer_chunk,
+        mu_chunk,
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+    ):
+        n = len(times_chunk)
+        eph = np.zeros((n, 6), dtype=np.float64)
+        lt = np.zeros((n,), dtype=np.float64)
+        lt[0] = np.nan
+        aberrated = np.zeros((n, 6), dtype=np.float64)
+        return eph, lt, aberrated
+
+    monkeypatch.setattr(
+        ephemeris_module, "_generate_ephemeris_2body_vmap", _bad_ephemeris_vmap
+    )
+
+    with pytest.raises(DynamicsNumericalError, match="non_finite_light_time"):
+        generate_ephemeris_2body(
+            orbits, observers, predict_magnitudes=False, max_processes=1
+        )

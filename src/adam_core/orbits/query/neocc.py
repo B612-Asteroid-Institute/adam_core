@@ -51,6 +51,43 @@ def _upper_triangular_to_full_dimension(
     return full
 
 
+def _full_covariance_dimension(n_elements: int) -> int:
+    """
+    Infer the square dimension D of a matrix stored as D*(D+1)/2 upper-triangular
+    elements.
+    """
+    dimension = int((np.sqrt(8 * n_elements + 1) - 1) // 2)
+    if dimension * (dimension + 1) // 2 != n_elements:
+        raise ValueError(
+            f"Covariance upper-triangular length {n_elements} is not a valid "
+            "triangular number."
+        )
+    return dimension
+
+
+def _solved_state_covariance_from_upper_triangular(
+    upper_triangular: List[float],
+    solved_dimension: int,
+) -> npt.NDArray[np.float64]:
+    """
+    Build the solved-state covariance from an OEF upper-triangular matrix.
+
+    The OEF covariance may append parameters beyond the solved orbital and
+    non-gravitational state (most commonly absolute magnitude, see "2018 CW2").
+    ``solved_dimension`` is the LSP-reported dimension (6 orbital + k non-grav),
+    so the leading ``solved_dimension`` block is the solved-state covariance and
+    any trailing rows/columns (e.g. magnitude) are dropped. This keeps a fitted
+    non-grav parameter such as A2 (dimension 7, full 7x7) while still discarding
+    a magnitude column appended to a 6D solution (dimension 6, full 7x7).
+    """
+    full = _upper_triangular_to_full_dimension(
+        np.array(upper_triangular), _full_covariance_dimension(len(upper_triangular))
+    )
+    if full.shape[0] > solved_dimension:
+        full = full[:solved_dimension, :solved_dimension]
+    return full
+
+
 def _parse_oef(data: str) -> Dict[str, Any]:
     """
     Parse a OEF file and return the stored orbital elements.
@@ -192,13 +229,9 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         if line.strip().startswith("COV"):
             cov_matrix.extend([float(x) for x in line.split()[1:]])
     if cov_matrix:
-        dimension = result.get("nongrav", {}).get("dimension", 6)
-        if dimension == 6:
-            result["covariance_full"] = _upper_triangular_to_full(np.array(cov_matrix))
-        else:
-            result["covariance_full"] = _upper_triangular_to_full_dimension(
-                np.array(cov_matrix), dimension
-            )
+        result["covariance_full"] = _solved_state_covariance_from_upper_triangular(
+            cov_matrix, result.get("nongrav", {}).get("dimension", 6)
+        )
         result["covariance"] = result["covariance_full"][:6, :6]
 
     # Parse correlation matrix
@@ -207,13 +240,9 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         if line.strip().startswith("COR"):
             cor_matrix.extend([float(x) for x in line.split()[1:]])
     if cor_matrix:
-        dimension = result.get("nongrav", {}).get("dimension", 6)
-        if dimension == 6:
-            result["correlation_full"] = _upper_triangular_to_full(np.array(cor_matrix))
-        else:
-            result["correlation_full"] = _upper_triangular_to_full_dimension(
-                np.array(cor_matrix), dimension
-            )
+        result["correlation_full"] = _solved_state_covariance_from_upper_triangular(
+            cor_matrix, result.get("nongrav", {}).get("dimension", 6)
+        )
         result["correlation"] = result["correlation_full"][:6, :6]
 
     return result
@@ -432,8 +461,8 @@ def query_neocc(
         response.raise_for_status()
 
         data = _parse_oef(response.text)
-        if orbit_type == "ke":
 
+        if orbit_type == "ke" and "time_system" in data:
             time_scale = data["time_system"]
             if time_scale == "TDT":
                 time_scale = "tt"

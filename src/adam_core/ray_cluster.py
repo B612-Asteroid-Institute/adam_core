@@ -1,9 +1,20 @@
 import logging
+import warnings
 from typing import Optional
 
 import ray
 
 logger = logging.getLogger(__name__)
+
+_JAX_FORK_RUNTIMEWARNING_RE = r"os\.fork\(\) was called\..*JAX is multithreaded.*"
+
+
+def _silence_jax_fork_runtimewarning() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message=_JAX_FORK_RUNTIMEWARNING_RE,
+        category=RuntimeWarning,
+    )
 
 
 def initialize_use_ray(
@@ -14,6 +25,8 @@ def initialize_use_ray(
     """
     use_ray = False
     if num_cpus is None or num_cpus > 1:
+        _silence_jax_fork_runtimewarning()
+
         # Default Ray configuration for this codebase.
         #
         # - We don't need the dashboard in library usage (and it can bring in extra

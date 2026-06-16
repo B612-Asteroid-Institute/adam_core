@@ -9,7 +9,10 @@ from ...observations.exposures import Exposures
 from ...observers.observers import Observers
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
-from ..absolute_magnitude import estimate_absolute_magnitude_v_from_detections
+from ..absolute_magnitude import (
+    estimate_absolute_magnitude_v_from_detections,
+    estimate_absolute_magnitude_v_from_detections_grouped,
+)
 from ..bandpasses.api import map_to_canonical_filter_bands
 from ..magnitude import predict_magnitudes
 
@@ -71,7 +74,7 @@ def test_estimate_absolute_magnitude_missing_sigma(monkeypatch):
     obj, observer = _make_geometry(n=len(det))
 
     def fake_observers(self, *args, **kwargs):  # noqa: ARG001
-        return observer
+        return observer.take(pa.array(np.arange(len(self), dtype=np.int32)))
 
     monkeypatch.setattr(Exposures, "observers", fake_observers)
 
@@ -132,7 +135,7 @@ def test_estimate_absolute_magnitude_with_sigma(monkeypatch):
     obj, observer = _make_geometry(n=len(det))
 
     def fake_observers(self, *args, **kwargs):  # noqa: ARG001
-        return observer
+        return observer.take(pa.array(np.arange(len(self), dtype=np.int32)))
 
     monkeypatch.setattr(Exposures, "observers", fake_observers)
 
@@ -158,3 +161,90 @@ def test_estimate_absolute_magnitude_with_sigma(monkeypatch):
     assert float(est.H_v[0].as_py()) == pytest.approx(H_true, abs=7e-2)
     assert est.chi2_red[0].as_py() is not None
     assert est.H_v_sigma[0].as_py() is not None
+
+
+def test_estimate_absolute_magnitude_grouped_matches_single(monkeypatch):
+    exp = Exposures.from_kwargs(
+        id=["e1", "e2", "e3", "e4"],
+        start_time=Timestamp.from_mjd([60000, 60000, 60000, 60000], scale="tdb"),
+        duration=[0.0, 0.0, 0.0, 0.0],
+        filter=["LSST_r", "LSST_r", "LSST_r", "LSST_r"],
+        observatory_code=["X05", "X05", "X05", "X05"],
+        seeing=[None, None, None, None],
+        depth_5sigma=[None, None, None, None],
+    )
+    det = PointSourceDetections.from_kwargs(
+        id=["d1", "d2", "d3", "d4", "d5", "d6"],
+        exposure_id=["e1", "e2", "e3", "e1", "e3", "e4"],
+        time=Timestamp.from_mjd(
+            [60000, 60000, 60000, 60000, 60000, 60000], scale="tdb"
+        ),
+        ra=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        dec=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        mag=[None, None, None, None, None, None],
+        mag_sigma=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+    )
+    obj, observer = _make_geometry(n=len(det))
+
+    def fake_observers(self, *args, **kwargs):  # noqa: ARG001
+        return observer.take(pa.array(np.arange(len(self), dtype=np.int32)))
+
+    monkeypatch.setattr(Exposures, "observers", fake_observers)
+
+    exp_aligned = exp.take(pa.array([0, 1, 2, 0, 2, 3], type=pa.int32()))
+    H_true_a = 19.0
+    H_true_b = 22.0
+    idx_a = [0, 1, 2]
+    idx_b = [3, 4, 5]
+    mags_a = np.asarray(
+        predict_magnitudes(
+            H_true_a,
+            obj.take(idx_a),
+            exp_aligned.take(pa.array(idx_a, type=pa.int32())),
+            reference_filter="V",
+            composition="NEO",
+        ),
+        dtype=np.float64,
+    )
+    mags_b = np.asarray(
+        predict_magnitudes(
+            H_true_b,
+            obj.take(idx_b),
+            exp_aligned.take(pa.array(idx_b, type=pa.int32())),
+            reference_filter="V",
+            composition="NEO",
+        ),
+        dtype=np.float64,
+    )
+    det = det.set_column("mag", np.concatenate([mags_a, mags_b]))
+
+    ids = pa.array(["A", "A", "A", "B", "B", "B"], type=pa.large_string())
+    grouped = estimate_absolute_magnitude_v_from_detections_grouped(
+        det, exp, obj, ids, composition="NEO", G=0.15
+    )
+    by_id = {str(r["object_id"]): r for r in grouped.table.to_pylist()}
+
+    est_a = estimate_absolute_magnitude_v_from_detections(
+        det.take(pa.array(idx_a, type=pa.int32())),
+        exp,
+        obj.take(idx_a),
+        composition="NEO",
+        G=0.15,
+    )
+    est_b = estimate_absolute_magnitude_v_from_detections(
+        det.take(pa.array(idx_b, type=pa.int32())),
+        exp,
+        obj.take(idx_b),
+        composition="NEO",
+        G=0.15,
+    )
+
+    assert "A" in by_id and "B" in by_id
+    assert float(by_id["A"]["physical_parameters"]["H_v"]) == pytest.approx(
+        float(est_a.H_v[0].as_py()), abs=1e-10
+    )
+    assert float(by_id["B"]["physical_parameters"]["H_v"]) == pytest.approx(
+        float(est_b.H_v[0].as_py()), abs=1e-10
+    )
+    assert int(by_id["A"]["n_fit_detections"]) == 3
+    assert int(by_id["B"]["n_fit_detections"]) == 3

@@ -21,6 +21,7 @@ def _add_light_time(
     mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-15,
+    max_lt_iter: int = 10,
 ) -> Tuple[jnp.ndarray, jnp.float64]:
     """
     When generating ephemeris, orbits need to be backwards propagated to the time
@@ -65,6 +66,7 @@ def _add_light_time(
         t0 = p[1]
         lt0 = p[2]
         dlt = p[3]
+        lt_iterations = p[4]
 
         # Calculate topocentric distance
         rho = jnp.linalg.norm(orbit_i[:3] - observer_position)
@@ -86,25 +88,37 @@ def _add_light_time(
         p[1] = t1
         p[2] = lt
         p[3] = dlt
+        p[4] = lt_iterations + 1
         return p
 
     @jit
     def _while_condition(p):
-        dlt = p[-1]
-        return dlt > lt_tol
+        dlt = p[3]
+        iterations = p[4]
+        return (dlt > lt_tol) & (iterations < max_lt_iter)
 
-    p = [orbit, t0, lt, dlt]
+    lt_iterations = 0
+    p = [orbit, t0, lt, dlt, lt_iterations]
     p = lax.while_loop(_while_condition, _iterate_light_time, p)
 
     orbit_aberrated = p[0]
     t0_aberrated = p[1]  # noqa: F841
     lt = p[2]
+    dlt = p[3]
+    iterations = p[4]
+    # Return NaN light-time when convergence was not reached so host-side callers
+    # can fail fast with row-level context.
+    lt = jnp.where((dlt > lt_tol) | (iterations >= max_lt_iter), jnp.nan, lt)
     return orbit_aberrated, lt
 
 
 # Vectorization Map: _add_light_time
 _add_light_time_vmap = jit(
-    vmap(_add_light_time, in_axes=(0, 0, 0, None, None, None, None), out_axes=(0, 0))
+    vmap(
+        _add_light_time,
+        in_axes=(0, 0, 0, None, None, None, None, None),
+        out_axes=(0, 0),
+    )
 )
 
 
@@ -117,6 +131,7 @@ def add_light_time(
     mu: float = MU,
     max_iter: int = 1000,
     tol: float = 1e-15,
+    max_lt_iter: int = 10,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     When generating ephemeris, orbits need to be backwards propagated to the time
@@ -152,7 +167,7 @@ def add_light_time(
         Light time correction (t0 - corrected_t0).
     """
     orbits_aberrated, lts = _add_light_time_vmap(
-        orbits, t0, observer_positions, lt_tol, mu, max_iter, tol
+        orbits, t0, observer_positions, lt_tol, mu, max_iter, tol, max_lt_iter
     )
     return orbits_aberrated, lts
 

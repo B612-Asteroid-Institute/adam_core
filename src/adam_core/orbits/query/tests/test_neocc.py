@@ -6,10 +6,31 @@ from ..neocc import (
     _non_gravitational_parameters_from_neocc,
     _parse_oef,
     _physical_parameters_from_neocc,
+    _solved_state_covariance_from_upper_triangular,
     query_neocc,
 )
 
 TESTDATA_DIR = Path(__file__).parent / "testdata" / "neocc"
+
+
+def test__solved_state_covariance_drops_trailing_magnitude_for_6d_solution():
+    # A 28-element (7x7) upper-triangular COV on a 6D orbital solution carries
+    # an appended magnitude row/column; it must be dropped to a 6x6 solved
+    # state (see "2018 CW2").
+    upper = list(range(1, 29))  # 28 distinct values
+    solved = _solved_state_covariance_from_upper_triangular(upper, solved_dimension=6)
+    assert solved.shape == (6, 6)
+
+
+def test__solved_state_covariance_keeps_nongrav_parameter_for_7d_solution():
+    # The same 28-element (7x7) COV on a 7D non-grav solution (6 orbital + A2)
+    # must keep the full 7x7 — the 7th row/column is A2, not magnitude.
+    upper = list(range(1, 29))
+    solved = _solved_state_covariance_from_upper_triangular(upper, solved_dimension=7)
+    assert solved.shape == (7, 7)
+    # The leading 6x6 block is identical whether or not the 7th param is kept.
+    dropped = _solved_state_covariance_from_upper_triangular(upper, solved_dimension=6)
+    np.testing.assert_array_equal(solved[:6, :6], dropped)
 
 
 def test__parse_oef_2024YR4_ke0():
@@ -380,3 +401,64 @@ def test_real_neocc_oef_files_parse_without_error() -> None:
     assert (
         parsed >= 2
     ), "at least two real OEF files should parse (e.g. 2024YR4, 2022OB5)"
+
+
+def test_empty_response(mocker) -> None:
+    # Sometimes, e.g. "1416T-2", the response text is empty even though the
+    # HTTP code is 200. We should just skip those objects.
+
+    import requests
+
+    # Create mock response
+    def mock_get(url, params):
+        mock = mocker.MagicMock()
+        mock.status_code = 200
+        mock.text = ""
+        return mock
+
+    mocker.patch("requests.get", side_effect=mock_get)
+
+    object_ids = ["1416T-2"]
+    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
+
+    # Verify the results
+    assert orbits is not None
+    assert len(orbits) == 0
+    requests.get.assert_has_calls(
+        [
+            mocker.call(
+                "https://neo.ssa.esa.int/PSDB-portlet/download",
+                params={"file": "1416T-2.ke1"},
+            ),
+        ]
+    )
+
+
+def test_28element_matrix(mocker) -> None:
+    # Some objects have 28 elements upper triangular for covariance and correlation
+    import requests
+
+    # Create mock response
+    def mock_get(url, params):
+        mock = mocker.MagicMock()
+        mock.status_code = 200
+        with open(TESTDATA_DIR / "2018CW2.ke1", "r") as f:
+            mock.text = f.read()
+        return mock
+
+    mocker.patch("requests.get", side_effect=mock_get)
+
+    object_ids = ["2018 CW2"]
+    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
+
+    # Verify the results
+    assert orbits is not None
+    assert len(orbits) == 1
+    requests.get.assert_has_calls(
+        [
+            mocker.call(
+                "https://neo.ssa.esa.int/PSDB-portlet/download",
+                params={"file": "2018CW2.ke1"},
+            ),
+        ]
+    )
