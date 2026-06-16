@@ -11,6 +11,14 @@ import numpy.typing as npt
 
 jax.config.update("jax_enable_x64", True)
 
+# Design-matrix column-bucket size.  The design width varies per object (it grows with
+# the per-(filter, session) offset columns), and array width is a JIT shape -> a fresh
+# XLA compile per distinct width, i.e. ~per object.  Padding the width up to a multiple
+# of this collapses those into a few shared shapes so the compile cache is reused across
+# objects.  Padded columns are zeros (the +1e-15*I ridge solves their coeffs to 0), so
+# the fit is bit-identical; ``df`` is computed from the REAL parameter count.
+_DESIGN_COL_PAD_MULTIPLE = 8
+
 
 @dataclass(slots=True)
 class JAXBatchFitResult:
@@ -31,6 +39,18 @@ def _next_multiple(value: int, multiple: int) -> int:
     return int(ceil(value / multiple) * multiple)
 
 
+def _row_bucket(n_rows: int, floor: int) -> int:
+    """Round the row count up to a power-of-two bucket (>= floor).
+
+    Padded rows are masked out of the fit (``row_mask``), so the bucket is purely a
+    JIT-shape control: n_obs spans ~30..2000 across the candle set, and a fine ×64
+    pad makes almost every object a distinct row shape -> a fresh XLA compile each.
+    Power-of-two buckets collapse that to ~7 shared shapes (waste capped at <2x rows).
+    """
+    n = max(int(n_rows), int(floor))
+    return 1 << (n - 1).bit_length()
+
+
 def _pad_rows(
     *,
     time_rel: npt.NDArray[np.float64],
@@ -46,7 +66,7 @@ def _pad_rows(
     npt.NDArray[np.bool_],
 ]:
     n_rows = int(y.shape[0])
-    n_padded = _next_multiple(n_rows, row_pad_multiple)
+    n_padded = _row_bucket(n_rows, row_pad_multiple)
     time_pad = np.zeros(n_padded, dtype=np.float64)
     y_pad = np.zeros(n_padded, dtype=np.float64)
     fixed_pad = np.zeros((n_padded, fixed.shape[1]), dtype=np.float64)
@@ -96,6 +116,7 @@ def _evaluate_frequency_batch_jit(
     prior_weights: jnp.ndarray,
     frequencies: jnp.ndarray,
     frequency_valid: jnp.ndarray,
+    n_par_real: jnp.ndarray,
     *,
     fourier_order: int,
     clip_sigma: float,
@@ -160,7 +181,7 @@ def _evaluate_frequency_batch_jit(
         model = jnp.matmul(design_real, coeffs[:, :, None])[:, :, 0]
         resid = target - model
         n_fit = jnp.sum(active_mask, axis=1)
-        df = n_fit - n_par
+        df = n_fit - n_par_real
         if has_observation_weights:
             rss = jnp.sum(jnp.where(active_mask, w_eff * resid * resid, 0.0), axis=1)
             weight_sum = jnp.sum(w_eff, axis=1)
@@ -193,7 +214,7 @@ def _evaluate_frequency_batch_jit(
 
     coeffs, resid, rss, sigma = solve_with_mask(active)
     n_fit = jnp.sum(active, axis=1)
-    df = n_fit - n_par
+    df = n_fit - n_par_real
     valid = frequency_valid & (df > 0) & jnp.isfinite(sigma)
     scores = jnp.where(valid, sigma, jnp.inf)
     best_idx = jnp.argmin(scores)
@@ -246,6 +267,22 @@ def evaluate_frequency_indices_jax(
         weights=None if weights is None else np.asarray(weights, dtype=np.float64),
         row_pad_multiple=row_pad_multiple,
     )
+    # Column-bucket the design width (see _DESIGN_COL_PAD_MULTIPLE): pad with zero
+    # columns so distinct per-object widths share JIT-compiled shapes.  ``n_par_real``
+    # carries the true parameter count (for df); padded coeffs are stripped on return.
+    real_design_width = int(fixed.shape[1])
+    n_par_real = real_design_width + 2 * int(fourier_order)
+    padded_design_width = _next_multiple(real_design_width, _DESIGN_COL_PAD_MULTIPLE)
+    col_pad = int(padded_design_width - real_design_width)
+    if col_pad:
+        fixed_pad = np.concatenate(
+            [fixed_pad, np.zeros((fixed_pad.shape[0], col_pad), dtype=np.float64)], axis=1
+        )
+        pr = np.asarray(prior_rows, dtype=np.float64)
+        prior_rows = np.concatenate(
+            [pr[:, :real_design_width], np.zeros((pr.shape[0], col_pad), dtype=np.float64), pr[:, real_design_width:]],
+            axis=1,
+        )
     n_scores = int(sample_indices.size)
     scores = np.full(n_scores, np.nan, dtype=np.float64)
 
@@ -289,6 +326,7 @@ def evaluate_frequency_indices_jax(
             jnp.asarray(prior_weights, dtype=jnp.float64),
             jnp.asarray(frequencies_batch),
             jnp.asarray(frequency_valid),
+            jnp.asarray(n_par_real, dtype=jnp.int64),
             fourier_order=int(fourier_order),
             clip_sigma=float(clip_sigma),
             max_clip_iterations=int(max_clip_iterations),
@@ -305,7 +343,14 @@ def evaluate_frequency_indices_jax(
             if local_sigma < best_sigma:
                 best_valid = True
                 best_sigma = local_sigma
-                best_coeffs = np.asarray(coeffs_batch, dtype=np.float64)
+                cb = np.asarray(coeffs_batch, dtype=np.float64)
+                best_coeffs = (
+                    cb
+                    if not col_pad
+                    else np.concatenate(
+                        [cb[:real_design_width], cb[padded_design_width:padded_design_width + 2 * fourier_order]]
+                    )
+                )
                 best_mask = np.asarray(mask_batch, dtype=bool)[: time_rel.shape[0]]
                 best_rss = float(np.asarray(rss_batch, dtype=np.float64))
                 best_df = int(np.asarray(df_batch, dtype=np.int64))
