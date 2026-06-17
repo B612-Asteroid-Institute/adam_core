@@ -784,9 +784,7 @@
     <span class="c1"># with on_unknown=&quot;skip&quot; we leave None entries in the output and let the</span>
     <span class="c1"># caller handle them.</span>
     <span class="k">if</span> <span class="n">on_unknown</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;raise&quot;</span><span class="p">,</span> <span class="s2">&quot;skip&quot;</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;on_unknown must be &#39;raise&#39; or &#39;skip&#39;; got </span><span class="si">{</span><span class="n">on_unknown</span><span class="si">!r}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;on_unknown must be &#39;raise&#39; or &#39;skip&#39;; got </span><span class="si">{</span><span class="n">on_unknown</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">missing_out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">out</span> <span class="o">==</span> <span class="kc">None</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># noqa: E711</span>
     <span class="k">if</span> <span class="n">on_unknown</span> <span class="o">==</span> <span class="s2">&quot;raise&quot;</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">missing_out</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">codes_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
@@ -813,8 +811,7 @@
                 <span class="n">codes</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span>
             <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
             <span class="n">fallback_pairs</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">codes_np</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">b_np</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">fallback_indices</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">codes_np</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">b_np</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">fallback_indices</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
             <span class="p">]</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;No non-fallback mapping found for: &quot;</span>
@@ -829,9 +826,7 @@
         <span class="n">out_non_none</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)[</span><span class="n">non_none_mask</span><span class="p">]</span>
         <span class="n">out_arr</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">out_non_none</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
         <span class="n">out_idx</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">fill_null</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">index_in</span><span class="p">(</span><span class="n">out_arr</span><span class="p">,</span> <span class="n">value_set</span><span class="o">=</span><span class="n">curves</span><span class="o">.</span><span class="n">filter_id</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">out_idx_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
-            <span class="n">out_idx</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span>
-        <span class="p">)</span>
+        <span class="n">out_idx_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out_idx</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">out_idx_np</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>
             <span class="n">bad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">out_non_none</span><span class="p">[</span><span class="n">out_idx_np</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">))</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1189,7 +1184,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=e7a08c54"></script>
+</div><script src="../../../../_static/documentation_options.js?v=5b603a8c"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
