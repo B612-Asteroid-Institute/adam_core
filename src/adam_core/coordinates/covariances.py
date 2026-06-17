@@ -539,7 +539,9 @@ def transform_solved_state_covariances_linear(
             "transform_matrices must have shape (6, 6) or (N, 6, 6) for solved-state covariance transforms."
         )
     if len(matrices) != len(covariances):
-        raise ValueError("Number of transform matrices must match number of covariances.")
+        raise ValueError(
+            "Number of transform matrices must match number of covariances."
+        )
 
     transformed: list[np.ndarray | None] = []
     for matrix, covariance in zip(matrices, covariances):

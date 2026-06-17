@@ -79,7 +79,9 @@ def test_transform_coordinates_roundtrip_cometary_preserves_solved_state_covaria
         rtol=0,
         atol=1e-10,
     )
-    np.testing.assert_allclose(cometary_roundtrip.values, coords.values, rtol=0, atol=1e-10)
+    np.testing.assert_allclose(
+        cometary_roundtrip.values, coords.values, rtol=0, atol=1e-10
+    )
     np.testing.assert_allclose(
         solved_roundtrip.to_matrix()[0],
         cometary_covariance[0],
@@ -156,7 +158,9 @@ def test_transform_coordinates_roundtrip_keplerian_preserves_9x9_solved_state_co
         rtol=0,
         atol=1e-10,
     )
-    np.testing.assert_allclose(keplerian_roundtrip.values, coords.values, rtol=0, atol=1e-10)
+    np.testing.assert_allclose(
+        keplerian_roundtrip.values, coords.values, rtol=0, atol=1e-10
+    )
     np.testing.assert_allclose(
         solved_roundtrip.to_matrix()[0],
         keplerian_covariance[0],
@@ -166,7 +170,9 @@ def test_transform_coordinates_roundtrip_keplerian_preserves_9x9_solved_state_co
 
 
 def test_transform_coordinates_frame_rotation_preserves_solved_state_covariance():
-    covariance = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26]).reshape(1, 7, 7)
+    covariance = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26]).reshape(
+        1, 7, 7
+    )
     covariance[0, 0, 6] = 7e-18
     covariance[0, 6, 0] = 7e-18
     covariance[0, 2, 6] = -2e-18

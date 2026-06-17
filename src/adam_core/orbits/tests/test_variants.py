@@ -50,9 +50,7 @@ def _nongrav_a2_row(a2: float, a2_sigma: float) -> NonGravitationalParameters:
     )
 
 
-def _solved_a2_orbit(
-    orbit_id: str, covariance_7x7: np.ndarray
-) -> Orbits:
+def _solved_a2_orbit(orbit_id: str, covariance_7x7: np.ndarray) -> Orbits:
     return Orbits.from_kwargs(
         orbit_id=[orbit_id],
         object_id=[orbit_id],
@@ -193,18 +191,16 @@ def test_VariantOrbits_joint_sampling_uses_solved_state_covariance():
     # Compare element-wise relative to each entry's own scale: an absolute
     # tolerance would be vacuously satisfied by the ~1e-26 non-grav entries.
     recovered = collapsed.solved_state_covariance.to_matrix()[0]
-    np.testing.assert_allclose(
-        np.diag(recovered), np.diag(covariance[0]), rtol=1e-9
-    )
+    np.testing.assert_allclose(np.diag(recovered), np.diag(covariance[0]), rtol=1e-9)
     np.testing.assert_allclose(recovered[0, 6], covariance[0, 0, 6], rtol=1e-9)
     np.testing.assert_allclose(recovered[4, 7], covariance[0, 4, 7], rtol=1e-9)
     np.testing.assert_allclose(recovered[5, 8], covariance[0, 5, 8], rtol=1e-9)
 
 
 def test_VariantOrbits_create_include_nongrav_false_uses_orbital_covariance_only():
-    covariance = np.diag(
-        [1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26]
-    ).reshape(1, 7, 7)
+    covariance = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26]).reshape(
+        1, 7, 7
+    )
     orbits = Orbits.from_kwargs(
         orbit_id=["joint"],
         object_id=["joint"],
@@ -296,8 +292,7 @@ def test_VariantOrbits_create_mixed_solved_state_coverage():
     assert len(plain) == 13  # 2 * 6 + 1 sigma points
     assert len(np.unique(joint.non_gravitational_parameters.A2.to_pylist())) > 1
     assert all(
-        value is None
-        for value in plain.non_gravitational_parameters.A2.to_pylist()
+        value is None for value in plain.non_gravitational_parameters.A2.to_pylist()
     )
     assert plain.solved_state_covariance.dimension[0].as_py() is None
     assert len(set(variants.variant_id.to_pylist())) == len(variants)
@@ -533,9 +528,7 @@ def test_VariantOrbits_collapse_by_object_id():
 
 
 def test_VariantOrbits_collapse_by_object_id_rebuilds_solved_state_covariance():
-    covariance = np.diag(
-        [1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26]
-    )
+    covariance = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
     variant_orbits = VariantOrbits.from_kwargs(
         orbit_id=["obj1", "obj1", "obj1"],
         object_id=["obj1", "obj1", "obj1"],

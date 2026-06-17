@@ -27,17 +27,20 @@ if (
         allow_module_level=True,
     )
 
-from ...coordinates.cartesian import CartesianCoordinates
-from ...coordinates.origin import Origin
-from ...orbits import Orbits
-from ...orbits.non_gravitational_parameters import NonGravitationalParameters
-from ...orbits.query.neocc import _non_gravitational_parameters_from_neocc, _parse_oef
-from ...orbits.query.sbdb import _orbits_from_sbdb_payloads
-from ...time import Timestamp
-
-TESTDATA_DIR = (
-    Path(__file__).parents[2] / "orbits" / "query" / "tests" / "testdata"
+from ...coordinates.cartesian import CartesianCoordinates  # noqa: E402
+from ...coordinates.origin import Origin  # noqa: E402
+from ...orbits import Orbits  # noqa: E402
+from ...orbits.non_gravitational_parameters import (  # noqa: E402
+    NonGravitationalParameters,
 )
+from ...orbits.query.neocc import (  # noqa: E402
+    _non_gravitational_parameters_from_neocc,
+    _parse_oef,
+)
+from ...orbits.query.sbdb import _orbits_from_sbdb_payloads  # noqa: E402
+from ...time import Timestamp  # noqa: E402
+
+TESTDATA_DIR = Path(__file__).parents[2] / "orbits" / "query" / "tests" / "testdata"
 
 
 class FakeExtras:
@@ -316,4 +319,6 @@ def test_assist_propagation_real_neocc_99942_allows_non_estimated_amrat():
         )
     )
 
-    np.testing.assert_allclose(particle_params, np.array([0.0, -2.90010329254113e-14, 0.0]))
+    np.testing.assert_allclose(
+        particle_params, np.array([0.0, -2.90010329254113e-14, 0.0])
+    )

@@ -183,9 +183,7 @@ def _joint_sample_variants(
             0,
             parameter_names,
         )
-        if not (
-            np.all(np.isfinite(mean)) and np.all(np.isfinite(solved_covariance))
-        ):
+        if not (np.all(np.isfinite(mean)) and np.all(np.isfinite(solved_covariance))):
             raise ValueError(
                 f"Solved-state covariance sampling requires finite mean and "
                 f"covariance values for orbit {orbit_id}."
@@ -383,9 +381,7 @@ class VariantOrbits(qv.Table):
             combined = qv.concatenate([joint_variants, coordinate_only_variants])
             return combined.set_column(
                 "variant_id",
-                pa.array(
-                    np.arange(len(combined)).astype(str), type=pa.large_string()
-                ),
+                pa.array(np.arange(len(combined)).astype(str), type=pa.large_string()),
             )
 
         variant_coordinates: VariantCoordinatesTable = create_coordinate_variants(
@@ -494,7 +490,9 @@ class VariantOrbits(qv.Table):
                 "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)
             )
             solved_covariances = orbit.solved_state_covariance.to_matrix()
-            solved_parameter_names = orbit.solved_state_covariance.parameter_names_list()
+            solved_parameter_names = (
+                orbit.solved_state_covariance.parameter_names_list()
+            )
             if solved_covariances[0] is not None and solved_parameter_names[0]:
                 parameter_names = solved_parameter_names[0]
                 samples_full = []
@@ -604,7 +602,8 @@ class VariantOrbits(qv.Table):
                 covariance_full = weighted_covariance(
                     mean_full,
                     full_samples,
-                    np.ones(len(object_variants), dtype=np.float64) / len(object_variants),
+                    np.ones(len(object_variants), dtype=np.float64)
+                    / len(object_variants),
                 )
                 orbit = orbit.set_column(
                     "non_gravitational_parameters",

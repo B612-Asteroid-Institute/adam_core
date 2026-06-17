@@ -19,14 +19,14 @@ from ..utils.chunking import process_in_chunks
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
-from .geodetics import GeodeticCoordinates, WGS84
-from .keplerian import KeplerianCoordinates
-from .origin import OriginCodes
-from .spherical import SphericalCoordinates
 from .covariances import (
     transform_solved_state_covariances_jacobian,
     transform_solved_state_covariances_linear,
 )
+from .geodetics import WGS84, GeodeticCoordinates
+from .keplerian import KeplerianCoordinates
+from .origin import OriginCodes
+from .spherical import SphericalCoordinates
 
 config.update("jax_enable_x64", True)
 
@@ -1986,8 +1986,12 @@ def transform_coordinates(
 
     if origin_out is not None and not isinstance(origin_out, OriginCodes):
         raise TypeError("Unsupported origin_out type: {}".format(type(origin_out)))
-    if solved_state_covariances is not None and len(solved_state_covariances) != len(coords):
-        raise ValueError("solved_state_covariances must have the same length as coords.")
+    if solved_state_covariances is not None and len(solved_state_covariances) != len(
+        coords
+    ):
+        raise ValueError(
+            "solved_state_covariances must have the same length as coords."
+        )
 
     if representation_out is None:
         representation_out_ = coords.__class__
@@ -2026,8 +2030,10 @@ def transform_coordinates(
     solved_state_covariances_ = solved_state_covariances
     if not isinstance(coords, CartesianCoordinates):
         if solved_state_covariances_ is not None:
-            solved_state_covariances_ = _transform_solved_state_covariances_to_cartesian(
-                coords, solved_state_covariances_
+            solved_state_covariances_ = (
+                _transform_solved_state_covariances_to_cartesian(
+                    coords, solved_state_covariances_
+                )
             )
         cartesian = coords.to_cartesian()
     else:

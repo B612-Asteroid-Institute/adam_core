@@ -134,7 +134,9 @@ def _convert_sbdb_solved_state_covariance(
     orbit_permutation = [1, 0, 5, 3, 4, 2]
     extra_indices = list(range(6, len(labels)))
     permutation = orbit_permutation + extra_indices
-    parameter_names = ["q", "e", "i", "raan", "ap", "tp"] + [labels[i] for i in extra_indices]
+    parameter_names = ["q", "e", "i", "raan", "ap", "tp"] + [
+        labels[i] for i in extra_indices
+    ]
     return covariance[np.ix_(permutation, permutation)], parameter_names
 
 
@@ -598,7 +600,9 @@ def _sbdb_nongrav_row(payload: dict[str, Any]) -> dict[str, Any]:
         row["model"] = "srp"
     elif "DT" in names_seen or "A3" in names_seen:
         row["model"] = "cometary"
-    elif any(name in names_seen for name in ("A1", "A2", "ALN", "NK", "NM", "NN", "R0")):
+    elif any(
+        name in names_seen for name in ("A1", "A2", "ALN", "NK", "NM", "NN", "R0")
+    ):
         row["model"] = "nongrav"
 
     return row

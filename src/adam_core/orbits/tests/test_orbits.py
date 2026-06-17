@@ -152,9 +152,7 @@ def test_orbits_solved_state_covariance_to_keplerian():
             time=Timestamp.from_mjd([59000.0], scale="tdb"),
             origin=Origin.from_kwargs(code=["SUN"]),
             frame="ecliptic",
-            covariance=CoordinateCovariances.from_matrix(
-                np.eye(6).reshape(1, 6, 6)
-            ),
+            covariance=CoordinateCovariances.from_matrix(np.eye(6).reshape(1, 6, 6)),
         ),
     )
 

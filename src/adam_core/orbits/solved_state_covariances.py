@@ -52,7 +52,9 @@ class SolvedStateCovariances(qv.Table):
         parameter_names: Sequence[Sequence[str] | str | None],
     ) -> "SolvedStateCovariances":
         if len(covariances) != len(parameter_names):
-            raise ValueError("covariances and parameter_names must have the same length.")
+            raise ValueError(
+                "covariances and parameter_names must have the same length."
+            )
 
         dims: list[int | None] = []
         names_out: list[str | None] = []
@@ -93,7 +95,8 @@ class SolvedStateCovariances(qv.Table):
             dimension=dims,
             parameter_names=names_out,
             values=pa.LargeListArray.from_arrays(
-                pa.array(offsets, type=pa.int64()), pa.array(flat_values, type=pa.float64())
+                pa.array(offsets, type=pa.int64()),
+                pa.array(flat_values, type=pa.float64()),
             ),
         )
 
@@ -109,7 +112,9 @@ class SolvedStateCovariances(qv.Table):
         return matrices
 
     def parameter_names_list(self) -> list[list[str]]:
-        return [parse_parameter_names(value) for value in self.parameter_names.to_pylist()]
+        return [
+            parse_parameter_names(value) for value in self.parameter_names.to_pylist()
+        ]
 
     def to_orbital_covariances(self) -> CoordinateCovariances:
         """
@@ -199,5 +204,7 @@ def build_solved_state(
         if name in orbit_lookup:
             state.append(orbit_lookup[name])
         else:
-            state.append(extract_nongrav_parameter_value(name, nongrav_parameters, index))
+            state.append(
+                extract_nongrav_parameter_value(name, nongrav_parameters, index)
+            )
     return np.asarray(state, dtype=np.float64)

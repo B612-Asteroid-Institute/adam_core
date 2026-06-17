@@ -329,8 +329,7 @@ def test_query_neocc_preserves_full_solved_state_covariance(mocker):
 
     assert orbits.solved_state_covariance.dimension[0].as_py() == 7
     assert (
-        orbits.solved_state_covariance.parameter_names[0].as_py()
-        == "x,y,z,vx,vy,vz,A2"
+        orbits.solved_state_covariance.parameter_names[0].as_py() == "x,y,z,vx,vy,vz,A2"
     )
     covariance = orbits.solved_state_covariance.to_matrix()[0]
     assert covariance is not None
@@ -353,9 +352,7 @@ def test_query_neocc_preserves_full_solved_state_covariance(mocker):
         rtol=1e-4,
     )
     # parameter_count counts the estimated parameters.
-    estimated = orbits.non_gravitational_parameters.estimated_parameter_names[
-        0
-    ].as_py()
+    estimated = orbits.non_gravitational_parameters.estimated_parameter_names[0].as_py()
     assert orbits.non_gravitational_parameters.parameter_count[0].as_py() == len(
         estimated.split(",")
     )

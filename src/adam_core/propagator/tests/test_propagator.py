@@ -715,9 +715,7 @@ def test_propagate_orbits_warns_when_propagator_lacks_nongrav_support(caplog):
 
     with caplog.at_level(logging.WARNING, logger="adam_core.propagator.propagator"):
         MockPropagator().propagate_orbits(orbits, times)
-    assert any(
-        "non-gravitational" in record.message for record in caplog.records
-    )
+    assert any("non-gravitational" in record.message for record in caplog.records)
 
     # No warning for orbits without non-grav parameters.
     caplog.clear()
@@ -725,9 +723,7 @@ def test_propagate_orbits_warns_when_propagator_lacks_nongrav_support(caplog):
         MockPropagator().propagate_orbits(
             orbits.without_non_gravitational_parameters(), times
         )
-    assert not any(
-        "non-gravitational" in record.message for record in caplog.records
-    )
+    assert not any("non-gravitational" in record.message for record in caplog.records)
 
     # No warning when the propagator declares non-grav support.
     class NongravMockPropagator(MockPropagator):
@@ -736,9 +732,7 @@ def test_propagate_orbits_warns_when_propagator_lacks_nongrav_support(caplog):
     caplog.clear()
     with caplog.at_level(logging.WARNING, logger="adam_core.propagator.propagator"):
         NongravMockPropagator().propagate_orbits(orbits, times)
-    assert not any(
-        "non-gravitational" in record.message for record in caplog.records
-    )
+    assert not any("non-gravitational" in record.message for record in caplog.records)
 
 
 def test_generate_ephemeris_include_nongrav_false_strips_before_backend():
@@ -748,9 +742,7 @@ def test_generate_ephemeris_include_nongrav_false_strips_before_backend():
             return super()._generate_ephemeris(orbits, observers)
 
     orbits = _make_nongrav_orbits()
-    observers = Observers.from_code(
-        "X05", Timestamp.from_mjd([60001], scale="tdb")
-    )
+    observers = Observers.from_code("X05", Timestamp.from_mjd([60001], scale="tdb"))
 
     prop = RecordingMockPropagator()
     prop.generate_ephemeris(
@@ -762,9 +754,7 @@ def test_generate_ephemeris_include_nongrav_false_strips_before_backend():
     prop.generate_ephemeris(
         orbits, observers, include_nongrav=True, predict_magnitudes=False
     )
-    assert (
-        prop.received_orbits.non_gravitational_parameters.A2[0].as_py() is not None
-    )
+    assert prop.received_orbits.non_gravitational_parameters.A2[0].as_py() is not None
 
 
 def test_propagate_orbits_multiple_workers_ray_variant_orbits_input():

@@ -7,15 +7,14 @@ import quivr as qv
 import requests
 
 from adam_core.coordinates.covariances import (
-    _upper_triangular_to_full,
     transform_solved_state_covariances_jacobian,
 )
 
 from ...coordinates import CoordinateCovariances, KeplerianCoordinates, Origin
 from ...coordinates.transform import _keplerian_to_cartesian_a
-from ..non_gravitational_parameters import NonGravitationalParameters
 from ...orbits import Orbits
 from ...time import Timestamp
+from ..non_gravitational_parameters import NonGravitationalParameters
 from ..physical_parameters import PhysicalParameters
 from ..solved_state_covariances import ORBITAL_PARAMETER_NAMES, SolvedStateCovariances
 
@@ -305,7 +304,9 @@ def _neocc_solved_state_is_supported(data: Dict[str, Any]) -> bool:
     return all(name in _NEOCC_SUPPORTED_SOLVE_FOR for name in solve_for)
 
 
-def _neocc_solved_sigmas(data: Dict[str, Any], solve_for: list[str]) -> Dict[str, float]:
+def _neocc_solved_sigmas(
+    data: Dict[str, Any], solve_for: list[str]
+) -> Dict[str, float]:
     """
     Extract per-parameter sigmas (in canonical units) from the diagonal of the
     raw OEF solved-state covariance.
@@ -361,9 +362,7 @@ def _non_gravitational_parameters_from_neocc(
         # The Yarkovsky-model NGR vector is (AMRAT, A2) in OEF native units;
         # convert to the canonical units declared by NonGravitationalParameters.
         amrat = (
-            float(vector[0]) * _NEOCC_UNIT_FACTORS["AMRAT"]
-            if len(vector) > 0
-            else None
+            float(vector[0]) * _NEOCC_UNIT_FACTORS["AMRAT"] if len(vector) > 0 else None
         )
         a2 = float(vector[1]) * _NEOCC_UNIT_FACTORS["A2"] if len(vector) > 1 else None
         sigmas = _neocc_solved_sigmas(data, solve_for)
@@ -528,9 +527,11 @@ def query_neocc(
                 non_gravitational_parameters=nongrav,
                 solved_state_covariance=SolvedStateCovariances.from_matrix(
                     solved_covariance_cartesian,
-                    [list(ORBITAL_PARAMETER_NAMES) + solve_for]
-                    if solved_covariance_native is not None
-                    else [None],
+                    (
+                        [list(ORBITAL_PARAMETER_NAMES) + solve_for]
+                        if solved_covariance_native is not None
+                        else [None]
+                    ),
                 ),
             )
             orbits = qv.concatenate([orbits, orbit])

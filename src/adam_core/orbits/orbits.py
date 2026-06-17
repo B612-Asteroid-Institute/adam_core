@@ -91,7 +91,10 @@ class Orbits(qv.Table):
     def coordinates_to(
         self,
         representation_out: type[
-            CartesianCoordinates | KeplerianCoordinates | CometaryCoordinates | SphericalCoordinates
+            CartesianCoordinates
+            | KeplerianCoordinates
+            | CometaryCoordinates
+            | SphericalCoordinates
         ],
         *,
         frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,
@@ -112,7 +115,10 @@ class Orbits(qv.Table):
     def solved_state_covariance_to(
         self,
         representation_out: type[
-            CartesianCoordinates | KeplerianCoordinates | CometaryCoordinates | SphericalCoordinates
+            CartesianCoordinates
+            | KeplerianCoordinates
+            | CometaryCoordinates
+            | SphericalCoordinates
         ],
         *,
         frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,

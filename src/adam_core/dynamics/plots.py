@@ -282,9 +282,7 @@ def _closest_event_time_window(
 
     percentile_low, percentile_high = window_percentiles
     if not (0.0 <= percentile_low <= percentile_high <= 100.0):
-        raise ValueError(
-            "window_percentiles must satisfy 0 <= low <= high <= 100."
-        )
+        raise ValueError("window_percentiles must satisfy 0 <= low <= high <= 100.")
 
     start_mjd = np.percentile(closest_times_mjd, percentile_low)
     end_mjd = np.percentile(closest_times_mjd, percentile_high)

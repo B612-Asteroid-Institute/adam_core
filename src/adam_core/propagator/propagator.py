@@ -683,9 +683,7 @@ class EphemerisMixin:
                 # check its length for chunking and determine
                 # if we need to propagate variants
                 orbits = ray.get(orbits_ref)
-                if not include_nongrav and isinstance(
-                    orbits, (Orbits, VariantOrbits)
-                ):
+                if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
                     orbits = orbits.without_non_gravitational_parameters()
                     orbits_ref = ray.put(orbits)
                 _warn_if_unsupported_nongrav(self, orbits)
