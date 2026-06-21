@@ -232,6 +232,11 @@ fn propagate_with_sampled_covariance(
             "covariance=True requires input coordinate covariance rows",
         ));
     }
+    // Public covariance mirrors Python `adam_assist`: sample variants, propagate them,
+    // and collapse to nominal covariance. The lower-level ASSIST STM transport
+    // (`CovariancePropagation::Linearized`) is intentionally NOT used here; it stays a
+    // separate typed Rust-trait surface (see `AssistPropagator::supports`). The public
+    // path therefore forces `None` and owns covariance via sampled variants.
     options.covariance = CovariancePropagation::None;
     let variant_samples =
         create_sampled_orbit_variants(orbits, method, num_samples, seed, 1.0, 0.0, 0.0)

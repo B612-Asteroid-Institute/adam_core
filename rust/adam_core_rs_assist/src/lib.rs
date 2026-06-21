@@ -121,6 +121,15 @@ impl Propagator for AssistPropagator {
         TimeScale::Tdb
     }
 
+    // RM-STANDALONE-007B decision (2026-06-21): `CovariancePropagation::Linearized`
+    // is a deliberately separate, lower-level Rust-typed-trait surface that transports
+    // covariance with the ASSIST state-transition matrix (first-order linearization).
+    // It is intentionally NOT the public `adam_assist` covariance behavior: the Python
+    // public path samples variants and collapses them, so the public PyO3 boundary
+    // (`python.rs`) mirrors that sampled/collapse semantics and forces
+    // `CovariancePropagation::None`. Keep Linearized reachable only through the typed
+    // Rust trait for callers that explicitly want STM transport; do not wire it into
+    // the drop-in public covariance API without an explicit, separately-labeled surface.
     fn supports(&self, mode: CovariancePropagation) -> bool {
         matches!(
             mode,
