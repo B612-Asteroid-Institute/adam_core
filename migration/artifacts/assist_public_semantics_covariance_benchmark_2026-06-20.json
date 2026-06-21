@@ -1,0 +1,555 @@
+{
+  "benchmark_id": "assist_public_semantics_covariance_benchmark_2026-06-20",
+  "environment": {
+    "covariance_methods": "Public sampled covariance: VariantOrbits.create -> variant propagation -> collapse-to-nominal covariance, mirrored by the Rust adam_core_rs_coords::variant_sampling path.",
+    "cpu_count": 10,
+    "machine": "arm64",
+    "max_processes": 10,
+    "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "python": "3.13.3",
+    "stochastic_policy": "sigma-point and auto are deterministic and compared element-wise (parity_expected=true); monte-carlo uses different RNGs in Python (NumPy) and Rust (SplitMix64) so it is compared statistically (parity_expected=false). The nominal mean state is a strict parity check for every method.",
+    "thread_mode": "parallel public calls: Python adam-assist uses Ray worker processes and adam_assist_rust uses the same value as its Rust Rayon thread_limit"
+  },
+  "generated_at_utc": "2026-06-21T02:02:28+00:00",
+  "kernels": [
+    {
+      "file_name": "de440.bsp",
+      "label": "naif_de440",
+      "sha256": "a4ce9bf9b3282becc9f4b2ac3cebe03a2ae7599981aabd7265fd8482fff7c4b5",
+      "size_bytes": 119799808
+    },
+    {
+      "file_name": "sb441-n16.bsp",
+      "label": "jpl_small_bodies_de441_n16",
+      "sha256": "919d612ce3c72a78fc7158f9120156542d0f21e6b8b052e4c1339c759747fd90",
+      "size_bytes": 645727232
+    }
+  ],
+  "packages": {
+    "adam-assist": "0.3.9",
+    "adam-assist-rust": "0.1.0",
+    "adam-core": "0.5.6",
+    "assist": "1.2.3",
+    "rebound": "4.6.0"
+  },
+  "schema_version": 1,
+  "workloads": [
+    {
+      "covariance": {
+        "method": "sigma-point",
+        "num_samples": 1000,
+        "parity_expected": true,
+        "seed": null
+      },
+      "covariance_residuals": {
+        "max_abs": 1.0037563779569175e-24,
+        "max_rel_frobenius": 9.314381251192953e-09,
+        "max_sigma_rel": 1.2068233379902587e-08,
+        "mean_rel_frobenius": 2.4693226771025193e-09,
+        "mean_sigma_rel": 1.0607244723729573e-09,
+        "python_finite": true,
+        "rows": 12,
+        "rust_finite": true
+      },
+      "description": "Tiny deterministic sigma-point covariance: 4 SUN/ecliptic/TDB same-epoch orbits by 3 target epochs.",
+      "input": {
+        "frame": "ecliptic",
+        "input_epoch_horizon_days": 0.0,
+        "input_epoch_mjd_max": 60000.0,
+        "input_epoch_mjd_min": 60000.0,
+        "origin_codes": [
+          "SUN"
+        ],
+        "rows": 4,
+        "table_type": "Orbits",
+        "time_scale": "tdb",
+        "unique_input_epochs": 1
+      },
+      "lane": "tiny",
+      "name": "tiny_cov_sigma_point_sun_ecliptic_tdb_4x3",
+      "options": {
+        "chunk_size": 1,
+        "chunk_size_ceiling": 100,
+        "covariance": true,
+        "max_processes": 10
+      },
+      "state_residuals": {
+        "position_abs_au": 2.220446049250313e-16,
+        "position_abs_m": 3.321740009720742e-05,
+        "rows": 12,
+        "time_abs_ns": 0,
+        "velocity_abs_au_per_day": 6.938893903907228e-18,
+        "velocity_abs_m_per_s": 1.2014395289788562e-11
+      },
+      "target_times": {
+        "rows": 3,
+        "scale": "tdb",
+        "unique_rows": 3
+      },
+      "timing_seconds": {
+        "python": {
+          "p50": 0.2215612092986703,
+          "p95": 0.27741688322275876,
+          "values": [
+            0.28771941643208265,
+            0.23620675038546324,
+            0.19709054194390774,
+            0.2215612092986703,
+            0.2008407087996602
+          ]
+        },
+        "rust": {
+          "p50": 0.012093416415154934,
+          "p95": 0.018951950222253797,
+          "values": [
+            0.012093416415154934,
+            0.009854082949459553,
+            0.016782250255346298,
+            0.019494375213980675,
+            0.00984487496316433
+          ]
+        },
+        "speedup": {
+          "p50_python_over_rust": 18.3208120594458,
+          "p95_python_over_rust": 14.63790691561704
+        }
+      },
+      "workload_shape": {
+        "n_orbits": 4,
+        "n_target_times": 3,
+        "output_rows": 12
+      }
+    },
+    {
+      "covariance": {
+        "method": "sigma-point",
+        "num_samples": 1000,
+        "parity_expected": true,
+        "seed": null
+      },
+      "covariance_residuals": {
+        "max_abs": 2.069381977586986e-24,
+        "max_rel_frobenius": 1.7956502690369654e-08,
+        "max_sigma_rel": 1.9625503391775294e-08,
+        "mean_rel_frobenius": 4.488267877409526e-09,
+        "mean_sigma_rel": 1.461379802969071e-09,
+        "python_finite": true,
+        "rows": 500,
+        "rust_finite": true
+      },
+      "description": "Small deterministic sigma-point covariance: 25 SUN/ecliptic/TDB same-epoch orbits by 20 target epochs.",
+      "input": {
+        "frame": "ecliptic",
+        "input_epoch_horizon_days": 0.0,
+        "input_epoch_mjd_max": 60000.0,
+        "input_epoch_mjd_min": 60000.0,
+        "origin_codes": [
+          "SUN"
+        ],
+        "rows": 25,
+        "table_type": "Orbits",
+        "time_scale": "tdb",
+        "unique_input_epochs": 1
+      },
+      "lane": "small",
+      "name": "small_cov_sigma_point_sun_ecliptic_tdb_25x20",
+      "options": {
+        "chunk_size": 2,
+        "chunk_size_ceiling": 200,
+        "covariance": true,
+        "max_processes": 10
+      },
+      "state_residuals": {
+        "position_abs_au": 4.440892098500626e-16,
+        "position_abs_m": 6.643480019441483e-05,
+        "rows": 500,
+        "time_abs_ns": 0,
+        "velocity_abs_au_per_day": 1.0408340855860843e-17,
+        "velocity_abs_m_per_s": 1.8021592934682844e-11
+      },
+      "target_times": {
+        "rows": 20,
+        "scale": "tdb",
+        "unique_rows": 20
+      },
+      "timing_seconds": {
+        "python": {
+          "p50": 1.3692119996994734,
+          "p95": 2.072569766640663,
+          "values": [
+            1.299170583486557,
+            1.3692119996994734,
+            2.216500791721046,
+            1.4968456663191319,
+            1.3116812091320753
+          ]
+        },
+        "rust": {
+          "p50": 0.06231150031089783,
+          "p95": 0.07076434139162302,
+          "values": [
+            0.06231150031089783,
+            0.05970008298754692,
+            0.05367233417928219,
+            0.0686705419793725,
+            0.07128779124468565
+          ]
+        },
+        "speedup": {
+          "p50_python_over_rust": 21.97366445789154,
+          "p95_python_over_rust": 29.288335422648487
+        }
+      },
+      "workload_shape": {
+        "n_orbits": 25,
+        "n_target_times": 20,
+        "output_rows": 500
+      }
+    },
+    {
+      "covariance": {
+        "method": "auto",
+        "num_samples": 1000,
+        "parity_expected": true,
+        "seed": null
+      },
+      "covariance_residuals": {
+        "max_abs": 2.069381977586986e-24,
+        "max_rel_frobenius": 1.7956502690369654e-08,
+        "max_sigma_rel": 1.9625503391775294e-08,
+        "mean_rel_frobenius": 4.488267877409526e-09,
+        "mean_sigma_rel": 1.461379802969071e-09,
+        "python_finite": true,
+        "rows": 500,
+        "rust_finite": true
+      },
+      "description": "Small deterministic auto covariance (sigma-point reconstructs the well-conditioned input): 25 SUN/ecliptic/TDB same-epoch orbits by 20 target epochs.",
+      "input": {
+        "frame": "ecliptic",
+        "input_epoch_horizon_days": 0.0,
+        "input_epoch_mjd_max": 60000.0,
+        "input_epoch_mjd_min": 60000.0,
+        "origin_codes": [
+          "SUN"
+        ],
+        "rows": 25,
+        "table_type": "Orbits",
+        "time_scale": "tdb",
+        "unique_input_epochs": 1
+      },
+      "lane": "small",
+      "name": "small_cov_auto_sun_ecliptic_tdb_25x20",
+      "options": {
+        "chunk_size": 2,
+        "chunk_size_ceiling": 200,
+        "covariance": true,
+        "max_processes": 10
+      },
+      "state_residuals": {
+        "position_abs_au": 4.440892098500626e-16,
+        "position_abs_m": 6.643480019441483e-05,
+        "rows": 500,
+        "time_abs_ns": 0,
+        "velocity_abs_au_per_day": 1.0408340855860843e-17,
+        "velocity_abs_m_per_s": 1.8021592934682844e-11
+      },
+      "target_times": {
+        "rows": 20,
+        "scale": "tdb",
+        "unique_rows": 20
+      },
+      "timing_seconds": {
+        "python": {
+          "p50": 1.2335210833698511,
+          "p95": 1.302720533311367,
+          "values": [
+            1.314862041734159,
+            1.205882958136499,
+            1.2335210833698511,
+            1.2541544996201992,
+            1.1802378743886948
+          ]
+        },
+        "rust": {
+          "p50": 0.05287704057991505,
+          "p95": 0.06498028356581927,
+          "values": [
+            0.04820412490516901,
+            0.05314274970442057,
+            0.047105749137699604,
+            0.06793966703116894,
+            0.05287704057991505
+          ]
+        },
+        "speedup": {
+          "p50_python_over_rust": 23.328103650308957,
+          "p95_python_over_rust": 20.047935494030686
+        }
+      },
+      "workload_shape": {
+        "n_orbits": 25,
+        "n_target_times": 20,
+        "output_rows": 500
+      }
+    },
+    {
+      "covariance": {
+        "method": "monte-carlo",
+        "num_samples": 512,
+        "parity_expected": false,
+        "seed": 20260620
+      },
+      "covariance_residuals": {
+        "max_abs": 1.3812122543779136e-17,
+        "max_rel_frobenius": 0.12129274134335925,
+        "max_sigma_rel": 0.06460757984036969,
+        "mean_rel_frobenius": 0.12060298109435472,
+        "mean_sigma_rel": 0.026746280738663718,
+        "python_finite": true,
+        "rows": 100,
+        "rust_finite": true
+      },
+      "description": "Small statistical monte-carlo covariance: 10 SUN/ecliptic/TDB same-epoch orbits by 10 target epochs, 512 samples, fixed seed. Compared statistically because NumPy and SplitMix64 RNGs differ.",
+      "input": {
+        "frame": "ecliptic",
+        "input_epoch_horizon_days": 0.0,
+        "input_epoch_mjd_max": 60000.0,
+        "input_epoch_mjd_min": 60000.0,
+        "origin_codes": [
+          "SUN"
+        ],
+        "rows": 10,
+        "table_type": "Orbits",
+        "time_scale": "tdb",
+        "unique_input_epochs": 1
+      },
+      "lane": "small",
+      "name": "small_cov_monte_carlo_sun_ecliptic_tdb_10x10",
+      "options": {
+        "chunk_size": 1,
+        "chunk_size_ceiling": 200,
+        "covariance": true,
+        "max_processes": 10
+      },
+      "state_residuals": {
+        "position_abs_au": 4.440892098500626e-16,
+        "position_abs_m": 6.643480019441483e-05,
+        "rows": 100,
+        "time_abs_ns": 0,
+        "velocity_abs_au_per_day": 1.0408340855860843e-17,
+        "velocity_abs_m_per_s": 1.8021592934682844e-11
+      },
+      "target_times": {
+        "rows": 10,
+        "scale": "tdb",
+        "unique_rows": 10
+      },
+      "timing_seconds": {
+        "python": {
+          "p50": 21.05513108242303,
+          "p95": 21.866446716710925,
+          "values": [
+            21.949242416769266,
+            21.53526391647756,
+            20.457697874866426,
+            19.341901917010546,
+            21.05513108242303
+          ]
+        },
+        "rust": {
+          "p50": 1.3650323748588562,
+          "p95": 1.4992015497758984,
+          "values": [
+            1.3650323748588562,
+            1.2915987921878695,
+            1.4439212502911687,
+            1.513021624647081,
+            1.2477867910638452
+          ]
+        },
+        "speedup": {
+          "p50_python_over_rust": 15.424638616794802,
+          "p95_python_over_rust": 14.58539495238618
+        }
+      },
+      "workload_shape": {
+        "n_orbits": 10,
+        "n_target_times": 10,
+        "output_rows": 100
+      }
+    },
+    {
+      "covariance": {
+        "method": "sigma-point",
+        "num_samples": 1000,
+        "parity_expected": true,
+        "seed": null
+      },
+      "covariance_residuals": {
+        "max_abs": 4.9426938297287375e-22,
+        "max_rel_frobenius": 1.7381692466640202e-08,
+        "max_sigma_rel": 2.18144921200604e-08,
+        "mean_rel_frobenius": 2.2640064865563733e-09,
+        "mean_sigma_rel": 1.2391030446148172e-09,
+        "python_finite": true,
+        "rows": 5000,
+        "rust_finite": true
+      },
+      "description": "Large deterministic sigma-point covariance over a one-year horizon: 100 SUN/ecliptic/TDB same-epoch orbits by 50 target epochs across 365 days.",
+      "input": {
+        "frame": "ecliptic",
+        "input_epoch_horizon_days": 0.0,
+        "input_epoch_mjd_max": 60000.0,
+        "input_epoch_mjd_min": 60000.0,
+        "origin_codes": [
+          "SUN"
+        ],
+        "rows": 100,
+        "table_type": "Orbits",
+        "time_scale": "tdb",
+        "unique_input_epochs": 1
+      },
+      "lane": "large",
+      "name": "large_cov_sigma_point_sun_ecliptic_tdb_100x50_1yr",
+      "options": {
+        "chunk_size": 10,
+        "chunk_size_ceiling": 200,
+        "covariance": true,
+        "max_processes": 10
+      },
+      "state_residuals": {
+        "position_abs_au": 6.5503158452884236e-15,
+        "position_abs_m": 0.0009799133028676188,
+        "rows": 5000,
+        "time_abs_ns": 0,
+        "velocity_abs_au_per_day": 1.0321604682062002e-16,
+        "velocity_abs_m_per_s": 1.7871412993560486e-10
+      },
+      "target_times": {
+        "rows": 50,
+        "scale": "tdb",
+        "unique_rows": 50
+      },
+      "timing_seconds": {
+        "python": {
+          "p50": 5.342445624992251,
+          "p95": 5.644582174345851,
+          "values": [
+            5.711173707619309,
+            5.378216041252017,
+            5.342445624992251,
+            5.274705708958209,
+            5.298677417449653
+          ]
+        },
+        "rust": {
+          "p50": 0.6107891667634249,
+          "p95": 0.7211267668753862,
+          "values": [
+            0.5554607911035419,
+            0.7292539170011878,
+            0.68861816637218,
+            0.6107891667634249,
+            0.5632900418713689
+          ]
+        },
+        "speedup": {
+          "p50_python_over_rust": 8.746791717511789,
+          "p95_python_over_rust": 7.82744786856769
+        }
+      },
+      "workload_shape": {
+        "n_orbits": 100,
+        "n_target_times": 50,
+        "output_rows": 5000
+      }
+    },
+    {
+      "covariance": {
+        "method": "sigma-point",
+        "num_samples": 1000,
+        "parity_expected": true,
+        "seed": null
+      },
+      "covariance_residuals": {
+        "max_abs": 1.7013445682995797e-20,
+        "max_rel_frobenius": 6.812048072658789e-07,
+        "max_sigma_rel": 1.3471552818641882e-06,
+        "mean_rel_frobenius": 1.066050196608812e-08,
+        "mean_sigma_rel": 4.9358058706367175e-09,
+        "python_finite": true,
+        "rows": 1250,
+        "rust_finite": true
+      },
+      "description": "Large realistic unique-input-epoch sigma-point covariance over a one-year horizon: 50 SUN/ecliptic/TDB orbits with 50 unique initial epochs by 25 target epochs across 365 days. Exercises the one-by-one per-orbit covariance fallback.",
+      "input": {
+        "frame": "ecliptic",
+        "input_epoch_horizon_days": 29.875,
+        "input_epoch_mjd_max": 59999.875,
+        "input_epoch_mjd_min": 59970.0,
+        "origin_codes": [
+          "SUN"
+        ],
+        "rows": 50,
+        "table_type": "Orbits",
+        "time_scale": "tdb",
+        "unique_input_epochs": 50
+      },
+      "lane": "large",
+      "name": "large_cov_sigma_point_unique_input_epochs_50x25_1yr",
+      "options": {
+        "chunk_size": 5,
+        "chunk_size_ceiling": 200,
+        "covariance": true,
+        "max_processes": 10
+      },
+      "state_residuals": {
+        "position_abs_au": 1.9628743075372768e-13,
+        "position_abs_m": 0.029364181685931356,
+        "rows": 1250,
+        "time_abs_ns": 0,
+        "velocity_abs_au_per_day": 3.0192862099376327e-15,
+        "velocity_abs_m_per_s": 5.2277637504692485e-09
+      },
+      "target_times": {
+        "rows": 25,
+        "scale": "tdb",
+        "unique_rows": 25
+      },
+      "timing_seconds": {
+        "python": {
+          "p50": 2.0018362076953053,
+          "p95": 2.1772233076393603,
+          "values": [
+            2.0018362076953053,
+            2.1913612075150013,
+            2.120671708136797,
+            1.8956142086535692,
+            1.9353867499157786
+          ]
+        },
+        "rust": {
+          "p50": 0.1880253329873085,
+          "p95": 0.1999355923384428,
+          "values": [
+            0.20020366739481688,
+            0.1820859992876649,
+            0.1880253329873085,
+            0.18711045756936073,
+            0.1988632921129465
+          ]
+        },
+        "speedup": {
+          "p50_python_over_rust": 10.646630301835057,
+          "p95_python_over_rust": 10.889623414093503
+        }
+      },
+      "workload_shape": {
+        "n_orbits": 50,
+        "n_target_times": 25,
+        "output_rows": 1250
+      }
+    }
+  ]
+}
