@@ -2281,6 +2281,150 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires ASSIST kernel env vars and compares ephemeris against the frozen Python public-semantics fixture"]
+    fn live_assist_matches_public_semantics_fixture_ephemeris_case() {
+        use adam_core_rs_coords::{generate_ephemeris, EphemerisPhotometryOptions};
+
+        let propagator = live_propagator_from_env();
+        let fixture = fixture();
+        let cases = fixture
+            .get("ephemeris_cases")
+            .and_then(Value::as_array)
+            .expect("fixture must contain ephemeris cases");
+        for case in cases {
+            let case_id = case
+                .get("case_id")
+                .and_then(Value::as_str)
+                .expect("case must have id");
+            let orbits = json_orbits(case.get("input_orbits").unwrap());
+
+            // Build observers and sort by epoch to match Python EphemerisMixin
+            // output ordering (sorted observer epochs/codes).
+            let observers_value = case.get("observers").unwrap();
+            let codes = json_string_array(observers_value, "code");
+            let observer_coordinates_value = observers_value.get("coordinates").unwrap();
+            let observer_times = json_time_array(observer_coordinates_value.get("time").unwrap());
+            let observer_states = json_states(observer_coordinates_value);
+            let observer_origins = json_string_array(observer_coordinates_value, "origin_codes");
+            let observer_frame = Frame::parse(
+                observer_coordinates_value
+                    .get("frame")
+                    .and_then(Value::as_str)
+                    .unwrap(),
+            )
+            .unwrap();
+            let mut order: Vec<usize> = (0..codes.len()).collect();
+            order.sort_by(|&a, &b| {
+                (
+                    observer_times.epochs[a].days,
+                    observer_times.epochs[a].nanos,
+                )
+                    .cmp(&(
+                        observer_times.epochs[b].days,
+                        observer_times.epochs[b].nanos,
+                    ))
+            });
+            let sorted_codes = order
+                .iter()
+                .map(|&i| ObservatoryCode(codes[i].clone()))
+                .collect::<Vec<_>>();
+            let sorted_states = order
+                .iter()
+                .map(|&i| observer_states[i])
+                .collect::<Vec<_>>();
+            let sorted_origins = OriginArray::new(
+                order
+                    .iter()
+                    .map(|&i| OriginId::from_code(observer_origins[i].clone()))
+                    .collect(),
+            );
+            let sorted_epochs = order
+                .iter()
+                .map(|&i| observer_times.epochs[i])
+                .collect::<Vec<_>>();
+            let observers = ObserverBatch::new(
+                sorted_codes,
+                CoordinateBatch::cartesian(
+                    sorted_states,
+                    observer_frame,
+                    sorted_origins,
+                    Some(TimeArray::new(observer_times.scale, sorted_epochs).unwrap()),
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+
+            // Python default ephemeris uses light-time only (no stellar aberration),
+            // UTC output, observer-code origins, optional phase angle without H/G.
+            let options = EphemerisOptions {
+                output_time_scale: TimeScale::Utc,
+                stellar_aberration: false,
+                photometry: EphemerisPhotometryOptions {
+                    predict_magnitude_v: false,
+                    predict_phase_angle: true,
+                    h_v: None,
+                    g: None,
+                },
+                ..EphemerisOptions::default()
+            };
+
+            let result =
+                generate_ephemeris(&propagator, &orbits, &observers, &options, &NoopProvider)
+                    .unwrap();
+
+            let expected = case
+                .get("output_ephemeris")
+                .unwrap()
+                .get("coordinates")
+                .unwrap();
+            let expected_states = json_states(expected);
+            let expected_origins = json_string_array(expected, "origin_codes");
+            let expected_times = json_time_array(expected.get("time").unwrap());
+
+            let coordinates = &result.ephemeris.coordinates;
+            let actual_states = coordinates.values.spherical().expect("spherical output");
+            assert_eq!(actual_states.len(), expected_states.len(), "{case_id} rows");
+            let actual_origins = coordinates
+                .origins
+                .origins
+                .iter()
+                .map(OriginId::code)
+                .collect::<Vec<_>>();
+            assert_eq!(actual_origins, expected_origins, "{case_id} origins");
+            assert_eq!(
+                coordinates.times.as_ref().unwrap(),
+                &expected_times,
+                "{case_id} times"
+            );
+            let mut max_abs = 0.0_f64;
+            let mut per_axis = [0.0_f64; 6];
+            for (actual, expected) in actual_states.iter().zip(expected_states.iter()) {
+                for axis in 0..6 {
+                    let diff = (actual[axis] - expected[axis]).abs();
+                    per_axis[axis] = per_axis[axis].max(diff);
+                    max_abs = max_abs.max(diff);
+                }
+            }
+            println!(
+                "{case_id}: ephemeris max abs spherical residual = {max_abs:e}; per-axis [rho,lon,lat,vrho,vlon,vlat] = {per_axis:?}"
+            );
+            // MEASURED 2026-06-22: the Rust-native ASSIST ephemeris matches the
+            // frozen Python adam_assist fixture to mas/km level (RA ~2.56e-6 deg,
+            // Dec ~1.09e-6 deg, range ~4.57e-8 AU), NOT yet machine epsilon. The
+            // residual is a light-time sub-step convention difference: Python
+            // add_light_time runs on barycentric states with Sun mu, while the
+            // generic Rust generate_ephemeris runs on the orbit's heliocentric
+            // origin. Reaching bit-parity is tracked as follow-up work; this
+            // threshold pins the current measured level and guards regressions.
+            assert!(
+                max_abs < 5.0e-6,
+                "{case_id} ephemeris spherical residual {max_abs:e} exceeds measured tolerance"
+            );
+        }
+    }
+
+    #[test]
     #[ignore = "requires ADAM_CORE_RS_ASSIST_PLANETS_PATH and ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH"]
     fn live_assist_propagates_with_env_kernels() {
         let propagator = live_propagator_from_env();
