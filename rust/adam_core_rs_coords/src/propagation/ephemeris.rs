@@ -5,6 +5,7 @@ use crate::photometry::{
     calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
     calculate_phase_angle_flat,
 };
+use crate::translation::{normalize_coordinates_to, OriginTranslationProvider};
 use crate::types::time::TimeScaleProvider;
 use crate::types::{
     origin_mu_au3_day2, CoordinateBatch, EphemerisBatch, Frame, ObserverBatch, OriginArray,
@@ -400,6 +401,73 @@ fn build_aberrated_coordinates(
     .map_err(PropagationError::from)
 }
 
+/// Generate ephemerides while translating the observers to the orbits' origin
+/// and the ecliptic frame natively, via `translation_provider`.
+///
+/// This is the Rust-native replacement for the Python observer-state /
+/// `get_perturber_state` glue: the orbits are propagated in their own origin
+/// (so 2-body central-body dynamics are unaffected), the observers are rotated
+/// to ecliptic and shifted to the orbits' origin, and then [`generate_ephemeris`]
+/// runs with its same-origin ecliptic contract satisfied by construction.
+///
+/// Orbits must already be ecliptic and share a single origin (rotate them first
+/// if needed); only the observer normalization needs the SPICE-backed provider.
+pub fn generate_ephemeris_translated<P, T>(
+    propagator: &P,
+    orbits: &OrbitBatch,
+    observers: &ObserverBatch,
+    options: &EphemerisOptions,
+    time_provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<EphemerisResult>
+where
+    P: Propagator,
+    T: OriginTranslationProvider + ?Sized,
+{
+    if orbits.coordinates.frame != Frame::Ecliptic {
+        return Err(PropagationError::InvalidRequest(
+            "generate_ephemeris_translated requires ecliptic orbit coordinates".to_string(),
+        ));
+    }
+    let target_origin = orbits
+        .coordinates
+        .origins
+        .origins
+        .first()
+        .cloned()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "ephemeris generation requires at least one orbit".to_string(),
+            )
+        })?;
+    if orbits
+        .coordinates
+        .origins
+        .origins
+        .iter()
+        .any(|origin| origin != &target_origin)
+    {
+        return Err(PropagationError::InvalidRequest(
+            "generate_ephemeris_translated requires orbits to share a single origin".to_string(),
+        ));
+    }
+
+    let observer_coordinates = normalize_coordinates_to(
+        &observers.coordinates,
+        &target_origin,
+        Frame::Ecliptic,
+        translation_provider,
+    )?;
+    let translated_observers = ObserverBatch::new(observers.code.clone(), observer_coordinates)?;
+    generate_ephemeris(
+        propagator,
+        orbits,
+        &translated_observers,
+        options,
+        time_provider,
+    )
+}
+
 fn validate_ephemeris_input_contract(
     orbits: &OrbitBatch,
     observers: &ObserverBatch,
@@ -622,6 +690,101 @@ mod tests {
             coordinates,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn translated_ephemeris_matches_manually_translated_observers() {
+        use crate::translation::OriginTranslationProvider;
+
+        struct StubOriginProvider {
+            vectors: Vec<[f64; 6]>,
+        }
+        impl OriginTranslationProvider for StubOriginProvider {
+            fn origin_translation_vectors(
+                &self,
+                origins: &OriginArray,
+                _target_origin: &OriginId,
+                _frame: Frame,
+                times: &TimeArray,
+            ) -> SchemaResult<Vec<[f64; 6]>> {
+                assert_eq!(origins.len(), times.len());
+                Ok(self.vectors.clone())
+            }
+        }
+
+        let orbits = sample_orbits();
+        let observer_states = vec![
+            [0.9, -0.2, 0.0, 0.002, 0.017, 0.0],
+            [1.1, 0.1, 0.02, -0.001, 0.016, 0.0001],
+        ];
+        let codes = vec![
+            ObservatoryCode("500".to_string()),
+            ObservatoryCode("X05".to_string()),
+        ];
+        let ssb_observers = ObserverBatch::new(
+            codes.clone(),
+            CoordinateBatch::cartesian(
+                observer_states.clone(),
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+                Some(sample_times(2)),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let vectors = vec![
+            [0.005, -0.003, 0.001, 1.0e-6, -2.0e-6, 3.0e-7],
+            [0.004, -0.002, 0.0015, 2.0e-6, -1.0e-6, 1.0e-7],
+        ];
+        let provider = StubOriginProvider {
+            vectors: vectors.clone(),
+        };
+        let options = EphemerisOptions::default();
+
+        let translated = generate_ephemeris_translated(
+            &TwoBodyPropagator::default(),
+            &orbits,
+            &ssb_observers,
+            &options,
+            &NoopProvider,
+            &provider,
+        )
+        .unwrap();
+
+        let manual_states: Vec<[f64; 6]> = observer_states
+            .iter()
+            .zip(vectors.iter())
+            .map(|(state, vector)| {
+                let mut out = *state;
+                for index in 0..6 {
+                    out[index] += vector[index];
+                }
+                out
+            })
+            .collect();
+        let sun_observers = ObserverBatch::new(
+            codes,
+            CoordinateBatch::cartesian(
+                manual_states,
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::Named("SUN".to_string()), 2),
+                Some(sample_times(2)),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let expected = generate_ephemeris(
+            &TwoBodyPropagator::default(),
+            &orbits,
+            &sun_observers,
+            &options,
+            &NoopProvider,
+        )
+        .unwrap();
+
+        assert_eq!(translated, expected);
     }
 
     #[test]

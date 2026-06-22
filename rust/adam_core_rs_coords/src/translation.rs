@@ -91,6 +91,70 @@ where
     )
 }
 
+/// Rotate a Cartesian `CoordinateBatch` between the ecliptic and equatorial
+/// frames using the canonical adam-core obliquity kernels.
+///
+/// Frame rotation is not covariance-invariant, and this helper does not rotate
+/// covariance, so it requires `covariance == None` for an actual frame change
+/// (a no-op same-frame call preserves covariance). Only ecliptic<->equatorial
+/// is supported here; time-varying (ITRF93) rotation is out of scope.
+pub fn rotate_coordinates_to_frame(
+    coordinates: &CoordinateBatch,
+    target_frame: Frame,
+) -> SchemaResult<CoordinateBatch> {
+    if coordinates.frame == target_frame {
+        return Ok(coordinates.clone());
+    }
+    if coordinates.covariance.is_some() {
+        return Err(SchemaError::InvalidRecordBatch(
+            "frame rotation of coordinates with covariance is not supported here".to_string(),
+        ));
+    }
+    let states = coordinates.values.cartesian().ok_or_else(|| {
+        SchemaError::InvalidRecordBatch("frame rotation requires Cartesian coordinates".to_string())
+    })?;
+    let rotated: Vec<[f64; 6]> = match (coordinates.frame, target_frame) {
+        (Frame::Equatorial, Frame::Ecliptic) => states
+            .iter()
+            .map(crate::rotate_equatorial_to_ecliptic_row)
+            .collect(),
+        (Frame::Ecliptic, Frame::Equatorial) => states
+            .iter()
+            .map(crate::rotate_ecliptic_to_equatorial_row)
+            .collect(),
+        _ => {
+            return Err(SchemaError::InvalidRecordBatch(format!(
+                "unsupported frame rotation from {} to {}",
+                coordinates.frame.as_str(),
+                target_frame.as_str()
+            )))
+        }
+    };
+    CoordinateBatch::cartesian(
+        rotated,
+        target_frame,
+        coordinates.origins.clone(),
+        coordinates.times.clone(),
+        None,
+    )
+}
+
+/// Normalize a Cartesian `CoordinateBatch` to a single `target_origin` and
+/// `target_frame`: rotate to the target frame first (so the origin-translation
+/// vectors are evaluated in that frame), then shift the origin via `provider`.
+pub fn normalize_coordinates_to<P>(
+    coordinates: &CoordinateBatch,
+    target_origin: &OriginId,
+    target_frame: Frame,
+    provider: &P,
+) -> SchemaResult<CoordinateBatch>
+where
+    P: OriginTranslationProvider + ?Sized,
+{
+    let rotated = rotate_coordinates_to_frame(coordinates, target_frame)?;
+    translate_coordinates_to_origin(&rotated, target_origin, provider)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +235,68 @@ mod tests {
             out.covariance.as_ref().unwrap().values_row_major,
             cov_values
         );
+    }
+
+    #[test]
+    fn rotate_to_frame_roundtrips_through_obliquity() {
+        let states = vec![[1.0, 0.5, -0.3, 0.01, 0.005, -0.003]];
+        let times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)]).unwrap();
+        let ecliptic = CoordinateBatch::cartesian(
+            states.clone(),
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 1),
+            Some(times),
+            None,
+        )
+        .unwrap();
+        let equatorial = rotate_coordinates_to_frame(&ecliptic, Frame::Equatorial).unwrap();
+        assert_eq!(equatorial.frame, Frame::Equatorial);
+        let back = rotate_coordinates_to_frame(&equatorial, Frame::Ecliptic).unwrap();
+        assert!(close(
+            back.values.cartesian().unwrap()[0],
+            ecliptic.values.cartesian().unwrap()[0]
+        ));
+    }
+
+    #[test]
+    fn rotate_to_frame_rejects_covariance_change() {
+        let (coords, _) = sample_batch();
+        // coords is equatorial with covariance; rotating to ecliptic must error.
+        let err = rotate_coordinates_to_frame(&coords, Frame::Ecliptic).unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
+    fn normalize_rotates_then_translates_origin() {
+        let states = vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]];
+        let times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)]).unwrap();
+        let ecliptic = CoordinateBatch::cartesian(
+            states,
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 1),
+            Some(times),
+            None,
+        )
+        .unwrap();
+        let provider = StubProvider {
+            vectors: vec![[10.0, 20.0, 30.0, 1.0, 2.0, 3.0]],
+        };
+        let out = normalize_coordinates_to(
+            &ecliptic,
+            &OriginId::Named("SUN".to_string()),
+            Frame::Ecliptic,
+            &provider,
+        )
+        .unwrap();
+        assert_eq!(out.frame, Frame::Ecliptic);
+        assert!(matches!(
+            out.origins.origins[0],
+            OriginId::Named(ref code) if code == "SUN"
+        ));
+        assert!(close(
+            out.values.cartesian().unwrap()[0],
+            [11.0, 22.0, 33.0, 1.1, 2.2, 3.3]
+        ));
     }
 
     #[test]

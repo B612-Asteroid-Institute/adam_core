@@ -24,12 +24,12 @@ pub use generic::{
 pub mod propagate;
 pub mod propagation;
 pub use propagation::{
-    generate_ephemeris, CovariancePropagation, EphemerisDiagnostics, EphemerisFailureCode,
-    EphemerisOptions, EphemerisPhotometryOptions, EphemerisResult, EphemerisRowDiagnostic,
-    EpochOrder, EpochPolicy, OrbitRow, PropagationConvergence, PropagationConvergenceStatus,
-    PropagationDiagnostics, PropagationError, PropagationFailureCode, PropagationOptions,
-    PropagationRequest, PropagationResult, PropagationResultValue, Propagator, PropagatorShard,
-    RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
+    generate_ephemeris, generate_ephemeris_translated, CovariancePropagation, EphemerisDiagnostics,
+    EphemerisFailureCode, EphemerisOptions, EphemerisPhotometryOptions, EphemerisResult,
+    EphemerisRowDiagnostic, EpochOrder, EpochPolicy, OrbitRow, PropagationConvergence,
+    PropagationConvergenceStatus, PropagationDiagnostics, PropagationError, PropagationFailureCode,
+    PropagationOptions, PropagationRequest, PropagationResult, PropagationResultValue, Propagator,
+    PropagatorShard, RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
 };
 pub mod tisserand;
 pub use tisserand::tisserand_parameter_flat;
@@ -54,7 +54,10 @@ pub use variant_sampling::{
 };
 
 pub mod translation;
-pub use translation::{translate_coordinates_to_origin, OriginTranslationProvider};
+pub use translation::{
+    normalize_coordinates_to, rotate_coordinates_to_frame, translate_coordinates_to_origin,
+    OriginTranslationProvider,
+};
 
 pub mod abs_mag;
 pub use abs_mag::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, AbsMagFit};
