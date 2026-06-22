@@ -19,8 +19,9 @@ pub use diagnostics::{
     PropagationFailureCode, RowOutput,
 };
 pub use ephemeris::{
-    generate_ephemeris, generate_ephemeris_translated, EphemerisDiagnostics, EphemerisFailureCode,
-    EphemerisOptions, EphemerisPhotometryOptions, EphemerisResult, EphemerisRowDiagnostic,
+    generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,
+    EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions, EphemerisPhotometryOptions,
+    EphemerisResult, EphemerisRowDiagnostic,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{

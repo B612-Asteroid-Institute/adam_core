@@ -12,7 +12,7 @@ use adam_core_rs_coords::propagation::{
 };
 use adam_core_rs_coords::types::Frame;
 use adam_core_rs_coords::{
-    generate_ephemeris_translated, rotate_ecliptic_to_equatorial6, rotate_equatorial_to_ecliptic6,
+    generate_ephemeris_barycentric, rotate_ecliptic_to_equatorial6, rotate_equatorial_to_ecliptic6,
     CoordinateBatch, CovarianceBatch, CovarianceUnits, EphemerisOptions, EphemerisResult, Epoch,
     ObserverBatch, OrbitBatch, OrbitVariantBatch, OriginArray, OriginId, OriginTranslationProvider,
     TimeArray, TimeScale, TimeScaleProvider, Validity, NANOS_PER_DAY,
@@ -131,9 +131,9 @@ impl AssistPropagator {
         translation_provider: &T,
     ) -> PropagationResultValue<EphemerisResult>
     where
-        T: OriginTranslationProvider + ?Sized,
+        T: OriginTranslationProvider,
     {
-        generate_ephemeris_translated(
+        generate_ephemeris_barycentric(
             self,
             orbits,
             observers,
@@ -2283,9 +2283,14 @@ mod tests {
     #[test]
     #[ignore = "requires ASSIST kernel env vars and compares ephemeris against the frozen Python public-semantics fixture"]
     fn live_assist_matches_public_semantics_fixture_ephemeris_case() {
-        use adam_core_rs_coords::{generate_ephemeris, EphemerisPhotometryOptions};
+        use adam_core_rs_coords::{generate_ephemeris_barycentric, EphemerisPhotometryOptions};
 
         let propagator = live_propagator_from_env();
+        let planets = std::env::var("ADAM_CORE_RS_ASSIST_PLANETS_PATH").unwrap();
+        let mut spice = adam_core_rs_spice::AdamCoreSpiceBackend::new();
+        spice
+            .furnsh(std::path::Path::new(&planets))
+            .expect("furnsh planets kernel");
         let fixture = fixture();
         let cases = fixture
             .get("ephemeris_cases")
@@ -2369,9 +2374,15 @@ mod tests {
                 ..EphemerisOptions::default()
             };
 
-            let result =
-                generate_ephemeris(&propagator, &orbits, &observers, &options, &NoopProvider)
-                    .unwrap();
+            let result = generate_ephemeris_barycentric(
+                &propagator,
+                &orbits,
+                &observers,
+                &options,
+                &NoopProvider,
+                &spice,
+            )
+            .unwrap();
 
             let expected = case
                 .get("output_ephemeris")
@@ -2409,17 +2420,15 @@ mod tests {
             println!(
                 "{case_id}: ephemeris max abs spherical residual = {max_abs:e}; per-axis [rho,lon,lat,vrho,vlon,vlat] = {per_axis:?}"
             );
-            // MEASURED 2026-06-22: the Rust-native ASSIST ephemeris matches the
-            // frozen Python adam_assist fixture to mas/km level (RA ~2.56e-6 deg,
-            // Dec ~1.09e-6 deg, range ~4.57e-8 AU), NOT yet machine epsilon. The
-            // residual is a light-time sub-step convention difference: Python
-            // add_light_time runs on barycentric states with Sun mu, while the
-            // generic Rust generate_ephemeris runs on the orbit's heliocentric
-            // origin. Reaching bit-parity is tracked as follow-up work; this
-            // threshold pins the current measured level and guards regressions.
+            // BIT-PARITY 2026-06-22: with barycentric light-time geometry
+            // (generate_ephemeris_barycentric translates the object + observer to
+            // SSB so the light-time sub-step uses barycentric velocity, matching
+            // Python add_light_time), the Rust-native ASSIST ephemeris matches the
+            // frozen Python adam_assist fixture to machine epsilon: measured max
+            // abs spherical residual ~5.7e-14 (range ~6.7e-16 AU, RA ~5.7e-14 deg).
             assert!(
-                max_abs < 5.0e-6,
-                "{case_id} ephemeris spherical residual {max_abs:e} exceeds measured tolerance"
+                max_abs < 1.0e-11,
+                "{case_id} ephemeris spherical residual {max_abs:e} exceeds bit-parity tolerance"
             );
         }
     }

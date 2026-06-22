@@ -151,10 +151,50 @@ pub fn generate_ephemeris<P: Propagator>(
     options: &EphemerisOptions,
     provider: &dyn TimeScaleProvider,
 ) -> PropagationResultValue<EphemerisResult> {
+    generate_ephemeris_impl(propagator, orbits, observers, options, provider, None)
+}
+
+/// Like [`generate_ephemeris`], but performs the light-time geometry in the
+/// solar-system-barycentric (SSB) frame: the propagated object and the observer
+/// are translated to SSB via `translation_provider` while the orbit-origin
+/// gravitational parameter is retained for the light-time 2-body sub-step. This
+/// matches Python adam_assist / adam_core public ephemeris semantics, whose
+/// `add_light_time` runs on barycentric states (so the light-time correction
+/// uses barycentric velocity). The aberrated coordinates are emitted in SSB.
+pub fn generate_ephemeris_barycentric<P, T>(
+    propagator: &P,
+    orbits: &OrbitBatch,
+    observers: &ObserverBatch,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<EphemerisResult>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    generate_ephemeris_impl(
+        propagator,
+        orbits,
+        observers,
+        options,
+        provider,
+        Some(translation_provider as &dyn OriginTranslationProvider),
+    )
+}
+
+fn generate_ephemeris_impl<P: Propagator>(
+    propagator: &P,
+    orbits: &OrbitBatch,
+    observers: &ObserverBatch,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    barycentric: Option<&dyn OriginTranslationProvider>,
+) -> PropagationResultValue<EphemerisResult> {
     orbits.validate()?;
     observers.validate()?;
     options.validate(orbits.len())?;
-    validate_ephemeris_input_contract(orbits, observers, options)?;
+    validate_ephemeris_input_contract(orbits, observers, options, barycentric.is_none())?;
 
     let observer_times = observers.coordinates.times.as_ref().ok_or_else(|| {
         PropagationError::InvalidRequest("observer coordinates require times".to_string())
@@ -197,6 +237,28 @@ pub fn generate_ephemeris<P: Propagator>(
         )
     })?;
 
+    // Barycentric geometry: translate the propagated object and the observer to
+    // SSB so the light-time 2-body sub-step uses barycentric velocity (Python
+    // parity). The orbit-origin gravitational parameter is retained below.
+    let barycentric_orbit_offsets = match barycentric {
+        Some(translation_provider) => Some(translation_provider.origin_translation_vectors(
+            &propagation.orbits.coordinates.origins,
+            &OriginId::SolarSystemBarycenter,
+            Frame::Ecliptic,
+            propagated_times,
+        )?),
+        None => None,
+    };
+    let barycentric_observer_offsets = match barycentric {
+        Some(translation_provider) => Some(translation_provider.origin_translation_vectors(
+            &observers.coordinates.origins,
+            &OriginId::SolarSystemBarycenter,
+            Frame::Ecliptic,
+            observer_times,
+        )?),
+        None => None,
+    };
+
     let mut spherical_states = Vec::with_capacity(output_rows);
     let mut light_time_days = Vec::with_capacity(output_rows);
     let mut aberrated_states = Vec::with_capacity(output_rows);
@@ -229,11 +291,21 @@ pub fn generate_ephemeris<P: Propagator>(
             row_failure = Some(EphemerisFailureCode::NonFiniteObserverState);
         }
 
+        let mut geometry_object = propagated_state;
+        let mut geometry_observer = observer_state;
+        if let (Some(orbit_offsets), Some(observer_offsets)) =
+            (&barycentric_orbit_offsets, &barycentric_observer_offsets)
+        {
+            for axis in 0..6 {
+                geometry_object[axis] += orbit_offsets[output_row][axis];
+                geometry_observer[axis] += observer_offsets[observer_index][axis];
+            }
+        }
         let (spherical, light_time, aberrated) = if row_failure.is_none() {
             let mu = origin_mu_au3_day2(propagated_origin)?;
             generate_ephemeris_2body_row::<f64>(
-                propagated_state,
-                observer_state,
+                geometry_object,
+                geometry_observer,
                 mu,
                 options.lt_tol,
                 options.max_iter,
@@ -262,7 +334,11 @@ pub fn generate_ephemeris<P: Propagator>(
         aberrated_epochs.push(emission_epoch);
         coordinate_epochs.push(observer_time);
         spherical_origins.push(OriginId::Named(observers.code[observer_index].0.clone()));
-        aberrated_origins.push(propagated_origin.clone());
+        aberrated_origins.push(if barycentric.is_some() {
+            OriginId::SolarSystemBarycenter
+        } else {
+            propagated_origin.clone()
+        });
         validity.push(valid);
         diagnostics.push(EphemerisRowDiagnostic {
             output_row,
@@ -283,7 +359,7 @@ pub fn generate_ephemeris<P: Propagator>(
             input_orbit_index,
         ));
 
-        if propagated_origin != observer_origin {
+        if barycentric.is_none() && propagated_origin != observer_origin {
             return Err(PropagationError::InvalidRequest(
                 "internal ephemeris origin mismatch after request validation".to_string(),
             ));
@@ -472,6 +548,7 @@ fn validate_ephemeris_input_contract(
     orbits: &OrbitBatch,
     observers: &ObserverBatch,
     options: &EphemerisOptions,
+    require_same_origin: bool,
 ) -> PropagationResultValue<()> {
     if orbits.coordinates.frame != Frame::Ecliptic || observers.coordinates.frame != Frame::Ecliptic
     {
@@ -480,7 +557,9 @@ fn validate_ephemeris_input_contract(
                 .to_string(),
         ));
     }
-    if !origins_share_single_origin(&orbits.coordinates.origins, &observers.coordinates.origins) {
+    if require_same_origin
+        && !origins_share_single_origin(&orbits.coordinates.origins, &observers.coordinates.origins)
+    {
         return Err(PropagationError::InvalidRequest(
             "typed ephemeris generation requires orbit and observer coordinates in the same origin until origin-state translation is wired"
                 .to_string(),

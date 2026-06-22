@@ -24,12 +24,13 @@ pub use generic::{
 pub mod propagate;
 pub mod propagation;
 pub use propagation::{
-    generate_ephemeris, generate_ephemeris_translated, CovariancePropagation, EphemerisDiagnostics,
-    EphemerisFailureCode, EphemerisOptions, EphemerisPhotometryOptions, EphemerisResult,
-    EphemerisRowDiagnostic, EpochOrder, EpochPolicy, OrbitRow, PropagationConvergence,
-    PropagationConvergenceStatus, PropagationDiagnostics, PropagationError, PropagationFailureCode,
-    PropagationOptions, PropagationRequest, PropagationResult, PropagationResultValue, Propagator,
-    PropagatorShard, RowOutput, TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
+    generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,
+    CovariancePropagation, EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions,
+    EphemerisPhotometryOptions, EphemerisResult, EphemerisRowDiagnostic, EpochOrder, EpochPolicy,
+    OrbitRow, PropagationConvergence, PropagationConvergenceStatus, PropagationDiagnostics,
+    PropagationError, PropagationFailureCode, PropagationOptions, PropagationRequest,
+    PropagationResult, PropagationResultValue, Propagator, PropagatorShard, RowOutput,
+    TwoBodyPropagator, TwoBodyPropagatorConfig, TwoBodyShard,
 };
 pub mod tisserand;
 pub use tisserand::tisserand_parameter_flat;
