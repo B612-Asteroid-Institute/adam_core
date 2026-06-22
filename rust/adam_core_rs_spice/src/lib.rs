@@ -70,6 +70,8 @@ pub enum SpiceBackendError {
     UnsupportedFrame(String),
     #[error("invalid observer site {code}: {message}")]
     InvalidObserverSite { code: String, message: String },
+    #[error("cannot parse MPC observatory codes: {0}")]
+    ObsCodes(String),
     #[error(transparent)]
     DataModel(#[from] SchemaError),
     #[error(transparent)]
@@ -682,6 +684,35 @@ impl OriginTranslationProvider for AdamCoreSpiceBackend {
     }
 }
 
+/// Parse the MPC extended observatory-codes JSON (as shipped by the Python
+/// `mpc_obscodes` package: an object keyed by observatory code whose values are
+/// `{ "Longitude": f64, "cos": f64, "sin": f64, "Name": str }`) into
+/// ground-observer sites. Space-based codes with null/non-finite geodetic
+/// fields are skipped. This is the Rust-native source of topocentric parallax
+/// coefficients, replacing the Python `Observers`/`get_observer_state` lookup;
+/// the resulting [`GroundObserverSite`] feeds [`AdamCoreSpiceBackend::ground_observer_state`].
+pub fn parse_mpc_obscodes(
+    json: &str,
+) -> Result<HashMap<String, GroundObserverSite>, SpiceBackendError> {
+    let raw: HashMap<String, serde_json::Value> =
+        serde_json::from_str(json).map_err(|err| SpiceBackendError::ObsCodes(err.to_string()))?;
+    let mut sites = HashMap::with_capacity(raw.len());
+    for (code, entry) in raw {
+        let longitude = entry.get("Longitude").and_then(serde_json::Value::as_f64);
+        let cos_phi = entry.get("cos").and_then(serde_json::Value::as_f64);
+        let sin_phi = entry.get("sin").and_then(serde_json::Value::as_f64);
+        let (Some(longitude), Some(cos_phi), Some(sin_phi)) = (longitude, cos_phi, sin_phi) else {
+            continue;
+        };
+        if !(longitude.is_finite() && cos_phi.is_finite() && sin_phi.is_finite()) {
+            continue;
+        }
+        let site = GroundObserverSite::new(code.clone(), longitude, cos_phi, sin_phi)?;
+        sites.insert(code, site);
+    }
+    Ok(sites)
+}
+
 pub fn builtin_bodn2c(name: &str) -> Result<i32, SpiceBackendError> {
     spicekit_bodn2c(name).map_err(SpiceBackendError::NaifId)
 }
@@ -1010,6 +1041,22 @@ mod tests {
         assert_eq!(backend.bodn2c("EARTH").unwrap(), 399);
         assert_eq!(backend.bodn2c("EARTH_MOON_BARYCENTER").unwrap(), 3);
         assert_eq!(backend.bodc2n(399).unwrap(), "EARTH");
+    }
+
+    #[test]
+    fn parse_mpc_obscodes_extracts_ground_sites_and_skips_space_based() {
+        let json = r#"{
+            "500": {"Longitude": 0.0, "cos": 0.0, "sin": 0.0, "Name": "Geocentric"},
+            "X05": {"Longitude": 243.14012, "cos": 0.845303, "sin": 0.533213, "Name": "ZTF"},
+            "C49": {"Longitude": null, "cos": null, "sin": null, "Name": "Space-based"}
+        }"#;
+        let sites = parse_mpc_obscodes(json).unwrap();
+        assert_eq!(sites.len(), 2);
+        assert!(!sites.contains_key("C49"));
+        let x05 = sites.get("X05").expect("X05 site");
+        assert!((x05.longitude_deg - 243.14012).abs() < 1.0e-9);
+        assert!((x05.cos_phi - 0.845303).abs() < 1.0e-9);
+        assert!((x05.sin_phi - 0.533213).abs() < 1.0e-9);
     }
 
     const SAMPLE_LSK: &str = concat!(
