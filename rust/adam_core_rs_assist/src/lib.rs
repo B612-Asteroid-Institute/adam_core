@@ -12,8 +12,9 @@ use adam_core_rs_coords::propagation::{
 };
 use adam_core_rs_coords::types::Frame;
 use adam_core_rs_coords::{
-    rotate_ecliptic_to_equatorial6, rotate_equatorial_to_ecliptic6, CoordinateBatch,
-    CovarianceBatch, CovarianceUnits, Epoch, OrbitBatch, OrbitVariantBatch, OriginArray, OriginId,
+    generate_ephemeris_translated, rotate_ecliptic_to_equatorial6, rotate_equatorial_to_ecliptic6,
+    CoordinateBatch, CovarianceBatch, CovarianceUnits, EphemerisOptions, EphemerisResult, Epoch,
+    ObserverBatch, OrbitBatch, OrbitVariantBatch, OriginArray, OriginId, OriginTranslationProvider,
     TimeArray, TimeScale, TimeScaleProvider, Validity, NANOS_PER_DAY,
 };
 use assist_rs::ffi;
@@ -111,6 +112,35 @@ impl AssistPropagator {
             }
             assemble_result(request, target_output_times, blocks)
         })
+    }
+}
+
+impl AssistPropagator {
+    /// Generate ephemerides natively over this ASSIST propagator, translating
+    /// the observers to the orbits' origin and ecliptic frame via
+    /// `translation_provider` (for example an
+    /// `adam_core_rs_spice::AdamCoreSpiceBackend`). The orbits propagate in
+    /// their own origin, so this is the Rust-native ASSIST ephemeris path that
+    /// replaces the Python observer-state / `get_perturber_state` glue.
+    pub fn generate_ephemeris<T>(
+        &self,
+        orbits: &OrbitBatch,
+        observers: &ObserverBatch,
+        options: &EphemerisOptions,
+        time_provider: &dyn TimeScaleProvider,
+        translation_provider: &T,
+    ) -> PropagationResultValue<EphemerisResult>
+    where
+        T: OriginTranslationProvider + ?Sized,
+    {
+        generate_ephemeris_translated(
+            self,
+            orbits,
+            observers,
+            options,
+            time_provider,
+            translation_provider,
+        )
     }
 }
 
@@ -1384,7 +1414,9 @@ mod tests {
     use super::*;
     use adam_core_rs_coords::propagation::PropagationOptions;
     use adam_core_rs_coords::types::SchemaResult;
-    use adam_core_rs_coords::{ObjectId, OrbitId, SchemaError, VariantId};
+    use adam_core_rs_coords::{
+        EphemerisOptions, ObjectId, ObservatoryCode, OrbitId, SchemaError, VariantId,
+    };
     use serde_json::{json, Value};
 
     // Local measured residuals against the frozen Python fixture on 2026-05-20:
@@ -2274,5 +2306,61 @@ mod tests {
         assert_eq!(result.orbits.len(), 2);
         assert!(result.validity.is_valid(0));
         assert!(result.validity.is_valid(1));
+    }
+
+    #[test]
+    #[ignore = "requires ADAM_CORE_RS_ASSIST_PLANETS_PATH and ADAM_CORE_RS_ASSIST_ASTEROIDS_PATH"]
+    fn live_assist_generate_ephemeris_translates_observers_via_spice() {
+        let propagator = live_propagator_from_env();
+        let planets = std::env::var("ADAM_CORE_RS_ASSIST_PLANETS_PATH").unwrap();
+        let mut spice = adam_core_rs_spice::AdamCoreSpiceBackend::new();
+        spice
+            .furnsh(std::path::Path::new(&planets))
+            .expect("furnsh planets kernel");
+
+        let orbits = sample_orbits(
+            Frame::Ecliptic,
+            OriginId::Named("SUN".to_string()),
+            TimeScale::Tdb,
+        );
+        let observer_times =
+            TimeArray::from_parts(TimeScale::Tdb, vec![60_001, 60_002], vec![0, 0]).unwrap();
+        // Observers expressed at the solar-system barycenter; the SPICE-backed
+        // translation provider shifts them to the orbits' SUN origin natively.
+        let observer_coordinates = CoordinateBatch::cartesian(
+            vec![[0.0; 6], [0.0; 6]],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+            Some(observer_times),
+            None,
+        )
+        .unwrap();
+        let observers = ObserverBatch::new(
+            vec![
+                ObservatoryCode("SSB".to_string()),
+                ObservatoryCode("SSB".to_string()),
+            ],
+            observer_coordinates,
+        )
+        .unwrap();
+
+        let result = propagator
+            .generate_ephemeris(
+                &orbits,
+                &observers,
+                &EphemerisOptions::default(),
+                &NoopProvider,
+                &spice,
+            )
+            .unwrap();
+        assert_eq!(result.ephemeris.len(), 2);
+        assert!(result
+            .ephemeris
+            .coordinates
+            .values
+            .spherical()
+            .expect("ephemeris is spherical")
+            .iter()
+            .all(|row| row.iter().all(|value| value.is_finite())));
     }
 }
