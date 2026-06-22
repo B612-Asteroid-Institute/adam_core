@@ -12,6 +12,7 @@ extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
+adam_core_rs_spice = { path = "../adam_core_rs_spice" }
 assist-rs = { version = "0.1", default-features = false, features = ["parallel"] }
 ndarray = { version = "0.16", optional = true }
 numpy = { version = "0.22", optional = true }
@@ -20,7 +21,6 @@ rayon = "1.11"
 
 [dev-dependencies]
 serde_json = "1"
-adam_core_rs_spice = { path = "../adam_core_rs_spice" }
 
 [lib]
 path = "src/lib.rs"

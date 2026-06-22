@@ -18,6 +18,9 @@ import numpy.typing as npt
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import Origin
+from adam_core.coordinates.spherical import SphericalCoordinates
+from adam_core.observers.observers import Observers
+from adam_core.orbits.ephemeris import Ephemeris
 from adam_core.orbits.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
 from adam_core.time import Timestamp
@@ -105,6 +108,53 @@ def _coordinates_from_result(result: dict[str, Any]) -> CartesianCoordinates:
     )
 
 
+def _ephemeris_from_result(result: dict[str, Any]) -> Ephemeris:
+    states = np.asarray(result["states"], dtype=np.float64)
+    coordinates = SphericalCoordinates.from_kwargs(
+        rho=states[:, 0],
+        lon=states[:, 1],
+        lat=states[:, 2],
+        vrho=states[:, 3],
+        vlon=states[:, 4],
+        vlat=states[:, 5],
+        time=Timestamp.from_kwargs(
+            days=result["time_days"],
+            nanos=result["time_nanos"],
+            scale=result["time_scale"],
+        ),
+        origin=Origin.from_kwargs(code=result["origin_codes"]),
+        frame=result["frame"],
+    )
+    kwargs: dict[str, Any] = {
+        "orbit_id": result["orbit_id"],
+        "object_id": result["object_id"],
+        "coordinates": coordinates,
+        "light_time": result["light_time"],
+    }
+    if result["alpha"] is not None:
+        kwargs["alpha"] = result["alpha"]
+    if result["predicted_magnitude_v"] is not None:
+        kwargs["predicted_magnitude_v"] = result["predicted_magnitude_v"]
+    if result["aberrated_states"] is not None:
+        aberrated_states = np.asarray(result["aberrated_states"], dtype=np.float64)
+        kwargs["aberrated_coordinates"] = CartesianCoordinates.from_kwargs(
+            x=aberrated_states[:, 0],
+            y=aberrated_states[:, 1],
+            z=aberrated_states[:, 2],
+            vx=aberrated_states[:, 3],
+            vy=aberrated_states[:, 4],
+            vz=aberrated_states[:, 5],
+            time=Timestamp.from_kwargs(
+                days=result["aberrated_time_days"],
+                nanos=result["aberrated_time_nanos"],
+                scale=result["aberrated_time_scale"],
+            ),
+            origin=Origin.from_kwargs(code=result["aberrated_origin_codes"]),
+            frame="ecliptic",
+        )
+    return Ephemeris.from_kwargs(**kwargs)
+
+
 class ASSISTPropagator:
     """Rust-backed propagation subset of ``adam_assist.ASSISTPropagator``.
 
@@ -179,6 +229,80 @@ class ASSISTPropagator:
         return result.sort_by(
             ["orbit_id", "coordinates.time.days", "coordinates.time.nanos"]
         )
+
+    def generate_ephemeris(
+        self,
+        orbits: Orbits,
+        observers: Observers,
+        *,
+        lt_tol: float = 1.0e-12,
+        max_iter: int = 1000,
+        tol: float = 1.0e-15,
+        stellar_aberration: bool = False,
+        max_lt_iter: int = 10,
+        output_time_scale: str | None = None,
+        predict_magnitudes: bool = False,
+        predict_phase_angle: bool = False,
+        chunk_size: int | None = 100,
+        max_processes: int | None = 1,
+    ) -> Ephemeris:
+        """Rust-native ASSIST ephemeris matching adam_assist public semantics.
+
+        Observer Cartesian states come from the ``observers`` table (e.g.
+        ``Observers.from_codes``); the Rust path performs the barycentric
+        light-time geometry natively. Mirrors ``adam_assist`` light-time-only
+        (no stellar aberration) defaults.
+        """
+        orbit_coordinates = orbits.coordinates
+        orbit_scale, orbit_days, orbit_nanos = _time_parts(orbit_coordinates.time)
+        orbit_states: npt.NDArray[np.float64] = np.ascontiguousarray(
+            orbit_coordinates.values, dtype=np.float64
+        )
+        observer_coordinates = observers.coordinates
+        observer_scale, observer_days, observer_nanos = _time_parts(
+            observer_coordinates.time
+        )
+        observer_states: npt.NDArray[np.float64] = np.ascontiguousarray(
+            observer_coordinates.values, dtype=np.float64
+        )
+        out_scale = output_time_scale or observer_coordinates.time.scale
+
+        h_v: list[float | None] | None = None
+        g: list[float | None] | None = None
+        if predict_magnitudes:
+            h_v = _optional_float_column_to_list(orbits.physical_parameters.H)
+            g = _optional_float_column_to_list(orbits.physical_parameters.G)
+
+        native = self._native.generate_ephemeris(
+            _string_column_to_list(orbits.orbit_id),
+            _optional_string_column_to_list(orbits.object_id),
+            orbit_states,
+            _string_column_to_list(orbit_coordinates.origin.code),
+            orbit_coordinates.frame,
+            orbit_scale,
+            orbit_days,
+            orbit_nanos,
+            _string_column_to_list(observers.code),
+            observer_states,
+            _string_column_to_list(observer_coordinates.origin.code),
+            observer_coordinates.frame,
+            observer_scale,
+            observer_days,
+            observer_nanos,
+            out_scale,
+            lt_tol,
+            max_iter,
+            tol,
+            stellar_aberration,
+            max_lt_iter,
+            predict_magnitudes,
+            predict_phase_angle,
+            h_v,
+            g,
+            chunk_size,
+            max_processes,
+        )
+        return _ephemeris_from_result(native)
 
     def _propagate_orbits_native(
         self,

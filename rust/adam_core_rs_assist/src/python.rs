@@ -9,10 +9,12 @@ use adam_core_rs_coords::types::Frame;
 use adam_core_rs_coords::types::{SchemaResult, TimeScaleProvider};
 use adam_core_rs_coords::{
     collapse_propagated_variants_to_orbits, create_sampled_orbit_variants, CoordinateBatch,
-    CoordinateRepresentation, CovarianceBatch, CovarianceUnits, ObjectId, OrbitBatch, OrbitId,
-    OrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId, SchemaError, TimeArray,
-    TimeScale, VariantId,
+    CoordinateRepresentation, CovarianceBatch, CovarianceUnits, EphemerisOptions,
+    EphemerisPhotometryOptions, EphemerisResult, ObjectId, ObservatoryCode, ObserverBatch,
+    OrbitBatch, OrbitId, OrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
+    SchemaError, TimeArray, TimeScale, VariantId,
 };
+use adam_core_rs_spice::AdamCoreSpiceBackend;
 use assist_rs::{AssistData, Ephemeris, Ias15AdaptiveMode, IntegratorConfig};
 use numpy::{IntoPyArray, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -36,6 +38,7 @@ impl TimeScaleProvider for PythonTimeProvider {
 #[pyclass]
 struct NativeAssistPropagator {
     inner: RustAssistPropagator,
+    spice: AdamCoreSpiceBackend,
 }
 
 #[pymethods]
@@ -72,12 +75,161 @@ impl NativeAssistPropagator {
             adaptive_mode: Some(adaptive_mode),
             epsilon: Some(epsilon),
         };
+        let mut spice = AdamCoreSpiceBackend::new();
+        spice.furnsh(Path::new(planets_path)).map_err(|err| {
+            PyRuntimeError::new_err(format!("failed to load SPICE planets kernel: {err}"))
+        })?;
         Ok(Self {
             inner: RustAssistPropagator::with_integrator(
                 Arc::new(AssistData::new(ephem)),
                 integrator,
             ),
+            spice,
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        orbit_ids,
+        object_ids,
+        orbit_states,
+        orbit_origin_codes,
+        orbit_frame,
+        orbit_time_scale,
+        orbit_time_days,
+        orbit_time_nanos,
+        observer_codes,
+        observer_states,
+        observer_origin_codes,
+        observer_frame,
+        observer_time_scale,
+        observer_time_days,
+        observer_time_nanos,
+        output_time_scale,
+        lt_tol=1.0e-12,
+        max_iter=1000,
+        tol=1.0e-15,
+        stellar_aberration=false,
+        max_lt_iter=10,
+        predict_magnitude_v=false,
+        predict_phase_angle=false,
+        h_v=None,
+        g=None,
+        chunk_size=None,
+        thread_limit=None
+    ))]
+    fn generate_ephemeris<'py>(
+        &self,
+        py: Python<'py>,
+        orbit_ids: Vec<String>,
+        object_ids: Vec<Option<String>>,
+        orbit_states: PyReadonlyArray2<'py, f64>,
+        orbit_origin_codes: Vec<String>,
+        orbit_frame: &str,
+        orbit_time_scale: &str,
+        orbit_time_days: Vec<i64>,
+        orbit_time_nanos: Vec<i64>,
+        observer_codes: Vec<String>,
+        observer_states: PyReadonlyArray2<'py, f64>,
+        observer_origin_codes: Vec<String>,
+        observer_frame: &str,
+        observer_time_scale: &str,
+        observer_time_days: Vec<i64>,
+        observer_time_nanos: Vec<i64>,
+        output_time_scale: &str,
+        lt_tol: f64,
+        max_iter: usize,
+        tol: f64,
+        stellar_aberration: bool,
+        max_lt_iter: usize,
+        predict_magnitude_v: bool,
+        predict_phase_angle: bool,
+        h_v: Option<Vec<Option<f64>>>,
+        g: Option<Vec<Option<f64>>>,
+        chunk_size: Option<usize>,
+        thread_limit: Option<usize>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let orbit_coordinates = CoordinateBatch::cartesian(
+            states_from_pyarray(orbit_states)?,
+            Frame::parse(orbit_frame).map_err(py_value_error)?,
+            OriginArray::new(
+                orbit_origin_codes
+                    .into_iter()
+                    .map(OriginId::from_code)
+                    .collect(),
+            ),
+            Some(time_array(
+                orbit_time_scale,
+                orbit_time_days,
+                orbit_time_nanos,
+            )?),
+            None,
+        )
+        .map_err(py_value_error)?;
+        let orbits = OrbitBatch::new(
+            orbit_ids.into_iter().map(OrbitId).collect(),
+            object_ids
+                .into_iter()
+                .map(|value| value.map(ObjectId))
+                .collect(),
+            orbit_coordinates,
+        )
+        .map_err(py_value_error)?;
+        let observer_coordinates = CoordinateBatch::cartesian(
+            states_from_pyarray(observer_states)?,
+            Frame::parse(observer_frame).map_err(py_value_error)?,
+            OriginArray::new(
+                observer_origin_codes
+                    .into_iter()
+                    .map(OriginId::from_code)
+                    .collect(),
+            ),
+            Some(time_array(
+                observer_time_scale,
+                observer_time_days,
+                observer_time_nanos,
+            )?),
+            None,
+        )
+        .map_err(py_value_error)?;
+        let observers = ObserverBatch::new(
+            observer_codes.into_iter().map(ObservatoryCode).collect(),
+            observer_coordinates,
+        )
+        .map_err(py_value_error)?;
+        let options = EphemerisOptions {
+            propagation: PropagationOptions {
+                chunk_size,
+                thread_limit,
+                epoch_policy: EpochPolicy::CrossProduct,
+                covariance: CovariancePropagation::None,
+            },
+            lt_tol,
+            max_iter,
+            tol,
+            stellar_aberration,
+            max_lt_iter,
+            output_time_scale: TimeScale::parse(output_time_scale).map_err(py_value_error)?,
+            include_aberrated_coordinates: true,
+            photometry: EphemerisPhotometryOptions {
+                predict_magnitude_v,
+                predict_phase_angle,
+                h_v,
+                g,
+            },
+        };
+        let result = py
+            .allow_threads(|| {
+                self.inner.generate_ephemeris(
+                    &orbits,
+                    &observers,
+                    &options,
+                    &PythonTimeProvider,
+                    &self.spice,
+                )
+            })
+            .map_err(py_runtime_error)?;
+        ephemeris_result_to_dict(py, &result)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -454,6 +606,142 @@ fn propagation_result_to_dict<'py>(
     dict.set_item("input_orbit_indices", input_orbit_indices)?;
     dict.set_item("validity", validity)?;
     dict.set_item("messages", messages)?;
+    Ok(dict)
+}
+
+fn ephemeris_result_to_dict<'py>(
+    py: Python<'py>,
+    result: &EphemerisResult,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new_bound(py);
+    let ephemeris = &result.ephemeris;
+    dict.set_item(
+        "orbit_id",
+        ephemeris
+            .orbit_id
+            .iter()
+            .map(|value| value.0.clone())
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item(
+        "object_id",
+        ephemeris
+            .object_id
+            .iter()
+            .map(|value| value.as_ref().map(|item| item.0.clone()))
+            .collect::<Vec<_>>(),
+    )?;
+    let coordinates = &ephemeris.coordinates;
+    let states = coordinates
+        .values
+        .spherical()
+        .ok_or_else(|| PyRuntimeError::new_err("ephemeris coordinates must be spherical"))?;
+    let flat = states
+        .iter()
+        .flat_map(|row| row.iter().copied())
+        .collect::<Vec<_>>();
+    let shaped = ndarray::Array2::from_shape_vec((states.len(), 6), flat).map_err(|err| {
+        PyRuntimeError::new_err(format!("failed to shape ephemeris states: {err}"))
+    })?;
+    dict.set_item("states", shaped.into_pyarray_bound(py))?;
+    dict.set_item(
+        "origin_codes",
+        coordinates
+            .origins
+            .origins
+            .iter()
+            .map(OriginId::code)
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item("frame", coordinates.frame.as_str())?;
+    let times = coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| PyRuntimeError::new_err("ephemeris coordinates missing times"))?;
+    dict.set_item("time_scale", times.scale.as_str())?;
+    dict.set_item(
+        "time_days",
+        times
+            .epochs
+            .iter()
+            .map(|epoch| epoch.days)
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item(
+        "time_nanos",
+        times
+            .epochs
+            .iter()
+            .map(|epoch| epoch.nanos)
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item("light_time", ephemeris.light_time_days.clone())?;
+    match &ephemeris.alpha_deg {
+        Some(values) => dict.set_item("alpha", values.clone())?,
+        None => dict.set_item("alpha", py.None())?,
+    }
+    match &ephemeris.predicted_magnitude_v {
+        Some(values) => dict.set_item("predicted_magnitude_v", values.clone())?,
+        None => dict.set_item("predicted_magnitude_v", py.None())?,
+    }
+    match &ephemeris.aberrated_coordinates {
+        Some(aberrated) => {
+            let aberrated_states = aberrated.values.cartesian().ok_or_else(|| {
+                PyRuntimeError::new_err("aberrated coordinates must be Cartesian")
+            })?;
+            let aberrated_flat = aberrated_states
+                .iter()
+                .flat_map(|row| row.iter().copied())
+                .collect::<Vec<_>>();
+            let aberrated_shaped =
+                ndarray::Array2::from_shape_vec((aberrated_states.len(), 6), aberrated_flat)
+                    .map_err(|err| {
+                        PyRuntimeError::new_err(format!("failed to shape aberrated states: {err}"))
+                    })?;
+            dict.set_item("aberrated_states", aberrated_shaped.into_pyarray_bound(py))?;
+            dict.set_item(
+                "aberrated_origin_codes",
+                aberrated
+                    .origins
+                    .origins
+                    .iter()
+                    .map(OriginId::code)
+                    .collect::<Vec<_>>(),
+            )?;
+            let aberrated_times = aberrated
+                .times
+                .as_ref()
+                .ok_or_else(|| PyRuntimeError::new_err("aberrated coordinates missing times"))?;
+            dict.set_item("aberrated_time_scale", aberrated_times.scale.as_str())?;
+            dict.set_item(
+                "aberrated_time_days",
+                aberrated_times
+                    .epochs
+                    .iter()
+                    .map(|epoch| epoch.days)
+                    .collect::<Vec<_>>(),
+            )?;
+            dict.set_item(
+                "aberrated_time_nanos",
+                aberrated_times
+                    .epochs
+                    .iter()
+                    .map(|epoch| epoch.nanos)
+                    .collect::<Vec<_>>(),
+            )?;
+        }
+        None => {
+            dict.set_item("aberrated_states", py.None())?;
+            dict.set_item("aberrated_origin_codes", py.None())?;
+            dict.set_item("aberrated_time_scale", py.None())?;
+            dict.set_item("aberrated_time_days", py.None())?;
+            dict.set_item("aberrated_time_nanos", py.None())?;
+        }
+    }
+    let validity = (0..ephemeris.validity.len())
+        .map(|index| ephemeris.validity.is_valid(index))
+        .collect::<Vec<_>>();
+    dict.set_item("validity", validity)?;
     Ok(dict)
 }
 
