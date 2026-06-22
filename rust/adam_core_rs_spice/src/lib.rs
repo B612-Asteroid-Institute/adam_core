@@ -11,8 +11,9 @@ use std::io::{self, Read};
 use std::path::Path;
 
 use adam_core_rs_coords::types::{
-    CoordinateBatch, Frame, OriginArray, OriginId, SchemaError, TimeArray, TimeScale,
+    CoordinateBatch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray, TimeScale,
 };
+use adam_core_rs_coords::OriginTranslationProvider;
 use spicekit::frame::{
     apply_sxform, invert_sxform, j2000_to_eclipj2000, pck_euler_rotation_and_derivative,
     sxform_from_rotation,
@@ -662,6 +663,22 @@ impl AdamCoreSpiceBackend {
             }
         }
         None
+    }
+}
+
+impl OriginTranslationProvider for AdamCoreSpiceBackend {
+    fn origin_translation_vectors(
+        &self,
+        origins: &OriginArray,
+        target_origin: &OriginId,
+        frame: Frame,
+        times: &TimeArray,
+    ) -> SchemaResult<Vec<[f64; 6]>> {
+        // Method-call syntax resolves to the inherent method (inherent methods
+        // take precedence over trait methods), so this delegates to the SPICE
+        // implementation and maps its error into the coords SchemaError surface.
+        self.origin_translation_vectors(origins, target_origin, frame, times)
+            .map_err(|err| SchemaError::InvalidRecordBatch(err.to_string()))
     }
 }
 

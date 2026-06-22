@@ -5,11 +5,11 @@
 //! expansion, propagation, and collapse inside one Rust boundary.
 
 use crate::propagation::{PropagationError, PropagationResult, PropagationResultValue};
+use crate::types::SchemaResult;
 use crate::{
     CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
     OrbitBatch, OrbitVariantBatch, OriginArray, SchemaError, TimeArray, Validity, VariantId,
 };
-use crate::types::SchemaResult;
 use std::collections::HashMap;
 
 const DIM: usize = 6;
@@ -58,9 +58,13 @@ pub fn create_sampled_orbit_variants(
         OrbitVariantSamplingMethod::Auto => {
             validate_sigma_point_parameters(alpha, beta, kappa)?;
             validate_monte_carlo_parameters(num_samples)?;
-            create_orbit_variants_from_sampler(orbits, num_samples.max(SIGMA_POINT_COUNT), |row_index, mean, covariance| {
-                auto_samples(row_index, mean, covariance, num_samples, alpha, beta, kappa)
-            })
+            create_orbit_variants_from_sampler(
+                orbits,
+                num_samples.max(SIGMA_POINT_COUNT),
+                |row_index, mean, covariance| {
+                    auto_samples(row_index, mean, covariance, num_samples, alpha, beta, kappa)
+                },
+            )
         }
         OrbitVariantSamplingMethod::SigmaPoint => {
             create_sigma_point_orbit_variants(orbits, alpha, beta, kappa)
@@ -113,9 +117,10 @@ where
 {
     orbits.validate()?;
     let means = coordinate_rows(&orbits.coordinates.values);
-    let covariances = orbits.coordinates.covariance.as_ref().ok_or_else(|| {
-        SchemaError::MissingRequiredField("coordinates.covariance".to_string())
-    })?;
+    let covariances =
+        orbits.coordinates.covariance.as_ref().ok_or_else(|| {
+            SchemaError::MissingRequiredField("coordinates.covariance".to_string())
+        })?;
     if covariances.dimension != DIM {
         return Err(SchemaError::InvalidCovarianceShape {
             rows: covariances.rows,
@@ -233,11 +238,8 @@ fn monte_carlo_samples(
     num_samples: usize,
     seed: u64,
 ) -> SchemaResult<Vec<CoordinateSample>> {
-    let root = symmetric_square_root_scaled_with_tolerance(
-        covariance,
-        1.0,
-        MONTE_CARLO_PSD_TOLERANCE,
-    )?;
+    let root =
+        symmetric_square_root_scaled_with_tolerance(covariance, 1.0, MONTE_CARLO_PSD_TOLERANCE)?;
     let mut rng = SplitMix64Normal::new(seed);
     let weight = 1.0 / num_samples as f64;
     let mut samples = Vec::with_capacity(num_samples);
@@ -290,14 +292,23 @@ fn sigma_points_reconstruct_input(
         .iter()
         .flat_map(|sample| sample.values.iter().copied())
         .collect::<Vec<_>>();
-    let weights = samples.iter().map(|sample| sample.weight).collect::<Vec<_>>();
+    let weights = samples
+        .iter()
+        .map(|sample| sample.weight)
+        .collect::<Vec<_>>();
     let weights_cov = samples
         .iter()
         .map(|sample| sample.weight_cov)
         .collect::<Vec<_>>();
-    let reconstructed_mean = crate::weighted_mean_flat(&sample_values, &weights, samples.len(), DIM);
-    let reconstructed_covariance =
-        crate::weighted_covariance_flat(&reconstructed_mean, &sample_values, &weights_cov, samples.len(), DIM);
+    let reconstructed_mean =
+        crate::weighted_mean_flat(&sample_values, &weights, samples.len(), DIM);
+    let reconstructed_covariance = crate::weighted_covariance_flat(
+        &reconstructed_mean,
+        &sample_values,
+        &weights_cov,
+        samples.len(),
+        DIM,
+    );
     mean.iter()
         .zip(reconstructed_mean.iter())
         .all(|(expected, actual)| (actual - expected).abs() < AUTO_RECONSTRUCTION_TOLERANCE)
@@ -321,11 +332,17 @@ pub fn collapse_propagated_variants_to_orbits(
             "cannot collapse covariance variants into nominal VariantOrbits".to_string(),
         ));
     }
-    let nominal_states = nominal.orbits.coordinates.values.cartesian().ok_or_else(|| {
-        PropagationError::InvalidRequest(
-            "variant covariance collapse currently requires Cartesian nominal output".to_string(),
-        )
-    })?;
+    let nominal_states = nominal
+        .orbits
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "variant covariance collapse currently requires Cartesian nominal output"
+                    .to_string(),
+            )
+        })?;
     let variants = propagated_variants.variants.as_ref().ok_or_else(|| {
         PropagationError::InvalidRequest(
             "propagated covariance collapse requires propagated VariantOrbits".to_string(),
@@ -349,7 +366,10 @@ pub fn collapse_propagated_variants_to_orbits(
 
     let mut nominal_row_by_key = HashMap::with_capacity(nominal.diagnostics.convergence.len());
     for row in &nominal.diagnostics.convergence {
-        nominal_row_by_key.insert((row.input_orbit_index, row.input_time_index), row.output_row);
+        nominal_row_by_key.insert(
+            (row.input_orbit_index, row.input_time_index),
+            row.output_row,
+        );
     }
 
     let output_rows = nominal_states.len();
@@ -374,7 +394,10 @@ pub fn collapse_propagated_variants_to_orbits(
                     convergence.input_time_index
                 ))
             })?;
-        if !propagated_variants.validity.is_valid(convergence.output_row) {
+        if !propagated_variants
+            .validity
+            .is_valid(convergence.output_row)
+        {
             collapse_validity[nominal_row] = false;
         }
         let weight = variants.weights_cov[convergence.output_row].ok_or_else(|| {
@@ -649,6 +672,9 @@ fn rotate_jacobi(a: &mut [[f64; DIM]; DIM], vectors: &mut [[f64; DIM]; DIM], p: 
     let c = theta.cos();
     let s = theta.sin();
 
+    // Jacobi rotation updates rows p/q and column k of the same matrix, so
+    // direct index access is clearer than an iterator here.
+    #[allow(clippy::needless_range_loop)]
     for k in 0..DIM {
         if k != p && k != q {
             let akp = a[k][p];
@@ -724,8 +750,7 @@ impl SplitMix64Normal {
 mod tests {
     use super::*;
     use crate::propagation::{
-        EpochOrder, PropagationConvergence, PropagationConvergenceStatus,
-        PropagationDiagnostics,
+        EpochOrder, PropagationConvergence, PropagationConvergenceStatus, PropagationDiagnostics,
     };
     use crate::types::Frame;
     use crate::{Epoch, OrbitId, OriginId, TimeScale, Validity};
@@ -753,12 +778,16 @@ mod tests {
             Some(covariance_batch),
         )
         .unwrap();
-        let orbits = OrbitBatch::new(vec![OrbitId("o1".to_string())], vec![None], coordinates)
-            .unwrap();
+        let orbits =
+            OrbitBatch::new(vec![OrbitId("o1".to_string())], vec![None], coordinates).unwrap();
         (orbits, state, covariance)
     }
 
-    fn assert_reconstructs_covariance(samples: &OrbitVariantSamples, mean: &[f64; DIM], covariance: &[f64]) {
+    fn assert_reconstructs_covariance(
+        samples: &OrbitVariantSamples,
+        mean: &[f64; DIM],
+        covariance: &[f64],
+    ) {
         let variant_values = coordinate_rows(&samples.variants.coordinates.values)
             .iter()
             .flat_map(|row| row.iter().copied())
@@ -769,10 +798,18 @@ mod tests {
             .iter()
             .map(|value| value.unwrap())
             .collect::<Vec<_>>();
-        let reconstructed =
-            crate::weighted_covariance_flat(mean, &variant_values, &weights, samples.variants.len(), DIM);
+        let reconstructed = crate::weighted_covariance_flat(
+            mean,
+            &variant_values,
+            &weights,
+            samples.variants.len(),
+            DIM,
+        );
         for (actual, expected) in reconstructed.iter().zip(covariance.iter()) {
-            assert!((actual - expected).abs() < 1.0e-18, "{actual} != {expected}");
+            assert!(
+                (actual - expected).abs() < 1.0e-18,
+                "{actual} != {expected}"
+            );
         }
     }
 
@@ -808,8 +845,8 @@ mod tests {
             Some(covariance_batch),
         )
         .unwrap();
-        let orbits = OrbitBatch::new(vec![OrbitId("o1".to_string())], vec![None], coordinates)
-            .unwrap();
+        let orbits =
+            OrbitBatch::new(vec![OrbitId("o1".to_string())], vec![None], coordinates).unwrap();
         let samples = create_sigma_point_orbit_variants(&orbits, 1.0, 0.0, 0.0).unwrap();
         assert_reconstructs_covariance(&samples, &state, &covariance);
     }
@@ -909,7 +946,10 @@ mod tests {
             .unwrap()
             .row_values(0);
         for (actual, expected) in collapsed_covariance.iter().zip(covariance.iter()) {
-            assert!((actual - expected).abs() < 1.0e-18, "{actual} != {expected}");
+            assert!(
+                (actual - expected).abs() < 1.0e-18,
+                "{actual} != {expected}"
+            );
         }
     }
 
@@ -968,10 +1008,10 @@ mod tests {
         let mut origins = Vec::with_capacity(samples.variants.len() * 2);
         let mut epochs = Vec::with_capacity(samples.variants.len() * 2);
         let mut convergence = Vec::with_capacity(samples.variants.len() * 2);
-        for sample_index in 0..samples.variants.len() {
+        for (sample_index, sample) in sample_rows.iter().enumerate() {
             for time_index in 0..2 {
                 let output_row = output_rows.len();
-                output_rows.push(sample_rows[sample_index]);
+                output_rows.push(*sample);
                 orbit_ids.push(samples.variants.orbit_id[sample_index].clone());
                 object_ids.push(samples.variants.object_id[sample_index].clone());
                 variant_ids.push(samples.variants.variant_id[sample_index].clone());
@@ -1032,7 +1072,10 @@ mod tests {
                 .iter()
                 .zip(covariance.iter())
             {
-                assert!((actual - expected).abs() < 1.0e-18, "{actual} != {expected}");
+                assert!(
+                    (actual - expected).abs() < 1.0e-18,
+                    "{actual} != {expected}"
+                );
             }
         }
     }

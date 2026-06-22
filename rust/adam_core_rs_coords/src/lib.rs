@@ -53,6 +53,9 @@ pub use variant_sampling::{
     OrbitVariantSamplingMethod,
 };
 
+pub mod translation;
+pub use translation::{translate_coordinates_to_origin, OriginTranslationProvider};
+
 pub mod abs_mag;
 pub use abs_mag::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, AbsMagFit};
 
