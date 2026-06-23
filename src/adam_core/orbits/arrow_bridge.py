@@ -98,3 +98,18 @@ def sample_orbit_variants(
         orbits_to_ipc(orbits), method, num_samples, seed, alpha, beta, kappa
     )
     return variants_from_ipc(raw)
+
+
+def propagate_orbits_2body(
+    orbits: Orbits, time, max_iter: int = 100, tol: float = 1e-14
+) -> Orbits:
+    """Propagate ``orbits`` to a single shared ``time`` (length-1 Timestamp) with
+    2-body dynamics Rust-side in one crossing (state only). Orbit epochs and
+    ``time`` must share the dynamics time scale (typically TDB).
+    """
+    days = int(time.days.to_numpy(zero_copy_only=False)[0])
+    nanos = int(time.nanos.to_numpy(zero_copy_only=False)[0])
+    raw = _rn.orbits_propagate_2body_ipc(
+        orbits_to_ipc(orbits), days, nanos, time.scale, max_iter, tol
+    )
+    return orbits_from_ipc(raw)

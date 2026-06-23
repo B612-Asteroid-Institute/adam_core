@@ -114,6 +114,7 @@ pub use lambert::{izzo_lambert, izzo_lambert_batch_flat, porkchop_grid_flat};
 
 pub mod coordinate_frame;
 pub mod moid;
+pub mod orbit_propagation;
 pub use moid::{calculate_moid, calculate_moid_batch};
 
 pub fn cartesian_to_cometary_flat6(flat_coords: &[f64], t0: &[f64], mu: &[f64]) -> Vec<f64> {

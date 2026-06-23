@@ -6,9 +6,9 @@ use adam_core_rs_coords::{
     rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6,
     spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
     transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
-    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Frame,
+    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
     IntoNestedRecordBatch, OrbitBatch as DataOrbitBatch, OrbitVariantSamplingMethod,
-    Representation as CoordsRepresentation, TryFromNestedRecordBatch,
+    Representation as CoordsRepresentation, TimeScale, TryFromNestedRecordBatch,
 };
 use arrow_array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
@@ -1178,6 +1178,35 @@ fn orbits_sample_variants_ipc<'py>(
     Ok(PyBytes::new_bound(py, &bytes))
 }
 
+/// W1 data-model workflow (bead personal-cmy.13): propagate a quivr `Orbits`
+/// table (Arrow IPC) to a shared `target` epoch with 2-body dynamics entirely
+/// Rust-side in a single crossing -- decode to `OrbitBatch`, propagate, re-encode.
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, target_days, target_nanos, target_scale, max_iter=100, tol=1e-14))]
+fn orbits_propagate_2body_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+    target_days: i64,
+    target_nanos: i64,
+    target_scale: &str,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let scale =
+        TimeScale::parse(target_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+    let propagated = orbits
+        .propagate_2body_to(Epoch::new(target_days, target_nanos), scale, max_iter, tol)
+        .map_err(|err| PyValueError::new_err(format!("failed to propagate: {err}")))?;
+    let out = propagated
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
+    let bytes = write_orbit_ipc(&out)?;
+    Ok(PyBytes::new_bound(py, &bytes))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
@@ -1205,5 +1234,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_rotate_frame_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_sample_variants_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(orbits_propagate_2body_ipc, m)?)?;
     Ok(())
 }

@@ -19,8 +19,10 @@ from adam_core.coordinates import (
     transform_coordinates,
 )
 from adam_core.orbits import Orbits
+from adam_core.dynamics import propagate_2body
 from adam_core.orbits.arrow_bridge import (
     orbits_to_ipc,
+    propagate_orbits_2body,
     rotate_orbits_frame,
     round_trip_orbits,
     sample_orbit_variants,
@@ -167,4 +169,32 @@ def test_sample_orbit_variants_sigma_point_matches_create():
     )
     np.testing.assert_allclose(
         bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-12
+    )
+
+
+def test_propagate_orbits_2body_matches_propagate_2body():
+    # Physically valid near-circular heliocentric orbits (v ~ sqrt(mu_sun / r)).
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0, 1.5, 2.0],
+        y=[0.0, 0.0, 0.0],
+        z=[0.0, 0.0, 0.0],
+        vx=[0.0, 0.0, 0.0],
+        vy=[0.01720, 0.01405, 0.01216],
+        vz=[0.0, 0.0, 0.0],
+        time=Timestamp.from_mjd([60000.0, 60000.0, 60000.0], scale="tdb"),
+        origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+        frame="ecliptic",
+    )
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1", "o2", "o3"],
+        object_id=["a", "b", "c"],
+        coordinates=coordinates,
+    )
+    target = Timestamp.from_mjd([60010.0], scale="tdb")
+    bridge = propagate_orbits_2body(orbits, target)
+    reference = propagate_2body(orbits, target)
+    assert bridge.coordinates.time.scale == "tdb"
+    assert bridge.orbit_id.to_pylist() == reference.orbit_id.to_pylist()
+    np.testing.assert_allclose(
+        bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-11
     )
