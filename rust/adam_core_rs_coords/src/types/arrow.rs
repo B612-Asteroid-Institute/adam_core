@@ -10,8 +10,12 @@ use super::{
     ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, SchemaError,
     SchemaResult, TimeArray, TimeScale, Validity, VariantId,
 };
-use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, LargeStringArray, RecordBatch};
-use arrow_schema::{DataType, Field, Schema};
+use arrow_array::builder::{Float64Builder, LargeListBuilder};
+use arrow_array::{
+    Array, ArrayRef, Float64Array, Int64Array, LargeListArray, LargeStringArray, RecordBatch,
+    StructArray,
+};
+use arrow_schema::{DataType, Field, Fields, Schema};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -24,6 +28,8 @@ const COVARIANCE_METADATA_KEY: &str = "adam_core_covariance";
 const CARTESIAN_COORDINATE_SCHEMA: &str = "CoordinateBatch.cartesian.flat.v1";
 const ORBIT_SCHEMA: &str = "OrbitBatch.cartesian.flat.v1";
 const ORBIT_VARIANT_SCHEMA: &str = "OrbitVariantBatch.cartesian.flat.v1";
+const CARTESIAN_NESTED_SCHEMA: &str = "CoordinateBatch.cartesian.nested.quivr.v1";
+const ORBIT_NESTED_SCHEMA: &str = "OrbitBatch.cartesian.nested.quivr.v1";
 
 pub trait ArrowSchemaExport {
     fn schema() -> Schema;
@@ -35,6 +41,19 @@ pub trait IntoRecordBatch {
 
 pub trait TryFromRecordBatch: Sized {
     fn try_from_record_batch(batch: &RecordBatch) -> SchemaResult<Self>;
+}
+
+/// Nested, quivr-compatible Arrow round-trip (W1 keystone option (a), bead
+/// personal-cmy.13). Emits/consumes the EXACT nested quivr layout: a `coordinates`
+/// struct (for orbits) or top-level coordinate columns (for coordinate batches) with
+/// nested `time`/`covariance`/`origin` structs and a `large_list` covariance, so a
+/// quivr table's Arrow buffers map to a Rust batch with no reshaping and no loss.
+pub trait IntoNestedRecordBatch {
+    fn into_nested_record_batch(self) -> SchemaResult<RecordBatch>;
+}
+
+pub trait TryFromNestedRecordBatch: Sized {
+    fn try_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Self>;
 }
 
 impl ArrowSchemaExport for CoordinateBatch {
@@ -89,6 +108,389 @@ impl TryFromRecordBatch for OrbitVariantBatch {
     fn try_from_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
         orbit_variant_from_record_batch(batch)
     }
+}
+
+impl IntoNestedRecordBatch for CoordinateBatch {
+    fn into_nested_record_batch(self) -> SchemaResult<RecordBatch> {
+        coordinate_to_nested_record_batch(&self)
+    }
+}
+
+impl TryFromNestedRecordBatch for CoordinateBatch {
+    fn try_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
+        coordinate_from_nested_record_batch(batch)
+    }
+}
+
+impl IntoNestedRecordBatch for OrbitBatch {
+    fn into_nested_record_batch(self) -> SchemaResult<RecordBatch> {
+        orbit_to_nested_record_batch(&self)
+    }
+}
+
+impl TryFromNestedRecordBatch for OrbitBatch {
+    fn try_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
+        orbit_from_nested_record_batch(batch)
+    }
+}
+
+// ---- nested (quivr-compatible) builders: W1 option (a) ----
+
+fn nested_time_struct(coordinates: &CoordinateBatch, rows: usize) -> SchemaResult<StructArray> {
+    let (days, nanos): (Vec<Option<i64>>, Vec<Option<i64>>) = match &coordinates.times {
+        Some(times) => (
+            times.epochs.iter().map(|epoch| Some(epoch.days)).collect(),
+            times.epochs.iter().map(|epoch| Some(epoch.nanos)).collect(),
+        ),
+        None => (vec![None; rows], vec![None; rows]),
+    };
+    StructArray::try_new(
+        Fields::from(vec![
+            Field::new("days", DataType::Int64, true),
+            Field::new("nanos", DataType::Int64, true),
+        ]),
+        vec![
+            Arc::new(Int64Array::from(days)) as ArrayRef,
+            Arc::new(Int64Array::from(nanos)) as ArrayRef,
+        ],
+        None,
+    )
+    .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn nested_covariance_struct(
+    coordinates: &CoordinateBatch,
+    rows: usize,
+) -> SchemaResult<StructArray> {
+    if let Some(covariance) = coordinates.covariance.as_ref() {
+        if covariance.dimension != 6 {
+            return Err(SchemaError::InvalidCovarianceShape {
+                rows: covariance.rows,
+                dimension: covariance.dimension,
+                values: covariance.values_row_major.len(),
+            });
+        }
+    }
+    let mut builder = LargeListBuilder::new(Float64Builder::new());
+    match coordinates.covariance.as_ref() {
+        Some(covariance) => {
+            for row in 0..rows {
+                if covariance.is_row_valid(row) {
+                    for element in 0..36 {
+                        builder
+                            .values()
+                            .append_value(covariance.values_row_major[row * 36 + element]);
+                    }
+                    builder.append(true);
+                } else {
+                    builder.append(false);
+                }
+            }
+        }
+        None => {
+            for _ in 0..rows {
+                builder.append(false);
+            }
+        }
+    }
+    let list = builder.finish();
+    StructArray::try_new(
+        Fields::from(vec![Field::new("values", list.data_type().clone(), true)]),
+        vec![Arc::new(list) as ArrayRef],
+        None,
+    )
+    .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn nested_origin_struct(coordinates: &CoordinateBatch) -> SchemaResult<StructArray> {
+    let codes =
+        LargeStringArray::from_iter_values(coordinates.origins.origins.iter().map(OriginId::code));
+    StructArray::try_new(
+        Fields::from(vec![Field::new("code", DataType::LargeUtf8, false)]),
+        vec![Arc::new(codes) as ArrayRef],
+        None,
+    )
+    .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+/// Build the nine quivr coordinate columns (x..vz plus nested time/covariance/origin
+/// structs) as (field, array) pairs. Used both as the top-level columns of a
+/// CartesianCoordinates batch and as the children of the Orbits `coordinates` struct.
+fn nested_coordinate_named_arrays(
+    coordinates: &CoordinateBatch,
+) -> SchemaResult<Vec<(Arc<Field>, ArrayRef)>> {
+    coordinates.validate()?;
+    let values = coordinates.values.cartesian().ok_or_else(|| {
+        SchemaError::InvalidRecordBatch("expected Cartesian coordinates".to_string())
+    })?;
+    let rows = values.len();
+    let mut out: Vec<(Arc<Field>, ArrayRef)> = Vec::with_capacity(9);
+    for (column, name) in ["x", "y", "z", "vx", "vy", "vz"].into_iter().enumerate() {
+        let array = Arc::new(Float64Array::from(
+            values.iter().map(|row| row[column]).collect::<Vec<_>>(),
+        )) as ArrayRef;
+        out.push((Arc::new(Field::new(name, DataType::Float64, true)), array));
+    }
+    let time = nested_time_struct(coordinates, rows)?;
+    out.push((
+        Arc::new(Field::new("time", time.data_type().clone(), true)),
+        Arc::new(time) as ArrayRef,
+    ));
+    let covariance = nested_covariance_struct(coordinates, rows)?;
+    out.push((
+        Arc::new(Field::new(
+            "covariance",
+            covariance.data_type().clone(),
+            true,
+        )),
+        Arc::new(covariance) as ArrayRef,
+    ));
+    let origin = nested_origin_struct(coordinates)?;
+    out.push((
+        Arc::new(Field::new("origin", origin.data_type().clone(), false)),
+        Arc::new(origin) as ArrayRef,
+    ));
+    Ok(out)
+}
+
+fn coordinate_to_nested_record_batch(coordinates: &CoordinateBatch) -> SchemaResult<RecordBatch> {
+    let time_scale = coordinates.times.as_ref().map(|time| time.scale);
+    let columns = nested_coordinate_named_arrays(coordinates)?;
+    let fields = columns
+        .iter()
+        .map(|(field, _)| field.as_ref().clone())
+        .collect::<Vec<_>>();
+    let arrays = columns
+        .into_iter()
+        .map(|(_, array)| array)
+        .collect::<Vec<_>>();
+    let schema = Schema::new_with_metadata(
+        fields,
+        coordinate_metadata(
+            CARTESIAN_NESTED_SCHEMA,
+            coordinates.frame,
+            time_scale,
+            coordinates.covariance.is_some(),
+        ),
+    );
+    RecordBatch::try_new(Arc::new(schema), arrays)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn orbit_to_nested_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch> {
+    orbits.validate()?;
+    let time_scale = orbits.coordinates.times.as_ref().map(|time| time.scale);
+    let columns = nested_coordinate_named_arrays(&orbits.coordinates)?;
+    let coord_fields = columns
+        .iter()
+        .map(|(field, _)| field.clone())
+        .collect::<Fields>();
+    let coord_arrays = columns
+        .iter()
+        .map(|(_, array)| array.clone())
+        .collect::<Vec<_>>();
+    let coordinates = StructArray::try_new(coord_fields, coord_arrays, None)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))?;
+
+    let fields = vec![
+        Field::new("orbit_id", DataType::LargeUtf8, false),
+        Field::new("object_id", DataType::LargeUtf8, true),
+        Field::new("coordinates", coordinates.data_type().clone(), false),
+    ];
+    let mut arrays = orbit_metadata_arrays(&orbits.orbit_id, &orbits.object_id);
+    arrays.push(Arc::new(coordinates) as ArrayRef);
+    let schema = Schema::new_with_metadata(
+        fields,
+        coordinate_metadata(
+            ORBIT_NESTED_SCHEMA,
+            orbits.coordinates.frame,
+            time_scale,
+            orbits.coordinates.covariance.is_some(),
+        ),
+    );
+    RecordBatch::try_new(Arc::new(schema), arrays)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn coordinate_from_nested_columns<'a, F>(
+    column: F,
+    rows: usize,
+    metadata: &HashMap<String, String>,
+) -> SchemaResult<CoordinateBatch>
+where
+    F: Fn(&str) -> Option<&'a ArrayRef>,
+{
+    let representation = metadata
+        .get(REPRESENTATION_METADATA_KEY)
+        .map(String::as_str)
+        .unwrap_or("cartesian");
+    if representation != CoordinateRepresentation::Cartesian.as_str() {
+        return Err(SchemaError::InvalidRecordBatch(format!(
+            "expected Cartesian representation metadata, got {representation}"
+        )));
+    }
+    let frame = metadata
+        .get(FRAME_METADATA_KEY)
+        .map(|value| Frame::parse(value))
+        .transpose()?
+        .unwrap_or(Frame::Unspecified);
+    let require = |name: &str| -> SchemaResult<&'a ArrayRef> {
+        column(name).ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))
+    };
+
+    let x = array_as_f64(require("x")?, "x")?;
+    let y = array_as_f64(require("y")?, "y")?;
+    let z = array_as_f64(require("z")?, "z")?;
+    let vx = array_as_f64(require("vx")?, "vx")?;
+    let vy = array_as_f64(require("vy")?, "vy")?;
+    let vz = array_as_f64(require("vz")?, "vz")?;
+    let mut values = Vec::with_capacity(rows);
+    for row in 0..rows {
+        values.push([
+            non_null_f64(x, "x", row)?,
+            non_null_f64(y, "y", row)?,
+            non_null_f64(z, "z", row)?,
+            non_null_f64(vx, "vx", row)?,
+            non_null_f64(vy, "vy", row)?,
+            non_null_f64(vz, "vz", row)?,
+        ]);
+    }
+
+    let time = array_as_struct(require("time")?, "time")?;
+    let days = struct_field_i64(time, "days")?;
+    let nanos = struct_field_i64(time, "nanos")?;
+    let times = parse_time_array(metadata, days, nanos)?;
+
+    let origin = array_as_struct(require("origin")?, "origin")?;
+    let code = struct_field_lstr(origin, "code")?;
+    let origins = OriginArray::new(
+        (0..rows)
+            .map(|row| {
+                if code.is_null(row) {
+                    return Err(SchemaError::UnsupportedNull {
+                        field: "origin.code".to_string(),
+                        row,
+                    });
+                }
+                Ok(OriginId::from_code(code.value(row)))
+            })
+            .collect::<SchemaResult<Vec<_>>>()?,
+    );
+
+    let covariance = array_as_struct(require("covariance")?, "covariance")?;
+    let covariance = parse_nested_covariance(covariance, rows)?;
+
+    CoordinateBatch::cartesian(values, frame, origins, times, covariance)
+}
+
+fn coordinate_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<CoordinateBatch> {
+    let schema = batch.schema();
+    coordinate_from_nested_columns(
+        |name| batch.column_by_name(name),
+        batch.num_rows(),
+        schema.metadata(),
+    )
+}
+
+fn orbit_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatch> {
+    let (orbit_id, object_id) = parse_orbit_metadata(batch)?;
+    let schema = batch.schema();
+    let coordinates = batch
+        .column_by_name("coordinates")
+        .ok_or_else(|| SchemaError::MissingRequiredField("coordinates".to_string()))?;
+    let coordinates = array_as_struct(coordinates, "coordinates")?;
+    let coordinates = coordinate_from_nested_columns(
+        |name| coordinates.column_by_name(name),
+        batch.num_rows(),
+        schema.metadata(),
+    )?;
+    OrbitBatch::new(orbit_id, object_id, coordinates)
+}
+
+fn parse_nested_covariance(
+    covariance: &StructArray,
+    rows: usize,
+) -> SchemaResult<Option<CovarianceBatch>> {
+    let values_col = covariance
+        .column_by_name("values")
+        .ok_or_else(|| SchemaError::MissingRequiredField("covariance.values".to_string()))?;
+    let list = values_col
+        .as_any()
+        .downcast_ref::<LargeListArray>()
+        .ok_or_else(|| {
+            SchemaError::InvalidRecordBatch("covariance.values must be LargeList".to_string())
+        })?;
+    let mut values = vec![f64::NAN; rows * 36];
+    let mut row_validity = vec![true; rows];
+    let mut any_present = false;
+    for row in 0..rows {
+        if list.is_null(row) {
+            row_validity[row] = false;
+            continue;
+        }
+        let entry = list.value(row);
+        let entry = entry
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .ok_or_else(|| {
+                SchemaError::InvalidRecordBatch(
+                    "covariance.values items must be Float64".to_string(),
+                )
+            })?;
+        if entry.len() != 36 {
+            return Err(SchemaError::InvalidRecordBatch(format!(
+                "covariance row {row} must have 36 elements, got {}",
+                entry.len()
+            )));
+        }
+        for element in 0..36 {
+            values[row * 36 + element] = non_null_f64(entry, "covariance.values", element)?;
+        }
+        any_present = true;
+    }
+    if !any_present {
+        return Ok(None);
+    }
+    CovarianceBatch::new(
+        rows,
+        6,
+        values,
+        CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+    )
+    .and_then(|covariance| covariance.with_row_validity(Validity::from_bools(&row_validity)))
+    .map(Some)
+}
+
+fn array_as_f64<'a>(array: &'a ArrayRef, name: &str) -> SchemaResult<&'a Float64Array> {
+    array
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be Float64")))
+}
+
+fn array_as_struct<'a>(array: &'a ArrayRef, name: &str) -> SchemaResult<&'a StructArray> {
+    array
+        .as_any()
+        .downcast_ref::<StructArray>()
+        .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be a Struct")))
+}
+
+fn struct_field_i64<'a>(array: &'a StructArray, name: &str) -> SchemaResult<&'a Int64Array> {
+    array
+        .column_by_name(name)
+        .ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))?
+        .as_any()
+        .downcast_ref::<Int64Array>()
+        .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be Int64")))
+}
+
+fn struct_field_lstr<'a>(array: &'a StructArray, name: &str) -> SchemaResult<&'a LargeStringArray> {
+    array
+        .column_by_name(name)
+        .ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))?
+        .as_any()
+        .downcast_ref::<LargeStringArray>()
+        .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be LargeUtf8")))
 }
 
 fn coordinate_fields() -> Vec<Field> {
@@ -751,5 +1153,118 @@ mod tests {
         assert_eq!(round_tripped.weights_cov, vec![Some(0.5625), None]);
         assert_eq!(round_tripped.coordinates.len(), 2);
         assert_eq!(round_tripped.coordinates.frame, Frame::Ecliptic);
+    }
+
+    fn expected_quivr_coordinates_type() -> DataType {
+        DataType::Struct(Fields::from(vec![
+            Field::new("x", DataType::Float64, true),
+            Field::new("y", DataType::Float64, true),
+            Field::new("z", DataType::Float64, true),
+            Field::new("vx", DataType::Float64, true),
+            Field::new("vy", DataType::Float64, true),
+            Field::new("vz", DataType::Float64, true),
+            Field::new(
+                "time",
+                DataType::Struct(Fields::from(vec![
+                    Field::new("days", DataType::Int64, true),
+                    Field::new("nanos", DataType::Int64, true),
+                ])),
+                true,
+            ),
+            Field::new(
+                "covariance",
+                DataType::Struct(Fields::from(vec![Field::new(
+                    "values",
+                    DataType::LargeList(Arc::new(Field::new("item", DataType::Float64, true))),
+                    true,
+                )])),
+                true,
+            ),
+            Field::new(
+                "origin",
+                DataType::Struct(Fields::from(vec![Field::new(
+                    "code",
+                    DataType::LargeUtf8,
+                    false,
+                )])),
+                false,
+            ),
+        ]))
+    }
+
+    #[test]
+    fn orbit_nested_round_trip_matches_quivr_layout() {
+        let orbits = OrbitBatch::new(
+            vec![
+                OrbitId("orbit-1".to_string()),
+                OrbitId("orbit-2".to_string()),
+            ],
+            vec![Some(ObjectId("object-1".to_string())), None],
+            coordinate_batch_with_covariance(),
+        )
+        .unwrap();
+        let batch = orbits.into_nested_record_batch().unwrap();
+        assert_eq!(batch.num_columns(), 3);
+        let schema = batch.schema();
+        assert_eq!(
+            schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
+            ORBIT_NESTED_SCHEMA
+        );
+        // The `coordinates` column type must match quivr's nested struct exactly
+        // (W1 option (a): zero-reshape, lossless bridge).
+        let coords_index = schema.index_of("coordinates").unwrap();
+        assert_eq!(
+            schema.field(coords_index).data_type(),
+            &expected_quivr_coordinates_type()
+        );
+
+        let round_tripped = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(round_tripped.orbit_id[0].0, "orbit-1");
+        assert_eq!(round_tripped.orbit_id[1].0, "orbit-2");
+        assert_eq!(round_tripped.object_id[0].as_ref().unwrap().0, "object-1");
+        assert!(round_tripped.object_id[1].is_none());
+        assert_eq!(round_tripped.coordinates.frame, Frame::Ecliptic);
+        assert_eq!(
+            round_tripped.coordinates.times.as_ref().unwrap().scale,
+            TimeScale::Tdb
+        );
+        assert_eq!(
+            round_tripped.coordinates.origins.origins[0].code(),
+            "SOLAR_SYSTEM_BARYCENTER"
+        );
+        let values = round_tripped.coordinates.values.cartesian().unwrap();
+        assert_eq!(values[0], [1.0, 2.0, 3.0, 0.1, 0.2, 0.3]);
+        assert_eq!(values[1], [4.0, 5.0, 6.0, 0.4, 0.5, 0.6]);
+        let covariance = round_tripped.coordinates.covariance.unwrap();
+        assert!(covariance.is_row_valid(0));
+        assert!(!covariance.is_row_valid(1));
+        assert_eq!(covariance.row_values(0)[35], 35.0);
+        assert!(covariance.row_values(1)[0].is_nan());
+    }
+
+    #[test]
+    fn coordinate_nested_round_trip_without_time_or_covariance() {
+        let coordinates = CoordinateBatch::cartesian(
+            vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]],
+            Frame::Equatorial,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 1),
+            None,
+            None,
+        )
+        .unwrap();
+        let batch = coordinates.into_nested_record_batch().unwrap();
+        let schema = batch.schema();
+        assert_eq!(
+            schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
+            CARTESIAN_NESTED_SCHEMA
+        );
+        // Top-level columns: x..vz + nested time/covariance/origin structs = 9.
+        assert_eq!(batch.num_columns(), 9);
+        let round_tripped = CoordinateBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(round_tripped.frame, Frame::Equatorial);
+        assert!(round_tripped.times.is_none());
+        assert!(round_tripped.covariance.is_none());
+        let values = round_tripped.values.cartesian().unwrap();
+        assert_eq!(values[0], [1.0, 2.0, 3.0, 0.1, 0.2, 0.3]);
     }
 }
