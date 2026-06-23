@@ -7,8 +7,8 @@
 
 use super::{
     CoordinateBatch, CoordinateRepresentation, CovarianceBatch, CovarianceUnits, Epoch, Frame,
-    ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, SchemaError,
-    SchemaResult, TimeArray, TimeScale, Validity, VariantId,
+    ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
+    PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray, TimeScale, Validity, VariantId,
 };
 use arrow_array::builder::{Float64Builder, LargeListBuilder};
 use arrow_array::{
@@ -291,14 +291,22 @@ fn orbit_to_nested_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch
         .collect::<Vec<_>>();
     let coordinates = StructArray::try_new(coord_fields, coord_arrays, None)
         .map_err(|err| SchemaError::Arrow(err.to_string()))?;
+    let physical_parameters =
+        nested_physical_parameters_struct(orbits.physical_parameters.as_ref(), orbits.len())?;
 
     let fields = vec![
         Field::new("orbit_id", DataType::LargeUtf8, false),
         Field::new("object_id", DataType::LargeUtf8, true),
         Field::new("coordinates", coordinates.data_type().clone(), false),
+        Field::new(
+            "physical_parameters",
+            physical_parameters.data_type().clone(),
+            false,
+        ),
     ];
     let mut arrays = orbit_metadata_arrays(&orbits.orbit_id, &orbits.object_id);
     arrays.push(Arc::new(coordinates) as ArrayRef);
+    arrays.push(Arc::new(physical_parameters) as ArrayRef);
     let schema = Schema::new_with_metadata(
         fields,
         coordinate_metadata(
@@ -404,7 +412,20 @@ fn orbit_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatc
         batch.num_rows(),
         schema.metadata(),
     )?;
-    OrbitBatch::new(orbit_id, object_id, coordinates)
+    let physical_parameters = batch
+        .column_by_name("physical_parameters")
+        .map(|column| array_as_struct(column, "physical_parameters"))
+        .transpose()?
+        .map(|physical_parameters| {
+            parse_nested_physical_parameters(physical_parameters, batch.num_rows())
+        })
+        .transpose()?
+        .flatten();
+    let orbits = OrbitBatch::new(orbit_id, object_id, coordinates)?;
+    match physical_parameters {
+        Some(physical_parameters) => orbits.with_physical_parameters(physical_parameters),
+        None => Ok(orbits),
+    }
 }
 
 fn parse_nested_covariance(
@@ -491,6 +512,72 @@ fn struct_field_lstr<'a>(array: &'a StructArray, name: &str) -> SchemaResult<&'a
         .as_any()
         .downcast_ref::<LargeStringArray>()
         .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be LargeUtf8")))
+}
+
+fn struct_field_f64<'a>(array: &'a StructArray, name: &str) -> SchemaResult<&'a Float64Array> {
+    array
+        .column_by_name(name)
+        .ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))?
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be Float64")))
+}
+
+fn nested_physical_parameters_struct(
+    physical_parameters: Option<&PhysicalParametersBatch>,
+    rows: usize,
+) -> SchemaResult<StructArray> {
+    let columns: [(&str, Vec<Option<f64>>); 6] = match physical_parameters {
+        Some(pp) => [
+            ("H_v", pp.h_v.clone()),
+            ("H_v_sigma", pp.h_v_sigma.clone()),
+            ("G", pp.g.clone()),
+            ("G_sigma", pp.g_sigma.clone()),
+            ("sigma_eff", pp.sigma_eff.clone()),
+            ("chi2_red", pp.chi2_red.clone()),
+        ],
+        None => [
+            ("H_v", vec![None; rows]),
+            ("H_v_sigma", vec![None; rows]),
+            ("G", vec![None; rows]),
+            ("G_sigma", vec![None; rows]),
+            ("sigma_eff", vec![None; rows]),
+            ("chi2_red", vec![None; rows]),
+        ],
+    };
+    let mut fields = Vec::with_capacity(6);
+    let mut arrays: Vec<ArrayRef> = Vec::with_capacity(6);
+    for (name, values) in columns {
+        fields.push(Field::new(name, DataType::Float64, true));
+        arrays.push(Arc::new(Float64Array::from(values)) as ArrayRef);
+    }
+    StructArray::try_new(Fields::from(fields), arrays, None)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn parse_nested_physical_parameters(
+    physical_parameters: &StructArray,
+    _rows: usize,
+) -> SchemaResult<Option<PhysicalParametersBatch>> {
+    let read = |name: &str| -> SchemaResult<Vec<Option<f64>>> {
+        Ok(optional_float64_values(struct_field_f64(
+            physical_parameters,
+            name,
+        )?))
+    };
+    let batch = PhysicalParametersBatch {
+        h_v: read("H_v")?,
+        h_v_sigma: read("H_v_sigma")?,
+        g: read("G")?,
+        g_sigma: read("G_sigma")?,
+        sigma_eff: read("sigma_eff")?,
+        chi2_red: read("chi2_red")?,
+    };
+    if batch.is_all_null() {
+        Ok(None)
+    } else {
+        Ok(Some(batch))
+    }
 }
 
 fn coordinate_fields() -> Vec<Field> {
@@ -1204,7 +1291,7 @@ mod tests {
         )
         .unwrap();
         let batch = orbits.into_nested_record_batch().unwrap();
-        assert_eq!(batch.num_columns(), 3);
+        assert_eq!(batch.num_columns(), 4);
         let schema = batch.schema();
         assert_eq!(
             schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
@@ -1240,6 +1327,34 @@ mod tests {
         assert!(!covariance.is_row_valid(1));
         assert_eq!(covariance.row_values(0)[35], 35.0);
         assert!(covariance.row_values(1)[0].is_nan());
+        assert!(round_tripped.physical_parameters.is_none());
+    }
+
+    #[test]
+    fn orbit_nested_round_trip_preserves_physical_parameters() {
+        let physical_parameters = PhysicalParametersBatch {
+            h_v: vec![Some(15.5), None],
+            h_v_sigma: vec![Some(0.1), None],
+            g: vec![Some(0.15), None],
+            g_sigma: vec![None, None],
+            sigma_eff: vec![Some(0.05), None],
+            chi2_red: vec![Some(1.2), None],
+        };
+        let orbits = OrbitBatch::new(
+            vec![
+                OrbitId("orbit-1".to_string()),
+                OrbitId("orbit-2".to_string()),
+            ],
+            vec![Some(ObjectId("object-1".to_string())), None],
+            coordinate_batch_with_covariance(),
+        )
+        .unwrap()
+        .with_physical_parameters(physical_parameters.clone())
+        .unwrap();
+        let batch = orbits.into_nested_record_batch().unwrap();
+        assert_eq!(batch.num_columns(), 4);
+        let round_tripped = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(round_tripped.physical_parameters, Some(physical_parameters));
     }
 
     #[test]

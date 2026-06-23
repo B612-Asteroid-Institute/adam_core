@@ -8,7 +8,10 @@
 pub mod arrow;
 pub mod origin;
 pub mod time;
-pub use arrow::{ArrowSchemaExport, IntoRecordBatch, TryFromRecordBatch};
+pub use arrow::{
+    ArrowSchemaExport, IntoNestedRecordBatch, IntoRecordBatch, TryFromNestedRecordBatch,
+    TryFromRecordBatch,
+};
 pub use origin::{
     convert_mu_km3_s2_to_au3_day2, naif_origin_name, origin_code_mu_au3_day2, origin_mu_au3_day2,
     solar_system_barycenter_mu_au3_day2, KM_PER_AU,
@@ -599,11 +602,71 @@ impl CoordinateBatch {
     }
 }
 
+/// Optional photometric / physical parameters carried alongside an orbit, matching
+/// quivr `Orbits.physical_parameters`
+/// (`struct<H_v, H_v_sigma, G, G_sigma, sigma_eff, chi2_red: f64>`). Every column is
+/// per-row optional. Used by the nested quivr-compatible Arrow round-trip so a full
+/// `Orbits` table maps losslessly to/from a Rust `OrbitBatch` (bead personal-cmy.13).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PhysicalParametersBatch {
+    pub h_v: Vec<Option<f64>>,
+    pub h_v_sigma: Vec<Option<f64>>,
+    pub g: Vec<Option<f64>>,
+    pub g_sigma: Vec<Option<f64>>,
+    pub sigma_eff: Vec<Option<f64>>,
+    pub chi2_red: Vec<Option<f64>>,
+}
+
+impl PhysicalParametersBatch {
+    pub fn len(&self) -> usize {
+        self.h_v.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.h_v.is_empty()
+    }
+
+    /// True when every column is entirely null (no physical information present).
+    pub fn is_all_null(&self) -> bool {
+        [
+            &self.h_v,
+            &self.h_v_sigma,
+            &self.g,
+            &self.g_sigma,
+            &self.sigma_eff,
+            &self.chi2_red,
+        ]
+        .into_iter()
+        .all(|column| column.iter().all(Option::is_none))
+    }
+
+    pub fn validate(&self, rows: usize) -> SchemaResult<()> {
+        for (field, len) in [
+            ("H_v", self.h_v.len()),
+            ("H_v_sigma", self.h_v_sigma.len()),
+            ("G", self.g.len()),
+            ("G_sigma", self.g_sigma.len()),
+            ("sigma_eff", self.sigma_eff.len()),
+            ("chi2_red", self.chi2_red.len()),
+        ] {
+            if len != rows {
+                return Err(SchemaError::LengthMismatch {
+                    field: format!("physical_parameters.{field}"),
+                    expected: rows,
+                    actual: len,
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrbitBatch {
     pub orbit_id: Vec<OrbitId>,
     pub object_id: Vec<Option<ObjectId>>,
     pub coordinates: CoordinateBatch,
+    pub physical_parameters: Option<PhysicalParametersBatch>,
 }
 
 impl OrbitBatch {
@@ -616,9 +679,20 @@ impl OrbitBatch {
             orbit_id,
             object_id,
             coordinates,
+            physical_parameters: None,
         };
         out.validate()?;
         Ok(out)
+    }
+
+    /// Attach quivr-compatible physical parameters; validated against the orbit row count.
+    pub fn with_physical_parameters(
+        mut self,
+        physical_parameters: PhysicalParametersBatch,
+    ) -> SchemaResult<Self> {
+        physical_parameters.validate(self.coordinates.len())?;
+        self.physical_parameters = Some(physical_parameters);
+        Ok(self)
     }
 
     pub fn len(&self) -> usize {
@@ -630,7 +704,11 @@ impl OrbitBatch {
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
-        validate_orbit_metadata(&self.orbit_id, &self.object_id, &self.coordinates)
+        validate_orbit_metadata(&self.orbit_id, &self.object_id, &self.coordinates)?;
+        if let Some(physical_parameters) = &self.physical_parameters {
+            physical_parameters.validate(self.coordinates.len())?;
+        }
+        Ok(())
     }
 }
 
