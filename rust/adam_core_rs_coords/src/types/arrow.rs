@@ -31,6 +31,7 @@ const ORBIT_SCHEMA: &str = "OrbitBatch.cartesian.flat.v1";
 const ORBIT_VARIANT_SCHEMA: &str = "OrbitVariantBatch.cartesian.flat.v1";
 const CARTESIAN_NESTED_SCHEMA: &str = "CoordinateBatch.cartesian.nested.quivr.v1";
 const ORBIT_NESTED_SCHEMA: &str = "OrbitBatch.cartesian.nested.quivr.v1";
+const ORBIT_VARIANT_NESTED_SCHEMA: &str = "OrbitVariantBatch.cartesian.nested.quivr.v1";
 
 pub trait ArrowSchemaExport {
     fn schema() -> Schema;
@@ -132,6 +133,12 @@ impl IntoNestedRecordBatch for OrbitBatch {
 impl TryFromNestedRecordBatch for OrbitBatch {
     fn try_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
         orbit_from_nested_record_batch(batch)
+    }
+}
+
+impl IntoNestedRecordBatch for OrbitVariantBatch {
+    fn into_nested_record_batch(self) -> SchemaResult<RecordBatch> {
+        orbit_variant_to_nested_record_batch(&self)
     }
 }
 
@@ -319,6 +326,71 @@ fn orbit_to_nested_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch
             orbits.coordinates.frame,
             time_scale,
             orbits.coordinates.covariance.is_some(),
+        ),
+    );
+    RecordBatch::try_new(Arc::new(schema), arrays)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn orbit_variant_to_nested_record_batch(variants: &OrbitVariantBatch) -> SchemaResult<RecordBatch> {
+    variants.validate()?;
+    let rows = variants.coordinates.len();
+    let time_scale = variants.coordinates.times.as_ref().map(|time| time.scale);
+    let columns = nested_coordinate_named_arrays(&variants.coordinates)?;
+    let coord_fields = columns
+        .iter()
+        .map(|(field, _)| field.clone())
+        .collect::<Fields>();
+    let coord_arrays = columns
+        .iter()
+        .map(|(_, array)| array.clone())
+        .collect::<Vec<_>>();
+    let coordinates = StructArray::try_new(coord_fields, coord_arrays, None)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))?;
+    // Variants carry no physical parameters; emit the quivr column as all-null.
+    let physical_parameters = nested_physical_parameters_struct(None, rows)?;
+
+    let fields = vec![
+        Field::new("orbit_id", DataType::LargeUtf8, false),
+        Field::new("object_id", DataType::LargeUtf8, true),
+        Field::new("variant_id", DataType::LargeUtf8, true),
+        Field::new("weights", DataType::Float64, true),
+        Field::new("weights_cov", DataType::Float64, true),
+        Field::new("coordinates", coordinates.data_type().clone(), true),
+        Field::new(
+            "physical_parameters",
+            physical_parameters.data_type().clone(),
+            true,
+        ),
+    ];
+    let arrays: Vec<ArrayRef> = vec![
+        Arc::new(LargeStringArray::from_iter_values(
+            variants.orbit_id.iter().map(|id| id.0.as_str()),
+        )) as ArrayRef,
+        Arc::new(LargeStringArray::from_iter(
+            variants
+                .object_id
+                .iter()
+                .map(|id| id.as_ref().map(|id| id.0.as_str())),
+        )) as ArrayRef,
+        Arc::new(LargeStringArray::from_iter(
+            variants
+                .variant_id
+                .iter()
+                .map(|id| id.as_ref().map(|id| id.0.as_str())),
+        )) as ArrayRef,
+        Arc::new(Float64Array::from(variants.weights.clone())) as ArrayRef,
+        Arc::new(Float64Array::from(variants.weights_cov.clone())) as ArrayRef,
+        Arc::new(coordinates) as ArrayRef,
+        Arc::new(physical_parameters) as ArrayRef,
+    ];
+    let schema = Schema::new_with_metadata(
+        fields,
+        coordinate_metadata(
+            ORBIT_VARIANT_NESTED_SCHEMA,
+            variants.coordinates.frame,
+            time_scale,
+            variants.coordinates.covariance.is_some(),
         ),
     );
     RecordBatch::try_new(Arc::new(schema), arrays)

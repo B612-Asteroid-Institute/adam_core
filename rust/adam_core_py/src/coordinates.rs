@@ -2,12 +2,13 @@ use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, calculate_chi2_flat,
     cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
     cartesian_to_spherical_flat6, cartesian_to_spherical_row, classify_orbits_flat,
-    cometary_to_cartesian_flat6, keplerian_to_cartesian_flat6, rotate_cartesian_frame_flat6,
-    rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
-    tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
-    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Frame,
-    IntoNestedRecordBatch, OrbitBatch as DataOrbitBatch, Representation as CoordsRepresentation,
-    TryFromNestedRecordBatch,
+    cometary_to_cartesian_flat6, create_sampled_orbit_variants, keplerian_to_cartesian_flat6,
+    rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6,
+    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
+    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
+    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Frame,
+    IntoNestedRecordBatch, OrbitBatch as DataOrbitBatch, OrbitVariantSamplingMethod,
+    Representation as CoordsRepresentation, TryFromNestedRecordBatch,
 };
 use arrow_array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
@@ -1129,6 +1130,54 @@ fn orbits_rotate_frame_ipc<'py>(
     Ok(PyBytes::new_bound(py, &bytes))
 }
 
+fn parse_variant_method(method: &str) -> PyResult<OrbitVariantSamplingMethod> {
+    match method {
+        "auto" => Ok(OrbitVariantSamplingMethod::Auto),
+        "sigma-point" => Ok(OrbitVariantSamplingMethod::SigmaPoint),
+        "monte-carlo" => Ok(OrbitVariantSamplingMethod::MonteCarlo),
+        other => Err(PyValueError::new_err(format!(
+            "variant method must be one of 'auto', 'sigma-point', or 'monte-carlo'; got {other:?}"
+        ))),
+    }
+}
+
+/// W1 data-model workflow (bead personal-cmy.13): sample covariance variants of
+/// a quivr `Orbits` table (Arrow IPC) entirely Rust-side in a single crossing --
+/// decode to `OrbitBatch`, run `VariantOrbits.create` sampling semantics, and
+/// encode the resulting `OrbitVariantBatch` as quivr-`VariantOrbits` IPC.
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+fn orbits_sample_variants_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+    method: &str,
+    num_samples: usize,
+    seed: Option<u64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+    let samples = create_sampled_orbit_variants(
+        &orbits,
+        parse_variant_method(method)?,
+        num_samples,
+        seed,
+        alpha,
+        beta,
+        kappa,
+    )
+    .map_err(|err| PyValueError::new_err(format!("failed to sample variants: {err}")))?;
+    let out = samples
+        .variants
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(format!("failed to encode variants: {err}")))?;
+    let bytes = write_orbit_ipc(&out)?;
+    Ok(PyBytes::new_bound(py, &bytes))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
@@ -1155,5 +1204,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tisserand_parameter_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_rotate_frame_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(orbits_sample_variants_ipc, m)?)?;
     Ok(())
 }

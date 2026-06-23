@@ -19,6 +19,7 @@ import pyarrow as pa
 
 from adam_core import _rust_native as _rn
 from adam_core.orbits import Orbits
+from adam_core.orbits.variants import VariantOrbits
 
 _NESTED_SCHEMA = "OrbitBatch.cartesian.nested.quivr.v1"
 
@@ -44,20 +45,29 @@ def orbits_to_ipc(orbits: Orbits) -> bytes:
     return sink.getvalue().to_pybytes()
 
 
-def orbits_from_ipc(raw: bytes) -> Orbits:
-    """Reconstruct ``Orbits`` from Rust-produced Arrow IPC bytes."""
+def _table_with_quivr_metadata(raw: bytes) -> pa.Table:
+    """Read Rust IPC bytes and translate ``adam_core_*`` metadata to quivr keys."""
     with pa.ipc.open_stream(pa.py_buffer(raw)) as reader:
         table = reader.read_all().combine_chunks()
     metadata = dict(table.schema.metadata or {})
     frame = metadata.get(b"adam_core_frame", b"unspecified").decode()
     scale = metadata.get(b"adam_core_time_scale", b"utc").decode()
-    table = table.replace_schema_metadata(
+    return table.replace_schema_metadata(
         {
             b"coordinates.frame": frame.encode(),
             b"coordinates.time.scale": scale.encode(),
         }
     )
-    return Orbits.from_pyarrow(table)
+
+
+def orbits_from_ipc(raw: bytes) -> Orbits:
+    """Reconstruct ``Orbits`` from Rust-produced Arrow IPC bytes."""
+    return Orbits.from_pyarrow(_table_with_quivr_metadata(raw))
+
+
+def variants_from_ipc(raw: bytes) -> VariantOrbits:
+    """Reconstruct ``VariantOrbits`` from Rust-produced Arrow IPC bytes."""
+    return VariantOrbits.from_pyarrow(_table_with_quivr_metadata(raw))
 
 
 def round_trip_orbits(orbits: Orbits) -> Orbits:
@@ -68,3 +78,23 @@ def round_trip_orbits(orbits: Orbits) -> Orbits:
 def rotate_orbits_frame(orbits: Orbits, frame: str) -> Orbits:
     """Rotate orbit coordinates and covariance into ``frame`` Rust-side, one crossing."""
     return orbits_from_ipc(_rn.orbits_rotate_frame_ipc(orbits_to_ipc(orbits), frame))
+
+
+def sample_orbit_variants(
+    orbits: Orbits,
+    method: str = "sigma-point",
+    num_samples: int = 10000,
+    seed: int | None = None,
+    alpha: float = 1.0,
+    beta: float = 0.0,
+    kappa: float = 0.0,
+) -> VariantOrbits:
+    """Sample covariance variants of ``orbits`` Rust-side in one crossing.
+
+    Mirrors ``VariantOrbits.create`` semantics; ``method`` is one of ``auto``,
+    ``sigma-point``, or ``monte-carlo``.
+    """
+    raw = _rn.orbits_sample_variants_ipc(
+        orbits_to_ipc(orbits), method, num_samples, seed, alpha, beta, kappa
+    )
+    return variants_from_ipc(raw)

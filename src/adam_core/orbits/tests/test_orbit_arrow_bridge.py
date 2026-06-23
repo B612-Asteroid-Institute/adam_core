@@ -23,8 +23,10 @@ from adam_core.orbits.arrow_bridge import (
     orbits_to_ipc,
     rotate_orbits_frame,
     round_trip_orbits,
+    sample_orbit_variants,
 )
 from adam_core.orbits.orbits import PhysicalParameters
+from adam_core.orbits.variants import VariantOrbits
 from adam_core.time import Timestamp
 
 
@@ -119,4 +121,50 @@ def test_rotate_orbits_frame_matches_transform_coordinates():
         reference.covariance.to_matrix(),
         rtol=0,
         atol=1e-12,
+    )
+
+
+def _orbits_with_psd_covariance() -> Orbits:
+    # Sigma-point sampling requires a positive-semidefinite covariance.
+    base = np.diag([1e-6, 1e-6, 1e-6, 1e-9, 1e-9, 1e-9])
+    cov = np.stack([base * (i + 1) for i in range(3)])
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0, 4.0, 7.0],
+        y=[2.0, 5.0, 8.0],
+        z=[3.0, 6.0, 9.0],
+        vx=[0.001, 0.004, 0.007],
+        vy=[0.002, 0.005, 0.008],
+        vz=[0.003, 0.006, 0.009],
+        time=Timestamp.from_mjd([60000.0, 60001.0, 60002.0], scale="tdb"),
+        covariance=CoordinateCovariances.from_matrix(cov),
+        origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+        frame="ecliptic",
+    )
+    return Orbits.from_kwargs(
+        orbit_id=["o1", "o2", "o3"],
+        object_id=["a", "b", "c"],
+        coordinates=coordinates,
+    )
+
+
+def test_sample_orbit_variants_sigma_point_matches_create():
+    orbits = _orbits_with_psd_covariance()
+    bridge = sample_orbit_variants(orbits, method="sigma-point")
+    reference = VariantOrbits.create(orbits, method="sigma-point")
+    assert bridge.orbit_id.to_pylist() == reference.orbit_id.to_pylist()
+    assert bridge.variant_id.to_pylist() == reference.variant_id.to_pylist()
+    np.testing.assert_allclose(
+        bridge.weights.to_numpy(zero_copy_only=False),
+        reference.weights.to_numpy(zero_copy_only=False),
+        rtol=0,
+        atol=1e-15,
+    )
+    np.testing.assert_allclose(
+        bridge.weights_cov.to_numpy(zero_copy_only=False),
+        reference.weights_cov.to_numpy(zero_copy_only=False),
+        rtol=0,
+        atol=1e-15,
+    )
+    np.testing.assert_allclose(
+        bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-12
     )
