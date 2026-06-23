@@ -212,3 +212,38 @@ def test_propagate_orbits_2body_matches_propagate_2body():
     np.testing.assert_allclose(
         bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-11
     )
+
+
+def test_propagate_orbits_2body_transports_covariance():
+    # Valid near-circular orbits with a small covariance; propagation must
+    # transport covariance via the STM, matching propagate_2body.
+    cov = np.stack([np.diag([1e-8, 1e-8, 1e-8, 1e-12, 1e-12, 1e-12])] * 3)
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0, 1.5, 2.0],
+        y=[0.0, 0.0, 0.0],
+        z=[0.0, 0.0, 0.0],
+        vx=[0.0, 0.0, 0.0],
+        vy=[0.01720, 0.01405, 0.01216],
+        vz=[0.0, 0.0, 0.0],
+        time=Timestamp.from_mjd([60000.0, 60000.0, 60000.0], scale="tdb"),
+        covariance=CoordinateCovariances.from_matrix(cov),
+        origin=Origin.from_kwargs(code=["SUN", "SUN", "SUN"]),
+        frame="ecliptic",
+    )
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1", "o2", "o3"],
+        object_id=["a", "b", "c"],
+        coordinates=coordinates,
+    )
+    target = Timestamp.from_mjd([60010.0], scale="tdb")
+    bridge = propagate_orbits_2body(orbits, target)
+    reference = propagate_2body(orbits, target)
+    np.testing.assert_allclose(
+        bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-11
+    )
+    np.testing.assert_allclose(
+        bridge.coordinates.covariance.to_matrix(),
+        reference.coordinates.covariance.to_matrix(),
+        rtol=1e-9,
+        atol=1e-18,
+    )

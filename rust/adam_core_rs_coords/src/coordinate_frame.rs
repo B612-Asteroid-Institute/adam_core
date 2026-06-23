@@ -9,7 +9,7 @@ use crate::types::{
 };
 use crate::{rotate_cartesian_frame_flat6, transform_with_covariance_flat6, Representation};
 
-fn chunk6(flat: &[f64]) -> Vec<[f64; 6]> {
+pub(crate) fn chunk6(flat: &[f64]) -> Vec<[f64; 6]> {
     flat.chunks_exact(6)
         .map(|chunk| [chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5]])
         .collect()

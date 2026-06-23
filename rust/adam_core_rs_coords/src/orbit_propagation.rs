@@ -3,16 +3,20 @@
 //! on `OrbitBatch` across a single Arrow-bridge crossing, using the same Kepler
 //! kernel (`propagate_2body_flat6`) as the public `propagate_2body` path.
 
-use crate::propagate_2body_flat6;
+use crate::coordinate_frame::chunk6;
 use crate::types::{
-    origin_mu_au3_day2, CoordinateBatch, Epoch, OrbitBatch, SchemaError, SchemaResult, TimeArray,
-    TimeScale, NANOS_PER_DAY,
+    origin_mu_au3_day2, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
+    CovarianceUnits, Epoch, OrbitBatch, SchemaError, SchemaResult, TimeArray, TimeScale,
+    NANOS_PER_DAY,
 };
+use crate::{propagate_2body_flat6, propagate_2body_with_covariance_flat6};
 
 impl OrbitBatch {
     /// Propagate every orbit from its own epoch to the shared `target` epoch with
-    /// 2-body Keplerian dynamics (state only; covariance is dropped). Orbit
-    /// epochs must already be in `scale`, the dynamics time scale (typically TDB).
+    /// 2-body Keplerian dynamics. When covariance is present it is transported via
+    /// the state-transition matrix (`Sigma_out = J Sigma_in J^T`), matching
+    /// `propagate_2body`. Orbit epochs must already be in `scale`, the dynamics
+    /// time scale (typically TDB).
     pub fn propagate_2body_to(
         &self,
         target: Epoch,
@@ -51,19 +55,53 @@ impl OrbitBatch {
             .iter()
             .map(origin_mu_au3_day2)
             .collect::<SchemaResult<Vec<f64>>>()?;
-        let propagated = propagate_2body_flat6(&flat, &dts, &mus, max_iter, tol);
-        let new_values: Vec<[f64; 6]> = propagated
-            .chunks_exact(6)
-            .map(|chunk| [chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5]])
-            .collect();
         let target_times = TimeArray::new(scale, vec![target; n])?;
-        let coordinates = CoordinateBatch::cartesian(
-            new_values,
-            self.coordinates.frame,
-            self.coordinates.origins.clone(),
-            Some(target_times),
-            None,
-        )?;
+        let coordinates = match self.coordinates.covariance.as_ref() {
+            None => {
+                let states = propagate_2body_flat6(&flat, &dts, &mus, max_iter, tol);
+                CoordinateBatch::cartesian(
+                    chunk6(&states),
+                    self.coordinates.frame,
+                    self.coordinates.origins.clone(),
+                    Some(target_times),
+                    None,
+                )?
+            }
+            Some(covariance) => {
+                if covariance.dimension != 6 {
+                    return Err(SchemaError::InvalidCovarianceShape {
+                        rows: covariance.rows,
+                        dimension: covariance.dimension,
+                        values: covariance.values_row_major.len(),
+                    });
+                }
+                let (states, covariances) = propagate_2body_with_covariance_flat6(
+                    &flat,
+                    &covariance.values_row_major,
+                    &dts,
+                    &mus,
+                    max_iter,
+                    tol,
+                );
+                let propagated_covariance = CovarianceBatch::new(
+                    n,
+                    6,
+                    covariances,
+                    CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+                )?;
+                let propagated_covariance = match covariance.row_validity.clone() {
+                    Some(validity) => propagated_covariance.with_row_validity(validity)?,
+                    None => propagated_covariance,
+                };
+                CoordinateBatch::cartesian(
+                    chunk6(&states),
+                    self.coordinates.frame,
+                    self.coordinates.origins.clone(),
+                    Some(target_times),
+                    Some(propagated_covariance),
+                )?
+            }
+        };
         let propagated_orbits =
             OrbitBatch::new(self.orbit_id.clone(), self.object_id.clone(), coordinates)?;
         match self.physical_parameters.clone() {
