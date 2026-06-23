@@ -15,6 +15,7 @@ use arrow_array::{
     Array, ArrayRef, Float64Array, Int64Array, LargeListArray, LargeStringArray, RecordBatch,
     StructArray,
 };
+use arrow_buffer::NullBuffer;
 use arrow_schema::{DataType, Field, Fields, Schema};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -172,9 +173,10 @@ fn nested_covariance_struct(
         }
     }
     let mut builder = LargeListBuilder::new(Float64Builder::new());
+    let mut validity = vec![false; rows];
     match coordinates.covariance.as_ref() {
         Some(covariance) => {
-            for row in 0..rows {
+            for (row, valid) in validity.iter_mut().enumerate() {
                 if covariance.is_row_valid(row) {
                     for element in 0..36 {
                         builder
@@ -182,6 +184,7 @@ fn nested_covariance_struct(
                             .append_value(covariance.values_row_major[row * 36 + element]);
                     }
                     builder.append(true);
+                    *valid = true;
                 } else {
                     builder.append(false);
                 }
@@ -194,10 +197,12 @@ fn nested_covariance_struct(
         }
     }
     let list = builder.finish();
+    // quivr marks an absent covariance as a null struct row (not just a null list),
+    // so mirror that with a struct-level null buffer for lossless round-trips.
     StructArray::try_new(
         Fields::from(vec![Field::new("values", list.data_type().clone(), true)]),
         vec![Arc::new(list) as ArrayRef],
-        None,
+        Some(NullBuffer::from_iter(validity)),
     )
     .map_err(|err| SchemaError::Arrow(err.to_string()))
 }
@@ -206,7 +211,7 @@ fn nested_origin_struct(coordinates: &CoordinateBatch) -> SchemaResult<StructArr
     let codes =
         LargeStringArray::from_iter_values(coordinates.origins.origins.iter().map(OriginId::code));
     StructArray::try_new(
-        Fields::from(vec![Field::new("code", DataType::LargeUtf8, false)]),
+        Fields::from(vec![Field::new("code", DataType::LargeUtf8, true)]),
         vec![Arc::new(codes) as ArrayRef],
         None,
     )
@@ -247,7 +252,7 @@ fn nested_coordinate_named_arrays(
     ));
     let origin = nested_origin_struct(coordinates)?;
     out.push((
-        Arc::new(Field::new("origin", origin.data_type().clone(), false)),
+        Arc::new(Field::new("origin", origin.data_type().clone(), true)),
         Arc::new(origin) as ArrayRef,
     ));
     Ok(out)
@@ -297,11 +302,11 @@ fn orbit_to_nested_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch
     let fields = vec![
         Field::new("orbit_id", DataType::LargeUtf8, false),
         Field::new("object_id", DataType::LargeUtf8, true),
-        Field::new("coordinates", coordinates.data_type().clone(), false),
+        Field::new("coordinates", coordinates.data_type().clone(), true),
         Field::new(
             "physical_parameters",
             physical_parameters.data_type().clone(),
-            false,
+            true,
         ),
     ];
     let mut arrays = orbit_metadata_arrays(&orbits.orbit_id, &orbits.object_id);
@@ -445,7 +450,7 @@ fn parse_nested_covariance(
     let mut row_validity = vec![true; rows];
     let mut any_present = false;
     for row in 0..rows {
-        if list.is_null(row) {
+        if covariance.is_null(row) || list.is_null(row) {
             row_validity[row] = false;
             continue;
         }
@@ -545,25 +550,47 @@ fn nested_physical_parameters_struct(
             ("chi2_red", vec![None; rows]),
         ],
     };
+    // A row is a null struct (quivr `None`) iff it carries no physical information,
+    // matching how quivr represents orbits without physical parameters.
+    let mut validity = vec![false; rows];
+    for (_, values) in &columns {
+        for (row, value) in values.iter().enumerate() {
+            if value.is_some() {
+                validity[row] = true;
+            }
+        }
+    }
     let mut fields = Vec::with_capacity(6);
     let mut arrays: Vec<ArrayRef> = Vec::with_capacity(6);
     for (name, values) in columns {
         fields.push(Field::new(name, DataType::Float64, true));
         arrays.push(Arc::new(Float64Array::from(values)) as ArrayRef);
     }
-    StructArray::try_new(Fields::from(fields), arrays, None)
-        .map_err(|err| SchemaError::Arrow(err.to_string()))
+    StructArray::try_new(
+        Fields::from(fields),
+        arrays,
+        Some(NullBuffer::from_iter(validity)),
+    )
+    .map_err(|err| SchemaError::Arrow(err.to_string()))
 }
 
 fn parse_nested_physical_parameters(
     physical_parameters: &StructArray,
-    _rows: usize,
+    rows: usize,
 ) -> SchemaResult<Option<PhysicalParametersBatch>> {
+    // Honor the struct-level null buffer: a null struct row means "no value",
+    // regardless of any masked child placeholder values quivr may carry.
     let read = |name: &str| -> SchemaResult<Vec<Option<f64>>> {
-        Ok(optional_float64_values(struct_field_f64(
-            physical_parameters,
-            name,
-        )?))
+        let array = struct_field_f64(physical_parameters, name)?;
+        Ok((0..rows)
+            .map(|row| {
+                if physical_parameters.is_null(row) || array.is_null(row) {
+                    None
+                } else {
+                    Some(array.value(row))
+                }
+            })
+            .collect())
     };
     let batch = PhysicalParametersBatch {
         h_v: read("H_v")?,
@@ -1272,9 +1299,9 @@ mod tests {
                 DataType::Struct(Fields::from(vec![Field::new(
                     "code",
                     DataType::LargeUtf8,
-                    false,
+                    true,
                 )])),
-                false,
+                true,
             ),
         ]))
     }

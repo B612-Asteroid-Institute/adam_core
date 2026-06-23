@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 rayon = "1.11"
 arrow-array = "54"
+arrow-buffer = "54"
 arrow-schema = "54"
 erfars = "0.2"
 adam_core_rs_autodiff = { path = "../adam_core_rs_autodiff" }

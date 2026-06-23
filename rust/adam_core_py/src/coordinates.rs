@@ -6,13 +6,18 @@ use adam_core_rs_coords::{
     rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
     tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
     weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, Frame,
-    OrbitBatch as DataOrbitBatch, Representation as CoordsRepresentation,
+    IntoNestedRecordBatch, OrbitBatch as DataOrbitBatch, Representation as CoordsRepresentation,
+    TryFromNestedRecordBatch,
 };
+use arrow_array::RecordBatch;
+use arrow_ipc::reader::StreamReader;
+use arrow_ipc::writer::StreamWriter;
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::collections::HashMap;
 
 fn schema_metadata(schema: arrow_schema::Schema) -> (Vec<String>, HashMap<String, String>) {
@@ -1043,6 +1048,53 @@ fn tisserand_parameter_numpy<'py>(
     Ok(ndarray::Array1::from_vec(out).into_pyarray_bound(py))
 }
 
+fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
+    let mut reader = StreamReader::try_new(bytes, None)
+        .map_err(|err| PyValueError::new_err(format!("invalid Arrow IPC stream: {err}")))?;
+    let batch = reader
+        .next()
+        .ok_or_else(|| PyValueError::new_err("Arrow IPC stream contained no record batches"))?
+        .map_err(|err| PyValueError::new_err(format!("failed to read Arrow IPC batch: {err}")))?;
+    Ok(batch)
+}
+
+fn write_orbit_ipc(batch: &RecordBatch) -> PyResult<Vec<u8>> {
+    let mut buffer = Vec::new();
+    {
+        let schema = batch.schema();
+        let mut writer = StreamWriter::try_new(&mut buffer, &schema).map_err(|err| {
+            PyValueError::new_err(format!("failed to start Arrow IPC writer: {err}"))
+        })?;
+        writer.write(batch).map_err(|err| {
+            PyValueError::new_err(format!("failed to write Arrow IPC batch: {err}"))
+        })?;
+        writer.finish().map_err(|err| {
+            PyValueError::new_err(format!("failed to finish Arrow IPC stream: {err}"))
+        })?;
+    }
+    Ok(buffer)
+}
+
+/// W1 data-model bridge (bead personal-cmy.13, mechanism C): round-trip a quivr
+/// `Orbits` table (Arrow IPC bytes in the nested quivr layout) through the
+/// Rust-canonical `OrbitBatch` and back. Proves the single-crossing,
+/// full-nested-schema bridge is lossless. The caller injects the
+/// `adam_core_*` schema metadata (frame, time scale) Rust needs.
+#[pyfunction]
+fn orbits_nested_ipc_round_trip<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+    let out = orbits
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
+    let bytes = write_orbit_ipc(&out)?;
+    Ok(PyBytes::new_bound(py, &bytes))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
@@ -1067,5 +1119,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(weighted_covariance_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(classify_orbits_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(tisserand_parameter_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(orbits_nested_ipc_round_trip, m)?)?;
     Ok(())
 }
