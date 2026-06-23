@@ -25,6 +25,7 @@ from adam_core.orbits.arrow_bridge import (
     propagate_orbits_2body,
     rotate_orbits_frame,
     round_trip_orbits,
+    round_trip_orbits_zero_copy,
     sample_orbit_variants,
 )
 from adam_core.orbits.orbits import PhysicalParameters
@@ -100,6 +101,19 @@ def test_orbits_nested_ipc_round_trip_with_physical_parameters():
 def test_round_trip_orbits_reconstructs_orbits():
     orbits = _orbits(with_covariance=True, physical=True)
     out = round_trip_orbits(orbits)
+    assert out.coordinates.frame == orbits.coordinates.frame
+    assert out.coordinates.time.scale == orbits.coordinates.time.scale
+    assert (
+        out.table.combine_chunks().to_pylist()
+        == orbits.table.combine_chunks().to_pylist()
+    )
+
+
+def test_round_trip_orbits_zero_copy_reconstructs_orbits():
+    # Arrow C Data Interface transport (no IPC copy); verifies schema metadata
+    # survives the zero-copy hand-off in both directions.
+    orbits = _orbits(with_covariance=True, physical=True)
+    out = round_trip_orbits_zero_copy(orbits)
     assert out.coordinates.frame == orbits.coordinates.frame
     assert out.coordinates.time.scale == orbits.coordinates.time.scale
     assert (

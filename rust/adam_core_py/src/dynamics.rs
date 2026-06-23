@@ -33,7 +33,7 @@ fn calc_mean_motion_numpy<'py>(
             .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?,
     );
 
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -58,7 +58,7 @@ fn calc_period_numpy<'py>(
         .zip(mu_slice)
         .map(|(&ai, &mi)| calc_period(ai, mi))
         .collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -83,7 +83,7 @@ fn calc_periapsis_distance_numpy<'py>(
         .zip(e_slice)
         .map(|(&ai, &ei)| calc_periapsis_distance(ai, ei))
         .collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -108,7 +108,7 @@ fn calc_apoapsis_distance_numpy<'py>(
         .zip(e_slice)
         .map(|(&ai, &ei)| calc_apoapsis_distance(ai, ei))
         .collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -133,7 +133,7 @@ fn calc_semi_major_axis_numpy<'py>(
         .zip(e_slice)
         .map(|(&qi, &ei)| calc_semi_major_axis(qi, ei))
         .collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -158,7 +158,7 @@ fn calc_semi_latus_rectum_numpy<'py>(
         .zip(e_slice)
         .map(|(&ai, &ei)| calc_semi_latus_rectum(ai, ei))
         .collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -183,7 +183,7 @@ fn calc_mean_anomaly_numpy<'py>(
         .zip(e_slice)
         .map(|(&nui, &ei)| calc_mean_anomaly(nui, ei))
         .collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -196,7 +196,7 @@ fn solve_barker_numpy<'py>(
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("m must be contiguous"))?;
     let out: Vec<f64> = m_slice.iter().map(|&mi| solve_barker(mi)).collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -224,7 +224,7 @@ fn solve_kepler_numpy<'py>(
         .zip(m_slice)
         .map(|(&ei, &mi)| solve_kepler_true_anomaly(ei, mi, max_iter, tol))
         .collect();
-    Ok(out.into_pyarray_bound(py))
+    Ok(out.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -242,7 +242,7 @@ fn calc_stumpff_numpy<'py>(
     }
     let shaped = ndarray::Array2::from_shape_vec((psi_slice.len(), 6), out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -298,7 +298,7 @@ fn calc_chi_numpy<'py>(
     }
     let shaped = ndarray::Array2::from_shape_vec((n, 7), out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -365,9 +365,9 @@ fn calc_lagrange_coefficients_numpy<'py>(
     let stumpff = ndarray::Array2::from_shape_vec((n, 6), stumpff_out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape stumpff output: {e}")))?;
     Ok((
-        coeffs.into_pyarray_bound(py),
-        stumpff.into_pyarray_bound(py),
-        ndarray::Array1::from_vec(chi_out).into_pyarray_bound(py),
+        coeffs.into_pyarray(py),
+        stumpff.into_pyarray(py),
+        ndarray::Array1::from_vec(chi_out).into_pyarray(py),
     ))
 }
 
@@ -431,10 +431,7 @@ fn apply_lagrange_coefficients_numpy<'py>(
         .map_err(|e| PyValueError::new_err(format!("failed to shape r output: {e}")))?;
     let v_shaped = ndarray::Array2::from_shape_vec((n, 3), v_out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape v output: {e}")))?;
-    Ok((
-        r_shaped.into_pyarray_bound(py),
-        v_shaped.into_pyarray_bound(py),
-    ))
+    Ok((r_shaped.into_pyarray(py), v_shaped.into_pyarray(py)))
 }
 
 #[pyfunction]
@@ -496,7 +493,7 @@ fn add_stellar_aberration_numpy<'py>(
 
     let shaped = ndarray::Array2::from_shape_vec((n, 3), out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -534,7 +531,7 @@ fn propagate_2body_numpy<'py>(
     let out_flat = propagate_2body_flat6(orbits_flat, dts_slice, mus_slice, max_iter, tol);
     let shaped = ndarray::Array2::from_shape_vec((n, 6), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -574,7 +571,7 @@ fn propagate_2body_along_arc_numpy<'py>(
     }
     let shaped = ndarray::Array2::from_shape_vec((n, 6), flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -619,7 +616,7 @@ fn propagate_2body_arc_batch_numpy<'py>(
         propagate_2body_arc_batch_flat6(orbits_flat, dts_flat, mus_slice, k, max_iter, tol);
     let shaped = ndarray::Array2::from_shape_vec((n * k, 6), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -676,10 +673,7 @@ fn propagate_2body_with_covariance_numpy<'py>(
         .map_err(|e| PyValueError::new_err(format!("failed to shape states output: {e}")))?;
     let cov_shaped = ndarray::Array2::from_shape_vec((n, 36), cov_out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape cov output: {e}")))?;
-    Ok((
-        states_shaped.into_pyarray_bound(py),
-        cov_shaped.into_pyarray_bound(py),
-    ))
+    Ok((states_shaped.into_pyarray(py), cov_shaped.into_pyarray(py)))
 }
 
 #[pyfunction]
@@ -746,9 +740,9 @@ fn generate_ephemeris_2body_numpy<'py>(
     let aberrated_shaped = ndarray::Array2::from_shape_vec((n, 6), aberrated_out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape aberrated output: {e}")))?;
     Ok((
-        sph_shaped.into_pyarray_bound(py),
-        lt_shaped.into_pyarray_bound(py),
-        aberrated_shaped.into_pyarray_bound(py),
+        sph_shaped.into_pyarray(py),
+        lt_shaped.into_pyarray(py),
+        aberrated_shaped.into_pyarray(py),
     ))
 }
 
@@ -830,10 +824,10 @@ fn generate_ephemeris_2body_with_covariance_numpy<'py>(
     let cov_shaped = ndarray::Array2::from_shape_vec((n, 36), cov_out)
         .map_err(|e| PyValueError::new_err(format!("failed to shape cov output: {e}")))?;
     Ok((
-        sph_shaped.into_pyarray_bound(py),
-        lt_shaped.into_pyarray_bound(py),
-        aberrated_shaped.into_pyarray_bound(py),
-        cov_shaped.into_pyarray_bound(py),
+        sph_shaped.into_pyarray(py),
+        lt_shaped.into_pyarray(py),
+        aberrated_shaped.into_pyarray(py),
+        cov_shaped.into_pyarray(py),
     ))
 }
 
@@ -890,8 +884,8 @@ fn add_light_time_numpy<'py>(
     let ab_shaped = ndarray::Array2::from_shape_vec((n, 6), ab)
         .map_err(|e| PyValueError::new_err(format!("failed to shape aberrated output: {e}")))?;
     Ok((
-        ab_shaped.into_pyarray_bound(py),
-        ndarray::Array1::from_vec(lt).into_pyarray_bound(py),
+        ab_shaped.into_pyarray(py),
+        ndarray::Array1::from_vec(lt).into_pyarray(py),
     ))
 }
 
@@ -951,8 +945,8 @@ fn calculate_moid_batch_numpy<'py>(
         .ok_or_else(|| PyValueError::new_err("mus must be contiguous"))?;
     let (moids, dts) = calculate_moid_batch(p_slice, s_slice, mu_slice, max_iter, xtol);
     Ok((
-        ndarray::Array1::from_vec(moids).into_pyarray_bound(py),
-        ndarray::Array1::from_vec(dts).into_pyarray_bound(py),
+        ndarray::Array1::from_vec(moids).into_pyarray(py),
+        ndarray::Array1::from_vec(dts).into_pyarray(py),
     ))
 }
 
@@ -1008,10 +1002,7 @@ fn izzo_lambert_numpy<'py>(
         .map_err(|e| PyValueError::new_err(format!("failed to shape v1 output: {e}")))?;
     let v2_shaped = ndarray::Array2::from_shape_vec((n, 3), v2)
         .map_err(|e| PyValueError::new_err(format!("failed to shape v2 output: {e}")))?;
-    Ok((
-        v1_shaped.into_pyarray_bound(py),
-        v2_shaped.into_pyarray_bound(py),
-    ))
+    Ok((v1_shaped.into_pyarray(py), v2_shaped.into_pyarray(py)))
 }
 
 #[pyfunction]
@@ -1084,10 +1075,10 @@ fn porkchop_grid_numpy<'py>(
     let v2_shaped = ndarray::Array2::from_shape_vec((v, 3), v2)
         .map_err(|e| PyValueError::new_err(format!("failed to shape v2 output: {e}")))?;
     Ok((
-        ndarray::Array1::from_vec(dep_idx).into_pyarray_bound(py),
-        ndarray::Array1::from_vec(arr_idx).into_pyarray_bound(py),
-        v1_shaped.into_pyarray_bound(py),
-        v2_shaped.into_pyarray_bound(py),
+        ndarray::Array1::from_vec(dep_idx).into_pyarray(py),
+        ndarray::Array1::from_vec(arr_idx).into_pyarray(py),
+        v1_shaped.into_pyarray(py),
+        v2_shaped.into_pyarray(py),
     ))
 }
 

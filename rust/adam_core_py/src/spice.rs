@@ -75,7 +75,7 @@ impl PyAdamCoreSpiceBackend {
             .map_err(spice_err_to_py)?;
         let arr = ndarray::Array2::from_shape_vec((ets.len(), 6), out)
             .map_err(|e| PyValueError::new_err(format!("spkez_batch shape error: {e}")))?;
-        Ok(arr.into_pyarray_bound(py))
+        Ok(arr.into_pyarray(py))
     }
 
     fn pxform_batch<'py>(
@@ -92,7 +92,7 @@ impl PyAdamCoreSpiceBackend {
             .map_err(spice_err_to_py)?;
         let arr = ndarray::Array3::from_shape_vec((ets.len(), 3, 3), out)
             .map_err(|e| PyValueError::new_err(format!("pxform_batch shape error: {e}")))?;
-        Ok(arr.into_pyarray_bound(py))
+        Ok(arr.into_pyarray(py))
     }
 
     fn sxform_batch<'py>(
@@ -109,7 +109,7 @@ impl PyAdamCoreSpiceBackend {
             .map_err(spice_err_to_py)?;
         let arr = ndarray::Array3::from_shape_vec((ets.len(), 6, 6), out)
             .map_err(|e| PyValueError::new_err(format!("sxform_batch shape error: {e}")))?;
-        Ok(arr.into_pyarray_bound(py))
+        Ok(arr.into_pyarray(py))
     }
 
     fn bodn2c(&self, name: &str) -> PyResult<i32> {
@@ -170,7 +170,7 @@ impl NaifSpk {
                 out[[i, k]] = s[k];
             }
         }
-        Ok(out.into_pyarray_bound(py))
+        Ok(out.into_pyarray(py))
     }
 
     fn state_batch_in_frame<'py>(
@@ -193,7 +193,7 @@ impl NaifSpk {
                 out[[i, k]] = s[k];
             }
         }
-        Ok(out.into_pyarray_bound(py))
+        Ok(out.into_pyarray(py))
     }
 }
 
@@ -240,7 +240,7 @@ impl NaifPck {
                 }
             }
         }
-        Ok(out.into_pyarray_bound(py))
+        Ok(out.into_pyarray(py))
     }
 
     fn sxform_batch<'py>(
@@ -261,7 +261,7 @@ impl NaifPck {
                 }
             }
         }
-        Ok(out.into_pyarray_bound(py))
+        Ok(out.into_pyarray(py))
     }
 }
 

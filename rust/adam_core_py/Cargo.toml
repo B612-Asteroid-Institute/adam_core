@@ -8,9 +8,10 @@ name = "_rust_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module"] }
-numpy = "0.22"
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"
 ndarray = "0.16"
+arrow = { version = "54", features = ["pyarrow"] }
 arrow-array = "54"
 arrow-ipc = "54"
 arrow-schema = "54"

@@ -61,11 +61,11 @@ fn fit_absolute_magnitude_grouped_numpy<'py>(
     let chi2_red: Vec<f64> = fits.iter().map(|f| f.chi2_red).collect();
     let n_used: Vec<i64> = fits.iter().map(|f| f.n_used).collect();
     Ok((
-        ndarray::Array1::from_vec(h_hat).into_pyarray_bound(py),
-        ndarray::Array1::from_vec(h_sigma).into_pyarray_bound(py),
-        ndarray::Array1::from_vec(sigma_eff).into_pyarray_bound(py),
-        ndarray::Array1::from_vec(chi2_red).into_pyarray_bound(py),
-        ndarray::Array1::from_vec(n_used).into_pyarray_bound(py),
+        ndarray::Array1::from_vec(h_hat).into_pyarray(py),
+        ndarray::Array1::from_vec(h_sigma).into_pyarray(py),
+        ndarray::Array1::from_vec(sigma_eff).into_pyarray(py),
+        ndarray::Array1::from_vec(chi2_red).into_pyarray(py),
+        ndarray::Array1::from_vec(n_used).into_pyarray(py),
     ))
 }
 
@@ -92,7 +92,7 @@ fn calculate_phase_angle_numpy<'py>(
     let obs_slice = obs_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("observer_pos must be contiguous"))?;
-    let out = PyArray1::<f64>::zeros_bound(py, n, false);
+    let out = PyArray1::<f64>::zeros(py, n, false);
     {
         let mut out_rw = numpy::PyArrayMethods::readwrite(&out);
         let out_slice = out_rw
@@ -141,7 +141,7 @@ fn calculate_apparent_magnitude_v_numpy<'py>(
     let g_slice = g_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
-    let out = PyArray1::<f64>::zeros_bound(py, n, false);
+    let out = PyArray1::<f64>::zeros(py, n, false);
     {
         let mut out_rw = numpy::PyArrayMethods::readwrite(&out);
         let out_slice = out_rw
@@ -192,8 +192,8 @@ fn calculate_apparent_magnitude_v_and_phase_angle_numpy<'py>(
     let g_slice = g_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
-    let mag_out = PyArray1::<f64>::zeros_bound(py, n, false);
-    let alpha_out = PyArray1::<f64>::zeros_bound(py, n, false);
+    let mag_out = PyArray1::<f64>::zeros(py, n, false);
+    let alpha_out = PyArray1::<f64>::zeros(py, n, false);
     {
         let mut mag_rw = numpy::PyArrayMethods::readwrite(&mag_out);
         let mut alpha_rw = numpy::PyArrayMethods::readwrite(&alpha_out);
@@ -263,7 +263,7 @@ fn predict_magnitudes_bandpass_numpy<'py>(
     let dt_slice = dt_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("delta_table must be contiguous"))?;
-    let out = PyArray1::<f64>::zeros_bound(py, n, false);
+    let out = PyArray1::<f64>::zeros(py, n, false);
     {
         let mut out_rw = numpy::PyArrayMethods::readwrite(&out);
         let out_slice = out_rw

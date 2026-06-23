@@ -30,7 +30,7 @@ fn calc_gibbs_numpy<'py>(
         mu,
     );
 
-    Ok(ndarray::Array1::from_vec(out.to_vec()).into_pyarray_bound(py))
+    Ok(ndarray::Array1::from_vec(out.to_vec()).into_pyarray(py))
 }
 
 #[pyfunction]
@@ -63,7 +63,7 @@ fn calc_herrick_gibbs_numpy<'py>(
         mu,
     );
 
-    Ok(ndarray::Array1::from_vec(out.to_vec()).into_pyarray_bound(py))
+    Ok(ndarray::Array1::from_vec(out.to_vec()).into_pyarray(py))
 }
 
 #[pyfunction]
@@ -96,7 +96,7 @@ fn calc_gauss_numpy<'py>(
         mu,
     );
 
-    Ok(ndarray::Array1::from_vec(out.to_vec()).into_pyarray_bound(py))
+    Ok(ndarray::Array1::from_vec(out.to_vec()).into_pyarray(py))
 }
 
 #[pyfunction]
@@ -169,10 +169,10 @@ fn gauss_iod_orbits_numpy<'py>(
         c,
     );
     let n = epochs.len();
-    let epochs_arr = ndarray::Array1::from_vec(epochs).into_pyarray_bound(py);
+    let epochs_arr = ndarray::Array1::from_vec(epochs).into_pyarray(py);
     let orbits_arr = ndarray::Array2::from_shape_vec((n, 6), orbits_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?
-        .into_pyarray_bound(py);
+        .into_pyarray(py);
 
     Ok((epochs_arr, orbits_arr))
 }
@@ -240,10 +240,10 @@ fn gauss_iod_fused_numpy<'py>(
         c,
     );
     let n = epochs.len();
-    let epochs_arr = ndarray::Array1::from_vec(epochs).into_pyarray_bound(py);
+    let epochs_arr = ndarray::Array1::from_vec(epochs).into_pyarray(py);
     let orbits_arr = ndarray::Array2::from_shape_vec((n, 6), orbits_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?
-        .into_pyarray_bound(py);
+        .into_pyarray(py);
 
     Ok((epochs_arr, orbits_arr))
 }

@@ -10,6 +10,7 @@ use adam_core_rs_coords::{
     IntoNestedRecordBatch, OrbitBatch as DataOrbitBatch, OrbitVariantSamplingMethod,
     Representation as CoordsRepresentation, TimeScale, TryFromNestedRecordBatch,
 };
+use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
 use arrow_ipc::writer::StreamWriter;
@@ -111,7 +112,7 @@ fn cartesian_to_spherical_numpy<'py>(
         let out_flat = cartesian_to_spherical_flat6(flat);
         let shaped = ndarray::Array2::from_shape_vec((arr.nrows(), 6), out_flat)
             .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-        return Ok(shaped.into_pyarray_bound(py));
+        return Ok(shaped.into_pyarray(py));
     }
 
     let mut shaped = ndarray::Array2::<f64>::zeros((arr.nrows(), 6));
@@ -125,7 +126,7 @@ fn cartesian_to_spherical_numpy<'py>(
         shaped[[i, 5]] = out[5];
     }
 
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -142,7 +143,7 @@ fn spherical_to_cartesian_numpy<'py>(
         let out_flat = spherical_to_cartesian_flat6(flat);
         let shaped = ndarray::Array2::from_shape_vec((arr.nrows(), 6), out_flat)
             .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-        return Ok(shaped.into_pyarray_bound(py));
+        return Ok(shaped.into_pyarray(py));
     }
 
     let mut shaped = ndarray::Array2::<f64>::zeros((arr.nrows(), 6));
@@ -156,7 +157,7 @@ fn spherical_to_cartesian_numpy<'py>(
         shaped[[i, 5]] = out[5];
     }
 
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -177,7 +178,7 @@ fn cartesian_to_geodetic_numpy<'py>(
         let out_flat = cartesian_to_geodetic_flat6(flat, a, f, max_iter, tol);
         let shaped = ndarray::Array2::from_shape_vec((arr.nrows(), 6), out_flat)
             .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-        return Ok(shaped.into_pyarray_bound(py));
+        return Ok(shaped.into_pyarray(py));
     }
 
     Err(PyValueError::new_err("coords must be contiguous"))
@@ -216,7 +217,7 @@ fn cartesian_to_keplerian_numpy<'py>(
     let out_flat = cartesian_to_keplerian_flat6(flat, t0_slice, mu_slice);
     let shaped = ndarray::Array2::from_shape_vec((arr.nrows(), 13), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -249,7 +250,7 @@ fn keplerian_to_cartesian_numpy<'py>(
     let out_flat = keplerian_to_cartesian_flat6(flat, mu_slice, max_iter, tol);
     let shaped = ndarray::Array2::from_shape_vec((arr.nrows(), 6), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -285,7 +286,7 @@ fn cartesian_to_cometary_numpy<'py>(
     let out_flat = cartesian_to_cometary_flat6(flat, t0_slice, mu_slice);
     let shaped = ndarray::Array2::from_shape_vec((arr.nrows(), 6), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -323,7 +324,7 @@ fn cometary_to_cartesian_numpy<'py>(
     let out_flat = cometary_to_cartesian_flat6(flat, t0_slice, mu_slice, max_iter, tol);
     let shaped = ndarray::Array2::from_shape_vec((arr.nrows(), 6), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -499,7 +500,7 @@ fn transform_coordinates_numpy<'py>(
 
     let shaped = ndarray::Array2::from_shape_vec((n, ncols), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -643,10 +644,7 @@ fn transform_coordinates_with_covariance_numpy<'py>(
         .map_err(|e| PyValueError::new_err(format!("failed to shape coords output: {e}")))?;
     let cov_shaped = ndarray::Array2::from_shape_vec((n, 36), cov_out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape covariance output: {e}")))?;
-    Ok((
-        coords_shaped.into_pyarray_bound(py),
-        cov_shaped.into_pyarray_bound(py),
-    ))
+    Ok((coords_shaped.into_pyarray(py), cov_shaped.into_pyarray(py)))
 }
 
 #[pyfunction]
@@ -726,11 +724,11 @@ fn rotate_cartesian_time_varying_numpy<'py>(
         let shaped = ndarray::Array2::from_shape_vec((n, 36), cov_out_flat).map_err(|e| {
             PyValueError::new_err(format!("failed to shape covariance output: {e}"))
         })?;
-        Some(shaped.into_pyarray_bound(py))
+        Some(shaped.into_pyarray(py))
     } else {
         None
     };
-    Ok((coords_shaped.into_pyarray_bound(py), cov_out))
+    Ok((coords_shaped.into_pyarray(py), cov_out))
 }
 
 #[pyfunction]
@@ -757,7 +755,7 @@ fn bound_longitude_residuals_numpy<'py>(
     bound_longitude_residuals_flat(obs_slice, &mut buf, n, d);
     let arr = ndarray::Array2::from_shape_vec((n, d), buf)
         .map_err(|e| PyValueError::new_err(format!("shape: {e}")))?;
-    Ok(arr.into_pyarray_bound(py))
+    Ok(arr.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -799,10 +797,7 @@ fn apply_cosine_latitude_correction_numpy<'py>(
         .map_err(|e| PyValueError::new_err(format!("shape: {e}")))?;
     let cov_out = ndarray::Array3::from_shape_vec((n, d, d), cov_buf)
         .map_err(|e| PyValueError::new_err(format!("shape: {e}")))?;
-    Ok((
-        res_out.into_pyarray_bound(py),
-        cov_out.into_pyarray_bound(py),
-    ))
+    Ok((res_out.into_pyarray(py), cov_out.into_pyarray(py)))
 }
 
 #[pyfunction]
@@ -828,7 +823,7 @@ fn calculate_chi2_numpy<'py>(
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?;
     match calculate_chi2_flat(r_slice, c_slice, n, d) {
-        Ok(out) => Ok(out.into_pyarray_bound(py)),
+        Ok(out) => Ok(out.into_pyarray(py)),
         Err(adam_core_rs_coords::chi2::Chi2Error::NanDiagonal { row, dim }) => {
             let _ = (row, dim);
             Err(PyValueError::new_err(
@@ -908,9 +903,9 @@ fn compute_residuals_chi2_numpy<'py>(
             let chi2_arr = ndarray::Array1::from_vec(out.chi2);
             let dof_arr = ndarray::Array1::from_vec(out.dof);
             Ok((
-                res_arr.into_pyarray_bound(py),
-                chi2_arr.into_pyarray_bound(py),
-                dof_arr.into_pyarray_bound(py),
+                res_arr.into_pyarray(py),
+                chi2_arr.into_pyarray(py),
+                dof_arr.into_pyarray(py),
                 out.had_off_diagonal_nan,
             ))
         }
@@ -949,10 +944,7 @@ fn weighted_mean_numpy<'py>(
     let w_slice = w_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("W must be contiguous"))?;
-    Ok(
-        ndarray::Array1::from_vec(weighted_mean_flat(s_slice, w_slice, n, d))
-            .into_pyarray_bound(py),
-    )
+    Ok(ndarray::Array1::from_vec(weighted_mean_flat(s_slice, w_slice, n, d)).into_pyarray(py))
 }
 
 #[pyfunction]
@@ -987,7 +979,7 @@ fn weighted_covariance_numpy<'py>(
     let cov = weighted_covariance_flat(m_slice, s_slice, w_slice, n, d);
     let shaped = ndarray::Array2::from_shape_vec((d, d), cov)
         .map_err(|e| PyValueError::new_err(format!("failed to shape: {e}")))?;
-    Ok(shaped.into_pyarray_bound(py))
+    Ok(shaped.into_pyarray(py))
 }
 
 #[pyfunction]
@@ -1019,7 +1011,7 @@ fn classify_orbits_numpy<'py>(
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("Q must be contiguous"))?;
     let codes = classify_orbits_flat(a_s, e_s, q_s, q_apo_s);
-    Ok(ndarray::Array1::from_vec(codes).into_pyarray_bound(py))
+    Ok(ndarray::Array1::from_vec(codes).into_pyarray(py))
 }
 
 #[pyfunction]
@@ -1046,7 +1038,7 @@ fn tisserand_parameter_numpy<'py>(
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("i_deg must be contiguous"))?;
     let out = tisserand_parameter_flat(a_slice, e_slice, i_slice, ap);
-    Ok(ndarray::Array1::from_vec(out).into_pyarray_bound(py))
+    Ok(ndarray::Array1::from_vec(out).into_pyarray(py))
 }
 
 fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
@@ -1093,7 +1085,7 @@ fn orbits_nested_ipc_round_trip<'py>(
         .into_nested_record_batch()
         .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
     let bytes = write_orbit_ipc(&out)?;
-    Ok(PyBytes::new_bound(py, &bytes))
+    Ok(PyBytes::new(py, &bytes))
 }
 
 /// Map the rotation-kernel `Frame` onto the typed-batch `Frame` used by
@@ -1127,7 +1119,7 @@ fn orbits_rotate_frame_ipc<'py>(
         .into_nested_record_batch()
         .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
     let bytes = write_orbit_ipc(&out)?;
-    Ok(PyBytes::new_bound(py, &bytes))
+    Ok(PyBytes::new(py, &bytes))
 }
 
 fn parse_variant_method(method: &str) -> PyResult<OrbitVariantSamplingMethod> {
@@ -1175,7 +1167,7 @@ fn orbits_sample_variants_ipc<'py>(
         .into_nested_record_batch()
         .map_err(|err| PyValueError::new_err(format!("failed to encode variants: {err}")))?;
     let bytes = write_orbit_ipc(&out)?;
-    Ok(PyBytes::new_bound(py, &bytes))
+    Ok(PyBytes::new(py, &bytes))
 }
 
 /// W1 data-model workflow (bead personal-cmy.13): propagate a quivr `Orbits`
@@ -1204,7 +1196,27 @@ fn orbits_propagate_2body_ipc<'py>(
         .into_nested_record_batch()
         .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
     let bytes = write_orbit_ipc(&out)?;
-    Ok(PyBytes::new_bound(py, &bytes))
+    Ok(PyBytes::new(py, &bytes))
+}
+
+/// W1 data-model bridge (bead personal-cmy.13, mechanism A): zero-copy round-trip
+/// of a quivr `Orbits` table through the Rust-canonical `OrbitBatch` using the
+/// Arrow C Data Interface (no IPC serialize/deserialize copy). Accepts a pyarrow
+/// `RecordBatch` and returns one.
+#[pyfunction]
+fn orbits_nested_round_trip_arrow<'py>(
+    py: Python<'py>,
+    batch: &Bound<'py, PyAny>,
+) -> PyResult<PyObject> {
+    let record_batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(&record_batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+    let out = orbits
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
+    out.to_pyarrow(py)
+        .map_err(|err| PyValueError::new_err(format!("failed to export RecordBatch: {err}")))
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1235,5 +1247,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_rotate_frame_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_sample_variants_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_propagate_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     Ok(())
 }
