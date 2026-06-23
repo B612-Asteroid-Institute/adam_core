@@ -112,6 +112,7 @@ const COORD_SERIAL_THRESHOLD_ROWS: usize = 4096;
 pub mod lambert;
 pub use lambert::{izzo_lambert, izzo_lambert_batch_flat, porkchop_grid_flat};
 
+pub mod coordinate_frame;
 pub mod moid;
 pub use moid::{calculate_moid, calculate_moid_batch};
 

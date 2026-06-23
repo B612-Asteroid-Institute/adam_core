@@ -1,42 +1,31 @@
 """W1 data-model bridge parity (Beads personal-cmy.13, mechanism C).
 
-Round-trips a real quivr ``Orbits`` table through the Rust-canonical ``OrbitBatch``
-via Arrow IPC bytes (a single Python<->Rust crossing of the complete nested
-schema) and asserts the data AND the Arrow schema (ignoring metadata) survive
-exactly. This exercises the Rust ``OrbitBatch`` nested quivr-compatible
-round-trip end-to-end through the compiled ``_rust_native`` extension.
-
-The small ``_orbits_to_ipc`` shim injects the ``adam_core_*`` schema metadata
-(frame, time scale) the Rust decoder needs -- this is the "quivr adapts"
-boundary that a future bridge module will own.
+Round-trips a real quivr ``Orbits`` table through the Rust-canonical
+``OrbitBatch`` via Arrow IPC bytes (a single Python<->Rust crossing of the
+complete nested schema) and asserts the data AND the Arrow schema (ignoring
+metadata) survive exactly, then exercises a real Rust-native workflow
+(frame rotation) over the same bridge. Uses the productionized bridge in
+``adam_core.orbits.arrow_bridge`` rather than re-implementing the boundary.
 """
 
 import numpy as np
 import pyarrow as pa
 
 from adam_core import _rust_native as rn
-from adam_core.coordinates import CartesianCoordinates, CoordinateCovariances, Origin
+from adam_core.coordinates import (
+    CartesianCoordinates,
+    CoordinateCovariances,
+    Origin,
+    transform_coordinates,
+)
 from adam_core.orbits import Orbits
+from adam_core.orbits.arrow_bridge import (
+    orbits_to_ipc,
+    rotate_orbits_frame,
+    round_trip_orbits,
+)
 from adam_core.orbits.orbits import PhysicalParameters
 from adam_core.time import Timestamp
-
-
-def _orbits_to_ipc(orbits: Orbits) -> bytes:
-    table = orbits.table.combine_chunks()
-    coords = orbits.coordinates
-    table = table.replace_schema_metadata(
-        {
-            "adam_core_schema": "OrbitBatch.cartesian.nested.quivr.v1",
-            "adam_core_schema_version": "1",
-            "adam_core_representation": "cartesian",
-            "adam_core_frame": coords.frame,
-            "adam_core_time_scale": coords.time.scale,
-        }
-    )
-    sink = pa.BufferOutputStream()
-    with pa.ipc.new_stream(sink, table.schema) as writer:
-        writer.write_table(table)
-    return sink.getvalue().to_pybytes()
 
 
 def _read_ipc_table(raw: bytes) -> pa.Table:
@@ -46,7 +35,7 @@ def _read_ipc_table(raw: bytes) -> pa.Table:
 
 def _assert_lossless(orbits: Orbits) -> None:
     tin = orbits.table.combine_chunks()
-    tout = _read_ipc_table(rn.orbits_nested_ipc_round_trip(_orbits_to_ipc(orbits)))
+    tout = _read_ipc_table(rn.orbits_nested_ipc_round_trip(orbits_to_ipc(orbits)))
     # Full nested data survives quivr -> IPC -> Rust OrbitBatch -> IPC -> quivr.
     assert tout.to_pylist() == tin.to_pylist()
     # Arrow schema (types + nullability) is byte-identical, ignoring metadata.
@@ -74,37 +63,60 @@ def _cartesian(with_covariance: bool) -> CartesianCoordinates:
     return CartesianCoordinates.from_kwargs(**kwargs)
 
 
-def test_orbits_nested_ipc_round_trip_full_with_covariance():
-    orbits = Orbits.from_kwargs(
+def _orbits(with_covariance: bool = True, physical: bool = False) -> Orbits:
+    kwargs = dict(
         orbit_id=["o1", "o2", "o3"],
         object_id=["a", None, "c"],
-        coordinates=_cartesian(with_covariance=True),
+        coordinates=_cartesian(with_covariance=with_covariance),
     )
-    _assert_lossless(orbits)
+    if physical:
+        kwargs["physical_parameters"] = PhysicalParameters.from_kwargs(
+            H_v=[15.5, 16.0, 17.0],
+            H_v_sigma=[0.1, None, 0.3],
+            G=[0.15, 0.15, 0.15],
+            G_sigma=[None, None, None],
+            sigma_eff=[0.05, 0.06, 0.07],
+            chi2_red=[1.2, 1.1, 1.0],
+        )
+    return Orbits.from_kwargs(**kwargs)
+
+
+def test_orbits_nested_ipc_round_trip_full_with_covariance():
+    _assert_lossless(_orbits(with_covariance=True))
 
 
 def test_orbits_nested_ipc_round_trip_without_covariance():
-    orbits = Orbits.from_kwargs(
-        orbit_id=["o1", "o2", "o3"],
-        object_id=["a", "b", "c"],
-        coordinates=_cartesian(with_covariance=False),
-    )
-    _assert_lossless(orbits)
+    _assert_lossless(_orbits(with_covariance=False))
 
 
 def test_orbits_nested_ipc_round_trip_with_physical_parameters():
-    physical_parameters = PhysicalParameters.from_kwargs(
-        H_v=[15.5, 16.0, 17.0],
-        H_v_sigma=[0.1, None, 0.3],
-        G=[0.15, 0.15, 0.15],
-        G_sigma=[None, None, None],
-        sigma_eff=[0.05, 0.06, 0.07],
-        chi2_red=[1.2, 1.1, 1.0],
+    _assert_lossless(_orbits(with_covariance=True, physical=True))
+
+
+def test_round_trip_orbits_reconstructs_orbits():
+    orbits = _orbits(with_covariance=True, physical=True)
+    out = round_trip_orbits(orbits)
+    assert out.coordinates.frame == orbits.coordinates.frame
+    assert out.coordinates.time.scale == orbits.coordinates.time.scale
+    assert (
+        out.table.combine_chunks().to_pylist()
+        == orbits.table.combine_chunks().to_pylist()
     )
-    orbits = Orbits.from_kwargs(
-        orbit_id=["o1", "o2", "o3"],
-        object_id=["a", "b", "c"],
-        coordinates=_cartesian(with_covariance=True),
-        physical_parameters=physical_parameters,
+
+
+def test_rotate_orbits_frame_matches_transform_coordinates():
+    orbits = _orbits(with_covariance=True)
+    rotated = rotate_orbits_frame(orbits, "equatorial")
+    reference = transform_coordinates(
+        orbits.coordinates, CartesianCoordinates, frame_out="equatorial"
     )
-    _assert_lossless(orbits)
+    assert rotated.coordinates.frame == "equatorial"
+    np.testing.assert_allclose(
+        rotated.coordinates.values, reference.values, rtol=0, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        rotated.coordinates.covariance.to_matrix(),
+        reference.covariance.to_matrix(),
+        rtol=0,
+        atol=1e-12,
+    )

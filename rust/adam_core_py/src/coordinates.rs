@@ -5,7 +5,7 @@ use adam_core_rs_coords::{
     cometary_to_cartesian_flat6, keplerian_to_cartesian_flat6, rotate_cartesian_frame_flat6,
     rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
     tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
-    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, Frame,
+    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Frame,
     IntoNestedRecordBatch, OrbitBatch as DataOrbitBatch, Representation as CoordsRepresentation,
     TryFromNestedRecordBatch,
 };
@@ -1095,6 +1095,40 @@ fn orbits_nested_ipc_round_trip<'py>(
     Ok(PyBytes::new_bound(py, &bytes))
 }
 
+/// Map the rotation-kernel `Frame` onto the typed-batch `Frame` used by
+/// `OrbitBatch::rotate_frame`.
+fn data_frame(frame: Frame) -> DataFrame {
+    match frame {
+        Frame::Ecliptic => DataFrame::Ecliptic,
+        Frame::Equatorial => DataFrame::Equatorial,
+        Frame::Itrf93 => DataFrame::Itrf93,
+    }
+}
+
+/// W1 data-model workflow (bead personal-cmy.13): rotate a quivr `Orbits` table
+/// (Arrow IPC, nested quivr layout) into `target_frame` entirely Rust-side in a
+/// single crossing -- decode to `OrbitBatch`, rotate coordinates + covariance,
+/// re-encode. Demonstrates a real Rust-native workflow over the bridge.
+#[pyfunction]
+fn orbits_rotate_frame_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+    target_frame: &str,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let target = data_frame(parse_frame(target_frame)?);
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+    let rotated = orbits
+        .rotate_frame(target)
+        .map_err(|err| PyValueError::new_err(format!("failed to rotate frame: {err}")))?;
+    let out = rotated
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
+    let bytes = write_orbit_ipc(&out)?;
+    Ok(PyBytes::new_bound(py, &bytes))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
@@ -1120,5 +1154,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(classify_orbits_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(tisserand_parameter_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_ipc_round_trip, m)?)?;
+    m.add_function(wrap_pyfunction!(orbits_rotate_frame_ipc, m)?)?;
     Ok(())
 }
