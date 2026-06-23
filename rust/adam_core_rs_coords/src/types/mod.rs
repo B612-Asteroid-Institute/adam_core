@@ -488,6 +488,17 @@ impl CoordinateValues {
             _ => None,
         }
     }
+
+    /// The raw 6-vectors regardless of representation.
+    pub fn raw_values(&self) -> &[[f64; 6]] {
+        match self {
+            Self::Cartesian(values)
+            | Self::Spherical(values)
+            | Self::Keplerian(values)
+            | Self::Cometary(values)
+            | Self::Geodetic(values) => values,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

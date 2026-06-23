@@ -6,8 +6,8 @@
 //! the Rust schema.
 
 use super::{
-    CoordinateBatch, CoordinateRepresentation, CovarianceBatch, CovarianceUnits, Epoch, Frame,
-    ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
+    CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
+    Epoch, Frame, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
     PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray, TimeScale, Validity, VariantId,
 };
 use arrow_array::builder::{Float64Builder, LargeListBuilder};
@@ -225,19 +225,35 @@ fn nested_origin_struct(coordinates: &CoordinateBatch) -> SchemaResult<StructArr
     .map_err(|err| SchemaError::Arrow(err.to_string()))
 }
 
-/// Build the nine quivr coordinate columns (x..vz plus nested time/covariance/origin
-/// structs) as (field, array) pairs. Used both as the top-level columns of a
-/// CartesianCoordinates batch and as the children of the Orbits `coordinates` struct.
+/// Field names for the nested-coordinate representations carried over the bridge.
+/// Cartesian and Spherical are supported (orbits use Cartesian; observed
+/// astrometry uses Spherical); other representations are rejected.
+fn nested_coordinate_field_names(
+    representation: CoordinateRepresentation,
+) -> SchemaResult<[&'static str; 6]> {
+    match representation {
+        CoordinateRepresentation::Cartesian => Ok(["x", "y", "z", "vx", "vy", "vz"]),
+        CoordinateRepresentation::Spherical => Ok(["rho", "lon", "lat", "vrho", "vlon", "vlat"]),
+        other => Err(SchemaError::InvalidRecordBatch(format!(
+            "nested coordinate bridge supports Cartesian and Spherical, got {}",
+            other.as_str()
+        ))),
+    }
+}
+
+/// Build the nine quivr coordinate columns (the six representation components plus
+/// nested time/covariance/origin structs) as (field, array) pairs. Used both as the
+/// top-level columns of a coordinates batch and as the children of the Orbits/
+/// VariantOrbits `coordinates` struct.
 fn nested_coordinate_named_arrays(
     coordinates: &CoordinateBatch,
 ) -> SchemaResult<Vec<(Arc<Field>, ArrayRef)>> {
     coordinates.validate()?;
-    let values = coordinates.values.cartesian().ok_or_else(|| {
-        SchemaError::InvalidRecordBatch("expected Cartesian coordinates".to_string())
-    })?;
+    let field_names = nested_coordinate_field_names(coordinates.values.representation())?;
+    let values = coordinates.values.raw_values();
     let rows = values.len();
     let mut out: Vec<(Arc<Field>, ArrayRef)> = Vec::with_capacity(9);
-    for (column, name) in ["x", "y", "z", "vx", "vy", "vz"].into_iter().enumerate() {
+    for (column, name) in field_names.into_iter().enumerate() {
         let array = Arc::new(Float64Array::from(
             values.iter().map(|row| row[column]).collect::<Vec<_>>(),
         )) as ArrayRef;
@@ -276,15 +292,19 @@ fn coordinate_to_nested_record_batch(coordinates: &CoordinateBatch) -> SchemaRes
         .into_iter()
         .map(|(_, array)| array)
         .collect::<Vec<_>>();
-    let schema = Schema::new_with_metadata(
-        fields,
-        coordinate_metadata(
-            CARTESIAN_NESTED_SCHEMA,
-            coordinates.frame,
-            time_scale,
-            coordinates.covariance.is_some(),
-        ),
+    let mut metadata = coordinate_metadata(
+        CARTESIAN_NESTED_SCHEMA,
+        coordinates.frame,
+        time_scale,
+        coordinates.covariance.is_some(),
     );
+    // The bare-coordinate nested bridge carries the actual representation (e.g.
+    // Spherical for observed astrometry), unlike the always-Cartesian orbit paths.
+    metadata.insert(
+        REPRESENTATION_METADATA_KEY.to_string(),
+        coordinates.values.representation().as_str().to_string(),
+    );
+    let schema = Schema::new_with_metadata(fields, metadata);
     RecordBatch::try_new(Arc::new(schema), arrays)
         .map_err(|err| SchemaError::Arrow(err.to_string()))
 }
@@ -409,11 +429,16 @@ where
         .get(REPRESENTATION_METADATA_KEY)
         .map(String::as_str)
         .unwrap_or("cartesian");
-    if representation != CoordinateRepresentation::Cartesian.as_str() {
-        return Err(SchemaError::InvalidRecordBatch(format!(
-            "expected Cartesian representation metadata, got {representation}"
-        )));
-    }
+    let representation = match representation {
+        "cartesian" => CoordinateRepresentation::Cartesian,
+        "spherical" => CoordinateRepresentation::Spherical,
+        other => {
+            return Err(SchemaError::InvalidRecordBatch(format!(
+                "nested coordinate bridge supports Cartesian and Spherical, got {other}"
+            )))
+        }
+    };
+    let field_names = nested_coordinate_field_names(representation)?;
     let frame = metadata
         .get(FRAME_METADATA_KEY)
         .map(|value| Frame::parse(value))
@@ -423,22 +448,18 @@ where
         column(name).ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))
     };
 
-    let x = array_as_f64(require("x")?, "x")?;
-    let y = array_as_f64(require("y")?, "y")?;
-    let z = array_as_f64(require("z")?, "z")?;
-    let vx = array_as_f64(require("vx")?, "vx")?;
-    let vy = array_as_f64(require("vy")?, "vy")?;
-    let vz = array_as_f64(require("vz")?, "vz")?;
+    let columns = field_names
+        .iter()
+        .copied()
+        .map(|name| array_as_f64(require(name)?, name))
+        .collect::<SchemaResult<Vec<_>>>()?;
     let mut values = Vec::with_capacity(rows);
     for row in 0..rows {
-        values.push([
-            non_null_f64(x, "x", row)?,
-            non_null_f64(y, "y", row)?,
-            non_null_f64(z, "z", row)?,
-            non_null_f64(vx, "vx", row)?,
-            non_null_f64(vy, "vy", row)?,
-            non_null_f64(vz, "vz", row)?,
-        ]);
+        let mut entry = [0.0_f64; 6];
+        for (index, column) in columns.iter().enumerate() {
+            entry[index] = non_null_f64(column, field_names[index], row)?;
+        }
+        values.push(entry);
     }
 
     let time = array_as_struct(require("time")?, "time")?;
@@ -463,9 +484,13 @@ where
     );
 
     let covariance = array_as_struct(require("covariance")?, "covariance")?;
-    let covariance = parse_nested_covariance(covariance, rows)?;
+    let covariance = parse_nested_covariance(covariance, representation, rows)?;
 
-    CoordinateBatch::cartesian(values, frame, origins, times, covariance)
+    let values = match representation {
+        CoordinateRepresentation::Spherical => CoordinateValues::Spherical(values),
+        _ => CoordinateValues::Cartesian(values),
+    };
+    CoordinateBatch::new(values, frame, origins, times, covariance)
 }
 
 fn coordinate_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<CoordinateBatch> {
@@ -507,6 +532,7 @@ fn orbit_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatc
 
 fn parse_nested_covariance(
     covariance: &StructArray,
+    representation: CoordinateRepresentation,
     rows: usize,
 ) -> SchemaResult<Option<CovarianceBatch>> {
     let values_col = covariance
@@ -549,14 +575,9 @@ fn parse_nested_covariance(
     if !any_present {
         return Ok(None);
     }
-    CovarianceBatch::new(
-        rows,
-        6,
-        values,
-        CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
-    )
-    .and_then(|covariance| covariance.with_row_validity(Validity::from_bools(&row_validity)))
-    .map(Some)
+    CovarianceBatch::new(rows, 6, values, CovarianceUnits::Coordinate(representation))
+        .and_then(|covariance| covariance.with_row_validity(Validity::from_bools(&row_validity)))
+        .map(Some)
 }
 
 fn array_as_f64<'a>(array: &'a ArrayRef, name: &str) -> SchemaResult<&'a Float64Array> {
@@ -1454,6 +1475,35 @@ mod tests {
         assert_eq!(batch.num_columns(), 4);
         let round_tripped = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
         assert_eq!(round_tripped.physical_parameters, Some(physical_parameters));
+    }
+
+    #[test]
+    fn coordinate_nested_round_trip_spherical() {
+        let coordinates = CoordinateBatch::spherical(
+            vec![
+                [1.0, 30.0, -10.0, 0.01, 0.02, 0.03],
+                [2.0, 45.0, 20.0, 0.04, 0.05, 0.06],
+            ],
+            Frame::Equatorial,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+            Some(TimeArray::from_parts(TimeScale::Utc, vec![60000, 60001], vec![0, 0]).unwrap()),
+            None,
+        )
+        .unwrap();
+        let batch = coordinates.into_nested_record_batch().unwrap();
+        let schema = batch.schema();
+        assert!(schema.index_of("rho").is_ok());
+        assert!(schema.index_of("vlat").is_ok());
+        assert!(schema.index_of("x").is_err());
+        let round_tripped = CoordinateBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(round_tripped.frame, Frame::Equatorial);
+        assert_eq!(
+            round_tripped.values.representation(),
+            CoordinateRepresentation::Spherical
+        );
+        let values = round_tripped.values.spherical().unwrap();
+        assert_eq!(values[0], [1.0, 30.0, -10.0, 0.01, 0.02, 0.03]);
+        assert_eq!(values[1], [2.0, 45.0, 20.0, 0.04, 0.05, 0.06]);
     }
 
     #[test]
