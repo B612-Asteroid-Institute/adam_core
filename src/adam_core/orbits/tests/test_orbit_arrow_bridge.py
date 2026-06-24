@@ -19,9 +19,13 @@ from adam_core.coordinates import (
     transform_coordinates,
 )
 from adam_core.orbits import Orbits
+from adam_core.coordinates import SphericalCoordinates
+from adam_core.coordinates.residuals import Residuals
 from adam_core.dynamics import propagate_2body
+from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.observers import Observers
 from adam_core.orbits.arrow_bridge import (
+    evaluate_residuals_2body,
     orbits_to_ipc,
     propagate_orbits_2body,
     rotate_orbits_frame,
@@ -214,6 +218,62 @@ def test_propagate_orbits_2body_matches_propagate_2body():
     np.testing.assert_allclose(
         bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-11
     )
+
+
+def test_evaluate_residuals_2body_matches_generate_ephemeris_2body():
+    # Orbits at the observation epoch (1:1 with observers), all TDB.
+    orbit_coords = CartesianCoordinates.from_kwargs(
+        x=[1.0, 1.5, 2.0],
+        y=[0.0, 0.1, 0.2],
+        z=[0.0, 0.0, 0.05],
+        vx=[0.0, 0.0, 0.0],
+        vy=[0.01720, 0.01405, 0.01216],
+        vz=[0.0, 0.001, 0.0],
+        time=Timestamp.from_mjd([60000.0, 60000.0, 60000.0], scale="tdb"),
+        origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"] * 3),
+        frame="ecliptic",
+    )
+    orbits = Orbits.from_kwargs(orbit_id=["o1", "o2", "o3"], coordinates=orbit_coords)
+    observer_coords = CartesianCoordinates.from_kwargs(
+        x=[0.0, 0.01, -0.01],
+        y=[1.0, 0.99, 1.01],
+        z=[0.0, 0.0, 0.0],
+        vx=[-0.01720, -0.0170, -0.0173],
+        vy=[0.0, 0.001, 0.0],
+        vz=[0.0, 0.0, 0.0],
+        time=Timestamp.from_mjd([60000.0, 60000.0, 60000.0], scale="tdb"),
+        origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"] * 3),
+        frame="ecliptic",
+    )
+    observers = Observers.from_kwargs(
+        code=["X05", "X05", "X05"], coordinates=observer_coords
+    )
+
+    # Reference predicted astrometry via adam_core's 2-body ephemeris.
+    ephemeris = generate_ephemeris_2body(orbits, observers)
+    predicted = ephemeris.coordinates
+    n = 3
+    cov = np.tile(
+        np.diag([1.0, (1.0 / 3600.0) ** 2, (1.0 / 3600.0) ** 2, 1.0, 1.0, 1.0]),
+        (n, 1, 1),
+    )
+    observed = SphericalCoordinates.from_kwargs(
+        rho=predicted.rho.to_numpy(zero_copy_only=False),
+        lon=predicted.lon.to_numpy(zero_copy_only=False) + 1e-4,
+        lat=predicted.lat.to_numpy(zero_copy_only=False) - 1e-4,
+        vrho=predicted.vrho.to_numpy(zero_copy_only=False),
+        vlon=predicted.vlon.to_numpy(zero_copy_only=False),
+        vlat=predicted.vlat.to_numpy(zero_copy_only=False),
+        time=predicted.time,
+        origin=predicted.origin,
+        frame=predicted.frame,
+        covariance=CoordinateCovariances.from_matrix(cov),
+    )
+    reference = Residuals.calculate(observed, predicted)
+    chi2_reference = reference.chi2.to_numpy(zero_copy_only=False)
+
+    chi2_rust, _residuals_rust = evaluate_residuals_2body(orbits, observed, observers)
+    np.testing.assert_allclose(chi2_rust, chi2_reference, rtol=1e-9, atol=1e-12)
 
 
 def test_round_trip_observers_reconstructs_observers():

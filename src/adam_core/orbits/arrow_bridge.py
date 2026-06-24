@@ -121,6 +121,21 @@ def observers_from_ipc(raw: bytes) -> Observers:
     return Observers.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
 
 
+def coordinates_to_ipc(coordinates, representation: str) -> bytes:
+    """Serialize a coordinate table (``cartesian`` or ``spherical``) to Arrow IPC."""
+    table = _stamp_adam_core_metadata(
+        coordinates.table.combine_chunks(),
+        representation,
+        coordinates.frame,
+        coordinates.time.scale,
+        "CoordinateBatch.nested.quivr.v1",
+    )
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    return sink.getvalue().to_pybytes()
+
+
 # --- Arrow C Data Interface (zero-copy) transport ------------------------------
 
 
@@ -149,6 +164,58 @@ def round_trip_observers(observers: Observers) -> Observers:
     """Decode to the Rust ``ObserverBatch`` and back via IPC (transport check)."""
     return observers_from_ipc(
         _rn.observers_nested_ipc_round_trip(observers_to_ipc(observers))
+    )
+
+
+def evaluate_residuals_2body(
+    orbits: Orbits,
+    observed_coordinates,
+    observers: Observers,
+    lt_tol: float = 1e-10,
+    max_iter: int = 1000,
+    tol: float = 1e-15,
+    stellar_aberration: bool = False,
+    max_lt_iter: int = 10,
+):
+    """Rust-native OD residual evaluation (the OD inner loop) over the bridge.
+
+    ``orbits`` must already be at the observation times (1:1 with the observed
+    astrometry and observers). Composes the same 2-body ephemeris + residual
+    kernels as adam_core's ``generate_ephemeris_2body`` + ``Residuals.calculate``,
+    including its barycentric (SSB / ecliptic) light-time convention: orbits and
+    observers are transformed to the solar-system barycenter first (identity when
+    already barycentric). Returns ``(chi2 (N,), residuals (N, 6))`` numpy arrays.
+    """
+    from adam_core.coordinates import CartesianCoordinates, transform_coordinates
+    from adam_core.coordinates.origin import OriginCodes
+
+    orbits = orbits.set_column(
+        "coordinates",
+        transform_coordinates(
+            orbits.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    observers = observers.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    return _rn.evaluate_residuals_2body_ipc(
+        orbits_to_ipc(orbits),
+        coordinates_to_ipc(observed_coordinates, "spherical"),
+        observers_to_ipc(observers),
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+        max_lt_iter,
     )
 
 

@@ -2,14 +2,14 @@ use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, calculate_chi2_flat,
     cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
     cartesian_to_spherical_flat6, cartesian_to_spherical_row, classify_orbits_flat,
-    cometary_to_cartesian_flat6, create_sampled_orbit_variants, keplerian_to_cartesian_flat6,
-    rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6,
-    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
-    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
-    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
-    IntoNestedRecordBatch, ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
-    OrbitVariantSamplingMethod, Representation as CoordsRepresentation, TimeScale,
-    TryFromNestedRecordBatch,
+    cometary_to_cartesian_flat6, create_sampled_orbit_variants, generate_ephemeris_2body_flat6,
+    keplerian_to_cartesian_flat6, origin_mu_au3_day2, rotate_cartesian_frame_flat6,
+    rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
+    tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
+    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame,
+    Epoch, Frame, IntoNestedRecordBatch, ObserverBatch as DataObserverBatch,
+    OrbitBatch as DataOrbitBatch, OrbitVariantSamplingMethod,
+    Representation as CoordsRepresentation, TimeScale, TryFromNestedRecordBatch,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::RecordBatch;
@@ -1238,6 +1238,111 @@ fn observers_nested_ipc_round_trip<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
+/// W1 / OD slice 3: Rust-native OD residual evaluation over the bridge. Given
+/// orbits (already at the observation times, 1:1 with observations), the observed
+/// astrometry (`SphericalCoordinates`), and the observers, this composes the exact
+/// kernels adam_core uses -- `generate_ephemeris_2body_flat6` (the 2-body
+/// light-time ephemeris forward model) and `compute_residuals_chi2_flat` (spherical
+/// residual + chi2) -- so results match `generate_ephemeris_2body` +
+/// `Residuals.calculate`. Returns `(chi2 (N,), residuals (N, 6))`.
+#[pyfunction]
+#[pyo3(signature = (orbits_ipc, observed_ipc, observers_ipc, lt_tol=1e-10, max_iter=1000, tol=1e-15, stellar_aberration=false, max_lt_iter=10))]
+#[allow(clippy::too_many_arguments)]
+fn evaluate_residuals_2body_ipc<'py>(
+    py: Python<'py>,
+    orbits_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    stellar_aberration: bool,
+    max_lt_iter: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray2<f64>>)> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+    let observed = DataCoordinateBatch::try_from_nested_record_batch(&read_orbit_ipc(
+        observed_ipc.as_bytes(),
+    )?)
+    .map_err(|err| {
+        PyValueError::new_err(format!("failed to decode observed coordinates: {err}"))
+    })?;
+    let observers =
+        DataObserverBatch::try_from_nested_record_batch(&read_orbit_ipc(observers_ipc.as_bytes())?)
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to decode ObserverBatch: {err}"))
+            })?;
+
+    let n = orbits.coordinates.len();
+    if observed.len() != n || observers.coordinates.len() != n {
+        return Err(PyValueError::new_err(
+            "orbits, observed coordinates, and observers must have equal length (1:1)",
+        ));
+    }
+    let orbit_values = orbits
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| PyValueError::new_err("orbits must be Cartesian"))?;
+    let orbit_flat: Vec<f64> = orbit_values.iter().flatten().copied().collect();
+    let observer_values = observers
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| PyValueError::new_err("observer coordinates must be Cartesian"))?;
+    let observer_flat: Vec<f64> = observer_values.iter().flatten().copied().collect();
+    let mus = orbits
+        .coordinates
+        .origins
+        .origins
+        .iter()
+        .map(origin_mu_au3_day2)
+        .collect::<Result<Vec<f64>, _>>()
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+
+    let (predicted, _light_time, _aberrated) = generate_ephemeris_2body_flat6(
+        &orbit_flat,
+        &observer_flat,
+        &mus,
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+        max_lt_iter,
+    );
+
+    let observed_values = observed.values.raw_values();
+    let observed_flat: Vec<f64> = observed_values.iter().flatten().copied().collect();
+    let observed_cov = observed.covariance.as_ref().ok_or_else(|| {
+        PyValueError::new_err("observed coordinates require covariance to compute chi2")
+    })?;
+    if observed_cov.dimension != 6 {
+        return Err(PyValueError::new_err(
+            "observed covariance must be 6x6 per row",
+        ));
+    }
+    // The 2-body ephemeris model carries no covariance, matching
+    // Residuals.calculate(observed, predicted) where the predicted ephemeris is
+    // covariance-free (residual covariance = observed covariance).
+    let predicted_cov = vec![0.0_f64; n * 36];
+    let output = adam_core_rs_coords::compute_residuals_chi2_flat(
+        &observed_flat,
+        &predicted,
+        &observed_cov.values_row_major,
+        &predicted_cov,
+        n,
+        6,
+        true,
+    )
+    .map_err(|err| PyValueError::new_err(format!("failed to compute residuals: {err:?}")))?;
+
+    let chi2 = ndarray::Array1::from_vec(output.chi2);
+    let residuals = ndarray::Array2::from_shape_vec((n, 6), output.residuals)
+        .map_err(|err| PyValueError::new_err(format!("failed to shape residuals: {err}")))?;
+    Ok((chi2.into_pyarray(py), residuals.into_pyarray(py)))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
@@ -1268,5 +1373,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_propagate_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     Ok(())
 }
