@@ -13,7 +13,9 @@ from ...time import Timestamp
 from ..rotation_period_wrappers import estimate_rotation_period_from_detections_grouped
 
 
-def _phase_angle_deg(object_coords: CartesianCoordinates, observers: Observers) -> np.ndarray:
+def _phase_angle_deg(
+    object_coords: CartesianCoordinates, observers: Observers
+) -> np.ndarray:
     obj = np.asarray(object_coords.r, dtype=np.float64)
     obs = np.asarray(observers.coordinates.r, dtype=np.float64)
     delta = obj - obs
@@ -24,15 +26,23 @@ def _phase_angle_deg(object_coords: CartesianCoordinates, observers: Observers) 
     return np.degrees(np.arccos(cos_alpha))
 
 
-def _make_detection_bundle() -> tuple[PointSourceDetections, Exposures, CartesianCoordinates, Observers, pa.Array]:
+def _make_detection_bundle() -> (
+    tuple[PointSourceDetections, Exposures, CartesianCoordinates, Observers, pa.Array]
+):
     n_per_object = 32
     object_ids = (["a"] * n_per_object) + (["b"] * n_per_object)
     periods = {"a": 0.02, "b": 0.025}
-    filters = (["LSST_r", "LSST_g"] * n_per_object)[:n_per_object] + (["LSST_r", "LSST_g"] * n_per_object)[:n_per_object]
+    filters = (["LSST_r", "LSST_g"] * n_per_object)[:n_per_object] + (
+        ["LSST_r", "LSST_g"] * n_per_object
+    )[:n_per_object]
     mjd = np.linspace(60100.0, 60100.08, len(object_ids), dtype=np.float64)
     times = Timestamp.from_mjd(mjd, scale="tdb")
-    object_x = np.asarray([2.0 if oid == "a" else 2.2 for oid in object_ids], dtype=np.float64)
-    object_y = np.asarray([0.1 if oid == "a" else 0.15 for oid in object_ids], dtype=np.float64)
+    object_x = np.asarray(
+        [2.0 if oid == "a" else 2.2 for oid in object_ids], dtype=np.float64
+    )
+    object_y = np.asarray(
+        [0.1 if oid == "a" else 0.15 for oid in object_ids], dtype=np.float64
+    )
     object_coords = CartesianCoordinates.from_kwargs(
         x=object_x,
         y=object_y,
@@ -61,15 +71,25 @@ def _make_detection_bundle() -> tuple[PointSourceDetections, Exposures, Cartesia
     phase_angle = _phase_angle_deg(object_coords, observers)
     r_au = np.linalg.norm(np.asarray(object_coords.r, dtype=np.float64), axis=1)
     delta_au = np.linalg.norm(
-        np.asarray(object_coords.r, dtype=np.float64) - np.asarray(observers.coordinates.r, dtype=np.float64),
+        np.asarray(object_coords.r, dtype=np.float64)
+        - np.asarray(observers.coordinates.r, dtype=np.float64),
         axis=1,
     )
-    baseline = 15.0 + 5.0 * np.log10(r_au * delta_au) + 0.015 * phase_angle + 0.0015 * np.square(phase_angle)
+    baseline = (
+        15.0
+        + 5.0 * np.log10(r_au * delta_au)
+        + 0.015 * phase_angle
+        + 0.0015 * np.square(phase_angle)
+    )
     t_rel = mjd - mjd.min()
     mag = baseline.copy()
     for idx, oid in enumerate(object_ids):
         phase = 2.0 * np.pi * t_rel[idx] / periods[oid]
-        mag[idx] += 0.10 * np.cos(phase) + 0.30 * np.cos(2.0 * phase) + 0.05 * np.sin(2.0 * phase)
+        mag[idx] += (
+            0.10 * np.cos(phase)
+            + 0.30 * np.cos(2.0 * phase)
+            + 0.05 * np.sin(2.0 * phase)
+        )
     exposures = Exposures.from_kwargs(
         id=[f"e{idx}" for idx in range(len(object_ids))],
         start_time=times,
@@ -88,11 +108,19 @@ def _make_detection_bundle() -> tuple[PointSourceDetections, Exposures, Cartesia
         mag=mag,
         mag_sigma=np.full(len(object_ids), 0.03, dtype=np.float64),
     )
-    return detections, exposures, object_coords, observers, pa.array(object_ids, type=pa.large_string())
+    return (
+        detections,
+        exposures,
+        object_coords,
+        observers,
+        pa.array(object_ids, type=pa.large_string()),
+    )
 
 
 def test_exact_grid_reference_recovers_fast_period(monkeypatch):
-    detections, exposures, object_coords, observers, object_ids = _make_detection_bundle()
+    detections, exposures, object_coords, observers, object_ids = (
+        _make_detection_bundle()
+    )
 
     def fake_observers(self, *args, **kwargs):  # noqa: ARG001
         return observers
@@ -116,7 +144,9 @@ def test_exact_grid_reference_recovers_fast_period(monkeypatch):
 
 
 def test_exact_and_staged_reference_match_on_same_case(monkeypatch):
-    detections, exposures, object_coords, observers, object_ids = _make_detection_bundle()
+    detections, exposures, object_coords, observers, object_ids = (
+        _make_detection_bundle()
+    )
 
     def fake_observers(self, *args, **kwargs):  # noqa: ARG001
         return observers

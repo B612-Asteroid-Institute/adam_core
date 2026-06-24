@@ -25,11 +25,11 @@ import pyarrow as pa
 import pytest
 
 from adam_core.photometry.rotation_period_fourier import estimate_rotation_period
-from adam_core.photometry.rotation_period_types import RotationPeriodObservations
 from adam_core.photometry.rotation_period_scoring import (
     alias_bucket,
     harmonic_adjusted_error_pct,
 )
+from adam_core.photometry.rotation_period_types import RotationPeriodObservations
 from adam_core.time import Timestamp
 
 DATA_DIR = Path(__file__).parent / "data"

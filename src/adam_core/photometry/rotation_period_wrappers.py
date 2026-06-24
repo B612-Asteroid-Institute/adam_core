@@ -63,11 +63,17 @@ def _align_observers_to_exposures(
         raise ValueError(
             "internal error: aligned observers length does not match detections length"
         )
-    idx = pc.fill_null(pc.index_in(exposures_aligned.id, value_set=exposures_full.id), -1)
+    idx = pc.fill_null(
+        pc.index_in(exposures_aligned.id, value_set=exposures_full.id), -1
+    )
     idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
     if np.any(idx_np < 0):
-        raise ValueError("internal error: exposure alignment failed for observer mapping")
+        raise ValueError(
+            "internal error: exposure alignment failed for observer mapping"
+        )
     return observers.take(pa.array(idx_np, type=pa.int32()))
+
+
 def build_rotation_period_observations_from_detections(
     detections: PointSourceDetections,
     exposures: Exposures,
@@ -85,7 +91,9 @@ def build_rotation_period_observations_from_detections(
         )
 
     exposures_aligned = _align_exposures_to_detections(detections, exposures)
-    observers_helio = exposures_aligned.observers(frame="ecliptic", origin=OriginCodes.SUN)
+    observers_helio = exposures_aligned.observers(
+        frame="ecliptic", origin=OriginCodes.SUN
+    )
     observers_helio = _align_observers_to_exposures(
         observers_helio,
         exposures,
@@ -99,7 +107,9 @@ def build_rotation_period_observations_from_detections(
     )
 
     if len(observers_helio) != n_det:
-        raise ValueError("internal error: aligned observers length does not match detections length")
+        raise ValueError(
+            "internal error: aligned observers length does not match detections length"
+        )
 
     time = object_coords_helio.time.rescale("tdb")
     mag = _as_float64_nan(detections.mag)
@@ -116,7 +126,9 @@ def build_rotation_period_observations_from_detections(
     if np.any(~np.isfinite(mag)):
         raise ValueError("detections.mag must be finite for rotation-period analysis")
     if np.any(~np.isfinite(r_au)) or np.any(r_au <= 0.0):
-        raise ValueError("invalid heliocentric distance(s) for rotation-period analysis")
+        raise ValueError(
+            "invalid heliocentric distance(s) for rotation-period analysis"
+        )
     if np.any(~np.isfinite(delta_au)) or np.any(delta_au <= 0.0):
         raise ValueError("invalid observer distance(s) for rotation-period analysis")
     if np.any(~np.isfinite(phase_angle_deg)):
@@ -130,9 +142,16 @@ def build_rotation_period_observations_from_detections(
         exposures_aligned.observatory_code.to_numpy(zero_copy_only=False),
         dtype=object,
     )
-    observing_night_np = np.asarray(observing_night.to_numpy(zero_copy_only=False), dtype=np.int64)
+    observing_night_np = np.asarray(
+        observing_night.to_numpy(zero_copy_only=False), dtype=np.int64
+    )
     session_id = pa.array(
-        [f"{str(code)}:{int(night)}" for code, night in zip(observatory_code.tolist(), observing_night_np.tolist())],
+        [
+            f"{str(code)}:{int(night)}"
+            for code, night in zip(
+                observatory_code.tolist(), observing_night_np.tolist()
+            )
+        ],
         type=pa.large_string(),
     )
 
@@ -256,5 +275,9 @@ def estimate_rotation_period_from_detections_grouped(
 
         i0 = i1
 
-    result = RotationPeriodResult.empty() if not out_results else qv.concatenate(out_results)
-    return GroupedRotationPeriodResults.from_kwargs(object_id=out_object_id, result=result)
+    result = (
+        RotationPeriodResult.empty() if not out_results else qv.concatenate(out_results)
+    )
+    return GroupedRotationPeriodResults.from_kwargs(
+        object_id=out_object_id, result=result
+    )

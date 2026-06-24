@@ -150,7 +150,9 @@ def _evaluate_frequency_batch_jit(
     n_par = design_real.shape[2]
     eye = jnp.eye(n_par, dtype=jnp.float64)
     target = jnp.broadcast_to(y[None, :], (frequencies.shape[0], y.shape[0]))
-    active = jnp.broadcast_to(row_mask[None, :], target.shape) & frequency_valid[:, None]
+    active = (
+        jnp.broadcast_to(row_mask[None, :], target.shape) & frequency_valid[:, None]
+    )
     n_obs = jnp.sum(row_mask)
 
     prior_design = jnp.broadcast_to(
@@ -164,7 +166,9 @@ def _evaluate_frequency_batch_jit(
         (frequencies.shape[0], prior_target.shape[0]),
     )
 
-    def solve_with_mask(active_mask: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def solve_with_mask(
+        active_mask: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         w_eff = jnp.where(active_mask, weights[None, :], 0.0)
         sqrt_w = jnp.sqrt(w_eff)
         design_real_w = design_real * sqrt_w[:, :, None]
@@ -276,11 +280,16 @@ def evaluate_frequency_indices_jax(
     col_pad = int(padded_design_width - real_design_width)
     if col_pad:
         fixed_pad = np.concatenate(
-            [fixed_pad, np.zeros((fixed_pad.shape[0], col_pad), dtype=np.float64)], axis=1
+            [fixed_pad, np.zeros((fixed_pad.shape[0], col_pad), dtype=np.float64)],
+            axis=1,
         )
         pr = np.asarray(prior_rows, dtype=np.float64)
         prior_rows = np.concatenate(
-            [pr[:, :real_design_width], np.zeros((pr.shape[0], col_pad), dtype=np.float64), pr[:, real_design_width:]],
+            [
+                pr[:, :real_design_width],
+                np.zeros((pr.shape[0], col_pad), dtype=np.float64),
+                pr[:, real_design_width:],
+            ],
             axis=1,
         )
     n_scores = int(sample_indices.size)
@@ -348,7 +357,13 @@ def evaluate_frequency_indices_jax(
                     cb
                     if not col_pad
                     else np.concatenate(
-                        [cb[:real_design_width], cb[padded_design_width:padded_design_width + 2 * fourier_order]]
+                        [
+                            cb[:real_design_width],
+                            cb[
+                                padded_design_width : padded_design_width
+                                + 2 * fourier_order
+                            ],
+                        ]
                     )
                 )
                 best_mask = np.asarray(mask_batch, dtype=bool)[: time_rel.shape[0]]

@@ -9,21 +9,21 @@ import numpy.typing as npt
 
 from .rotation_period_fourier_core import (
     PROFILES,
-    _DesignInfo,
-    _FitResult,
-    _FitWithPeriod,
-    _FourierProfile,
-    _SessionSummary,
     _amplitude_from_fit,
     _apply_light_time_correction,
     _build_fixed_design,
+    _DesignInfo,
     _fit_bic,
     _fit_frequency,
     _fit_frequency_unclipped,
     _fit_with_period,
+    _FitResult,
+    _FitWithPeriod,
+    _FourierProfile,
     _ordered_unique,
     _phase_prior_rows,
     _select_order,
+    _SessionSummary,
     _sigma_threshold_for_confidence,
     _summarize_sessions,
     _validate_inputs,
@@ -150,7 +150,9 @@ class _LSMSolution:
 def _resolve_search_fidelity(search_fidelity: str | None) -> str:
     resolved = "validated_staged" if search_fidelity is None else str(search_fidelity)
     if resolved not in {"validated_staged", "exact_grid"}:
-        raise ValueError("search_fidelity must be one of {'validated_staged', 'exact_grid'}")
+        raise ValueError(
+            "search_fidelity must be one of {'validated_staged', 'exact_grid'}"
+        )
     return resolved
 
 
@@ -168,7 +170,10 @@ def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
     if not intervals:
         return []
     normalized = sorted(
-        [(min(int(start), int(end)), max(int(start), int(end))) for start, end in intervals],
+        [
+            (min(int(start), int(end)), max(int(start), int(end)))
+            for start, end in intervals
+        ],
         key=lambda item: item[0],
     )
     merged: list[tuple[int, int]] = [normalized[0]]
@@ -212,7 +217,11 @@ def _local_minima_positions(scores: npt.NDArray[np.float64]) -> list[int]:
         return []
     minima: list[int] = []
     for pos in valid_positions.tolist():
-        left = float(scores[pos - 1]) if pos > 0 and np.isfinite(scores[pos - 1]) else np.inf
+        left = (
+            float(scores[pos - 1])
+            if pos > 0 and np.isfinite(scores[pos - 1])
+            else np.inf
+        )
         center = float(scores[pos])
         right = (
             float(scores[pos + 1])
@@ -236,7 +245,11 @@ def _candidate_intervals_from_scores(
     positions = sorted(positions, key=lambda pos: float(scores[pos]))
     intervals: list[tuple[int, int]] = []
     chosen_centers: list[int] = []
-    stride = 1 if sample_indices.size <= 1 else int(max(1, round(float(np.median(np.diff(sample_indices))))))
+    stride = (
+        1
+        if sample_indices.size <= 1
+        else int(max(1, round(float(np.median(np.diff(sample_indices))))))
+    )
     for pos in positions:
         center = int(sample_indices[pos])
         if any(abs(center - existing) < stride for existing in chosen_centers):
@@ -264,7 +277,9 @@ def _evaluate_frequency_indices_with_jax(
     try:
         from .rotation_period_jax import evaluate_frequency_indices_jax
     except Exception as exc:  # pragma: no cover - depends on optional local JAX install
-        raise RuntimeError("exact_evaluation_backend='jax' requires JAX to be installed") from exc
+        raise RuntimeError(
+            "exact_evaluation_backend='jax' requires JAX to be installed"
+        ) from exc
 
     n_par = int(design_info.fixed.shape[1] + 2 * int(order))
     min_phase = float(np.min(design_info.fixed[:, design_info.phase_c1_idx]))
@@ -415,7 +430,9 @@ def _search_best_fit(
     coarse_stride = max(1, int(ceil(n_total / 1024.0)))
     coarse_indices = np.arange(0, n_total, coarse_stride, dtype=np.int64)
     if coarse_indices[-1] != n_total - 1:
-        coarse_indices = np.concatenate([coarse_indices, np.asarray([n_total - 1], dtype=np.int64)])
+        coarse_indices = np.concatenate(
+            [coarse_indices, np.asarray([n_total - 1], dtype=np.int64)]
+        )
     coarse_scores, _, _ = _evaluate_frequency_indices(
         t_rel=t_rel,
         y=y,
@@ -530,13 +547,19 @@ def _build_frequency_grid(
     if not np.isfinite(f_min) or f_min <= 0.0:
         raise ValueError("derived minimum frequency is invalid")
     if f_max <= f_min:
-        raise ValueError("max_frequency_cycles_per_day must exceed the minimum searchable frequency")
-    n_freq = max(int(ceil(float(frequency_grid_scale) * span_days * (f_max - f_min)) + 1), 2)
+        raise ValueError(
+            "max_frequency_cycles_per_day must exceed the minimum searchable frequency"
+        )
+    n_freq = max(
+        int(ceil(float(frequency_grid_scale) * span_days * (f_max - f_min)) + 1), 2
+    )
     n_freq = min(n_freq, _FOURIER_MAX_FREQUENCY_SAMPLES)
     return np.linspace(f_min, f_max, n_freq, dtype=np.float64)
 
 
-def _weights_from_sigma(mag_sigma: npt.NDArray[np.float64] | None) -> npt.NDArray[np.float64] | None:
+def _weights_from_sigma(
+    mag_sigma: npt.NDArray[np.float64] | None,
+) -> npt.NDArray[np.float64] | None:
     if mag_sigma is None:
         return None
     sigma = np.asarray(mag_sigma, dtype=np.float64)
@@ -566,16 +589,22 @@ def _cluster_fourier_solutions(
             period_lower_days = float(fit_with_period.period_days)
             period_upper_days = float(fit_with_period.period_days)
         else:
-            left_frequency = float(frequencies[int(idx - 1)]) if idx > 0 else center_frequency
+            left_frequency = (
+                float(frequencies[int(idx - 1)]) if idx > 0 else center_frequency
+            )
             right_frequency = (
-                float(frequencies[int(idx + 1)]) if int(idx) + 1 < len(frequencies) else center_frequency
+                float(frequencies[int(idx + 1)])
+                if int(idx) + 1 < len(frequencies)
+                else center_frequency
             )
             frequency_half_step = 0.5 * max(
                 abs(center_frequency - left_frequency),
                 abs(right_frequency - center_frequency),
             )
             factor = 2.0 if fit_with_period.is_period_doubled else 1.0
-            low_edge_frequency = max(center_frequency - frequency_half_step, np.finfo(np.float64).eps)
+            low_edge_frequency = max(
+                center_frequency - frequency_half_step, np.finfo(np.float64).eps
+            )
             high_edge_frequency = center_frequency + frequency_half_step
             edge_periods = np.asarray(
                 [factor / high_edge_frequency, factor / low_edge_frequency],
@@ -583,12 +612,16 @@ def _cluster_fourier_solutions(
             )
             period_lower_days = float(np.min(edge_periods))
             period_upper_days = float(np.max(edge_periods))
-        fit_items.append((int(idx), fit_with_period, period_lower_days, period_upper_days))
+        fit_items.append(
+            (int(idx), fit_with_period, period_lower_days, period_upper_days)
+        )
     if not fit_items:
         return []
     fit_items.sort(key=lambda item: (item[2], item[3], item[0]))
     clusters: list[_FourierCluster] = []
-    merged_items: list[list[tuple[int, _FitWithPeriod, float, float]]] = [[fit_items[0]]]
+    merged_items: list[list[tuple[int, _FitWithPeriod, float, float]]] = [
+        [fit_items[0]]
+    ]
     for item in fit_items[1:]:
         current_lower = float(item[2])
         previous_group = merged_items[-1]
@@ -615,13 +648,19 @@ def _cluster_fourier_solutions(
     return sorted(clusters, key=lambda cluster: float(cluster.sigma_best))
 
 
-def _relative_period_uncertainty(period_days: float, lower_days: float, upper_days: float) -> float:
+def _relative_period_uncertainty(
+    period_days: float, lower_days: float, upper_days: float
+) -> float:
     if not np.isfinite(period_days) or period_days <= 0.0:
         return float("inf")
-    return float(max(abs(period_days - lower_days), abs(upper_days - period_days)) / period_days)
+    return float(
+        max(abs(period_days - lower_days), abs(upper_days - period_days)) / period_days
+    )
 
 
-def _max_cluster_period_deviation(period_days: float, clusters: list[_FourierCluster]) -> float:
+def _max_cluster_period_deviation(
+    period_days: float, clusters: list[_FourierCluster]
+) -> float:
     if not np.isfinite(period_days) or period_days <= 0.0 or not clusters:
         return float("inf")
     return float(
@@ -695,8 +734,12 @@ def _derive_fourier_solution(
     if best_fit is None:
         raise ValueError("best Fourier fit is unavailable")
     best_with_period = _fit_with_period(best_fit)
-    sigma_threshold = float(_sigma_threshold_for_confidence(best_fit, profile.sigma_threshold_confidence))
-    accepted_indices = np.flatnonzero(np.isfinite(sigma_curve) & (sigma_curve <= sigma_threshold))
+    sigma_threshold = float(
+        _sigma_threshold_for_confidence(best_fit, profile.sigma_threshold_confidence)
+    )
+    accepted_indices = np.flatnonzero(
+        np.isfinite(sigma_curve) & (sigma_curve <= sigma_threshold)
+    )
     if accepted_indices.size == 0:
         accepted_indices = np.asarray([best_idx], dtype=np.int64)
     for idx in accepted_indices.tolist():
@@ -746,14 +789,23 @@ def _derive_fourier_solution(
 
     is_valid = True
     if profile.valid_relative_uncertainty_max is not None:
-        is_valid = bool(relative_uncertainty <= float(profile.valid_relative_uncertainty_max))
+        is_valid = bool(
+            relative_uncertainty <= float(profile.valid_relative_uncertainty_max)
+        )
 
     is_reliable = is_valid
-    if profile.reliable_relative_multiplier is not None and profile.reliable_absolute_hours is not None:
-        uncertainty_days = _max_cluster_period_deviation(best_with_period.period_days, clusters)
+    if (
+        profile.reliable_relative_multiplier is not None
+        and profile.reliable_absolute_hours is not None
+    ):
+        uncertainty_days = _max_cluster_period_deviation(
+            best_with_period.period_days, clusters
+        )
         is_reliable = bool(
-            uncertainty_days <= max(
-                float(profile.reliable_relative_multiplier) * best_with_period.period_days,
+            uncertainty_days
+            <= max(
+                float(profile.reliable_relative_multiplier)
+                * best_with_period.period_days,
                 float(profile.reliable_absolute_hours) / 24.0,
             )
         )
@@ -776,7 +828,9 @@ def _derive_fourier_solution(
     )
 
 
-def _band_intercept_design(filter_labels: npt.NDArray[np.object_]) -> tuple[npt.NDArray[np.float64], list[str]]:
+def _band_intercept_design(
+    filter_labels: npt.NDArray[np.object_],
+) -> tuple[npt.NDArray[np.float64], list[str]]:
     unique_filters = _ordered_unique(filter_labels)
     n = len(filter_labels)
     cols: list[npt.NDArray[np.float64]] = [np.ones(n, dtype=np.float64)]
@@ -806,7 +860,9 @@ def _weighted_fit_with_clipping(
         else:
             w_use = np.asarray(weights[idx], dtype=np.float64)
             sqrt_w = np.sqrt(w_use)
-            coeffs, *_ = np.linalg.lstsq(design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None)
+            coeffs, *_ = np.linalg.lstsq(
+                design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None
+            )
             residuals = target_use - design_use @ coeffs
         sigma = float(np.std(residuals, ddof=max(1, design_use.shape[1])))
         if not np.isfinite(sigma) or sigma <= 0.0:
@@ -827,7 +883,9 @@ def _weighted_fit_with_clipping(
     else:
         w_use = np.asarray(weights[idx], dtype=np.float64)
         sqrt_w = np.sqrt(w_use)
-        coeffs, *_ = np.linalg.lstsq(design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None)
+        coeffs, *_ = np.linalg.lstsq(
+            design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None
+        )
     return np.asarray(coeffs, dtype=np.float64), mask
 
 
@@ -849,11 +907,17 @@ def _prepare_lsm_inputs(
     n_obs = int(mag.shape[0])
     active_mask = np.ones(n_obs, dtype=bool)
     if predicted_mag_v is not None and np.all(np.isfinite(predicted_mag_v)):
-        corrected = np.asarray(mag, dtype=np.float64) - np.asarray(predicted_mag_v, dtype=np.float64)
+        corrected = np.asarray(mag, dtype=np.float64) - np.asarray(
+            predicted_mag_v, dtype=np.float64
+        )
     else:
         fixed_design, _ = _band_intercept_design(filter_labels)
         phase_cols = np.column_stack(
-            [fixed_design, np.asarray(phase_angle, dtype=np.float64), np.square(phase_angle)]
+            [
+                fixed_design,
+                np.asarray(phase_angle, dtype=np.float64),
+                np.square(phase_angle),
+            ]
         )
         coeffs, mask = _weighted_fit_with_clipping(
             design=phase_cols,
@@ -867,7 +931,9 @@ def _prepare_lsm_inputs(
             active_mask &= np.asarray(mask, dtype=bool)
             corrected = corrected[mask]
             filter_labels = filter_labels[mask]
-            weights = None if weights is None else np.asarray(weights[mask], dtype=np.float64)
+            weights = (
+                None if weights is None else np.asarray(weights[mask], dtype=np.float64)
+            )
 
     corrected = np.asarray(corrected, dtype=np.float64) - float(np.median(corrected))
     mean = float(np.mean(corrected))
@@ -952,9 +1018,13 @@ def _fit_lsm_frequency(
     else:
         w = np.asarray(weights, dtype=np.float64)
         sqrt_w = np.sqrt(w)
-        flat_coeffs, *_ = np.linalg.lstsq(flat_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None)
+        flat_coeffs, *_ = np.linalg.lstsq(
+            flat_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None
+        )
         flat_resid = corrected - flat_design @ flat_coeffs
-        coeffs, *_ = np.linalg.lstsq(full_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None)
+        coeffs, *_ = np.linalg.lstsq(
+            full_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None
+        )
         resid = corrected - full_design @ coeffs
     chi2_0 = _weighted_chi2(flat_resid, weights)
     chi2 = _weighted_chi2(resid, weights)
@@ -965,7 +1035,9 @@ def _fit_lsm_frequency(
     return float(power), np.asarray(coeffs, dtype=np.float64)
 
 
-def _periodic_extrema_counts_from_coeffs(coeffs: npt.NDArray[np.float64], order: int = 2) -> tuple[int, int]:
+def _periodic_extrema_counts_from_coeffs(
+    coeffs: npt.NDArray[np.float64], order: int = 2
+) -> tuple[int, int]:
     phase = np.linspace(0.0, 1.0, 2048, endpoint=False)
     periodic = np.zeros_like(phase)
     start = coeffs.size - 2 * int(order)
@@ -980,7 +1052,9 @@ def _periodic_extrema_counts_from_coeffs(coeffs: npt.NDArray[np.float64], order:
     return int(np.count_nonzero(maxima)), int(np.count_nonzero(minima))
 
 
-def _amplitude_from_lsm_coeffs(coeffs: npt.NDArray[np.float64], order: int = 2) -> float:
+def _amplitude_from_lsm_coeffs(
+    coeffs: npt.NDArray[np.float64], order: int = 2
+) -> float:
     phase = np.linspace(0.0, 1.0, 4096, endpoint=False)
     periodic = np.zeros_like(phase)
     start = coeffs.size - 2 * int(order)
@@ -1038,7 +1112,11 @@ def _lsm_false_alarm_probability(
         # strongest periodicity in this data significant?". A doubly-peaked
         # rotation puts most single-term power at 2x the LSM frequency, so take
         # the more significant of (LSM peak, global periodogram peak).
-        model = LombScargle(times, values, dy=dy) if dy is not None else LombScargle(times, values)
+        model = (
+            LombScargle(times, values, dy=dy)
+            if dy is not None
+            else LombScargle(times, values)
+        )
         power_at_best = float(model.power(float(best_frequency)))
         _, power_grid = model.autopower(
             minimum_frequency=float(best_frequency) / 4.0,
@@ -1088,13 +1166,19 @@ def _estimate_lsm_solution(
 
     time_lsm = np.asarray(t_rel[keep_mask], dtype=np.float64)
     if time_lsm.size != corrected.size:
-        raise ValueError("internal error: LSM masking produced misaligned time and magnitude arrays")
+        raise ValueError(
+            "internal error: LSM masking produced misaligned time and magnitude arrays"
+        )
     span_days = float(np.max(time_lsm) - np.min(time_lsm))
     span_days = max(span_days, 1.0e-6)
-    frequencies = _lsm_frequency_grid(span_days=span_days, max_samples=lsm_max_frequency_samples)
+    frequencies = _lsm_frequency_grid(
+        span_days=span_days, max_samples=lsm_max_frequency_samples
+    )
 
     powers = np.full(frequencies.shape, np.nan, dtype=np.float64)
-    coeffs_by_index: list[npt.NDArray[np.float64] | None] = [None] * int(frequencies.size)
+    coeffs_by_index: list[npt.NDArray[np.float64] | None] = [None] * int(
+        frequencies.size
+    )
     for idx, frequency in enumerate(frequencies.tolist()):
         power, coeffs = _fit_lsm_frequency(
             t_rel=time_lsm,
@@ -1144,11 +1228,21 @@ def _estimate_lsm_solution(
         if best_power - float(candidate.power) <= _LSM_POWER_TIE_TOLERANCE
     ]
     best = max(tied_survivors, key=lambda candidate: float(candidate.period_days))
-    ordered_survivors = [best] + [candidate for candidate in survivors if candidate is not best]
-    second_power = float(ordered_survivors[1].power) if len(ordered_survivors) >= 2 else 0.0
-    power_gap = float(best.power - second_power) if len(ordered_survivors) >= 2 else float(best.power)
+    ordered_survivors = [best] + [
+        candidate for candidate in survivors if candidate is not best
+    ]
+    second_power = (
+        float(ordered_survivors[1].power) if len(ordered_survivors) >= 2 else 0.0
+    )
+    power_gap = (
+        float(best.power - second_power)
+        if len(ordered_survivors) >= 2
+        else float(best.power)
+    )
     amplitude_mag = float(_amplitude_from_lsm_coeffs(best.coeffs, order=2))
-    best_frequency = 1.0 / float(best.period_days) if best.period_days > 0.0 else float("nan")
+    best_frequency = (
+        1.0 / float(best.period_days) if best.period_days > 0.0 else float("nan")
+    )
     false_alarm_probability = _lsm_false_alarm_probability(
         time_lsm=time_lsm,
         corrected=corrected,
@@ -1167,8 +1261,12 @@ def _estimate_lsm_solution(
         period_days=float(best.period_days),
         power=float(best.power),
         power_gap=float(power_gap),
-        candidate_period_days=[float(candidate.period_days) for candidate in ordered_survivors[:12]],
-        candidate_powers=[float(candidate.power) for candidate in ordered_survivors[:12]],
+        candidate_period_days=[
+            float(candidate.period_days) for candidate in ordered_survivors[:12]
+        ],
+        candidate_powers=[
+            float(candidate.power) for candidate in ordered_survivors[:12]
+        ],
         is_reliable=is_reliable,
         amplitude_mag=amplitude_mag,
         n_fit_observations=int(corrected.size),
@@ -1225,7 +1323,9 @@ def _phase_coverage_fraction(
     return float(occupied) / float(n_bins)
 
 
-def _amplitude_snr(amplitude_mag: float | None, residual_sigma_mag: float | None) -> float | None:
+def _amplitude_snr(
+    amplitude_mag: float | None, residual_sigma_mag: float | None
+) -> float | None:
     """``amplitude_mag / residual_sigma_mag`` with division/None guards."""
     if amplitude_mag is None or residual_sigma_mag is None:
         return None
@@ -1298,7 +1398,10 @@ def _classify_confidence(
     # signal-gate insufficiency.
     signal_gate: tuple[tuple[bool, str], ...] = (
         (_below_min(amplitude_snr, AMPLITUDE_SNR_MIN), "amplitude_below_noise"),
-        (_below_min(phase_coverage_fraction, PHASE_COVERAGE_MIN_FAMILY), "phase_coverage_low"),
+        (
+            _below_min(phase_coverage_fraction, PHASE_COVERAGE_MIN_FAMILY),
+            "phase_coverage_low",
+        ),
         (_below_min(n_rotations_spanned, min_rotations), "spans_too_few_rotations"),
         (not observation_count_sufficient, "too_few_observations"),
         (uses_fap and fap_insignificant, "no_significant_peak"),
@@ -1308,10 +1411,17 @@ def _classify_confidence(
             reasons.append(reason)
 
     if reasons:
-        return _VERDICT_INSUFFICIENT, _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT], flags, reasons
+        return (
+            _VERDICT_INSUFFICIENT,
+            _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT],
+            flags,
+            reasons,
+        )
 
     # Signal present -> record positive flags (each row is (present?, flag)).
-    good_coverage_for_single = _at_least(phase_coverage_fraction, PHASE_COVERAGE_MIN_SINGLE)
+    good_coverage_for_single = _at_least(
+        phase_coverage_fraction, PHASE_COVERAGE_MIN_SINGLE
+    )
     positive_flags: tuple[tuple[bool, str], ...] = (
         (
             uses_fap
@@ -1331,13 +1441,19 @@ def _classify_confidence(
     n_aliases = 0 if n_significant_aliases is None else int(n_significant_aliases)
     alias_ambiguous = n_aliases >= 2
     single_max_ambiguous = bool(is_period_doubled)
-    eligible_single = (not alias_ambiguous) and (not single_max_ambiguous) and good_coverage_for_single
+    eligible_single = (
+        (not alias_ambiguous)
+        and (not single_max_ambiguous)
+        and good_coverage_for_single
+    )
 
     alias_gate: tuple[tuple[bool, str], ...] = (
         (alias_ambiguous, "conflicting_aliases"),
         (single_max_ambiguous, "single_max_alias"),
         (
-            not good_coverage_for_single and not alias_ambiguous and not single_max_ambiguous,
+            not good_coverage_for_single
+            and not alias_ambiguous
+            and not single_max_ambiguous,
             "phase_coverage_low",
         ),
     )
@@ -1380,7 +1496,9 @@ def _verdict_diagnostics(
     """Compute the D1 numeric verdict diagnostics for the chosen period."""
     if np.isfinite(period_days) and period_days > 0.0:
         n_rotations_spanned: float | None = float(span_days) / float(period_days)
-        phase_coverage_fraction = _phase_coverage_fraction(times=t_rel, period_days=float(period_days))
+        phase_coverage_fraction = _phase_coverage_fraction(
+            times=t_rel, period_days=float(period_days)
+        )
     else:
         n_rotations_spanned = None
         phase_coverage_fraction = None
@@ -1450,27 +1568,36 @@ def _primary_from_method(
             t_rel=t_rel,
             span_days=span_days,
         )
-        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = _classify_confidence(
-            primary_method="fourier",
-            amplitude_snr=diagnostics["amplitude_snr"],
-            phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
-            n_rotations_spanned=diagnostics["n_rotations_spanned"],
-            min_rotations_in_span=min_rotations_in_span,
-            lsm_false_alarm_probability=None,
-            n_significant_aliases=n_fourier_aliases,
-            is_period_doubled=bool(fourier_solution.chosen.is_period_doubled),
-            observation_count_sufficient=observation_count_sufficient,
-            is_reliable=bool(fourier_solution.is_reliable),
-            is_valid=bool(fourier_solution.is_valid),
+        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = (
+            _classify_confidence(
+                primary_method="fourier",
+                amplitude_snr=diagnostics["amplitude_snr"],
+                phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
+                n_rotations_spanned=diagnostics["n_rotations_spanned"],
+                min_rotations_in_span=min_rotations_in_span,
+                lsm_false_alarm_probability=None,
+                n_significant_aliases=n_fourier_aliases,
+                is_period_doubled=bool(fourier_solution.chosen.is_period_doubled),
+                observation_count_sufficient=observation_count_sufficient,
+                is_reliable=bool(fourier_solution.is_reliable),
+                is_valid=bool(fourier_solution.is_valid),
+            )
         )
         return _primary_result(
             primary_method="fourier",
             period_days=float(fourier_solution.chosen.period_days),
             period_lower_days=float(fourier_solution.period_lower_days),
             period_upper_days=float(fourier_solution.period_upper_days),
-            relative_period_uncertainty=float(fourier_solution.relative_period_uncertainty),
+            relative_period_uncertainty=float(
+                fourier_solution.relative_period_uncertainty
+            ),
             alternate_period_days=list(fourier_solution.alternate_period_days),
-            verdict=(period_verdict, reliability_code, confidence_flags, insufficiency_reasons),
+            verdict=(
+                period_verdict,
+                reliability_code,
+                confidence_flags,
+                insufficiency_reasons,
+            ),
             selected_method_amplitude_mag=amplitude_mag,
             diagnostics=diagnostics,
         )
@@ -1509,18 +1636,20 @@ def _primary_from_method(
             t_rel=t_rel,
             span_days=span_days,
         )
-        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = _classify_confidence(
-            primary_method="lsm",
-            amplitude_snr=diagnostics["amplitude_snr"],
-            phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
-            n_rotations_spanned=diagnostics["n_rotations_spanned"],
-            min_rotations_in_span=min_rotations_in_span,
-            lsm_false_alarm_probability=lsm_solution.false_alarm_probability,
-            n_significant_aliases=n_lsm_aliases,
-            is_period_doubled=False,
-            observation_count_sufficient=observation_count_sufficient,
-            is_reliable=bool(lsm_solution.is_reliable),
-            is_valid=True,
+        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = (
+            _classify_confidence(
+                primary_method="lsm",
+                amplitude_snr=diagnostics["amplitude_snr"],
+                phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
+                n_rotations_spanned=diagnostics["n_rotations_spanned"],
+                min_rotations_in_span=min_rotations_in_span,
+                lsm_false_alarm_probability=lsm_solution.false_alarm_probability,
+                n_significant_aliases=n_lsm_aliases,
+                is_period_doubled=False,
+                observation_count_sufficient=observation_count_sufficient,
+                is_reliable=bool(lsm_solution.is_reliable),
+                is_valid=True,
+            )
         )
         alternate_periods = list(lsm_solution.candidate_period_days[1:])
         return _primary_result(
@@ -1530,7 +1659,12 @@ def _primary_from_method(
             period_upper_days=None,
             relative_period_uncertainty=None,
             alternate_period_days=alternate_periods,
-            verdict=(period_verdict, reliability_code, confidence_flags, insufficiency_reasons),
+            verdict=(
+                period_verdict,
+                reliability_code,
+                confidence_flags,
+                insufficiency_reasons,
+            ),
             selected_method_amplitude_mag=amplitude_mag,
             diagnostics=diagnostics,
         )
@@ -1571,7 +1705,11 @@ def _pre_solve_insufficiency(
         if not np.isfinite(span_days) or span_days <= 0.0
         else float(min_rotations_in_span) / float(span_days)
     )
-    if not np.isfinite(span_days) or span_days <= 0.0 or f_min >= float(max_frequency_cycles_per_day):
+    if (
+        not np.isfinite(span_days)
+        or span_days <= 0.0
+        or f_min >= float(max_frequency_cycles_per_day)
+    ):
         reasons.append("insufficient_time_span")
 
     # --- amplitude_below_noise: robust scatter (1.4826*MAD) of the reduced
@@ -1584,7 +1722,9 @@ def _pre_solve_insufficiency(
             finite_sigma = np.asarray(mag_sigma, dtype=np.float64)
             finite_sigma = finite_sigma[np.isfinite(finite_sigma)]
             noise_level = (
-                float(np.median(finite_sigma)) if finite_sigma.size > 0 else PRE_SOLVE_ABS_SCATTER_FLOOR
+                float(np.median(finite_sigma))
+                if finite_sigma.size > 0
+                else PRE_SOLVE_ABS_SCATTER_FLOOR
             )
         else:
             noise_level = PRE_SOLVE_ABS_SCATTER_FLOOR
@@ -1674,7 +1814,9 @@ def _assemble_result(
     period_days = float(primary["period_days"])
     period_hours = float(period_days * 24.0)
     frequency_cycles_per_day = (
-        float("nan") if not np.isfinite(period_days) or period_days <= 0.0 else float(1.0 / period_days)
+        float("nan")
+        if not np.isfinite(period_days) or period_days <= 0.0
+        else float(1.0 / period_days)
     )
 
     selected_period_lower_days = _none_or_float(primary["period_lower_days"])
@@ -1714,8 +1856,20 @@ def _assemble_result(
         fourier_period_days=[float(fourier_solution.chosen.period_days)],
         fourier_order=[int(fourier_solution.fit_summary.fourier_order)],
         fourier_sigma_threshold=[float(fourier_solution.sigma_threshold)],
-        fourier_phase_c1=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c1_idx])],
-        fourier_phase_c2=[float(fourier_solution.fit_summary.coeffs[fourier_solution.fit_summary.phase_c2_idx])],
+        fourier_phase_c1=[
+            float(
+                fourier_solution.fit_summary.coeffs[
+                    fourier_solution.fit_summary.phase_c1_idx
+                ]
+            )
+        ],
+        fourier_phase_c2=[
+            float(
+                fourier_solution.fit_summary.coeffs[
+                    fourier_solution.fit_summary.phase_c2_idx
+                ]
+            )
+        ],
         residual_sigma_mag=[float(fourier_solution.fit_summary.residual_sigma)],
         fourier_is_valid=[bool(fourier_solution.is_valid)],
         fourier_is_reliable=[bool(fourier_solution.is_reliable)],
@@ -1727,19 +1881,27 @@ def _assemble_result(
         lsm_candidate_powers=[list(lsm_solution.candidate_powers)],
         lsm_is_reliable=[bool(lsm_solution.is_reliable)],
         lsm_false_alarm_probability=[
-            None
-            if lsm_solution.false_alarm_probability is None
-            else float(lsm_solution.false_alarm_probability)
+            (
+                None
+                if lsm_solution.false_alarm_probability is None
+                else float(lsm_solution.false_alarm_probability)
+            )
         ],
         phase_coverage_fraction=[
-            None
-            if primary["phase_coverage_fraction"] is None
-            else float(primary["phase_coverage_fraction"])
+            (
+                None
+                if primary["phase_coverage_fraction"] is None
+                else float(primary["phase_coverage_fraction"])
+            )
         ],
         n_rotations_spanned=[_none_or_float(primary["n_rotations_spanned"])],
         amplitude_snr=[_none_or_float(primary["amplitude_snr"])],
         n_significant_aliases=[
-            None if primary["n_significant_aliases"] is None else int(primary["n_significant_aliases"])
+            (
+                None
+                if primary["n_significant_aliases"] is None
+                else int(primary["n_significant_aliases"])
+            )
         ],
         n_observations=[int(len(observations))],
         n_fit_observations=[n_fit_observations],
@@ -1955,7 +2117,8 @@ def estimate_rotation_period(
             # (rp-e4a.22).
             session_eligible = bool(
                 session_summary.n_sessions >= 2
-                and session_summary.min_group_count >= auto_session_min_observations_per_group
+                and session_summary.min_group_count
+                >= auto_session_min_observations_per_group
                 and session_summary.median_session_span_days > 0.0
             )
             if session_eligible and (
@@ -2058,7 +2221,9 @@ def estimate_rotation_period(
         ):
             primary["period_verdict"] = _VERDICT_FAMILY
             primary["reliability_code"] = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
-            downgrade_reasons = list(cast("list[str]", primary["insufficiency_reasons"]))
+            downgrade_reasons = list(
+                cast("list[str]", primary["insufficiency_reasons"])
+            )
             if "subharmonic_unresolved" not in downgrade_reasons:
                 downgrade_reasons.append("subharmonic_unresolved")
             primary["insufficiency_reasons"] = downgrade_reasons

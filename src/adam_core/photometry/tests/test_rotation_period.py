@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-
 import numpy as np
 import pyarrow as pa
 import pytest
 
 import adam_core.photometry.rotation_period_fourier as rotation_period_fourier
+
 from ...time import Timestamp
 from ..rotation_period_fourier import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
@@ -14,8 +14,8 @@ from ..rotation_period_fourier import (
     estimate_rotation_period,
 )
 from ..rotation_period_fourier_core import (
-    _FitResult,
     _f_test_confidence,
+    _FitResult,
     _select_order,
 )
 from ..rotation_period_types import RotationPeriodObservations, RotationPeriodResult
@@ -56,13 +56,24 @@ def _make_rotation_observations(
     delta_au = np.full(n, 1.5, dtype=np.float64)
     phase_angle = 12.0 + 4.0 * np.sin(2.0 * np.pi * t_rel / max(span_days, 1.0e-6))
 
-    baseline = 15.0 + 5.0 * np.log10(r_au * delta_au) + 0.015 * phase_angle + 0.0015 * np.square(phase_angle)
+    baseline = (
+        15.0
+        + 5.0 * np.log10(r_au * delta_au)
+        + 0.015 * phase_angle
+        + 0.0015 * np.square(phase_angle)
+    )
     phase = 2.0 * np.pi * t_rel / period_days
     if single_peaked:
         rotation = amplitude * np.cos(phase)
     else:
-        rotation = 0.10 * np.cos(phase) + amplitude * np.cos(2.0 * phase) + 0.07 * np.sin(2.0 * phase)
-    rotation = rotation + np.asarray([0.03 if name == "LSST_g" else 0.0 for name in filters], dtype=np.float64)
+        rotation = (
+            0.10 * np.cos(phase)
+            + amplitude * np.cos(2.0 * phase)
+            + 0.07 * np.sin(2.0 * phase)
+        )
+    rotation = rotation + np.asarray(
+        [0.03 if name == "LSST_g" else 0.0 for name in filters], dtype=np.float64
+    )
     rng = np.random.default_rng(20260414)
     mag = baseline + rotation + rng.normal(0.0, noise_sigma, size=n)
     predicted = baseline if include_predicted else None
@@ -71,7 +82,9 @@ def _make_rotation_observations(
         time=time,
         mag=pa.array(mag, type=pa.float64()),
         mag_sigma=pa.array(np.full(n, 0.03, dtype=np.float64), type=pa.float64()),
-        predicted_mag_v=None if predicted is None else pa.array(predicted, type=pa.float64()),
+        predicted_mag_v=(
+            None if predicted is None else pa.array(predicted, type=pa.float64())
+        ),
         filter=pa.array(filters.tolist(), type=pa.large_string()),
         session_id=pa.array(sessions.tolist(), type=pa.large_string()),
         r_au=pa.array(r_au, type=pa.float64()),
@@ -131,7 +144,8 @@ def test_fourier_single_peak_is_doubled():
     assert isinstance(result, RotationPeriodResult)
     assert float(_scalar(result.period_days[0])) == pytest.approx(0.04, rel=0.10)
     assert all(
-        float(period) > 0.03 for period in result.fourier_alternate_period_days[0].as_py()
+        float(period) > 0.03
+        for period in result.fourier_alternate_period_days[0].as_py()
     )
 
 
@@ -143,7 +157,8 @@ def test_lsm_single_peak_candidates_are_rejected():
     assert _scalar(result.primary_method[0]) == "lsm"
     assert float(_scalar(result.period_days[0])) == pytest.approx(0.04, rel=0.10)
     assert all(
-        abs(float(period) - 0.02) > 0.002 for period in result.lsm_candidate_period_days[0].as_py()
+        abs(float(period) - 0.02) > 0.002
+        for period in result.lsm_candidate_period_days[0].as_py()
     )
     assert bool(_scalar(result.lsm_is_reliable[0])) is False
 
@@ -257,10 +272,16 @@ def test_staged_and_exact_fourier_match():
         frequency_grid_scale=40.0,
     )
 
-    assert float(_scalar(staged.period_days[0])) == pytest.approx(float(_scalar(exact.period_days[0])), rel=0.02)
+    assert float(_scalar(staged.period_days[0])) == pytest.approx(
+        float(_scalar(exact.period_days[0])), rel=0.02
+    )
     assert int(_scalar(staged.fourier_order[0])) == int(_scalar(exact.fourier_order[0]))
-    assert float(_scalar(staged.period_lower_days[0])) == pytest.approx(float(_scalar(exact.period_lower_days[0])), rel=0.05)
-    assert float(_scalar(staged.period_upper_days[0])) == pytest.approx(float(_scalar(exact.period_upper_days[0])), rel=0.05)
+    assert float(_scalar(staged.period_lower_days[0])) == pytest.approx(
+        float(_scalar(exact.period_lower_days[0])), rel=0.05
+    )
+    assert float(_scalar(staged.period_upper_days[0])) == pytest.approx(
+        float(_scalar(exact.period_upper_days[0])), rel=0.05
+    )
 
 
 def test_numpy_and_jax_exact_paths_match():
@@ -282,8 +303,12 @@ def test_numpy_and_jax_exact_paths_match():
         frequency_grid_scale=40.0,
     )
 
-    assert float(_scalar(numpy_result.period_days[0])) == pytest.approx(float(_scalar(jax_result.period_days[0])), rel=1.0e-8)
-    assert int(_scalar(numpy_result.fourier_order[0])) == int(_scalar(jax_result.fourier_order[0]))
+    assert float(_scalar(numpy_result.period_days[0])) == pytest.approx(
+        float(_scalar(jax_result.period_days[0])), rel=1.0e-8
+    )
+    assert int(_scalar(numpy_result.fourier_order[0])) == int(
+        _scalar(jax_result.fourier_order[0])
+    )
 
 
 def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
@@ -339,7 +364,9 @@ def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
     assert bool(_scalar(result.is_reliable[0])) is False
     assert "period_implausibly_long" in list(result.insufficiency_reasons[0].as_py())
     # The recovered period value itself is still reported, only downgraded.
-    assert float(_scalar(result.period_hours[0])) == pytest.approx(long_period_days * 24.0)
+    assert float(_scalar(result.period_hours[0])) == pytest.approx(
+        long_period_days * 24.0
+    )
 
 
 def test_subharmonic_alias_below_grid_is_capped_to_family():
