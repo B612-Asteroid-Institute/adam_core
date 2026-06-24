@@ -26,6 +26,7 @@ from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.observers import Observers
 from adam_core.orbits.arrow_bridge import (
     evaluate_residuals_2body,
+    fit_orbit_least_squares,
     orbits_to_ipc,
     propagate_orbits_2body,
     rotate_orbits_frame,
@@ -274,6 +275,83 @@ def test_evaluate_residuals_2body_matches_generate_ephemeris_2body():
 
     chi2_rust, _residuals_rust = evaluate_residuals_2body(orbits, observed, observers)
     np.testing.assert_allclose(chi2_rust, chi2_reference, rtol=1e-9, atol=1e-12)
+
+
+def test_fit_orbit_least_squares_recovers_truth():
+    # Generate noise-free astrometry from a truth orbit, then confirm the
+    # Rust-native Gauss-Newton fit recovers it from a perturbed start. (adam_core
+    # has no 2-body Propagator, so ground truth is the reference.)
+    n = 8
+    mjds = [60000.0 + i * 5.0 for i in range(n)]
+    obs_times = Timestamp.from_mjd(mjds, scale="tdb")
+    mu = 0.000_295_912_208_285_591_1
+    v = mu**0.5
+    thetas = np.array([v * (m - 60000.0) for m in mjds])
+    observer_coords = CartesianCoordinates.from_kwargs(
+        x=np.cos(thetas),
+        y=np.sin(thetas),
+        z=np.zeros(n),
+        vx=-v * np.sin(thetas),
+        vy=v * np.cos(thetas),
+        vz=np.zeros(n),
+        time=obs_times,
+        origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"] * n),
+        frame="ecliptic",
+    )
+    observers = Observers.from_kwargs(code=["X05"] * n, coordinates=observer_coords)
+    truth_state = np.array([1.2, 0.1, 0.05, -0.002, 0.016, 0.001])
+    truth = Orbits.from_kwargs(
+        orbit_id=["truth"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.2],
+            y=[0.1],
+            z=[0.05],
+            vx=[-0.002],
+            vy=[0.016],
+            vz=[0.001],
+            time=Timestamp.from_mjd([60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]),
+            frame="ecliptic",
+        ),
+    )
+    propagated = propagate_2body(truth, obs_times)
+    predicted = generate_ephemeris_2body(propagated, observers).coordinates
+    arcsec = (1.0 / 3600.0) ** 2
+    cov = np.tile(np.diag([1.0, arcsec, arcsec, 1.0, 1.0, 1.0]), (n, 1, 1))
+    observed = SphericalCoordinates.from_kwargs(
+        rho=predicted.rho.to_numpy(zero_copy_only=False),
+        lon=predicted.lon.to_numpy(zero_copy_only=False),
+        lat=predicted.lat.to_numpy(zero_copy_only=False),
+        vrho=predicted.vrho.to_numpy(zero_copy_only=False),
+        vlon=predicted.vlon.to_numpy(zero_copy_only=False),
+        vlat=predicted.vlat.to_numpy(zero_copy_only=False),
+        time=predicted.time,
+        origin=predicted.origin,
+        frame=predicted.frame,
+        covariance=CoordinateCovariances.from_matrix(cov),
+    )
+    initial = Orbits.from_kwargs(
+        orbit_id=["fit"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.2 + 1e-3],
+            y=[0.1 - 1e-3],
+            z=[0.05 + 5e-4],
+            vx=[-0.002 + 1e-5],
+            vy=[0.016 - 1e-5],
+            vz=[0.001 + 1e-5],
+            time=Timestamp.from_mjd([60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]),
+            frame="ecliptic",
+        ),
+    )
+    fitted, chi2, iterations, converged = fit_orbit_least_squares(
+        initial, observed, observers
+    )
+    assert converged
+    assert chi2 < 0.1
+    np.testing.assert_allclose(
+        fitted.coordinates.values[0], truth_state, rtol=0, atol=1e-4
+    )
 
 
 def test_round_trip_observers_reconstructs_observers():

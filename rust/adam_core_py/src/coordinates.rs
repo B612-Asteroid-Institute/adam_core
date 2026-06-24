@@ -2,12 +2,13 @@ use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, calculate_chi2_flat,
     cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
     cartesian_to_spherical_flat6, cartesian_to_spherical_row, classify_orbits_flat,
-    cometary_to_cartesian_flat6, create_sampled_orbit_variants, generate_ephemeris_2body_flat6,
-    keplerian_to_cartesian_flat6, origin_mu_au3_day2, rotate_cartesian_frame_flat6,
-    rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
-    tisserand_parameter_flat, transform_with_covariance_flat6, weighted_covariance_flat,
-    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame,
-    Epoch, Frame, IntoNestedRecordBatch, ObserverBatch as DataObserverBatch,
+    cometary_to_cartesian_flat6, create_sampled_orbit_variants, fit_orbit_2body_least_squares,
+    generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6, origin_mu_au3_day2,
+    rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6,
+    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
+    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
+    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
+    IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
     OrbitBatch as DataOrbitBatch, OrbitVariantSamplingMethod,
     Representation as CoordsRepresentation, TimeScale, TryFromNestedRecordBatch,
 };
@@ -1343,6 +1344,129 @@ fn evaluate_residuals_2body_ipc<'py>(
     Ok((chi2.into_pyarray(py), residuals.into_pyarray(py)))
 }
 
+/// W6 / OD slice 4: Rust-native Gauss-Newton least-squares orbit fit over the
+/// bridge. Differentially corrects a single orbit (at its epoch) against
+/// astrometric observations, reusing the slice-3 evaluate as the inner residual.
+/// Inputs are barycentric (SSB / ecliptic). Returns `(state (6,), covariance
+/// (6, 6), chi2, iterations, converged)`.
+#[pyfunction]
+#[pyo3(signature = (orbit_ipc, observed_ipc, observers_ipc, xtol=1e-12, ftol=1e-12, max_iterations=100, lt_tol=1e-10, eph_max_iter=1000, eph_tol=1e-15, stellar_aberration=false, max_lt_iter=10))]
+#[allow(clippy::too_many_arguments)]
+fn fit_orbit_2body_least_squares_ipc<'py>(
+    py: Python<'py>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    xtol: f64,
+    ftol: f64,
+    max_iterations: usize,
+    lt_tol: f64,
+    eph_max_iter: usize,
+    eph_tol: f64,
+    stellar_aberration: bool,
+    max_lt_iter: usize,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray2<f64>>,
+    f64,
+    usize,
+    bool,
+)> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbit_ipc.as_bytes())?)
+            .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+    if orbits.coordinates.len() != 1 {
+        return Err(PyValueError::new_err(
+            "least-squares fit requires exactly one orbit",
+        ));
+    }
+    let observed = DataCoordinateBatch::try_from_nested_record_batch(&read_orbit_ipc(
+        observed_ipc.as_bytes(),
+    )?)
+    .map_err(|err| {
+        PyValueError::new_err(format!("failed to decode observed coordinates: {err}"))
+    })?;
+    let observers =
+        DataObserverBatch::try_from_nested_record_batch(&read_orbit_ipc(observers_ipc.as_bytes())?)
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to decode ObserverBatch: {err}"))
+            })?;
+    let n = observed.len();
+    if observers.coordinates.len() != n {
+        return Err(PyValueError::new_err(
+            "observed coordinates and observers must have equal length",
+        ));
+    }
+    let orbit_values = orbits
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| PyValueError::new_err("orbit must be Cartesian"))?;
+    let mut initial_state = [0.0_f64; 6];
+    initial_state.copy_from_slice(&orbit_values[0]);
+    let epoch = orbits
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| PyValueError::new_err("orbit requires an epoch"))?
+        .epochs[0];
+    let mu = origin_mu_au3_day2(&orbits.coordinates.origins.origins[0])
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let observed_flat: Vec<f64> = observed
+        .values
+        .raw_values()
+        .iter()
+        .flatten()
+        .copied()
+        .collect();
+    let observed_cov = observed
+        .covariance
+        .as_ref()
+        .ok_or_else(|| PyValueError::new_err("observed coordinates require covariance to fit"))?;
+    let observer_values = observers
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| PyValueError::new_err("observer coordinates must be Cartesian"))?;
+    let observer_flat: Vec<f64> = observer_values.iter().flatten().copied().collect();
+    let obs_epochs = &observers
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| PyValueError::new_err("observers require epochs"))?
+        .epochs;
+    let config = LeastSquaresConfig {
+        xtol,
+        ftol,
+        max_iterations,
+        lt_tol,
+        ephemeris_max_iter: eph_max_iter,
+        ephemeris_tol: eph_tol,
+        stellar_aberration,
+        max_lt_iter,
+    };
+    let fit = fit_orbit_2body_least_squares(
+        initial_state,
+        epoch,
+        mu,
+        &observed_flat,
+        &observed_cov.values_row_major,
+        &observer_flat,
+        obs_epochs,
+        &config,
+    );
+    let state = ndarray::Array1::from_vec(fit.state.to_vec());
+    let covariance = ndarray::Array2::from_shape_vec((6, 6), fit.covariance.to_vec())
+        .map_err(|err| PyValueError::new_err(format!("failed to shape covariance: {err}")))?;
+    Ok((
+        state.into_pyarray(py),
+        covariance.into_pyarray(py),
+        fit.chi2,
+        fit.iterations,
+        fit.converged,
+    ))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
@@ -1374,5 +1498,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())
 }

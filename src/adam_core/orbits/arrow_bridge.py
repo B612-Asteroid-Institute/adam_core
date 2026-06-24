@@ -219,6 +219,88 @@ def evaluate_residuals_2body(
     )
 
 
+def fit_orbit_least_squares(
+    orbit: Orbits,
+    observed_coordinates,
+    observers: Observers,
+    xtol: float = 1e-12,
+    ftol: float = 1e-12,
+    max_iterations: int = 100,
+    lt_tol: float = 1e-10,
+    eph_max_iter: int = 1000,
+    eph_tol: float = 1e-15,
+    stellar_aberration: bool = False,
+    max_lt_iter: int = 10,
+):
+    """Rust-native Gauss-Newton least-squares orbit determination over the bridge.
+
+    Differentially corrects a single ``orbit`` (at its epoch) against astrometric
+    observations, reusing the slice-3 residual evaluation as the inner loop. Like
+    adam_core's ``generate_ephemeris_2body``, inputs are transformed to the
+    barycentric (SSB / ecliptic) frame first. Returns
+    ``(fitted_orbit, chi2, iterations, converged)`` where ``fitted_orbit`` is an
+    ``Orbits`` (SSB / ecliptic) carrying the ``inv(JᵀJ)`` parameter covariance.
+    """
+    from adam_core.coordinates import (
+        CartesianCoordinates,
+        CoordinateCovariances,
+        Origin,
+        transform_coordinates,
+    )
+    from adam_core.coordinates.origin import OriginCodes
+
+    orbit = orbit.set_column(
+        "coordinates",
+        transform_coordinates(
+            orbit.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    observers = observers.set_column(
+        "coordinates",
+        transform_coordinates(
+            observers.coordinates,
+            CartesianCoordinates,
+            frame_out="ecliptic",
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+        ),
+    )
+    state, covariance, chi2, iterations, converged = (
+        _rn.fit_orbit_2body_least_squares_ipc(
+            orbits_to_ipc(orbit),
+            coordinates_to_ipc(observed_coordinates, "spherical"),
+            observers_to_ipc(observers),
+            xtol,
+            ftol,
+            max_iterations,
+            lt_tol,
+            eph_max_iter,
+            eph_tol,
+            stellar_aberration,
+            max_lt_iter,
+        )
+    )
+    fitted = Orbits.from_kwargs(
+        orbit_id=orbit.orbit_id,
+        object_id=orbit.object_id,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[state[0]],
+            y=[state[1]],
+            z=[state[2]],
+            vx=[state[3]],
+            vy=[state[4]],
+            vz=[state[5]],
+            time=orbit.coordinates.time,
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]),
+            covariance=CoordinateCovariances.from_matrix(covariance.reshape(1, 6, 6)),
+        ),
+    )
+    return fitted, chi2, iterations, converged
+
+
 def round_trip_orbits_zero_copy(orbits: Orbits) -> Orbits:
     """Identity round-trip via the zero-copy Arrow C Data Interface transport."""
     out = _rn.orbits_nested_round_trip_arrow(orbits_to_record_batch(orbits))
