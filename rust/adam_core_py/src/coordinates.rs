@@ -7,8 +7,9 @@ use adam_core_rs_coords::{
     spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
     transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
     ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
-    IntoNestedRecordBatch, OrbitBatch as DataOrbitBatch, OrbitVariantSamplingMethod,
-    Representation as CoordsRepresentation, TimeScale, TryFromNestedRecordBatch,
+    IntoNestedRecordBatch, ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
+    OrbitVariantSamplingMethod, Representation as CoordsRepresentation, TimeScale,
+    TryFromNestedRecordBatch,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::RecordBatch;
@@ -1219,6 +1220,24 @@ fn orbits_nested_round_trip_arrow<'py>(
         .map_err(|err| PyValueError::new_err(format!("failed to export RecordBatch: {err}")))
 }
 
+/// W1 data-model bridge (bead personal-cmy.13 / OD slice 2): round-trip a quivr
+/// `Observers` table (Arrow IPC, nested quivr layout) through the Rust-canonical
+/// `ObserverBatch` and back. Establishes the observers transport for OD.
+#[pyfunction]
+fn observers_nested_ipc_round_trip<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let observers = DataObserverBatch::try_from_nested_record_batch(&batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode ObserverBatch: {err}")))?;
+    let out = observers
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(format!("failed to encode ObserverBatch: {err}")))?;
+    let bytes = write_orbit_ipc(&out)?;
+    Ok(PyBytes::new(py, &bytes))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
@@ -1248,5 +1267,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_sample_variants_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_propagate_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     Ok(())
 }

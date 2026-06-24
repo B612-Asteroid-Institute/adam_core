@@ -7,8 +7,9 @@
 
 use super::{
     CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
-    Epoch, Frame, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
-    PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray, TimeScale, Validity, VariantId,
+    Epoch, Frame, ObjectId, ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch,
+    OriginArray, OriginId, PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray,
+    TimeScale, Validity, VariantId,
 };
 use arrow_array::builder::{Float64Builder, LargeListBuilder};
 use arrow_array::{
@@ -32,6 +33,7 @@ const ORBIT_VARIANT_SCHEMA: &str = "OrbitVariantBatch.cartesian.flat.v1";
 const CARTESIAN_NESTED_SCHEMA: &str = "CoordinateBatch.cartesian.nested.quivr.v1";
 const ORBIT_NESTED_SCHEMA: &str = "OrbitBatch.cartesian.nested.quivr.v1";
 const ORBIT_VARIANT_NESTED_SCHEMA: &str = "OrbitVariantBatch.cartesian.nested.quivr.v1";
+const OBSERVER_NESTED_SCHEMA: &str = "ObserverBatch.cartesian.nested.quivr.v1";
 
 pub trait ArrowSchemaExport {
     fn schema() -> Schema;
@@ -139,6 +141,18 @@ impl TryFromNestedRecordBatch for OrbitBatch {
 impl IntoNestedRecordBatch for OrbitVariantBatch {
     fn into_nested_record_batch(self) -> SchemaResult<RecordBatch> {
         orbit_variant_to_nested_record_batch(&self)
+    }
+}
+
+impl IntoNestedRecordBatch for ObserverBatch {
+    fn into_nested_record_batch(self) -> SchemaResult<RecordBatch> {
+        observer_to_nested_record_batch(&self)
+    }
+}
+
+impl TryFromNestedRecordBatch for ObserverBatch {
+    fn try_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
+        observer_from_nested_record_batch(batch)
     }
 }
 
@@ -415,6 +429,71 @@ fn orbit_variant_to_nested_record_batch(variants: &OrbitVariantBatch) -> SchemaR
     );
     RecordBatch::try_new(Arc::new(schema), arrays)
         .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn observer_to_nested_record_batch(observers: &ObserverBatch) -> SchemaResult<RecordBatch> {
+    observers.validate()?;
+    let time_scale = observers.coordinates.times.as_ref().map(|time| time.scale);
+    let columns = nested_coordinate_named_arrays(&observers.coordinates)?;
+    let coord_fields = columns
+        .iter()
+        .map(|(field, _)| field.clone())
+        .collect::<Fields>();
+    let coord_arrays = columns
+        .iter()
+        .map(|(_, array)| array.clone())
+        .collect::<Vec<_>>();
+    let coordinates = StructArray::try_new(coord_fields, coord_arrays, None)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))?;
+
+    let fields = vec![
+        Field::new("code", DataType::LargeUtf8, false),
+        Field::new("coordinates", coordinates.data_type().clone(), true),
+    ];
+    let arrays: Vec<ArrayRef> = vec![
+        Arc::new(LargeStringArray::from_iter_values(
+            observers.code.iter().map(|code| code.0.as_str()),
+        )) as ArrayRef,
+        Arc::new(coordinates) as ArrayRef,
+    ];
+    let schema = Schema::new_with_metadata(
+        fields,
+        coordinate_metadata(
+            OBSERVER_NESTED_SCHEMA,
+            observers.coordinates.frame,
+            time_scale,
+            observers.coordinates.covariance.is_some(),
+        ),
+    );
+    RecordBatch::try_new(Arc::new(schema), arrays)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn observer_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<ObserverBatch> {
+    let rows = batch.num_rows();
+    let schema = batch.schema();
+    let code_array = large_string_column(batch, "code")?;
+    let code = (0..rows)
+        .map(|row| {
+            if code_array.is_null(row) {
+                return Err(SchemaError::UnsupportedNull {
+                    field: "code".to_string(),
+                    row,
+                });
+            }
+            Ok(ObservatoryCode(code_array.value(row).to_string()))
+        })
+        .collect::<SchemaResult<Vec<_>>>()?;
+    let coordinates = batch
+        .column_by_name("coordinates")
+        .ok_or_else(|| SchemaError::MissingRequiredField("coordinates".to_string()))?;
+    let coordinates = array_as_struct(coordinates, "coordinates")?;
+    let coordinates = coordinate_from_nested_columns(
+        |name| coordinates.column_by_name(name),
+        rows,
+        schema.metadata(),
+    )?;
+    ObserverBatch::new(code, coordinates)
 }
 
 fn coordinate_from_nested_columns<'a, F>(
@@ -1504,6 +1583,37 @@ mod tests {
         let values = round_tripped.values.spherical().unwrap();
         assert_eq!(values[0], [1.0, 30.0, -10.0, 0.01, 0.02, 0.03]);
         assert_eq!(values[1], [2.0, 45.0, 20.0, 0.04, 0.05, 0.06]);
+    }
+
+    #[test]
+    fn observer_nested_round_trip_preserves_codes_and_states() {
+        let coordinates = CoordinateBatch::cartesian(
+            vec![
+                [1.0, 2.0, 3.0, 0.1, 0.2, 0.3],
+                [4.0, 5.0, 6.0, 0.4, 0.5, 0.6],
+            ],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+            Some(TimeArray::from_parts(TimeScale::Tdb, vec![60000, 60001], vec![0, 0]).unwrap()),
+            None,
+        )
+        .unwrap();
+        let observers = ObserverBatch::new(
+            vec![
+                ObservatoryCode("X05".to_string()),
+                ObservatoryCode("500".to_string()),
+            ],
+            coordinates,
+        )
+        .unwrap();
+        let batch = observers.into_nested_record_batch().unwrap();
+        let round_tripped = ObserverBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(round_tripped.code[0].0, "X05");
+        assert_eq!(round_tripped.code[1].0, "500");
+        assert_eq!(round_tripped.coordinates.frame, Frame::Ecliptic);
+        let values = round_tripped.coordinates.values.cartesian().unwrap();
+        assert_eq!(values[0], [1.0, 2.0, 3.0, 0.1, 0.2, 0.3]);
+        assert_eq!(values[1], [4.0, 5.0, 6.0, 0.4, 0.5, 0.6]);
     }
 
     #[test]

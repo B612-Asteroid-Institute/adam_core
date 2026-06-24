@@ -20,10 +20,12 @@ from adam_core.coordinates import (
 )
 from adam_core.orbits import Orbits
 from adam_core.dynamics import propagate_2body
+from adam_core.observers import Observers
 from adam_core.orbits.arrow_bridge import (
     orbits_to_ipc,
     propagate_orbits_2body,
     rotate_orbits_frame,
+    round_trip_observers,
     round_trip_orbits,
     round_trip_orbits_zero_copy,
     sample_orbit_variants,
@@ -211,6 +213,29 @@ def test_propagate_orbits_2body_matches_propagate_2body():
     assert bridge.orbit_id.to_pylist() == reference.orbit_id.to_pylist()
     np.testing.assert_allclose(
         bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-11
+    )
+
+
+def test_round_trip_observers_reconstructs_observers():
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0, 2.0],
+        y=[3.0, 4.0],
+        z=[5.0, 6.0],
+        vx=[0.1, 0.2],
+        vy=[0.3, 0.4],
+        vz=[0.5, 0.6],
+        time=Timestamp.from_mjd([60000.0, 60001.0], scale="tdb"),
+        origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+        frame="ecliptic",
+    )
+    observers = Observers.from_kwargs(code=["X05", "500"], coordinates=coordinates)
+    out = round_trip_observers(observers)
+    assert out.code.to_pylist() == observers.code.to_pylist()
+    assert out.coordinates.frame == "ecliptic"
+    assert out.coordinates.time.scale == "tdb"
+    assert (
+        out.table.combine_chunks().to_pylist()
+        == observers.table.combine_chunks().to_pylist()
     )
 
 

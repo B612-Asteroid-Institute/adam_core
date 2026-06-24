@@ -23,27 +23,41 @@ from __future__ import annotations
 import pyarrow as pa
 
 from adam_core import _rust_native as _rn
+from adam_core.observers import Observers
 from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
 
 _NESTED_SCHEMA = "OrbitBatch.cartesian.nested.quivr.v1"
+_OBSERVER_SCHEMA = "ObserverBatch.cartesian.nested.quivr.v1"
+
+
+def _stamp_adam_core_metadata(
+    table: pa.Table, representation: str, frame: str, scale: str, schema_name: str
+) -> pa.Table:
+    """Stamp the canonical ``adam_core_*`` schema metadata the Rust codec reads."""
+    metadata = dict(table.schema.metadata or {})
+    metadata.update(
+        {
+            b"adam_core_schema": schema_name.encode(),
+            b"adam_core_schema_version": b"1",
+            b"adam_core_representation": representation.encode(),
+            b"adam_core_frame": frame.encode(),
+            b"adam_core_time_scale": scale.encode(),
+        }
+    )
+    return table.replace_schema_metadata(metadata)
 
 
 def _with_adam_core_metadata(orbits: Orbits) -> pa.Table:
     """Combine chunks and stamp the canonical ``adam_core_*`` schema metadata."""
-    table = orbits.table.combine_chunks()
     coordinates = orbits.coordinates
-    metadata = dict(table.schema.metadata or {})
-    metadata.update(
-        {
-            b"adam_core_schema": _NESTED_SCHEMA.encode(),
-            b"adam_core_schema_version": b"1",
-            b"adam_core_representation": b"cartesian",
-            b"adam_core_frame": coordinates.frame.encode(),
-            b"adam_core_time_scale": coordinates.time.scale.encode(),
-        }
+    return _stamp_adam_core_metadata(
+        orbits.table.combine_chunks(),
+        "cartesian",
+        coordinates.frame,
+        coordinates.time.scale,
+        _NESTED_SCHEMA,
     )
-    return table.replace_schema_metadata(metadata)
 
 
 def _to_quivr_metadata(table: pa.Table) -> pa.Table:
@@ -86,6 +100,27 @@ def variants_from_ipc(raw: bytes) -> VariantOrbits:
     return VariantOrbits.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
 
 
+def observers_to_ipc(observers: Observers) -> bytes:
+    """Serialize ``Observers`` to Arrow IPC bytes with the metadata Rust needs."""
+    coordinates = observers.coordinates
+    table = _stamp_adam_core_metadata(
+        observers.table.combine_chunks(),
+        "cartesian",
+        coordinates.frame,
+        coordinates.time.scale,
+        _OBSERVER_SCHEMA,
+    )
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    return sink.getvalue().to_pybytes()
+
+
+def observers_from_ipc(raw: bytes) -> Observers:
+    """Reconstruct ``Observers`` from Rust-produced Arrow IPC bytes."""
+    return Observers.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
+
+
 # --- Arrow C Data Interface (zero-copy) transport ------------------------------
 
 
@@ -108,6 +143,13 @@ def orbits_from_record_batch(record_batch: pa.RecordBatch) -> Orbits:
 def round_trip_orbits(orbits: Orbits) -> Orbits:
     """Decode to the Rust ``OrbitBatch`` and back via IPC (identity bridge check)."""
     return orbits_from_ipc(_rn.orbits_nested_ipc_round_trip(orbits_to_ipc(orbits)))
+
+
+def round_trip_observers(observers: Observers) -> Observers:
+    """Decode to the Rust ``ObserverBatch`` and back via IPC (transport check)."""
+    return observers_from_ipc(
+        _rn.observers_nested_ipc_round_trip(observers_to_ipc(observers))
+    )
 
 
 def round_trip_orbits_zero_copy(orbits: Orbits) -> Orbits:
