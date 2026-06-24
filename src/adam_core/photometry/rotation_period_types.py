@@ -100,6 +100,72 @@ class RotationPeriodResult(qv.Table):
     used_session_offsets = qv.BooleanColumn()
     is_period_doubled = qv.BooleanColumn()
 
+    @classmethod
+    def single_insufficient(
+        cls,
+        *,
+        reasons: list[str],
+        confidence_flags: list[str] | None = None,
+        n_observations: int = 0,
+        n_filters: int = 0,
+        n_sessions: int = 0,
+        primary_method: str = "none",
+        profile: str = "default",
+    ) -> "RotationPeriodResult":
+        """One-row ``insufficient_data`` result: NaN period, every nullable diagnostic
+        ``None``.
+
+        The canonical builder for the insufficient verdict. Used both by the solver's
+        early-exit path and by the detection wrappers when an object cannot be solved,
+        so a grouped solve returns one row per object id rather than silently dropping
+        failures. ``period_verdict``/``reliability_code`` are the contract constants
+        (``"insufficient_data"`` / ``"1"``).
+        """
+        return cls.from_kwargs(
+            period_days=[float("nan")],
+            period_hours=[float("nan")],
+            frequency_cycles_per_day=[float("nan")],
+            primary_method=[primary_method],
+            profile=[profile],
+            period_verdict=["insufficient_data"],
+            reliability_code=["1"],
+            confidence_flags=[list(confidence_flags or [])],
+            insufficiency_reasons=[list(reasons)],
+            is_valid=[False],
+            is_reliable=[False],
+            period_lower_days=[None],
+            period_upper_days=[None],
+            relative_period_uncertainty=[None],
+            alternate_period_days=[[]],
+            fourier_period_days=[None],
+            fourier_order=[None],
+            fourier_sigma_threshold=[None],
+            fourier_phase_c1=[None],
+            fourier_phase_c2=[None],
+            residual_sigma_mag=[None],
+            fourier_is_valid=[None],
+            fourier_is_reliable=[None],
+            fourier_alternate_period_days=[[]],
+            lsm_period_days=[None],
+            lsm_power=[None],
+            lsm_power_gap=[None],
+            lsm_candidate_period_days=[[]],
+            lsm_candidate_powers=[[]],
+            lsm_is_reliable=[None],
+            lsm_false_alarm_probability=[None],
+            phase_coverage_fraction=[None],
+            n_rotations_spanned=[None],
+            amplitude_snr=[None],
+            n_significant_aliases=[None],
+            n_observations=[int(n_observations)],
+            n_fit_observations=[0],
+            n_clipped=[0],
+            n_filters=[int(n_filters)],
+            n_sessions=[int(n_sessions)],
+            used_session_offsets=[False],
+            is_period_doubled=[False],
+        )
+
 
 class GroupedRotationPeriodResults(qv.Table):
     object_id = qv.LargeStringColumn()

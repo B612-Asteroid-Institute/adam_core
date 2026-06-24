@@ -207,3 +207,61 @@ def test_from_point_source_observations_classmethod_matches_wrapper(monkeypatch)
     assert isinstance(via_method, RotationPeriodObservations)
     assert len(via_method) == len(detections)
     assert via_method.table.equals(via_wrapper.table)
+
+
+def test_grouped_solve_emits_insufficient_row_for_failed_object(monkeypatch):
+    # rp-e4a.4 / review #3: a per-object solve failure must NOT silently drop the
+    # object. The grouped output keeps one row per id; an expected (ValueError)
+    # failure becomes an insufficient_data row flagged 'solve_error'.
+    import adam_core.photometry.rotation_period_fourier as rpf
+
+    detections, exposures, object_coords, observers, object_ids = (
+        _make_detection_bundle()
+    )
+    monkeypatch.setattr(Exposures, "observers", lambda self, *a, **k: observers)
+
+    def always_fail(observations, **kw):
+        raise ValueError("simulated insufficient data")
+
+    monkeypatch.setattr(rpf, "estimate_rotation_period", always_fail)
+    result = estimate_rotation_period_from_detections_grouped(
+        detections,
+        exposures,
+        object_coords,
+        object_ids=object_ids,
+        method_mode="fourier",
+    )
+
+    # No silent drop: every distinct id still appears, exactly one row each, each
+    # failure turned into an insufficient_data row flagged 'solve_error'.
+    assert sorted(result.object_id.to_pylist()) == ["a", "b"]
+    assert len(result) == 2
+    for i in range(len(result)):
+        assert result.result.period_verdict[i].as_py() == "insufficient_data"
+        assert "solve_error" in (result.result.confidence_flags[i].as_py() or [])
+    # (The existing reference tests prove that NON-failing objects recover normally,
+    #  so good and failed objects coexist one-row-per-id in the grouped output.)
+
+
+def test_grouped_solve_reraises_unexpected_error_with_object_id(monkeypatch):
+    # rp-e4a.4 / review #3: an UNEXPECTED exception must propagate with object-id
+    # context, not be swallowed.
+    import adam_core.photometry.rotation_period_fourier as rpf
+
+    detections, exposures, object_coords, observers, object_ids = (
+        _make_detection_bundle()
+    )
+    monkeypatch.setattr(Exposures, "observers", lambda self, *a, **k: observers)
+
+    def boom(observations, **kw):
+        raise RuntimeError("unexpected solver bug")
+
+    monkeypatch.setattr(rpf, "estimate_rotation_period", boom)
+    with pytest.raises(RuntimeError, match="object_id"):
+        estimate_rotation_period_from_detections_grouped(
+            detections,
+            exposures,
+            object_coords,
+            object_ids=object_ids,
+            method_mode="fourier",
+        )

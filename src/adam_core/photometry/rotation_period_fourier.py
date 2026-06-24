@@ -1752,49 +1752,16 @@ def _insufficient_result(
     """
     session_summary = _summarize_sessions(time_lt, filter_labels, session_labels)
     primary_method = method_mode if method_mode in {"fourier", "lsm"} else "none"
-    return RotationPeriodResult.from_kwargs(
-        period_days=[float("nan")],
-        period_hours=[float("nan")],
-        frequency_cycles_per_day=[float("nan")],
-        primary_method=[primary_method],
-        profile=[profile.name],
-        period_verdict=[_VERDICT_INSUFFICIENT],
-        reliability_code=[_RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT]],
-        confidence_flags=[[]],
-        insufficiency_reasons=[list(reasons)],
-        is_valid=[False],
-        is_reliable=[False],
-        period_lower_days=[None],
-        period_upper_days=[None],
-        relative_period_uncertainty=[None],
-        alternate_period_days=[[]],
-        fourier_period_days=[None],
-        fourier_order=[None],
-        fourier_sigma_threshold=[None],
-        fourier_phase_c1=[None],
-        fourier_phase_c2=[None],
-        residual_sigma_mag=[None],
-        fourier_is_valid=[None],
-        fourier_is_reliable=[None],
-        fourier_alternate_period_days=[[]],
-        lsm_period_days=[None],
-        lsm_power=[None],
-        lsm_power_gap=[None],
-        lsm_candidate_period_days=[[]],
-        lsm_candidate_powers=[[]],
-        lsm_is_reliable=[None],
-        lsm_false_alarm_probability=[None],
-        phase_coverage_fraction=[None],
-        n_rotations_spanned=[None],
-        amplitude_snr=[None],
-        n_significant_aliases=[None],
-        n_observations=[int(len(observations))],
-        n_fit_observations=[0],
-        n_clipped=[0],
-        n_filters=[int(len(_ordered_unique(filter_labels)))],
-        n_sessions=[int(session_summary.n_sessions)],
-        used_session_offsets=[False],
-        is_period_doubled=[False],
+    # Canonical insufficient-row builder lives on the result type (shared with the
+    # detection wrappers' per-object failure path); this path adds the session/filter
+    # diagnostics it has cheaply on hand.
+    return RotationPeriodResult.single_insufficient(
+        reasons=list(reasons),
+        primary_method=primary_method,
+        profile=profile.name,
+        n_observations=int(len(observations)),
+        n_filters=int(len(_ordered_unique(filter_labels))),
+        n_sessions=int(session_summary.n_sessions),
     )
 
 
@@ -1925,7 +1892,7 @@ def estimate_rotation_period(
     max_frequency_cycles_per_day: float = 1000.0,
     frequency_grid_scale: float = 30.0,
     max_search_period_hours: float | None = None,
-    early_exit_on_insufficient: bool = False,
+    early_exit_on_insufficient: bool = True,
     exact_evaluation_backend: str = "numpy",
     session_mode: str = "auto",
     auto_session_min_observations_per_group: int = 6,
@@ -1964,9 +1931,11 @@ def estimate_rotation_period(
     exact_evaluation_backend : {"numpy", "jax"}, default "numpy"
         Backend for exact frequency fits; ``"jax"`` is faster on large grids and
         gives identical results (imported lazily, so ``"numpy"`` needs no JAX).
-    early_exit_on_insufficient : bool, default False
-        When True, screen obviously under-determined inputs before building the
-        grid and return ``insufficient_data`` early.
+    early_exit_on_insufficient : bool, default True
+        When True (default), screen obviously under-determined inputs before
+        building the grid and return a structured ``insufficient_data`` result
+        instead of raising. Set False (validation/calibration) to force every
+        object through the full solve so a recovered period is always reported.
     min_rotations_in_span, max_frequency_cycles_per_day, frequency_grid_scale, max_search_period_hours, clip_sigma : float
         Frequency-grid and fit knobs: lower frequency bound (rotations spanned),
         upper bound, grid oversampling, optional period ceiling, and the

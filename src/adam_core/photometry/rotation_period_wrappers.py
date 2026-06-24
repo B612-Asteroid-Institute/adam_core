@@ -266,9 +266,21 @@ def estimate_rotation_period_from_detections_grouped(
             )
             if len(result_i) != 1:
                 raise ValueError("rotation-period kernel must return exactly one row")
-        except Exception:
-            i0 = i1
-            continue
+        except ValueError as exc:
+            # Expected data failure (insufficient/degenerate input or a kernel
+            # ValueError): emit a one-row insufficient_data result for this object so it
+            # is NEVER silently dropped -- the grouped output keeps one row per id.
+            result_i = RotationPeriodResult.single_insufficient(
+                reasons=[f"solve_error: {exc}"],
+                confidence_flags=["solve_error"],
+                n_observations=int(i1 - i0),
+            )
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - attach object-id context, then re-raise
+            raise RuntimeError(
+                f"rotation-period solve failed for object_id {oid!r}"
+            ) from exc
 
         out_object_id.append(oid)
         out_results.append(result_i)
