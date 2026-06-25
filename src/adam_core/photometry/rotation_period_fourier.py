@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
-from typing import cast
 
 import numpy as np
 import numpy.typing as npt
@@ -145,6 +144,49 @@ class _LSMSolution:
     n_fit_observations: int
     n_clipped: int
     false_alarm_probability: float | None = None
+
+
+@dataclass(slots=True)
+class _VerdictDiagnostics:
+    """D1 numeric verdict diagnostics for the chosen period.
+
+    Replaces the former ``dict[str, object]`` so the floats/ints flow typed into
+    ``_classify_confidence`` instead of being re-narrowed at each call site.
+    """
+
+    amplitude_snr: float | None
+    phase_coverage_fraction: float | None
+    n_rotations_spanned: float | None
+    n_significant_aliases: int | None
+
+
+@dataclass(slots=True)
+class _PrimaryResult:
+    """Per-method primary result (verdict + diagnostics) for one solver run.
+
+    Non-frozen with ``slots=True`` so the two ``estimate_rotation_period``
+    confidence guardrails can downgrade the verdict in place (attribute writes)
+    without rebuilding the object.  Replaces the former ``dict[str, object]`` so
+    ``_assemble_result`` reads typed attributes instead of re-narrowing each key.
+    """
+
+    primary_method: str
+    period_days: float
+    period_lower_days: float | None
+    period_upper_days: float | None
+    relative_period_uncertainty: float | None
+    alternate_period_days: list[float]
+    period_verdict: str
+    reliability_code: str
+    confidence_flags: list[str]
+    insufficiency_reasons: list[str]
+    is_valid: bool
+    is_reliable: bool
+    selected_method_amplitude_mag: float | None
+    amplitude_snr: float | None
+    phase_coverage_fraction: float | None
+    n_rotations_spanned: float | None
+    n_significant_aliases: int | None
 
 
 def _resolve_search_fidelity(search_fidelity: str | None) -> str:
@@ -1541,7 +1583,7 @@ def _verdict_diagnostics(
     n_significant_aliases: int | None,
     t_rel: npt.NDArray[np.float64],
     span_days: float,
-) -> dict[str, object]:
+) -> _VerdictDiagnostics:
     """Compute the D1 numeric verdict diagnostics for the chosen period."""
     if np.isfinite(period_days) and period_days > 0.0:
         n_rotations_spanned: float | None = float(span_days) / float(period_days)
@@ -1551,14 +1593,14 @@ def _verdict_diagnostics(
     else:
         n_rotations_spanned = None
         phase_coverage_fraction = None
-    return {
-        "amplitude_snr": _amplitude_snr(amplitude_mag, residual_sigma_mag),
-        "phase_coverage_fraction": phase_coverage_fraction,
-        "n_rotations_spanned": n_rotations_spanned,
-        "n_significant_aliases": (
+    return _VerdictDiagnostics(
+        amplitude_snr=_amplitude_snr(amplitude_mag, residual_sigma_mag),
+        phase_coverage_fraction=phase_coverage_fraction,
+        n_rotations_spanned=n_rotations_spanned,
+        n_significant_aliases=(
             None if n_significant_aliases is None else int(n_significant_aliases)
         ),
-    }
+    )
 
 
 def _primary_result(
@@ -1571,26 +1613,29 @@ def _primary_result(
     alternate_period_days: list[float],
     verdict: tuple[str, str, list[str], list[str]],
     selected_method_amplitude_mag: float | None,
-    diagnostics: dict[str, object],
-) -> dict[str, object]:
-    """Assemble the per-method result dict (one key set + one is_valid/is_reliable rule)."""
+    diagnostics: _VerdictDiagnostics,
+) -> _PrimaryResult:
+    """Assemble the per-method result (one field set + one is_valid/is_reliable rule)."""
     period_verdict, reliability_code, confidence_flags, insufficiency_reasons = verdict
-    return {
-        "primary_method": primary_method,
-        "period_days": period_days,
-        "period_lower_days": period_lower_days,
-        "period_upper_days": period_upper_days,
-        "relative_period_uncertainty": relative_period_uncertainty,
-        "alternate_period_days": alternate_period_days,
-        "period_verdict": period_verdict,
-        "reliability_code": reliability_code,
-        "confidence_flags": confidence_flags,
-        "insufficiency_reasons": insufficiency_reasons,
-        "is_valid": bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
-        "is_reliable": bool(period_verdict == _VERDICT_SINGLE),
-        "selected_method_amplitude_mag": selected_method_amplitude_mag,
-        **diagnostics,
-    }
+    return _PrimaryResult(
+        primary_method=primary_method,
+        period_days=period_days,
+        period_lower_days=period_lower_days,
+        period_upper_days=period_upper_days,
+        relative_period_uncertainty=relative_period_uncertainty,
+        alternate_period_days=alternate_period_days,
+        period_verdict=period_verdict,
+        reliability_code=reliability_code,
+        confidence_flags=confidence_flags,
+        insufficiency_reasons=insufficiency_reasons,
+        is_valid=bool(period_verdict in {_VERDICT_SINGLE, _VERDICT_FAMILY}),
+        is_reliable=bool(period_verdict == _VERDICT_SINGLE),
+        selected_method_amplitude_mag=selected_method_amplitude_mag,
+        amplitude_snr=diagnostics.amplitude_snr,
+        phase_coverage_fraction=diagnostics.phase_coverage_fraction,
+        n_rotations_spanned=diagnostics.n_rotations_spanned,
+        n_significant_aliases=diagnostics.n_significant_aliases,
+    )
 
 
 def _primary_from_method(
@@ -1603,7 +1648,7 @@ def _primary_from_method(
     span_days: float,
     min_rotations_in_span: float,
     residual_sigma_mag: float | None,
-) -> dict[str, object]:
+) -> _PrimaryResult:
     observation_count_sufficient = _observation_count_sufficient(filter_labels)
     n_fourier_aliases = int(len(fourier_solution.clusters))
 
@@ -1620,9 +1665,9 @@ def _primary_from_method(
         period_verdict, reliability_code, confidence_flags, insufficiency_reasons = (
             _classify_confidence(
                 primary_method="fourier",
-                amplitude_snr=diagnostics["amplitude_snr"],
-                phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
-                n_rotations_spanned=diagnostics["n_rotations_spanned"],
+                amplitude_snr=diagnostics.amplitude_snr,
+                phase_coverage_fraction=diagnostics.phase_coverage_fraction,
+                n_rotations_spanned=diagnostics.n_rotations_spanned,
                 min_rotations_in_span=min_rotations_in_span,
                 lsm_false_alarm_probability=None,
                 n_significant_aliases=n_fourier_aliases,
@@ -1668,18 +1713,18 @@ def _primary_from_method(
                     ["no_significant_peak"],
                 ),
                 selected_method_amplitude_mag=None,
-                diagnostics={
-                    "amplitude_snr": None,
-                    "phase_coverage_fraction": None,
-                    "n_rotations_spanned": None,
-                    "n_significant_aliases": 0,
-                },
+                diagnostics=_VerdictDiagnostics(
+                    amplitude_snr=None,
+                    phase_coverage_fraction=None,
+                    n_rotations_spanned=None,
+                    n_significant_aliases=0,
+                ),
             )
-        amplitude_mag = lsm_solution.amplitude_mag
+        lsm_amplitude_mag: float | None = lsm_solution.amplitude_mag
         n_lsm_aliases = int(len(lsm_solution.candidate_period_days))
         diagnostics = _verdict_diagnostics(
             period_days=float(period_days),
-            amplitude_mag=amplitude_mag,
+            amplitude_mag=lsm_amplitude_mag,
             residual_sigma_mag=residual_sigma_mag,
             n_significant_aliases=n_lsm_aliases,
             t_rel=t_rel,
@@ -1688,9 +1733,9 @@ def _primary_from_method(
         period_verdict, reliability_code, confidence_flags, insufficiency_reasons = (
             _classify_confidence(
                 primary_method="lsm",
-                amplitude_snr=diagnostics["amplitude_snr"],
-                phase_coverage_fraction=diagnostics["phase_coverage_fraction"],
-                n_rotations_spanned=diagnostics["n_rotations_spanned"],
+                amplitude_snr=diagnostics.amplitude_snr,
+                phase_coverage_fraction=diagnostics.phase_coverage_fraction,
+                n_rotations_spanned=diagnostics.n_rotations_spanned,
                 min_rotations_in_span=min_rotations_in_span,
                 lsm_false_alarm_probability=lsm_solution.false_alarm_probability,
                 n_significant_aliases=n_lsm_aliases,
@@ -1714,7 +1759,7 @@ def _primary_from_method(
                 confidence_flags,
                 insufficiency_reasons,
             ),
-            selected_method_amplitude_mag=amplitude_mag,
+            selected_method_amplitude_mag=lsm_amplitude_mag,
             diagnostics=diagnostics,
         )
 
@@ -1816,7 +1861,7 @@ def _insufficient_result(
 
 def _assemble_result(
     *,
-    primary: dict[str, object],
+    primary: _PrimaryResult,
     fourier_solution: _FourierSolution,
     lsm_solution: _LSMSolution,
     profile: _FourierProfile,
@@ -1832,8 +1877,8 @@ def _assemble_result(
     diagnostics (e.g. ``staged_search_used``, ``grid_capped``) alongside the
     classifier's own positive flags.
     """
-    primary_method = str(primary["primary_method"])
-    period_days = float(primary["period_days"])
+    primary_method = primary.primary_method
+    period_days = float(primary.period_days)
     period_hours = float(period_days * 24.0)
     frequency_cycles_per_day = (
         float("nan")
@@ -1841,14 +1886,10 @@ def _assemble_result(
         else float(1.0 / period_days)
     )
 
-    selected_period_lower_days = _none_or_float(primary["period_lower_days"])
-    selected_period_upper_days = _none_or_float(primary["period_upper_days"])
-    selected_relative_uncertainty = (
-        None
-        if primary["relative_period_uncertainty"] is None
-        else float(primary["relative_period_uncertainty"])
-    )
-    alternate_period_days = [float(value) for value in primary["alternate_period_days"]]
+    selected_period_lower_days = _none_or_float(primary.period_lower_days)
+    selected_period_upper_days = _none_or_float(primary.period_upper_days)
+    selected_relative_uncertainty = _none_or_float(primary.relative_period_uncertainty)
+    alternate_period_days = [float(value) for value in primary.alternate_period_days]
 
     if primary_method == "fourier":
         n_fit_observations = int(fourier_solution.fit_summary.n_fit)
@@ -1865,12 +1906,12 @@ def _assemble_result(
         frequency_cycles_per_day=[frequency_cycles_per_day],
         primary_method=[primary_method],
         profile=[profile.name],
-        period_verdict=[str(primary["period_verdict"])],
-        reliability_code=[str(primary["reliability_code"])],
-        confidence_flags=[list(primary["confidence_flags"]) + list(extra_flags or [])],
-        insufficiency_reasons=[list(primary["insufficiency_reasons"])],
-        is_valid=[bool(primary["is_valid"])],
-        is_reliable=[bool(primary["is_reliable"])],
+        period_verdict=[primary.period_verdict],
+        reliability_code=[primary.reliability_code],
+        confidence_flags=[list(primary.confidence_flags) + list(extra_flags or [])],
+        insufficiency_reasons=[list(primary.insufficiency_reasons)],
+        is_valid=[bool(primary.is_valid)],
+        is_reliable=[bool(primary.is_reliable)],
         period_lower_days=[selected_period_lower_days],
         period_upper_days=[selected_period_upper_days],
         relative_period_uncertainty=[selected_relative_uncertainty],
@@ -1909,20 +1950,14 @@ def _assemble_result(
                 else float(lsm_solution.false_alarm_probability)
             )
         ],
-        phase_coverage_fraction=[
-            (
-                None
-                if primary["phase_coverage_fraction"] is None
-                else float(primary["phase_coverage_fraction"])
-            )
-        ],
-        n_rotations_spanned=[_none_or_float(primary["n_rotations_spanned"])],
-        amplitude_snr=[_none_or_float(primary["amplitude_snr"])],
+        phase_coverage_fraction=[_none_or_float(primary.phase_coverage_fraction)],
+        n_rotations_spanned=[_none_or_float(primary.n_rotations_spanned)],
+        amplitude_snr=[_none_or_float(primary.amplitude_snr)],
         n_significant_aliases=[
             (
                 None
-                if primary["n_significant_aliases"] is None
-                else int(primary["n_significant_aliases"])
+                if primary.n_significant_aliases is None
+                else int(primary.n_significant_aliases)
             )
         ],
         n_observations=[int(len(observations))],
@@ -2190,7 +2225,7 @@ def estimate_rotation_period(
         min_rotations_in_span=min_rotations_in_span,
         residual_sigma_mag=float(fourier_solution.fit_summary.residual_sigma),
     )
-    period_days = float(primary["period_days"])
+    period_days = float(primary.period_days)
     period_hours = float(period_days * 24.0)
 
     # Long-period confidence guardrail (bead rp-e4a.22 step 1).  A
@@ -2198,18 +2233,16 @@ def estimate_rotation_period(
     # low-frequency drift fit as rotation; keep the reported value but downgrade
     # confidence to ``period_family``.
     if (
-        str(primary["period_verdict"]) == _VERDICT_SINGLE
+        primary.period_verdict == _VERDICT_SINGLE
         and np.isfinite(period_hours)
         and period_hours > MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS
     ):
-        primary["period_verdict"] = _VERDICT_FAMILY
-        primary["reliability_code"] = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
-        downgrade_reasons = list(cast("list[str]", primary["insufficiency_reasons"]))
-        if "period_implausibly_long" not in downgrade_reasons:
-            downgrade_reasons.append("period_implausibly_long")
-        primary["insufficiency_reasons"] = downgrade_reasons
-        primary["is_valid"] = True
-        primary["is_reliable"] = False
+        primary.period_verdict = _VERDICT_FAMILY
+        primary.reliability_code = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
+        if "period_implausibly_long" not in primary.insufficiency_reasons:
+            primary.insufficiency_reasons.append("period_implausibly_long")
+        primary.is_valid = True
+        primary.is_reliable = False
 
     # Sub-harmonic confidence guardrail.  When the span is short enough that the
     # recovered period sits at the long-period edge of the search grid -- fewer
@@ -2222,8 +2255,8 @@ def estimate_rotation_period(
     # chosen one (within the cluster acceptance band), the two periods are
     # indistinguishable and a single_period verdict is capped at period_family.
     if (
-        str(primary["primary_method"]) == "fourier"
-        and str(primary["period_verdict"]) == _VERDICT_SINGLE
+        primary.primary_method == "fourier"
+        and primary.period_verdict == _VERDICT_SINGLE
         and np.isfinite(period_days)
         and period_days > 0.0
         and 0.5 / period_days < float(frequencies[0])
@@ -2247,16 +2280,12 @@ def estimate_rotation_period(
         if half_fit is not None and float(half_fit.residual_sigma) < float(
             fourier_solution.fit_summary.residual_sigma
         ):
-            primary["period_verdict"] = _VERDICT_FAMILY
-            primary["reliability_code"] = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
-            downgrade_reasons = list(
-                cast("list[str]", primary["insufficiency_reasons"])
-            )
-            if "subharmonic_unresolved" not in downgrade_reasons:
-                downgrade_reasons.append("subharmonic_unresolved")
-            primary["insufficiency_reasons"] = downgrade_reasons
-            primary["is_valid"] = True
-            primary["is_reliable"] = False
+            primary.period_verdict = _VERDICT_FAMILY
+            primary.reliability_code = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
+            if "subharmonic_unresolved" not in primary.insufficiency_reasons:
+                primary.insufficiency_reasons.append("subharmonic_unresolved")
+            primary.is_valid = True
+            primary.is_reliable = False
 
     # Search diagnostics (review #8/#9): surface when the staged heuristic was used
     # (grid above the exact-grid threshold) and when the frequency grid was clamped to

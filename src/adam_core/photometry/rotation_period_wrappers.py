@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import pyarrow as pa
@@ -12,6 +13,7 @@ from ..coordinates.origin import OriginCodes
 from ..coordinates.transform import transform_coordinates
 from ..observations.detections import PointSourceDetections
 from ..observations.exposures import Exposures
+from ..observers.observers import Observers
 from ..observers.utils import calculate_observing_night
 from ..photometry.magnitude import calculate_phase_angle
 from ..photometry.rotation_period_types import (
@@ -36,10 +38,15 @@ def _align_exposures_to_detections(
 ) -> Exposures:
     if len(detections) == 0:
         raise ValueError("detections must be non-empty")
-    if pc.any(pc.is_null(detections.exposure_id)).as_py():
+    # pyarrow.compute ships incomplete type stubs; any/is_null/index_in/fill_null
+    # are valid at runtime (exercised by the test suite) but absent from the stubs.
+    if pc.any(pc.is_null(detections.exposure_id)).as_py():  # type: ignore[attr-defined]
         raise ValueError("detections.exposure_id must be non-null to align exposures")
 
-    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
+    idx = pc.fill_null(  # type: ignore[no-untyped-call]
+        pc.index_in(detections.exposure_id, value_set=exposures.id),  # type: ignore[attr-defined]
+        -1,
+    )
     idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
     if np.any(idx_np < 0):
         missing = np.unique(
@@ -53,18 +60,21 @@ def _align_exposures_to_detections(
 
 
 def _align_observers_to_exposures(
-    observers,
+    observers: Observers,
     exposures_full: Exposures,
     exposures_aligned: Exposures,
-):
+) -> Observers:
     if len(observers) == len(exposures_aligned):
         return observers
     if len(observers) != len(exposures_full):
         raise ValueError(
             "internal error: aligned observers length does not match detections length"
         )
-    idx = pc.fill_null(
-        pc.index_in(exposures_aligned.id, value_set=exposures_full.id), -1
+    idx = pc.fill_null(  # type: ignore[no-untyped-call]
+        pc.index_in(  # type: ignore[attr-defined]
+            exposures_aligned.id, value_set=exposures_full.id
+        ),
+        -1,
     )
     idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
     if np.any(idx_np < 0):
@@ -176,7 +186,7 @@ def estimate_rotation_period_from_detections(
     detections: PointSourceDetections,
     exposures: Exposures,
     object_coords: CartesianCoordinates,
-    **search_kwargs,
+    **search_kwargs: Any,
 ) -> RotationPeriodResult:
     observations = build_rotation_period_observations_from_detections(
         detections, exposures, object_coords
@@ -198,7 +208,7 @@ def estimate_rotation_period_from_detections_grouped(
     exposures: Exposures,
     object_coords: CartesianCoordinates,
     object_ids: pa.Array | pa.ChunkedArray | Sequence[str | None],
-    **search_kwargs,
+    **search_kwargs: Any,
 ) -> GroupedRotationPeriodResults:
     n_det = len(detections)
     if n_det == 0:
@@ -214,7 +224,7 @@ def estimate_rotation_period_from_detections_grouped(
     ids_arr = (
         pa.array(object_ids, type=pa.large_string())
         if not isinstance(object_ids, (pa.Array, pa.ChunkedArray))
-        else pc.cast(object_ids, pa.large_string())
+        else pc.cast(object_ids, pa.large_string())  # type: ignore[no-untyped-call]
     )
     ids_np = np.asarray(ids_arr.to_numpy(zero_copy_only=False), dtype=object)
     if ids_np.size != n_det:

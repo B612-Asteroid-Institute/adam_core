@@ -406,12 +406,12 @@ def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
 
     def fake_primary(**kwargs):
         primary = real_primary(**kwargs)
-        primary["period_days"] = long_period_days
-        primary["period_verdict"] = "single_period"
-        primary["reliability_code"] = "3"
-        primary["insufficiency_reasons"] = []
-        primary["is_valid"] = True
-        primary["is_reliable"] = True
+        primary.period_days = long_period_days
+        primary.period_verdict = "single_period"
+        primary.reliability_code = "3"
+        primary.insufficiency_reasons = []
+        primary.is_valid = True
+        primary.is_reliable = True
         return primary
 
     monkeypatch.setattr(rotation_period_fourier, "_primary_from_method", fake_primary)
