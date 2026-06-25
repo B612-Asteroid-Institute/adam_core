@@ -2443,6 +2443,19 @@
 <span class="sd">    ValueError</span>
 <span class="sd">        If ``method_mode`` / ``session_mode`` / ``exact_evaluation_backend`` is</span>
 <span class="sd">        invalid or a numeric knob is non-positive.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The confidence verdict is **measured, not guaranteed.** The solver is designed to</span>
+<span class="sd">    downgrade harmonic and sampling aliases to ``period_family`` instead of asserting a</span>
+<span class="sd">    confident ``single_period``, but this is calibrated behaviour with a known, nonzero</span>
+<span class="sd">    residual false-confidence risk: a ``single_period`` result can occasionally be a</span>
+<span class="sd">    harmonic or sampling alias of the true period. Measured strict ``single_period``</span>
+<span class="sd">    precision on the LCDB/DAMIT standard-candle set is ~0.88, and one tracked case</span>
+<span class="sd">    (1627 Ivar, a ~5/3 diurnal-sampling alias) is still reported confidently at the</span>
+<span class="sd">    wrong period. When a period that is wrong by an integer factor would be costly,</span>
+<span class="sd">    cross-check a ``single_period`` result against ``alternate_period_days`` and</span>
+<span class="sd">    ``reliability_code`` rather than treating the verdict as infallible.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">method_mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span> <span class="s2">&quot;lsm&quot;</span><span class="p">}:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;method_mode must be one of {&#39;fourier&#39;, &#39;lsm&#39;}&quot;</span><span class="p">)</span>
@@ -2742,7 +2755,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=95e4d176"></script>
+</div><script src="../../../_static/documentation_options.js?v=58808730"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
