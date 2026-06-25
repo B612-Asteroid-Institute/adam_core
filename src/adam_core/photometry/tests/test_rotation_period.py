@@ -6,7 +6,11 @@ import pytest
 
 import adam_core.photometry.rotation_period_fourier as rotation_period_fourier
 
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.origin import Origin
+from ...observers.observers import Observers
 from ...time import Timestamp
+from ..magnitude import calculate_apparent_magnitude_v_and_phase_angle
 from ..rotation_period_fourier import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
     _build_frequency_grid,
@@ -17,6 +21,7 @@ from ..rotation_period_fourier import (
 from ..rotation_period_fourier_core import (
     _f_test_confidence,
     _FitResult,
+    _hg_phase_reduced,
     _select_order,
 )
 from ..rotation_period_types import RotationPeriodObservations, RotationPeriodResult
@@ -471,3 +476,73 @@ def test_subharmonic_alias_below_grid_is_capped_to_family():
     assert float(_scalar(result.period_hours[0])) == pytest.approx(10.0, rel=0.1)
     assert _scalar(result.period_verdict[0]) == "period_family"
     assert "subharmonic_unresolved" in list(result.insufficiency_reasons[0].as_py())
+
+
+def test_hg_phase_reduced_matches_magnitude_module() -> None:
+    """The rotation prior's IAU H-G phase term must track adam_core's canonical
+    (JAX) magnitude implementation -- the two re-implement the same law with the
+    same constants (-3.33/0.63/-1.87/1.22), so they must not silently drift.
+    (PR#200 review #11.)
+
+    Strategy: drive the public apparent-magnitude path over a phase-angle sweep,
+    back out its phase term (mag_v - H - 5*log10(r*delta)), and compare it to
+    ``_hg_phase_reduced`` evaluated at the SAME returned phase angle. Feeding the
+    identical alpha through both paths isolates the phase *function* (exp/pow/log
+    + the H-G constants) from the shared geometry, so the only thing under test
+    is that the two formulas agree.
+    """
+    alpha_target_deg = np.linspace(1.0, 120.0, 24)
+    n = alpha_target_deg.size
+    r_helio = 2.0
+    delta = 1.0
+    h_mag = 15.0
+
+    # Object on +x at r_helio; its direction to the Sun is (-1, 0, 0). Put the
+    # observer one delta away along a direction rotated by alpha from that, so the
+    # Sun-object-observer angle (the phase angle) sweeps alpha_target_deg.
+    alpha_rad = np.radians(alpha_target_deg)
+    obs_x = r_helio - delta * np.cos(alpha_rad)
+    obs_y = -delta * np.sin(alpha_rad)
+    zeros = np.zeros(n)
+    time = Timestamp.from_mjd([60000.0] * n, scale="tdb")
+    obj = CartesianCoordinates.from_kwargs(
+        x=np.full(n, r_helio),
+        y=zeros,
+        z=zeros,
+        vx=zeros,
+        vy=zeros,
+        vz=zeros,
+        time=time,
+        frame="ecliptic",
+        origin=Origin.from_kwargs(code=["SUN"] * n),
+    )
+    observer = Observers.from_kwargs(
+        code=["500"] * n,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=obs_x,
+            y=obs_y,
+            z=zeros,
+            vx=zeros,
+            vy=zeros,
+            vz=zeros,
+            time=time,
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"] * n),
+        ),
+    )
+
+    distance_modulus = 5.0 * np.log10(r_helio * delta)
+    for g_value in (0.15, 0.25):
+        mags_v, alpha_deg = calculate_apparent_magnitude_v_and_phase_angle(
+            h_mag, obj, observer, G=g_value
+        )
+        # Sanity: the constructed geometry really does span a wide phase range.
+        assert float(alpha_deg.min()) < 5.0
+        assert float(alpha_deg.max()) > 110.0
+        # Phase term as the magnitude module computes it, with H and the distance
+        # modulus 5*log10(r*delta) removed -- this is exactly -2.5*log10(phi).
+        phase_term_ref = mags_v - h_mag - distance_modulus
+        phase_term_rotation = _hg_phase_reduced(alpha_deg, g_value)
+        np.testing.assert_allclose(
+            phase_term_rotation, phase_term_ref, rtol=0.0, atol=1e-9
+        )
