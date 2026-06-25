@@ -25,11 +25,11 @@ from adam_core.dynamics import propagate_2body
 from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.observers import Observers
 from adam_core.orbits.arrow_bridge import (
+    _rotate_orbits_frame_ipc_candidate,
     evaluate_residuals_2body,
     fit_orbit_least_squares,
     orbits_to_ipc,
     propagate_orbits_2body,
-    rotate_orbits_frame,
     round_trip_observers,
     round_trip_orbits,
     round_trip_orbits_zero_copy,
@@ -129,9 +129,9 @@ def test_round_trip_orbits_zero_copy_reconstructs_orbits():
     )
 
 
-def test_rotate_orbits_frame_matches_transform_coordinates():
+def test_rotate_orbits_frame_candidate_matches_transform_coordinates():
     orbits = _orbits(with_covariance=True)
-    rotated = rotate_orbits_frame(orbits, "equatorial")
+    rotated = _rotate_orbits_frame_ipc_candidate(orbits, "equatorial")
     reference = transform_coordinates(
         orbits.coordinates, CartesianCoordinates, frame_out="equatorial"
     )

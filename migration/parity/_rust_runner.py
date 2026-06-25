@@ -948,12 +948,12 @@ def _bridge_rotate_orbits_frame(
     frame_in: str,
     frame_out: str,
 ) -> dict[str, np.ndarray]:
-    """Bridge ``rotate_orbits_frame`` (state + covariance) on the migration checkout."""
+    """Diagnostic Arrow-IPC frame-rotation candidate on the migration checkout."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.covariances import CoordinateCovariances
     from adam_core.coordinates.origin import Origin
     from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import rotate_orbits_frame
+    from adam_core.orbits.arrow_bridge import _rotate_orbits_frame_ipc_candidate
     from adam_core.time import Timestamp
 
     coords = np.asarray(coords, dtype=np.float64)
@@ -976,7 +976,7 @@ def _bridge_rotate_orbits_frame(
         orbit_id=[str(i) for i in range(n)],
         coordinates=cart,
     )
-    out = rotate_orbits_frame(orbits, str(frame_out))
+    out = _rotate_orbits_frame_ipc_candidate(orbits, str(frame_out))
     return {
         "values": _ensure(out.coordinates.values, "bridge.rotate_orbits_frame"),
         "covariance": _ensure(

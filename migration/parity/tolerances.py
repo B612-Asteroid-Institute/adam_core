@@ -1019,9 +1019,10 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "covariance": OutputTol(atol=1e-12, rtol=1e-9),
         },
         rationale=(
-            "Arrow-bridge ``rotate_orbits_frame`` (state + covariance, single "
-            "Python<->Rust crossing) compared against baseline-main "
-            "``transform_coordinates`` rotating ecliptic Cartesian into equatorial."
+            "Diagnostic Arrow-IPC frame-rotation backend candidate (state + "
+            "covariance, single Python<->Rust crossing) compared against "
+            "baseline-main public ``transform_coordinates`` rotating ecliptic "
+            "Cartesian into equatorial."
         ),
         dominant_column="covariance off-diagonal",
         physical_magnitude=(
@@ -1034,7 +1035,7 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "Arrow IPC transport."
         ),
         verdict=(
-            "bridge-signature parity; numerically reduces to a transform_coordinates "
+            "backend-candidate parity; numerically reduces to a transform_coordinates "
             "frame rotation."
         ),
     ),

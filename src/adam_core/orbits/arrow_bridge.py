@@ -307,8 +307,13 @@ def round_trip_orbits_zero_copy(orbits: Orbits) -> Orbits:
     return orbits_from_record_batch(out)
 
 
-def rotate_orbits_frame(orbits: Orbits, frame: str) -> Orbits:
-    """Rotate orbit coordinates and covariance into ``frame`` Rust-side, one crossing."""
+def _rotate_orbits_frame_ipc_candidate(orbits: Orbits, frame: str) -> Orbits:
+    """Diagnostic Arrow-IPC candidate for ``transform_coordinates(..., frame_out=...)``.
+
+    This is intentionally private: the canonical public API for frame changes is
+    ``adam_core.coordinates.transform_coordinates``. The parity/speed harness
+    may still time this Orbits-level workflow as a backend-candidate experiment.
+    """
     return orbits_from_ipc(_rn.orbits_rotate_frame_ipc(orbits_to_ipc(orbits), frame))
 
 

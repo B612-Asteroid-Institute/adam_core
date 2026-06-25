@@ -58,14 +58,14 @@ BACKEND_CANDIDATES: Final[tuple[BackendCandidate, ...]] = (
         canonical_name="coordinates.transform_coordinates",
         implementation_label="Arrow IPC Orbits frame-rotation workflow",
         boundary="python+quivr+arrow-ipc",
-        rust_module="adam_core.orbits.arrow_bridge.rotate_orbits_frame",
+        rust_module="adam_core.orbits.arrow_bridge._rotate_orbits_frame_ipc_candidate",
         legacy_comparator=(
             "adam_core.coordinates.transform.transform_coordinates(..., frame_out=...)"
         ),
         note=(
-            "Diagnostic candidate only: this should either remain a private "
-            "implementation detail or be exposed through transform_coordinates "
-            "semantics, not as a standalone public rotate_orbits_frame API."
+            "Diagnostic candidate only: this remains a private implementation "
+            "detail benchmarked against transform_coordinates semantics, not a "
+            "standalone public rotate_orbits_frame API."
         ),
     ),
     BackendCandidate(
