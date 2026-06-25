@@ -76,6 +76,29 @@ class VariantOrbits(qv.Table):
         variants_orbits : '~adam_core.orbits.variants.VariantOrbits'
             The variant orbits.
         """
+        if method == "sigma-point":
+            # Promote the deterministic Rust sampler behind the canonical API.
+            # Keep auto/Monte Carlo on the legacy Python path until the Rust
+            # fallback/RNG behavior is intentionally made SciPy-compatible.
+            from .arrow_bridge import _sample_orbit_variants_ipc_candidate
+
+            variants = _sample_orbit_variants_ipc_candidate(
+                orbits,
+                method=method,
+                num_samples=num_samples,
+                alpha=alpha,
+                beta=beta,
+                kappa=kappa,
+                seed=seed,
+            )
+            source_index = pa.array(
+                np.repeat(np.arange(len(orbits), dtype=np.int64), 13),
+                type=pa.int64(),
+            )
+            return variants.set_column(
+                "physical_parameters", orbits.physical_parameters.take(source_index)
+            )
+
         variant_coordinates: VariantCoordinatesTable = create_coordinate_variants(
             orbits.coordinates,
             method=method,

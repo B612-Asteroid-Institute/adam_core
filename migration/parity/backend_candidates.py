@@ -74,11 +74,12 @@ BACKEND_CANDIDATES: Final[tuple[BackendCandidate, ...]] = (
         canonical_name="orbits.VariantOrbits.create",
         implementation_label="Arrow IPC covariance-variant sampler workflow",
         boundary="python+quivr+arrow-ipc",
-        rust_module="adam_core.orbits.arrow_bridge.sample_orbit_variants",
+        rust_module="adam_core.orbits.arrow_bridge._sample_orbit_variants_ipc_candidate",
         legacy_comparator="adam_core.orbits.variants.VariantOrbits.create",
         note=(
-            "Diagnostic candidate for the Rust backend that should ultimately "
-            "sit behind VariantOrbits.create if it wins semantics/performance."
+            "Diagnostic candidate for the private Rust backend used by "
+            "VariantOrbits.create(method='sigma-point'); auto/Monte Carlo remain "
+            "on the legacy Python path until RNG/fallback semantics align."
         ),
     ),
     BackendCandidate(

@@ -10,22 +10,25 @@ metadata) survive exactly, then exercises a real Rust-native workflow
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 
 from adam_core import _rust_native as rn
 from adam_core.coordinates import (
     CartesianCoordinates,
     CoordinateCovariances,
     Origin,
+    SphericalCoordinates,
     transform_coordinates,
 )
+from adam_core.coordinates.variants import create_coordinate_variants
 from adam_core.orbits import Orbits
-from adam_core.coordinates import SphericalCoordinates
 from adam_core.coordinates.residuals import Residuals
 from adam_core.dynamics import propagate_2body
 from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.observers import Observers
 from adam_core.orbits.arrow_bridge import (
     _rotate_orbits_frame_ipc_candidate,
+    _sample_orbit_variants_ipc_candidate,
     evaluate_residuals_2body,
     fit_orbit_least_squares,
     orbits_to_ipc,
@@ -33,7 +36,6 @@ from adam_core.orbits.arrow_bridge import (
     round_trip_observers,
     round_trip_orbits,
     round_trip_orbits_zero_copy,
-    sample_orbit_variants,
 )
 from adam_core.orbits.orbits import PhysicalParameters
 from adam_core.orbits.variants import VariantOrbits
@@ -170,26 +172,78 @@ def _orbits_with_psd_covariance() -> Orbits:
     )
 
 
-def test_sample_orbit_variants_sigma_point_matches_create():
+def _legacy_sigma_point_variants(orbits: Orbits) -> VariantOrbits:
+    variant_coordinates = create_coordinate_variants(
+        orbits.coordinates, method="sigma-point"
+    )
+    return VariantOrbits.from_kwargs(
+        orbit_id=pc.take(orbits.orbit_id, variant_coordinates.index),
+        object_id=pc.take(orbits.object_id, variant_coordinates.index),
+        variant_id=np.array(
+            np.arange(len(variant_coordinates)).astype(str), dtype="object"
+        ),
+        weights=variant_coordinates.weight,
+        weights_cov=variant_coordinates.weight_cov,
+        coordinates=variant_coordinates.sample,
+        physical_parameters=orbits.physical_parameters.take(variant_coordinates.index),
+    )
+
+
+def _assert_sigma_point_variants_match(
+    actual: VariantOrbits, expected: VariantOrbits
+) -> None:
+    assert actual.orbit_id.to_pylist() == expected.orbit_id.to_pylist()
+    assert actual.object_id.to_pylist() == expected.object_id.to_pylist()
+    assert actual.variant_id.to_pylist() == expected.variant_id.to_pylist()
+    np.testing.assert_allclose(
+        actual.weights.to_numpy(zero_copy_only=False),
+        expected.weights.to_numpy(zero_copy_only=False),
+        rtol=0,
+        atol=1e-15,
+    )
+    np.testing.assert_allclose(
+        actual.weights_cov.to_numpy(zero_copy_only=False),
+        expected.weights_cov.to_numpy(zero_copy_only=False),
+        rtol=0,
+        atol=1e-15,
+    )
+    np.testing.assert_allclose(
+        actual.coordinates.values, expected.coordinates.values, rtol=0, atol=1e-12
+    )
+
+
+def test_sample_orbit_variants_sigma_point_candidate_matches_legacy_sampler():
     orbits = _orbits_with_psd_covariance()
-    bridge = sample_orbit_variants(orbits, method="sigma-point")
-    reference = VariantOrbits.create(orbits, method="sigma-point")
-    assert bridge.orbit_id.to_pylist() == reference.orbit_id.to_pylist()
-    assert bridge.variant_id.to_pylist() == reference.variant_id.to_pylist()
-    np.testing.assert_allclose(
-        bridge.weights.to_numpy(zero_copy_only=False),
-        reference.weights.to_numpy(zero_copy_only=False),
-        rtol=0,
-        atol=1e-15,
+    bridge = _sample_orbit_variants_ipc_candidate(orbits, method="sigma-point")
+    reference = _legacy_sigma_point_variants(orbits)
+    _assert_sigma_point_variants_match(bridge, reference)
+
+
+def test_variant_orbits_create_sigma_point_uses_rust_candidate_and_preserves_physical():
+    base = _orbits_with_psd_covariance()
+    orbits = Orbits.from_kwargs(
+        orbit_id=base.orbit_id,
+        object_id=base.object_id,
+        coordinates=base.coordinates,
+        physical_parameters=PhysicalParameters.from_kwargs(
+            H_v=[15.5, 16.0, 17.0],
+            H_v_sigma=[0.1, None, 0.3],
+            G=[0.15, 0.15, 0.15],
+            G_sigma=[None, None, None],
+            sigma_eff=[0.05, 0.06, 0.07],
+            chi2_red=[1.2, 1.1, 1.0],
+        ),
     )
-    np.testing.assert_allclose(
-        bridge.weights_cov.to_numpy(zero_copy_only=False),
-        reference.weights_cov.to_numpy(zero_copy_only=False),
-        rtol=0,
-        atol=1e-15,
+    variants = VariantOrbits.create(orbits, method="sigma-point")
+    reference = _legacy_sigma_point_variants(orbits)
+    _assert_sigma_point_variants_match(variants, reference)
+    assert (
+        variants.physical_parameters.H_v.to_pylist()
+        == reference.physical_parameters.H_v.to_pylist()
     )
-    np.testing.assert_allclose(
-        bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-12
+    assert (
+        variants.physical_parameters.G.to_pylist()
+        == reference.physical_parameters.G.to_pylist()
     )
 
 

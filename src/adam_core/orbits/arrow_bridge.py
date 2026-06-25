@@ -317,7 +317,7 @@ def _rotate_orbits_frame_ipc_candidate(orbits: Orbits, frame: str) -> Orbits:
     return orbits_from_ipc(_rn.orbits_rotate_frame_ipc(orbits_to_ipc(orbits), frame))
 
 
-def sample_orbit_variants(
+def _sample_orbit_variants_ipc_candidate(
     orbits: Orbits,
     method: str = "sigma-point",
     num_samples: int = 10000,
@@ -326,10 +326,12 @@ def sample_orbit_variants(
     beta: float = 0.0,
     kappa: float = 0.0,
 ) -> VariantOrbits:
-    """Sample covariance variants of ``orbits`` Rust-side in one crossing.
+    """Diagnostic Arrow-IPC candidate for ``VariantOrbits.create``.
 
-    Mirrors ``VariantOrbits.create`` semantics; ``method`` is one of ``auto``,
-    ``sigma-point``, or ``monte-carlo``.
+    This remains private because only deterministic ``sigma-point`` sampling is
+    currently promoted behind the canonical public API. ``auto`` and
+    ``monte-carlo`` stay on the legacy Python path until the Rust RNG/fallback
+    behavior is intentionally aligned.
     """
     raw = _rn.orbits_sample_variants_ipc(
         orbits_to_ipc(orbits), method, num_samples, seed, alpha, beta, kappa

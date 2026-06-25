@@ -1046,8 +1046,8 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "weights_cov": OutputTol(atol=1e-15),
         },
         rationale=(
-            "Arrow-bridge ``sample_orbit_variants`` (deterministic sigma-point "
-            "unscented transform) compared against baseline-main "
+            "Arrow-bridge private variant-sampler candidate (deterministic "
+            "sigma-point unscented transform) compared against baseline-main "
             "``VariantOrbits.create`` on identical PSD covariances."
         ),
         dominant_column="sigma-point coordinates",
@@ -1061,8 +1061,8 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "at ~1e-12 while the analytic weights are bit-identical."
         ),
         verdict=(
-            "bridge-signature parity; the deterministic sigma-point set and weights "
-            "match legacy VariantOrbits.create."
+            "backend-candidate parity; the deterministic sigma-point set and "
+            "weights match legacy VariantOrbits.create."
         ),
     ),
     "bridge.evaluate_residuals_2body": ToleranceSpec(

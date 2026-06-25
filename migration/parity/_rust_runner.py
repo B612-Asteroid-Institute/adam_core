@@ -992,12 +992,12 @@ def _bridge_sample_orbit_variants(
     origin: str,
     frame: str,
 ) -> dict[str, np.ndarray]:
-    """Bridge ``sample_orbit_variants`` (sigma-point) on the migration checkout."""
+    """Bridge candidate for ``VariantOrbits.create`` sigma-point sampling."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.covariances import CoordinateCovariances
     from adam_core.coordinates.origin import Origin
     from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import sample_orbit_variants
+    from adam_core.orbits.arrow_bridge import _sample_orbit_variants_ipc_candidate
     from adam_core.time import Timestamp
 
     coords = np.asarray(coords, dtype=np.float64)
@@ -1020,7 +1020,7 @@ def _bridge_sample_orbit_variants(
         orbit_id=[str(i) for i in range(n)],
         coordinates=cart,
     )
-    out = sample_orbit_variants(orbits, method="sigma-point")
+    out = _sample_orbit_variants_ipc_candidate(orbits, method="sigma-point")
     return {
         "coordinates": _ensure(out.coordinates.values, "bridge.sample_orbit_variants"),
         "weights": _ensure(
