@@ -1,0 +1,358 @@
+{
+  "cold": {},
+  "created_at": "2026-06-25T15:15:58+00:00",
+  "legacy_identity": {
+    "benchmark_source_hash": "7d3f3052ee881ecd6c68048ceb5e6d7e19a4947b60ecd872b66571f9338a81b3",
+    "git_commit": "9ef630867bf93cedd42a4c3eda9be3a1977f9446",
+    "git_dirty": false,
+    "git_relevant_untracked_dirty": false,
+    "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "legacy_packages_hash": "7c4da0d466f4a3d71a086f1cdef3e9f03c39acef9f5e11cc491459d04dbb0f3b",
+    "machine": {
+      "cpu_brand": "Apple M1 Max",
+      "hostname": "MacBook-Pro-5.local",
+      "machine": "arm64",
+      "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+      "processor": "arm"
+    },
+    "process_version": "rm-p1-020-built-in-speed-trials-v1",
+    "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+    "python_version": "Python 3.13.3",
+    "repo_root": "/Users/aleck/Code/adam-core",
+    "timing_process_hash": "51bd8a06927db78da4258975203ed5efe7eecdad9771c1b840049c4e5fcfef2e"
+  },
+  "process_version": "rm-p1-020-built-in-speed-trials-v1",
+  "schema_version": 1,
+  "updated_at": "2026-06-25T15:19:18+00:00",
+  "warm": {
+    "72a9bfe18e8b007f66b666c617f0187a6e870c9242c3509cace7149f300fde9e": {
+      "captured_at": "2026-06-25T15:19:10+00:00",
+      "key_fields": {
+        "api_id": "bridge.sample_orbit_variants",
+        "kind": "warm",
+        "lane": "small-n",
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "reps": 7,
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "timing_trials": 3,
+        "warmup": 2,
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=2000",
+          "rows": 2000
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "7d3f3052ee881ecd6c68048ceb5e6d7e19a4947b60ecd872b66571f9338a81b3",
+        "git_commit": "9ef630867bf93cedd42a4c3eda9be3a1977f9446",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "7c4da0d466f4a3d71a086f1cdef3e9f03c39acef9f5e11cc491459d04dbb0f3b",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "51bd8a06927db78da4258975203ed5efe7eecdad9771c1b840049c4e5fcfef2e"
+      },
+      "p50_s": 1.6269338754937053,
+      "p50_trials_s": [
+        1.6724322084337473,
+        1.5954627497121692,
+        1.6269338754937053
+      ],
+      "p95_s": 1.7147467702627182,
+      "p95_trials_s": [
+        1.7147467702627182,
+        1.672942295949906,
+        1.7258286790922284
+      ],
+      "sample_trials_s": [
+        [
+          1.6724322084337473,
+          1.668822499923408,
+          1.6073865834623575,
+          1.7224584575742483,
+          1.6967528332024813,
+          1.6252283342182636,
+          1.6793565843254328
+        ],
+        [
+          1.5529685001820326,
+          1.6485005421563983,
+          1.5954627497121692,
+          1.5776673750951886,
+          1.571360332891345,
+          1.6834173332899809,
+          1.6146990833804011
+        ],
+        [
+          1.745891916565597,
+          1.6715596243739128,
+          1.5923272501677275,
+          1.679014458321035,
+          1.5700503746047616,
+          1.5968652497977018,
+          1.6269338754937053
+        ]
+      ],
+      "timing_aggregation": "median-of-trial-percentiles"
+    },
+    "c6bb2ebed9312308e93e676755a4b12039ba3d98dd31bddf901f6f84dcac4d28": {
+      "captured_at": "2026-06-25T15:19:18+00:00",
+      "key_fields": {
+        "api_id": "bridge.evaluate_residuals_2body",
+        "kind": "warm",
+        "lane": "small-n",
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "reps": 7,
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "timing_trials": 3,
+        "warmup": 2,
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=2000",
+          "rows": 2000
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "7d3f3052ee881ecd6c68048ceb5e6d7e19a4947b60ecd872b66571f9338a81b3",
+        "git_commit": "9ef630867bf93cedd42a4c3eda9be3a1977f9446",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "7c4da0d466f4a3d71a086f1cdef3e9f03c39acef9f5e11cc491459d04dbb0f3b",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "51bd8a06927db78da4258975203ed5efe7eecdad9771c1b840049c4e5fcfef2e"
+      },
+      "p50_s": 0.011649291962385178,
+      "p50_trials_s": [
+        0.011466249823570251,
+        0.011649291962385178,
+        0.011701332405209541
+      ],
+      "p95_s": 0.012165533564984798,
+      "p95_trials_s": [
+        0.011796095501631498,
+        0.012923012021929026,
+        0.012165533564984798
+      ],
+      "sample_trials_s": [
+        [
+          0.011391832493245602,
+          0.011466249823570251,
+          0.010855291038751602,
+          0.01155041716992855,
+          0.0114313755184412,
+          0.011842207983136177,
+          0.011688499711453915
+        ],
+        [
+          0.011649291962385178,
+          0.011623167432844639,
+          0.012203791178762913,
+          0.013231249526143074,
+          0.012053375132381916,
+          0.011564000509679317,
+          0.011312166228890419
+        ],
+        [
+          0.012244833633303642,
+          0.01160412561148405,
+          0.01122770830988884,
+          0.01161954179406166,
+          0.011701332405209541,
+          0.011849790811538696,
+          0.01198050007224083
+        ]
+      ],
+      "timing_aggregation": "median-of-trial-percentiles"
+    },
+    "c7c594b1c8f0f37806f77fa0b9b5665f4b94376715cc436e9f5b936e5b645aa0": {
+      "captured_at": "2026-06-25T15:18:20+00:00",
+      "key_fields": {
+        "api_id": "bridge.rotate_orbits_frame",
+        "kind": "warm",
+        "lane": "small-n",
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "reps": 7,
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "timing_trials": 3,
+        "warmup": 2,
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=2000",
+          "rows": 2000
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "7d3f3052ee881ecd6c68048ceb5e6d7e19a4947b60ecd872b66571f9338a81b3",
+        "git_commit": "9ef630867bf93cedd42a4c3eda9be3a1977f9446",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "7c4da0d466f4a3d71a086f1cdef3e9f03c39acef9f5e11cc491459d04dbb0f3b",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "51bd8a06927db78da4258975203ed5efe7eecdad9771c1b840049c4e5fcfef2e"
+      },
+      "p50_s": 0.0035409163683652878,
+      "p50_trials_s": [
+        0.0036027496680617332,
+        0.0035409163683652878,
+        0.0032312506809830666
+      ],
+      "p95_s": 0.0038060047663748264,
+      "p95_trials_s": [
+        0.0038060047663748264,
+        0.004277421440929174,
+        0.003671575058251619
+      ],
+      "sample_trials_s": [
+        [
+          0.003811292350292206,
+          0.003612915985286236,
+          0.003593292087316513,
+          0.003793667070567608,
+          0.003433915786445141,
+          0.00345008447766304,
+          0.0036027496680617332
+        ],
+        [
+          0.004012792371213436,
+          0.003469499759376049,
+          0.003967540338635445,
+          0.003376624546945095,
+          0.0033727502450346947,
+          0.0043908338993787766,
+          0.0035409163683652878
+        ],
+        [
+          0.0037683751434087753,
+          0.0032577915117144585,
+          0.0032312506809830666,
+          0.003445708192884922,
+          0.003189791925251484,
+          0.003209000453352928,
+          0.0032224170863628387
+        ]
+      ],
+      "timing_aggregation": "median-of-trial-percentiles"
+    },
+    "cf198cce733976517291490999a439b87dec11a0ebf9c35fa71cef63227c102a": {
+      "captured_at": "2026-06-25T15:18:16+00:00",
+      "key_fields": {
+        "api_id": "bridge.propagate_orbits_2body",
+        "kind": "warm",
+        "lane": "small-n",
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "reps": 7,
+        "seed": 20260425,
+        "thread_mode": "multi-thread",
+        "timing_trials": 3,
+        "warmup": 2,
+        "workload_shape": {
+          "axes": {},
+          "label": "rows=2000",
+          "rows": 2000
+        }
+      },
+      "legacy_identity": {
+        "benchmark_source_hash": "7d3f3052ee881ecd6c68048ceb5e6d7e19a4947b60ecd872b66571f9338a81b3",
+        "git_commit": "9ef630867bf93cedd42a4c3eda9be3a1977f9446",
+        "git_dirty": false,
+        "git_relevant_untracked_dirty": false,
+        "git_relevant_untracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "git_tracked_status_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "legacy_packages_hash": "7c4da0d466f4a3d71a086f1cdef3e9f03c39acef9f5e11cc491459d04dbb0f3b",
+        "machine": {
+          "cpu_brand": "Apple M1 Max",
+          "hostname": "MacBook-Pro-5.local",
+          "machine": "arm64",
+          "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+          "processor": "arm"
+        },
+        "process_version": "rm-p1-020-built-in-speed-trials-v1",
+        "python": "/Users/aleck/Code/adam-core-rust-migration/.legacy-venv/bin/python",
+        "python_version": "Python 3.13.3",
+        "repo_root": "/Users/aleck/Code/adam-core",
+        "timing_process_hash": "51bd8a06927db78da4258975203ed5efe7eecdad9771c1b840049c4e5fcfef2e"
+      },
+      "p50_s": 0.0033013755455613136,
+      "p50_trials_s": [
+        0.0033013755455613136,
+        0.0032558748498559,
+        0.0034095412120223045
+      ],
+      "p95_s": 0.003605183400213718,
+      "p95_trials_s": [
+        0.0034955250099301337,
+        0.003605183400213718,
+        0.003668966423720121
+      ],
+      "sample_trials_s": [
+        [
+          0.00350787490606308,
+          0.0031368331983685493,
+          0.0034667085856199265,
+          0.003319207578897476,
+          0.0033013755455613136,
+          0.0032740412279963493,
+          0.0031756246462464333
+        ],
+        [
+          0.0036494582891464233,
+          0.003501875326037407,
+          0.003188749775290489,
+          0.003079500049352646,
+          0.0029975837096571922,
+          0.0032558748498559,
+          0.0034379586577415466
+        ],
+        [
+          0.003744666464626789,
+          0.0034577082842588425,
+          0.00324925035238266,
+          0.0029887091368436813,
+          0.0032979166135191917,
+          0.0034095412120223045,
+          0.0034923329949378967
+        ]
+      ],
+      "timing_aggregation": "median-of-trial-percentiles"
+    }
+  }
+}

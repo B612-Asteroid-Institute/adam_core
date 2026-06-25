@@ -188,6 +188,13 @@ def _is_diagnostic_speed_api(api_id: str) -> bool:
     """Return True for raw kernels whose speed is tracked but not promoted."""
     from adam_core._rust.status import API_MIGRATIONS_BY_ID
 
+    # Arrow-bridge orchestration signatures (single Python<->Rust crossing) are
+    # tracked for diagnostics but not promotion-gated: their wall-clock includes
+    # fixed IPC serialization overhead, so a cheap single-op kernel (e.g. frame
+    # rotation) can be only marginally faster than the legacy Python path even
+    # though the underlying Rust kernel is already promotion-gated elsewhere.
+    if api_id.startswith("bridge."):
+        return True
     migration = API_MIGRATIONS_BY_ID.get(api_id)
     return migration is not None and migration.status == "raw-kernel-only"
 

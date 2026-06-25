@@ -989,6 +989,108 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict="public quivr orchestration parity for Lambert porkchop grids.",
     ),
+    "bridge.propagate_orbits_2body": ToleranceSpec(
+        outputs={"out": OutputTol(atol=1e-11)},
+        rationale=(
+            "Arrow-bridge ``propagate_orbits_2body`` (single Python<->Rust "
+            "crossing, Orbits in -> Orbits out) compared against baseline-main "
+            "public ``dynamics.propagate_2body`` on identical bound heliocentric "
+            "orbits propagated to one shared TDB epoch."
+        ),
+        dominant_column="position (x, y, z)",
+        physical_magnitude=(
+            "Same universal-Kepler kernel as dynamics.propagate_2body; "
+            "≤8.9e-14 AU ≈ 13 picometers."
+        ),
+        root_cause=(
+            "The bridge reuses the same Rust universal-Kepler kernel as "
+            "dynamics.propagate_2body; the only added surface is the nested "
+            "Arrow IPC transport, which is lossless, so any drift is bounded by "
+            "the same Newton last-bit root choice."
+        ),
+        verdict=(
+            "bridge-signature parity; numerically reduces to dynamics.propagate_2body "
+            "plus a lossless Arrow round-trip."
+        ),
+    ),
+    "bridge.rotate_orbits_frame": ToleranceSpec(
+        outputs={
+            "values": OutputTol(atol=1e-12),
+            "covariance": OutputTol(atol=1e-12, rtol=1e-9),
+        },
+        rationale=(
+            "Arrow-bridge ``rotate_orbits_frame`` (state + covariance, single "
+            "Python<->Rust crossing) compared against baseline-main "
+            "``transform_coordinates`` rotating ecliptic Cartesian into equatorial."
+        ),
+        dominant_column="covariance off-diagonal",
+        physical_magnitude=(
+            "Constant obliquity rotation; observed drift at ~1e-14 (state) and "
+            "~1e-13 (covariance J Sigma J^T)."
+        ),
+        root_cause=(
+            "The bridge reuses the same fixed 3x3 obliquity rotation kernel as "
+            "transform_coordinates; the only added surface is the lossless nested "
+            "Arrow IPC transport."
+        ),
+        verdict=(
+            "bridge-signature parity; numerically reduces to a transform_coordinates "
+            "frame rotation."
+        ),
+    ),
+    "bridge.sample_orbit_variants": ToleranceSpec(
+        outputs={
+            "coordinates": OutputTol(atol=1e-12),
+            "weights": OutputTol(atol=1e-15),
+            "weights_cov": OutputTol(atol=1e-15),
+        },
+        rationale=(
+            "Arrow-bridge ``sample_orbit_variants`` (deterministic sigma-point "
+            "unscented transform) compared against baseline-main "
+            "``VariantOrbits.create`` on identical PSD covariances."
+        ),
+        dominant_column="sigma-point coordinates",
+        physical_magnitude=(
+            "Deterministic unscented transform; sigma points within ~1e-12 of "
+            "legacy, weights bit-identical."
+        ),
+        root_cause=(
+            "Sigma points are mean +/- columns of sqrt((n+lambda) Sigma); the "
+            "matrix square-root last-bit choice differs from the legacy NumPy path "
+            "at ~1e-12 while the analytic weights are bit-identical."
+        ),
+        verdict=(
+            "bridge-signature parity; the deterministic sigma-point set and weights "
+            "match legacy VariantOrbits.create."
+        ),
+    ),
+    "bridge.evaluate_residuals_2body": ToleranceSpec(
+        outputs={"chi2": OutputTol(atol=1e-6, rtol=1e-7)},
+        rationale=(
+            "Arrow-bridge ``evaluate_residuals_2body`` (the OD inner loop: 2-body "
+            "ephemeris + chi2 in one Python<->Rust crossing) compared against "
+            "baseline-main ``generate_ephemeris_2body`` + ``Residuals.calculate`` "
+            "on identical observations and 1:1 orbit/observer pairs."
+        ),
+        dominant_column="chi2",
+        physical_magnitude=(
+            "chi2 ~ O(1e3) for the 1e-2 deg test residuals; observed rust-vs-legacy "
+            "chi2 drift is ~1e-9 relative. The chi2 relative error is ~2*delta/r "
+            "where delta is the generate_ephemeris_2body angular drift (~3e-12 deg) "
+            "and r the residual magnitude, so it is amplified for tiny residuals."
+        ),
+        root_cause=(
+            "The bridge reuses the same Rust generate_ephemeris_2body and chi2 "
+            "kernels (same SSB / ecliptic barycentric light-time convention) while "
+            "the baseline-main reference uses the JAX ephemeris; the chi2 difference "
+            "is the already-gated generate_ephemeris_2body angular drift propagated "
+            "through the chi2 sum and divided by the residual magnitude."
+        ),
+        verdict=(
+            "bridge-signature parity; numerically reduces to generate_ephemeris_2body "
+            "+ Residuals.calculate, both already gated."
+        ),
+    ),
 }
 
 
