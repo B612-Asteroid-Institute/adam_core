@@ -67,7 +67,7 @@ def _align_observers_to_exposures(
     if len(observers) == len(exposures_aligned):
         return observers
     if len(observers) != len(exposures_full):
-        raise ValueError(
+        raise RuntimeError(
             "internal error: aligned observers length does not match detections length"
         )
     idx = pc.fill_null(  # type: ignore[no-untyped-call]
@@ -78,7 +78,7 @@ def _align_observers_to_exposures(
     )
     idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
     if np.any(idx_np < 0):
-        raise ValueError(
+        raise RuntimeError(
             "internal error: exposure alignment failed for observer mapping"
         )
     return observers.take(pa.array(idx_np, type=pa.int32()))
@@ -117,7 +117,7 @@ def build_rotation_period_observations_from_detections(
     )
 
     if len(observers_helio) != n_det:
-        raise ValueError(
+        raise RuntimeError(
             "internal error: aligned observers length does not match detections length"
         )
 
@@ -275,11 +275,16 @@ def estimate_rotation_period_from_detections_grouped(
                 **search_kwargs,
             )
             if len(result_i) != 1:
-                raise ValueError("rotation-period kernel must return exactly one row")
+                # Internal kernel-contract violation, NOT an expected data failure -- a
+                # RuntimeError so it bypasses the `except ValueError` insufficient path
+                # below and surfaces (with object-id context) via the Exception handler.
+                raise RuntimeError("rotation-period kernel must return exactly one row")
         except ValueError as exc:
-            # Expected data failure (insufficient/degenerate input or a kernel
-            # ValueError): emit a one-row insufficient_data result for this object so it
-            # is NEVER silently dropped -- the grouped output keeps one row per id.
+            # Expected data failure: the observation builder or the solver's input
+            # validation raised a ValueError for insufficient/degenerate input. Emit a
+            # one-row insufficient_data result for this object so it is NEVER silently
+            # dropped -- the grouped output keeps one row per id. (Internal invariant
+            # failures raise RuntimeError above and are NOT caught here.)
             result_i = RotationPeriodResult.single_insufficient(
                 reasons=[f"solve_error: {exc}"],
                 confidence_flags=["solve_error"],

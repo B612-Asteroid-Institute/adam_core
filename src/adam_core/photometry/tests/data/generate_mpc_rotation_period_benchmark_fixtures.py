@@ -96,8 +96,10 @@ def _query_rows(
             bigquery.ScalarQueryParameter("stn", "STRING", case.station_code),
         ]
     )
-    return client.query(query, job_config=job_config).result().to_arrow(
-        create_bqstorage_client=True
+    return (
+        client.query(query, job_config=job_config)
+        .result()
+        .to_arrow(create_bqstorage_client=True)
     )
 
 
@@ -143,7 +145,9 @@ def _build_geometry(
 def _session_ids(codes: list[str], times_utc: Timestamp) -> list[str]:
     nights = calculate_observing_night(pa.array(codes, type=pa.string()), times_utc)
     night_values = np.asarray(nights.to_numpy(zero_copy_only=False), dtype=np.int64)
-    return [f"{code}:{int(night)}" for code, night in zip(codes, night_values, strict=True)]
+    return [
+        f"{code}:{int(night)}" for code, night in zip(codes, night_values, strict=True)
+    ]
 
 
 def _build_observations(
@@ -164,7 +168,9 @@ def _build_observations(
     codes = [case.station_code] * rows.num_rows
     return RotationPeriodObservations.from_kwargs(
         time=times_utc,
-        mag=np.asarray(rows.column("mag").to_numpy(zero_copy_only=False), dtype=np.float64),
+        mag=np.asarray(
+            rows.column("mag").to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
         mag_sigma=pa.array(
             mag_sigma,
             mask=~np.isfinite(mag_sigma),
