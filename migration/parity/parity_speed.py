@@ -185,15 +185,16 @@ def _shape_json(workload: Any) -> dict[str, object]:
 
 
 def _is_diagnostic_speed_api(api_id: str) -> bool:
-    """Return True for raw kernels whose speed is tracked but not promoted."""
+    """Return True for tracked comparisons that are not promotion-gated."""
     from adam_core._rust.status import API_MIGRATIONS_BY_ID
 
-    # Arrow-bridge orchestration signatures (single Python<->Rust crossing) are
-    # tracked for diagnostics but not promotion-gated: their wall-clock includes
-    # fixed IPC serialization overhead, so a cheap single-op kernel (e.g. frame
-    # rotation) can be only marginally faster than the legacy Python path even
-    # though the underlying Rust kernel is already promotion-gated elsewhere.
-    if api_id.startswith("bridge."):
+    from . import backend_candidates
+
+    # Backend/transport candidates (for example Arrow IPC workflow wrappers)
+    # are tracked for diagnostics while we evaluate whether they should be
+    # promoted behind a canonical public API. They are not public API migration
+    # identities and should not fail the public promotion gate.
+    if backend_candidates.is_candidate(api_id):
         return True
     migration = API_MIGRATIONS_BY_ID.get(api_id)
     return migration is not None and migration.status == "raw-kernel-only"
@@ -1576,6 +1577,58 @@ def _lane_status(results: list[SpeedResult]) -> dict[str, dict[str, object]]:
     return status
 
 
+def _speed_result_to_json(result: SpeedResult) -> dict[str, object]:
+    from . import backend_candidates
+
+    row: dict[str, object] = {
+        "api_id": result.api_id,
+        "lane": result.lane,
+        "lane_description": result.lane_description,
+        "lane_enforced": result.lane_enforced,
+        "workload_shape": result.workload_shape,
+        "workload_label": result.workload_label,
+        "n": result.n,
+        "reps": result.reps,
+        "warmup": result.warmup,
+        "timing_trials": result.timing_trials,
+        "timing_aggregation": result.timing_aggregation,
+        "rust_sample_trials_s": result.rust_sample_trials_s,
+        "rust_p50_trials_s": result.rust_p50_trials_s,
+        "rust_p95_trials_s": result.rust_p95_trials_s,
+        "legacy_sample_trials_s": result.legacy_sample_trials_s,
+        "legacy_p50_trials_s": result.legacy_p50_trials_s,
+        "legacy_p95_trials_s": result.legacy_p95_trials_s,
+        "speedup_p50_trials": result.speedup_p50_trials,
+        "speedup_p95_trials": result.speedup_p95_trials,
+        "rust_p50_s": result.rust_p50,
+        "rust_p95_s": result.rust_p95,
+        "legacy_p50_s": result.legacy_p50,
+        "legacy_p95_s": result.legacy_p95,
+        "legacy_source": result.legacy_source,
+        "legacy_cache_key": result.legacy_cache_key,
+        "speedup_p50": result.speedup_p50,
+        "speedup_p95": result.speedup_p95,
+        "min_speedup_p50": result.min_speedup_p50,
+        "min_speedup_p95": result.min_speedup_p95,
+        "raw_passed": result.raw_passed,
+        "passed": result.passed,
+        "waived": result.waived,
+        "waiver": result.waiver,
+        "error": result.error,
+        "rust_cold_s": result.rust_cold,
+        "legacy_cold_s": result.legacy_cold,
+        "legacy_cold_source": result.legacy_cold_source,
+        "legacy_cold_cache_key": result.legacy_cold_cache_key,
+        "rust_cold_trials_s": result.rust_cold_trials_s,
+        "legacy_cold_trials_s": result.legacy_cold_trials_s,
+        "speedup_cold": result.speedup_cold,
+    }
+    candidate = backend_candidates.get(result.api_id)
+    if candidate is not None:
+        row["backend_candidate"] = candidate.to_json()
+    return row
+
+
 def to_json(
     results: list[SpeedResult],
     legacy_cache: Mapping[str, object] | None = None,
@@ -1618,59 +1671,15 @@ def to_json(
             "The small-n lane preserves the historical n=2000 promotion gate. "
             "The large-n lane is API-shaped, records structured workload axes, "
             "and is enforced by default with explicit per-lane waivers required "
-            "for known large-workload regressions. Raw-kernel-only APIs are "
-            "timed and reported as diagnostic comparisons because they are not "
-            "public-dispatch Rust-default promotion gates."
+            "for known large-workload regressions. Raw-kernel-only APIs and "
+            "backend/transport implementation candidates are timed and reported "
+            "as diagnostic comparisons because they are not public-dispatch "
+            "Rust-default promotion gates."
         ),
         "legacy_timing_cache": _legacy_cache_metadata(legacy_cache),
         "lanes": _lane_metadata(results),
         "lane_status": _lane_status(results),
-        "apis": [
-            {
-                "api_id": r.api_id,
-                "lane": r.lane,
-                "lane_description": r.lane_description,
-                "lane_enforced": r.lane_enforced,
-                "workload_shape": r.workload_shape,
-                "workload_label": r.workload_label,
-                "n": r.n,
-                "reps": r.reps,
-                "warmup": r.warmup,
-                "timing_trials": r.timing_trials,
-                "timing_aggregation": r.timing_aggregation,
-                "rust_sample_trials_s": r.rust_sample_trials_s,
-                "rust_p50_trials_s": r.rust_p50_trials_s,
-                "rust_p95_trials_s": r.rust_p95_trials_s,
-                "legacy_sample_trials_s": r.legacy_sample_trials_s,
-                "legacy_p50_trials_s": r.legacy_p50_trials_s,
-                "legacy_p95_trials_s": r.legacy_p95_trials_s,
-                "speedup_p50_trials": r.speedup_p50_trials,
-                "speedup_p95_trials": r.speedup_p95_trials,
-                "rust_p50_s": r.rust_p50,
-                "rust_p95_s": r.rust_p95,
-                "legacy_p50_s": r.legacy_p50,
-                "legacy_p95_s": r.legacy_p95,
-                "legacy_source": r.legacy_source,
-                "legacy_cache_key": r.legacy_cache_key,
-                "speedup_p50": r.speedup_p50,
-                "speedup_p95": r.speedup_p95,
-                "min_speedup_p50": r.min_speedup_p50,
-                "min_speedup_p95": r.min_speedup_p95,
-                "raw_passed": r.raw_passed,
-                "passed": r.passed,
-                "waived": r.waived,
-                "waiver": r.waiver,
-                "error": r.error,
-                "rust_cold_s": r.rust_cold,
-                "legacy_cold_s": r.legacy_cold,
-                "legacy_cold_source": r.legacy_cold_source,
-                "legacy_cold_cache_key": r.legacy_cold_cache_key,
-                "rust_cold_trials_s": r.rust_cold_trials_s,
-                "legacy_cold_trials_s": r.legacy_cold_trials_s,
-                "speedup_cold": r.speedup_cold,
-            }
-            for r in results
-        ],
+        "apis": [_speed_result_to_json(result) for result in results],
         "all_passed": all(_governance_passed(r) for r in results),
     }
     if artifact["legacy_timing_cache"] is None:

@@ -28,7 +28,13 @@ if __package__ in {None, ""}:
 
 from adam_core._rust.status import API_MIGRATIONS_BY_ID, validate_api_migrations
 
-from migration.parity import _inputs, parity_fixed, parity_fuzz, tolerances
+from migration.parity import (
+    _inputs,
+    backend_candidates,
+    parity_fixed,
+    parity_fuzz,
+    tolerances,
+)
 
 DEFAULT_PARITY_ARTIFACT = Path("migration/artifacts/parity_gate.json")
 DEFAULT_SPEED_ARTIFACT = Path("migration/artifacts/parity_speed_cold_warm.json")
@@ -51,6 +57,72 @@ def _headroom_from_ratio(max_tolerance_ratio: float) -> float:
     return 1.0 / max_tolerance_ratio
 
 
+def _governance_fields(api_id: str) -> dict[str, Any]:
+    candidate = backend_candidates.get(api_id)
+    if candidate is not None:
+        return {
+            "backend_candidate": True,
+            "backend_candidate_id": candidate.candidate_id,
+            "canonical_api_id": candidate.canonical_api_id,
+            "canonical_name": candidate.canonical_name,
+            "implementation_label": candidate.implementation_label,
+            "boundary": candidate.boundary,
+            "rust_module": candidate.rust_module,
+            "legacy_comparator": candidate.legacy_comparator,
+            "candidate_note": candidate.note,
+            "registry_status": "backend-candidate",
+            "parity_coverage": "backend-candidate",
+            "coverage_note": candidate.note,
+            "covered_subcases": (
+                f"{candidate.implementation_label} compared against {candidate.legacy_comparator}",
+            ),
+            "excluded_subcases": (),
+        }
+    migration = API_MIGRATIONS_BY_ID[api_id]
+    return {
+        "backend_candidate": False,
+        "registry_status": migration.status,
+        "parity_coverage": migration.parity_coverage,
+        "coverage_note": migration.coverage_note,
+        "covered_subcases": migration.covered_subcases,
+        "excluded_subcases": migration.excluded_subcases,
+    }
+
+
+def _api_markdown_label(api_id: str, row: dict[str, Any] | None = None) -> str:
+    candidate = None
+    if row and row.get("backend_candidate"):
+        metadata = row.get("backend_candidate")
+        if isinstance(metadata, dict):
+            candidate = {
+                "canonical_name": metadata.get("canonical_name"),
+                "implementation_label": metadata.get("implementation_label"),
+            }
+        else:
+            candidate = {
+                "canonical_name": row.get("canonical_name"),
+                "implementation_label": row.get("implementation_label"),
+            }
+    else:
+        registry_candidate = backend_candidates.get(api_id)
+        if registry_candidate is not None:
+            candidate = {
+                "canonical_name": registry_candidate.canonical_name,
+                "implementation_label": registry_candidate.implementation_label,
+            }
+    if candidate is not None:
+        canonical = candidate.get("canonical_name") or "canonical API TBD"
+        label = candidate.get("implementation_label") or "implementation candidate"
+        return f"`{canonical}`<br>" f"<sub>impl candidate: `{api_id}` ({label})</sub>"
+    return f"`{api_id}`"
+
+
+def _is_backend_candidate_row(row: dict[str, Any]) -> bool:
+    return bool(row.get("backend_candidate")) or str(row.get("state", "")).startswith(
+        "backend-candidate"
+    )
+
+
 def _build_rows(
     fuzz_results: list[parity_fuzz.ApiResult],
     fixed_results: list[parity_fixed.ApiResult] | None = None,
@@ -64,7 +136,8 @@ def _build_rows(
     fixed_ids = set(fixed_by_api.keys())
     wired_ids = set(_inputs.all_api_ids())
     declared_ids = set(tolerances.all_api_ids())
-    missing_registry = sorted(declared_ids - set(API_MIGRATIONS_BY_ID))
+    candidate_ids = set(backend_candidates.BACKEND_CANDIDATES_BY_ID)
+    missing_registry = sorted(declared_ids - set(API_MIGRATIONS_BY_ID) - candidate_ids)
     if missing_registry:
         raise RuntimeError(
             "Parity tolerance entries missing from API_MIGRATIONS registry: "
@@ -75,7 +148,12 @@ def _build_rows(
     for api_id in sorted(measured_ids):
         spec = tolerances.get(api_id)
         api_result = by_api[api_id]
-        migration = API_MIGRATIONS_BY_ID[api_id]
+        governance = _governance_fields(api_id)
+        state = (
+            "backend-candidate-measured"
+            if governance["backend_candidate"]
+            else "measured"
+        )
         for out_name, tol in spec.outputs.items():
             worst_abs = 0.0
             worst_rel = 0.0
@@ -115,19 +193,15 @@ def _build_rows(
                     "physical_magnitude": spec.physical_magnitude,
                     "root_cause": spec.root_cause,
                     "verdict": spec.verdict,
-                    "state": "measured",
-                    "registry_status": migration.status,
-                    "parity_coverage": migration.parity_coverage,
-                    "coverage_note": migration.coverage_note,
-                    "covered_subcases": migration.covered_subcases,
-                    "excluded_subcases": migration.excluded_subcases,
+                    "state": state,
+                    **governance,
                 }
             )
 
     for api_id in sorted(fixed_ids):
         spec = tolerances.get(api_id)
         api_result = fixed_by_api[api_id]
-        migration = API_MIGRATIONS_BY_ID[api_id]
+        governance = _governance_fields(api_id)
         output_names = sorted(
             {
                 output.name
@@ -189,11 +263,7 @@ def _build_rows(
                         if api_id in measured_ids
                         else "fixed-fixture"
                     ),
-                    "registry_status": migration.status,
-                    "parity_coverage": migration.parity_coverage,
-                    "coverage_note": migration.coverage_note,
-                    "covered_subcases": migration.covered_subcases,
-                    "excluded_subcases": migration.excluded_subcases,
+                    **governance,
                     "fixture_names": tuple(
                         fixture.name for fixture in api_result.fixtures
                     ),
@@ -202,21 +272,29 @@ def _build_rows(
 
     for api_id in sorted(declared_ids - measured_ids - fixed_ids):
         spec = tolerances.get(api_id)
-        migration = API_MIGRATIONS_BY_ID[api_id]
-        if migration.parity_coverage == "orchestration-implied":
-            state = "orchestration-implied"
-        elif migration.parity_coverage == "fixed-fixture":
-            state = "fixed-fixture-missing"
-        elif migration.parity_coverage == "random-fuzz-excluded":
-            state = "random-fuzz-excluded"
-        elif migration.parity_coverage == "targeted-tests":
-            state = "targeted-tests"
-        elif migration.parity_coverage == "manual-only":
-            state = "manual-only"
-        elif api_id in wired_ids:
-            state = "wired-not-measured"
+        governance = _governance_fields(api_id)
+        if governance["backend_candidate"]:
+            state = (
+                "backend-candidate-skipped"
+                if api_id in wired_ids
+                else "backend-candidate-unwired"
+            )
         else:
-            state = "unwired"
+            migration = API_MIGRATIONS_BY_ID[api_id]
+            if migration.parity_coverage == "orchestration-implied":
+                state = "orchestration-implied"
+            elif migration.parity_coverage == "fixed-fixture":
+                state = "fixed-fixture-missing"
+            elif migration.parity_coverage == "random-fuzz-excluded":
+                state = "random-fuzz-excluded"
+            elif migration.parity_coverage == "targeted-tests":
+                state = "targeted-tests"
+            elif migration.parity_coverage == "manual-only":
+                state = "manual-only"
+            elif api_id in wired_ids:
+                state = "wired-not-measured"
+            else:
+                state = "unwired"
         for out_name, tol in spec.outputs.items():
             rows.append(
                 {
@@ -239,11 +317,7 @@ def _build_rows(
                     "root_cause": spec.root_cause,
                     "verdict": spec.verdict,
                     "state": state,
-                    "registry_status": migration.status,
-                    "parity_coverage": migration.parity_coverage,
-                    "coverage_note": migration.coverage_note,
-                    "covered_subcases": migration.covered_subcases,
-                    "excluded_subcases": migration.excluded_subcases,
+                    **governance,
                 }
             )
     return rows
@@ -260,6 +334,7 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
             "measured",
             "fixed-fixture",
             "fixed-fixture-supplemental",
+            "backend-candidate-measured",
         }
         if not observed:
             wa = "—"
@@ -310,6 +385,12 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
             flag = " (targeted tests)"
         elif r["state"] == "manual-only":
             flag = " (manual only)"
+        elif r["state"] == "backend-candidate-measured":
+            flag = " (impl candidate)"
+        elif r["state"] == "backend-candidate-skipped":
+            flag = " (impl candidate skipped)"
+        elif r["state"] == "backend-candidate-unwired":
+            flag = " (impl candidate UNWIRED)"
         elif r["investigate"]:
             flag = f" ⚠ {r['investigate_task'] or 'investigate'}"
         rtol_s = f"{r['rtol']:.0e}" if r["rtol"] > 0 else "0"
@@ -317,8 +398,9 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
         phys = _truncate(r.get("physical_magnitude") or "—", max_text)
         rc = _truncate(r.get("root_cause") or "—", max_text)
         verdict = _truncate(r.get("verdict") or "—", max_text)
+        api_label = _api_markdown_label(r["api_id"], r)
         lines.append(
-            f"| `{r['api_id']}`{flag} "
+            f"| {api_label}{flag} "
             f"| {r['output']} "
             f"| {r['atol']:.0e} | {rtol_s} "
             f"| {wa} | {wr} | {wr_floor} | {nan_mismatch} | {result} "
@@ -473,7 +555,7 @@ def _format_lane_cell(row: dict[str, Any] | None) -> str:
 
 def _format_speed_long_markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
-        "| Lane | API | Size/shape | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
+        "| Lane | API / implementation | Size/shape | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
         "|---|---|---|---:|---:|---:|---|---|",
     ]
     for r in rows:
@@ -482,7 +564,7 @@ def _format_speed_long_markdown(rows: list[dict[str, Any]]) -> str:
         lane = r.get("lane", "small-n")
         lines.append(
             f"| `{lane}` "
-            f"| `{r['api_id']}` "
+            f"| {_api_markdown_label(r['api_id'], r)} "
             f"| {_workload_label(r)} "
             f"| {_format_speed(r.get('speedup_p50'))} "
             f"| {_format_speed(r.get('speedup_p95'))} "
@@ -502,41 +584,62 @@ def _format_speed_markdown(rows: list[dict[str, Any]], *, long: bool = False) ->
         by_api.setdefault(row["api_id"], {})[row.get("lane", "small-n")] = row
 
     lines = [
-        "| API | " + " | ".join(f"{lane} speed" for lane in lane_order) + " |",
+        "| API / implementation | "
+        + " | ".join(f"{lane} speed" for lane in lane_order)
+        + " |",
         "|---" + "|---" * len(lane_order) + "|",
     ]
     for api_id in sorted(by_api):
         cells = [_format_lane_cell(by_api[api_id].get(lane)) for lane in lane_order]
-        lines.append(f"| `{api_id}` | " + " | ".join(cells) + " |")
+        first_row = next(iter(by_api[api_id].values()))
+        lines.append(
+            f"| {_api_markdown_label(api_id, first_row)} | " + " | ".join(cells) + " |"
+        )
     return "\n".join(lines)
 
 
 def _coverage_summary(rows: list[dict]) -> str:
-    declared_apis = sorted({r["api_id"] for r in rows})
-    measured_apis = sorted({r["api_id"] for r in rows if r["state"] == "measured"})
+    public_rows = [r for r in rows if not _is_backend_candidate_row(r)]
+    candidate_rows = [r for r in rows if _is_backend_candidate_row(r)]
+    declared_apis = sorted({r["api_id"] for r in public_rows})
+    measured_apis = sorted(
+        {r["api_id"] for r in public_rows if r["state"] == "measured"}
+    )
     wired_not_measured = sorted(
-        {r["api_id"] for r in rows if r["state"] == "wired-not-measured"}
+        {r["api_id"] for r in public_rows if r["state"] == "wired-not-measured"}
     )
     orchestration = sorted(
-        {r["api_id"] for r in rows if r["state"] == "orchestration-implied"}
+        {r["api_id"] for r in public_rows if r["state"] == "orchestration-implied"}
     )
-    fixed_only = sorted({r["api_id"] for r in rows if r["state"] == "fixed-fixture"})
+    fixed_only = sorted(
+        {r["api_id"] for r in public_rows if r["state"] == "fixed-fixture"}
+    )
     fixed_supplemental = sorted(
-        {r["api_id"] for r in rows if r["state"] == "fixed-fixture-supplemental"}
+        {r["api_id"] for r in public_rows if r["state"] == "fixed-fixture-supplemental"}
     )
     fixed_missing = sorted(
-        {r["api_id"] for r in rows if r["state"] == "fixed-fixture-missing"}
+        {r["api_id"] for r in public_rows if r["state"] == "fixed-fixture-missing"}
     )
     random_excluded = sorted(
-        {r["api_id"] for r in rows if r["state"] == "random-fuzz-excluded"}
+        {r["api_id"] for r in public_rows if r["state"] == "random-fuzz-excluded"}
     )
-    targeted = sorted({r["api_id"] for r in rows if r["state"] == "targeted-tests"})
-    manual = sorted({r["api_id"] for r in rows if r["state"] == "manual-only"})
-    unwired = sorted({r["api_id"] for r in rows if r["state"] == "unwired"})
+    targeted = sorted(
+        {r["api_id"] for r in public_rows if r["state"] == "targeted-tests"}
+    )
+    manual = sorted({r["api_id"] for r in public_rows if r["state"] == "manual-only"})
+    unwired = sorted({r["api_id"] for r in public_rows if r["state"] == "unwired"})
+    backend_candidate_ids = sorted({r["api_id"] for r in candidate_rows})
+    backend_candidate_measured = sorted(
+        {
+            r["api_id"]
+            for r in candidate_rows
+            if r["state"] == "backend-candidate-measured"
+        }
+    )
     flagged = sorted(
         {
             r["api_id"]
-            for r in rows
+            for r in public_rows
             if r["state"] in {"measured", "fixed-fixture", "fixed-fixture-supplemental"}
             and r["investigate"]
         }
@@ -561,6 +664,21 @@ def _coverage_summary(rows: list[dict]) -> str:
         f"from randomized fuzz with no fixed fixture in this artifact. "
         f"{len(measured_apis)} random-fuzz {measured_word} measured this run."
     )
+    if backend_candidate_ids:
+        lines.append("")
+        lines.append(
+            "**Backend/transport implementation candidates** "
+            "(diagnostic; not public API identities):"
+        )
+        for candidate_id in backend_candidate_ids:
+            row = next(r for r in candidate_rows if r["api_id"] == candidate_id)
+            measured = (
+                "measured"
+                if candidate_id in backend_candidate_measured
+                else "not measured"
+            )
+            lines.append(f"- {_api_markdown_label(candidate_id, row)} — {measured}")
+
     if wired_not_measured:
         lines.append("")
         lines.append("**Wired but excluded from this run by `--apis` filter**:")
@@ -817,9 +935,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         fixed_results = parity_fixed.fixed_all(requested_fixed_api_ids)
 
     rows = _build_rows(fuzz_results, fixed_results)
+    requested_api_ids = set(args.apis) if args.apis is not None else None
+    if requested_api_ids is not None:
+        rows = [row for row in rows if row["api_id"] in requested_api_ids]
     speed_rows, speed_metadata = (
         ([], {}) if args.no_speed else _load_speed_artifact(args.speed_artifact)
     )
+    if requested_api_ids is not None:
+        speed_rows = [
+            row for row in speed_rows if str(row.get("api_id")) in requested_api_ids
+        ]
 
     max_text = None if args.max_text == 0 else args.max_text
     sections = [
