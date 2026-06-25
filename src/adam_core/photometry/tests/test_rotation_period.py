@@ -10,6 +10,7 @@ from ...time import Timestamp
 from ..rotation_period_fourier import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
     _build_frequency_grid,
+    _grid_was_capped,
     _observation_count_sufficient,
     estimate_rotation_period,
 )
@@ -281,6 +282,69 @@ def test_staged_and_exact_fourier_match():
     )
     assert float(_scalar(staged.period_upper_days[0])) == pytest.approx(
         float(_scalar(exact.period_upper_days[0])), rel=0.05
+    )
+
+
+@pytest.mark.parametrize(
+    "period_days, span_days, noise_sigma",
+    [
+        (0.020, 0.08, 0.010),
+        (0.035, 0.10, 0.020),
+        (0.014, 0.09, 0.015),
+    ],
+)
+def test_staged_matches_exact_on_large_grid(period_days, span_days, noise_sigma):
+    # rp-e4a.12 / review #8: with a >2048-point grid the validated_staged COARSE path
+    # (coarse sample -> local-minima refine) actually runs, and the global-best guard
+    # must keep it from missing the global-best grid region. Staged must match the
+    # exact-grid period across several periods/spans/noise levels, and the result must
+    # advertise that the staged heuristic was used.
+    obs = _make_rotation_observations(
+        n=80, span_days=span_days, period_days=period_days, noise_sigma=noise_sigma
+    )
+    kw = dict(
+        method_mode="fourier",
+        exact_evaluation_backend="jax",
+        max_frequency_cycles_per_day=700.0,
+        frequency_grid_scale=40.0,
+    )
+    staged = estimate_rotation_period(obs, search_fidelity="validated_staged", **kw)
+    exact = estimate_rotation_period(obs, search_fidelity="exact_grid", **kw)
+
+    assert (
+        _build_frequency_grid(
+            span_days=span_days,
+            min_rotations_in_span=2.0,
+            max_frequency_cycles_per_day=700.0,
+            frequency_grid_scale=40.0,
+        ).size
+        > 2048
+    )  # the staged coarse path is genuinely exercised
+    assert "staged_search_used" in list(staged.confidence_flags[0].as_py() or [])
+    assert float(_scalar(staged.period_days[0])) == pytest.approx(
+        float(_scalar(exact.period_days[0])), rel=0.05
+    )
+
+
+def test_grid_cap_diagnostic():
+    # rp-e4a.12 / review #9: the hard frequency-grid cap is detectable as a diagnostic.
+    assert (
+        _grid_was_capped(
+            span_days=4000.0,
+            min_rotations_in_span=2.0,
+            max_frequency_cycles_per_day=1000.0,
+            frequency_grid_scale=30.0,
+        )
+        is True
+    )
+    assert (
+        _grid_was_capped(
+            span_days=0.1,
+            min_rotations_in_span=2.0,
+            max_frequency_cycles_per_day=120.0,
+            frequency_grid_scale=40.0,
+        )
+        is False
     )
 
 

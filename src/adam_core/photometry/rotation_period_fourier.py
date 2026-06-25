@@ -455,6 +455,26 @@ def _search_best_fit(
         candidate_count=12,
     )
     final_indices = _sample_indices_from_intervals(intervals, stride=1, n_total=n_total)
+    # Global-best guard (rp-e4a.12 / review #8): the coarse global minimum is already
+    # computed, so always include its neighborhood in the exact-refine set. The
+    # candidate_count=12 local-minima cap could otherwise skip the global-best grid
+    # region on an alias-dense periodogram, and the prior code only fell back to the
+    # full grid when NO fit was found -- never when it found a non-global one. This is
+    # an O(coarse-grid) guarantee, not a continuous optimizer or a fuzz battery.
+    finite = np.isfinite(coarse_scores)
+    if np.any(finite):
+        global_best = int(
+            coarse_indices[int(np.argmin(np.where(finite, coarse_scores, np.inf)))]
+        )
+        radius = max(8, 4 * coarse_stride)
+        final_indices = np.union1d(
+            final_indices,
+            np.arange(
+                max(0, global_best - radius),
+                min(n_total, global_best + radius + 1),
+                dtype=np.int64,
+            ),
+        )
     _, _, best_fit = _evaluate_frequency_indices(
         t_rel=t_rel,
         y=y,
@@ -555,6 +575,35 @@ def _build_frequency_grid(
     )
     n_freq = min(n_freq, _FOURIER_MAX_FREQUENCY_SAMPLES)
     return np.linspace(f_min, f_max, n_freq, dtype=np.float64)
+
+
+def _grid_was_capped(
+    *,
+    span_days: float,
+    min_rotations_in_span: float,
+    max_frequency_cycles_per_day: float,
+    frequency_grid_scale: float,
+    max_search_period_hours: float | None = None,
+) -> bool:
+    """Whether ``_build_frequency_grid`` clamped the requested resolution to
+    ``_FOURIER_MAX_FREQUENCY_SAMPLES`` (review #9: surface the cap as a diagnostic).
+
+    Recomputes the uncapped sample count; keep the f_min/f_max/n_freq formula in sync
+    with ``_build_frequency_grid`` above.
+    """
+    try:
+        f_min = float(min_rotations_in_span / span_days)
+        f_max = float(max_frequency_cycles_per_day)
+        if max_search_period_hours is not None:
+            f_min = max(f_min, 24.0 / float(max_search_period_hours))
+        if not np.isfinite(f_min) or f_min <= 0.0 or f_max <= f_min:
+            return False
+        n_freq_uncapped = max(
+            int(ceil(float(frequency_grid_scale) * span_days * (f_max - f_min)) + 1), 2
+        )
+    except (ZeroDivisionError, ValueError):
+        return False
+    return n_freq_uncapped > _FOURIER_MAX_FREQUENCY_SAMPLES
 
 
 def _weights_from_sigma(
@@ -1775,8 +1824,14 @@ def _assemble_result(
     filter_labels: npt.NDArray[np.object_],
     session_summary: _SessionSummary,
     used_session_offsets: bool,
+    extra_flags: list[str] | None = None,
 ) -> RotationPeriodResult:
-    """Serialize the selected solution and D1 verdict into the one-row result table."""
+    """Serialize the selected solution and D1 verdict into the one-row result table.
+
+    ``extra_flags`` are appended to ``confidence_flags`` to surface search
+    diagnostics (e.g. ``staged_search_used``, ``grid_capped``) alongside the
+    classifier's own positive flags.
+    """
     primary_method = str(primary["primary_method"])
     period_days = float(primary["period_days"])
     period_hours = float(period_days * 24.0)
@@ -1812,7 +1867,7 @@ def _assemble_result(
         profile=[profile.name],
         period_verdict=[str(primary["period_verdict"])],
         reliability_code=[str(primary["reliability_code"])],
-        confidence_flags=[list(primary["confidence_flags"])],
+        confidence_flags=[list(primary["confidence_flags"]) + list(extra_flags or [])],
         insufficiency_reasons=[list(primary["insufficiency_reasons"])],
         is_valid=[bool(primary["is_valid"])],
         is_reliable=[bool(primary["is_reliable"])],
@@ -2199,6 +2254,22 @@ def estimate_rotation_period(
             primary["is_valid"] = True
             primary["is_reliable"] = False
 
+    # Search diagnostics (review #8/#9): surface when the staged heuristic was used
+    # (grid above the exact-grid threshold) and when the frequency grid was clamped to
+    # the hard cap, so callers can see the recovered period/uncertainty came from a
+    # coarsened or heuristically-searched grid rather than the requested resolution.
+    diagnostic_flags: list[str] = []
+    if resolved_fidelity == "validated_staged" and int(frequencies.size) > 2048:
+        diagnostic_flags.append("staged_search_used")
+    if _grid_was_capped(
+        span_days=span_days,
+        min_rotations_in_span=min_rotations_in_span,
+        max_frequency_cycles_per_day=max_frequency_cycles_per_day,
+        frequency_grid_scale=frequency_grid_scale,
+        max_search_period_hours=max_search_period_hours,
+    ):
+        diagnostic_flags.append("grid_capped")
+
     return _assemble_result(
         primary=primary,
         fourier_solution=fourier_solution,
@@ -2208,4 +2279,5 @@ def estimate_rotation_period(
         filter_labels=filter_labels,
         session_summary=session_summary,
         used_session_offsets=used_session_offsets,
+        extra_flags=diagnostic_flags,
     )
