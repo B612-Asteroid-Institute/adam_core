@@ -490,6 +490,9 @@
     <span class="n">primary_method</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="n">profile</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="n">period_verdict</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
+    <span class="c1"># LCDB-U-style reliability code as a STRING (&quot;3&quot;/&quot;2&quot;/&quot;1&quot;, highest first). Kept a</span>
+    <span class="c1"># string (not int) to mirror LCDB U codes and stay forward-compatible with</span>
+    <span class="c1"># qualified codes (e.g. &quot;1+&quot;); do NOT sort or compare it numerically. (review #19)</span>
     <span class="n">reliability_code</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="n">confidence_flags</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">insufficiency_reasons</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -514,6 +517,10 @@
     <span class="n">lsm_candidate_period_days</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">lsm_candidate_powers</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">lsm_is_reliable</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># Approximate single-term (nterms=1) Astropy Baluev false-alarm probability -- an</span>
+    <span class="c1"># ADVISORY diagnostic only. It is NOT calibrated for the two-harmonic, multi-band,</span>
+    <span class="c1"># extrema-filtered LSM selection model, and is NOT a validated confidence gate.</span>
+    <span class="c1"># (PR#200 review #6.)</span>
     <span class="n">lsm_false_alarm_probability</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">phase_coverage_fraction</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">n_rotations_spanned</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -525,7 +532,76 @@
     <span class="n">n_filters</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Int64Column</span><span class="p">()</span>
     <span class="n">n_sessions</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Int64Column</span><span class="p">()</span>
     <span class="n">used_session_offsets</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">()</span>
-    <span class="n">is_period_doubled</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">()</span></div>
+    <span class="n">is_period_doubled</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">()</span>
+
+<div class="viewcode-block" id="RotationPeriodResult.single_insufficient">
+<a class="viewcode-back" href="../../../reference/api/adam_core.photometry.rotation_period_types.html#adam_core.photometry.RotationPeriodResult.single_insufficient">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">single_insufficient</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">reasons</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">confidence_flags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_observations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">n_filters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">n_sessions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">primary_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span>
+        <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;RotationPeriodResult&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;One-row ``insufficient_data`` result: NaN period, every nullable diagnostic</span>
+<span class="sd">        ``None``.</span>
+
+<span class="sd">        The canonical builder for the insufficient verdict. Used both by the solver&#39;s</span>
+<span class="sd">        early-exit path and by the detection wrappers when an object cannot be solved,</span>
+<span class="sd">        so a grouped solve returns one row per object id rather than silently dropping</span>
+<span class="sd">        failures. ``period_verdict``/``reliability_code`` are the contract constants</span>
+<span class="sd">        (``&quot;insufficient_data&quot;`` / ``&quot;1&quot;``).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">period_days</span><span class="o">=</span><span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)],</span>
+            <span class="n">period_hours</span><span class="o">=</span><span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)],</span>
+            <span class="n">frequency_cycles_per_day</span><span class="o">=</span><span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)],</span>
+            <span class="n">primary_method</span><span class="o">=</span><span class="p">[</span><span class="n">primary_method</span><span class="p">],</span>
+            <span class="n">profile</span><span class="o">=</span><span class="p">[</span><span class="n">profile</span><span class="p">],</span>
+            <span class="n">period_verdict</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;insufficient_data&quot;</span><span class="p">],</span>
+            <span class="n">reliability_code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;1&quot;</span><span class="p">],</span>
+            <span class="n">confidence_flags</span><span class="o">=</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">confidence_flags</span> <span class="ow">or</span> <span class="p">[])],</span>
+            <span class="n">insufficiency_reasons</span><span class="o">=</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">reasons</span><span class="p">)],</span>
+            <span class="n">is_valid</span><span class="o">=</span><span class="p">[</span><span class="kc">False</span><span class="p">],</span>
+            <span class="n">is_reliable</span><span class="o">=</span><span class="p">[</span><span class="kc">False</span><span class="p">],</span>
+            <span class="n">period_lower_days</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">period_upper_days</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">relative_period_uncertainty</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">alternate_period_days</span><span class="o">=</span><span class="p">[[]],</span>
+            <span class="n">fourier_period_days</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">fourier_order</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">fourier_sigma_threshold</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">fourier_phase_c1</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">fourier_phase_c2</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">residual_sigma_mag</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">fourier_is_valid</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">fourier_is_reliable</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">fourier_alternate_period_days</span><span class="o">=</span><span class="p">[[]],</span>
+            <span class="n">lsm_period_days</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">lsm_power</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">lsm_power_gap</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">lsm_candidate_period_days</span><span class="o">=</span><span class="p">[[]],</span>
+            <span class="n">lsm_candidate_powers</span><span class="o">=</span><span class="p">[[]],</span>
+            <span class="n">lsm_is_reliable</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">lsm_false_alarm_probability</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">phase_coverage_fraction</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">n_rotations_spanned</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">amplitude_snr</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">n_significant_aliases</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="n">n_observations</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">n_observations</span><span class="p">)],</span>
+            <span class="n">n_fit_observations</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">n_clipped</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">n_filters</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">n_filters</span><span class="p">)],</span>
+            <span class="n">n_sessions</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">n_sessions</span><span class="p">)],</span>
+            <span class="n">used_session_offsets</span><span class="o">=</span><span class="p">[</span><span class="kc">False</span><span class="p">],</span>
+            <span class="n">is_period_doubled</span><span class="o">=</span><span class="p">[</span><span class="kc">False</span><span class="p">],</span>
+        <span class="p">)</span></div>
+</div>
 
 
 
@@ -553,7 +629,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-10</div>
+              Last updated on 2026-06-25</div>
           </div>
           <div class="right-details">
             
@@ -568,7 +644,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=733c69e9"></script>
+</div><script src="../../../_static/documentation_options.js?v=68f82167"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
