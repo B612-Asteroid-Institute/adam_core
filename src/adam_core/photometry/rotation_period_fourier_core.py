@@ -7,9 +7,12 @@ import numpy.typing as npt
 import pyarrow as pa
 from scipy.stats import f as f_dist
 
+from ..constants import Constants
 from .rotation_period_types import RotationPeriodObservations
 
-LIGHT_SPEED_AU_PER_DAY = 173.14463267424034
+# Speed of light in au/day. Use the canonical adam_core constant rather than a local
+# literal to avoid drift (bit-identical to the prior hardcoded value). PR#200 review #10.
+LIGHT_SPEED_AU_PER_DAY = Constants.C
 _HG_G_MIN = -0.25
 _HG_G_MAX = 0.95
 _HG_PHASE_MIN_DEG = 1.0
