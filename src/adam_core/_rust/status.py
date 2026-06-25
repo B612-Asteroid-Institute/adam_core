@@ -625,6 +625,75 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         ),
     ),
     ApiMigration(
+        api_id="bridge.propagate_orbits_2body",
+        status=ORCHESTRATION_RUST_DEFAULT,
+        boundary="python+quivr",
+        default="rust",
+        rust_module="adam_core.orbits.arrow_bridge.propagate_orbits_2body",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Python-facing quivr/Arrow bridge workflow: Orbits enter through "
+            "the PyO3 Arrow bridge, Rust runs 2-body propagation, and Orbits "
+            "are reconstructed on return. This is a binding/workflow benchmark, "
+            "not a raw kernel timing; the underlying same-signature public API "
+            "remains dynamics.propagate_2body."
+        ),
+        covered_subcases=(
+            "Bound heliocentric/ecliptic Orbits propagated to a shared epoch",
+        ),
+    ),
+    ApiMigration(
+        api_id="bridge.rotate_orbits_frame",
+        status=ORCHESTRATION_RUST_DEFAULT,
+        boundary="python+quivr",
+        default="rust",
+        rust_module="adam_core.orbits.arrow_bridge.rotate_orbits_frame",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Python-facing quivr/Arrow bridge workflow for frame rotation of "
+            "orbit states and covariances. It measures binding transport plus "
+            "the Rust rotation workflow; same-name legacy API does not exist, "
+            "so the comparator is baseline-main transform_coordinates."
+        ),
+        covered_subcases=(
+            "Cartesian Orbits with covariance rotated ecliptic->equatorial",
+        ),
+    ),
+    ApiMigration(
+        api_id="bridge.sample_orbit_variants",
+        status=ORCHESTRATION_RUST_DEFAULT,
+        boundary="python+quivr",
+        default="rust",
+        rust_module="adam_core.orbits.arrow_bridge.sample_orbit_variants",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Python-facing quivr/Arrow bridge workflow for covariance variant "
+            "generation. It compares the Rust bridge result with baseline-main "
+            "VariantOrbits.create sigma-point output; there is no pre-existing "
+            "same-name public legacy function."
+        ),
+        covered_subcases=(
+            "Deterministic sigma-point variants for PSD Cartesian orbit covariances",
+        ),
+    ),
+    ApiMigration(
+        api_id="bridge.evaluate_residuals_2body",
+        status=ORCHESTRATION_RUST_DEFAULT,
+        boundary="python+quivr",
+        default="rust",
+        rust_module="adam_core.orbits.arrow_bridge.evaluate_residuals_2body",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Python-facing quivr/Arrow bridge workflow composing Rust 2-body "
+            "ephemeris and residual kernels for the OD inner loop. The legacy "
+            "comparator is generate_ephemeris_2body plus Residuals.calculate; "
+            "there is no pre-existing same-name public legacy function."
+        ),
+        covered_subcases=(
+            "1:1 orbit/observer/observation residual evaluation with SSB/ecliptic light-time convention",
+        ),
+    ),
+    ApiMigration(
         api_id="statistics.weighted_mean",
         status=RAW_KERNEL_ONLY,
         boundary="numpy",
