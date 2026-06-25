@@ -2022,6 +2022,19 @@ def estimate_rotation_period(
     ValueError
         If ``method_mode`` / ``session_mode`` / ``exact_evaluation_backend`` is
         invalid or a numeric knob is non-positive.
+
+    Notes
+    -----
+    The confidence verdict is **measured, not guaranteed.** The solver is designed to
+    downgrade harmonic and sampling aliases to ``period_family`` instead of asserting a
+    confident ``single_period``, but this is calibrated behaviour with a known, nonzero
+    residual false-confidence risk: a ``single_period`` result can occasionally be a
+    harmonic or sampling alias of the true period. Measured strict ``single_period``
+    precision on the LCDB/DAMIT standard-candle set is ~0.88, and one tracked case
+    (1627 Ivar, a ~5/3 diurnal-sampling alias) is still reported confidently at the
+    wrong period. When a period that is wrong by an integer factor would be costly,
+    cross-check a ``single_period`` result against ``alternate_period_days`` and
+    ``reliability_code`` rather than treating the verdict as infallible.
     """
     if method_mode not in {"fourier", "lsm"}:
         raise ValueError("method_mode must be one of {'fourier', 'lsm'}")
