@@ -129,3 +129,5 @@ migration/artifacts/rust_latency_current.json
 # Stale live-legacy bench artifact (superseded by rust_latency_baseline.json +
 # migration/artifacts/history/rust_vs_legacy_final_snapshot_*.json).
 migration/artifacts/rust_benchmark_gate.json
+decisions.md
+journal.md
