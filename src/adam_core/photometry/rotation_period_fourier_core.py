@@ -359,6 +359,15 @@ def _phase_prior_rows(
     design_info: _DesignInfo,
     min_phase_angle_deg: float,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Two weighted pseudo-observations constraining the phase-angle (H-G) coefficients.
+
+    NOTE (PR#200 review #7): these rows make every Fourier fit a RIDGE-REGULARIZED
+    least-squares solve, not ordinary least squares. The reported RSS / residual_sigma
+    / df / BIC / F-test are computed on the REAL observations only and exclude this
+    prior penalty, so those statistics (and the order selection, sigma thresholds, and
+    uncertainty intervals derived from them) are regularized/approximate, not exact OLS
+    quantities. Treat them as such when interpreting the confidence surface.
+    """
     (c1_min, c1_max), (c2_min, c2_max) = _phase_prior_bounds(min_phase_angle_deg)
     rows = np.zeros((2, n_par), dtype=np.float64)
     rows[0, design_info.phase_c1_idx] = 1.0

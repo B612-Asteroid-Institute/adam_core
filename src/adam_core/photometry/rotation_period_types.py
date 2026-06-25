@@ -63,6 +63,9 @@ class RotationPeriodResult(qv.Table):
     primary_method = qv.LargeStringColumn()
     profile = qv.LargeStringColumn()
     period_verdict = qv.LargeStringColumn()
+    # LCDB-U-style reliability code as a STRING ("3"/"2"/"1", highest first). Kept a
+    # string (not int) to mirror LCDB U codes and stay forward-compatible with
+    # qualified codes (e.g. "1+"); do NOT sort or compare it numerically. (review #19)
     reliability_code = qv.LargeStringColumn()
     confidence_flags = qv.LargeListColumn(pa.large_string(), nullable=True)
     insufficiency_reasons = qv.LargeListColumn(pa.large_string(), nullable=True)
@@ -87,6 +90,10 @@ class RotationPeriodResult(qv.Table):
     lsm_candidate_period_days = qv.LargeListColumn(pa.float64(), nullable=True)
     lsm_candidate_powers = qv.LargeListColumn(pa.float64(), nullable=True)
     lsm_is_reliable = qv.BooleanColumn(nullable=True)
+    # Approximate single-term (nterms=1) Astropy Baluev false-alarm probability -- an
+    # ADVISORY diagnostic only. It is NOT calibrated for the two-harmonic, multi-band,
+    # extrema-filtered LSM selection model, and is NOT a validated confidence gate.
+    # (PR#200 review #6.)
     lsm_false_alarm_probability = qv.Float64Column(nullable=True)
     phase_coverage_fraction = qv.Float64Column(nullable=True)
     n_rotations_spanned = qv.Float64Column(nullable=True)

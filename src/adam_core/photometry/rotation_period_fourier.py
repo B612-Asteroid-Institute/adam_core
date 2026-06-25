@@ -1970,9 +1970,13 @@ def estimate_rotation_period(
         (``r_au`` / ``delta_au`` / ``phase_angle_deg``).
     method_mode : {"fourier", "lsm"}, default "fourier"
         Primary estimator. ``"fourier"`` does multi-order F-test selection with
-        alias clustering and a validated uncertainty interval; ``"lsm"`` is a fast
-        Lomb-Scargle backup capped at ``period_family`` (no validated interval, per
-        the D2 policy).
+        alias clustering and a validated uncertainty interval. ``"lsm"`` is an
+        EXPERIMENTAL / diagnostic Lomb-Scargle mode, capped at ``period_family`` (no
+        validated interval, per the D2 policy). It is NOT an independent fast
+        fallback: the Fourier model is always built and solved first, and the LSM
+        verdict reuses the Fourier residual-sigma noise model, so ``"lsm"`` is not
+        faster than ``"fourier"`` and does not produce a result when the Fourier
+        solve fails. (PR#200 review #4.)
     profile : str, default "default"
         Solver configuration profile (Fourier orders, F-test/cluster confidences,
         reliability window). Only ``"default"`` is shipped.
