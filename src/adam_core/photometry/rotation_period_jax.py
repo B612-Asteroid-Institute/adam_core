@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
-jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)  # type: ignore[no-untyped-call]
 
 # Design-matrix column-bucket size.  The design width varies per object (it grows with
 # the per-(filter, session) offset columns), and array width is a JIT shape -> a fresh

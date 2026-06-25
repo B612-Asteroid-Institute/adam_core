@@ -1256,9 +1256,10 @@ def _estimate_lsm_solution(
     local_maxima = _local_maxima_indices(powers)
     survivors: list[_LSMCandidate] = []
     for idx in local_maxima.tolist():
-        coeffs = coeffs_by_index[int(idx)]
-        if coeffs is None:
+        candidate_coeffs = coeffs_by_index[int(idx)]
+        if candidate_coeffs is None:
             continue
+        coeffs = candidate_coeffs
         n_maxima, n_minima = _count_local_extrema(coeffs, 2)
         if n_maxima != 2 or n_minima != 2:
             continue

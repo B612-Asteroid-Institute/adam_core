@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
-from scipy.stats import f as f_dist
+from scipy.stats import f as f_dist  # type: ignore[import-untyped]
 
 from ..constants import Constants
 from .rotation_period_types import RotationPeriodObservations
@@ -87,7 +88,9 @@ PROFILES: dict[str, _FourierProfile] = {
 }
 
 
-def _to_numpy_1d(values: pa.Array | pa.ChunkedArray | npt.ArrayLike) -> npt.NDArray:
+def _to_numpy_1d(
+    values: pa.Array | pa.ChunkedArray | npt.ArrayLike,
+) -> npt.NDArray[Any]:
     if isinstance(values, (pa.Array, pa.ChunkedArray)):
         return np.asarray(values.to_numpy(zero_copy_only=False))
     return np.asarray(values)
@@ -224,10 +227,10 @@ def _apply_light_time_correction(
     time_mjd_tdb: npt.NDArray[np.float64],
     delta_au: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
-    return (
-        np.asarray(time_mjd_tdb, dtype=np.float64)
-        - np.asarray(delta_au, dtype=np.float64) / LIGHT_SPEED_AU_PER_DAY
+    corrected = np.asarray(time_mjd_tdb, dtype=np.float64) - (
+        np.asarray(delta_au, dtype=np.float64) / LIGHT_SPEED_AU_PER_DAY
     )
+    return np.asarray(corrected, dtype=np.float64)
 
 
 def _build_fixed_design(
@@ -455,7 +458,9 @@ def _fit_frequency(
     )
     mask = np.ones(n_obs, dtype=bool)
 
-    def _solve(idx: npt.NDArray[np.int64]):
+    def _solve(
+        idx: npt.NDArray[np.int64],
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float, float, int]:
         """Weighted, prior-augmented Fourier fit at the unmasked rows ``idx``."""
         fourier = _build_fourier_columns(t_rel[idx], frequency, fourier_order)
         design_real = np.concatenate([fixed[idx], fourier], axis=1)
@@ -478,7 +483,11 @@ def _fit_frequency(
         return coeffs, residuals, sigma, rss, df
 
     def _result(
-        idx: npt.NDArray[np.int64], coeffs, sigma: float, rss: float, df: int
+        idx: npt.NDArray[np.int64],
+        coeffs: npt.NDArray[np.float64],
+        sigma: float,
+        rss: float,
+        df: int,
     ) -> _FitResult:
         return _FitResult(
             frequency=float(frequency),
