@@ -649,18 +649,31 @@ def _count_local_extrema(
     return int(np.count_nonzero(maxima)), int(np.count_nonzero(minima))
 
 
+def _periodic_amplitude_from_coeffs(
+    coeffs: npt.NDArray[np.float64],
+    fourier_order: int,
+    dense_points: int = 4096,
+) -> float:
+    """Peak-to-peak amplitude of the periodic (Fourier) part of a coefficient vector.
+
+    Canonical helper shared by the Fourier and LSM paths (start = len - 2*order
+    convention), so both compute amplitude identically. (PR#200 review #23.)
+    """
+    phase = np.linspace(0.0, 1.0, dense_points, endpoint=False)
+    periodic = np.zeros_like(phase)
+    start = coeffs.size - 2 * int(fourier_order)
+    for harmonic in range(1, int(fourier_order) + 1):
+        idx = start + 2 * (harmonic - 1)
+        periodic += coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
+        periodic += coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
+    return float(np.max(periodic) - np.min(periodic))
+
+
 def _amplitude_from_fit(
     fit: _FitResult,
     dense_points: int = 4096,
 ) -> float:
-    phase = np.linspace(0.0, 1.0, dense_points, endpoint=False)
-    periodic = np.zeros_like(phase)
-    start = fit.coeffs.size - 2 * int(fit.fourier_order)
-    for harmonic in range(1, int(fit.fourier_order) + 1):
-        idx = start + 2 * (harmonic - 1)
-        periodic += fit.coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
-        periodic += fit.coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
-    return float(np.max(periodic) - np.min(periodic))
+    return _periodic_amplitude_from_coeffs(fit.coeffs, fit.fourier_order, dense_points)
 
 
 def _fit_with_period(fit: _FitResult) -> _FitWithPeriod:

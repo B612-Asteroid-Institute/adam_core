@@ -11,6 +11,7 @@ from .rotation_period_fourier_core import (
     _amplitude_from_fit,
     _apply_light_time_correction,
     _build_fixed_design,
+    _count_local_extrema,
     _DesignInfo,
     _fit_bic,
     _fit_frequency,
@@ -20,6 +21,7 @@ from .rotation_period_fourier_core import (
     _FitWithPeriod,
     _FourierProfile,
     _ordered_unique,
+    _periodic_amplitude_from_coeffs,
     _phase_prior_rows,
     _select_order,
     _SessionSummary,
@@ -1126,36 +1128,6 @@ def _fit_lsm_frequency(
     return float(power), np.asarray(coeffs, dtype=np.float64)
 
 
-def _periodic_extrema_counts_from_coeffs(
-    coeffs: npt.NDArray[np.float64], order: int = 2
-) -> tuple[int, int]:
-    phase = np.linspace(0.0, 1.0, 2048, endpoint=False)
-    periodic = np.zeros_like(phase)
-    start = coeffs.size - 2 * int(order)
-    for harmonic in range(1, int(order) + 1):
-        idx = start + 2 * (harmonic - 1)
-        periodic += coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
-        periodic += coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
-    prev_vals = np.roll(periodic, 1)
-    next_vals = np.roll(periodic, -1)
-    maxima = (periodic > prev_vals) & (periodic >= next_vals)
-    minima = (periodic < prev_vals) & (periodic <= next_vals)
-    return int(np.count_nonzero(maxima)), int(np.count_nonzero(minima))
-
-
-def _amplitude_from_lsm_coeffs(
-    coeffs: npt.NDArray[np.float64], order: int = 2
-) -> float:
-    phase = np.linspace(0.0, 1.0, 4096, endpoint=False)
-    periodic = np.zeros_like(phase)
-    start = coeffs.size - 2 * int(order)
-    for harmonic in range(1, int(order) + 1):
-        idx = start + 2 * (harmonic - 1)
-        periodic += coeffs[idx] * np.cos(2.0 * np.pi * harmonic * phase)
-        periodic += coeffs[idx + 1] * np.sin(2.0 * np.pi * harmonic * phase)
-    return float(np.max(periodic) - np.min(periodic))
-
-
 def _local_maxima_indices(values: npt.NDArray[np.float64]) -> npt.NDArray[np.int64]:
     if values.size == 0:
         return np.zeros(0, dtype=np.int64)
@@ -1287,7 +1259,7 @@ def _estimate_lsm_solution(
         coeffs = coeffs_by_index[int(idx)]
         if coeffs is None:
             continue
-        n_maxima, n_minima = _periodic_extrema_counts_from_coeffs(coeffs, order=2)
+        n_maxima, n_minima = _count_local_extrema(coeffs, 2)
         if n_maxima != 2 or n_minima != 2:
             continue
         survivors.append(
@@ -1330,7 +1302,7 @@ def _estimate_lsm_solution(
         if len(ordered_survivors) >= 2
         else float(best.power)
     )
-    amplitude_mag = float(_amplitude_from_lsm_coeffs(best.coeffs, order=2))
+    amplitude_mag = float(_periodic_amplitude_from_coeffs(best.coeffs, 2))
     best_frequency = (
         1.0 / float(best.period_days) if best.period_days > 0.0 else float("nan")
     )
