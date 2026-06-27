@@ -14,8 +14,14 @@ from mpcq.orbits import MPCOrbits
 from ..dynamics.propagation import propagate_2body
 from ..observers.observers import Observers
 from .hg12star import hg12star_correction
+from .magnitude import calculate_phase_angle
 
 _BANDS = ("g", "i", "r", "u")
+_PHI_TYPES = ("HG12star", "HG", "c1c2")
+# If fewer than this fraction of an object's observations survive validity
+# filtering, band-recognition filtering, and outlier rejection, the fit is
+# not trustworthy enough to report silently.
+_MIN_RETAINED_FRACTION = 0.5
 
 
 class ColorFit(qv.Table):
@@ -33,30 +39,33 @@ class ColorFit(qv.Table):
 
 def _compute_geometry(
     object_coords,
-    observer_pos: np.ndarray,
+    observers: Observers,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute heliocentric distance r (AU), topocentric distance delta (AU),
-    and phase angle alpha (degrees) from Cartesian positions.
+    and phase angle alpha (degrees).
 
-    object_coords: CartesianCoordinates, heliocentric, aligned with observer_pos rows.
-    observer_pos: N×3 array of heliocentric observer positions in AU.
+    object_coords: CartesianCoordinates, heliocentric, aligned with observers rows.
+    observers: Observers, heliocentric, aligned with object_coords rows.
+
+    Phase angle is computed via `calculate_phase_angle`, which also validates
+    that the input geometry is finite and physically sensible (r > 0, delta > 0)
+    and raises otherwise.
     """
     obj_pos = object_coords.r  # N×3
-    T = obj_pos - observer_pos  # vector from observer to object
+    observer_pos = observers.coordinates.r  # N×3
     r = np.linalg.norm(obj_pos, axis=1)
-    delta = np.linalg.norm(T, axis=1)
-    # phase angle at object between Sun direction and observer direction
-    cos_alpha = np.einsum("ij,ij->i", obj_pos, T) / (r * delta)
-    cos_alpha = np.clip(cos_alpha, -1.0, 1.0)
-    alpha_deg = np.rad2deg(np.arccos(cos_alpha))
+    delta = np.linalg.norm(obj_pos - observer_pos, axis=1)
+    alpha_deg = calculate_phase_angle(object_coords, observers)
     return r, delta, alpha_deg
 
 
 def _prepare_geometry(
     obs: MPCObservations,
     object_coords,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
     """
     Extract geometry and photometry arrays needed for per-band H fitting.
 
@@ -65,13 +74,14 @@ def _prepare_geometry(
     """
     stn = np.asarray(obs.stn.to_numpy(zero_copy_only=False), dtype=object).astype(str)
     observers = Observers.from_codes(stn, obs.obstime)
-    observer_pos = observers.coordinates.r
 
     mag = obs.mag.to_numpy(zero_copy_only=False).astype(np.float64)
     rmsmag = obs.rmsmag.to_numpy(zero_copy_only=False).astype(np.float64)
-    bands = np.asarray(obs.band.to_numpy(zero_copy_only=False), dtype=object).astype(str)
+    bands = np.asarray(obs.band.to_numpy(zero_copy_only=False), dtype=object).astype(
+        str
+    )
 
-    r, delta, alpha_deg = _compute_geometry(object_coords, observer_pos)
+    r, delta, alpha_deg = _compute_geometry(object_coords, observers)
     valid = np.isfinite(mag) & np.isfinite(rmsmag) & (rmsmag > 0)
     return mag, rmsmag, bands, r, delta, alpha_deg, valid
 
@@ -115,6 +125,12 @@ def _fit_per_band_h(
     - "c1c2": polynomial phase correction c1*alpha + c2*alpha^2 (alpha in radians);
       purely linear.
 
+    Observations whose band is not one of "g", "i", "r", "u" are excluded up
+    front and counted as outliers. A band with zero surviving observations is
+    reported as NaN. If, after all exclusions and outlier rejection, fewer than
+    `_MIN_RETAINED_FRACTION` of the input rows remain, the fit is considered
+    unreliable and raises.
+
     In all cases the fit is solved with iterative 9-sigma outlier rejection.
 
     Returns dict with keys "H_g", "H_i", "H_r", "H_u", "num_obs", "num_outliers".
@@ -122,7 +138,15 @@ def _fit_per_band_h(
     n = len(m_red)
     H_sel = _band_selector_matrix(bands)
     full_weights = root_weights**2
-    included = np.ones(n, dtype=bool)
+
+    known_band_mask = np.isin(bands, _BANDS)
+    if not np.all(known_band_mask):
+        unknown_bands = sorted(set(bands[~known_band_mask].tolist()))
+        print(
+            f"Excluding {int(np.sum(~known_band_mask))} observations with "
+            f"unrecognized band codes: {unknown_bands}"
+        )
+    included = known_band_mask.copy()
 
     if phi_type == "c1c2":
         alpha_rad = np.deg2rad(alpha_deg)
@@ -130,7 +154,9 @@ def _fit_per_band_h(
         H_idx = 2
     else:
         A = H_sel
-        correction_fn = hg12star_correction if phi_type == "HG12star" else _hg_correction
+        correction_fn = (
+            hg12star_correction if phi_type == "HG12star" else _hg_correction
+        )
         H_init = np.array(
             [
                 float(np.mean(m_red[bands == b])) if np.any(bands == b) else 0.0
@@ -139,10 +165,13 @@ def _fit_per_band_h(
         )
         params0 = np.concatenate([[0.15], H_init])
         H_idx = 1
+        # Loop-invariant: A, root_weights, and m_red never change across
+        # outlier-rejection iterations, only the `included` mask does.
+        Aw = A * root_weights[:, None]
+        Bw = m_red * root_weights
 
     num_params = A.shape[1] + (0 if phi_type == "c1c2" else 1)
     values = np.zeros(num_params)
-    num_outliers = 0
     converged = False
     while not converged:
         if phi_type == "c1c2":
@@ -151,13 +180,13 @@ def _fit_per_band_h(
             values, _, _, _ = np.linalg.lstsq(Aw, Bw, rcond=None)
             res = (A @ values - m_red) ** 2 * full_weights
         else:
-            Aw = A * root_weights[:, None]
-            Bw = m_red * root_weights
 
             def func(par):
                 corr = correction_fn(alpha_deg, par[0])
                 return (
-                    Aw[included] @ par[1:] + (corr * root_weights)[included] - Bw[included]
+                    Aw[included] @ par[1:]
+                    + (corr * root_weights)[included]
+                    - Bw[included]
                 )
 
             result = scipy.optimize.least_squares(func, params0, verbose=0)
@@ -168,19 +197,32 @@ def _fit_per_band_h(
 
         n_incl = int(np.sum(included))
         sigma2 = (
-            np.dot(res, included) / (n_incl - num_params) if n_incl > num_params else np.inf
+            np.dot(res, included) / (n_incl - num_params)
+            if n_incl > num_params
+            else np.inf
         )
         outliers = res > 9 * sigma2
         new_outliers = outliers & included
         converged = not np.any(new_outliers)
         included &= ~outliers
-        num_outliers = int(np.sum(~included))
+
+    num_outliers = int(np.sum(~included))
+    if n - num_outliers < _MIN_RETAINED_FRACTION * n:
+        raise ValueError(
+            f"Outlier/band rejection removed {num_outliers}/{n} observations "
+            f"(more than {1 - _MIN_RETAINED_FRACTION:.0%} of the data); fit is unreliable."
+        )
+
+    H_values = [float(values[H_idx + i]) for i in range(len(_BANDS))]
+    for i, b in enumerate(_BANDS):
+        if not np.any(bands[known_band_mask] == b):
+            H_values[i] = float("nan")
 
     return {
-        "H_g": float(values[H_idx]),
-        "H_i": float(values[H_idx + 1]),
-        "H_r": float(values[H_idx + 2]),
-        "H_u": float(values[H_idx + 3]),
+        "H_g": H_values[0],
+        "H_i": H_values[1],
+        "H_r": H_values[2],
+        "H_u": H_values[3],
         "num_obs": n,
         "num_outliers": num_outliers,
     }
@@ -214,6 +256,11 @@ def estimate_colors(
     ColorFit
         One row per unique object found in both ``observations`` and ``orbits``.
     """
+    if phi_type not in _PHI_TYPES:
+        raise ValueError(
+            f"Unsupported phi_type {phi_type!r}; expected one of {_PHI_TYPES}"
+        )
+
     len_before = len(observations)
     observations = observations.apply_mask(pc.is_valid(observations.band))
     observations = observations.apply_mask(pc.is_valid(observations.mag))
@@ -242,6 +289,8 @@ def estimate_colors(
         orb = orbits.apply_mask(orb_mask)
         if len(orb) == 0:
             continue
+        if len(orb) > 1:
+            raise ValueError(f"Expected exactly one orbit for {obj_id}, got {len(orb)}")
 
         adam_orbits = orb.orbits()
         propagated = propagate_2body(adam_orbits, obs.obstime)
@@ -254,13 +303,14 @@ def estimate_colors(
         g_r: Optional[float] = None
         g_i: Optional[float] = None
         r_i: Optional[float] = None
-        num_obs: Optional[int] = None
+        num_obs: int = len(obs)
         num_outliers: Optional[int] = None
 
         try:
             mag, rmsmag, bands, r, delta, alpha_deg, valid = _prepare_geometry(
                 obs, object_coords
             )
+            n_invalid = len(obs) - int(np.sum(valid))
             if np.any(valid):
                 m_red = mag[valid] - 5.0 * np.log10(r[valid] * delta[valid])
                 root_weights = 1.0 / rmsmag[valid]
@@ -271,13 +321,15 @@ def estimate_colors(
                 H_i = fit["H_i"]
                 H_r = fit["H_r"]
                 H_u = fit["H_u"]
-                num_obs = int(fit["num_obs"])
-                num_outliers = int(fit["num_outliers"])
+                num_outliers = n_invalid + int(fit["num_outliers"])
                 g_r = H_g - H_r
                 g_i = H_g - H_i
                 r_i = H_r - H_i
-        except Exception as e:
-            print(f"Problem when fitting colors for {obj_id}: {e}")
+            else:
+                num_outliers = n_invalid
+        except Exception:
+            print(f"Problem when fitting colors for {obj_id}")
+            raise
 
         out_ids.append(obj_id)
         out_g_mag.append(H_g)
