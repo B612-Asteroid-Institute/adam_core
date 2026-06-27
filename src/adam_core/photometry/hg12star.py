@@ -1,5 +1,3 @@
-from typing import Optional
-
 import numpy as np
 
 
@@ -110,21 +108,8 @@ def _phi3(alpha_deg):
 # for alpha in [0.0, 0.35, 2.0, 5.5, 75]:
 #    print(f"Alpha={alpha} phi1={_phi1(alpha)} phi2={_phi2(alpha)} phi3={_phi3(alpha)}")
 
-# Values for H-only fit from page 14 of Shevchenko et al (2016).
-# Table 4: type, G1, G2
-# This is used when `kind` is specified as positive [0, 5]
-G_VALUES = [
-    ("S", 0.26, 0.38),
-    ("M", 0.27, 0.35),
-    ("E", 0.15, 0.60),
-    ("C", 0.82, 0.02),
-    ("P", 0.83, 0.05),
-    ("D", 0.96, 0.02),
-]
-
-
 def hg12star_correction(
-    alpha_deg: np.ndarray, kind: Optional[int] = None, g12star: Optional[float] = None
+    alpha_deg: np.ndarray, g12star: float
 ) -> np.ndarray:
     """Compute alpha correction using H,G12* approximation.
 
@@ -132,22 +117,15 @@ def hg12star_correction(
     -----------
     alpha_deg: np.ndarray
       angle Sun-object-observer in degrees
-    kind: Optional[int], range [0,5], default None
-      index into known G_VALUES
-    g12star: Optional[float], default None
+    g12star: float
       value of G12* parameter to use for computing G1 and G2
-
-    Exactly one of kind and g12star should be provided.
 
     Returns:
     --------
     Magnitude correction for the given alphas.
     """
-    if g12star is not None:
-        G1 = 0.84293649 * g12star
-        G2 = 0.53513350 * (1.0 - g12star)
-    else:
-        G1, G2 = G_VALUES[kind][1], G_VALUES[kind][2]
+    G1 = 0.84293649 * g12star
+    G2 = 0.53513350 * (1.0 - g12star)
     G3 = 1.0 - G1 - G2
     combined = G1 * _phi1(alpha_deg) + G2 * _phi2(alpha_deg) + G3 * _phi3(alpha_deg)
     combined = np.maximum(combined, 1e-10)

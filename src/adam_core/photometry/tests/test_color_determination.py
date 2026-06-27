@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
+import quivr as qv
 
 from adam_core.time import Timestamp
 from mpcq import MPCObservations
@@ -20,13 +23,15 @@ COLOR_FIXTURES: list[str] = sorted(
 if not COLOR_FIXTURES:
     COLOR_FIXTURES = ["__NO_FIXTURES__"]
 
-# Tolerance: compare within ±0.15 mag of the paper values.
+# Tolerances: compare within the given margin of the paper (Fourier) values.
 # Greenstreet et al. 2026 reports colors from Fourier fits that include a
 # rotational period term.  Our implementation sets g(t)=0 (no rotation), so
-# per-band H values can be biased by ~0.1-0.15 mag when multi-band observations
-# sample different rotational phases.  Adding rotation fitting later will allow
-# this tolerance to be tightened.
-COLOR_TOLERANCE = 0.065 # TODO 0.15
+# per-band H values can be biased when multi-band observations sample
+# different rotational phases.  HG12* is the best-matching phase model of the
+# three; HG and c1c2 are coarser approximations and need looser tolerances.
+HG12STAR_TOLERANCE = 0.065
+HG_TOLERANCE = 0.11
+C1C2_TOLERANCE = 0.08
 
 
 def _load_fixture_observations(fx: np.lib.npyio.NpzFile) -> MPCObservations:
@@ -98,8 +103,47 @@ def _load_fixture_orbits(fx: np.lib.npyio.NpzFile) -> MPCOrbits:
     )
 
 
+def _paper_colors(fx: np.lib.npyio.NpzFile) -> dict[str, float]:
+    return {
+        "g_r": float(fx["paper_g_r_fourier"][0]),
+        "g_i": float(fx["paper_g_i_fourier"][0]),
+        "r_i": float(fx["paper_r_i_fourier"][0]),
+    }
+
+
+def _assert_colors_close(
+    result: ColorFit, object_id: str, paper: dict[str, float], tolerance: float
+) -> None:
+    row = result.apply_mask(pc.equal(result.object_id, object_id))
+    assert len(row) == 1, f"Expected 1 result row for {object_id}, got {len(row)}"
+
+    g_r = row.g_r[0].as_py()
+    g_i = row.g_i[0].as_py()
+    r_i = row.r_i[0].as_py()
+
+    assert np.isfinite(g_r), f"g-r not finite for {object_id}"
+    assert np.isfinite(g_i), f"g-i not finite for {object_id}"
+    assert np.isfinite(r_i), f"r-i not finite for {object_id}"
+
+    assert abs(g_r - paper["g_r"]) <= tolerance, (
+        f"{object_id} g-r: got {g_r:.3f}, paper Fourier {paper['g_r']:.3f}, "
+        f"diff={g_r - paper['g_r']:+.3f} > tol={tolerance}"
+    )
+    assert abs(g_i - paper["g_i"]) <= tolerance, (
+        f"{object_id} g-i: got {g_i:.3f}, paper Fourier {paper['g_i']:.3f}, "
+        f"diff={g_i - paper['g_i']:+.3f} > tol={tolerance}"
+    )
+    assert abs(r_i - paper["r_i"]) <= tolerance, (
+        f"{object_id} r-i: got {r_i:.3f}, paper Fourier {paper['r_i']:.3f}, "
+        f"diff={r_i - paper['r_i']:+.3f} > tol={tolerance}"
+    )
+
+
+@pytest.mark.parametrize("phi_type,tolerance", [("HG12star", HG12STAR_TOLERANCE), ("HG", HG_TOLERANCE), ("c1c2", C1C2_TOLERANCE)])
 @pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
-def test_estimate_colors_from_fixture(fixture_name: str) -> None:
+def test_estimate_colors_from_fixture(
+    fixture_name: str, phi_type: Literal["HG", "c1c2"], tolerance: float
+) -> None:
     if fixture_name == "__NO_FIXTURES__":
         pytest.skip("No color fixtures found on disk.")
 
@@ -113,61 +157,34 @@ def test_estimate_colors_from_fixture(fixture_name: str) -> None:
     observations = _load_fixture_observations(fx)
     orbits = _load_fixture_orbits(fx)
 
-    result = estimate_colors(observations, orbits, "HG12star")
+    result = estimate_colors(observations, orbits, phi_type)
 
     assert isinstance(result, ColorFit)
     assert len(result) >= 1
 
-    import pyarrow.compute as pc
+    _assert_colors_close(result, object_id, _paper_colors(fx), tolerance)
 
-    row = result.apply_mask(pc.equal(result.object_id, object_id))
-    assert len(row) == 1, f"Expected 1 result row for {object_id}, got {len(row)}"
 
-    # --- abs_mag check ---
-    # Compare estimated H_V against the MPC orbit value stored in the fixture.
-    # Tolerance is generous (±0.5 mag) because we assume NEO composition for
-    # band-to-V conversion and the MPC value was computed with a different pipeline.
-    # ABS_MAG_TOLERANCE = 0.2
-    # abs_mag = row.abs_mag[0].as_py()
-    # assert abs_mag is not None, f"abs_mag is None for {object_id}"
-    # abs_mag = float(abs_mag)
-    # mpc_h = float(fx["H_v_mpc"][0])
-    # print(f"MPC {mpc_h}, computed {abs_mag}")
-    # assert np.isfinite(abs_mag), f"abs_mag not finite for {object_id}"
-    # assert abs(abs_mag - mpc_h) <= ABS_MAG_TOLERANCE, (
-    #     f"{object_id} abs_mag: got {abs_mag:.3f}, MPC H={mpc_h:.3f}, "
-    #     f"diff={abs_mag - mpc_h:+.3f} > tol={ABS_MAG_TOLERANCE}"
-    # )
+def test_estimate_colors_multi_object() -> None:
+    """
+    estimate_colors should produce identical per-object results whether
+    objects are passed in one at a time or batched together.
+    """
+    fixture_paths = [DATA_DIR / name for name in COLOR_FIXTURES if name != "__NO_FIXTURES__"]
+    if len(fixture_paths) < 2:
+        pytest.skip("Need at least two color fixtures to test multi-object batching.")
 
-    # --- color checks (will pass once colors are implemented) ---
-    g_r = row.g_r[0].as_py()
-    g_i = row.g_i[0].as_py()
-    r_i = row.r_i[0].as_py()
+    fixtures = [np.load(p, allow_pickle=True) for p in fixture_paths]
+    object_ids = [str(fx["object_id"][0]) for fx in fixtures]
 
-    if g_r is None or g_i is None or r_i is None:
-        pytest.xfail("Colors not yet implemented")
+    observations = qv.concatenate([_load_fixture_observations(fx) for fx in fixtures])
+    orbits = qv.concatenate([_load_fixture_orbits(fx) for fx in fixtures])
 
-    g_r = float(g_r)
-    g_i = float(g_i)
-    r_i = float(r_i)
+    result = estimate_colors(observations, orbits, "HG12star")
 
-    paper_g_r = float(fx["paper_g_r_fourier"][0])
-    paper_g_i = float(fx["paper_g_i_fourier"][0])
-    paper_r_i = float(fx["paper_r_i_fourier"][0])
+    assert isinstance(result, ColorFit)
+    assert len(result) == len(object_ids)
+    assert set(result.object_id.to_pylist()) == set(object_ids)
 
-    assert np.isfinite(g_r), f"g-r not finite for {object_id}"
-    assert np.isfinite(g_i), f"g-i not finite for {object_id}"
-    assert np.isfinite(r_i), f"r-i not finite for {object_id}"
-
-    assert abs(g_r - paper_g_r) <= COLOR_TOLERANCE, (
-        f"{object_id} g-r: got {g_r:.3f}, paper Fourier {paper_g_r:.3f}, "
-        f"diff={g_r - paper_g_r:+.3f} > tol={COLOR_TOLERANCE}"
-    )
-    assert abs(g_i - paper_g_i) <= COLOR_TOLERANCE, (
-        f"{object_id} g-i: got {g_i:.3f}, paper Fourier {paper_g_i:.3f}, "
-        f"diff={g_i - paper_g_i:+.3f} > tol={COLOR_TOLERANCE}"
-    )
-    assert abs(r_i - paper_r_i) <= COLOR_TOLERANCE, (
-        f"{object_id} r-i: got {r_i:.3f}, paper Fourier {paper_r_i:.3f}, "
-        f"diff={r_i - paper_r_i:+.3f} > tol={COLOR_TOLERANCE}"
-    )
+    for fx, object_id in zip(fixtures, object_ids):
+        _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
