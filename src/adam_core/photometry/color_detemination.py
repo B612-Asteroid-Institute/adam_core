@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import pyarrow.compute as pc
@@ -12,16 +12,14 @@ from mpcq import MPCObservations
 from mpcq.orbits import MPCOrbits
 
 from ..dynamics.propagation import propagate_2body
-from ..observations.detections import PointSourceDetections
-from ..observations.exposures import Exposures
 from ..observers.observers import Observers
-from .absolute_magnitude import estimate_absolute_magnitude_v_from_detections
 from .hg12star import hg12star_correction
+
+_BANDS = ("g", "i", "r", "u")
 
 
 class ColorFit(qv.Table):
     object_id = qv.LargeStringColumn()
-    abs_mag = qv.Float64Column(nullable=True)
     g_mag = qv.Float64Column(nullable=True)
     i_mag = qv.Float64Column(nullable=True)
     r_mag = qv.Float64Column(nullable=True)
@@ -31,70 +29,6 @@ class ColorFit(qv.Table):
     r_i = qv.Float64Column(nullable=True)
     num_obs = qv.Int64Column(nullable=True)
     num_outliers = qv.Int64Column(nullable=True)
-    color_class = qv.StringColumn(nullable=True)
-
-
-def _obs_to_detections_and_exposures(
-    obs: MPCObservations,
-) -> tuple[PointSourceDetections, Exposures]:
-    """
-    Convert a single-object MPCObservations slice into aligned
-    PointSourceDetections + Exposures (one row per observation).
-    """
-    n = len(obs)
-    times = obs.obstime
-
-    obsids = np.asarray(obs.obsid.to_numpy(zero_copy_only=False), dtype=object).astype(
-        str
-    )
-    bands = np.asarray(obs.band.to_numpy(zero_copy_only=False), dtype=object).astype(
-        str
-    )
-    stn = np.asarray(obs.stn.to_numpy(zero_copy_only=False), dtype=object).astype(str)
-    mag = obs.mag.to_numpy(zero_copy_only=False).astype(np.float64)
-    rmsmag = obs.rmsmag.to_numpy(zero_copy_only=False).astype(np.float64)
-    ra = obs.ra.to_numpy(zero_copy_only=False).astype(np.float64)
-    dec = obs.dec.to_numpy(zero_copy_only=False).astype(np.float64)
-
-    exposures = Exposures.from_kwargs(
-        id=obsids.tolist(),
-        start_time=times,
-        duration=np.zeros(n, dtype=np.float64),
-        filter=bands.tolist(),
-        observatory_code=stn.tolist(),
-    )
-
-    detections = PointSourceDetections.from_kwargs(
-        id=obsids.tolist(),
-        exposure_id=obsids.tolist(),
-        time=times,
-        ra=ra.tolist(),
-        dec=dec.tolist(),
-        mag=mag.tolist(),
-        mag_sigma=rmsmag.tolist(),
-    )
-
-    return detections, exposures
-
-
-def _estimate_abs_mag(
-    obs: MPCObservations,
-    object_coords,
-    G: float,
-) -> Optional[float]:
-    """Estimate H_V via existing photometry pipeline for a single object."""
-    detections, exposures = _obs_to_detections_and_exposures(obs)
-    try:
-        pp = estimate_absolute_magnitude_v_from_detections(
-            detections,
-            exposures,
-            object_coords,
-            composition="NEO",
-            G=G,
-        )
-        return float(pp.H_v[0].as_py())
-    except Exception:
-        return None
 
 
 def _compute_geometry(
@@ -117,219 +51,6 @@ def _compute_geometry(
     cos_alpha = np.clip(cos_alpha, -1.0, 1.0)
     alpha_deg = np.rad2deg(np.arccos(cos_alpha))
     return r, delta, alpha_deg
-
-
-def _fit_per_band_h_g12star(
-    m_red: np.ndarray,
-    alpha_deg: np.ndarray,
-    bands: np.ndarray,
-    root_weights: np.ndarray,
-) -> dict[str, float]:
-    """
-    Fit per-band absolute magnitudes (H_g, H_i, H_r, H_u) and G12* simultaneously
-    using the Penttilä (2016) HG12* phase function with g(t)=0 (no rotation term).
-
-    Returns dict with keys "G12star", "H_g", "H_i", "H_r", "H_u", "num_obs", "num_outliers".
-    """
-    n = len(m_red)
-    # Band selector matrix: columns for H_g, H_i, H_r, H_u
-    A = np.zeros((n, 4))
-    A[:, 0] = (bands == "g").astype(float)
-    A[:, 1] = (bands == "i").astype(float)
-    A[:, 2] = (bands == "r").astype(float)
-    A[:, 3] = (bands == "u").astype(float)
-
-    Aw = A * root_weights[:, None]
-    Bw = m_red * root_weights
-    full_weights = root_weights**2
-
-    # Initial H per band: unweighted mean of reduced mags in that band
-    H_init = np.zeros(4)
-    for bi, bname in enumerate(["g", "i", "r", "u"]):
-        mask = bands == bname
-        if np.any(mask):
-            H_init[bi] = float(np.mean(m_red[mask]))
-
-    params0 = np.concatenate([[0.15], H_init])
-    included = np.ones(n, dtype=bool)
-
-    def func(par):
-        corr = hg12star_correction(alpha_deg, g12star=par[0])
-        return (
-            Aw[included] @ par[1:]
-            + (corr * root_weights)[included]
-            - Bw[included]
-        )
-
-    converged = False
-    values = params0.copy()
-    num_outliers = 0
-    while not converged:
-        result = scipy.optimize.least_squares(func, params0, verbose=0)
-        values = result.x
-        corr = hg12star_correction(alpha_deg, g12star=values[0])
-        res = (A @ values[1:] + corr - m_red) ** 2 * full_weights
-        n_incl = int(np.sum(included))
-        sigma2 = np.dot(res, included) / (n_incl - 5) if n_incl > 5 else np.inf
-        outliers = res > 9 * sigma2
-        new_outliers = outliers & included
-        converged = not np.any(new_outliers)
-        included &= ~outliers
-        params0 = values
-        num_outliers = np.sum(outliers)
-
-    return {
-        "G12star": float(values[0]),
-        "H_g": float(values[1]),
-        "H_i": float(values[2]),
-        "H_r": float(values[3]),
-        "H_u": float(values[4]),
-        "num_obs": n,
-        "num_outliers": num_outliers,
-    }
-
-
-def _fit_per_band_h_c1c2(
-    m_red: np.ndarray,
-    alpha_deg: np.ndarray,
-    bands: np.ndarray,
-    root_weights: np.ndarray,
-) -> dict:
-    """
-    Fit per-band absolute magnitudes (H_g, H_i, H_r, H_u) with the polynomial
-    phase correction phi(alpha) = c1*alpha + c2*alpha^2 (alpha in radians).
-
-    Purely linear; solved with weighted least squares and iterative sigma-clipping.
-
-    Returns dict with keys "c1", "c2", "H_g", "H_i", "H_r", "H_u", "num_obs", "num_outliers".
-    """
-    n = len(m_red)
-    alpha_rad = np.deg2rad(alpha_deg)
-
-    # A matrix: [c1_col, c2_col, H_g_sel, H_i_sel, H_r_sel, H_u_sel]
-    A = np.zeros((n, 6))
-    A[:, 0] = alpha_rad
-    A[:, 1] = alpha_rad**2
-    A[:, 2] = (bands == "g").astype(float)
-    A[:, 3] = (bands == "i").astype(float)
-    A[:, 4] = (bands == "r").astype(float)
-    A[:, 5] = (bands == "u").astype(float)
-
-    full_weights = root_weights**2
-    included = np.ones(n, dtype=bool)
-    values = np.zeros(6)
-
-    converged = False
-    num_outliers = 0
-    while not converged:
-        Aw = A[included] * root_weights[included, None]
-        Bw = m_red[included] * root_weights[included]
-        values, _, _, _ = np.linalg.lstsq(Aw, Bw, rcond=None)
-        res = (A @ values - m_red) ** 2 * full_weights
-        n_incl = int(np.sum(included))
-        sigma2 = np.dot(res, included) / (n_incl - 6) if n_incl > 6 else np.inf
-        outliers = res > 9 * sigma2
-        new_outliers = outliers & included
-        converged = not np.any(new_outliers)
-        included &= ~outliers
-        num_outliers = int(np.sum(~included))
-
-    return {
-        "c1": float(values[0]),
-        "c2": float(values[1]),
-        "H_g": float(values[2]),
-        "H_i": float(values[3]),
-        "H_r": float(values[4]),
-        "H_u": float(values[5]),
-        "num_obs": n,
-        "num_outliers": num_outliers,
-    }
-
-
-def _hg_correction(alpha_deg: np.ndarray, G: float) -> np.ndarray:
-    """
-    Standard Bowell et al. (1989) H-G phase function correction, using
-    tan(alpha/2) basis functions (the model already used elsewhere in
-    `photometry.magnitude` for predicting apparent magnitudes).
-
-    Returns -2.5*log10((1-G)*phi1 + G*phi2).
-    """
-    alpha_rad = np.deg2rad(np.asarray(alpha_deg, dtype=float))
-    cos_alpha = np.cos(alpha_rad)
-    tan_half = np.sqrt((1.0 - cos_alpha) / (1.0 + cos_alpha))
-    phi1 = np.exp(-3.33 * tan_half**0.63)
-    phi2 = np.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-    phase_function = np.maximum(phase_function, 1e-10)
-    return -2.5 * np.log10(phase_function)
-
-
-def _fit_per_band_h_hg(
-    m_red: np.ndarray,
-    alpha_deg: np.ndarray,
-    bands: np.ndarray,
-    root_weights: np.ndarray,
-) -> dict:
-    """
-    Fit per-band absolute magnitudes (H_g, H_i, H_r, H_u) and G simultaneously
-    using the standard Bowell et al. H-G phase function with g(t)=0 (no rotation term).
-
-    Returns dict with keys "G", "H_g", "H_i", "H_r", "H_u", "num_obs", "num_outliers".
-    """
-    n = len(m_red)
-    A = np.zeros((n, 4))
-    A[:, 0] = (bands == "g").astype(float)
-    A[:, 1] = (bands == "i").astype(float)
-    A[:, 2] = (bands == "r").astype(float)
-    A[:, 3] = (bands == "u").astype(float)
-
-    Aw = A * root_weights[:, None]
-    Bw = m_red * root_weights
-    full_weights = root_weights**2
-
-    H_init = np.zeros(4)
-    for bi, bname in enumerate(["g", "i", "r", "u"]):
-        mask = bands == bname
-        if np.any(mask):
-            H_init[bi] = float(np.mean(m_red[mask]))
-
-    params0 = np.concatenate([[0.15], H_init])
-    included = np.ones(n, dtype=bool)
-
-    def func(par):
-        corr = _hg_correction(alpha_deg, par[0])
-        return (
-            Aw[included] @ par[1:]
-            + (corr * root_weights)[included]
-            - Bw[included]
-        )
-
-    converged = False
-    values = params0.copy()
-    num_outliers = 0
-    while not converged:
-        result = scipy.optimize.least_squares(func, params0, verbose=0)
-        values = result.x
-        corr = _hg_correction(alpha_deg, values[0])
-        res = (A @ values[1:] + corr - m_red) ** 2 * full_weights
-        n_incl = int(np.sum(included))
-        sigma2 = np.dot(res, included) / (n_incl - 5) if n_incl > 5 else np.inf
-        outliers = res > 9 * sigma2
-        new_outliers = outliers & included
-        converged = not np.any(new_outliers)
-        included &= ~outliers
-        params0 = values
-        num_outliers = int(np.sum(outliers))
-
-    return {
-        "G": float(values[0]),
-        "H_g": float(values[1]),
-        "H_i": float(values[2]),
-        "H_r": float(values[3]),
-        "H_u": float(values[4]),
-        "num_obs": n,
-        "num_outliers": num_outliers,
-    }
 
 
 def _prepare_geometry(
@@ -355,10 +76,120 @@ def _prepare_geometry(
     return mag, rmsmag, bands, r, delta, alpha_deg, valid
 
 
+def _band_selector_matrix(bands: np.ndarray) -> np.ndarray:
+    """N×4 selector matrix for H_g, H_i, H_r, H_u columns."""
+    return np.column_stack([(bands == b).astype(float) for b in _BANDS])
+
+
+def _hg_correction(alpha_deg: np.ndarray, G: float) -> np.ndarray:
+    """
+    Standard Bowell et al. (1989) H-G phase function correction, using
+    tan(alpha/2) basis functions (the model already used elsewhere in
+    `photometry.magnitude` for predicting apparent magnitudes).
+
+    Returns -2.5*log10((1-G)*phi1 + G*phi2).
+    """
+    alpha_rad = np.deg2rad(np.asarray(alpha_deg, dtype=float))
+    cos_alpha = np.cos(alpha_rad)
+    tan_half = np.sqrt((1.0 - cos_alpha) / (1.0 + cos_alpha))
+    phi1 = np.exp(-3.33 * tan_half**0.63)
+    phi2 = np.exp(-1.87 * tan_half**1.22)
+    phase_function = (1.0 - G) * phi1 + G * phi2
+    phase_function = np.maximum(phase_function, 1e-10)
+    return -2.5 * np.log10(phase_function)
+
+
+def _fit_per_band_h(
+    m_red: np.ndarray,
+    alpha_deg: np.ndarray,
+    bands: np.ndarray,
+    root_weights: np.ndarray,
+    phi_type: Literal["HG12star", "HG", "c1c2"],
+) -> dict[str, float]:
+    """
+    Fit per-band absolute magnitudes (H_g, H_i, H_r, H_u) with g(t)=0 (no rotation
+    term), using one of three phase-function models:
+
+    - "HG12star": Penttilä (2016) HG12* phase function; G12* fit jointly (nonlinear).
+    - "HG": standard Bowell et al. H-G phase function; G fit jointly (nonlinear).
+    - "c1c2": polynomial phase correction c1*alpha + c2*alpha^2 (alpha in radians);
+      purely linear.
+
+    In all cases the fit is solved with iterative 9-sigma outlier rejection.
+
+    Returns dict with keys "H_g", "H_i", "H_r", "H_u", "num_obs", "num_outliers".
+    """
+    n = len(m_red)
+    H_sel = _band_selector_matrix(bands)
+    full_weights = root_weights**2
+    included = np.ones(n, dtype=bool)
+
+    if phi_type == "c1c2":
+        alpha_rad = np.deg2rad(alpha_deg)
+        A = np.column_stack([alpha_rad, alpha_rad**2, H_sel])
+        H_idx = 2
+    else:
+        A = H_sel
+        correction_fn = hg12star_correction if phi_type == "HG12star" else _hg_correction
+        H_init = np.array(
+            [
+                float(np.mean(m_red[bands == b])) if np.any(bands == b) else 0.0
+                for b in _BANDS
+            ]
+        )
+        params0 = np.concatenate([[0.15], H_init])
+        H_idx = 1
+
+    num_params = A.shape[1] + (0 if phi_type == "c1c2" else 1)
+    values = np.zeros(num_params)
+    num_outliers = 0
+    converged = False
+    while not converged:
+        if phi_type == "c1c2":
+            Aw = A[included] * root_weights[included, None]
+            Bw = m_red[included] * root_weights[included]
+            values, _, _, _ = np.linalg.lstsq(Aw, Bw, rcond=None)
+            res = (A @ values - m_red) ** 2 * full_weights
+        else:
+            Aw = A * root_weights[:, None]
+            Bw = m_red * root_weights
+
+            def func(par):
+                corr = correction_fn(alpha_deg, par[0])
+                return (
+                    Aw[included] @ par[1:] + (corr * root_weights)[included] - Bw[included]
+                )
+
+            result = scipy.optimize.least_squares(func, params0, verbose=0)
+            values = result.x
+            corr = correction_fn(alpha_deg, values[0])
+            res = (A @ values[1:] + corr - m_red) ** 2 * full_weights
+            params0 = values
+
+        n_incl = int(np.sum(included))
+        sigma2 = (
+            np.dot(res, included) / (n_incl - num_params) if n_incl > num_params else np.inf
+        )
+        outliers = res > 9 * sigma2
+        new_outliers = outliers & included
+        converged = not np.any(new_outliers)
+        included &= ~outliers
+        num_outliers = int(np.sum(~included))
+
+    return {
+        "H_g": float(values[H_idx]),
+        "H_i": float(values[H_idx + 1]),
+        "H_r": float(values[H_idx + 2]),
+        "H_u": float(values[H_idx + 3]),
+        "num_obs": n,
+        "num_outliers": num_outliers,
+    }
+
+
 def estimate_colors(
     observations: MPCObservations,
     orbits: MPCOrbits,
-    phi_type: str, # = "HG12star",
+    phi_type: Literal["HG12star", "HG", "c1c2"],
 ) -> ColorFit:
     """
     Estimate per-band absolute magnitudes and colors for each object.
@@ -383,17 +214,16 @@ def estimate_colors(
     ColorFit
         One row per unique object found in both ``observations`` and ``orbits``.
     """
-    # TODO check phi_type is in the supported set
-
     len_before = len(observations)
     observations = observations.apply_mask(pc.is_valid(observations.band))
     observations = observations.apply_mask(pc.is_valid(observations.mag))
     if len(observations) != len_before:
-        print(f"Removed {len_before-len(observations)} null bands")
-    unique_ids = [x for x in pc.unique(observations.requested_provid).to_pylist() if x is not None]
+        print(f"Removed {len_before - len(observations)} null bands")
+    unique_ids = [
+        x for x in pc.unique(observations.requested_provid).to_pylist() if x is not None
+    ]
 
     out_ids: list[str] = []
-    # out_abs_mag: list[Optional[float]] = []
     out_g_mag: list[Optional[float]] = []
     out_i_mag: list[Optional[float]] = []
     out_r_mag: list[Optional[float]] = []
@@ -414,15 +244,8 @@ def estimate_colors(
             continue
 
         adam_orbits = orb.orbits()
-        times = obs.obstime
-
-        propagated = propagate_2body(adam_orbits, times)
+        propagated = propagate_2body(adam_orbits, obs.obstime)
         object_coords = propagated.coordinates
-
-        G_raw = orb.g[0].as_py()
-        G = float(G_raw) if G_raw is not None else 0.15
-
-        # H_V = _estimate_abs_mag(obs, object_coords, G)
 
         H_g: Optional[float] = None
         H_i: Optional[float] = None
@@ -434,41 +257,29 @@ def estimate_colors(
         num_obs: Optional[int] = None
         num_outliers: Optional[int] = None
 
-        if phi_type in ("HG12star", "c1c2", "HG"):
-            try:
-                mag, rmsmag, bands, r, delta, alpha_deg, valid = _prepare_geometry(
-                    obs, object_coords
+        try:
+            mag, rmsmag, bands, r, delta, alpha_deg, valid = _prepare_geometry(
+                obs, object_coords
+            )
+            if np.any(valid):
+                m_red = mag[valid] - 5.0 * np.log10(r[valid] * delta[valid])
+                root_weights = 1.0 / rmsmag[valid]
+                fit = _fit_per_band_h(
+                    m_red, alpha_deg[valid], bands[valid], root_weights, phi_type
                 )
-                if np.any(valid):
-                    m_red = mag[valid] - 5.0 * np.log10(r[valid] * delta[valid])
-                    root_weights = 1.0 / rmsmag[valid]
-                    if phi_type == "HG12star":
-                        fit = _fit_per_band_h_g12star(
-                            m_red, alpha_deg[valid], bands[valid], root_weights
-                        )
-                    elif phi_type == "HG":
-                        fit = _fit_per_band_h_hg(
-                            m_red, alpha_deg[valid], bands[valid], root_weights
-                        )
-                    else:
-                        fit = _fit_per_band_h_c1c2(
-                            m_red, alpha_deg[valid], bands[valid], root_weights
-                        )
-                    H_g = fit["H_g"]
-                    H_i = fit["H_i"]
-                    H_r = fit["H_r"]
-                    H_u = fit["H_u"]
-                    num_obs = int(fit["num_obs"])
-                    num_outliers = int(fit["num_outliers"])
-                    g_r = H_g - H_r
-                    g_i = H_g - H_i
-                    r_i = H_r - H_i
-            except Exception as e:
-                print(f"Problem when fitting colors {e}")
-                pass
+                H_g = fit["H_g"]
+                H_i = fit["H_i"]
+                H_r = fit["H_r"]
+                H_u = fit["H_u"]
+                num_obs = int(fit["num_obs"])
+                num_outliers = int(fit["num_outliers"])
+                g_r = H_g - H_r
+                g_i = H_g - H_i
+                r_i = H_r - H_i
+        except Exception as e:
+            print(f"Problem when fitting colors for {obj_id}: {e}")
 
         out_ids.append(obj_id)
-        # out_abs_mag.append(H_V)
         out_g_mag.append(H_g)
         out_i_mag.append(H_i)
         out_r_mag.append(H_r)
@@ -479,10 +290,8 @@ def estimate_colors(
         out_num_obs.append(num_obs)
         out_num_outliers.append(num_outliers)
 
-    n_out = len(out_ids)
     return ColorFit.from_kwargs(
         object_id=out_ids,
-        # abs_mag=out_abs_mag,
         g_mag=out_g_mag,
         i_mag=out_i_mag,
         r_mag=out_r_mag,
@@ -492,5 +301,4 @@ def estimate_colors(
         r_i=out_r_i,
         num_obs=out_num_obs,
         num_outliers=out_num_outliers,
-        color_class=[None] * n_out,
     )
