@@ -114,7 +114,7 @@ def build_fixture(
     np.savez_compressed(
         out_path,
         object_id=np.array([obj_id], dtype=object),
-        station=np.array(["X05"], dtype=object),
+        station=stns,
         # Orbit parameters
         H_v_mpc=np.array([float(orb0.h[0].as_py())], dtype=np.float64),
         G_mpc=np.array([float(orb0.g[0].as_py())], dtype=np.float64),
@@ -134,12 +134,8 @@ def build_fixture(
         filter_id=np.array(
             [f if f is not None else "" for f in filter_ids.tolist()], dtype=object
         ),
-        mag_obs=np.asarray(
-            obs.mag.to_numpy(zero_copy_only=False), dtype=np.float64
-        ),
-        rmsmag=np.asarray(
-            obs.rmsmag.to_numpy(zero_copy_only=False), dtype=np.float64
-        ),
+        mag_obs=np.asarray(obs.mag.to_numpy(zero_copy_only=False), dtype=np.float64),
+        rmsmag=np.asarray(obs.rmsmag.to_numpy(zero_copy_only=False), dtype=np.float64),
         ra=np.asarray(obs.ra.to_numpy(zero_copy_only=False), dtype=np.float64),
         dec=np.asarray(obs.dec.to_numpy(zero_copy_only=False), dtype=np.float64),
         object_pos=np.asarray(obj_pos, dtype=np.float64),
@@ -175,7 +171,7 @@ def main() -> None:
 
     for obj_id in object_ids:
         slug = obj_id.replace(" ", "_")
-        out_path = OUT_DIR / f"color_fixture_X05_{slug}.npz"
+        out_path = OUT_DIR / f"color_fixture_{slug}.npz"
         build_fixture(obj_id, mpc_obs, mpc_orb, out_path)
 
 

@@ -108,9 +108,8 @@ def _phi3(alpha_deg):
 # for alpha in [0.0, 0.35, 2.0, 5.5, 75]:
 #    print(f"Alpha={alpha} phi1={_phi1(alpha)} phi2={_phi2(alpha)} phi3={_phi3(alpha)}")
 
-def hg12star_correction(
-    alpha_deg: np.ndarray, g12star: float
-) -> np.ndarray:
+
+def hg12star_correction(alpha_deg: np.ndarray, g12star: float) -> np.ndarray:
     """Compute alpha correction using H,G12* approximation.
 
     Parameters:
