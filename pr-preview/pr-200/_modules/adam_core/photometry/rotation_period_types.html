@@ -438,7 +438,6 @@
     <span class="n">time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
     <span class="n">mag</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">()</span>
     <span class="n">mag_sigma</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">predicted_mag_v</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="nb">filter</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">session_id</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">r_au</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">()</span>
@@ -511,17 +510,6 @@
     <span class="n">fourier_is_valid</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">fourier_is_reliable</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">fourier_alternate_period_days</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">lsm_period_days</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">lsm_power</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">lsm_power_gap</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">lsm_candidate_period_days</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">lsm_candidate_powers</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">lsm_is_reliable</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="c1"># Approximate single-term (nterms=1) Astropy Baluev false-alarm probability -- an</span>
-    <span class="c1"># ADVISORY diagnostic only. It is NOT calibrated for the two-harmonic, multi-band,</span>
-    <span class="c1"># extrema-filtered LSM selection model, and is NOT a validated confidence gate.</span>
-    <span class="c1"># (PR#200 review #6.)</span>
-    <span class="n">lsm_false_alarm_probability</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">phase_coverage_fraction</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">n_rotations_spanned</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">amplitude_snr</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -582,13 +570,6 @@
             <span class="n">fourier_is_valid</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
             <span class="n">fourier_is_reliable</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
             <span class="n">fourier_alternate_period_days</span><span class="o">=</span><span class="p">[[]],</span>
-            <span class="n">lsm_period_days</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-            <span class="n">lsm_power</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-            <span class="n">lsm_power_gap</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-            <span class="n">lsm_candidate_period_days</span><span class="o">=</span><span class="p">[[]],</span>
-            <span class="n">lsm_candidate_powers</span><span class="o">=</span><span class="p">[[]],</span>
-            <span class="n">lsm_is_reliable</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-            <span class="n">lsm_false_alarm_probability</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
             <span class="n">phase_coverage_fraction</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
             <span class="n">n_rotations_spanned</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
             <span class="n">amplitude_snr</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
@@ -644,7 +625,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=1ad69523"></script>
+</div><script src="../../../_static/documentation_options.js?v=05789b42"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

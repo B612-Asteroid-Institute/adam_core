@@ -430,7 +430,6 @@
     <span class="n">_amplitude_from_fit</span><span class="p">,</span>
     <span class="n">_apply_light_time_correction</span><span class="p">,</span>
     <span class="n">_build_fixed_design</span><span class="p">,</span>
-    <span class="n">_count_local_extrema</span><span class="p">,</span>
     <span class="n">_DesignInfo</span><span class="p">,</span>
     <span class="n">_fit_bic</span><span class="p">,</span>
     <span class="n">_fit_frequency</span><span class="p">,</span>
@@ -440,7 +439,6 @@
     <span class="n">_FitWithPeriod</span><span class="p">,</span>
     <span class="n">_FourierProfile</span><span class="p">,</span>
     <span class="n">_ordered_unique</span><span class="p">,</span>
-    <span class="n">_periodic_amplitude_from_coeffs</span><span class="p">,</span>
     <span class="n">_phase_prior_rows</span><span class="p">,</span>
     <span class="n">_select_order</span><span class="p">,</span>
     <span class="n">_SessionSummary</span><span class="p">,</span>
@@ -450,11 +448,6 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.rotation_period_types</span><span class="w"> </span><span class="kn">import</span> <span class="n">RotationPeriodObservations</span><span class="p">,</span> <span class="n">RotationPeriodResult</span>
 
-<span class="n">_LSM_MIN_PERIOD_DAYS</span> <span class="o">=</span> <span class="mf">0.00065</span>
-<span class="n">_LSM_MAX_PERIOD_DAYS</span> <span class="o">=</span> <span class="mf">3.0</span>
-<span class="n">_LSM_OVERSAMPLE_FACTOR</span> <span class="o">=</span> <span class="mf">100.0</span>
-<span class="n">_LSM_DEFAULT_MAX_SAMPLES</span> <span class="o">=</span> <span class="mi">20000</span>
-<span class="n">_LSM_POWER_TIE_TOLERANCE</span> <span class="o">=</span> <span class="mf">2.0e-4</span>
 <span class="n">_DEFAULT_JAX_FREQUENCY_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">256</span>
 <span class="n">_DEFAULT_JAX_ROW_PAD_MULTIPLE</span> <span class="o">=</span> <span class="mi">64</span>
 <span class="n">_FOURIER_MAX_CLIP_ITERATIONS</span> <span class="o">=</span> <span class="mi">8</span>
@@ -463,8 +456,6 @@
 <span class="c1"># Initial values per the D1 contract; the calibration study (bead rp-e4a.13)</span>
 <span class="c1"># will tune these on a held-out split of the standard-candle set, so treat the</span>
 <span class="c1"># values below as provisional defaults rather than validated cut points.</span>
-<span class="c1"># False-alarm-probability ceiling for accepting an LSM peak as signal.</span>
-<span class="n">FAP_SIGNIFICANT</span> <span class="o">=</span> <span class="mf">0.01</span>
 <span class="c1"># Minimum fraction of rotational-phase bins that must be occupied to clear the</span>
 <span class="c1"># signal gate (family-level) and to be eligible for ``single_period``.</span>
 <span class="n">PHASE_COVERAGE_MIN_FAMILY</span> <span class="o">=</span> <span class="mf">0.5</span>
@@ -493,7 +484,7 @@
 <span class="n">MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS</span> <span class="o">=</span> <span class="mf">240.0</span>
 
 <span class="c1"># --- Cheap pre-solve insufficiency thresholds (bead rp-e4a.19) -------------</span>
-<span class="c1"># Period-INDEPENDENT screening run before the Fourier/LSM search so obviously</span>
+<span class="c1"># Period-INDEPENDENT screening run before the Fourier search so obviously</span>
 <span class="c1"># under-determined / degenerate inputs can early-exit instead of building a</span>
 <span class="c1"># frequency grid (or hanging on a single-night span).  Provisional values; the</span>
 <span class="c1"># calibration study (bead rp-e4a.13) may retune them.</span>
@@ -547,27 +538,6 @@
 
 
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">_LSMCandidate</span><span class="p">:</span>
-    <span class="n">period_days</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">power</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">coeffs</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
-
-
-<span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">_LSMSolution</span><span class="p">:</span>
-    <span class="n">period_days</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">power</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">power_gap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">candidate_period_days</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
-    <span class="n">candidate_powers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
-    <span class="n">is_reliable</span><span class="p">:</span> <span class="nb">bool</span>
-    <span class="n">amplitude_mag</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">n_fit_observations</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">n_clipped</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">false_alarm_probability</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-
-
-<span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">_VerdictDiagnostics</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;D1 numeric verdict diagnostics for the chosen period.</span>
 
@@ -583,7 +553,7 @@
 
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">_PrimaryResult</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-method primary result (verdict + diagnostics) for one solver run.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Primary Fourier result (verdict + diagnostics) for one solver run.</span>
 
 <span class="sd">    Non-frozen with ``slots=True`` so the two ``estimate_rotation_period``</span>
 <span class="sd">    confidence guardrails can downgrade the verdict in place (attribute writes)</span>
@@ -921,7 +891,7 @@
     <span class="c1"># Global-best guard (rp-e4a.12 / review #8): the coarse global minimum is already</span>
     <span class="c1"># computed, so always include its neighborhood in the exact-refine set. The</span>
     <span class="c1"># candidate_count=12 local-minima cap could otherwise skip the global-best grid</span>
-    <span class="c1"># region on an alias-dense periodogram, and the prior code only fell back to the</span>
+    <span class="c1"># region on an alias-dense frequency grid, and the prior code only fell back to the</span>
     <span class="c1"># full grid when NO fit was found -- never when it found a non-global one. This is</span>
     <span class="c1"># an O(coarse-grid) guarantee, not a continuous optimizer or a fuzz battery.</span>
     <span class="n">finite</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">coarse_scores</span><span class="p">)</span>
@@ -1340,424 +1310,6 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_band_intercept_design</span><span class="p">(</span>
-    <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-    <span class="n">unique_filters</span> <span class="o">=</span> <span class="n">_ordered_unique</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">)</span>
-    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">)</span>
-    <span class="n">cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)]</span>
-    <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">unique_filters</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
-        <span class="n">cols</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">filter_labels</span> <span class="o">==</span> <span class="n">label</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span><span class="n">cols</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">unique_filters</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_weighted_fit_with_clipping</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">design</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">target</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">clip_sigma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">max_iterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]]:</span>
-    <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_iterations</span><span class="p">))):</span>
-        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">idx</span><span class="o">.</span><span class="n">size</span> <span class="o">&lt;=</span> <span class="n">design</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="k">break</span>
-        <span class="n">design_use</span> <span class="o">=</span> <span class="n">design</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-        <span class="n">target_use</span> <span class="o">=</span> <span class="n">target</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">design_use</span><span class="p">,</span> <span class="n">target_use</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-            <span class="n">residuals</span> <span class="o">=</span> <span class="n">target_use</span> <span class="o">-</span> <span class="n">design_use</span> <span class="o">@</span> <span class="n">coeffs</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">w_use</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-            <span class="n">sqrt_w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">w_use</span><span class="p">)</span>
-            <span class="n">coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span>
-                <span class="n">design_use</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">target_use</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="n">residuals</span> <span class="o">=</span> <span class="n">target_use</span> <span class="o">-</span> <span class="n">design_use</span> <span class="o">@</span> <span class="n">coeffs</span>
-        <span class="n">sigma</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">ddof</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">design_use</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])))</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">sigma</span><span class="p">)</span> <span class="ow">or</span> <span class="n">sigma</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-            <span class="k">break</span>
-        <span class="n">keep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">residuals</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="nb">float</span><span class="p">(</span><span class="n">clip_sigma</span><span class="p">)</span> <span class="o">*</span> <span class="n">sigma</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">keep</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coeffs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">mask</span>
-        <span class="n">new_mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="n">new_mask</span><span class="p">[</span><span class="n">idx</span><span class="p">[</span><span class="o">~</span><span class="n">keep</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">new_mask</span><span class="p">,</span> <span class="n">mask</span><span class="p">):</span>
-            <span class="k">break</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">new_mask</span>
-    <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
-    <span class="n">design_use</span> <span class="o">=</span> <span class="n">design</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-    <span class="n">target_use</span> <span class="o">=</span> <span class="n">target</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">design_use</span><span class="p">,</span> <span class="n">target_use</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">w_use</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">sqrt_w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">w_use</span><span class="p">)</span>
-        <span class="n">coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span>
-            <span class="n">design_use</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">target_use</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coeffs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">mask</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_lsm_inputs</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">mag</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">reduced_mag</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">predicted_mag_v</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">phase_angle</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-    <span class="n">weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span>
-    <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-    <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="nb">int</span><span class="p">,</span>
-    <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">],</span>
-<span class="p">]:</span>
-    <span class="n">n_obs</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mag</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-    <span class="n">active_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">predicted_mag_v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">predicted_mag_v</span><span class="p">)):</span>
-        <span class="n">corrected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mag</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
-            <span class="n">predicted_mag_v</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-        <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">fixed_design</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_band_intercept_design</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">)</span>
-        <span class="n">phase_cols</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">fixed_design</span><span class="p">,</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phase_angle</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">phase_angle</span><span class="p">),</span>
-            <span class="p">]</span>
-        <span class="p">)</span>
-        <span class="n">coeffs</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">_weighted_fit_with_clipping</span><span class="p">(</span>
-            <span class="n">design</span><span class="o">=</span><span class="n">phase_cols</span><span class="p">,</span>
-            <span class="n">target</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reduced_mag</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
-            <span class="n">clip_sigma</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">trend</span> <span class="o">=</span> <span class="n">phase_cols</span> <span class="o">@</span> <span class="n">coeffs</span>
-        <span class="n">corrected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reduced_mag</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">-</span> <span class="n">trend</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">mask</span><span class="p">):</span>
-            <span class="n">active_mask</span> <span class="o">&amp;=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-            <span class="n">corrected</span> <span class="o">=</span> <span class="n">corrected</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-            <span class="n">filter_labels</span> <span class="o">=</span> <span class="n">filter_labels</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-            <span class="n">weights</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="kc">None</span> <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-            <span class="p">)</span>
-
-    <span class="n">corrected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">corrected</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">corrected</span><span class="p">))</span>
-    <span class="n">mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">corrected</span><span class="p">))</span>
-    <span class="n">sigma</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">corrected</span><span class="p">))</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">sigma</span><span class="p">)</span> <span class="ow">or</span> <span class="n">sigma</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-        <span class="n">keep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">corrected</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">keep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">corrected</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">3.0</span> <span class="o">*</span> <span class="n">sigma</span>
-    <span class="n">corrected</span> <span class="o">=</span> <span class="n">corrected</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
-    <span class="n">filter_labels</span> <span class="o">=</span> <span class="n">filter_labels</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
-    <span class="n">clipped</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="o">~</span><span class="n">keep</span><span class="p">))</span>
-    <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">~</span><span class="n">active_mask</span><span class="p">):</span>
-        <span class="n">surviving</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">active_mask</span><span class="p">)</span>
-        <span class="n">final_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-        <span class="n">final_mask</span><span class="p">[</span><span class="n">surviving</span><span class="p">[</span><span class="n">keep</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">final_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">keep</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">corrected</span><span class="p">,</span> <span class="n">filter_labels</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">clipped</span><span class="p">,</span> <span class="n">final_mask</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_lsm_frequency_grid</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">span_days</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">max_samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
-    <span class="n">f_min</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">_LSM_MAX_PERIOD_DAYS</span>
-    <span class="n">f_max</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">_LSM_MIN_PERIOD_DAYS</span>
-    <span class="n">ideal_count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ceil</span><span class="p">(</span><span class="n">_LSM_OVERSAMPLE_FACTOR</span> <span class="o">*</span> <span class="n">span_days</span> <span class="o">*</span> <span class="p">(</span><span class="n">f_max</span> <span class="o">-</span> <span class="n">f_min</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="n">n_samples</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">max_samples</span><span class="p">),</span> <span class="n">ideal_count</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">f_min</span><span class="p">,</span> <span class="n">f_max</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_lsm_design</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">t_rel</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-    <span class="n">frequency</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">order</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
-    <span class="n">intercepts</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_band_intercept_design</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">)</span>
-    <span class="n">omega</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">t_rel</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">periodic_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">harmonic</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">order</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
-        <span class="n">angle</span> <span class="o">=</span> <span class="n">harmonic</span> <span class="o">*</span> <span class="n">omega</span>
-        <span class="n">periodic_cols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">))</span>
-        <span class="n">periodic_cols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">))</span>
-    <span class="n">periodic</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span><span class="n">periodic_cols</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">intercepts</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">intercepts</span><span class="p">,</span> <span class="n">periodic</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_weighted_chi2</span><span class="p">(</span>
-    <span class="n">residuals</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-    <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">residuals</span><span class="p">)))</span>
-    <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">w</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">residuals</span><span class="p">)))</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_fit_lsm_frequency</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">t_rel</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">corrected</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-    <span class="n">weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">frequency</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
-    <span class="n">flat_design</span><span class="p">,</span> <span class="n">full_design</span> <span class="o">=</span> <span class="n">_lsm_design</span><span class="p">(</span>
-        <span class="n">t_rel</span><span class="o">=</span><span class="n">t_rel</span><span class="p">,</span>
-        <span class="n">filter_labels</span><span class="o">=</span><span class="n">filter_labels</span><span class="p">,</span>
-        <span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
-        <span class="n">order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">flat_coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">flat_design</span><span class="p">,</span> <span class="n">corrected</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-        <span class="n">flat_resid</span> <span class="o">=</span> <span class="n">corrected</span> <span class="o">-</span> <span class="n">flat_design</span> <span class="o">@</span> <span class="n">flat_coeffs</span>
-        <span class="n">coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">full_design</span><span class="p">,</span> <span class="n">corrected</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-        <span class="n">resid</span> <span class="o">=</span> <span class="n">corrected</span> <span class="o">-</span> <span class="n">full_design</span> <span class="o">@</span> <span class="n">coeffs</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">sqrt_w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>
-        <span class="n">flat_coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span>
-            <span class="n">flat_design</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">corrected</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span>
-        <span class="p">)</span>
-        <span class="n">flat_resid</span> <span class="o">=</span> <span class="n">corrected</span> <span class="o">-</span> <span class="n">flat_design</span> <span class="o">@</span> <span class="n">flat_coeffs</span>
-        <span class="n">coeffs</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span>
-            <span class="n">full_design</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">corrected</span> <span class="o">*</span> <span class="n">sqrt_w</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span>
-        <span class="p">)</span>
-        <span class="n">resid</span> <span class="o">=</span> <span class="n">corrected</span> <span class="o">-</span> <span class="n">full_design</span> <span class="o">@</span> <span class="n">coeffs</span>
-    <span class="n">chi2_0</span> <span class="o">=</span> <span class="n">_weighted_chi2</span><span class="p">(</span><span class="n">flat_resid</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
-    <span class="n">chi2</span> <span class="o">=</span> <span class="n">_weighted_chi2</span><span class="p">(</span><span class="n">resid</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">chi2_0</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-        <span class="n">power</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">power</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">chi2</span> <span class="o">/</span> <span class="n">chi2_0</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">power</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coeffs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_local_maxima_indices</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
-    <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">maxima</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">size</span><span class="p">):</span>
-        <span class="n">left</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">idx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-        <span class="n">center</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
-        <span class="n">right</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-        <span class="k">if</span> <span class="n">center</span> <span class="o">&gt;=</span> <span class="n">left</span> <span class="ow">and</span> <span class="n">center</span> <span class="o">&gt;</span> <span class="n">right</span><span class="p">:</span>
-            <span class="n">maxima</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maxima</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_lsm_false_alarm_probability</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">time_lsm</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">corrected</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">best_frequency</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Astropy Baluev false-alarm probability for the LSM peak frequency.</span>
-
-<span class="sd">    Computes the Lomb-Scargle periodogram on the trend-corrected magnitudes and</span>
-<span class="sd">    returns the analytic Baluev FAP of the peak power. Returns ``None`` when the</span>
-<span class="sd">    FAP cannot be evaluated (too few points, degenerate inputs, or an Astropy</span>
-<span class="sd">    failure) so the caller can treat it as &quot;no significant peak&quot;.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">best_frequency</span><span class="p">)</span> <span class="ow">or</span> <span class="n">best_frequency</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">time_lsm</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">corrected</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">times</span><span class="o">.</span><span class="n">size</span> <span class="o">&lt;</span> <span class="mi">4</span> <span class="ow">or</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">times</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="c1"># Convert fit weights (1/sigma^2) back to per-point uncertainties when present.</span>
-    <span class="n">dy</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">w</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">w</span><span class="p">))</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">w</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">):</span>
-            <span class="n">dy</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.timeseries</span><span class="w"> </span><span class="kn">import</span> <span class="n">LombScargle</span>  <span class="c1"># type: ignore[import-untyped]</span>
-
-        <span class="c1"># Astropy only implements an analytic FAP for the single-term (nterms=1)</span>
-        <span class="c1"># periodogram, so the signal gate asks the standard question &quot;is the</span>
-        <span class="c1"># strongest periodicity in this data significant?&quot;. A doubly-peaked</span>
-        <span class="c1"># rotation puts most single-term power at 2x the LSM frequency, so take</span>
-        <span class="c1"># the more significant of (LSM peak, global periodogram peak).</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">LombScargle</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">dy</span><span class="o">=</span><span class="n">dy</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">dy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="n">LombScargle</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">power_at_best</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">best_frequency</span><span class="p">)))</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">power_grid</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">autopower</span><span class="p">(</span>
-            <span class="n">minimum_frequency</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">best_frequency</span><span class="p">)</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">,</span>
-            <span class="n">maximum_frequency</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">best_frequency</span><span class="p">)</span> <span class="o">*</span> <span class="mf">4.0</span><span class="p">,</span>
-            <span class="n">samples_per_peak</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">power_peak</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">power_at_best</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">power_grid</span><span class="p">)))</span>
-        <span class="n">fap</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">false_alarm_probability</span><span class="p">(</span><span class="n">power_peak</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;baluev&quot;</span><span class="p">))</span>
-    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">fap</span><span class="p">):</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">fap</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="mf">1.0</span><span class="p">))</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_estimate_lsm_solution</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">t_rel</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">mag</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">reduced_mag</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">predicted_mag_v</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">phase_angle</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-    <span class="n">weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">lsm_max_frequency_samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_LSMSolution</span><span class="p">:</span>
-    <span class="n">corrected</span><span class="p">,</span> <span class="n">filter_lsm</span><span class="p">,</span> <span class="n">weights_lsm</span><span class="p">,</span> <span class="n">clipped</span><span class="p">,</span> <span class="n">keep_mask</span> <span class="o">=</span> <span class="n">_prepare_lsm_inputs</span><span class="p">(</span>
-        <span class="n">mag</span><span class="o">=</span><span class="n">mag</span><span class="p">,</span>
-        <span class="n">reduced_mag</span><span class="o">=</span><span class="n">reduced_mag</span><span class="p">,</span>
-        <span class="n">predicted_mag_v</span><span class="o">=</span><span class="n">predicted_mag_v</span><span class="p">,</span>
-        <span class="n">phase_angle</span><span class="o">=</span><span class="n">phase_angle</span><span class="p">,</span>
-        <span class="n">filter_labels</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">),</span>
-        <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">corrected</span><span class="o">.</span><span class="n">size</span> <span class="o">&lt;</span> <span class="mi">8</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_LSMSolution</span><span class="p">(</span>
-            <span class="n">period_days</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">power</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">power_gap</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">candidate_period_days</span><span class="o">=</span><span class="p">[],</span>
-            <span class="n">candidate_powers</span><span class="o">=</span><span class="p">[],</span>
-            <span class="n">is_reliable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">amplitude_mag</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">n_fit_observations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">corrected</span><span class="o">.</span><span class="n">size</span><span class="p">),</span>
-            <span class="n">n_clipped</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">clipped</span><span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="n">time_lsm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">t_rel</span><span class="p">[</span><span class="n">keep_mask</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">time_lsm</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">corrected</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;internal error: LSM masking produced misaligned time and magnitude arrays&quot;</span>
-        <span class="p">)</span>
-    <span class="n">span_days</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">time_lsm</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">time_lsm</span><span class="p">))</span>
-    <span class="n">span_days</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">span_days</span><span class="p">,</span> <span class="mf">1.0e-6</span><span class="p">)</span>
-    <span class="n">frequencies</span> <span class="o">=</span> <span class="n">_lsm_frequency_grid</span><span class="p">(</span>
-        <span class="n">span_days</span><span class="o">=</span><span class="n">span_days</span><span class="p">,</span> <span class="n">max_samples</span><span class="o">=</span><span class="n">lsm_max_frequency_samples</span>
-    <span class="p">)</span>
-
-    <span class="n">powers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">frequencies</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">coeffs_by_index</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span>
-        <span class="n">frequencies</span><span class="o">.</span><span class="n">size</span>
-    <span class="p">)</span>
-    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">frequency</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">frequencies</span><span class="o">.</span><span class="n">tolist</span><span class="p">()):</span>
-        <span class="n">power</span><span class="p">,</span> <span class="n">coeffs</span> <span class="o">=</span> <span class="n">_fit_lsm_frequency</span><span class="p">(</span>
-            <span class="n">t_rel</span><span class="o">=</span><span class="n">time_lsm</span><span class="p">,</span>
-            <span class="n">corrected</span><span class="o">=</span><span class="n">corrected</span><span class="p">,</span>
-            <span class="n">filter_labels</span><span class="o">=</span><span class="n">filter_lsm</span><span class="p">,</span>
-            <span class="n">weights</span><span class="o">=</span><span class="n">weights_lsm</span><span class="p">,</span>
-            <span class="n">frequency</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">frequency</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="n">powers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">power</span><span class="p">)</span>
-        <span class="n">coeffs_by_index</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">coeffs</span>
-
-    <span class="n">local_maxima</span> <span class="o">=</span> <span class="n">_local_maxima_indices</span><span class="p">(</span><span class="n">powers</span><span class="p">)</span>
-    <span class="n">survivors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">_LSMCandidate</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">local_maxima</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
-        <span class="n">candidate_coeffs</span> <span class="o">=</span> <span class="n">coeffs_by_index</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">idx</span><span class="p">)]</span>
-        <span class="k">if</span> <span class="n">candidate_coeffs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">continue</span>
-        <span class="n">coeffs</span> <span class="o">=</span> <span class="n">candidate_coeffs</span>
-        <span class="n">n_maxima</span><span class="p">,</span> <span class="n">n_minima</span> <span class="o">=</span> <span class="n">_count_local_extrema</span><span class="p">(</span><span class="n">coeffs</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">n_maxima</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">n_minima</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
-            <span class="k">continue</span>
-        <span class="n">survivors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="n">_LSMCandidate</span><span class="p">(</span>
-                <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">frequencies</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">idx</span><span class="p">)]),</span>
-                <span class="n">power</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">powers</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">idx</span><span class="p">)]),</span>
-                <span class="n">coeffs</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coeffs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-
-    <span class="n">survivors</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">candidate</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">power</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">survivors</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_LSMSolution</span><span class="p">(</span>
-            <span class="n">period_days</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">power</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">power_gap</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">candidate_period_days</span><span class="o">=</span><span class="p">[],</span>
-            <span class="n">candidate_powers</span><span class="o">=</span><span class="p">[],</span>
-            <span class="n">is_reliable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">amplitude_mag</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">n_fit_observations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">corrected</span><span class="o">.</span><span class="n">size</span><span class="p">),</span>
-            <span class="n">n_clipped</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">clipped</span><span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="n">best_power</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">survivors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">power</span><span class="p">)</span>
-    <span class="n">tied_survivors</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">candidate</span>
-        <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">survivors</span>
-        <span class="k">if</span> <span class="n">best_power</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">power</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">_LSM_POWER_TIE_TOLERANCE</span>
-    <span class="p">]</span>
-    <span class="n">best</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">tied_survivors</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">candidate</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">period_days</span><span class="p">))</span>
-    <span class="n">ordered_survivors</span> <span class="o">=</span> <span class="p">[</span><span class="n">best</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span>
-        <span class="n">candidate</span> <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">survivors</span> <span class="k">if</span> <span class="n">candidate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">best</span>
-    <span class="p">]</span>
-    <span class="n">second_power</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">ordered_survivors</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">power</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ordered_survivors</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span> <span class="k">else</span> <span class="mf">0.0</span>
-    <span class="p">)</span>
-    <span class="n">power_gap</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">best</span><span class="o">.</span><span class="n">power</span> <span class="o">-</span> <span class="n">second_power</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ordered_survivors</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span>
-        <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">best</span><span class="o">.</span><span class="n">power</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">amplitude_mag</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">_periodic_amplitude_from_coeffs</span><span class="p">(</span><span class="n">best</span><span class="o">.</span><span class="n">coeffs</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
-    <span class="n">best_frequency</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="mf">1.0</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">best</span><span class="o">.</span><span class="n">period_days</span><span class="p">)</span> <span class="k">if</span> <span class="n">best</span><span class="o">.</span><span class="n">period_days</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">false_alarm_probability</span> <span class="o">=</span> <span class="n">_lsm_false_alarm_probability</span><span class="p">(</span>
-        <span class="n">time_lsm</span><span class="o">=</span><span class="n">time_lsm</span><span class="p">,</span>
-        <span class="n">corrected</span><span class="o">=</span><span class="n">corrected</span><span class="p">,</span>
-        <span class="n">weights</span><span class="o">=</span><span class="n">weights_lsm</span><span class="p">,</span>
-        <span class="n">best_frequency</span><span class="o">=</span><span class="n">best_frequency</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="c1"># Keep power/power_gap as diagnostics; the false-alarm probability is the</span>
-    <span class="c1"># validated significance gate (D1). ``None`` FAP fails the gate.</span>
-    <span class="n">is_reliable</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span>
-        <span class="n">best</span><span class="o">.</span><span class="n">power</span> <span class="o">&gt;=</span> <span class="mf">0.1</span>
-        <span class="ow">and</span> <span class="n">power_gap</span> <span class="o">&gt;=</span> <span class="mf">0.02</span>
-        <span class="ow">and</span> <span class="n">false_alarm_probability</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="ow">and</span> <span class="n">false_alarm_probability</span> <span class="o">&lt;=</span> <span class="n">FAP_SIGNIFICANT</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">_LSMSolution</span><span class="p">(</span>
-        <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">best</span><span class="o">.</span><span class="n">period_days</span><span class="p">),</span>
-        <span class="n">power</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">best</span><span class="o">.</span><span class="n">power</span><span class="p">),</span>
-        <span class="n">power_gap</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">power_gap</span><span class="p">),</span>
-        <span class="n">candidate_period_days</span><span class="o">=</span><span class="p">[</span>
-            <span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">period_days</span><span class="p">)</span> <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">ordered_survivors</span><span class="p">[:</span><span class="mi">12</span><span class="p">]</span>
-        <span class="p">],</span>
-        <span class="n">candidate_powers</span><span class="o">=</span><span class="p">[</span>
-            <span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">power</span><span class="p">)</span> <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">ordered_survivors</span><span class="p">[:</span><span class="mi">12</span><span class="p">]</span>
-        <span class="p">],</span>
-        <span class="n">is_reliable</span><span class="o">=</span><span class="n">is_reliable</span><span class="p">,</span>
-        <span class="n">amplitude_mag</span><span class="o">=</span><span class="n">amplitude_mag</span><span class="p">,</span>
-        <span class="n">n_fit_observations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">corrected</span><span class="o">.</span><span class="n">size</span><span class="p">),</span>
-        <span class="n">n_clipped</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">clipped</span><span class="p">),</span>
-        <span class="n">false_alarm_probability</span><span class="o">=</span><span class="n">false_alarm_probability</span><span class="p">,</span>
-    <span class="p">)</span>
-
-
 <span class="k">def</span><span class="w"> </span><span class="nf">_observation_count_sufficient</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether the best-sampled band is a credible lightcurve for the joint fit.</span>
 
@@ -1840,12 +1392,10 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_classify_confidence</span><span class="p">(</span>
     <span class="o">*</span><span class="p">,</span>
-    <span class="n">primary_method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">amplitude_snr</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">phase_coverage_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">n_rotations_spanned</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">min_rotations_in_span</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">lsm_false_alarm_probability</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">n_significant_aliases</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">is_period_doubled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="n">observation_count_sufficient</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
@@ -1860,20 +1410,14 @@
 <span class="sd">    The signal gate, positive flags, and alias gate are expressed as ordered</span>
 <span class="sd">    ``(condition, label)`` tables -- the tuple order *is* the emission order,</span>
 <span class="sd">    which is part of the D1 contract (the flags/reasons lists are compared by</span>
-<span class="sd">    membership AND order).  The early-return, the precision gate, its</span>
-<span class="sd">    ``no_precision`` de-dup guards, and the LSM family-cap are kept verbatim</span>
-<span class="sd">    because they carry the subtle, stateful behavior.</span>
+<span class="sd">    membership AND order).  The early-return, the precision gate, and its</span>
+<span class="sd">    ``no_precision`` de-dup guards are kept verbatim because they carry the</span>
+<span class="sd">    subtle, stateful behavior.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">flags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">reasons</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="n">uses_fap</span> <span class="o">=</span> <span class="n">primary_method</span> <span class="o">==</span> <span class="s2">&quot;lsm&quot;</span>
     <span class="n">min_rotations</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">min_rotations_in_span</span><span class="p">)</span>
-    <span class="n">fap_insignificant</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">lsm_false_alarm_probability</span> <span class="ow">is</span> <span class="kc">None</span>
-        <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">lsm_false_alarm_probability</span><span class="p">)</span>
-        <span class="ow">or</span> <span class="n">lsm_false_alarm_probability</span> <span class="o">&gt;</span> <span class="n">FAP_SIGNIFICANT</span>
-    <span class="p">)</span>
 
     <span class="c1"># ---- 1. Signal gate ----------------------------------------------------</span>
     <span class="c1"># Each row is (failed?, reason), appended in source order.  Any hit -&gt; early</span>
@@ -1887,7 +1431,6 @@
         <span class="p">),</span>
         <span class="p">(</span><span class="n">_below_min</span><span class="p">(</span><span class="n">n_rotations_spanned</span><span class="p">,</span> <span class="n">min_rotations</span><span class="p">),</span> <span class="s2">&quot;spans_too_few_rotations&quot;</span><span class="p">),</span>
         <span class="p">(</span><span class="ow">not</span> <span class="n">observation_count_sufficient</span><span class="p">,</span> <span class="s2">&quot;too_few_observations&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="n">uses_fap</span> <span class="ow">and</span> <span class="n">fap_insignificant</span><span class="p">,</span> <span class="s2">&quot;no_significant_peak&quot;</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">for</span> <span class="n">failed</span><span class="p">,</span> <span class="n">reason</span> <span class="ow">in</span> <span class="n">signal_gate</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">failed</span><span class="p">:</span>
@@ -1906,12 +1449,6 @@
         <span class="n">phase_coverage_fraction</span><span class="p">,</span> <span class="n">PHASE_COVERAGE_MIN_SINGLE</span>
     <span class="p">)</span>
     <span class="n">positive_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">(</span>
-            <span class="n">uses_fap</span>
-            <span class="ow">and</span> <span class="n">lsm_false_alarm_probability</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="n">lsm_false_alarm_probability</span> <span class="o">&lt;=</span> <span class="n">FAP_SIGNIFICANT</span><span class="p">,</span>
-            <span class="s2">&quot;fap_significant&quot;</span><span class="p">,</span>
-        <span class="p">),</span>
         <span class="p">(</span><span class="n">good_coverage_for_single</span><span class="p">,</span> <span class="s2">&quot;good_phase_coverage&quot;</span><span class="p">),</span>
         <span class="p">(</span><span class="n">_at_least</span><span class="p">(</span><span class="n">n_rotations_spanned</span><span class="p">,</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">min_rotations</span><span class="p">),</span> <span class="s2">&quot;multi_night&quot;</span><span class="p">),</span>
         <span class="p">(</span><span class="ow">not</span> <span class="n">is_period_doubled</span><span class="p">,</span> <span class="s2">&quot;two_max_two_min&quot;</span><span class="p">),</span>
@@ -1954,12 +1491,6 @@
         <span class="n">verdict</span> <span class="o">=</span> <span class="n">_VERDICT_FAMILY</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># Signal exists but neither precision criterion met: believe the family.</span>
-        <span class="n">verdict</span> <span class="o">=</span> <span class="n">_VERDICT_FAMILY</span>
-        <span class="k">if</span> <span class="s2">&quot;no_precision&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">reasons</span><span class="p">:</span>
-            <span class="n">reasons</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;no_precision&quot;</span><span class="p">)</span>
-
-    <span class="c1"># LSM-primary results have no validated uncertainty interval (D2): cap at family.</span>
-    <span class="k">if</span> <span class="n">primary_method</span> <span class="o">==</span> <span class="s2">&quot;lsm&quot;</span> <span class="ow">and</span> <span class="n">verdict</span> <span class="o">==</span> <span class="n">_VERDICT_SINGLE</span><span class="p">:</span>
         <span class="n">verdict</span> <span class="o">=</span> <span class="n">_VERDICT_FAMILY</span>
         <span class="k">if</span> <span class="s2">&quot;no_precision&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">reasons</span><span class="p">:</span>
             <span class="n">reasons</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;no_precision&quot;</span><span class="p">)</span>
@@ -2007,7 +1538,7 @@
     <span class="n">selected_method_amplitude_mag</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">diagnostics</span><span class="p">:</span> <span class="n">_VerdictDiagnostics</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_PrimaryResult</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assemble the per-method result (one field set + one is_valid/is_reliable rule).&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assemble the Fourier result (one field set + one is_valid/is_reliable rule).&quot;&quot;&quot;</span>
     <span class="n">period_verdict</span><span class="p">,</span> <span class="n">reliability_code</span><span class="p">,</span> <span class="n">confidence_flags</span><span class="p">,</span> <span class="n">insufficiency_reasons</span> <span class="o">=</span> <span class="n">verdict</span>
     <span class="k">return</span> <span class="n">_PrimaryResult</span><span class="p">(</span>
         <span class="n">primary_method</span><span class="o">=</span><span class="n">primary_method</span><span class="p">,</span>
@@ -2032,9 +1563,7 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_primary_from_method</span><span class="p">(</span>
     <span class="o">*</span><span class="p">,</span>
-    <span class="n">method_mode</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">fourier_solution</span><span class="p">:</span> <span class="n">_FourierSolution</span><span class="p">,</span>
-    <span class="n">lsm_solution</span><span class="p">:</span> <span class="n">_LSMSolution</span><span class="p">,</span>
     <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
     <span class="n">t_rel</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
     <span class="n">span_days</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -2044,118 +1573,44 @@
     <span class="n">observation_count_sufficient</span> <span class="o">=</span> <span class="n">_observation_count_sufficient</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">)</span>
     <span class="n">n_fourier_aliases</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">clusters</span><span class="p">))</span>
 
-    <span class="k">if</span> <span class="n">method_mode</span> <span class="o">==</span> <span class="s2">&quot;fourier&quot;</span><span class="p">:</span>
-        <span class="n">amplitude_mag</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">amplitude_mag</span><span class="p">)</span>
-        <span class="n">diagnostics</span> <span class="o">=</span> <span class="n">_verdict_diagnostics</span><span class="p">(</span>
-            <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">period_days</span><span class="p">),</span>
-            <span class="n">amplitude_mag</span><span class="o">=</span><span class="n">amplitude_mag</span><span class="p">,</span>
-            <span class="n">residual_sigma_mag</span><span class="o">=</span><span class="n">residual_sigma_mag</span><span class="p">,</span>
+    <span class="n">amplitude_mag</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">amplitude_mag</span><span class="p">)</span>
+    <span class="n">diagnostics</span> <span class="o">=</span> <span class="n">_verdict_diagnostics</span><span class="p">(</span>
+        <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">period_days</span><span class="p">),</span>
+        <span class="n">amplitude_mag</span><span class="o">=</span><span class="n">amplitude_mag</span><span class="p">,</span>
+        <span class="n">residual_sigma_mag</span><span class="o">=</span><span class="n">residual_sigma_mag</span><span class="p">,</span>
+        <span class="n">n_significant_aliases</span><span class="o">=</span><span class="n">n_fourier_aliases</span><span class="p">,</span>
+        <span class="n">t_rel</span><span class="o">=</span><span class="n">t_rel</span><span class="p">,</span>
+        <span class="n">span_days</span><span class="o">=</span><span class="n">span_days</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">period_verdict</span><span class="p">,</span> <span class="n">reliability_code</span><span class="p">,</span> <span class="n">confidence_flags</span><span class="p">,</span> <span class="n">insufficiency_reasons</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_classify_confidence</span><span class="p">(</span>
+            <span class="n">amplitude_snr</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">amplitude_snr</span><span class="p">,</span>
+            <span class="n">phase_coverage_fraction</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">phase_coverage_fraction</span><span class="p">,</span>
+            <span class="n">n_rotations_spanned</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">n_rotations_spanned</span><span class="p">,</span>
+            <span class="n">min_rotations_in_span</span><span class="o">=</span><span class="n">min_rotations_in_span</span><span class="p">,</span>
             <span class="n">n_significant_aliases</span><span class="o">=</span><span class="n">n_fourier_aliases</span><span class="p">,</span>
-            <span class="n">t_rel</span><span class="o">=</span><span class="n">t_rel</span><span class="p">,</span>
-            <span class="n">span_days</span><span class="o">=</span><span class="n">span_days</span><span class="p">,</span>
+            <span class="n">is_period_doubled</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">is_period_doubled</span><span class="p">),</span>
+            <span class="n">observation_count_sufficient</span><span class="o">=</span><span class="n">observation_count_sufficient</span><span class="p">,</span>
+            <span class="n">is_reliable</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_reliable</span><span class="p">),</span>
+            <span class="n">is_valid</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_valid</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="n">period_verdict</span><span class="p">,</span> <span class="n">reliability_code</span><span class="p">,</span> <span class="n">confidence_flags</span><span class="p">,</span> <span class="n">insufficiency_reasons</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">_classify_confidence</span><span class="p">(</span>
-                <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span>
-                <span class="n">amplitude_snr</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">amplitude_snr</span><span class="p">,</span>
-                <span class="n">phase_coverage_fraction</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">phase_coverage_fraction</span><span class="p">,</span>
-                <span class="n">n_rotations_spanned</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">n_rotations_spanned</span><span class="p">,</span>
-                <span class="n">min_rotations_in_span</span><span class="o">=</span><span class="n">min_rotations_in_span</span><span class="p">,</span>
-                <span class="n">lsm_false_alarm_probability</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">n_significant_aliases</span><span class="o">=</span><span class="n">n_fourier_aliases</span><span class="p">,</span>
-                <span class="n">is_period_doubled</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">is_period_doubled</span><span class="p">),</span>
-                <span class="n">observation_count_sufficient</span><span class="o">=</span><span class="n">observation_count_sufficient</span><span class="p">,</span>
-                <span class="n">is_reliable</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_reliable</span><span class="p">),</span>
-                <span class="n">is_valid</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_valid</span><span class="p">),</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">_primary_result</span><span class="p">(</span>
-            <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span>
-            <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">period_days</span><span class="p">),</span>
-            <span class="n">period_lower_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">period_lower_days</span><span class="p">),</span>
-            <span class="n">period_upper_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">period_upper_days</span><span class="p">),</span>
-            <span class="n">relative_period_uncertainty</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span>
-                <span class="n">fourier_solution</span><span class="o">.</span><span class="n">relative_period_uncertainty</span>
-            <span class="p">),</span>
-            <span class="n">alternate_period_days</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">alternate_period_days</span><span class="p">),</span>
-            <span class="n">verdict</span><span class="o">=</span><span class="p">(</span>
-                <span class="n">period_verdict</span><span class="p">,</span>
-                <span class="n">reliability_code</span><span class="p">,</span>
-                <span class="n">confidence_flags</span><span class="p">,</span>
-                <span class="n">insufficiency_reasons</span><span class="p">,</span>
-            <span class="p">),</span>
-            <span class="n">selected_method_amplitude_mag</span><span class="o">=</span><span class="n">amplitude_mag</span><span class="p">,</span>
-            <span class="n">diagnostics</span><span class="o">=</span><span class="n">diagnostics</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">method_mode</span> <span class="o">==</span> <span class="s2">&quot;lsm&quot;</span><span class="p">:</span>
-        <span class="n">period_days</span> <span class="o">=</span> <span class="n">lsm_solution</span><span class="o">.</span><span class="n">period_days</span>
-        <span class="k">if</span> <span class="n">period_days</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">_primary_result</span><span class="p">(</span>
-                <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;lsm&quot;</span><span class="p">,</span>
-                <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">),</span>
-                <span class="n">period_lower_days</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">period_upper_days</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">relative_period_uncertainty</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">alternate_period_days</span><span class="o">=</span><span class="p">[],</span>
-                <span class="n">verdict</span><span class="o">=</span><span class="p">(</span>
-                    <span class="n">_VERDICT_INSUFFICIENT</span><span class="p">,</span>
-                    <span class="n">_RELIABILITY_BY_VERDICT</span><span class="p">[</span><span class="n">_VERDICT_INSUFFICIENT</span><span class="p">],</span>
-                    <span class="p">[],</span>
-                    <span class="p">[</span><span class="s2">&quot;no_significant_peak&quot;</span><span class="p">],</span>
-                <span class="p">),</span>
-                <span class="n">selected_method_amplitude_mag</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">diagnostics</span><span class="o">=</span><span class="n">_VerdictDiagnostics</span><span class="p">(</span>
-                    <span class="n">amplitude_snr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                    <span class="n">phase_coverage_fraction</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                    <span class="n">n_rotations_spanned</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                    <span class="n">n_significant_aliases</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-                <span class="p">),</span>
-            <span class="p">)</span>
-        <span class="n">lsm_amplitude_mag</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">lsm_solution</span><span class="o">.</span><span class="n">amplitude_mag</span>
-        <span class="n">n_lsm_aliases</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">candidate_period_days</span><span class="p">))</span>
-        <span class="n">diagnostics</span> <span class="o">=</span> <span class="n">_verdict_diagnostics</span><span class="p">(</span>
-            <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">period_days</span><span class="p">),</span>
-            <span class="n">amplitude_mag</span><span class="o">=</span><span class="n">lsm_amplitude_mag</span><span class="p">,</span>
-            <span class="n">residual_sigma_mag</span><span class="o">=</span><span class="n">residual_sigma_mag</span><span class="p">,</span>
-            <span class="n">n_significant_aliases</span><span class="o">=</span><span class="n">n_lsm_aliases</span><span class="p">,</span>
-            <span class="n">t_rel</span><span class="o">=</span><span class="n">t_rel</span><span class="p">,</span>
-            <span class="n">span_days</span><span class="o">=</span><span class="n">span_days</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">period_verdict</span><span class="p">,</span> <span class="n">reliability_code</span><span class="p">,</span> <span class="n">confidence_flags</span><span class="p">,</span> <span class="n">insufficiency_reasons</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">_classify_confidence</span><span class="p">(</span>
-                <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;lsm&quot;</span><span class="p">,</span>
-                <span class="n">amplitude_snr</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">amplitude_snr</span><span class="p">,</span>
-                <span class="n">phase_coverage_fraction</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">phase_coverage_fraction</span><span class="p">,</span>
-                <span class="n">n_rotations_spanned</span><span class="o">=</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">n_rotations_spanned</span><span class="p">,</span>
-                <span class="n">min_rotations_in_span</span><span class="o">=</span><span class="n">min_rotations_in_span</span><span class="p">,</span>
-                <span class="n">lsm_false_alarm_probability</span><span class="o">=</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">false_alarm_probability</span><span class="p">,</span>
-                <span class="n">n_significant_aliases</span><span class="o">=</span><span class="n">n_lsm_aliases</span><span class="p">,</span>
-                <span class="n">is_period_doubled</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">observation_count_sufficient</span><span class="o">=</span><span class="n">observation_count_sufficient</span><span class="p">,</span>
-                <span class="n">is_reliable</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">is_reliable</span><span class="p">),</span>
-                <span class="n">is_valid</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">alternate_periods</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">candidate_period_days</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
-        <span class="k">return</span> <span class="n">_primary_result</span><span class="p">(</span>
-            <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;lsm&quot;</span><span class="p">,</span>
-            <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">period_days</span><span class="p">),</span>
-            <span class="n">period_lower_days</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">period_upper_days</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">relative_period_uncertainty</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">alternate_period_days</span><span class="o">=</span><span class="n">alternate_periods</span><span class="p">,</span>
-            <span class="n">verdict</span><span class="o">=</span><span class="p">(</span>
-                <span class="n">period_verdict</span><span class="p">,</span>
-                <span class="n">reliability_code</span><span class="p">,</span>
-                <span class="n">confidence_flags</span><span class="p">,</span>
-                <span class="n">insufficiency_reasons</span><span class="p">,</span>
-            <span class="p">),</span>
-            <span class="n">selected_method_amplitude_mag</span><span class="o">=</span><span class="n">lsm_amplitude_mag</span><span class="p">,</span>
-            <span class="n">diagnostics</span><span class="o">=</span><span class="n">diagnostics</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown method_mode: </span><span class="si">{</span><span class="n">method_mode</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_primary_result</span><span class="p">(</span>
+        <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span>
+        <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">period_days</span><span class="p">),</span>
+        <span class="n">period_lower_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">period_lower_days</span><span class="p">),</span>
+        <span class="n">period_upper_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">period_upper_days</span><span class="p">),</span>
+        <span class="n">relative_period_uncertainty</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">relative_period_uncertainty</span><span class="p">),</span>
+        <span class="n">alternate_period_days</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">alternate_period_days</span><span class="p">),</span>
+        <span class="n">verdict</span><span class="o">=</span><span class="p">(</span>
+            <span class="n">period_verdict</span><span class="p">,</span>
+            <span class="n">reliability_code</span><span class="p">,</span>
+            <span class="n">confidence_flags</span><span class="p">,</span>
+            <span class="n">insufficiency_reasons</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">selected_method_amplitude_mag</span><span class="o">=</span><span class="n">amplitude_mag</span><span class="p">,</span>
+        <span class="n">diagnostics</span><span class="o">=</span><span class="n">diagnostics</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_pre_solve_insufficiency</span><span class="p">(</span>
@@ -2223,7 +1678,6 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_insufficient_result</span><span class="p">(</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">reasons</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-    <span class="n">method_mode</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">_FourierProfile</span><span class="p">,</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">RotationPeriodObservations</span><span class="p">,</span>
     <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
@@ -2232,18 +1686,17 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RotationPeriodResult</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the one-row ``insufficient_data`` result for the early-exit path.</span>
 
-<span class="sd">    Mirrors the LSM-no-period branch of ``_primary_from_method``: NaN period /</span>
-<span class="sd">    frequency, ``None`` for every nullable diagnostic, and the same D1 verdict</span>
-<span class="sd">    fields.  All non-nullable columns are populated so the row is valid.</span>
+<span class="sd">    NaN period / frequency, ``None`` for every nullable diagnostic, and the D1</span>
+<span class="sd">    insufficient verdict fields.  All non-nullable columns are populated so the</span>
+<span class="sd">    row is valid.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">session_summary</span> <span class="o">=</span> <span class="n">_summarize_sessions</span><span class="p">(</span><span class="n">time_lt</span><span class="p">,</span> <span class="n">filter_labels</span><span class="p">,</span> <span class="n">session_labels</span><span class="p">)</span>
-    <span class="n">primary_method</span> <span class="o">=</span> <span class="n">method_mode</span> <span class="k">if</span> <span class="n">method_mode</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span> <span class="s2">&quot;lsm&quot;</span><span class="p">}</span> <span class="k">else</span> <span class="s2">&quot;none&quot;</span>
     <span class="c1"># Canonical insufficient-row builder lives on the result type (shared with the</span>
     <span class="c1"># detection wrappers&#39; per-object failure path); this path adds the session/filter</span>
     <span class="c1"># diagnostics it has cheaply on hand.</span>
     <span class="k">return</span> <span class="n">RotationPeriodResult</span><span class="o">.</span><span class="n">single_insufficient</span><span class="p">(</span>
         <span class="n">reasons</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">reasons</span><span class="p">),</span>
-        <span class="n">primary_method</span><span class="o">=</span><span class="n">primary_method</span><span class="p">,</span>
+        <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span>
         <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
         <span class="n">n_observations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)),</span>
         <span class="n">n_filters</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">_ordered_unique</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">))),</span>
@@ -2255,7 +1708,6 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">primary</span><span class="p">:</span> <span class="n">_PrimaryResult</span><span class="p">,</span>
     <span class="n">fourier_solution</span><span class="p">:</span> <span class="n">_FourierSolution</span><span class="p">,</span>
-    <span class="n">lsm_solution</span><span class="p">:</span> <span class="n">_LSMSolution</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">_FourierProfile</span><span class="p">,</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">RotationPeriodObservations</span><span class="p">,</span>
     <span class="n">filter_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
@@ -2283,14 +1735,9 @@
     <span class="n">selected_relative_uncertainty</span> <span class="o">=</span> <span class="n">_none_or_float</span><span class="p">(</span><span class="n">primary</span><span class="o">.</span><span class="n">relative_period_uncertainty</span><span class="p">)</span>
     <span class="n">alternate_period_days</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">primary</span><span class="o">.</span><span class="n">alternate_period_days</span><span class="p">]</span>
 
-    <span class="k">if</span> <span class="n">primary_method</span> <span class="o">==</span> <span class="s2">&quot;fourier&quot;</span><span class="p">:</span>
-        <span class="n">n_fit_observations</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">fit_summary</span><span class="o">.</span><span class="n">n_fit</span><span class="p">)</span>
-        <span class="n">n_clipped</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">fit_summary</span><span class="o">.</span><span class="n">n_clipped</span><span class="p">)</span>
-        <span class="n">is_period_doubled</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">is_period_doubled</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">n_fit_observations</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">n_fit_observations</span><span class="p">)</span>
-        <span class="n">n_clipped</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">n_clipped</span><span class="p">)</span>
-        <span class="n">is_period_doubled</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">n_fit_observations</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">fit_summary</span><span class="o">.</span><span class="n">n_fit</span><span class="p">)</span>
+    <span class="n">n_clipped</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">fit_summary</span><span class="o">.</span><span class="n">n_clipped</span><span class="p">)</span>
+    <span class="n">is_period_doubled</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">is_period_doubled</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">RotationPeriodResult</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
         <span class="n">period_days</span><span class="o">=</span><span class="p">[</span><span class="n">period_days</span><span class="p">],</span>
@@ -2329,19 +1776,6 @@
         <span class="n">fourier_is_valid</span><span class="o">=</span><span class="p">[</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_valid</span><span class="p">)],</span>
         <span class="n">fourier_is_reliable</span><span class="o">=</span><span class="p">[</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_reliable</span><span class="p">)],</span>
         <span class="n">fourier_alternate_period_days</span><span class="o">=</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">alternate_period_days</span><span class="p">)],</span>
-        <span class="n">lsm_period_days</span><span class="o">=</span><span class="p">[</span><span class="n">_none_or_float</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">period_days</span><span class="p">)],</span>
-        <span class="n">lsm_power</span><span class="o">=</span><span class="p">[</span><span class="n">_none_or_float</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">power</span><span class="p">)],</span>
-        <span class="n">lsm_power_gap</span><span class="o">=</span><span class="p">[</span><span class="n">_none_or_float</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">power_gap</span><span class="p">)],</span>
-        <span class="n">lsm_candidate_period_days</span><span class="o">=</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">candidate_period_days</span><span class="p">)],</span>
-        <span class="n">lsm_candidate_powers</span><span class="o">=</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">candidate_powers</span><span class="p">)],</span>
-        <span class="n">lsm_is_reliable</span><span class="o">=</span><span class="p">[</span><span class="nb">bool</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">is_reliable</span><span class="p">)],</span>
-        <span class="n">lsm_false_alarm_probability</span><span class="o">=</span><span class="p">[</span>
-            <span class="p">(</span>
-                <span class="kc">None</span>
-                <span class="k">if</span> <span class="n">lsm_solution</span><span class="o">.</span><span class="n">false_alarm_probability</span> <span class="ow">is</span> <span class="kc">None</span>
-                <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">lsm_solution</span><span class="o">.</span><span class="n">false_alarm_probability</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">],</span>
         <span class="n">phase_coverage_fraction</span><span class="o">=</span><span class="p">[</span><span class="n">_none_or_float</span><span class="p">(</span><span class="n">primary</span><span class="o">.</span><span class="n">phase_coverage_fraction</span><span class="p">)],</span>
         <span class="n">n_rotations_spanned</span><span class="o">=</span><span class="p">[</span><span class="n">_none_or_float</span><span class="p">(</span><span class="n">primary</span><span class="o">.</span><span class="n">n_rotations_spanned</span><span class="p">)],</span>
         <span class="n">amplitude_snr</span><span class="o">=</span><span class="p">[</span><span class="n">_none_or_float</span><span class="p">(</span><span class="n">primary</span><span class="o">.</span><span class="n">amplitude_snr</span><span class="p">)],</span>
@@ -2367,7 +1801,6 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">estimate_rotation_period</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">RotationPeriodObservations</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
-    <span class="n">method_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;fourier&quot;</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
     <span class="n">search_fidelity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">fourier_orders</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -2381,15 +1814,13 @@
     <span class="n">session_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
     <span class="n">auto_session_min_observations_per_group</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
     <span class="n">auto_session_bic_improvement</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
-    <span class="n">lsm_max_frequency_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">_LSM_DEFAULT_MAX_SAMPLES</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RotationPeriodResult</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Estimate an asteroid rotation period with a measured confidence verdict.</span>
 
 <span class="sd">    Fits the distance-reduced, light-time-corrected photometry with a</span>
-<span class="sd">    truncated-harmonic Fourier model (the MVP default) or a Lomb-Scargle</span>
-<span class="sd">    periodogram, searches a frequency grid, clusters harmonic aliases, and</span>
-<span class="sd">    classifies the outcome against the D1 confidence contract rather than</span>
-<span class="sd">    emitting a bare point estimate.</span>
+<span class="sd">    truncated-harmonic Fourier model, searches a frequency grid, clusters</span>
+<span class="sd">    harmonic aliases, and classifies the outcome against the D1 confidence</span>
+<span class="sd">    contract rather than emitting a bare point estimate.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -2397,15 +1828,6 @@
 <span class="sd">        One row per photometric measurement: time, magnitude, optional</span>
 <span class="sd">        uncertainty, filter, optional session id, and observing geometry</span>
 <span class="sd">        (``r_au`` / ``delta_au`` / ``phase_angle_deg``).</span>
-<span class="sd">    method_mode : {&quot;fourier&quot;, &quot;lsm&quot;}, default &quot;fourier&quot;</span>
-<span class="sd">        Primary estimator. ``&quot;fourier&quot;`` does multi-order F-test selection with</span>
-<span class="sd">        alias clustering and a validated uncertainty interval. ``&quot;lsm&quot;`` is an</span>
-<span class="sd">        EXPERIMENTAL / diagnostic Lomb-Scargle mode, capped at ``period_family`` (no</span>
-<span class="sd">        validated interval, per the D2 policy). It is NOT an independent fast</span>
-<span class="sd">        fallback: the Fourier model is always built and solved first, and the LSM</span>
-<span class="sd">        verdict reuses the Fourier residual-sigma noise model, so ``&quot;lsm&quot;`` is not</span>
-<span class="sd">        faster than ``&quot;fourier&quot;`` and does not produce a result when the Fourier</span>
-<span class="sd">        solve fails. (PR#200 review #4.)</span>
 <span class="sd">    profile : str, default &quot;default&quot;</span>
 <span class="sd">        Solver configuration profile (Fourier orders, F-test/cluster confidences,</span>
 <span class="sd">        reliability window). Only ``&quot;default&quot;`` is shipped.</span>
@@ -2436,13 +1858,13 @@
 <span class="sd">        ``period_family`` / ``insufficient_data``), ``reliability_code`` (``&quot;3&quot;`` /</span>
 <span class="sd">        ``&quot;2&quot;`` / ``&quot;1&quot;``, mapping to the LCDB U code), ``confidence_flags`` and</span>
 <span class="sd">        ``insufficiency_reasons`` -- plus the recovered ``period_hours`` /</span>
-<span class="sd">        ``period_days``, the per-method blocks, and diagnostics.</span>
+<span class="sd">        ``period_days``, the Fourier diagnostic block, and the verdict diagnostics.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If ``method_mode`` / ``session_mode`` / ``exact_evaluation_backend`` is</span>
-<span class="sd">        invalid or a numeric knob is non-positive.</span>
+<span class="sd">        If ``session_mode`` / ``exact_evaluation_backend`` is invalid or a</span>
+<span class="sd">        numeric knob is non-positive.</span>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
@@ -2457,8 +1879,6 @@
 <span class="sd">    cross-check a ``single_period`` result against ``alternate_period_days`` and</span>
 <span class="sd">    ``reliability_code`` rather than treating the verdict as infallible.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">method_mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span> <span class="s2">&quot;lsm&quot;</span><span class="p">}:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;method_mode must be one of {&#39;fourier&#39;, &#39;lsm&#39;}&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">clip_sigma</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;clip_sigma must be positive&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">min_rotations_in_span</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
@@ -2489,7 +1909,6 @@
         <span class="n">filter_labels</span><span class="p">,</span>
         <span class="n">session_labels</span><span class="p">,</span>
         <span class="n">mag_sigma</span><span class="p">,</span>
-        <span class="n">predicted_mag_v</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">=</span> <span class="n">_validate_inputs</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
 
     <span class="n">time_lt</span> <span class="o">=</span> <span class="n">_apply_light_time_correction</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">delta_au</span><span class="p">)</span>
@@ -2515,7 +1934,6 @@
         <span class="k">if</span> <span class="n">pre_solve_reasons</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">_insufficient_result</span><span class="p">(</span>
                 <span class="n">reasons</span><span class="o">=</span><span class="n">pre_solve_reasons</span><span class="p">,</span>
-                <span class="n">method_mode</span><span class="o">=</span><span class="n">method_mode</span><span class="p">,</span>
                 <span class="n">profile</span><span class="o">=</span><span class="n">resolved_profile</span><span class="p">,</span>
                 <span class="n">observations</span><span class="o">=</span><span class="n">observations</span><span class="p">,</span>
                 <span class="n">filter_labels</span><span class="o">=</span><span class="n">filter_labels</span><span class="p">,</span>
@@ -2599,33 +2017,8 @@
                 <span class="n">used_session_offsets</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="n">chosen_design</span> <span class="o">=</span> <span class="n">session_design</span>
 
-    <span class="n">lsm_solution</span> <span class="o">=</span> <span class="n">_LSMSolution</span><span class="p">(</span>
-        <span class="n">period_days</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">power</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">power_gap</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">candidate_period_days</span><span class="o">=</span><span class="p">[],</span>
-        <span class="n">candidate_powers</span><span class="o">=</span><span class="p">[],</span>
-        <span class="n">is_reliable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">amplitude_mag</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">n_fit_observations</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-        <span class="n">n_clipped</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">method_mode</span> <span class="o">==</span> <span class="s2">&quot;lsm&quot;</span><span class="p">:</span>
-        <span class="n">lsm_solution</span> <span class="o">=</span> <span class="n">_estimate_lsm_solution</span><span class="p">(</span>
-            <span class="n">t_rel</span><span class="o">=</span><span class="n">t_rel</span><span class="p">,</span>
-            <span class="n">mag</span><span class="o">=</span><span class="n">mag</span><span class="p">,</span>
-            <span class="n">reduced_mag</span><span class="o">=</span><span class="n">reduced_mag</span><span class="p">,</span>
-            <span class="n">predicted_mag_v</span><span class="o">=</span><span class="n">predicted_mag_v</span><span class="p">,</span>
-            <span class="n">phase_angle</span><span class="o">=</span><span class="n">phase_angle</span><span class="p">,</span>
-            <span class="n">filter_labels</span><span class="o">=</span><span class="n">filter_labels</span><span class="p">,</span>
-            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
-            <span class="n">lsm_max_frequency_samples</span><span class="o">=</span><span class="n">lsm_max_frequency_samples</span><span class="p">,</span>
-        <span class="p">)</span>
-
     <span class="n">primary</span> <span class="o">=</span> <span class="n">_primary_from_method</span><span class="p">(</span>
-        <span class="n">method_mode</span><span class="o">=</span><span class="n">method_mode</span><span class="p">,</span>
         <span class="n">fourier_solution</span><span class="o">=</span><span class="n">fourier_solution</span><span class="p">,</span>
-        <span class="n">lsm_solution</span><span class="o">=</span><span class="n">lsm_solution</span><span class="p">,</span>
         <span class="n">filter_labels</span><span class="o">=</span><span class="n">filter_labels</span><span class="p">,</span>
         <span class="n">t_rel</span><span class="o">=</span><span class="n">t_rel</span><span class="p">,</span>
         <span class="n">span_days</span><span class="o">=</span><span class="n">span_days</span><span class="p">,</span>
@@ -2662,8 +2055,7 @@
     <span class="c1"># chosen one (within the cluster acceptance band), the two periods are</span>
     <span class="c1"># indistinguishable and a single_period verdict is capped at period_family.</span>
     <span class="k">if</span> <span class="p">(</span>
-        <span class="n">primary</span><span class="o">.</span><span class="n">primary_method</span> <span class="o">==</span> <span class="s2">&quot;fourier&quot;</span>
-        <span class="ow">and</span> <span class="n">primary</span><span class="o">.</span><span class="n">period_verdict</span> <span class="o">==</span> <span class="n">_VERDICT_SINGLE</span>
+        <span class="n">primary</span><span class="o">.</span><span class="n">period_verdict</span> <span class="o">==</span> <span class="n">_VERDICT_SINGLE</span>
         <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">period_days</span><span class="p">)</span>
         <span class="ow">and</span> <span class="n">period_days</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
         <span class="ow">and</span> <span class="mf">0.5</span> <span class="o">/</span> <span class="n">period_days</span> <span class="o">&lt;</span> <span class="nb">float</span><span class="p">(</span><span class="n">frequencies</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
@@ -2713,7 +2105,6 @@
     <span class="k">return</span> <span class="n">_assemble_result</span><span class="p">(</span>
         <span class="n">primary</span><span class="o">=</span><span class="n">primary</span><span class="p">,</span>
         <span class="n">fourier_solution</span><span class="o">=</span><span class="n">fourier_solution</span><span class="p">,</span>
-        <span class="n">lsm_solution</span><span class="o">=</span><span class="n">lsm_solution</span><span class="p">,</span>
         <span class="n">profile</span><span class="o">=</span><span class="n">resolved_profile</span><span class="p">,</span>
         <span class="n">observations</span><span class="o">=</span><span class="n">observations</span><span class="p">,</span>
         <span class="n">filter_labels</span><span class="o">=</span><span class="n">filter_labels</span><span class="p">,</span>
@@ -2755,7 +2146,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=1ad69523"></script>
+</div><script src="../../../_static/documentation_options.js?v=05789b42"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
