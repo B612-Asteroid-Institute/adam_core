@@ -11,7 +11,6 @@ from .rotation_period_fourier_core import (
     _amplitude_from_fit,
     _apply_light_time_correction,
     _build_fixed_design,
-    _count_local_extrema,
     _DesignInfo,
     _fit_bic,
     _fit_frequency,
@@ -21,7 +20,6 @@ from .rotation_period_fourier_core import (
     _FitWithPeriod,
     _FourierProfile,
     _ordered_unique,
-    _periodic_amplitude_from_coeffs,
     _phase_prior_rows,
     _select_order,
     _SessionSummary,
@@ -31,11 +29,6 @@ from .rotation_period_fourier_core import (
 )
 from .rotation_period_types import RotationPeriodObservations, RotationPeriodResult
 
-_LSM_MIN_PERIOD_DAYS = 0.00065
-_LSM_MAX_PERIOD_DAYS = 3.0
-_LSM_OVERSAMPLE_FACTOR = 100.0
-_LSM_DEFAULT_MAX_SAMPLES = 20000
-_LSM_POWER_TIE_TOLERANCE = 2.0e-4
 _DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
 _DEFAULT_JAX_ROW_PAD_MULTIPLE = 64
 _FOURIER_MAX_CLIP_ITERATIONS = 8
@@ -44,8 +37,6 @@ _FOURIER_MAX_CLIP_ITERATIONS = 8
 # Initial values per the D1 contract; the calibration study (bead rp-e4a.13)
 # will tune these on a held-out split of the standard-candle set, so treat the
 # values below as provisional defaults rather than validated cut points.
-# False-alarm-probability ceiling for accepting an LSM peak as signal.
-FAP_SIGNIFICANT = 0.01
 # Minimum fraction of rotational-phase bins that must be occupied to clear the
 # signal gate (family-level) and to be eligible for ``single_period``.
 PHASE_COVERAGE_MIN_FAMILY = 0.5
@@ -74,7 +65,7 @@ _PHASE_COVERAGE_N_BINS = 20
 MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS = 240.0
 
 # --- Cheap pre-solve insufficiency thresholds (bead rp-e4a.19) -------------
-# Period-INDEPENDENT screening run before the Fourier/LSM search so obviously
+# Period-INDEPENDENT screening run before the Fourier search so obviously
 # under-determined / degenerate inputs can early-exit instead of building a
 # frequency grid (or hanging on a single-night span).  Provisional values; the
 # calibration study (bead rp-e4a.13) may retune them.
@@ -128,27 +119,6 @@ class _FourierSolution:
 
 
 @dataclass(slots=True)
-class _LSMCandidate:
-    period_days: float
-    power: float
-    coeffs: npt.NDArray[np.float64]
-
-
-@dataclass(slots=True)
-class _LSMSolution:
-    period_days: float | None
-    power: float | None
-    power_gap: float | None
-    candidate_period_days: list[float]
-    candidate_powers: list[float]
-    is_reliable: bool
-    amplitude_mag: float | None
-    n_fit_observations: int
-    n_clipped: int
-    false_alarm_probability: float | None = None
-
-
-@dataclass(slots=True)
 class _VerdictDiagnostics:
     """D1 numeric verdict diagnostics for the chosen period.
 
@@ -164,7 +134,7 @@ class _VerdictDiagnostics:
 
 @dataclass(slots=True)
 class _PrimaryResult:
-    """Per-method primary result (verdict + diagnostics) for one solver run.
+    """Primary Fourier result (verdict + diagnostics) for one solver run.
 
     Non-frozen with ``slots=True`` so the two ``estimate_rotation_period``
     confidence guardrails can downgrade the verdict in place (attribute writes)
@@ -502,7 +472,7 @@ def _search_best_fit(
     # Global-best guard (rp-e4a.12 / review #8): the coarse global minimum is already
     # computed, so always include its neighborhood in the exact-refine set. The
     # candidate_count=12 local-minima cap could otherwise skip the global-best grid
-    # region on an alias-dense periodogram, and the prior code only fell back to the
+    # region on an alias-dense frequency grid, and the prior code only fell back to the
     # full grid when NO fit was found -- never when it found a non-global one. This is
     # an O(coarse-grid) guarantee, not a continuous optimizer or a fuzz battery.
     finite = np.isfinite(coarse_scores)
@@ -921,424 +891,6 @@ def _derive_fourier_solution(
     )
 
 
-def _band_intercept_design(
-    filter_labels: npt.NDArray[np.object_],
-) -> tuple[npt.NDArray[np.float64], list[str]]:
-    unique_filters = _ordered_unique(filter_labels)
-    n = len(filter_labels)
-    cols: list[npt.NDArray[np.float64]] = [np.ones(n, dtype=np.float64)]
-    for label in unique_filters[1:]:
-        cols.append((filter_labels == label).astype(np.float64))
-    return np.column_stack(cols).astype(np.float64, copy=False), unique_filters
-
-
-def _weighted_fit_with_clipping(
-    *,
-    design: npt.NDArray[np.float64],
-    target: npt.NDArray[np.float64],
-    weights: npt.NDArray[np.float64] | None,
-    clip_sigma: float,
-    max_iterations: int = 6,
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-    mask = np.ones(target.shape[0], dtype=bool)
-    for _ in range(max(1, int(max_iterations))):
-        idx = np.flatnonzero(mask)
-        if idx.size <= design.shape[1]:
-            break
-        design_use = design[idx]
-        target_use = target[idx]
-        if weights is None:
-            coeffs, *_ = np.linalg.lstsq(design_use, target_use, rcond=None)
-            residuals = target_use - design_use @ coeffs
-        else:
-            w_use = np.asarray(weights[idx], dtype=np.float64)
-            sqrt_w = np.sqrt(w_use)
-            coeffs, *_ = np.linalg.lstsq(
-                design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None
-            )
-            residuals = target_use - design_use @ coeffs
-        sigma = float(np.std(residuals, ddof=max(1, design_use.shape[1])))
-        if not np.isfinite(sigma) or sigma <= 0.0:
-            break
-        keep = np.abs(residuals) <= float(clip_sigma) * sigma
-        if np.all(keep):
-            return np.asarray(coeffs, dtype=np.float64), mask
-        new_mask = mask.copy()
-        new_mask[idx[~keep]] = False
-        if np.array_equal(new_mask, mask):
-            break
-        mask = new_mask
-    idx = np.flatnonzero(mask)
-    design_use = design[idx]
-    target_use = target[idx]
-    if weights is None:
-        coeffs, *_ = np.linalg.lstsq(design_use, target_use, rcond=None)
-    else:
-        w_use = np.asarray(weights[idx], dtype=np.float64)
-        sqrt_w = np.sqrt(w_use)
-        coeffs, *_ = np.linalg.lstsq(
-            design_use * sqrt_w[:, None], target_use * sqrt_w, rcond=None
-        )
-    return np.asarray(coeffs, dtype=np.float64), mask
-
-
-def _prepare_lsm_inputs(
-    *,
-    mag: npt.NDArray[np.float64],
-    reduced_mag: npt.NDArray[np.float64],
-    predicted_mag_v: npt.NDArray[np.float64] | None,
-    phase_angle: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    weights: npt.NDArray[np.float64] | None,
-) -> tuple[
-    npt.NDArray[np.float64],
-    npt.NDArray[np.object_],
-    npt.NDArray[np.float64] | None,
-    int,
-    npt.NDArray[np.bool_],
-]:
-    n_obs = int(mag.shape[0])
-    active_mask = np.ones(n_obs, dtype=bool)
-    if predicted_mag_v is not None and np.all(np.isfinite(predicted_mag_v)):
-        corrected = np.asarray(mag, dtype=np.float64) - np.asarray(
-            predicted_mag_v, dtype=np.float64
-        )
-    else:
-        fixed_design, _ = _band_intercept_design(filter_labels)
-        phase_cols = np.column_stack(
-            [
-                fixed_design,
-                np.asarray(phase_angle, dtype=np.float64),
-                np.square(phase_angle),
-            ]
-        )
-        coeffs, mask = _weighted_fit_with_clipping(
-            design=phase_cols,
-            target=np.asarray(reduced_mag, dtype=np.float64),
-            weights=weights,
-            clip_sigma=3.0,
-        )
-        trend = phase_cols @ coeffs
-        corrected = np.asarray(reduced_mag, dtype=np.float64) - trend
-        if not np.all(mask):
-            active_mask &= np.asarray(mask, dtype=bool)
-            corrected = corrected[mask]
-            filter_labels = filter_labels[mask]
-            weights = (
-                None if weights is None else np.asarray(weights[mask], dtype=np.float64)
-            )
-
-    corrected = np.asarray(corrected, dtype=np.float64) - float(np.median(corrected))
-    mean = float(np.mean(corrected))
-    sigma = float(np.std(corrected))
-    if not np.isfinite(sigma) or sigma <= 0.0:
-        keep = np.ones(corrected.shape[0], dtype=bool)
-    else:
-        keep = np.abs(corrected - mean) <= 3.0 * sigma
-    corrected = corrected[keep]
-    filter_labels = filter_labels[keep]
-    clipped = int(np.count_nonzero(~keep))
-    if weights is not None:
-        weights = np.asarray(weights[keep], dtype=np.float64)
-    if np.any(~active_mask):
-        surviving = np.flatnonzero(active_mask)
-        final_mask = np.zeros(n_obs, dtype=bool)
-        final_mask[surviving[keep]] = True
-    else:
-        final_mask = np.asarray(keep, dtype=bool)
-    return corrected, filter_labels, weights, clipped, final_mask
-
-
-def _lsm_frequency_grid(
-    *,
-    span_days: float,
-    max_samples: int,
-) -> npt.NDArray[np.float64]:
-    f_min = 1.0 / _LSM_MAX_PERIOD_DAYS
-    f_max = 1.0 / _LSM_MIN_PERIOD_DAYS
-    ideal_count = int(ceil(_LSM_OVERSAMPLE_FACTOR * span_days * (f_max - f_min)) + 1)
-    n_samples = max(256, min(int(max_samples), ideal_count))
-    return np.linspace(f_min, f_max, n_samples, dtype=np.float64)
-
-
-def _lsm_design(
-    *,
-    t_rel: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    frequency: float,
-    order: int = 2,
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    intercepts, _ = _band_intercept_design(filter_labels)
-    omega = 2.0 * np.pi * float(frequency) * np.asarray(t_rel, dtype=np.float64)
-    periodic_cols: list[npt.NDArray[np.float64]] = []
-    for harmonic in range(1, int(order) + 1):
-        angle = harmonic * omega
-        periodic_cols.append(np.cos(angle))
-        periodic_cols.append(np.sin(angle))
-    periodic = np.column_stack(periodic_cols).astype(np.float64, copy=False)
-    return intercepts, np.concatenate([intercepts, periodic], axis=1)
-
-
-def _weighted_chi2(
-    residuals: npt.NDArray[np.float64],
-    weights: npt.NDArray[np.float64] | None,
-) -> float:
-    if weights is None:
-        return float(np.sum(np.square(residuals)))
-    w = np.asarray(weights, dtype=np.float64)
-    return float(np.sum(w * np.square(residuals)))
-
-
-def _fit_lsm_frequency(
-    *,
-    t_rel: npt.NDArray[np.float64],
-    corrected: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    weights: npt.NDArray[np.float64] | None,
-    frequency: float,
-) -> tuple[float, npt.NDArray[np.float64]]:
-    flat_design, full_design = _lsm_design(
-        t_rel=t_rel,
-        filter_labels=filter_labels,
-        frequency=frequency,
-        order=2,
-    )
-    if weights is None:
-        flat_coeffs, *_ = np.linalg.lstsq(flat_design, corrected, rcond=None)
-        flat_resid = corrected - flat_design @ flat_coeffs
-        coeffs, *_ = np.linalg.lstsq(full_design, corrected, rcond=None)
-        resid = corrected - full_design @ coeffs
-    else:
-        w = np.asarray(weights, dtype=np.float64)
-        sqrt_w = np.sqrt(w)
-        flat_coeffs, *_ = np.linalg.lstsq(
-            flat_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None
-        )
-        flat_resid = corrected - flat_design @ flat_coeffs
-        coeffs, *_ = np.linalg.lstsq(
-            full_design * sqrt_w[:, None], corrected * sqrt_w, rcond=None
-        )
-        resid = corrected - full_design @ coeffs
-    chi2_0 = _weighted_chi2(flat_resid, weights)
-    chi2 = _weighted_chi2(resid, weights)
-    if chi2_0 <= 0.0:
-        power = 0.0
-    else:
-        power = max(0.0, 1.0 - chi2 / chi2_0)
-    return float(power), np.asarray(coeffs, dtype=np.float64)
-
-
-def _local_maxima_indices(values: npt.NDArray[np.float64]) -> npt.NDArray[np.int64]:
-    if values.size == 0:
-        return np.zeros(0, dtype=np.int64)
-    maxima: list[int] = []
-    for idx in range(values.size):
-        left = float(values[idx - 1]) if idx > 0 else -np.inf
-        center = float(values[idx])
-        right = float(values[idx + 1]) if idx + 1 < values.size else -np.inf
-        if center >= left and center > right:
-            maxima.append(idx)
-    return np.asarray(maxima, dtype=np.int64)
-
-
-def _lsm_false_alarm_probability(
-    *,
-    time_lsm: npt.NDArray[np.float64],
-    corrected: npt.NDArray[np.float64],
-    weights: npt.NDArray[np.float64] | None,
-    best_frequency: float,
-) -> float | None:
-    """Astropy Baluev false-alarm probability for the LSM peak frequency.
-
-    Computes the Lomb-Scargle periodogram on the trend-corrected magnitudes and
-    returns the analytic Baluev FAP of the peak power. Returns ``None`` when the
-    FAP cannot be evaluated (too few points, degenerate inputs, or an Astropy
-    failure) so the caller can treat it as "no significant peak".
-    """
-    if not np.isfinite(best_frequency) or best_frequency <= 0.0:
-        return None
-    times = np.asarray(time_lsm, dtype=np.float64)
-    values = np.asarray(corrected, dtype=np.float64)
-    if times.size < 4 or values.size != times.size:
-        return None
-    # Convert fit weights (1/sigma^2) back to per-point uncertainties when present.
-    dy: npt.NDArray[np.float64] | None = None
-    if weights is not None:
-        w = np.asarray(weights, dtype=np.float64)
-        if w.shape == values.shape and np.all(np.isfinite(w)) and np.all(w > 0.0):
-            dy = 1.0 / np.sqrt(w)
-    try:
-        from astropy.timeseries import LombScargle  # type: ignore[import-untyped]
-
-        # Astropy only implements an analytic FAP for the single-term (nterms=1)
-        # periodogram, so the signal gate asks the standard question "is the
-        # strongest periodicity in this data significant?". A doubly-peaked
-        # rotation puts most single-term power at 2x the LSM frequency, so take
-        # the more significant of (LSM peak, global periodogram peak).
-        model = (
-            LombScargle(times, values, dy=dy)
-            if dy is not None
-            else LombScargle(times, values)
-        )
-        power_at_best = float(model.power(float(best_frequency)))
-        _, power_grid = model.autopower(
-            minimum_frequency=float(best_frequency) / 4.0,
-            maximum_frequency=float(best_frequency) * 4.0,
-            samples_per_peak=5,
-        )
-        power_peak = max(power_at_best, float(np.max(power_grid)))
-        fap = float(model.false_alarm_probability(power_peak, method="baluev"))
-    except Exception:
-        return None
-    if not np.isfinite(fap):
-        return None
-    return float(min(max(fap, 0.0), 1.0))
-
-
-def _estimate_lsm_solution(
-    *,
-    t_rel: npt.NDArray[np.float64],
-    mag: npt.NDArray[np.float64],
-    reduced_mag: npt.NDArray[np.float64],
-    predicted_mag_v: npt.NDArray[np.float64] | None,
-    phase_angle: npt.NDArray[np.float64],
-    filter_labels: npt.NDArray[np.object_],
-    weights: npt.NDArray[np.float64] | None,
-    lsm_max_frequency_samples: int,
-) -> _LSMSolution:
-    corrected, filter_lsm, weights_lsm, clipped, keep_mask = _prepare_lsm_inputs(
-        mag=mag,
-        reduced_mag=reduced_mag,
-        predicted_mag_v=predicted_mag_v,
-        phase_angle=phase_angle,
-        filter_labels=np.asarray(filter_labels, dtype=object),
-        weights=weights,
-    )
-    if corrected.size < 8:
-        return _LSMSolution(
-            period_days=None,
-            power=None,
-            power_gap=None,
-            candidate_period_days=[],
-            candidate_powers=[],
-            is_reliable=False,
-            amplitude_mag=None,
-            n_fit_observations=int(corrected.size),
-            n_clipped=int(clipped),
-        )
-
-    time_lsm = np.asarray(t_rel[keep_mask], dtype=np.float64)
-    if time_lsm.size != corrected.size:
-        raise ValueError(
-            "internal error: LSM masking produced misaligned time and magnitude arrays"
-        )
-    span_days = float(np.max(time_lsm) - np.min(time_lsm))
-    span_days = max(span_days, 1.0e-6)
-    frequencies = _lsm_frequency_grid(
-        span_days=span_days, max_samples=lsm_max_frequency_samples
-    )
-
-    powers = np.full(frequencies.shape, np.nan, dtype=np.float64)
-    coeffs_by_index: list[npt.NDArray[np.float64] | None] = [None] * int(
-        frequencies.size
-    )
-    for idx, frequency in enumerate(frequencies.tolist()):
-        power, coeffs = _fit_lsm_frequency(
-            t_rel=time_lsm,
-            corrected=corrected,
-            filter_labels=filter_lsm,
-            weights=weights_lsm,
-            frequency=float(frequency),
-        )
-        powers[idx] = float(power)
-        coeffs_by_index[idx] = coeffs
-
-    local_maxima = _local_maxima_indices(powers)
-    survivors: list[_LSMCandidate] = []
-    for idx in local_maxima.tolist():
-        candidate_coeffs = coeffs_by_index[int(idx)]
-        if candidate_coeffs is None:
-            continue
-        coeffs = candidate_coeffs
-        n_maxima, n_minima = _count_local_extrema(coeffs, 2)
-        if n_maxima != 2 or n_minima != 2:
-            continue
-        survivors.append(
-            _LSMCandidate(
-                period_days=float(1.0 / frequencies[int(idx)]),
-                power=float(powers[int(idx)]),
-                coeffs=np.asarray(coeffs, dtype=np.float64),
-            )
-        )
-
-    survivors.sort(key=lambda candidate: float(candidate.power), reverse=True)
-    if not survivors:
-        return _LSMSolution(
-            period_days=None,
-            power=None,
-            power_gap=None,
-            candidate_period_days=[],
-            candidate_powers=[],
-            is_reliable=False,
-            amplitude_mag=None,
-            n_fit_observations=int(corrected.size),
-            n_clipped=int(clipped),
-        )
-
-    best_power = float(survivors[0].power)
-    tied_survivors = [
-        candidate
-        for candidate in survivors
-        if best_power - float(candidate.power) <= _LSM_POWER_TIE_TOLERANCE
-    ]
-    best = max(tied_survivors, key=lambda candidate: float(candidate.period_days))
-    ordered_survivors = [best] + [
-        candidate for candidate in survivors if candidate is not best
-    ]
-    second_power = (
-        float(ordered_survivors[1].power) if len(ordered_survivors) >= 2 else 0.0
-    )
-    power_gap = (
-        float(best.power - second_power)
-        if len(ordered_survivors) >= 2
-        else float(best.power)
-    )
-    amplitude_mag = float(_periodic_amplitude_from_coeffs(best.coeffs, 2))
-    best_frequency = (
-        1.0 / float(best.period_days) if best.period_days > 0.0 else float("nan")
-    )
-    false_alarm_probability = _lsm_false_alarm_probability(
-        time_lsm=time_lsm,
-        corrected=corrected,
-        weights=weights_lsm,
-        best_frequency=best_frequency,
-    )
-    # Keep power/power_gap as diagnostics; the false-alarm probability is the
-    # validated significance gate (D1). ``None`` FAP fails the gate.
-    is_reliable = bool(
-        best.power >= 0.1
-        and power_gap >= 0.02
-        and false_alarm_probability is not None
-        and false_alarm_probability <= FAP_SIGNIFICANT
-    )
-    return _LSMSolution(
-        period_days=float(best.period_days),
-        power=float(best.power),
-        power_gap=float(power_gap),
-        candidate_period_days=[
-            float(candidate.period_days) for candidate in ordered_survivors[:12]
-        ],
-        candidate_powers=[
-            float(candidate.power) for candidate in ordered_survivors[:12]
-        ],
-        is_reliable=is_reliable,
-        amplitude_mag=amplitude_mag,
-        n_fit_observations=int(corrected.size),
-        n_clipped=int(clipped),
-        false_alarm_probability=false_alarm_probability,
-    )
-
-
 def _observation_count_sufficient(filter_labels: npt.NDArray[np.object_]) -> bool:
     """Whether the best-sampled band is a credible lightcurve for the joint fit.
 
@@ -1421,12 +973,10 @@ def _at_least(value: float | None, threshold: float) -> bool:
 
 def _classify_confidence(
     *,
-    primary_method: str,
     amplitude_snr: float | None,
     phase_coverage_fraction: float | None,
     n_rotations_spanned: float | None,
     min_rotations_in_span: float,
-    lsm_false_alarm_probability: float | None,
     n_significant_aliases: int | None,
     is_period_doubled: bool,
     observation_count_sufficient: bool,
@@ -1441,20 +991,14 @@ def _classify_confidence(
     The signal gate, positive flags, and alias gate are expressed as ordered
     ``(condition, label)`` tables -- the tuple order *is* the emission order,
     which is part of the D1 contract (the flags/reasons lists are compared by
-    membership AND order).  The early-return, the precision gate, its
-    ``no_precision`` de-dup guards, and the LSM family-cap are kept verbatim
-    because they carry the subtle, stateful behavior.
+    membership AND order).  The early-return, the precision gate, and its
+    ``no_precision`` de-dup guards are kept verbatim because they carry the
+    subtle, stateful behavior.
     """
     flags: list[str] = []
     reasons: list[str] = []
 
-    uses_fap = primary_method == "lsm"
     min_rotations = float(min_rotations_in_span)
-    fap_insignificant = (
-        lsm_false_alarm_probability is None
-        or not np.isfinite(lsm_false_alarm_probability)
-        or lsm_false_alarm_probability > FAP_SIGNIFICANT
-    )
 
     # ---- 1. Signal gate ----------------------------------------------------
     # Each row is (failed?, reason), appended in source order.  Any hit -> early
@@ -1468,7 +1012,6 @@ def _classify_confidence(
         ),
         (_below_min(n_rotations_spanned, min_rotations), "spans_too_few_rotations"),
         (not observation_count_sufficient, "too_few_observations"),
-        (uses_fap and fap_insignificant, "no_significant_peak"),
     )
     for failed, reason in signal_gate:
         if failed:
@@ -1487,12 +1030,6 @@ def _classify_confidence(
         phase_coverage_fraction, PHASE_COVERAGE_MIN_SINGLE
     )
     positive_flags: tuple[tuple[bool, str], ...] = (
-        (
-            uses_fap
-            and lsm_false_alarm_probability is not None
-            and lsm_false_alarm_probability <= FAP_SIGNIFICANT,
-            "fap_significant",
-        ),
         (good_coverage_for_single, "good_phase_coverage"),
         (_at_least(n_rotations_spanned, 2.0 * min_rotations), "multi_night"),
         (not is_period_doubled, "two_max_two_min"),
@@ -1535,12 +1072,6 @@ def _classify_confidence(
         verdict = _VERDICT_FAMILY
     else:
         # Signal exists but neither precision criterion met: believe the family.
-        verdict = _VERDICT_FAMILY
-        if "no_precision" not in reasons:
-            reasons.append("no_precision")
-
-    # LSM-primary results have no validated uncertainty interval (D2): cap at family.
-    if primary_method == "lsm" and verdict == _VERDICT_SINGLE:
         verdict = _VERDICT_FAMILY
         if "no_precision" not in reasons:
             reasons.append("no_precision")
@@ -1588,7 +1119,7 @@ def _primary_result(
     selected_method_amplitude_mag: float | None,
     diagnostics: _VerdictDiagnostics,
 ) -> _PrimaryResult:
-    """Assemble the per-method result (one field set + one is_valid/is_reliable rule)."""
+    """Assemble the Fourier result (one field set + one is_valid/is_reliable rule)."""
     period_verdict, reliability_code, confidence_flags, insufficiency_reasons = verdict
     return _PrimaryResult(
         primary_method=primary_method,
@@ -1613,9 +1144,7 @@ def _primary_result(
 
 def _primary_from_method(
     *,
-    method_mode: str,
     fourier_solution: _FourierSolution,
-    lsm_solution: _LSMSolution,
     filter_labels: npt.NDArray[np.object_],
     t_rel: npt.NDArray[np.float64],
     span_days: float,
@@ -1625,118 +1154,44 @@ def _primary_from_method(
     observation_count_sufficient = _observation_count_sufficient(filter_labels)
     n_fourier_aliases = int(len(fourier_solution.clusters))
 
-    if method_mode == "fourier":
-        amplitude_mag = float(fourier_solution.amplitude_mag)
-        diagnostics = _verdict_diagnostics(
-            period_days=float(fourier_solution.chosen.period_days),
-            amplitude_mag=amplitude_mag,
-            residual_sigma_mag=residual_sigma_mag,
+    amplitude_mag = float(fourier_solution.amplitude_mag)
+    diagnostics = _verdict_diagnostics(
+        period_days=float(fourier_solution.chosen.period_days),
+        amplitude_mag=amplitude_mag,
+        residual_sigma_mag=residual_sigma_mag,
+        n_significant_aliases=n_fourier_aliases,
+        t_rel=t_rel,
+        span_days=span_days,
+    )
+    period_verdict, reliability_code, confidence_flags, insufficiency_reasons = (
+        _classify_confidence(
+            amplitude_snr=diagnostics.amplitude_snr,
+            phase_coverage_fraction=diagnostics.phase_coverage_fraction,
+            n_rotations_spanned=diagnostics.n_rotations_spanned,
+            min_rotations_in_span=min_rotations_in_span,
             n_significant_aliases=n_fourier_aliases,
-            t_rel=t_rel,
-            span_days=span_days,
+            is_period_doubled=bool(fourier_solution.chosen.is_period_doubled),
+            observation_count_sufficient=observation_count_sufficient,
+            is_reliable=bool(fourier_solution.is_reliable),
+            is_valid=bool(fourier_solution.is_valid),
         )
-        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = (
-            _classify_confidence(
-                primary_method="fourier",
-                amplitude_snr=diagnostics.amplitude_snr,
-                phase_coverage_fraction=diagnostics.phase_coverage_fraction,
-                n_rotations_spanned=diagnostics.n_rotations_spanned,
-                min_rotations_in_span=min_rotations_in_span,
-                lsm_false_alarm_probability=None,
-                n_significant_aliases=n_fourier_aliases,
-                is_period_doubled=bool(fourier_solution.chosen.is_period_doubled),
-                observation_count_sufficient=observation_count_sufficient,
-                is_reliable=bool(fourier_solution.is_reliable),
-                is_valid=bool(fourier_solution.is_valid),
-            )
-        )
-        return _primary_result(
-            primary_method="fourier",
-            period_days=float(fourier_solution.chosen.period_days),
-            period_lower_days=float(fourier_solution.period_lower_days),
-            period_upper_days=float(fourier_solution.period_upper_days),
-            relative_period_uncertainty=float(
-                fourier_solution.relative_period_uncertainty
-            ),
-            alternate_period_days=list(fourier_solution.alternate_period_days),
-            verdict=(
-                period_verdict,
-                reliability_code,
-                confidence_flags,
-                insufficiency_reasons,
-            ),
-            selected_method_amplitude_mag=amplitude_mag,
-            diagnostics=diagnostics,
-        )
-
-    if method_mode == "lsm":
-        period_days = lsm_solution.period_days
-        if period_days is None:
-            return _primary_result(
-                primary_method="lsm",
-                period_days=float("nan"),
-                period_lower_days=None,
-                period_upper_days=None,
-                relative_period_uncertainty=None,
-                alternate_period_days=[],
-                verdict=(
-                    _VERDICT_INSUFFICIENT,
-                    _RELIABILITY_BY_VERDICT[_VERDICT_INSUFFICIENT],
-                    [],
-                    ["no_significant_peak"],
-                ),
-                selected_method_amplitude_mag=None,
-                diagnostics=_VerdictDiagnostics(
-                    amplitude_snr=None,
-                    phase_coverage_fraction=None,
-                    n_rotations_spanned=None,
-                    n_significant_aliases=0,
-                ),
-            )
-        lsm_amplitude_mag: float | None = lsm_solution.amplitude_mag
-        n_lsm_aliases = int(len(lsm_solution.candidate_period_days))
-        diagnostics = _verdict_diagnostics(
-            period_days=float(period_days),
-            amplitude_mag=lsm_amplitude_mag,
-            residual_sigma_mag=residual_sigma_mag,
-            n_significant_aliases=n_lsm_aliases,
-            t_rel=t_rel,
-            span_days=span_days,
-        )
-        period_verdict, reliability_code, confidence_flags, insufficiency_reasons = (
-            _classify_confidence(
-                primary_method="lsm",
-                amplitude_snr=diagnostics.amplitude_snr,
-                phase_coverage_fraction=diagnostics.phase_coverage_fraction,
-                n_rotations_spanned=diagnostics.n_rotations_spanned,
-                min_rotations_in_span=min_rotations_in_span,
-                lsm_false_alarm_probability=lsm_solution.false_alarm_probability,
-                n_significant_aliases=n_lsm_aliases,
-                is_period_doubled=False,
-                observation_count_sufficient=observation_count_sufficient,
-                is_reliable=bool(lsm_solution.is_reliable),
-                is_valid=True,
-            )
-        )
-        alternate_periods = list(lsm_solution.candidate_period_days[1:])
-        return _primary_result(
-            primary_method="lsm",
-            period_days=float(period_days),
-            period_lower_days=None,
-            period_upper_days=None,
-            relative_period_uncertainty=None,
-            alternate_period_days=alternate_periods,
-            verdict=(
-                period_verdict,
-                reliability_code,
-                confidence_flags,
-                insufficiency_reasons,
-            ),
-            selected_method_amplitude_mag=lsm_amplitude_mag,
-            diagnostics=diagnostics,
-        )
-
-    raise ValueError(f"unknown method_mode: {method_mode!r}")
+    )
+    return _primary_result(
+        primary_method="fourier",
+        period_days=float(fourier_solution.chosen.period_days),
+        period_lower_days=float(fourier_solution.period_lower_days),
+        period_upper_days=float(fourier_solution.period_upper_days),
+        relative_period_uncertainty=float(fourier_solution.relative_period_uncertainty),
+        alternate_period_days=list(fourier_solution.alternate_period_days),
+        verdict=(
+            period_verdict,
+            reliability_code,
+            confidence_flags,
+            insufficiency_reasons,
+        ),
+        selected_method_amplitude_mag=amplitude_mag,
+        diagnostics=diagnostics,
+    )
 
 
 def _pre_solve_insufficiency(
@@ -1804,7 +1259,6 @@ def _pre_solve_insufficiency(
 def _insufficient_result(
     *,
     reasons: list[str],
-    method_mode: str,
     profile: _FourierProfile,
     observations: RotationPeriodObservations,
     filter_labels: npt.NDArray[np.object_],
@@ -1813,18 +1267,17 @@ def _insufficient_result(
 ) -> RotationPeriodResult:
     """Build the one-row ``insufficient_data`` result for the early-exit path.
 
-    Mirrors the LSM-no-period branch of ``_primary_from_method``: NaN period /
-    frequency, ``None`` for every nullable diagnostic, and the same D1 verdict
-    fields.  All non-nullable columns are populated so the row is valid.
+    NaN period / frequency, ``None`` for every nullable diagnostic, and the D1
+    insufficient verdict fields.  All non-nullable columns are populated so the
+    row is valid.
     """
     session_summary = _summarize_sessions(time_lt, filter_labels, session_labels)
-    primary_method = method_mode if method_mode in {"fourier", "lsm"} else "none"
     # Canonical insufficient-row builder lives on the result type (shared with the
     # detection wrappers' per-object failure path); this path adds the session/filter
     # diagnostics it has cheaply on hand.
     return RotationPeriodResult.single_insufficient(
         reasons=list(reasons),
-        primary_method=primary_method,
+        primary_method="fourier",
         profile=profile.name,
         n_observations=int(len(observations)),
         n_filters=int(len(_ordered_unique(filter_labels))),
@@ -1836,7 +1289,6 @@ def _assemble_result(
     *,
     primary: _PrimaryResult,
     fourier_solution: _FourierSolution,
-    lsm_solution: _LSMSolution,
     profile: _FourierProfile,
     observations: RotationPeriodObservations,
     filter_labels: npt.NDArray[np.object_],
@@ -1864,14 +1316,9 @@ def _assemble_result(
     selected_relative_uncertainty = _none_or_float(primary.relative_period_uncertainty)
     alternate_period_days = [float(value) for value in primary.alternate_period_days]
 
-    if primary_method == "fourier":
-        n_fit_observations = int(fourier_solution.fit_summary.n_fit)
-        n_clipped = int(fourier_solution.fit_summary.n_clipped)
-        is_period_doubled = bool(fourier_solution.chosen.is_period_doubled)
-    else:
-        n_fit_observations = int(lsm_solution.n_fit_observations)
-        n_clipped = int(lsm_solution.n_clipped)
-        is_period_doubled = False
+    n_fit_observations = int(fourier_solution.fit_summary.n_fit)
+    n_clipped = int(fourier_solution.fit_summary.n_clipped)
+    is_period_doubled = bool(fourier_solution.chosen.is_period_doubled)
 
     return RotationPeriodResult.from_kwargs(
         period_days=[period_days],
@@ -1910,19 +1357,6 @@ def _assemble_result(
         fourier_is_valid=[bool(fourier_solution.is_valid)],
         fourier_is_reliable=[bool(fourier_solution.is_reliable)],
         fourier_alternate_period_days=[list(fourier_solution.alternate_period_days)],
-        lsm_period_days=[_none_or_float(lsm_solution.period_days)],
-        lsm_power=[_none_or_float(lsm_solution.power)],
-        lsm_power_gap=[_none_or_float(lsm_solution.power_gap)],
-        lsm_candidate_period_days=[list(lsm_solution.candidate_period_days)],
-        lsm_candidate_powers=[list(lsm_solution.candidate_powers)],
-        lsm_is_reliable=[bool(lsm_solution.is_reliable)],
-        lsm_false_alarm_probability=[
-            (
-                None
-                if lsm_solution.false_alarm_probability is None
-                else float(lsm_solution.false_alarm_probability)
-            )
-        ],
         phase_coverage_fraction=[_none_or_float(primary.phase_coverage_fraction)],
         n_rotations_spanned=[_none_or_float(primary.n_rotations_spanned)],
         amplitude_snr=[_none_or_float(primary.amplitude_snr)],
@@ -1946,7 +1380,6 @@ def _assemble_result(
 def estimate_rotation_period(
     observations: RotationPeriodObservations,
     *,
-    method_mode: str = "fourier",
     profile: str = "default",
     search_fidelity: str | None = None,
     fourier_orders: tuple[int, ...] | None = None,
@@ -1960,15 +1393,13 @@ def estimate_rotation_period(
     session_mode: str = "auto",
     auto_session_min_observations_per_group: int = 6,
     auto_session_bic_improvement: float = 10.0,
-    lsm_max_frequency_samples: int = _LSM_DEFAULT_MAX_SAMPLES,
 ) -> RotationPeriodResult:
     """Estimate an asteroid rotation period with a measured confidence verdict.
 
     Fits the distance-reduced, light-time-corrected photometry with a
-    truncated-harmonic Fourier model (the MVP default) or a Lomb-Scargle
-    periodogram, searches a frequency grid, clusters harmonic aliases, and
-    classifies the outcome against the D1 confidence contract rather than
-    emitting a bare point estimate.
+    truncated-harmonic Fourier model, searches a frequency grid, clusters
+    harmonic aliases, and classifies the outcome against the D1 confidence
+    contract rather than emitting a bare point estimate.
 
     Parameters
     ----------
@@ -1976,15 +1407,6 @@ def estimate_rotation_period(
         One row per photometric measurement: time, magnitude, optional
         uncertainty, filter, optional session id, and observing geometry
         (``r_au`` / ``delta_au`` / ``phase_angle_deg``).
-    method_mode : {"fourier", "lsm"}, default "fourier"
-        Primary estimator. ``"fourier"`` does multi-order F-test selection with
-        alias clustering and a validated uncertainty interval. ``"lsm"`` is an
-        EXPERIMENTAL / diagnostic Lomb-Scargle mode, capped at ``period_family`` (no
-        validated interval, per the D2 policy). It is NOT an independent fast
-        fallback: the Fourier model is always built and solved first, and the LSM
-        verdict reuses the Fourier residual-sigma noise model, so ``"lsm"`` is not
-        faster than ``"fourier"`` and does not produce a result when the Fourier
-        solve fails. (PR#200 review #4.)
     profile : str, default "default"
         Solver configuration profile (Fourier orders, F-test/cluster confidences,
         reliability window). Only ``"default"`` is shipped.
@@ -2015,13 +1437,13 @@ def estimate_rotation_period(
         ``period_family`` / ``insufficient_data``), ``reliability_code`` (``"3"`` /
         ``"2"`` / ``"1"``, mapping to the LCDB U code), ``confidence_flags`` and
         ``insufficiency_reasons`` -- plus the recovered ``period_hours`` /
-        ``period_days``, the per-method blocks, and diagnostics.
+        ``period_days``, the Fourier diagnostic block, and the verdict diagnostics.
 
     Raises
     ------
     ValueError
-        If ``method_mode`` / ``session_mode`` / ``exact_evaluation_backend`` is
-        invalid or a numeric knob is non-positive.
+        If ``session_mode`` / ``exact_evaluation_backend`` is invalid or a
+        numeric knob is non-positive.
 
     Notes
     -----
@@ -2036,8 +1458,6 @@ def estimate_rotation_period(
     cross-check a ``single_period`` result against ``alternate_period_days`` and
     ``reliability_code`` rather than treating the verdict as infallible.
     """
-    if method_mode not in {"fourier", "lsm"}:
-        raise ValueError("method_mode must be one of {'fourier', 'lsm'}")
     if clip_sigma <= 0.0:
         raise ValueError("clip_sigma must be positive")
     if min_rotations_in_span <= 0.0:
@@ -2068,7 +1488,6 @@ def estimate_rotation_period(
         filter_labels,
         session_labels,
         mag_sigma,
-        predicted_mag_v,
     ) = _validate_inputs(observations)
 
     time_lt = _apply_light_time_correction(time, delta_au)
@@ -2094,7 +1513,6 @@ def estimate_rotation_period(
         if pre_solve_reasons:
             return _insufficient_result(
                 reasons=pre_solve_reasons,
-                method_mode=method_mode,
                 profile=resolved_profile,
                 observations=observations,
                 filter_labels=filter_labels,
@@ -2178,33 +1596,8 @@ def estimate_rotation_period(
                 used_session_offsets = True
                 chosen_design = session_design
 
-    lsm_solution = _LSMSolution(
-        period_days=None,
-        power=None,
-        power_gap=None,
-        candidate_period_days=[],
-        candidate_powers=[],
-        is_reliable=False,
-        amplitude_mag=None,
-        n_fit_observations=0,
-        n_clipped=0,
-    )
-    if method_mode == "lsm":
-        lsm_solution = _estimate_lsm_solution(
-            t_rel=t_rel,
-            mag=mag,
-            reduced_mag=reduced_mag,
-            predicted_mag_v=predicted_mag_v,
-            phase_angle=phase_angle,
-            filter_labels=filter_labels,
-            weights=weights,
-            lsm_max_frequency_samples=lsm_max_frequency_samples,
-        )
-
     primary = _primary_from_method(
-        method_mode=method_mode,
         fourier_solution=fourier_solution,
-        lsm_solution=lsm_solution,
         filter_labels=filter_labels,
         t_rel=t_rel,
         span_days=span_days,
@@ -2241,8 +1634,7 @@ def estimate_rotation_period(
     # chosen one (within the cluster acceptance band), the two periods are
     # indistinguishable and a single_period verdict is capped at period_family.
     if (
-        primary.primary_method == "fourier"
-        and primary.period_verdict == _VERDICT_SINGLE
+        primary.period_verdict == _VERDICT_SINGLE
         and np.isfinite(period_days)
         and period_days > 0.0
         and 0.5 / period_days < float(frequencies[0])
@@ -2292,7 +1684,6 @@ def estimate_rotation_period(
     return _assemble_result(
         primary=primary,
         fourier_solution=fourier_solution,
-        lsm_solution=lsm_solution,
         profile=resolved_profile,
         observations=observations,
         filter_labels=filter_labels,

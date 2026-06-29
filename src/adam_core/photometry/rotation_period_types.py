@@ -17,7 +17,6 @@ class RotationPeriodObservations(qv.Table):
     time = Timestamp.as_column()
     mag = qv.Float64Column()
     mag_sigma = qv.Float64Column(nullable=True)
-    predicted_mag_v = qv.Float64Column(nullable=True)
     filter = qv.LargeStringColumn(nullable=True)
     session_id = qv.LargeStringColumn(nullable=True)
     r_au = qv.Float64Column()
@@ -84,17 +83,6 @@ class RotationPeriodResult(qv.Table):
     fourier_is_valid = qv.BooleanColumn(nullable=True)
     fourier_is_reliable = qv.BooleanColumn(nullable=True)
     fourier_alternate_period_days = qv.LargeListColumn(pa.float64(), nullable=True)
-    lsm_period_days = qv.Float64Column(nullable=True)
-    lsm_power = qv.Float64Column(nullable=True)
-    lsm_power_gap = qv.Float64Column(nullable=True)
-    lsm_candidate_period_days = qv.LargeListColumn(pa.float64(), nullable=True)
-    lsm_candidate_powers = qv.LargeListColumn(pa.float64(), nullable=True)
-    lsm_is_reliable = qv.BooleanColumn(nullable=True)
-    # Approximate single-term (nterms=1) Astropy Baluev false-alarm probability -- an
-    # ADVISORY diagnostic only. It is NOT calibrated for the two-harmonic, multi-band,
-    # extrema-filtered LSM selection model, and is NOT a validated confidence gate.
-    # (PR#200 review #6.)
-    lsm_false_alarm_probability = qv.Float64Column(nullable=True)
     phase_coverage_fraction = qv.Float64Column(nullable=True)
     n_rotations_spanned = qv.Float64Column(nullable=True)
     amplitude_snr = qv.Float64Column(nullable=True)
@@ -153,13 +141,6 @@ class RotationPeriodResult(qv.Table):
             fourier_is_valid=[None],
             fourier_is_reliable=[None],
             fourier_alternate_period_days=[[]],
-            lsm_period_days=[None],
-            lsm_power=[None],
-            lsm_power_gap=[None],
-            lsm_candidate_period_days=[[]],
-            lsm_candidate_powers=[[]],
-            lsm_is_reliable=[None],
-            lsm_false_alarm_probability=[None],
             phase_coverage_fraction=[None],
             n_rotations_spanned=[None],
             amplitude_snr=[None],

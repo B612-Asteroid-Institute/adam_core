@@ -131,7 +131,6 @@ def test_exact_grid_reference_recovers_fast_period(monkeypatch):
         exposures,
         object_coords,
         object_ids=object_ids,
-        method_mode="fourier",
         search_fidelity="exact_grid",
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,
@@ -157,7 +156,6 @@ def test_exact_and_staged_reference_match_on_same_case(monkeypatch):
         exposures,
         object_coords,
         object_ids=object_ids,
-        method_mode="fourier",
         search_fidelity="exact_grid",
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,
@@ -167,7 +165,6 @@ def test_exact_and_staged_reference_match_on_same_case(monkeypatch):
         exposures,
         object_coords,
         object_ids=object_ids,
-        method_mode="fourier",
         search_fidelity="validated_staged",
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,
@@ -229,7 +226,6 @@ def test_grouped_solve_emits_insufficient_row_for_failed_object(monkeypatch):
         exposures,
         object_coords,
         object_ids=object_ids,
-        method_mode="fourier",
     )
 
     # No silent drop: every distinct id still appears, exactly one row each, each
@@ -263,5 +259,4 @@ def test_grouped_solve_reraises_unexpected_error_with_object_id(monkeypatch):
             exposures,
             object_coords,
             object_ids=object_ids,
-            method_mode="fourier",
         )

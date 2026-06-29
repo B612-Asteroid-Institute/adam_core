@@ -173,7 +173,6 @@ def build_rotation_period_observations_from_detections(
             mask=~np.isfinite(mag_sigma),
             type=pa.float64(),
         ),
-        predicted_mag_v=pa.nulls(n_det, type=pa.float64()),
         filter=exposures_aligned.filter,
         session_id=session_id,
         r_au=pa.array(r_au, type=pa.float64()),

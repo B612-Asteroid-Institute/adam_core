@@ -44,7 +44,6 @@ def _make_rotation_observations(
     amplitude: float = 0.35,
     single_peaked: bool = False,
     noise_sigma: float = 0.01,
-    include_predicted: bool = False,
     filter_names: tuple[str, ...] = ("LSST_g", "LSST_r"),
 ) -> RotationPeriodObservations:
     mjd = np.linspace(60000.0, 60000.0 + span_days, n, dtype=np.float64)
@@ -82,15 +81,11 @@ def _make_rotation_observations(
     )
     rng = np.random.default_rng(20260414)
     mag = baseline + rotation + rng.normal(0.0, noise_sigma, size=n)
-    predicted = baseline if include_predicted else None
 
     return RotationPeriodObservations.from_kwargs(
         time=time,
         mag=pa.array(mag, type=pa.float64()),
         mag_sigma=pa.array(np.full(n, 0.03, dtype=np.float64), type=pa.float64()),
-        predicted_mag_v=(
-            None if predicted is None else pa.array(predicted, type=pa.float64())
-        ),
         filter=pa.array(filters.tolist(), type=pa.large_string()),
         session_id=pa.array(sessions.tolist(), type=pa.large_string()),
         r_au=pa.array(r_au, type=pa.float64()),
@@ -140,7 +135,6 @@ def test_fourier_single_peak_is_doubled():
     observations = _make_rotation_observations(single_peaked=True, period_days=0.02)
     result = estimate_rotation_period(
         observations,
-        method_mode="fourier",
         profile="default",
         search_fidelity="exact_grid",
         max_frequency_cycles_per_day=120.0,
@@ -153,36 +147,6 @@ def test_fourier_single_peak_is_doubled():
         float(period) > 0.03
         for period in result.fourier_alternate_period_days[0].as_py()
     )
-
-
-def test_lsm_single_peak_candidates_are_rejected():
-    observations = _make_rotation_observations(single_peaked=True, period_days=0.02)
-    result = estimate_rotation_period(observations, method_mode="lsm")
-
-    assert isinstance(result, RotationPeriodResult)
-    assert _scalar(result.primary_method[0]) == "lsm"
-    assert float(_scalar(result.period_days[0])) == pytest.approx(0.04, rel=0.10)
-    assert all(
-        abs(float(period) - 0.02) > 0.002
-        for period in result.lsm_candidate_period_days[0].as_py()
-    )
-    assert bool(_scalar(result.lsm_is_reliable[0])) is False
-
-
-def test_lsm_with_predicted_magnitude_matches_offline_approximation():
-    observations_offline = _make_rotation_observations(include_predicted=False)
-    observations_pred = _make_rotation_observations(include_predicted=True)
-
-    result_offline = estimate_rotation_period(observations_offline, method_mode="lsm")
-    result_pred = estimate_rotation_period(observations_pred, method_mode="lsm")
-
-    assert float(_scalar(result_pred.period_days[0])) == pytest.approx(
-        float(_scalar(result_offline.period_days[0])),
-        rel=0.10,
-    )
-    assert _scalar(result_pred.period_lower_days[0]) is None
-    assert _scalar(result_pred.period_upper_days[0]) is None
-    assert _scalar(result_pred.relative_period_uncertainty[0]) is None
 
 
 def test_observation_count_sufficient_gates_on_dominant_band():
@@ -229,9 +193,7 @@ def test_early_exit_on_insufficient_matches_full_path_verdict():
         phase_angle_deg=pa.array(np.full(n, 12.0, dtype=np.float64), type=pa.float64()),
     )
 
-    early = estimate_rotation_period(
-        observations, method_mode="fourier", early_exit_on_insufficient=True
-    )
+    early = estimate_rotation_period(observations, early_exit_on_insufficient=True)
     assert isinstance(early, RotationPeriodResult)
     assert len(early) == 1
     assert _scalar(early.period_verdict[0]) == "insufficient_data"
@@ -240,9 +202,7 @@ def test_early_exit_on_insufficient_matches_full_path_verdict():
     assert "amplitude_below_noise" in early.insufficiency_reasons[0].as_py()
 
     # Same input without the fast path must reach the SAME verdict.
-    full = estimate_rotation_period(
-        observations, method_mode="fourier", early_exit_on_insufficient=False
-    )
+    full = estimate_rotation_period(observations, early_exit_on_insufficient=False)
     assert _scalar(full.period_verdict[0]) == "insufficient_data"
 
 
@@ -251,7 +211,6 @@ def test_fourier_search_fidelities_match(search_fidelity: str):
     observations = _make_rotation_observations()
     result = estimate_rotation_period(
         observations,
-        method_mode="fourier",
         search_fidelity=search_fidelity,
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,
@@ -265,14 +224,12 @@ def test_staged_and_exact_fourier_match():
     observations = _make_rotation_observations()
     staged = estimate_rotation_period(
         observations,
-        method_mode="fourier",
         search_fidelity="validated_staged",
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,
     )
     exact = estimate_rotation_period(
         observations,
-        method_mode="fourier",
         search_fidelity="exact_grid",
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,
@@ -308,7 +265,6 @@ def test_staged_matches_exact_on_large_grid(period_days, span_days, noise_sigma)
         n=80, span_days=span_days, period_days=period_days, noise_sigma=noise_sigma
     )
     kw = dict(
-        method_mode="fourier",
         exact_evaluation_backend="jax",
         max_frequency_cycles_per_day=700.0,
         frequency_grid_scale=40.0,
@@ -357,7 +313,6 @@ def test_numpy_and_jax_exact_paths_match():
     observations = _make_rotation_observations()
     numpy_result = estimate_rotation_period(
         observations,
-        method_mode="fourier",
         search_fidelity="exact_grid",
         exact_evaluation_backend="numpy",
         max_frequency_cycles_per_day=120.0,
@@ -365,7 +320,6 @@ def test_numpy_and_jax_exact_paths_match():
     )
     jax_result = estimate_rotation_period(
         observations,
-        method_mode="fourier",
         search_fidelity="exact_grid",
         exact_evaluation_backend="jax",
         max_frequency_cycles_per_day=120.0,
@@ -422,7 +376,6 @@ def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
     monkeypatch.setattr(rotation_period_fourier, "_primary_from_method", fake_primary)
     result = estimate_rotation_period(
         observations,
-        method_mode="fourier",
         search_fidelity="exact_grid",
         max_frequency_cycles_per_day=120.0,
         frequency_grid_scale=40.0,
@@ -461,7 +414,6 @@ def test_subharmonic_alias_below_grid_is_capped_to_family():
         time=Timestamp.from_mjd(pa.array(t, type=pa.float64()), scale="tdb"),
         mag=pa.array(mag, type=pa.float64()),
         mag_sigma=pa.array(np.full(n, 0.01), type=pa.float64()),
-        predicted_mag_v=pa.nulls(n, type=pa.float64()),
         filter=pa.array(["r"] * n, type=pa.large_string()),
         session_id=pa.nulls(n, type=pa.large_string()),
         r_au=pa.array(np.full(n, 1.0), type=pa.float64()),

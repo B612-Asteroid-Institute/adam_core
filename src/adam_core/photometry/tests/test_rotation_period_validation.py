@@ -93,7 +93,6 @@ def _load_fixture(path: Path) -> tuple[RotationPeriodObservations, dict[str, obj
 def _solve(observations: RotationPeriodObservations, meta: dict[str, object]):
     return estimate_rotation_period(
         observations,
-        method_mode="fourier",
         search_fidelity="validated_staged",
         exact_evaluation_backend="jax",
         frequency_grid_scale=float(meta["frequency_grid_scale"]),

@@ -129,7 +129,6 @@ def _validate_inputs(
     npt.NDArray[np.object_],
     npt.NDArray[np.object_] | None,
     npt.NDArray[np.float64] | None,
-    npt.NDArray[np.float64] | None,
 ]:
     n = len(observations)
     if n == 0:
@@ -199,17 +198,6 @@ def _validate_inputs(
     if np.any(np.isfinite(raw_sigma)):
         mag_sigma = raw_sigma
 
-    predicted_mag_v = None
-    raw_predicted = np.asarray(
-        observations.predicted_mag_v.to_numpy(zero_copy_only=False), dtype=np.float64
-    )
-    if raw_predicted.shape != (n,):
-        raise ValueError(
-            "predicted_mag_v column must be 1D and aligned with observations"
-        )
-    if np.any(np.isfinite(raw_predicted)):
-        predicted_mag_v = raw_predicted
-
     return (
         time,
         mag,
@@ -219,7 +207,6 @@ def _validate_inputs(
         filter_labels,
         session_labels,
         mag_sigma,
-        predicted_mag_v,
     )
 
 
@@ -665,8 +652,8 @@ def _periodic_amplitude_from_coeffs(
 ) -> float:
     """Peak-to-peak amplitude of the periodic (Fourier) part of a coefficient vector.
 
-    Canonical helper shared by the Fourier and LSM paths (start = len - 2*order
-    convention), so both compute amplitude identically. (PR#200 review #23.)
+    Canonical amplitude helper for the Fourier path (start = len - 2*order
+    convention), shared by ``_amplitude_from_fit``.
     """
     phase = np.linspace(0.0, 1.0, dense_points, endpoint=False)
     periodic = np.zeros_like(phase)
