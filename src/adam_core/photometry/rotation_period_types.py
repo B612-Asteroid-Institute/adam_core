@@ -63,7 +63,7 @@ class RotationPeriodResult(qv.Table):
     period_verdict = qv.LargeStringColumn()
     # LCDB-U-style reliability code as a STRING ("3"/"2"/"1", highest first). Kept a
     # string (not int) to mirror LCDB U codes and stay forward-compatible with
-    # qualified codes (e.g. "1+"); do NOT sort or compare it numerically. (review #19)
+    # qualified codes (e.g. "1+"); do NOT sort or compare it numerically.
     reliability_code = qv.LargeStringColumn()
     confidence_flags = qv.LargeListColumn(pa.large_string(), nullable=True)
     insufficiency_reasons = qv.LargeListColumn(pa.large_string(), nullable=True)

@@ -1,14 +1,14 @@
-"""Scoring helpers for the rotation-period standard-candle validation (D2 policy).
+"""Scoring helpers for the rotation-period standard-candle validation.
 
 This small module collects the period-recovery scoring primitives shared by the
 committed validation gates (``test_rotation_period_validation.py``) and the
-out-of-package calibration report. It implements the D2 standard-candle scoring
+out-of-package calibration report. It implements the standard-candle scoring
 policy: a strict relative error, a harmonic-tolerant error over a fixed factor
 set, an alias-bucket label for the best-fitting harmonic, a per-fixture tolerance
 check on the *raw* error, and a diurnal-cadence (near-day) alias flag.
 
 All periods are in hours. Recovered (``p_rec``) and LCDB truth (``p_true``) are
-both synodic, so no sidereal correction is applied (see D2).
+both synodic, so no sidereal correction is applied.
 """
 
 from __future__ import annotations

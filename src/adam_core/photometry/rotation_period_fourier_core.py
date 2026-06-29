@@ -12,7 +12,7 @@ from ..constants import Constants
 from .rotation_period_types import RotationPeriodObservations
 
 # Speed of light in au/day. Use the canonical adam_core constant rather than a local
-# literal to avoid drift (bit-identical to the prior hardcoded value). PR#200 review #10.
+# literal to avoid drift.
 LIGHT_SPEED_AU_PER_DAY = Constants.C
 _HG_G_MIN = -0.25
 _HG_G_MAX = 0.95
@@ -71,10 +71,10 @@ class _FourierProfile:
     reliable_absolute_hours: float | None
 
 
-# Single MVP solver profile, built off the Greenstreet (2026) rotation-period method:
+# Solver profile, built off the Greenstreet (2026) rotation-period method:
 # search Fourier orders 2-6, pick the order by F-test at 90% confidence, cluster aliases
 # at the 95% sigma threshold, and call a period "reliable" when its uncertainty is within
-# max(2P, 7h). (An experimental second profile was dropped for the MVP — one profile only.)
+# max(2P, 7h).
 PROFILES: dict[str, _FourierProfile] = {
     "default": _FourierProfile(
         name="default",
@@ -351,7 +351,7 @@ def _phase_prior_rows(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Two weighted pseudo-observations constraining the phase-angle (H-G) coefficients.
 
-    NOTE (PR#200 review #7): these rows make every Fourier fit a RIDGE-REGULARIZED
+    NOTE: these rows make every Fourier fit a RIDGE-REGULARIZED
     least-squares solve, not ordinary least squares. The reported RSS / residual_sigma
     / df / BIC / F-test are computed on the REAL observations only and exclude this
     prior penalty, so those statistics (and the order selection, sigma thresholds, and

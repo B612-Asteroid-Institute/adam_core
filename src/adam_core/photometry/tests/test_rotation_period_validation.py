@@ -1,19 +1,20 @@
-"""Committed validation gates for rotation-period estimation (bead rp-e4a.14).
+"""Committed validation gates for rotation-period estimation.
 
 Auto-discovers the committed standard-candle fixtures
 (``rotation_period_validation_fixture_*.npz``) and runs the Fourier fast-path
 solver on each. Two gates are exercised:
 
 1. A schema/smoke gate (parametrized) asserting every fixture solves and returns
-   the new D1 confidence surface (``period_verdict`` in the valid enum,
-   ``reliability_code`` in ``{"1", "2", "3"}``, diagnostics populated).
-2. The D4 zero-false-confidence gate: no committed fixture may be labelled
+   a coherent confidence result (``period_verdict`` in the valid enum,
+   ``reliability_code`` in ``{"1", "2", "3"}``, and the validity/reliability/period
+   fields consistent with the verdict).
+2. The zero-false-confidence gate: no committed fixture may be labelled
    ``single_period`` while its STRICT (no-harmonic-adjustment) error exceeds the
    fixture tolerance -- a confident-but-wrong call, including a clean 2x/0.5x alias
-   which the D1 contract treats as the worst failure. This is ``xfail(strict=True)``
-   because 1627 Ivar remains a confident diurnal-sampling alias on the committed set
-   (the order-selection fix is tracked in rp-e4a.22/.23); strict=True forces the
-   marker to be removed once the solver is fixed (an xpass fails CI).
+   (the worst failure mode). This is ``xfail(strict=True)`` because 1627 Ivar
+   remains a confident diurnal-sampling alias on the committed set (the
+   order-selection fix is a tracked follow-up); strict=True forces the marker to be
+   removed once the solver is fixed (an xpass fails CI).
 
 Slow fixtures are marked ``@pytest.mark.profile`` so the default run
 (``-m 'not profile'``) stays fast.
@@ -103,7 +104,7 @@ def _solve(observations: RotationPeriodObservations, meta: dict[str, object]):
 
 @pytest.mark.parametrize("fixture_name", _FIXTURE_PARAMS)
 def test_validation_fixture_schema(fixture_name: str) -> None:
-    """Every committed fixture solves and returns the D1 confidence surface."""
+    """Every committed fixture solves and returns a coherent confidence result."""
     if fixture_name == "__NO_FIXTURES__":
         pytest.skip("No rotation-period validation fixtures found on disk.")
 
@@ -111,17 +112,23 @@ def test_validation_fixture_schema(fixture_name: str) -> None:
     result = _solve(observations, meta)
 
     verdict = str(result.period_verdict[0].as_py())
-    reliability = str(result.reliability_code[0].as_py())
     assert verdict in {"single_period", "period_family", "insufficient_data"}
-    assert reliability in {"1", "2", "3"}
-    # Diagnostics populated for a fixture that solved.
-    assert result.is_valid[0].as_py() is not None
-    assert result.is_reliable[0].as_py() is not None
     assert result.is_period_doubled[0].as_py() is not None
-    # Period finiteness must TRACK the verdict. The prior `period_hours is not None`
-    # check was a no-op for the insufficient path, which reports NaN (`nan is not None`
-    # is True). A believed/family call must report a finite positive period; an
-    # insufficient_data call must report a non-finite (NaN) period.
+
+    # The verdict fully determines validity, reliability, and reliability_code --
+    # assert the whole mapping, not merely that the columns are non-null.
+    is_valid = bool(result.is_valid[0].as_py())
+    is_reliable = bool(result.is_reliable[0].as_py())
+    reliability = str(result.reliability_code[0].as_py())
+    expected_by_verdict = {
+        "single_period": (True, True, "3"),
+        "period_family": (True, False, "2"),
+        "insufficient_data": (False, False, "1"),
+    }
+    assert (is_valid, is_reliable, reliability) == expected_by_verdict[verdict]
+
+    # Period finiteness must track the verdict: a believed/family call reports a
+    # finite positive period; an insufficient_data call reports a non-finite period.
     p_hours = result.period_hours[0].as_py()
     if verdict == "insufficient_data":
         assert p_hours is None or not np.isfinite(float(p_hours))
@@ -136,32 +143,30 @@ def test_validation_fixture_schema(fixture_name: str) -> None:
 
 @pytest.mark.xfail(
     strict=True,
-    reason="D1 zero-false-confidence is not yet satisfied on the committed set: 1627 "
+    reason="Zero-false-confidence is not yet satisfied on the committed set: 1627 "
     "Ivar is reported as a confident single_period at the ~5/3 diurnal-sampling alias "
-    "(P_rec=7.99h vs P_true=4.795h). The PR claims the MEASURED ~0.88 strict "
-    "single_period precision (full LCDB+DAMIT candle set), NOT a zero-alias guarantee. "
-    "strict=True so that fixing the order-selection alias (rp-e4a.22/.23) surfaces as "
-    "an xpass and forces removing this marker, instead of letting the gate rot.",
+    "(P_rec=7.99h vs P_true=4.795h). The estimator targets a MEASURED ~0.88 strict "
+    "single_period precision, not a zero-alias guarantee. strict=True so that fixing "
+    "the order-selection alias surfaces as an xpass and forces removing this marker.",
 )
 def test_zero_false_confidence() -> None:
-    """No committed fixture may be confidently wrong (D4 headline gate).
+    """No committed fixture may be confidently wrong (the headline gate).
 
     Collects every fast-set fixture labelled ``single_period`` whose STRICT relative
     error (no harmonic adjustment) exceeds the fixture tolerance -- a confident-but-
     wrong call -- and requires the list to be empty.
 
     The metric is intentionally strict ``within_tolerance``: unlike a harmonic-adjusted
-    metric, it ALSO flags a clean 2x/0.5x ``single_period``, which the D1 contract
-    (CLAUDE.md) treats as the worst failure mode. ``harmonic_adjusted_error_pct`` is
-    retained only for the diagnostic alias-bucket label on each offender.
+    metric, it ALSO flags a clean 2x/0.5x ``single_period``, the worst failure mode.
+    ``harmonic_adjusted_error_pct`` is retained only for the diagnostic alias-bucket
+    label on each offender.
 
     Current state (xfail, strict): the fast committed gold set has exactly one offender,
     1627 Ivar -- an in-grid order-6 fit that relocates to a ~2 cycle/day diurnal
-    sampling alias (NOT a harmonic-only issue, and NOT recovered by the existing A1
-    sub-harmonic guardrail, which only fires below the grid floor). The fix is the
-    frequency-aware order-selection / alias work in rp-e4a.22/.23; a prototyped
-    frequency-anchored order selection regressed the gold set, so it is a calibration
-    task, not a one-line statistic swap.
+    sampling alias (NOT a harmonic-only issue, and NOT recovered by the existing
+    sub-harmonic guardrail, which only fires below the grid floor). Resolving it
+    requires frequency-aware order selection; a prototyped frequency-anchored order
+    selection regressed the gold set, so it is a calibration task, not a one-liner.
     """
     # Iterate the fast default set only so the gate stays cheap; the known
     # offender (1627 Ivar) is in this set. Slow fixtures are covered by the
@@ -183,7 +188,7 @@ def test_zero_false_confidence() -> None:
         p_true = float(meta["expected_hours"])
         tol = float(meta["tolerance_fraction"])
         # STRICT metric: a single_period whose RAW relative error exceeds tolerance is
-        # confidently wrong. This also flags a clean 2x/0.5x alias (worst-case per D1);
+        # confidently wrong. This also flags a clean 2x/0.5x alias (the worst case);
         # harmonic_adjusted_error_pct is used only for the diagnostic alias label.
         if not within_tolerance(p_rec, p_true, tol):
             _, best_factor = harmonic_adjusted_error_pct(p_rec, p_true)

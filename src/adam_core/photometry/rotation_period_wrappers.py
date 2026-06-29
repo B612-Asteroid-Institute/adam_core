@@ -191,7 +191,7 @@ def estimate_rotation_period_from_detections(
         detections, exposures, object_coords
     )
 
-    # Lazy import keeps this wrapper file usable before the kernel bead lands.
+    # Lazy import keeps this wrapper module importable without the solver kernel.
     from .rotation_period_fourier import (
         estimate_rotation_period as _estimate_rotation_period,
     )

@@ -162,9 +162,9 @@ def test_observation_count_sufficient_gates_on_dominant_band():
     # Single-band semantics are preserved exactly: >= 30 passes, < 30 fails.
     assert _observation_count_sufficient(labels({"R": 30})) is True
     assert _observation_count_sufficient(labels({"R": 29})) is False
-    # The fix: a single-band-dominant lightcurve (Beate-like {C: 457, R: 27})
-    # passes even though the secondary band has < 30 -- the legacy top-two rule
-    # wrongly rejected this as too_few_observations.
+    # A single-band-dominant lightcurve (Beate-like {C: 457, R: 27}) passes even
+    # though the secondary band has < 30: the gate keys off the single
+    # most-populated band, not the top two each clearing the floor.
     assert _observation_count_sufficient(labels({"C": 457, "R": 27})) is True
     # Genuinely sparse data stays insufficient: no band reaches the floor.
     assert _observation_count_sufficient(labels({"R": 22})) is False
@@ -206,47 +206,6 @@ def test_early_exit_on_insufficient_matches_full_path_verdict():
     assert _scalar(full.period_verdict[0]) == "insufficient_data"
 
 
-@pytest.mark.parametrize("search_fidelity", ["validated_staged", "exact_grid"])
-def test_fourier_search_fidelities_match(search_fidelity: str):
-    observations = _make_rotation_observations()
-    result = estimate_rotation_period(
-        observations,
-        search_fidelity=search_fidelity,
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-
-    assert float(_scalar(result.period_days[0])) == pytest.approx(0.02, rel=0.10)
-    assert int(_scalar(result.fourier_order[0])) == 2
-
-
-def test_staged_and_exact_fourier_match():
-    observations = _make_rotation_observations()
-    staged = estimate_rotation_period(
-        observations,
-        search_fidelity="validated_staged",
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-    exact = estimate_rotation_period(
-        observations,
-        search_fidelity="exact_grid",
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-
-    assert float(_scalar(staged.period_days[0])) == pytest.approx(
-        float(_scalar(exact.period_days[0])), rel=0.02
-    )
-    assert int(_scalar(staged.fourier_order[0])) == int(_scalar(exact.fourier_order[0]))
-    assert float(_scalar(staged.period_lower_days[0])) == pytest.approx(
-        float(_scalar(exact.period_lower_days[0])), rel=0.05
-    )
-    assert float(_scalar(staged.period_upper_days[0])) == pytest.approx(
-        float(_scalar(exact.period_upper_days[0])), rel=0.05
-    )
-
-
 @pytest.mark.parametrize(
     "period_days, span_days, noise_sigma",
     [
@@ -256,7 +215,7 @@ def test_staged_and_exact_fourier_match():
     ],
 )
 def test_staged_matches_exact_on_large_grid(period_days, span_days, noise_sigma):
-    # rp-e4a.12 / review #8: with a >2048-point grid the validated_staged COARSE path
+    # With a >2048-point grid the validated_staged COARSE path
     # (coarse sample -> local-minima refine) actually runs, and the global-best guard
     # must keep it from missing the global-best grid region. Staged must match the
     # exact-grid period across several periods/spans/noise levels, and the result must
@@ -288,7 +247,7 @@ def test_staged_matches_exact_on_large_grid(period_days, span_days, noise_sigma)
 
 
 def test_grid_cap_diagnostic():
-    # rp-e4a.12 / review #9: the hard frequency-grid cap is detectable as a diagnostic.
+    # The hard frequency-grid cap is detectable as a diagnostic.
     assert (
         _grid_was_capped(
             span_days=4000.0,
@@ -335,7 +294,7 @@ def test_numpy_and_jax_exact_paths_match():
 
 
 def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
-    # rp-e4a.22 step 2: the cap raises f_min so the longest searched period is
+    # The cap raises f_min so the longest searched period is
     # bounded; default (None) leaves the floor at min_rotations_in_span / span.
     # A long span pushes the natural f_min below the cap floor so the cap bites.
     span_days = 100.0
@@ -356,7 +315,7 @@ def test_max_search_period_cap_and_long_period_guardrail(monkeypatch):
     assert float(capped[0]) == pytest.approx(24.0 / 72.0)  # raised floor 0.333
     assert float(capped[0]) > float(uncapped[0])
 
-    # rp-e4a.22 step 1: a single_period verdict at a period beyond
+    # A single_period verdict at a period beyond
     # MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS is downgraded to period_family while the
     # reported period value is preserved.
     observations = _make_rotation_observations()
@@ -396,8 +355,8 @@ def test_subharmonic_alias_below_grid_is_capped_to_family():
     # below the grid floor, so the solver locks onto the in-grid 2x alias (~10 h).
     # The lightcurve carries an odd 1st harmonic that genuinely distinguishes P
     # from P/2, so the sub-harmonic guardrail must refuse a confident single_period
-    # and cap at period_family rather than emit the 0.5x alias (the cardinal D1
-    # failure).
+    # and cap at period_family rather than emit the 0.5x alias (the
+    # worst-confidence failure mode).
     rng = np.random.default_rng(7)
     p_true_d = 20.0 / 24.0
     n = 180
@@ -434,7 +393,6 @@ def test_hg_phase_reduced_matches_magnitude_module() -> None:
     """The rotation prior's IAU H-G phase term must track adam_core's canonical
     (JAX) magnitude implementation -- the two re-implement the same law with the
     same constants (-3.33/0.63/-1.87/1.22), so they must not silently drift.
-    (PR#200 review #11.)
 
     Strategy: drive the public apparent-magnitude path over a phase-angle sweep,
     back out its phase term (mag_v - H - 5*log10(r*delta)), and compare it to

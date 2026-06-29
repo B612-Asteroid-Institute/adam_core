@@ -10,20 +10,8 @@ from ...observations.detections import PointSourceDetections
 from ...observations.exposures import Exposures
 from ...observers.observers import Observers
 from ...time import Timestamp
+from ..magnitude import calculate_phase_angle
 from ..rotation_period_wrappers import estimate_rotation_period_from_detections_grouped
-
-
-def _phase_angle_deg(
-    object_coords: CartesianCoordinates, observers: Observers
-) -> np.ndarray:
-    obj = np.asarray(object_coords.r, dtype=np.float64)
-    obs = np.asarray(observers.coordinates.r, dtype=np.float64)
-    delta = obj - obs
-    r = np.linalg.norm(obj, axis=1)
-    d = np.linalg.norm(delta, axis=1)
-    sun = np.linalg.norm(obs, axis=1)
-    cos_alpha = np.clip((r * r + d * d - sun * sun) / (2.0 * r * d), -1.0, 1.0)
-    return np.degrees(np.arccos(cos_alpha))
 
 
 def _make_detection_bundle() -> (
@@ -68,7 +56,7 @@ def _make_detection_bundle() -> (
             origin=Origin.from_kwargs(code=["SUN"] * len(object_ids)),
         ),
     )
-    phase_angle = _phase_angle_deg(object_coords, observers)
+    phase_angle = calculate_phase_angle(object_coords, observers)
     r_au = np.linalg.norm(np.asarray(object_coords.r, dtype=np.float64), axis=1)
     delta_au = np.linalg.norm(
         np.asarray(object_coords.r, dtype=np.float64)
@@ -142,41 +130,6 @@ def test_exact_grid_reference_recovers_fast_period(monkeypatch):
     assert periods[1] == pytest.approx(0.025, rel=0.15)
 
 
-def test_exact_and_staged_reference_match_on_same_case(monkeypatch):
-    detections, exposures, object_coords, observers, object_ids = (
-        _make_detection_bundle()
-    )
-
-    def fake_observers(self, *args, **kwargs):  # noqa: ARG001
-        return observers
-
-    monkeypatch.setattr(Exposures, "observers", fake_observers)
-    grouped_exact = estimate_rotation_period_from_detections_grouped(
-        detections,
-        exposures,
-        object_coords,
-        object_ids=object_ids,
-        search_fidelity="exact_grid",
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-    grouped_staged = estimate_rotation_period_from_detections_grouped(
-        detections,
-        exposures,
-        object_coords,
-        object_ids=object_ids,
-        search_fidelity="validated_staged",
-        max_frequency_cycles_per_day=120.0,
-        frequency_grid_scale=40.0,
-    )
-
-    for idx in range(len(grouped_exact)):
-        assert grouped_exact.result.period_days[idx].as_py() == pytest.approx(
-            grouped_staged.result.period_days[idx].as_py(),
-            rel=0.05,
-        )
-
-
 def test_from_point_source_observations_classmethod_matches_wrapper(monkeypatch):
     # RotationPeriodObservations.from_point_source_observations is the explicit
     # constructor linking the table to the adam_core observation primitives; it
@@ -207,7 +160,7 @@ def test_from_point_source_observations_classmethod_matches_wrapper(monkeypatch)
 
 
 def test_grouped_solve_emits_insufficient_row_for_failed_object(monkeypatch):
-    # rp-e4a.4 / review #3: a per-object solve failure must NOT silently drop the
+    # A per-object solve failure must NOT silently drop the
     # object. The grouped output keeps one row per id; an expected (ValueError)
     # failure becomes an insufficient_data row flagged 'solve_error'.
     import adam_core.photometry.rotation_period_fourier as rpf
@@ -240,7 +193,7 @@ def test_grouped_solve_emits_insufficient_row_for_failed_object(monkeypatch):
 
 
 def test_grouped_solve_reraises_unexpected_error_with_object_id(monkeypatch):
-    # rp-e4a.4 / review #3: an UNEXPECTED exception must propagate with object-id
+    # An UNEXPECTED exception must propagate with object-id
     # context, not be swallowed.
     import adam_core.photometry.rotation_period_fourier as rpf
 

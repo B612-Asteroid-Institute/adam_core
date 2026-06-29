@@ -33,10 +33,10 @@ _DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
 _DEFAULT_JAX_ROW_PAD_MULTIPLE = 64
 _FOURIER_MAX_CLIP_ITERATIONS = 8
 
-# --- D1 confidence-contract thresholds (bead rp-e4a.6) ---------------------
-# Initial values per the D1 contract; the calibration study (bead rp-e4a.13)
-# will tune these on a held-out split of the standard-candle set, so treat the
-# values below as provisional defaults rather than validated cut points.
+# --- Confidence-contract thresholds ----------------------------------------
+# Initial values per the confidence contract; the calibration study will tune
+# these on a held-out split of the standard-candle set, so treat the values
+# below as provisional defaults rather than validated cut points.
 # Minimum fraction of rotational-phase bins that must be occupied to clear the
 # signal gate (family-level) and to be eligible for ``single_period``.
 PHASE_COVERAGE_MIN_FAMILY = 0.5
@@ -44,8 +44,7 @@ PHASE_COVERAGE_MIN_SINGLE = 0.7
 # Minimum amplitude-to-noise ratio (amplitude_mag / residual_sigma_mag).
 AMPLITUDE_SNR_MIN = 3.0
 # Minimum observations in the best-sampled band for the jointly-fit shape to be
-# credibly constrained (signal-gate floor; preserves the legacy per-band 30).
-# Candidate for the rp-e4a.13 recalibration.
+# credibly constrained (signal-gate floor). Candidate for recalibration.
 OBSERVATION_COUNT_MIN = 30
 # Number of rotational-phase bins used to compute ``phase_coverage_fraction``.
 _PHASE_COVERAGE_N_BINS = 20
@@ -64,11 +63,11 @@ _PHASE_COVERAGE_N_BINS = 20
 # single_period when the baseline actually spans enough cycles to constrain it.
 MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS = 240.0
 
-# --- Cheap pre-solve insufficiency thresholds (bead rp-e4a.19) -------------
+# --- Cheap pre-solve insufficiency thresholds ------------------------------
 # Period-INDEPENDENT screening run before the Fourier search so obviously
 # under-determined / degenerate inputs can early-exit instead of building a
 # frequency grid (or hanging on a single-night span).  Provisional values; the
-# calibration study (bead rp-e4a.13) may retune them.
+# calibration study may retune them.
 # Hard floor on the number of observations regardless of model size.
 MIN_OBS = 8
 # Extra observations required beyond the baseline free-parameter count
@@ -120,10 +119,10 @@ class _FourierSolution:
 
 @dataclass(slots=True)
 class _VerdictDiagnostics:
-    """D1 numeric verdict diagnostics for the chosen period.
+    """Confidence-verdict diagnostics for the chosen period.
 
-    Replaces the former ``dict[str, object]`` so the floats/ints flow typed into
-    ``_classify_confidence`` instead of being re-narrowed at each call site.
+    The floats/ints flow typed into ``_classify_confidence`` rather than being
+    re-narrowed at each call site.
     """
 
     amplitude_snr: float | None
@@ -138,8 +137,8 @@ class _PrimaryResult:
 
     Non-frozen with ``slots=True`` so the two ``estimate_rotation_period``
     confidence guardrails can downgrade the verdict in place (attribute writes)
-    without rebuilding the object.  Replaces the former ``dict[str, object]`` so
-    ``_assemble_result`` reads typed attributes instead of re-narrowing each key.
+    without rebuilding the object.  ``_assemble_result`` reads typed attributes
+    rather than re-narrowing each key.
     """
 
     period_days: float
@@ -468,12 +467,12 @@ def _search_best_fit(
         candidate_count=12,
     )
     final_indices = _sample_indices_from_intervals(intervals, stride=1, n_total=n_total)
-    # Global-best guard (rp-e4a.12 / review #8): the coarse global minimum is already
-    # computed, so always include its neighborhood in the exact-refine set. The
-    # candidate_count=12 local-minima cap could otherwise skip the global-best grid
-    # region on an alias-dense frequency grid, and the prior code only fell back to the
-    # full grid when NO fit was found -- never when it found a non-global one. This is
-    # an O(coarse-grid) guarantee, not a continuous optimizer or a fuzz battery.
+    # Global-best guard: the coarse global minimum is already computed, so always
+    # include its neighborhood in the exact-refine set. The candidate_count=12
+    # local-minima cap could otherwise skip the global-best grid region on an
+    # alias-dense frequency grid, and falling back to the full grid only when NO fit
+    # is found would never catch a found-but-non-global minimum. This is an
+    # O(coarse-grid) guarantee, not a continuous optimizer or a fuzz battery.
     finite = np.isfinite(coarse_scores)
     if np.any(finite):
         global_best = int(
@@ -599,7 +598,7 @@ def _grid_was_capped(
     max_search_period_hours: float | None = None,
 ) -> bool:
     """Whether ``_build_frequency_grid`` clamped the requested resolution to
-    ``_FOURIER_MAX_FREQUENCY_SAMPLES`` (review #9: surface the cap as a diagnostic).
+    ``_FOURIER_MAX_FREQUENCY_SAMPLES``; surfaces the cap as a diagnostic.
 
     Recomputes the uncapped sample count; keep the f_min/f_max/n_freq formula in sync
     with ``_build_frequency_grid`` above.
@@ -896,18 +895,18 @@ def _observation_count_sufficient(filter_labels: npt.NDArray[np.object_]) -> boo
     The solver fits every photometric band JOINTLY (one shared rotational shape
     plus a per-band magnitude offset), so a secondary band contributes a single
     offset parameter, not its own count requirement. We therefore gate on the
-    most-populated band, not on the top two each clearing the floor. The legacy
-    two-band rule (``counts[0] >= 30 and counts[1] >= 30``) silently demanded 60
-    observations total and let a thin secondary band veto a richly-sampled
-    primary one, wrongly rejecting single-band-dominant lightcurves -- e.g. 1043
-    Beate ({C: 457, R: 27}): 457 points carry the shape, yet R=27 < 30 failed the
-    old guard.
+    most-populated band, not on the top two each clearing the floor. Requiring
+    both of the top two bands to clear the floor (``counts[0] >= 30 and
+    counts[1] >= 30``) would silently demand 60 observations total and let a thin
+    secondary band veto a richly-sampled primary one, wrongly rejecting
+    single-band-dominant lightcurves -- e.g. 1043 Beate ({C: 457, R: 27}): 457
+    points carry the shape, yet R=27 < 30 would fail.
 
     For a single-band lightcurve this reduces to ``counts[0] >= OBSERVATION_COUNT_MIN``,
-    identical to the legacy single-band branch, so genuinely sparse objects stay
-    ``insufficient_data``. The relaxation is monotonic (it can only remove the
-    ``too_few_observations`` reason); the amplitude-SNR, phase-coverage, alias,
-    and Fourier fit-quality gates still apply downstream to any admitted object.
+    so genuinely sparse objects stay ``insufficient_data``. The relaxation is
+    monotonic (it can only remove the ``too_few_observations`` reason); the
+    amplitude-SNR, phase-coverage, alias, and Fourier fit-quality gates still
+    apply downstream to any admitted object.
     """
     unique_filters = _ordered_unique(filter_labels)
     counts = [int(np.count_nonzero(filter_labels == label)) for label in unique_filters]
@@ -982,17 +981,16 @@ def _classify_confidence(
     is_reliable: bool,
     is_valid: bool,
 ) -> tuple[str, str, list[str], list[str]]:
-    """Single deterministic verdict (D1 §"decision tree").
+    """Single deterministic verdict from the confidence classifier's decision tree.
 
     Returns ``(period_verdict, reliability_code, confidence_flags,
     insufficiency_reasons)``.
 
     The signal gate, positive flags, and alias gate are expressed as ordered
     ``(condition, label)`` tables -- the tuple order *is* the emission order,
-    which is part of the D1 contract (the flags/reasons lists are compared by
-    membership AND order).  The early-return, the precision gate, and its
-    ``no_precision`` de-dup guards are kept verbatim because they carry the
-    subtle, stateful behavior.
+    which is part of the confidence contract (the flags/reasons lists are
+    compared by membership AND order).  The early-return, the precision gate, and
+    its ``no_precision`` de-dup guards carry subtle, stateful behavior.
     """
     flags: list[str] = []
     reasons: list[str] = []
@@ -1087,7 +1085,7 @@ def _verdict_diagnostics(
     t_rel: npt.NDArray[np.float64],
     span_days: float,
 ) -> _VerdictDiagnostics:
-    """Compute the D1 numeric verdict diagnostics for the chosen period."""
+    """Compute the confidence-verdict diagnostics for the chosen period."""
     if np.isfinite(period_days) and period_days > 0.0:
         n_rotations_spanned: float | None = float(span_days) / float(period_days)
         phase_coverage_fraction = _phase_coverage_fraction(
@@ -1201,9 +1199,9 @@ def _pre_solve_insufficiency(
     min_rotations_in_span: float,
     max_frequency_cycles_per_day: float,
 ) -> list[str]:
-    """Cheap, period-INDEPENDENT insufficiency screen (bead rp-e4a.19).
+    """Cheap, period-INDEPENDENT insufficiency screen.
 
-    Returns the subset of D1 ``insufficiency_reasons`` that are detectable
+    Returns the subset of public insufficiency reasons that are detectable
     without running the search; an empty list means the input looks solvable.
     Reason strings match the full-path ``_classify_confidence`` so the early
     and full verdicts stay consistent.
@@ -1263,7 +1261,7 @@ def _insufficient_result(
 ) -> RotationPeriodResult:
     """Build the one-row ``insufficient_data`` result for the early-exit path.
 
-    NaN period / frequency, ``None`` for every nullable diagnostic, and the D1
+    NaN period / frequency, ``None`` for every nullable diagnostic, and the
     insufficient verdict fields.  All non-nullable columns are populated so the
     row is valid.
     """
@@ -1291,7 +1289,7 @@ def _assemble_result(
     used_session_offsets: bool,
     extra_flags: list[str] | None = None,
 ) -> RotationPeriodResult:
-    """Serialize the selected solution and D1 verdict into the one-row result table.
+    """Serialize the selected solution and confidence verdict into the one-row result table.
 
     ``extra_flags`` are appended to ``confidence_flags`` to surface search
     diagnostics (e.g. ``staged_search_used``, ``grid_capped``) alongside the
@@ -1391,7 +1389,7 @@ def estimate_rotation_period(
 
     Fits the distance-reduced, light-time-corrected photometry with a
     truncated-harmonic Fourier model, searches a frequency grid, clusters
-    harmonic aliases, and classifies the outcome against the D1 confidence
+    harmonic aliases, and classifies the outcome against the confidence
     contract rather than emitting a bare point estimate.
 
     Parameters
@@ -1488,7 +1486,7 @@ def estimate_rotation_period(
     span_days = float(np.max(t_rel) - np.min(t_rel))
     reduced_mag = np.asarray(mag - 5.0 * np.log10(r_au * delta_au), dtype=np.float64)
 
-    # Cheap, period-independent insufficiency screen (bead rp-e4a.19).  When the
+    # Cheap, period-independent insufficiency screen.  When the
     # caller opts in, an under-determined / degenerate input early-exits with the
     # standard ``insufficient_data`` verdict instead of building the grid (which
     # can hang or raise on single-night spans).
@@ -1573,8 +1571,7 @@ def estimate_rotation_period(
             # do NOT gate on period-vs-session-span: multi-night campaigns
             # legitimately recover periods far longer than a single night's
             # session, and withholding the offsets there lets large inter-session
-            # magnitude steps be fit as spurious low-frequency "rotation"
-            # (rp-e4a.22).
+            # magnitude steps be fit as spurious low-frequency "rotation".
             session_eligible = bool(
                 session_summary.n_sessions >= 2
                 and session_summary.min_group_count
@@ -1600,7 +1597,7 @@ def estimate_rotation_period(
     period_days = float(primary.period_days)
     period_hours = float(period_days * 24.0)
 
-    # Long-period confidence guardrail (bead rp-e4a.22 step 1).  A
+    # Long-period confidence guardrail.  A
     # ``single_period`` claim at an implausibly long period is almost always
     # low-frequency drift fit as rotation; keep the reported value but downgrade
     # confidence to ``period_family``.
@@ -1620,7 +1617,7 @@ def estimate_rotation_period(
     # recovered period sits at the long-period edge of the search grid -- fewer
     # than ~4 rotations spanned, so HALF the recovered frequency falls below the
     # grid floor -- the true period may be the unsearched 2x period and the
-    # recovered value its 0.5x alias (the cardinal D1 failure: a confident
+    # recovered value its 0.5x alias (the cardinal failure: a confident
     # harmonic alias).  The in-grid alias clusters cannot catch this because the
     # competing period was never searched.  So fit explicitly at f/2 (the doubled
     # period, below the floor); if that fit is statistically competitive with the
@@ -1658,7 +1655,7 @@ def estimate_rotation_period(
             primary.is_valid = True
             primary.is_reliable = False
 
-    # Search diagnostics (review #8/#9): surface when the staged heuristic was used
+    # Search diagnostics: surface when the staged heuristic was used
     # (grid above the exact-grid threshold) and when the frequency grid was clamped to
     # the hard cap, so callers can see the recovered period/uncertainty came from a
     # coarsened or heuristically-searched grid rather than the requested resolution.
