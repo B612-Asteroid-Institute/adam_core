@@ -429,15 +429,15 @@
         <article role="main" id="furo-main-content">
           <section id="module-adam_core.photometry.rotation_period_scoring">
 <span id="adam-core-photometry-rotation-period-scoring-module"></span><h1>adam_core.photometry.rotation_period_scoring module<a class="headerlink" href="#module-adam_core.photometry.rotation_period_scoring" title="Link to this heading">¶</a></h1>
-<p>Scoring helpers for the rotation-period standard-candle validation (D2 policy).</p>
+<p>Scoring helpers for the rotation-period standard-candle validation.</p>
 <p>This small module collects the period-recovery scoring primitives shared by the
 committed validation gates (<code class="docutils literal notranslate"><span class="pre">test_rotation_period_validation.py</span></code>) and the
-out-of-package calibration report. It implements the D2 standard-candle scoring
+out-of-package calibration report. It implements the standard-candle scoring
 policy: a strict relative error, a harmonic-tolerant error over a fixed factor
 set, an alias-bucket label for the best-fitting harmonic, a per-fixture tolerance
 check on the <em>raw</em> error, and a diurnal-cadence (near-day) alias flag.</p>
 <p>All periods are in hours. Recovered (<code class="docutils literal notranslate"><span class="pre">p_rec</span></code>) and LCDB truth (<code class="docutils literal notranslate"><span class="pre">p_true</span></code>) are
-both synodic, so no sidereal correction is applied (see D2).</p>
+both synodic, so no sidereal correction is applied.</p>
 <dl class="py data">
 <dt class="sig sig-object py" id="adam_core.photometry.rotation_period_scoring.HARMONIC_FACTORS">
 <span class="sig-prename descclassname"><span class="pre">adam_core.photometry.rotation_period_scoring.</span></span><span class="sig-name descname"><span class="pre">HARMONIC_FACTORS</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[0.25,</span> <span class="pre">0.3333333333333333,</span> <span class="pre">0.5,</span> <span class="pre">0.6666666666666666,</span> <span class="pre">0.75,</span> <span class="pre">1.0,</span> <span class="pre">1.3333333333333333,</span> <span class="pre">1.5,</span> <span class="pre">2.0,</span> <span class="pre">3.0,</span> <span class="pre">4.0]</span></em><a class="headerlink" href="#adam_core.photometry.rotation_period_scoring.HARMONIC_FACTORS" title="Link to this definition">¶</a></dt>
@@ -628,7 +628,7 @@ frequency sits within <code class="docutils literal notranslate"><span class="pr
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=e339d045"></script>
+</div><script src="../../_static/documentation_options.js?v=13972d28"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

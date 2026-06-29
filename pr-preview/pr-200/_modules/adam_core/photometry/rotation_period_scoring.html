@@ -417,17 +417,17 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.photometry.rotation_period_scoring</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;Scoring helpers for the rotation-period standard-candle validation (D2 policy).</span>
+<span></span><span class="sd">&quot;&quot;&quot;Scoring helpers for the rotation-period standard-candle validation.</span>
 
 <span class="sd">This small module collects the period-recovery scoring primitives shared by the</span>
 <span class="sd">committed validation gates (``test_rotation_period_validation.py``) and the</span>
-<span class="sd">out-of-package calibration report. It implements the D2 standard-candle scoring</span>
+<span class="sd">out-of-package calibration report. It implements the standard-candle scoring</span>
 <span class="sd">policy: a strict relative error, a harmonic-tolerant error over a fixed factor</span>
 <span class="sd">set, an alias-bucket label for the best-fitting harmonic, a per-fixture tolerance</span>
 <span class="sd">check on the *raw* error, and a diurnal-cadence (near-day) alias flag.</span>
 
 <span class="sd">All periods are in hours. Recovered (``p_rec``) and LCDB truth (``p_true``) are</span>
-<span class="sd">both synodic, so no sidereal correction is applied (see D2).</span>
+<span class="sd">both synodic, so no sidereal correction is applied.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -637,7 +637,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=e339d045"></script>
+</div><script src="../../../_static/documentation_options.js?v=13972d28"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

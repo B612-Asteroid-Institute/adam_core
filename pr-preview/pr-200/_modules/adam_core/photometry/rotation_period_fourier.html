@@ -452,10 +452,10 @@
 <span class="n">_DEFAULT_JAX_ROW_PAD_MULTIPLE</span> <span class="o">=</span> <span class="mi">64</span>
 <span class="n">_FOURIER_MAX_CLIP_ITERATIONS</span> <span class="o">=</span> <span class="mi">8</span>
 
-<span class="c1"># --- D1 confidence-contract thresholds (bead rp-e4a.6) ---------------------</span>
-<span class="c1"># Initial values per the D1 contract; the calibration study (bead rp-e4a.13)</span>
-<span class="c1"># will tune these on a held-out split of the standard-candle set, so treat the</span>
-<span class="c1"># values below as provisional defaults rather than validated cut points.</span>
+<span class="c1"># --- Confidence-contract thresholds ----------------------------------------</span>
+<span class="c1"># Initial values per the confidence contract; the calibration study will tune</span>
+<span class="c1"># these on a held-out split of the standard-candle set, so treat the values</span>
+<span class="c1"># below as provisional defaults rather than validated cut points.</span>
 <span class="c1"># Minimum fraction of rotational-phase bins that must be occupied to clear the</span>
 <span class="c1"># signal gate (family-level) and to be eligible for ``single_period``.</span>
 <span class="n">PHASE_COVERAGE_MIN_FAMILY</span> <span class="o">=</span> <span class="mf">0.5</span>
@@ -463,8 +463,7 @@
 <span class="c1"># Minimum amplitude-to-noise ratio (amplitude_mag / residual_sigma_mag).</span>
 <span class="n">AMPLITUDE_SNR_MIN</span> <span class="o">=</span> <span class="mf">3.0</span>
 <span class="c1"># Minimum observations in the best-sampled band for the jointly-fit shape to be</span>
-<span class="c1"># credibly constrained (signal-gate floor; preserves the legacy per-band 30).</span>
-<span class="c1"># Candidate for the rp-e4a.13 recalibration.</span>
+<span class="c1"># credibly constrained (signal-gate floor). Candidate for recalibration.</span>
 <span class="n">OBSERVATION_COUNT_MIN</span> <span class="o">=</span> <span class="mi">30</span>
 <span class="c1"># Number of rotational-phase bins used to compute ``phase_coverage_fraction``.</span>
 <span class="n">_PHASE_COVERAGE_N_BINS</span> <span class="o">=</span> <span class="mi">20</span>
@@ -483,11 +482,11 @@
 <span class="c1"># single_period when the baseline actually spans enough cycles to constrain it.</span>
 <span class="n">MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS</span> <span class="o">=</span> <span class="mf">240.0</span>
 
-<span class="c1"># --- Cheap pre-solve insufficiency thresholds (bead rp-e4a.19) -------------</span>
+<span class="c1"># --- Cheap pre-solve insufficiency thresholds ------------------------------</span>
 <span class="c1"># Period-INDEPENDENT screening run before the Fourier search so obviously</span>
 <span class="c1"># under-determined / degenerate inputs can early-exit instead of building a</span>
 <span class="c1"># frequency grid (or hanging on a single-night span).  Provisional values; the</span>
-<span class="c1"># calibration study (bead rp-e4a.13) may retune them.</span>
+<span class="c1"># calibration study may retune them.</span>
 <span class="c1"># Hard floor on the number of observations regardless of model size.</span>
 <span class="n">MIN_OBS</span> <span class="o">=</span> <span class="mi">8</span>
 <span class="c1"># Extra observations required beyond the baseline free-parameter count</span>
@@ -539,10 +538,10 @@
 
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">_VerdictDiagnostics</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;D1 numeric verdict diagnostics for the chosen period.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Confidence-verdict diagnostics for the chosen period.</span>
 
-<span class="sd">    Replaces the former ``dict[str, object]`` so the floats/ints flow typed into</span>
-<span class="sd">    ``_classify_confidence`` instead of being re-narrowed at each call site.</span>
+<span class="sd">    The floats/ints flow typed into ``_classify_confidence`` rather than being</span>
+<span class="sd">    re-narrowed at each call site.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">amplitude_snr</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
@@ -557,8 +556,8 @@
 
 <span class="sd">    Non-frozen with ``slots=True`` so the two ``estimate_rotation_period``</span>
 <span class="sd">    confidence guardrails can downgrade the verdict in place (attribute writes)</span>
-<span class="sd">    without rebuilding the object.  Replaces the former ``dict[str, object]`` so</span>
-<span class="sd">    ``_assemble_result`` reads typed attributes instead of re-narrowing each key.</span>
+<span class="sd">    without rebuilding the object.  ``_assemble_result`` reads typed attributes</span>
+<span class="sd">    rather than re-narrowing each key.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">period_days</span><span class="p">:</span> <span class="nb">float</span>
@@ -887,12 +886,12 @@
         <span class="n">candidate_count</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">final_indices</span> <span class="o">=</span> <span class="n">_sample_indices_from_intervals</span><span class="p">(</span><span class="n">intervals</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_total</span><span class="o">=</span><span class="n">n_total</span><span class="p">)</span>
-    <span class="c1"># Global-best guard (rp-e4a.12 / review #8): the coarse global minimum is already</span>
-    <span class="c1"># computed, so always include its neighborhood in the exact-refine set. The</span>
-    <span class="c1"># candidate_count=12 local-minima cap could otherwise skip the global-best grid</span>
-    <span class="c1"># region on an alias-dense frequency grid, and the prior code only fell back to the</span>
-    <span class="c1"># full grid when NO fit was found -- never when it found a non-global one. This is</span>
-    <span class="c1"># an O(coarse-grid) guarantee, not a continuous optimizer or a fuzz battery.</span>
+    <span class="c1"># Global-best guard: the coarse global minimum is already computed, so always</span>
+    <span class="c1"># include its neighborhood in the exact-refine set. The candidate_count=12</span>
+    <span class="c1"># local-minima cap could otherwise skip the global-best grid region on an</span>
+    <span class="c1"># alias-dense frequency grid, and falling back to the full grid only when NO fit</span>
+    <span class="c1"># is found would never catch a found-but-non-global minimum. This is an</span>
+    <span class="c1"># O(coarse-grid) guarantee, not a continuous optimizer or a fuzz battery.</span>
     <span class="n">finite</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">coarse_scores</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">finite</span><span class="p">):</span>
         <span class="n">global_best</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span>
@@ -1018,7 +1017,7 @@
     <span class="n">max_search_period_hours</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether ``_build_frequency_grid`` clamped the requested resolution to</span>
-<span class="sd">    ``_FOURIER_MAX_FREQUENCY_SAMPLES`` (review #9: surface the cap as a diagnostic).</span>
+<span class="sd">    ``_FOURIER_MAX_FREQUENCY_SAMPLES``; surfaces the cap as a diagnostic.</span>
 
 <span class="sd">    Recomputes the uncapped sample count; keep the f_min/f_max/n_freq formula in sync</span>
 <span class="sd">    with ``_build_frequency_grid`` above.</span>
@@ -1315,18 +1314,18 @@
 <span class="sd">    The solver fits every photometric band JOINTLY (one shared rotational shape</span>
 <span class="sd">    plus a per-band magnitude offset), so a secondary band contributes a single</span>
 <span class="sd">    offset parameter, not its own count requirement. We therefore gate on the</span>
-<span class="sd">    most-populated band, not on the top two each clearing the floor. The legacy</span>
-<span class="sd">    two-band rule (``counts[0] &gt;= 30 and counts[1] &gt;= 30``) silently demanded 60</span>
-<span class="sd">    observations total and let a thin secondary band veto a richly-sampled</span>
-<span class="sd">    primary one, wrongly rejecting single-band-dominant lightcurves -- e.g. 1043</span>
-<span class="sd">    Beate ({C: 457, R: 27}): 457 points carry the shape, yet R=27 &lt; 30 failed the</span>
-<span class="sd">    old guard.</span>
+<span class="sd">    most-populated band, not on the top two each clearing the floor. Requiring</span>
+<span class="sd">    both of the top two bands to clear the floor (``counts[0] &gt;= 30 and</span>
+<span class="sd">    counts[1] &gt;= 30``) would silently demand 60 observations total and let a thin</span>
+<span class="sd">    secondary band veto a richly-sampled primary one, wrongly rejecting</span>
+<span class="sd">    single-band-dominant lightcurves -- e.g. 1043 Beate ({C: 457, R: 27}): 457</span>
+<span class="sd">    points carry the shape, yet R=27 &lt; 30 would fail.</span>
 
 <span class="sd">    For a single-band lightcurve this reduces to ``counts[0] &gt;= OBSERVATION_COUNT_MIN``,</span>
-<span class="sd">    identical to the legacy single-band branch, so genuinely sparse objects stay</span>
-<span class="sd">    ``insufficient_data``. The relaxation is monotonic (it can only remove the</span>
-<span class="sd">    ``too_few_observations`` reason); the amplitude-SNR, phase-coverage, alias,</span>
-<span class="sd">    and Fourier fit-quality gates still apply downstream to any admitted object.</span>
+<span class="sd">    so genuinely sparse objects stay ``insufficient_data``. The relaxation is</span>
+<span class="sd">    monotonic (it can only remove the ``too_few_observations`` reason); the</span>
+<span class="sd">    amplitude-SNR, phase-coverage, alias, and Fourier fit-quality gates still</span>
+<span class="sd">    apply downstream to any admitted object.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">unique_filters</span> <span class="o">=</span> <span class="n">_ordered_unique</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">)</span>
     <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">filter_labels</span> <span class="o">==</span> <span class="n">label</span><span class="p">))</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">unique_filters</span><span class="p">]</span>
@@ -1401,17 +1400,16 @@
     <span class="n">is_reliable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="n">is_valid</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Single deterministic verdict (D1 §&quot;decision tree&quot;).</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Single deterministic verdict from the confidence classifier&#39;s decision tree.</span>
 
 <span class="sd">    Returns ``(period_verdict, reliability_code, confidence_flags,</span>
 <span class="sd">    insufficiency_reasons)``.</span>
 
 <span class="sd">    The signal gate, positive flags, and alias gate are expressed as ordered</span>
 <span class="sd">    ``(condition, label)`` tables -- the tuple order *is* the emission order,</span>
-<span class="sd">    which is part of the D1 contract (the flags/reasons lists are compared by</span>
-<span class="sd">    membership AND order).  The early-return, the precision gate, and its</span>
-<span class="sd">    ``no_precision`` de-dup guards are kept verbatim because they carry the</span>
-<span class="sd">    subtle, stateful behavior.</span>
+<span class="sd">    which is part of the confidence contract (the flags/reasons lists are</span>
+<span class="sd">    compared by membership AND order).  The early-return, the precision gate, and</span>
+<span class="sd">    its ``no_precision`` de-dup guards carry subtle, stateful behavior.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">flags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">reasons</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1506,7 +1504,7 @@
     <span class="n">t_rel</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
     <span class="n">span_days</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_VerdictDiagnostics</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the D1 numeric verdict diagnostics for the chosen period.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the confidence-verdict diagnostics for the chosen period.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">period_days</span><span class="p">)</span> <span class="ow">and</span> <span class="n">period_days</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
         <span class="n">n_rotations_spanned</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">span_days</span><span class="p">)</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">period_days</span><span class="p">)</span>
         <span class="n">phase_coverage_fraction</span> <span class="o">=</span> <span class="n">_phase_coverage_fraction</span><span class="p">(</span>
@@ -1620,9 +1618,9 @@
     <span class="n">min_rotations_in_span</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">max_frequency_cycles_per_day</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cheap, period-INDEPENDENT insufficiency screen (bead rp-e4a.19).</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cheap, period-INDEPENDENT insufficiency screen.</span>
 
-<span class="sd">    Returns the subset of D1 ``insufficiency_reasons`` that are detectable</span>
+<span class="sd">    Returns the subset of public insufficiency reasons that are detectable</span>
 <span class="sd">    without running the search; an empty list means the input looks solvable.</span>
 <span class="sd">    Reason strings match the full-path ``_classify_confidence`` so the early</span>
 <span class="sd">    and full verdicts stay consistent.</span>
@@ -1682,7 +1680,7 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RotationPeriodResult</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the one-row ``insufficient_data`` result for the early-exit path.</span>
 
-<span class="sd">    NaN period / frequency, ``None`` for every nullable diagnostic, and the D1</span>
+<span class="sd">    NaN period / frequency, ``None`` for every nullable diagnostic, and the</span>
 <span class="sd">    insufficient verdict fields.  All non-nullable columns are populated so the</span>
 <span class="sd">    row is valid.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -1710,7 +1708,7 @@
     <span class="n">used_session_offsets</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="n">extra_flags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RotationPeriodResult</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Serialize the selected solution and D1 verdict into the one-row result table.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Serialize the selected solution and confidence verdict into the one-row result table.</span>
 
 <span class="sd">    ``extra_flags`` are appended to ``confidence_flags`` to surface search</span>
 <span class="sd">    diagnostics (e.g. ``staged_search_used``, ``grid_capped``) alongside the</span>
@@ -1812,7 +1810,7 @@
 
 <span class="sd">    Fits the distance-reduced, light-time-corrected photometry with a</span>
 <span class="sd">    truncated-harmonic Fourier model, searches a frequency grid, clusters</span>
-<span class="sd">    harmonic aliases, and classifies the outcome against the D1 confidence</span>
+<span class="sd">    harmonic aliases, and classifies the outcome against the confidence</span>
 <span class="sd">    contract rather than emitting a bare point estimate.</span>
 
 <span class="sd">    Parameters</span>
@@ -1909,7 +1907,7 @@
     <span class="n">span_days</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">t_rel</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">t_rel</span><span class="p">))</span>
     <span class="n">reduced_mag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mag</span> <span class="o">-</span> <span class="mf">5.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">r_au</span> <span class="o">*</span> <span class="n">delta_au</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
 
-    <span class="c1"># Cheap, period-independent insufficiency screen (bead rp-e4a.19).  When the</span>
+    <span class="c1"># Cheap, period-independent insufficiency screen.  When the</span>
     <span class="c1"># caller opts in, an under-determined / degenerate input early-exits with the</span>
     <span class="c1"># standard ``insufficient_data`` verdict instead of building the grid (which</span>
     <span class="c1"># can hang or raise on single-night spans).</span>
@@ -1994,8 +1992,7 @@
             <span class="c1"># do NOT gate on period-vs-session-span: multi-night campaigns</span>
             <span class="c1"># legitimately recover periods far longer than a single night&#39;s</span>
             <span class="c1"># session, and withholding the offsets there lets large inter-session</span>
-            <span class="c1"># magnitude steps be fit as spurious low-frequency &quot;rotation&quot;</span>
-            <span class="c1"># (rp-e4a.22).</span>
+            <span class="c1"># magnitude steps be fit as spurious low-frequency &quot;rotation&quot;.</span>
             <span class="n">session_eligible</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span>
                 <span class="n">session_summary</span><span class="o">.</span><span class="n">n_sessions</span> <span class="o">&gt;=</span> <span class="mi">2</span>
                 <span class="ow">and</span> <span class="n">session_summary</span><span class="o">.</span><span class="n">min_group_count</span>
@@ -2021,7 +2018,7 @@
     <span class="n">period_days</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">primary</span><span class="o">.</span><span class="n">period_days</span><span class="p">)</span>
     <span class="n">period_hours</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">period_days</span> <span class="o">*</span> <span class="mf">24.0</span><span class="p">)</span>
 
-    <span class="c1"># Long-period confidence guardrail (bead rp-e4a.22 step 1).  A</span>
+    <span class="c1"># Long-period confidence guardrail.  A</span>
     <span class="c1"># ``single_period`` claim at an implausibly long period is almost always</span>
     <span class="c1"># low-frequency drift fit as rotation; keep the reported value but downgrade</span>
     <span class="c1"># confidence to ``period_family``.</span>
@@ -2041,7 +2038,7 @@
     <span class="c1"># recovered period sits at the long-period edge of the search grid -- fewer</span>
     <span class="c1"># than ~4 rotations spanned, so HALF the recovered frequency falls below the</span>
     <span class="c1"># grid floor -- the true period may be the unsearched 2x period and the</span>
-    <span class="c1"># recovered value its 0.5x alias (the cardinal D1 failure: a confident</span>
+    <span class="c1"># recovered value its 0.5x alias (the cardinal failure: a confident</span>
     <span class="c1"># harmonic alias).  The in-grid alias clusters cannot catch this because the</span>
     <span class="c1"># competing period was never searched.  So fit explicitly at f/2 (the doubled</span>
     <span class="c1"># period, below the floor); if that fit is statistically competitive with the</span>
@@ -2079,7 +2076,7 @@
             <span class="n">primary</span><span class="o">.</span><span class="n">is_valid</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="n">primary</span><span class="o">.</span><span class="n">is_reliable</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="c1"># Search diagnostics (review #8/#9): surface when the staged heuristic was used</span>
+    <span class="c1"># Search diagnostics: surface when the staged heuristic was used</span>
     <span class="c1"># (grid above the exact-grid threshold) and when the frequency grid was clamped to</span>
     <span class="c1"># the hard cap, so callers can see the recovered period/uncertainty came from a</span>
     <span class="c1"># coarsened or heuristically-searched grid rather than the requested resolution.</span>
@@ -2139,7 +2136,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=e339d045"></script>
+</div><script src="../../../_static/documentation_options.js?v=13972d28"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -490,7 +490,7 @@
     <span class="n">period_verdict</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="c1"># LCDB-U-style reliability code as a STRING (&quot;3&quot;/&quot;2&quot;/&quot;1&quot;, highest first). Kept a</span>
     <span class="c1"># string (not int) to mirror LCDB U codes and stay forward-compatible with</span>
-    <span class="c1"># qualified codes (e.g. &quot;1+&quot;); do NOT sort or compare it numerically. (review #19)</span>
+    <span class="c1"># qualified codes (e.g. &quot;1+&quot;); do NOT sort or compare it numerically.</span>
     <span class="n">reliability_code</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="n">confidence_flags</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">insufficiency_reasons</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -622,7 +622,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=e339d045"></script>
+</div><script src="../../../_static/documentation_options.js?v=13972d28"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
