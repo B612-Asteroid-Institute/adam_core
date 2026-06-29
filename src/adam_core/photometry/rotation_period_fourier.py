@@ -142,7 +142,6 @@ class _PrimaryResult:
     ``_assemble_result`` reads typed attributes instead of re-narrowing each key.
     """
 
-    primary_method: str
     period_days: float
     period_lower_days: float | None
     period_upper_days: float | None
@@ -1109,7 +1108,6 @@ def _verdict_diagnostics(
 
 def _primary_result(
     *,
-    primary_method: str,
     period_days: float,
     period_lower_days: float | None,
     period_upper_days: float | None,
@@ -1122,7 +1120,6 @@ def _primary_result(
     """Assemble the Fourier result (one field set + one is_valid/is_reliable rule)."""
     period_verdict, reliability_code, confidence_flags, insufficiency_reasons = verdict
     return _PrimaryResult(
-        primary_method=primary_method,
         period_days=period_days,
         period_lower_days=period_lower_days,
         period_upper_days=period_upper_days,
@@ -1177,7 +1174,6 @@ def _primary_from_method(
         )
     )
     return _primary_result(
-        primary_method="fourier",
         period_days=float(fourier_solution.chosen.period_days),
         period_lower_days=float(fourier_solution.period_lower_days),
         period_upper_days=float(fourier_solution.period_upper_days),
@@ -1277,7 +1273,6 @@ def _insufficient_result(
     # diagnostics it has cheaply on hand.
     return RotationPeriodResult.single_insufficient(
         reasons=list(reasons),
-        primary_method="fourier",
         profile=profile.name,
         n_observations=int(len(observations)),
         n_filters=int(len(_ordered_unique(filter_labels))),
@@ -1302,7 +1297,6 @@ def _assemble_result(
     diagnostics (e.g. ``staged_search_used``, ``grid_capped``) alongside the
     classifier's own positive flags.
     """
-    primary_method = primary.primary_method
     period_days = float(primary.period_days)
     period_hours = float(period_days * 24.0)
     frequency_cycles_per_day = (
@@ -1324,7 +1318,6 @@ def _assemble_result(
         period_days=[period_days],
         period_hours=[period_hours],
         frequency_cycles_per_day=[frequency_cycles_per_day],
-        primary_method=[primary_method],
         profile=[profile.name],
         period_verdict=[primary.period_verdict],
         reliability_code=[primary.reliability_code],

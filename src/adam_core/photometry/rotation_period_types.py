@@ -59,7 +59,6 @@ class RotationPeriodResult(qv.Table):
     period_days = qv.Float64Column()
     period_hours = qv.Float64Column()
     frequency_cycles_per_day = qv.Float64Column()
-    primary_method = qv.LargeStringColumn()
     profile = qv.LargeStringColumn()
     period_verdict = qv.LargeStringColumn()
     # LCDB-U-style reliability code as a STRING ("3"/"2"/"1", highest first). Kept a
@@ -104,7 +103,6 @@ class RotationPeriodResult(qv.Table):
         n_observations: int = 0,
         n_filters: int = 0,
         n_sessions: int = 0,
-        primary_method: str = "none",
         profile: str = "default",
     ) -> "RotationPeriodResult":
         """One-row ``insufficient_data`` result: NaN period, every nullable diagnostic
@@ -120,7 +118,6 @@ class RotationPeriodResult(qv.Table):
             period_days=[float("nan")],
             period_hours=[float("nan")],
             frequency_cycles_per_day=[float("nan")],
-            primary_method=[primary_method],
             profile=[profile],
             period_verdict=["insufficient_data"],
             reliability_code=["1"],
