@@ -159,7 +159,8 @@ def test_on_unknown_skip_with_no_fallbacks_leaves_generic_bands_unmapped():
     # explicit observatory mapping become None rather than raising or
     # falling back.
     out = map_to_canonical_filter_bands(
-        ["XXX"], ["g"],
+        ["XXX"],
+        ["g"],
         allow_fallback_filters=False,
         on_unknown="skip",
     )
