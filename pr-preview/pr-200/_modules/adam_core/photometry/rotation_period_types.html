@@ -486,7 +486,6 @@
     <span class="n">period_days</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">()</span>
     <span class="n">period_hours</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">()</span>
     <span class="n">frequency_cycles_per_day</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">()</span>
-    <span class="n">primary_method</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="n">profile</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="n">period_verdict</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="c1"># LCDB-U-style reliability code as a STRING (&quot;3&quot;/&quot;2&quot;/&quot;1&quot;, highest first). Kept a</span>
@@ -533,7 +532,6 @@
         <span class="n">n_observations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
         <span class="n">n_filters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
         <span class="n">n_sessions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
-        <span class="n">primary_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span>
         <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;RotationPeriodResult&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;One-row ``insufficient_data`` result: NaN period, every nullable diagnostic</span>
@@ -549,7 +547,6 @@
             <span class="n">period_days</span><span class="o">=</span><span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)],</span>
             <span class="n">period_hours</span><span class="o">=</span><span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)],</span>
             <span class="n">frequency_cycles_per_day</span><span class="o">=</span><span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)],</span>
-            <span class="n">primary_method</span><span class="o">=</span><span class="p">[</span><span class="n">primary_method</span><span class="p">],</span>
             <span class="n">profile</span><span class="o">=</span><span class="p">[</span><span class="n">profile</span><span class="p">],</span>
             <span class="n">period_verdict</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;insufficient_data&quot;</span><span class="p">],</span>
             <span class="n">reliability_code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;1&quot;</span><span class="p">],</span>
@@ -625,7 +622,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=05789b42"></script>
+</div><script src="../../../_static/documentation_options.js?v=e339d045"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

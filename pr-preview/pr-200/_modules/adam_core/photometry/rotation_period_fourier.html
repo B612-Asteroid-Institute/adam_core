@@ -561,7 +561,6 @@
 <span class="sd">    ``_assemble_result`` reads typed attributes instead of re-narrowing each key.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">primary_method</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">period_days</span><span class="p">:</span> <span class="nb">float</span>
     <span class="n">period_lower_days</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">period_upper_days</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
@@ -1528,7 +1527,6 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_primary_result</span><span class="p">(</span>
     <span class="o">*</span><span class="p">,</span>
-    <span class="n">primary_method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">period_days</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">period_lower_days</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">period_upper_days</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
@@ -1541,7 +1539,6 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Assemble the Fourier result (one field set + one is_valid/is_reliable rule).&quot;&quot;&quot;</span>
     <span class="n">period_verdict</span><span class="p">,</span> <span class="n">reliability_code</span><span class="p">,</span> <span class="n">confidence_flags</span><span class="p">,</span> <span class="n">insufficiency_reasons</span> <span class="o">=</span> <span class="n">verdict</span>
     <span class="k">return</span> <span class="n">_PrimaryResult</span><span class="p">(</span>
-        <span class="n">primary_method</span><span class="o">=</span><span class="n">primary_method</span><span class="p">,</span>
         <span class="n">period_days</span><span class="o">=</span><span class="n">period_days</span><span class="p">,</span>
         <span class="n">period_lower_days</span><span class="o">=</span><span class="n">period_lower_days</span><span class="p">,</span>
         <span class="n">period_upper_days</span><span class="o">=</span><span class="n">period_upper_days</span><span class="p">,</span>
@@ -1596,7 +1593,6 @@
         <span class="p">)</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">_primary_result</span><span class="p">(</span>
-        <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span>
         <span class="n">period_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">chosen</span><span class="o">.</span><span class="n">period_days</span><span class="p">),</span>
         <span class="n">period_lower_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">period_lower_days</span><span class="p">),</span>
         <span class="n">period_upper_days</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">period_upper_days</span><span class="p">),</span>
@@ -1696,7 +1692,6 @@
     <span class="c1"># diagnostics it has cheaply on hand.</span>
     <span class="k">return</span> <span class="n">RotationPeriodResult</span><span class="o">.</span><span class="n">single_insufficient</span><span class="p">(</span>
         <span class="n">reasons</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">reasons</span><span class="p">),</span>
-        <span class="n">primary_method</span><span class="o">=</span><span class="s2">&quot;fourier&quot;</span><span class="p">,</span>
         <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
         <span class="n">n_observations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)),</span>
         <span class="n">n_filters</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">_ordered_unique</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">))),</span>
@@ -1721,7 +1716,6 @@
 <span class="sd">    diagnostics (e.g. ``staged_search_used``, ``grid_capped``) alongside the</span>
 <span class="sd">    classifier&#39;s own positive flags.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">primary_method</span> <span class="o">=</span> <span class="n">primary</span><span class="o">.</span><span class="n">primary_method</span>
     <span class="n">period_days</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">primary</span><span class="o">.</span><span class="n">period_days</span><span class="p">)</span>
     <span class="n">period_hours</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">period_days</span> <span class="o">*</span> <span class="mf">24.0</span><span class="p">)</span>
     <span class="n">frequency_cycles_per_day</span> <span class="o">=</span> <span class="p">(</span>
@@ -1743,7 +1737,6 @@
         <span class="n">period_days</span><span class="o">=</span><span class="p">[</span><span class="n">period_days</span><span class="p">],</span>
         <span class="n">period_hours</span><span class="o">=</span><span class="p">[</span><span class="n">period_hours</span><span class="p">],</span>
         <span class="n">frequency_cycles_per_day</span><span class="o">=</span><span class="p">[</span><span class="n">frequency_cycles_per_day</span><span class="p">],</span>
-        <span class="n">primary_method</span><span class="o">=</span><span class="p">[</span><span class="n">primary_method</span><span class="p">],</span>
         <span class="n">profile</span><span class="o">=</span><span class="p">[</span><span class="n">profile</span><span class="o">.</span><span class="n">name</span><span class="p">],</span>
         <span class="n">period_verdict</span><span class="o">=</span><span class="p">[</span><span class="n">primary</span><span class="o">.</span><span class="n">period_verdict</span><span class="p">],</span>
         <span class="n">reliability_code</span><span class="o">=</span><span class="p">[</span><span class="n">primary</span><span class="o">.</span><span class="n">reliability_code</span><span class="p">],</span>
@@ -2146,7 +2139,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=05789b42"></script>
+</div><script src="../../../_static/documentation_options.js?v=e339d045"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
