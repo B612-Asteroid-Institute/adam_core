@@ -334,6 +334,7 @@
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation_period_fourier.html">adam_core.photometry.rotation_period_fourier module</a></li>
@@ -425,6 +426,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.lightcurve</span><span class="w"> </span><span class="kn">import</span> <span class="n">reduced_magnitude</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.rotation_period_fourier_core</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">PROFILES</span><span class="p">,</span>
     <span class="n">_amplitude_from_fit</span><span class="p">,</span>
@@ -1905,7 +1907,7 @@
     <span class="n">time_lt</span> <span class="o">=</span> <span class="n">_apply_light_time_correction</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">delta_au</span><span class="p">)</span>
     <span class="n">t_rel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">time_lt</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">time_lt</span><span class="p">)),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
     <span class="n">span_days</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">t_rel</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">t_rel</span><span class="p">))</span>
-    <span class="n">reduced_mag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mag</span> <span class="o">-</span> <span class="mf">5.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">r_au</span> <span class="o">*</span> <span class="n">delta_au</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">reduced_mag</span> <span class="o">=</span> <span class="n">reduced_magnitude</span><span class="p">(</span><span class="n">mag</span><span class="p">,</span> <span class="n">r_au</span><span class="p">,</span> <span class="n">delta_au</span><span class="p">)</span>
 
     <span class="c1"># Cheap, period-independent insufficiency screen.  When the</span>
     <span class="c1"># caller opts in, an under-determined / degenerate input early-exits with the</span>
@@ -2121,7 +2123,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-29</div>
+              Last updated on 2026-06-30</div>
           </div>
           <div class="right-details">
             
@@ -2136,7 +2138,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=13972d28"></script>
+</div><script src="../../../_static/documentation_options.js?v=bf2ca236"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

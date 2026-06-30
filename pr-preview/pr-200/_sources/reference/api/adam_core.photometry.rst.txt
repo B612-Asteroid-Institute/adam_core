@@ -21,6 +21,7 @@ Submodules
    :maxdepth: 4
 
    adam_core.photometry.absolute_magnitude
+   adam_core.photometry.lightcurve
    adam_core.photometry.magnitude
    adam_core.photometry.magnitude_common
    adam_core.photometry.rotation_period_fourier

@@ -335,6 +335,7 @@
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.rotation_period_fourier.html">adam_core.photometry.rotation_period_fourier module</a></li>
@@ -947,6 +948,8 @@
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.calculate_phase_angle"><code class="docutils literal notranslate"><span class="pre">calculate_phase_angle()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.convert_magnitude"><code class="docutils literal notranslate"><span class="pre">convert_magnitude()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.predict_magnitudes"><code class="docutils literal notranslate"><span class="pre">predict_magnitudes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.hg_phase_correction"><code class="docutils literal notranslate"><span class="pre">hg_phase_correction()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.reduced_magnitude"><code class="docutils literal notranslate"><span class="pre">reduced_magnitude()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_absolute_magnitude_v_from_detections"><code class="docutils literal notranslate"><span class="pre">estimate_absolute_magnitude_v_from_detections()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_absolute_magnitude_v_from_detections_grouped"><code class="docutils literal notranslate"><span class="pre">estimate_absolute_magnitude_v_from_detections_grouped()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters"><code class="docutils literal notranslate"><span class="pre">GroupedPhysicalParameters</span></code></a><ul>
@@ -1047,6 +1050,10 @@
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.estimate_absolute_magnitude_v_from_detections_grouped"><code class="docutils literal notranslate"><span class="pre">estimate_absolute_magnitude_v_from_detections_grouped()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.lightcurve.html#adam_core.photometry.lightcurve.reduced_magnitude"><code class="docutils literal notranslate"><span class="pre">reduced_magnitude()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude.html#adam_core.photometry.magnitude.calculate_phase_angle"><code class="docutils literal notranslate"><span class="pre">calculate_phase_angle()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude.html#adam_core.photometry.magnitude.convert_magnitude"><code class="docutils literal notranslate"><span class="pre">convert_magnitude()</span></code></a></li>
@@ -1056,6 +1063,7 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.hg_phase_correction"><code class="docutils literal notranslate"><span class="pre">hg_phase_correction()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_filter_id_table"><code class="docutils literal notranslate"><span class="pre">bandpass_filter_id_table()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_integrals_for_composition"><code class="docutils literal notranslate"><span class="pre">bandpass_integrals_for_composition()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_composition_key"><code class="docutils literal notranslate"><span class="pre">bandpass_composition_key()</span></code></a></li>
@@ -1287,7 +1295,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-29</div>
+              Last updated on 2026-06-30</div>
           </div>
           <div class="right-details">
             
@@ -1322,7 +1330,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=13972d28"></script>
+</div><script src="../../_static/documentation_options.js?v=bf2ca236"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
