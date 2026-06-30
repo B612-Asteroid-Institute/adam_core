@@ -9,6 +9,7 @@ import pyarrow as pa
 from scipy.stats import f as f_dist  # type: ignore[import-untyped]
 
 from ..constants import Constants
+from .magnitude_common import hg_phase_correction
 from .rotation_period_types import RotationPeriodObservations
 
 # Speed of light in au/day. Use the canonical adam_core constant rather than a local
@@ -315,18 +316,6 @@ def _build_fourier_columns(
     return np.column_stack(cols).astype(np.float64, copy=False)
 
 
-def _hg_phase_reduced(
-    alpha_deg: npt.NDArray[np.float64], g_value: float
-) -> npt.NDArray[np.float64]:
-    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
-    tan_half = np.tan(0.5 * alpha_rad)
-    phi1 = np.exp(-3.33 * np.power(tan_half, 0.63))
-    phi2 = np.exp(-1.87 * np.power(tan_half, 1.22))
-    phase = (1.0 - g_value) * phi1 + g_value * phi2
-    phase = np.clip(phase, 1.0e-12, None)
-    return -2.5 * np.log10(phase)
-
-
 def _phase_prior_bounds(
     min_alpha_deg: float,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -337,8 +326,8 @@ def _phase_prior_bounds(
         25,
         dtype=np.float64,
     )
-    coeffs_min = np.polyfit(alpha_arc, _hg_phase_reduced(alpha_arc, _HG_G_MIN), deg=2)
-    coeffs_max = np.polyfit(alpha_arc, _hg_phase_reduced(alpha_arc, _HG_G_MAX), deg=2)
+    coeffs_min = np.polyfit(alpha_arc, hg_phase_correction(alpha_arc, _HG_G_MIN), deg=2)
+    coeffs_max = np.polyfit(alpha_arc, hg_phase_correction(alpha_arc, _HG_G_MAX), deg=2)
     c1_min, c1_max = sorted((float(coeffs_min[1]), float(coeffs_max[1])))
     c2_min, c2_max = sorted((float(coeffs_min[0]), float(coeffs_max[0])))
     return (c1_min, c1_max), (c2_min, c2_max)

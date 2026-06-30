@@ -18,6 +18,47 @@ JAX_CHUNK_SIZE = 8192
 
 BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 
+# IAU two-parameter (H, G) phase-function coefficients (Bowell et al. 1989).  Defined
+# once here so the NumPy and JAX implementations below cannot drift apart.
+_HG_PHI1_SCALE, _HG_PHI1_EXP = 3.33, 0.63
+_HG_PHI2_SCALE, _HG_PHI2_EXP = 1.87, 1.22
+_HG_PHASE_FLOOR = 1.0e-12
+
+
+def hg_phase_correction(
+    alpha_deg: npt.NDArray[np.float64] | float,
+    G: float,
+) -> npt.NDArray[np.float64]:
+    """H-G phase correction in magnitudes for solar phase angle ``alpha_deg`` and slope ``G``.
+
+    Returns ``-2.5 * log10[(1 - G) * phi1 + G * phi2]`` -- the term added to
+    ``H + 5 * log10(r_au * delta_au)`` to get the reduced/apparent V magnitude, where
+    ``phi_i = exp(-A_i * tan(alpha/2) ** B_i)``.  Zero at opposition (alpha = 0) and
+    positive (fainter) for larger phase angles.  NumPy implementation for CPU callers.
+    """
+    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
+    tan_half = np.tan(0.5 * alpha_rad)
+    phi1 = np.exp(-_HG_PHI1_SCALE * np.power(tan_half, _HG_PHI1_EXP))
+    phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
+    phase = np.clip((1.0 - G) * phi1 + G * phi2, _HG_PHASE_FLOOR, None)
+    return -2.5 * np.log10(phase)
+
+
+def _hg_phase_correction_from_cos_jax(
+    cos_phase: jnp.ndarray,
+    G: jnp.ndarray,
+) -> jnp.ndarray:
+    """H-G phase correction in magnitudes, from ``cos`` of the phase angle (JAX kernels).
+
+    Same coefficients as :func:`hg_phase_correction`, but takes ``cos_phase`` directly
+    (avoiding ``arccos``) via the identity ``tan(alpha/2) = sqrt((1 - cos) / (1 + cos))``.
+    """
+    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
+    phi1 = jnp.exp(-_HG_PHI1_SCALE * tan_half**_HG_PHI1_EXP)
+    phi2 = jnp.exp(-_HG_PHI2_SCALE * tan_half**_HG_PHI2_EXP)
+    phase_function = (1.0 - G) * phi1 + G * phi2
+    return -2.5 * jnp.log10(phase_function)
+
 
 @lru_cache(maxsize=1)
 def bandpass_filter_id_table() -> tuple[

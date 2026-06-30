@@ -6,6 +6,7 @@ from math import ceil
 import numpy as np
 import numpy.typing as npt
 
+from .lightcurve import reduced_magnitude
 from .rotation_period_fourier_core import (
     PROFILES,
     _amplitude_from_fit,
@@ -1484,7 +1485,7 @@ def estimate_rotation_period(
     time_lt = _apply_light_time_correction(time, delta_au)
     t_rel = np.asarray(time_lt - float(np.min(time_lt)), dtype=np.float64)
     span_days = float(np.max(t_rel) - np.min(t_rel))
-    reduced_mag = np.asarray(mag - 5.0 * np.log10(r_au * delta_au), dtype=np.float64)
+    reduced_mag = reduced_magnitude(mag, r_au, delta_au)
 
     # Cheap, period-independent insufficiency screen.  When the
     # caller opts in, an under-determined / degenerate input early-exits with the

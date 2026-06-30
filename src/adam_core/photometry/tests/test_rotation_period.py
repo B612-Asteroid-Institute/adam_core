@@ -11,6 +11,7 @@ from ...coordinates.origin import Origin
 from ...observers.observers import Observers
 from ...time import Timestamp
 from ..magnitude import calculate_apparent_magnitude_v_and_phase_angle
+from ..magnitude_common import hg_phase_correction
 from ..rotation_period_fourier import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
     _build_frequency_grid,
@@ -21,7 +22,6 @@ from ..rotation_period_fourier import (
 from ..rotation_period_fourier_core import (
     _f_test_confidence,
     _FitResult,
-    _hg_phase_reduced,
     _select_order,
 )
 from ..rotation_period_types import RotationPeriodObservations, RotationPeriodResult
@@ -389,17 +389,18 @@ def test_subharmonic_alias_below_grid_is_capped_to_family():
     assert "subharmonic_unresolved" in list(result.insufficiency_reasons[0].as_py())
 
 
-def test_hg_phase_reduced_matches_magnitude_module() -> None:
-    """The rotation prior's IAU H-G phase term must track adam_core's canonical
-    (JAX) magnitude implementation -- the two re-implement the same law with the
-    same constants (-3.33/0.63/-1.87/1.22), so they must not silently drift.
+def test_hg_phase_correction_matches_magnitude_module() -> None:
+    """The shared NumPy H-G phase correction must track the JAX magnitude kernels.
+
+    Both now read the same coefficient constants, but they remain separate
+    implementations (NumPy ``hg_phase_correction`` from alpha vs the JAX kernel from
+    cos(alpha)), so this guards against the two paths diverging numerically.
 
     Strategy: drive the public apparent-magnitude path over a phase-angle sweep,
     back out its phase term (mag_v - H - 5*log10(r*delta)), and compare it to
-    ``_hg_phase_reduced`` evaluated at the SAME returned phase angle. Feeding the
-    identical alpha through both paths isolates the phase *function* (exp/pow/log
-    + the H-G constants) from the shared geometry, so the only thing under test
-    is that the two formulas agree.
+    ``hg_phase_correction`` evaluated at the SAME returned phase angle. Feeding the
+    identical alpha through both paths isolates the phase function from the shared
+    geometry, so the only thing under test is that the two formulas agree.
     """
     alpha_target_deg = np.linspace(1.0, 120.0, 24)
     n = alpha_target_deg.size
@@ -452,7 +453,7 @@ def test_hg_phase_reduced_matches_magnitude_module() -> None:
         # Phase term as the magnitude module computes it, with H and the distance
         # modulus 5*log10(r*delta) removed -- this is exactly -2.5*log10(phi).
         phase_term_ref = mags_v - h_mag - distance_modulus
-        phase_term_rotation = _hg_phase_reduced(alpha_deg, g_value)
+        phase_term_rotation = hg_phase_correction(alpha_deg, g_value)
         np.testing.assert_allclose(
             phase_term_rotation, phase_term_ref, rtol=0.0, atol=1e-9
         )

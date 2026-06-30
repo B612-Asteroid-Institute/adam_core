@@ -16,6 +16,7 @@ from ..utils.chunking import process_in_chunks
 from .magnitude_common import (
     JAX_CHUNK_SIZE,
     BandpassComposition,
+    _hg_phase_correction_from_cos_jax,
     assert_filter_ids_have_curves,
 )
 from .magnitude_common import bandpass_composition_key as _bandpass_composition_key
@@ -275,16 +276,11 @@ def _calculate_apparent_magnitude_core_jax(
     numer = r**2 + delta**2 - observer_sun_dist**2
     denom = 2.0 * r * delta
     cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
-    # H-G phase function
-    #
-    # Best practice (perf): avoid arccos() + tan() since we only need tan(phase/2).
-    # Use identity: tan(phase/2) = sqrt((1 - cos_phase) / (1 + cos_phase)).
-    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = jnp.exp(-3.33 * tan_half**0.63)
-    phi2 = jnp.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-
-    return H_v + 5.0 * jnp.log10(r * delta) - 2.5 * jnp.log10(phase_function)
+    return (
+        H_v
+        + 5.0 * jnp.log10(r * delta)
+        + _hg_phase_correction_from_cos_jax(cos_phase, G)
+    )
 
 
 @jit
@@ -334,12 +330,11 @@ def _calculate_apparent_magnitude_and_phase_core_jax(
     denom = 2.0 * r * delta
     cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
 
-    # Magnitude H-G phase function (uses tan(phase/2)).
-    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = jnp.exp(-3.33 * tan_half**0.63)
-    phi2 = jnp.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-    mags_v = H_v + 5.0 * jnp.log10(r * delta) - 2.5 * jnp.log10(phase_function)
+    mags_v = (
+        H_v
+        + 5.0 * jnp.log10(r * delta)
+        + _hg_phase_correction_from_cos_jax(cos_phase, G)
+    )
 
     # Phase angle in degrees.
     y = jnp.sqrt(jnp.maximum(0.0, 1.0 - cos_phase))
