@@ -1,0 +1,706 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="MOID Analysis" href="moid_analysis.html"><link rel="prev" title="Photometry, Phase Angle, and Light Curves" href="photometry_and_magnitude.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/cookbook/rotation_periods.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>Rotation Periods and Measured Confidence - adam_core</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0404406e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0f766e;
+  --color-brand-content: #0369a1;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">adam_core</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">adam_core</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Documentation</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html">Installation</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="time_and_windows.html">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="orbit_sources_and_state_tables.html">Using Orbits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coordinates_classes.html">Coordinate Classes Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coordinate_covariances.html">Coordinate Covariances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coordinate_transforms.html">Coordinate Transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="residuals.html">Residuals and Fit Quality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Rotation Periods and Measured Confidence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scaling_and_utils.html">Scaling and Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../reference/api/modules.html">adam_core</a><input aria-label="Toggle navigation of adam_core" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../reference/api/adam_core.html">adam_core package</a><input aria-label="Toggle navigation of adam_core package" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.coordinates.html">adam_core.coordinates package</a><input aria-label="Toggle navigation of adam_core.coordinates package" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.cartesian.html">adam_core.coordinates.cartesian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.cometary.html">adam_core.coordinates.cometary module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.jacobian.html">adam_core.coordinates.jacobian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.transform.html">adam_core.coordinates.transform module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.types.html">adam_core.coordinates.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.units.html">adam_core.coordinates.units module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.variants.html">adam_core.coordinates.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.dynamics.html">adam_core.dynamics package</a><input aria-label="Toggle navigation of adam_core.dynamics package" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.aberrations.html">adam_core.dynamics.aberrations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.barker.html">adam_core.dynamics.barker module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.chi.html">adam_core.dynamics.chi module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.ephemeris.html">adam_core.dynamics.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.exceptions.html">adam_core.dynamics.exceptions module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.impacts.html">adam_core.dynamics.impacts module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.kepler.html">adam_core.dynamics.kepler module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.lagrange.html">adam_core.dynamics.lagrange module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.lambert.html">adam_core.dynamics.lambert module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.moid.html">adam_core.dynamics.moid module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.plots.html">adam_core.dynamics.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.propagation.html">adam_core.dynamics.propagation module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.stumpff.html">adam_core.dynamics.stumpff module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.dynamics.tisserand.html">adam_core.dynamics.tisserand module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.missions.html">adam_core.missions package</a><input aria-label="Toggle navigation of adam_core.missions package" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.missions.porkchop.html">adam_core.missions.porkchop module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.observers.html">adam_core.observers package</a><input aria-label="Toggle navigation of adam_core.observers package" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observers.observers.html">adam_core.observers.observers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observers.state.html">adam_core.observers.state module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observers.utils.html">adam_core.observers.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.gauss.html">adam_core.orbit_determination.gauss module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.gibbs.html">adam_core.orbit_determination.gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.herrick_gibbs.html">adam_core.orbit_determination.herrick_gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.iod.html">adam_core.orbit_determination.iod module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.least_squares.html">adam_core.orbit_determination.least_squares module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.od.html">adam_core.orbit_determination.od module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../reference/api/adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><input aria-label="Toggle navigation of adam_core.orbits.openspace package" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.openspace.assets.html">adam_core.orbits.openspace.assets module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.openspace.lua.html">adam_core.orbits.openspace.lua module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.openspace.renderable.html">adam_core.orbits.openspace.renderable module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.openspace.translation.html">adam_core.orbits.openspace.translation module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../reference/api/adam_core.orbits.query.html">adam_core.orbits.query package</a><input aria-label="Toggle navigation of adam_core.orbits.query package" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.query.horizons.html">adam_core.orbits.query.horizons module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.query.neocc.html">adam_core.orbits.query.neocc module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.query.sbdb.html">adam_core.orbits.query.sbdb module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../reference/api/adam_core.photometry.bandpasses.html">adam_core.photometry.bandpasses package</a><input aria-label="Toggle navigation of adam_core.photometry.bandpasses package" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.photometry.bandpasses.api.html">adam_core.photometry.bandpasses.api module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.photometry.bandpasses.constants.html">adam_core.photometry.bandpasses.constants module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.photometry.bandpasses.tables.html">adam_core.photometry.bandpasses.tables module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.rotation_period_fourier.html">adam_core.photometry.rotation_period_fourier module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.rotation_period_fourier_core.html">adam_core.photometry.rotation_period_fourier_core module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.rotation_period_jax.html">adam_core.photometry.rotation_period_jax module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.rotation_period_scoring.html">adam_core.photometry.rotation_period_scoring module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.rotation_period_types.html">adam_core.photometry.rotation_period_types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.rotation_period_wrappers.html">adam_core.photometry.rotation_period_wrappers module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l7"><a class="reference internal" href="../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
+</ul>
+</li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.utils.helpers.observations.html">adam_core.utils.helpers.observations module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/blob/main/docs/source/cookbook/rotation_periods.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/edit/main/docs/source/cookbook/rotation_periods.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="rotation-periods-and-measured-confidence">
+<h1>Rotation Periods and Measured Confidence<a class="headerlink" href="#rotation-periods-and-measured-confidence" title="Link to this heading">¶</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">adam_core.photometry</span></code> can recover an asteroid’s rotation period from sparse,
+multi-band photometry and, crucially, return a <strong>measured confidence verdict</strong>
+instead of a bare number. The estimator fits a truncated-harmonic Fourier model to
+the distance-reduced, light-time-corrected lightcurve, searches a frequency grid,
+clusters harmonic aliases, and classifies the outcome.</p>
+<p>The headline is the verdict, not the period: the API is built so that a caller can
+tell, per object, whether to trust the number.</p>
+<section id="what-you-get-back">
+<h2>What You Get Back<a class="headerlink" href="#what-you-get-back" title="Link to this heading">¶</a></h2>
+<p>Every solve returns a one-row <code class="docutils literal notranslate"><span class="pre">RotationPeriodResult</span></code>
+whose fields fall into three groups:</p>
+<ul class="simple">
+<li><p><strong>The answer</strong> – <code class="docutils literal notranslate"><span class="pre">period_hours</span></code> / <code class="docutils literal notranslate"><span class="pre">period_days</span></code>,
+<code class="docutils literal notranslate"><span class="pre">frequency_cycles_per_day</span></code>, an uncertainty interval
+(<code class="docutils literal notranslate"><span class="pre">period_lower_days</span></code> / <code class="docutils literal notranslate"><span class="pre">period_upper_days</span></code> /
+<code class="docutils literal notranslate"><span class="pre">relative_period_uncertainty</span></code>), and <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> (the other
+candidates considered – this is where harmonic aliases live).</p></li>
+<li><p><strong>How sure it is</strong> – <code class="docutils literal notranslate"><span class="pre">period_verdict</span></code> and <code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> (read these
+first; see below).</p></li>
+<li><p><strong>Why</strong> – <code class="docutils literal notranslate"><span class="pre">confidence_flags</span></code> and <code class="docutils literal notranslate"><span class="pre">insufficiency_reasons</span></code> (machine-readable
+rationale), plus diagnostics you can sanity-check yourself: <code class="docutils literal notranslate"><span class="pre">amplitude_snr</span></code>,
+<code class="docutils literal notranslate"><span class="pre">phase_coverage_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">n_rotations_spanned</span></code>, <code class="docutils literal notranslate"><span class="pre">n_observations</span></code>.</p></li>
+</ul>
+</section>
+<section id="confidence-model-and-guarantees">
+<h2>Confidence Model and Guarantees<a class="headerlink" href="#confidence-model-and-guarantees" title="Link to this heading">¶</a></h2>
+<p>The confidence is <strong>measured, not promised.</strong> <code class="docutils literal notranslate"><span class="pre">period_verdict</span></code> takes one of
+three values, and it is a decision guide:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">single_period</span></code> – one period is believed. In validation against LCDB/DAMIT
+standard-candle asteroids these calls are correct the large majority of the time.
+Use the value directly.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">period_family</span></code> – there is a real signal, but a harmonic ambiguity (typically
+2x / 0.5x) cannot be ruled out. The reported period may be off by an integer
+factor; consult <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> for the candidate family. Good for
+population statistics, riskier for a single precise value.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">insufficient_data</span></code> – the data cannot responsibly support a period. The period
+fields are <code class="docutils literal notranslate"><span class="pre">NaN</span></code>; <code class="docutils literal notranslate"><span class="pre">insufficiency_reasons</span></code> says what was lacking (too few
+observations, too little phase coverage, spans too few rotations, …).</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> mirrors the LCDB “U” quality scale as a <strong>string</strong> –
+<code class="docutils literal notranslate"><span class="pre">&quot;3&quot;</span></code> (secure), <code class="docutils literal notranslate"><span class="pre">&quot;2&quot;</span></code> (some ambiguity), <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> (weak). It is deterministic
+from the verdict (<code class="docutils literal notranslate"><span class="pre">single_period</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">&quot;3&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">period_family</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">&quot;2&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">insufficient_data</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code>). Do not sort or compare it numerically.</p>
+<p>Two guarantees worth stating plainly:</p>
+<ul class="simple">
+<li><p>There is <strong>no</strong> <code class="docutils literal notranslate"><span class="pre">0-1</span></code> “confidence score” – a single scalar was found to be
+misleading and was deliberately left out. Branch on the categorical verdict.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">single_period</span></code> is high-confidence but <strong>not a zero-alias guarantee.</strong> A
+confident call can, rarely, be a harmonic alias of the true period. If a period
+that is wrong by an integer factor would be costly, cross-check a
+<code class="docutils literal notranslate"><span class="pre">single_period</span></code> result against <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> and
+<code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> rather than treating it as infallible.</p></li>
+</ul>
+</section>
+<section id="data-requirements">
+<h2>Data Requirements<a class="headerlink" href="#data-requirements" title="Link to this heading">¶</a></h2>
+<p>The solver works on <code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations</span></code>: one
+row per photometric measurement, carrying the observing geometry so the intrinsic
+rotational variation can be isolated.</p>
+<ul class="simple">
+<li><p>Required per row: <code class="docutils literal notranslate"><span class="pre">time</span></code>, <code class="docutils literal notranslate"><span class="pre">mag</span></code>, <code class="docutils literal notranslate"><span class="pre">r_au</span></code> (heliocentric distance),
+<code class="docutils literal notranslate"><span class="pre">delta_au</span></code> (observer distance), <code class="docutils literal notranslate"><span class="pre">phase_angle_deg</span></code>.</p></li>
+<li><p>Optional: <code class="docutils literal notranslate"><span class="pre">mag_sigma</span></code> (per-point uncertainty), <code class="docutils literal notranslate"><span class="pre">filter</span></code> (multi-band is fit
+jointly with per-band offsets), <code class="docutils literal notranslate"><span class="pre">session_id</span></code> (per-night labels used for
+session-offset handling).</p></li>
+<li><p>Reductions are applied internally: distances are removed via
+<code class="docutils literal notranslate"><span class="pre">mag</span> <span class="pre">-</span> <span class="pre">5</span> <span class="pre">*</span> <span class="pre">log10(r_au</span> <span class="pre">*</span> <span class="pre">delta_au)</span></code> and times are light-time corrected.</p></li>
+</ul>
+</section>
+<section id="estimating-from-arrays">
+<h2>Estimating From Arrays<a class="headerlink" href="#estimating-from-arrays" title="Link to this heading">¶</a></h2>
+<p>The most direct path: build the observations table and call the estimator.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.photometry</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">RotationPeriodObservations</span><span class="p">,</span>
+    <span class="n">estimate_rotation_period</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+
+<span class="n">observations</span> <span class="o">=</span> <span class="n">RotationPeriodObservations</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">),</span>
+    <span class="n">mag</span><span class="o">=</span><span class="n">mag</span><span class="p">,</span>
+    <span class="n">mag_sigma</span><span class="o">=</span><span class="n">mag_sigma</span><span class="p">,</span>          <span class="c1"># optional</span>
+    <span class="nb">filter</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>               <span class="c1"># optional; e.g. [&quot;g&quot;, &quot;r&quot;, &quot;g&quot;, ...]</span>
+    <span class="n">session_id</span><span class="o">=</span><span class="n">session_ids</span><span class="p">,</span>       <span class="c1"># optional; per-night labels</span>
+    <span class="n">r_au</span><span class="o">=</span><span class="n">r_au</span><span class="p">,</span>
+    <span class="n">delta_au</span><span class="o">=</span><span class="n">delta_au</span><span class="p">,</span>
+    <span class="n">phase_angle_deg</span><span class="o">=</span><span class="n">phase_angle_deg</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">estimate_rotation_period</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+
+<span class="n">verdict</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">period_verdict</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+<span class="k">if</span> <span class="n">verdict</span> <span class="o">==</span> <span class="s2">&quot;single_period&quot;</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;P = </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">period_hours</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> h &quot;</span>
+          <span class="sa">f</span><span class="s2">&quot;(reliability </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">reliability_code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+<span class="k">elif</span> <span class="n">verdict</span> <span class="o">==</span> <span class="s2">&quot;period_family&quot;</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;period family; candidates:&quot;</span><span class="p">,</span>
+          <span class="n">result</span><span class="o">.</span><span class="n">alternate_period_days</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;insufficient:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">insufficiency_reasons</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="estimating-from-detections-and-exposures">
+<h2>Estimating From Detections and Exposures<a class="headerlink" href="#estimating-from-detections-and-exposures" title="Link to this heading">¶</a></h2>
+<p>If you are already working with <code class="docutils literal notranslate"><span class="pre">adam_core</span></code> observation primitives, the geometry
+is derived for you from aligned detections, exposures, and heliocentric object
+coordinates.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.photometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">estimate_rotation_period_from_detections</span>
+
+<span class="c1"># object_coords must be heliocentric (origin=SUN), row-aligned with detections.</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">estimate_rotation_period_from_detections</span><span class="p">(</span>
+    <span class="n">detections</span><span class="o">=</span><span class="n">detections</span><span class="p">,</span>
+    <span class="n">exposures</span><span class="o">=</span><span class="n">exposures</span><span class="p">,</span>
+    <span class="n">object_coords</span><span class="o">=</span><span class="n">object_coords</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The same geometry pipeline is available directly as
+<code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.from_point_source_observations(detections,</span> <span class="pre">exposures,</span>
+<span class="pre">object_coords)</span></code> if you want the observations table rather than a solve.</p>
+</section>
+<section id="survey-scale-one-row-per-object">
+<h2>Survey Scale: One Row Per Object<a class="headerlink" href="#survey-scale-one-row-per-object" title="Link to this heading">¶</a></h2>
+<p>For many objects at once, the grouped wrapper solves per object id and returns a
+<code class="docutils literal notranslate"><span class="pre">GroupedRotationPeriodResults</span></code> table.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.photometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">estimate_rotation_period_from_detections_grouped</span>
+
+<span class="n">grouped</span> <span class="o">=</span> <span class="n">estimate_rotation_period_from_detections_grouped</span><span class="p">(</span>
+    <span class="n">detections</span><span class="o">=</span><span class="n">detections</span><span class="p">,</span>
+    <span class="n">exposures</span><span class="o">=</span><span class="n">exposures</span><span class="p">,</span>
+    <span class="n">object_coords</span><span class="o">=</span><span class="n">object_coords</span><span class="p">,</span>
+    <span class="n">object_ids</span><span class="o">=</span><span class="n">object_ids</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># grouped.object_id  -&gt; the object ids</span>
+<span class="c1"># grouped.result     -&gt; a RotationPeriodResult column, one row per id</span>
+</pre></div>
+</div>
+<p>The grouped API <strong>never silently drops an object</strong>: an object whose solve fails on
+expected bad/insufficient data comes back as an <code class="docutils literal notranslate"><span class="pre">insufficient_data</span></code> row carrying a
+<code class="docutils literal notranslate"><span class="pre">solve_error</span></code> flag, so the output always has exactly one row per distinct input
+id. Unexpected (programmer/contract) errors are re-raised with the offending object
+id attached rather than swallowed.</p>
+</section>
+<section id="performance">
+<h2>Performance<a class="headerlink" href="#performance" title="Link to this heading">¶</a></h2>
+<p>The defaults are validated and correct out of the box. The solver has an optional
+JAX backend that is numerically identical to the NumPy path but faster on large
+frequency grids:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">estimate_rotation_period</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">,</span>
+    <span class="n">search_fidelity</span><span class="o">=</span><span class="s2">&quot;validated_staged&quot;</span><span class="p">,</span>   <span class="c1"># default; coarse-then-refine on big grids</span>
+    <span class="n">exact_evaluation_backend</span><span class="o">=</span><span class="s2">&quot;jax&quot;</span><span class="p">,</span>        <span class="c1"># ~2-5x faster than &quot;numpy&quot;, same numbers</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">session_mode</span></code> (default <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>) controls how multi-night magnitude offsets
+are handled; the default decides per object whether to fit per-session offsets.</p>
+</section>
+<section id="when-to-use">
+<h2>When to Use<a class="headerlink" href="#when-to-use" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period</span></code>: you already have a per-object observations table.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections</span></code>: single object, from detections /
+exposures / heliocentric coordinates.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections_grouped</span></code>: many objects; guarantees one
+result row per id.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.from_point_source_observations</span></code>: build the
+observations table (e.g. to inspect or reuse) without solving.</p></li>
+</ul>
+<p>Filtering tip: for science where an integer-factor error matters, keep only
+<code class="docutils literal notranslate"><span class="pre">period_verdict</span> <span class="pre">==</span> <span class="pre">&quot;single_period&quot;</span></code> (equivalently <code class="docutils literal notranslate"><span class="pre">reliability_code</span> <span class="pre">==</span> <span class="pre">&quot;3&quot;</span></code>);
+for population work, <code class="docutils literal notranslate"><span class="pre">period_family</span></code> results plus <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> give
+the realistic set of possibilities instead of false certainty.</p>
+</section>
+<section id="related-documentation">
+<h2>Related Documentation<a class="headerlink" href="#related-documentation" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="photometry_and_magnitude.html"><span class="doc">Photometry, Phase Angle, and Light Curves</span></a></p></li>
+<li><p><a class="reference internal" href="../use_cases/observability_and_light_curves.html"><span class="doc">Observability and Light Curves</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.photometry.html"><span class="doc">adam_core.photometry package</span></a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="moid_analysis.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">MOID Analysis</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="photometry_and_magnitude.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Photometry, Phase Angle, and Light Curves</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023-2026, B612 Asteroid Institute
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            <div class="last-updated">
+              Last updated on 2026-07-01</div>
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Rotation Periods and Measured Confidence</a><ul>
+<li><a class="reference internal" href="#what-you-get-back">What You Get Back</a></li>
+<li><a class="reference internal" href="#confidence-model-and-guarantees">Confidence Model and Guarantees</a></li>
+<li><a class="reference internal" href="#data-requirements">Data Requirements</a></li>
+<li><a class="reference internal" href="#estimating-from-arrays">Estimating From Arrays</a></li>
+<li><a class="reference internal" href="#estimating-from-detections-and-exposures">Estimating From Detections and Exposures</a></li>
+<li><a class="reference internal" href="#survey-scale-one-row-per-object">Survey Scale: One Row Per Object</a></li>
+<li><a class="reference internal" href="#performance">Performance</a></li>
+<li><a class="reference internal" href="#when-to-use">When to Use</a></li>
+<li><a class="reference internal" href="#related-documentation">Related Documentation</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=62e0a016"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

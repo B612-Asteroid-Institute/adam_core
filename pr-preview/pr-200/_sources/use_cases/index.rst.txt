@@ -19,6 +19,7 @@ mission-analysis details.
    ../cookbook/coordinates_and_residuals
    ../cookbook/variant_sampling_and_collapse
    ../cookbook/photometry_and_magnitude
+   ../cookbook/rotation_periods
    ../cookbook/moid_analysis
    ../cookbook/transfer_and_porkchop
    ../cookbook/oem_and_spk_io
