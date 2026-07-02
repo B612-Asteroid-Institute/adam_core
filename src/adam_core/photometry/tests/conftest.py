@@ -3,6 +3,14 @@ from __future__ import annotations
 import pytest
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "profile: slow rotation-period validation fixtures (deselected by the "
+        "default -m 'not profile' run)",
+    )
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("adam_core-photometry")
     group.addoption(

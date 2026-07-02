@@ -354,9 +354,7 @@ def map_to_canonical_filter_bands(
     # with on_unknown="skip" we leave None entries in the output and let the
     # caller handle them.
     if on_unknown not in ("raise", "skip"):
-        raise ValueError(
-            f"on_unknown must be 'raise' or 'skip'; got {on_unknown!r}"
-        )
+        raise ValueError(f"on_unknown must be 'raise' or 'skip'; got {on_unknown!r}")
     missing_out = np.nonzero(out == None)[0]  # noqa: E711
     if on_unknown == "raise" and len(missing_out) > 0:
         codes_np = np.asarray(
@@ -383,8 +381,7 @@ def map_to_canonical_filter_bands(
                 codes.to_numpy(zero_copy_only=False), dtype=object
             ).astype(str)
             fallback_pairs = [
-                f"{codes_np[i]}|{str(b_np[i])}"
-                for i in fallback_indices.tolist()
+                f"{codes_np[i]}|{str(b_np[i])}" for i in fallback_indices.tolist()
             ]
             raise ValueError(
                 "No non-fallback mapping found for: "
@@ -399,9 +396,7 @@ def map_to_canonical_filter_bands(
         out_non_none = np.asarray(out, dtype=object)[non_none_mask]
         out_arr = pa.array(out_non_none.tolist(), type=pa.large_string())
         out_idx = pc.fill_null(pc.index_in(out_arr, value_set=curves.filter_id), -1)
-        out_idx_np = np.asarray(
-            out_idx.to_numpy(zero_copy_only=False), dtype=np.int32
-        )
+        out_idx_np = np.asarray(out_idx.to_numpy(zero_copy_only=False), dtype=np.int32)
         if np.any(out_idx_np < 0):
             bad = np.unique(out_non_none[out_idx_np < 0].astype(str)).tolist()
             raise ValueError(
