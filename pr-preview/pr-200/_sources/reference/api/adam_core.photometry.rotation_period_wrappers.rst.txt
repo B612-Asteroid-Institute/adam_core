@@ -1,7 +1,0 @@
-adam\_core.photometry.rotation\_period\_wrappers module
-=======================================================
-
-.. automodule:: adam_core.photometry.rotation_period_wrappers
-   :members:
-   :show-inheritance:
-   :undoc-members:

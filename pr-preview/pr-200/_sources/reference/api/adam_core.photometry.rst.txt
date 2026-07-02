@@ -13,6 +13,7 @@ Subpackages
    :maxdepth: 4
 
    adam_core.photometry.bandpasses
+   adam_core.photometry.rotation
 
 Submodules
 ----------
@@ -24,9 +25,3 @@ Submodules
    adam_core.photometry.lightcurve
    adam_core.photometry.magnitude
    adam_core.photometry.magnitude_common
-   adam_core.photometry.rotation_period_fourier
-   adam_core.photometry.rotation_period_fourier_core
-   adam_core.photometry.rotation_period_jax
-   adam_core.photometry.rotation_period_scoring
-   adam_core.photometry.rotation_period_types
-   adam_core.photometry.rotation_period_wrappers
