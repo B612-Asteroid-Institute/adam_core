@@ -52,6 +52,12 @@ def test_observatory_band_map_covers_required_pairs():
         # Pan-STARRS1 wide filter (PS1.w), MPC codes F51 / F52.
         ("F51", "w"),
         ("F52", "w"),
+        # MPC-prefixed PS1 wide band ("Pw") at F51/F52 -- same aliasing
+        # scheme as ATLAS "Ao"/"Ac" below: MPC obs80/AIMS ingests PS1
+        # observations with a leading "P" filter prefix while the native
+        # PS1 exposure index uses just "w".
+        ("F51", "Pw"),
+        ("F52", "Pw"),
         # MPC-prefixed ATLAS bands ("Ao"/"Ac") at every ATLAS site. The
         # native equivalents ("o"/"c") are tested above; both forms must
         # resolve so vendor exposure-index lookups work for both native
@@ -98,6 +104,25 @@ def test_map_to_canonical_filter_bands_resolves_mpc_prefixed_atlas_aliases():
     # sites -- both encodings yield the same canonical id.
     resolved_native = map_to_canonical_filter_bands(
         atlas_codes, [b[1:] for b in atlas_bands], allow_fallback_filters=False
+    )
+    assert resolved_native.tolist() == resolved.tolist()
+
+
+def test_map_to_canonical_filter_bands_resolves_mpc_prefixed_ps1_w_alias():
+    """MPC obs80 / AIMS frames ingest Pan-STARRS observations with a
+    leading "P" filter prefix (``Pw``); the native PS1 exposure index
+    uses just ``w``. Both forms must resolve to canonical ``PS1_w`` at
+    F51/F52 so magnitude predictions (and pred_mag residuals) are not
+    silently nulled for MPC-sourced PS1 detections.
+    """
+    ps1_codes = ["F51", "F52"]
+    resolved = map_to_canonical_filter_bands(
+        ps1_codes, ["Pw", "Pw"], allow_fallback_filters=False
+    )
+    assert resolved.tolist() == ["PS1_w", "PS1_w"]
+
+    resolved_native = map_to_canonical_filter_bands(
+        ps1_codes, ["w", "w"], allow_fallback_filters=False
     )
     assert resolved_native.tolist() == resolved.tolist()
 

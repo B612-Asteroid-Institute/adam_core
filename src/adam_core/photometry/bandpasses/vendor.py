@@ -278,8 +278,17 @@ def build_observatory_band_map(out_dir: Path) -> ObservatoryBandMap:
     # (PAN-STARRS/PS1.w in SVO). Amateur / non-PS1 observatories that report
     # band "w" are intentionally NOT mapped here; their reported band is
     # observatory-specific clear-glass response and has no canonical mapping.
+    #
+    # Like ATLAS ("Ao"/"Ac") above, MPC obs80 / AIMS frames ingest PS1
+    # observations with a leading "P" filter prefix ("Pw"), while the native
+    # PS1 exposure index uses just "w". Register both forms so
+    # ``map_to_canonical_filter_bands`` resolves the MPC-prefixed band without
+    # per-station normalization. Without the "Pw" alias, F51/F52 recoveries
+    # whose reported filter is "Pw" get a null canonical filter and therefore
+    # a null predicted magnitude / mag residual downstream.
     for code in ["F51", "F52"]:
         mappings.append((code, "w", "PS1_w"))
+        mappings.append((code, "Pw", "PS1_w"))
 
     obs_codes, bands, filter_ids = zip(*mappings)
     keys = [f"{c}|{b}" for c, b in zip(obs_codes, bands)]
