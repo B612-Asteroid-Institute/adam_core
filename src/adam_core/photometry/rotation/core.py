@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
+import quivr as qv
 from scipy.stats import f as f_dist  # type: ignore[import-untyped]
 
-from ..constants import Constants
-from .magnitude_common import hg_phase_correction
-from .rotation_period_types import RotationPeriodObservations
+from ...constants import Constants
+from ...time import Timestamp
+from ..magnitude_common import hg_phase_correction
+
+if TYPE_CHECKING:
+    from ...coordinates.cartesian import CartesianCoordinates
+    from ...observations.detections import PointSourceDetections
+    from ...observations.exposures import Exposures
 
 # Speed of light in au/day. Use the canonical adam_core constant rather than a local
 # literal to avoid drift.
@@ -671,3 +677,314 @@ def _fit_with_period(fit: _FitResult) -> _FitWithPeriod:
         period_hours=float(period_days * 24.0),
         is_period_doubled=bool(is_period_doubled),
     )
+
+
+# ---------------------------------------------------------------------------
+# Public data model: rotation-period observations and results.
+# ---------------------------------------------------------------------------
+
+
+class RotationPeriodObservations(qv.Table):
+    time = Timestamp.as_column()
+    mag = qv.Float64Column()
+    mag_sigma = qv.Float64Column(nullable=True)
+    filter = qv.LargeStringColumn(nullable=True)
+    session_id = qv.LargeStringColumn(nullable=True)
+    r_au = qv.Float64Column()
+    delta_au = qv.Float64Column()
+    phase_angle_deg = qv.Float64Column()
+
+    @classmethod
+    def from_point_source_observations(
+        cls,
+        detections: PointSourceDetections,
+        exposures: Exposures,
+        object_coords: CartesianCoordinates,
+    ) -> RotationPeriodObservations:
+        """Build observations from adam_core point-source detections + exposures.
+
+        Links this table to the core adam_core observation primitives: one row per
+        ``PointSourceDetections`` entry, with ``filter`` and the per-exposure
+        observing geometry (heliocentric distance ``r_au``, observer distance
+        ``delta_au``, and solar ``phase_angle_deg``) derived from the aligned
+        ``Exposures`` and the object's heliocentric ``CartesianCoordinates``.
+
+        ``object_coords`` must be heliocentric (origin=SUN) and the same length and
+        order as ``detections``; ``detections.exposure_id`` is used to align each
+        detection to its exposure. ``mag`` / ``r_au`` / ``delta_au`` /
+        ``phase_angle_deg`` must be finite (and the distances positive) or a
+        ``ValueError`` is raised.
+        """
+        # Lazy import avoids a module-load cycle (the wrappers module imports this
+        # one); the geometry pipeline lives in that adapter module.
+        from .wrappers import (
+            build_rotation_period_observations_from_detections,
+        )
+
+        return build_rotation_period_observations_from_detections(
+            detections, exposures, object_coords
+        )
+
+
+class RotationPeriodResult(qv.Table):
+    period_days = qv.Float64Column()
+    period_hours = qv.Float64Column()
+    frequency_cycles_per_day = qv.Float64Column()
+    profile = qv.LargeStringColumn()
+    period_verdict = qv.LargeStringColumn()
+    # LCDB-U-style reliability code as a STRING ("3"/"2"/"1", highest first). Kept a
+    # string (not int) to mirror LCDB U codes and stay forward-compatible with
+    # qualified codes (e.g. "1+"); do NOT sort or compare it numerically.
+    reliability_code = qv.LargeStringColumn()
+    confidence_flags = qv.LargeListColumn(pa.large_string(), nullable=True)
+    insufficiency_reasons = qv.LargeListColumn(pa.large_string(), nullable=True)
+    is_valid = qv.BooleanColumn()
+    is_reliable = qv.BooleanColumn()
+    period_lower_days = qv.Float64Column(nullable=True)
+    period_upper_days = qv.Float64Column(nullable=True)
+    relative_period_uncertainty = qv.Float64Column(nullable=True)
+    alternate_period_days = qv.LargeListColumn(pa.float64(), nullable=True)
+    fourier_period_days = qv.Float64Column(nullable=True)
+    fourier_order = qv.Int64Column(nullable=True)
+    fourier_sigma_threshold = qv.Float64Column(nullable=True)
+    fourier_phase_c1 = qv.Float64Column(nullable=True)
+    fourier_phase_c2 = qv.Float64Column(nullable=True)
+    residual_sigma_mag = qv.Float64Column(nullable=True)
+    fourier_is_valid = qv.BooleanColumn(nullable=True)
+    fourier_is_reliable = qv.BooleanColumn(nullable=True)
+    fourier_alternate_period_days = qv.LargeListColumn(pa.float64(), nullable=True)
+    phase_coverage_fraction = qv.Float64Column(nullable=True)
+    n_rotations_spanned = qv.Float64Column(nullable=True)
+    amplitude_snr = qv.Float64Column(nullable=True)
+    n_significant_aliases = qv.Int64Column(nullable=True)
+    n_observations = qv.Int64Column()
+    n_fit_observations = qv.Int64Column()
+    n_clipped = qv.Int64Column()
+    n_filters = qv.Int64Column()
+    n_sessions = qv.Int64Column()
+    used_session_offsets = qv.BooleanColumn()
+    is_period_doubled = qv.BooleanColumn()
+
+    @classmethod
+    def single_insufficient(
+        cls,
+        *,
+        reasons: list[str],
+        confidence_flags: list[str] | None = None,
+        n_observations: int = 0,
+        n_filters: int = 0,
+        n_sessions: int = 0,
+        profile: str = "default",
+    ) -> "RotationPeriodResult":
+        """One-row ``insufficient_data`` result: NaN period, every nullable diagnostic
+        ``None``.
+
+        The canonical builder for the insufficient verdict. Used both by the solver's
+        early-exit path and by the detection wrappers when an object cannot be solved,
+        so a grouped solve returns one row per object id rather than silently dropping
+        failures. ``period_verdict``/``reliability_code`` are the contract constants
+        (``"insufficient_data"`` / ``"1"``).
+        """
+        return cls.from_kwargs(
+            period_days=[float("nan")],
+            period_hours=[float("nan")],
+            frequency_cycles_per_day=[float("nan")],
+            profile=[profile],
+            period_verdict=["insufficient_data"],
+            reliability_code=["1"],
+            confidence_flags=[list(confidence_flags or [])],
+            insufficiency_reasons=[list(reasons)],
+            is_valid=[False],
+            is_reliable=[False],
+            period_lower_days=[None],
+            period_upper_days=[None],
+            relative_period_uncertainty=[None],
+            alternate_period_days=[[]],
+            fourier_period_days=[None],
+            fourier_order=[None],
+            fourier_sigma_threshold=[None],
+            fourier_phase_c1=[None],
+            fourier_phase_c2=[None],
+            residual_sigma_mag=[None],
+            fourier_is_valid=[None],
+            fourier_is_reliable=[None],
+            fourier_alternate_period_days=[[]],
+            phase_coverage_fraction=[None],
+            n_rotations_spanned=[None],
+            amplitude_snr=[None],
+            n_significant_aliases=[None],
+            n_observations=[int(n_observations)],
+            n_fit_observations=[0],
+            n_clipped=[0],
+            n_filters=[int(n_filters)],
+            n_sessions=[int(n_sessions)],
+            used_session_offsets=[False],
+            is_period_doubled=[False],
+        )
+
+
+class GroupedRotationPeriodResults(qv.Table):
+    object_id = qv.LargeStringColumn()
+    result = RotationPeriodResult.as_column()
+
+
+# ---------------------------------------------------------------------------
+# Period-recovery scoring metrics (standard-candle validation). All periods in
+# hours; recovered and LCDB truth are both synodic (no sidereal correction).
+# ---------------------------------------------------------------------------
+
+HARMONIC_FACTORS: list[float] = [
+    0.25,
+    1.0 / 3.0,
+    0.5,
+    2.0 / 3.0,
+    0.75,
+    1.0,
+    4.0 / 3.0,
+    1.5,
+    2.0,
+    3.0,
+    4.0,
+]
+"""Harmonic factors applied to the recovered period when diagnosing aliases."""
+
+
+def relative_error_pct(p_rec: float, p_true: float) -> float:
+    """Strict relative error of a recovered period, in percent.
+
+    Parameters
+    ----------
+    p_rec : float
+        Recovered period (hours).
+    p_true : float
+        True (LCDB) period (hours); must be positive.
+
+    Returns
+    -------
+    float
+        ``100 * |p_rec - p_true| / p_true``.
+    """
+    return float(100.0 * abs(float(p_rec) - float(p_true)) / float(p_true))
+
+
+def harmonic_adjusted_error_pct(p_rec: float, p_true: float) -> tuple[float, float]:
+    """Harmonic-tolerant relative error and the best-fitting harmonic factor.
+
+    Minimises ``|p_rec * f - p_true| / p_true`` over :data:`HARMONIC_FACTORS`.
+
+    Parameters
+    ----------
+    p_rec : float
+        Recovered period (hours).
+    p_true : float
+        True (LCDB) period (hours); must be positive.
+
+    Returns
+    -------
+    tuple of (float, float)
+        The minimum harmonic-adjusted error in percent, and the factor ``f``
+        that achieves it.
+    """
+    factors = np.asarray(HARMONIC_FACTORS, dtype=np.float64)
+    errors = np.abs(float(p_rec) * factors - float(p_true)) / float(p_true)
+    best = int(np.argmin(errors))
+    return float(100.0 * errors[best]), float(factors[best])
+
+
+def alias_bucket(best_factor: float) -> str:
+    """Label the harmonic-alias bucket for the best-fitting factor.
+
+    Parameters
+    ----------
+    best_factor : float
+        The harmonic factor returned by :func:`harmonic_adjusted_error_pct`.
+
+    Returns
+    -------
+    str
+        One of ``"1x"``, ``"1/4x"``, ``"1/3x"``, ``"1/2x"``, ``"2/3x"``,
+        ``"3/4x"``, ``"4/3x"``, ``"3/2x"``, ``"2x"``, ``"3x"``, ``"4x"``, or
+        ``"other"`` if no factor is within 5% of ``best_factor``.
+    """
+    labels: list[tuple[float, str]] = [
+        (1.0, "1x"),
+        (0.25, "1/4x"),
+        (1.0 / 3.0, "1/3x"),
+        (0.5, "1/2x"),
+        (2.0 / 3.0, "2/3x"),
+        (0.75, "3/4x"),
+        (4.0 / 3.0, "4/3x"),
+        (1.5, "3/2x"),
+        (2.0, "2x"),
+        (3.0, "3x"),
+        (4.0, "4x"),
+    ]
+    factor = float(best_factor)
+    for value, label in labels:
+        if abs(factor - value) <= 0.05 * value:
+            return label
+    return "other"
+
+
+def within_tolerance(p_rec: float, p_true: float, tolerance_fraction: float) -> bool:
+    """Whether the raw relative error is within the fixture's tolerance.
+
+    Uses the strict :func:`relative_error_pct` (no harmonic adjustment) compared
+    against the per-fixture ``tolerance_fraction`` from the npz.
+
+    Parameters
+    ----------
+    p_rec : float
+        Recovered period (hours).
+    p_true : float
+        True (LCDB) period (hours); must be positive.
+    tolerance_fraction : float
+        Allowed fractional error (e.g. ``0.01`` for a tight U=3 fixture).
+
+    Returns
+    -------
+    bool
+        ``True`` if ``relative_error_pct(p_rec, p_true) <= tolerance_fraction * 100``.
+    """
+    return bool(relative_error_pct(p_rec, p_true) <= float(tolerance_fraction) * 100.0)
+
+
+def near_day_alias(
+    p_rec_hours: float,
+    p_true_hours: float,
+    tolerance_fraction: float = 0.02,
+) -> bool:
+    """Whether the recovered frequency is a diurnal-cadence alias of the truth.
+
+    Flags lock-on to a day-aliased frequency (cycles per day): the recovered
+    frequency sits within ``tolerance_fraction`` of ``f_true +/- n`` for ``n`` in
+    ``{1, 2}`` cycles/day, i.e. ``|f_rec - (f_true +/- n)| / f_true <= tol``.
+
+    Parameters
+    ----------
+    p_rec_hours : float
+        Recovered period (hours); must be positive.
+    p_true_hours : float
+        True (LCDB) period (hours); must be positive.
+    tolerance_fraction : float, optional
+        Fractional tolerance on the day-aliased frequency match (default 0.02).
+
+    Returns
+    -------
+    bool
+        ``True`` if a day-alias relationship holds.
+    """
+    p_rec = float(p_rec_hours)
+    p_true = float(p_true_hours)
+    if p_rec <= 0.0 or p_true <= 0.0:
+        return False
+    f_rec = 24.0 / p_rec
+    f_true = 24.0 / p_true
+    tol = float(tolerance_fraction)
+    for n in (1, 2):
+        for aliased in (f_true + n, f_true - n):
+            if aliased <= 0.0:
+                continue
+            if abs(f_rec - aliased) / f_true <= tol:
+                return True
+    return False

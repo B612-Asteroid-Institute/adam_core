@@ -22,8 +22,8 @@ from adam_core.coordinates.origin import OriginCodes
 from adam_core.observations.exposures import Exposures
 from adam_core.observers.utils import calculate_observing_night
 from adam_core.orbits.query.horizons import query_horizons
-from adam_core.photometry.rotation_period_fourier import estimate_rotation_period
-from adam_core.photometry.rotation_period_types import RotationPeriodObservations
+from adam_core.photometry.rotation.core import RotationPeriodObservations
+from adam_core.photometry.rotation.estimator import estimate_rotation_period
 from adam_core.time import Timestamp
 
 

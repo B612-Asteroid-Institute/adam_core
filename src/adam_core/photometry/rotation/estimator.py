@@ -6,9 +6,11 @@ from math import ceil
 import numpy as np
 import numpy.typing as npt
 
-from .lightcurve import reduced_magnitude
-from .rotation_period_fourier_core import (
+from ..lightcurve import reduced_magnitude
+from .core import (
     PROFILES,
+    RotationPeriodObservations,
+    RotationPeriodResult,
     _amplitude_from_fit,
     _apply_light_time_correction,
     _build_fixed_design,
@@ -28,7 +30,6 @@ from .rotation_period_fourier_core import (
     _summarize_sessions,
     _validate_inputs,
 )
-from .rotation_period_types import RotationPeriodObservations, RotationPeriodResult
 
 _DEFAULT_JAX_FREQUENCY_BATCH_SIZE = 256
 _DEFAULT_JAX_ROW_PAD_MULTIPLE = 64
@@ -288,7 +289,7 @@ def _evaluate_frequency_indices_with_jax(
     jax_row_pad_multiple: int,
 ) -> tuple[npt.NDArray[np.float64], list[_FitResult | None], _FitResult | None]:
     try:
-        from .rotation_period_jax import evaluate_frequency_indices_jax
+        from .jax_backend import evaluate_frequency_indices_jax
     except Exception as exc:  # pragma: no cover - depends on optional local JAX install
         raise RuntimeError(
             "exact_evaluation_backend='jax' requires JAX to be installed"

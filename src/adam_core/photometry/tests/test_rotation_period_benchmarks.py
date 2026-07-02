@@ -11,7 +11,7 @@ from ...observations.exposures import Exposures
 from ...observers.observers import Observers
 from ...time import Timestamp
 from ..magnitude import calculate_phase_angle
-from ..rotation_period_wrappers import estimate_rotation_period_from_detections_grouped
+from ..rotation.wrappers import estimate_rotation_period_from_detections_grouped
 
 
 def _make_detection_bundle() -> (
@@ -142,8 +142,8 @@ def test_from_point_source_observations_classmethod_matches_wrapper(monkeypatch)
 
     monkeypatch.setattr(Exposures, "observers", fake_observers)
 
-    from ..rotation_period_types import RotationPeriodObservations
-    from ..rotation_period_wrappers import (
+    from ..rotation.core import RotationPeriodObservations
+    from ..rotation.wrappers import (
         build_rotation_period_observations_from_detections,
     )
 
@@ -163,7 +163,7 @@ def test_grouped_solve_emits_insufficient_row_for_failed_object(monkeypatch):
     # A per-object solve failure must NOT silently drop the
     # object. The grouped output keeps one row per id; an expected (ValueError)
     # failure becomes an insufficient_data row flagged 'solve_error'.
-    import adam_core.photometry.rotation_period_fourier as rpf
+    import adam_core.photometry.rotation.estimator as rpf
 
     detections, exposures, object_coords, observers, object_ids = (
         _make_detection_bundle()
@@ -195,7 +195,7 @@ def test_grouped_solve_emits_insufficient_row_for_failed_object(monkeypatch):
 def test_grouped_solve_reraises_unexpected_error_with_object_id(monkeypatch):
     # An UNEXPECTED exception must propagate with object-id
     # context, not be swallowed.
-    import adam_core.photometry.rotation_period_fourier as rpf
+    import adam_core.photometry.rotation.estimator as rpf
 
     detections, exposures, object_coords, observers, object_ids = (
         _make_detection_bundle()

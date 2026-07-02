@@ -8,15 +8,15 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 
-from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.origin import OriginCodes
-from ..coordinates.transform import transform_coordinates
-from ..observations.detections import PointSourceDetections
-from ..observations.exposures import Exposures
-from ..observers.observers import Observers
-from ..observers.utils import calculate_observing_night
-from ..photometry.magnitude import calculate_phase_angle
-from ..photometry.rotation_period_types import (
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.origin import OriginCodes
+from ...coordinates.transform import transform_coordinates
+from ...observations.detections import PointSourceDetections
+from ...observations.exposures import Exposures
+from ...observers.observers import Observers
+from ...observers.utils import calculate_observing_night
+from ..magnitude import calculate_phase_angle
+from .core import (
     GroupedRotationPeriodResults,
     RotationPeriodObservations,
     RotationPeriodResult,
@@ -192,9 +192,7 @@ def estimate_rotation_period_from_detections(
     )
 
     # Lazy import keeps this wrapper module importable without the solver kernel.
-    from .rotation_period_fourier import (
-        estimate_rotation_period as _estimate_rotation_period,
-    )
+    from .estimator import estimate_rotation_period as _estimate_rotation_period
 
     return _estimate_rotation_period(
         observations,
@@ -265,9 +263,7 @@ def estimate_rotation_period_from_detections_grouped(
                 object_coords_i,
             )
 
-            from .rotation_period_fourier import (
-                estimate_rotation_period as _estimate_rotation_period,
-            )
+            from .estimator import estimate_rotation_period as _estimate_rotation_period
 
             result_i = _estimate_rotation_period(
                 observations_i,

@@ -13,14 +13,12 @@ from .magnitude import (
     predict_magnitudes,
 )
 from .magnitude_common import hg_phase_correction
-from .rotation_period_fourier import estimate_rotation_period
-from .rotation_period_types import (
+from .rotation import (
     GroupedRotationPeriodResults,
     RotationPeriodObservations,
     RotationPeriodResult,
-)
-from .rotation_period_wrappers import (
     build_rotation_period_observations_from_detections,
+    estimate_rotation_period,
     estimate_rotation_period_from_detections,
     estimate_rotation_period_from_detections_grouped,
 )

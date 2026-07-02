@@ -4,7 +4,7 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
-import adam_core.photometry.rotation_period_fourier as rotation_period_fourier
+import adam_core.photometry.rotation.estimator as rotation_period_fourier
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
@@ -12,19 +12,20 @@ from ...observers.observers import Observers
 from ...time import Timestamp
 from ..magnitude import calculate_apparent_magnitude_v_and_phase_angle
 from ..magnitude_common import hg_phase_correction
-from ..rotation_period_fourier import (
+from ..rotation.core import (
+    RotationPeriodObservations,
+    RotationPeriodResult,
+    _f_test_confidence,
+    _FitResult,
+    _select_order,
+)
+from ..rotation.estimator import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
     _build_frequency_grid,
     _grid_was_capped,
     _observation_count_sufficient,
     estimate_rotation_period,
 )
-from ..rotation_period_fourier_core import (
-    _f_test_confidence,
-    _FitResult,
-    _select_order,
-)
-from ..rotation_period_types import RotationPeriodObservations, RotationPeriodResult
 
 
 def _scalar(value) -> object:
