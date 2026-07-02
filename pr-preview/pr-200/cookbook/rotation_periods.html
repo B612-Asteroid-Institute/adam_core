@@ -457,7 +457,7 @@ rationale), plus diagnostics you can sanity-check yourself: <code class="docutil
 </section>
 <section id="confidence-model-and-guarantees">
 <h2>Confidence Model and Guarantees<a class="headerlink" href="#confidence-model-and-guarantees" title="Link to this heading">¶</a></h2>
-<p>The confidence is <strong>measured, not promised.</strong> <code class="docutils literal notranslate"><span class="pre">period_verdict</span></code> takes one of
+<p><code class="docutils literal notranslate"><span class="pre">period_verdict</span></code> takes one of
 three values, and it is a decision guide:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">single_period</span></code> – one period is believed. In validation against LCDB/DAMIT
@@ -465,26 +465,23 @@ standard-candle asteroids these calls are correct the large majority of the time
 Use the value directly.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">period_family</span></code> – there is a real signal, but a harmonic ambiguity (typically
 2x / 0.5x) cannot be ruled out. The reported period may be off by an integer
-factor; consult <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> for the candidate family. Good for
-population statistics, riskier for a single precise value.</p></li>
+factor; consult <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> for the candidate family.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">insufficient_data</span></code> – the data cannot responsibly support a period. The period
-fields are <code class="docutils literal notranslate"><span class="pre">NaN</span></code>; <code class="docutils literal notranslate"><span class="pre">insufficiency_reasons</span></code> says what was lacking (too few
-observations, too little phase coverage, spans too few rotations, …).</p></li>
+fields are <code class="docutils literal notranslate"><span class="pre">NaN</span></code>; <code class="docutils literal notranslate"><span class="pre">insufficiency_reasons</span></code> gives a first reason as to why a
+reliable period could not be fit (too few observations, too little phase
+coverage, spans too few rotations, …).</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> mirrors the LCDB “U” quality scale as a <strong>string</strong> –
 <code class="docutils literal notranslate"><span class="pre">&quot;3&quot;</span></code> (secure), <code class="docutils literal notranslate"><span class="pre">&quot;2&quot;</span></code> (some ambiguity), <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> (weak). It is deterministic
 from the verdict (<code class="docutils literal notranslate"><span class="pre">single_period</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">&quot;3&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">period_family</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">&quot;2&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">insufficient_data</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code>). Do not sort or compare it numerically.</p>
-<p>Two guarantees worth stating plainly:</p>
-<ul class="simple">
-<li><p>There is <strong>no</strong> <code class="docutils literal notranslate"><span class="pre">0-1</span></code> “confidence score” – a single scalar was found to be
-misleading and was deliberately left out. Branch on the categorical verdict.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">single_period</span></code> is high-confidence but <strong>not a zero-alias guarantee.</strong> A
-confident call can, rarely, be a harmonic alias of the true period. If a period
+<dl class="simple">
+<dt>Note that <code class="docutils literal notranslate"><span class="pre">single_period</span></code> is high-confidence but <strong>not a zero-alias guarantee.</strong> A</dt><dd><p>confident call can, rarely, be a harmonic alias of the true period. If a period
 that is wrong by an integer factor would be costly, cross-check a
 <code class="docutils literal notranslate"><span class="pre">single_period</span></code> result against <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> and
-<code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> rather than treating it as infallible.</p></li>
-</ul>
+<code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> rather than treating it as infallible.</p>
+</dd>
+</dl>
 </section>
 <section id="data-requirements">
 <h2>Data Requirements<a class="headerlink" href="#data-requirements" title="Link to this heading">¶</a></h2>
@@ -593,10 +590,10 @@ frequency grids:</p>
 <p><code class="docutils literal notranslate"><span class="pre">session_mode</span></code> (default <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>) controls how multi-night magnitude offsets
 are handled; the default decides per object whether to fit per-session offsets.</p>
 </section>
-<section id="when-to-use">
-<h2>When to Use<a class="headerlink" href="#when-to-use" title="Link to this heading">¶</a></h2>
+<section id="entry-points">
+<h2>Entry Points<a class="headerlink" href="#entry-points" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period</span></code>: you already have a per-object observations table.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period</span></code>: you already have a per-object RotationPeriodObservations table.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections</span></code>: single object, from detections /
 exposures / heliocentric coordinates.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections_grouped</span></code>: many objects; guarantees one
@@ -604,10 +601,6 @@ result row per id.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.from_point_source_observations</span></code>: build the
 observations table (e.g. to inspect or reuse) without solving.</p></li>
 </ul>
-<p>Filtering tip: for science where an integer-factor error matters, keep only
-<code class="docutils literal notranslate"><span class="pre">period_verdict</span> <span class="pre">==</span> <span class="pre">&quot;single_period&quot;</span></code> (equivalently <code class="docutils literal notranslate"><span class="pre">reliability_code</span> <span class="pre">==</span> <span class="pre">&quot;3&quot;</span></code>);
-for population work, <code class="docutils literal notranslate"><span class="pre">period_family</span></code> results plus <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> give
-the realistic set of possibilities instead of false certainty.</p>
 </section>
 <section id="related-documentation">
 <h2>Related Documentation<a class="headerlink" href="#related-documentation" title="Link to this heading">¶</a></h2>
@@ -654,7 +647,7 @@ the realistic set of possibilities instead of false certainty.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-01</div>
+              Last updated on 2026-07-02</div>
           </div>
           <div class="right-details">
             
@@ -683,7 +676,7 @@ the realistic set of possibilities instead of false certainty.</p>
 <li><a class="reference internal" href="#estimating-from-detections-and-exposures">Estimating From Detections and Exposures</a></li>
 <li><a class="reference internal" href="#survey-scale-one-row-per-object">Survey Scale: One Row Per Object</a></li>
 <li><a class="reference internal" href="#performance">Performance</a></li>
-<li><a class="reference internal" href="#when-to-use">When to Use</a></li>
+<li><a class="reference internal" href="#entry-points">Entry Points</a></li>
 <li><a class="reference internal" href="#related-documentation">Related Documentation</a></li>
 </ul>
 </li>
@@ -696,7 +689,7 @@ the realistic set of possibilities instead of false certainty.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=62e0a016"></script>
+</div><script src="../_static/documentation_options.js?v=3fdb3e1f"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
