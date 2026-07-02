@@ -30,7 +30,7 @@ whose fields fall into three groups:
 Confidence Model and Guarantees
 -------------------------------
 
-The confidence is **measured, not promised.** ``period_verdict`` takes one of
+``period_verdict`` takes one of
 three values, and it is a decision guide:
 
 * ``single_period`` -- one period is believed. In validation against LCDB/DAMIT
@@ -38,22 +38,18 @@ three values, and it is a decision guide:
   Use the value directly.
 * ``period_family`` -- there is a real signal, but a harmonic ambiguity (typically
   2x / 0.5x) cannot be ruled out. The reported period may be off by an integer
-  factor; consult ``alternate_period_days`` for the candidate family. Good for
-  population statistics, riskier for a single precise value.
+  factor; consult ``alternate_period_days`` for the candidate family.
 * ``insufficient_data`` -- the data cannot responsibly support a period. The period
-  fields are ``NaN``; ``insufficiency_reasons`` says what was lacking (too few
-  observations, too little phase coverage, spans too few rotations, ...).
+  fields are ``NaN``; ``insufficiency_reasons`` gives a first reason as to why a 
+  reliable period could not be fit (too few observations, too little phase 
+  coverage, spans too few rotations, ...).
 
 ``reliability_code`` mirrors the LCDB "U" quality scale as a **string** --
 ``"3"`` (secure), ``"2"`` (some ambiguity), ``"1"`` (weak). It is deterministic
 from the verdict (``single_period`` -> ``"3"``, ``period_family`` -> ``"2"``,
 ``insufficient_data`` -> ``"1"``). Do not sort or compare it numerically.
 
-Two guarantees worth stating plainly:
-
-* There is **no** ``0-1`` "confidence score" -- a single scalar was found to be
-  misleading and was deliberately left out. Branch on the categorical verdict.
-* ``single_period`` is high-confidence but **not a zero-alias guarantee.** A
+Note that ``single_period`` is high-confidence but **not a zero-alias guarantee.** A
   confident call can, rarely, be a harmonic alias of the true period. If a period
   that is wrong by an integer factor would be costly, cross-check a
   ``single_period`` result against ``alternate_period_days`` and
@@ -177,21 +173,16 @@ frequency grids:
 ``session_mode`` (default ``"auto"``) controls how multi-night magnitude offsets
 are handled; the default decides per object whether to fit per-session offsets.
 
-When to Use
+Entry Points
 -----------
 
-* ``estimate_rotation_period``: you already have a per-object observations table.
+* ``estimate_rotation_period``: you already have a per-object RotationPeriodObservations table.
 * ``estimate_rotation_period_from_detections``: single object, from detections /
   exposures / heliocentric coordinates.
 * ``estimate_rotation_period_from_detections_grouped``: many objects; guarantees one
   result row per id.
 * ``RotationPeriodObservations.from_point_source_observations``: build the
   observations table (e.g. to inspect or reuse) without solving.
-
-Filtering tip: for science where an integer-factor error matters, keep only
-``period_verdict == "single_period"`` (equivalently ``reliability_code == "3"``);
-for population work, ``period_family`` results plus ``alternate_period_days`` give
-the realistic set of possibilities instead of false certainty.
 
 Related Documentation
 ---------------------
