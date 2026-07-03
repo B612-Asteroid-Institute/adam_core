@@ -1,6 +1,7 @@
 #![allow(clippy::useless_conversion)] // PyO3 0.22 macro expansion trips this lint on generated wrappers.
 
 use crate::AssistPropagator as RustAssistPropagator;
+use crate::{map_origin_code_to_assist_body, CollisionConditionSpec};
 use adam_core_rs_coords::propagation::{
     CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest, PropagationResult,
     Propagator,
@@ -16,7 +17,7 @@ use adam_core_rs_coords::{
 };
 use adam_core_rs_spice::AdamCoreSpiceBackend;
 use assist_rs::{AssistData, Ephemeris, Ias15AdaptiveMode, IntegratorConfig};
-use numpy::{IntoPyArray, PyReadonlyArray2};
+use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -232,6 +233,109 @@ impl NativeAssistPropagator {
         ephemeris_result_to_dict(py, &result)
     }
 
+    /// Same-epoch collision detection mirroring
+    /// `adam_assist.ASSISTPropagator._detect_collisions`. `states` must be
+    /// barycentric equatorial (N, 6) at one shared TDB epoch; the epoch and
+    /// horizon are TDB Julian dates computed by the Python boundary exactly
+    /// as legacy does. Returns per-row survivor states/indices at the final
+    /// executed (overshooting) step plus one impact record per
+    /// condition-step detection, all in barycentric equatorial with TDB
+    /// Julian-date times.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        states,
+        epoch_jd_tdb,
+        final_jd_tdb,
+        condition_bodies,
+        condition_distances_km,
+        condition_stopping
+    ))]
+    fn detect_collisions<'py>(
+        &self,
+        py: Python<'py>,
+        states: PyReadonlyArray2<'py, f64>,
+        epoch_jd_tdb: f64,
+        final_jd_tdb: f64,
+        condition_bodies: Vec<String>,
+        condition_distances_km: Vec<f64>,
+        condition_stopping: Vec<bool>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        if condition_bodies.len() != condition_distances_km.len()
+            || condition_bodies.len() != condition_stopping.len()
+        {
+            return Err(PyValueError::new_err(
+                "collision condition arrays must share one length",
+            ));
+        }
+        let mut conditions = Vec::with_capacity(condition_bodies.len());
+        for ((code, distance_km), stopping) in condition_bodies
+            .iter()
+            .zip(condition_distances_km)
+            .zip(condition_stopping)
+        {
+            let body = map_origin_code_to_assist_body(code).ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "unsupported collision object code for ASSIST ephemeris: {code}"
+                ))
+            })?;
+            conditions.push(CollisionConditionSpec {
+                body,
+                distance_km,
+                stopping,
+            });
+        }
+        let states = states_from_pyarray(states)?;
+        let output = py
+            .allow_threads(|| {
+                self.inner.detect_collisions_same_epoch(
+                    &states,
+                    epoch_jd_tdb,
+                    final_jd_tdb,
+                    &conditions,
+                )
+            })
+            .map_err(|err| {
+                PyRuntimeError::new_err(format!("assist collision detection failed: {err}"))
+            })?;
+
+        let dict = PyDict::new_bound(py);
+        dict.set_item(
+            "final_indices",
+            output
+                .final_indices
+                .iter()
+                .map(|&index| index as i64)
+                .collect::<Vec<_>>(),
+        )?;
+        dict.set_item(
+            "final_states",
+            shaped_states_array(py, &output.final_states)?,
+        )?;
+        dict.set_item("final_time_jd_tdb", output.final_time_jd_tdb)?;
+        dict.set_item(
+            "impact_indices",
+            output
+                .impact_indices
+                .iter()
+                .map(|&index| index as i64)
+                .collect::<Vec<_>>(),
+        )?;
+        dict.set_item(
+            "impact_condition_indices",
+            output
+                .impact_condition_indices
+                .iter()
+                .map(|&index| index as i64)
+                .collect::<Vec<_>>(),
+        )?;
+        dict.set_item(
+            "impact_states",
+            shaped_states_array(py, &output.impact_states)?,
+        )?;
+        dict.set_item("impact_times_jd_tdb", output.impact_times_jd_tdb.clone())?;
+        Ok(dict)
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         orbit_ids,
@@ -433,6 +537,19 @@ fn parse_adaptive_mode(value: i32) -> PyResult<Ias15AdaptiveMode> {
             "adaptive_mode must be one of 0, 1, 2, or 3; got {value}"
         ))),
     }
+}
+
+fn shaped_states_array<'py>(
+    py: Python<'py>,
+    states: &[[f64; 6]],
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let flat: Vec<f64> = states
+        .iter()
+        .flat_map(|state| state.iter().copied())
+        .collect();
+    let shaped = ndarray::Array2::from_shape_vec((states.len(), 6), flat)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to shape states: {err}")))?;
+    Ok(shaped.into_pyarray_bound(py))
 }
 
 fn states_from_pyarray(states: PyReadonlyArray2<'_, f64>) -> PyResult<Vec<[f64; 6]>> {

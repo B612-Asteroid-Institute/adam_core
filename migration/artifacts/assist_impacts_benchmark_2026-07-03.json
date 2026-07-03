@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-07-03T12:55:21Z",
+  "description": "Python adam_assist vs Rust adam_assist_rust _detect_collisions on identical same-epoch impactor/safe workloads; parity of impact and survivor sets asserted per lane before timing.",
+  "machine": {
+    "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_brand": "Apple M1 Max"
+  },
+  "packages": {
+    "adam_assist": "0.3.9",
+    "adam_assist_rust": "0.1.0",
+    "adam_core": "0.5.6"
+  },
+  "repeats": 3,
+  "warmups": 1,
+  "impactor_fraction": 0.2,
+  "lanes": [
+    {
+      "n_orbits": 10,
+      "num_days": 30,
+      "n_impacts": 2,
+      "python_samples_s": [
+        0.0860155401751399,
+        0.08755241706967354,
+        0.0899145407602191
+      ],
+      "rust_samples_s": [
+        0.01340729184448719,
+        0.01294954214245081,
+        0.01266179047524929
+      ],
+      "python_p50_s": 0.08755241706967354,
+      "python_p95_s": 0.08967832839116455,
+      "rust_p50_s": 0.01294954214245081,
+      "rust_p95_s": 0.013361516874283552,
+      "speedup_p50": 6.761043448992823,
+      "speedup_p95": 6.711687694962636,
+      "max_impact_time_diff_days": 0.00011763302609324455
+    },
+    {
+      "n_orbits": 50,
+      "num_days": 30,
+      "n_impacts": 10,
+      "python_samples_s": [
+        0.2569116670638323,
+        0.2568147089332342,
+        0.3235312085598707
+      ],
+      "rust_samples_s": [
+        0.06420895922929049,
+        0.06548333261162043,
+        0.06551833357661963
+      ],
+      "python_p50_s": 0.2569116670638323,
+      "python_p95_s": 0.31686925441026687,
+      "rust_p50_s": 0.06548333261162043,
+      "rust_p95_s": 0.0655148334801197,
+      "speedup_p50": 3.923313869615758,
+      "speedup_p95": 4.836603217596821,
+      "max_impact_time_diff_days": 0.0004306165501475334
+    },
+    {
+      "n_orbits": 200,
+      "num_days": 30,
+      "n_impacts": 40,
+      "python_samples_s": [
+        1.0983455004170537,
+        1.0877172080799937,
+        1.1105871675536036
+      ],
+      "rust_samples_s": [
+        0.5238749170675874,
+        0.5211820835247636,
+        0.5144875003024936
+      ],
+      "python_p50_s": 1.0983455004170537,
+      "python_p95_s": 1.1093630008399487,
+      "rust_p50_s": 0.5211820835247636,
+      "rust_p95_s": 0.523605633713305,
+      "speedup_p50": 2.107412236792416,
+      "speedup_p95": 2.1186995124032015,
+      "max_impact_time_diff_days": 0.0005431598983705044
+    }
+  ]
+}

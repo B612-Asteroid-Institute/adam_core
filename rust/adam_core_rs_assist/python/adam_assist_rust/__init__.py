@@ -14,11 +14,16 @@ from typing import Any, Literal
 
 import numpy as np
 import numpy.typing as npt
+import pyarrow as pa
+import pyarrow.compute as pc
+import quivr as qv
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.covariances import CoordinateCovariances
-from adam_core.coordinates.origin import Origin
+from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
+from adam_core.coordinates.transform import transform_coordinates
+from adam_core.dynamics.impacts import CollisionConditions, CollisionEvent, ImpactMixin
 from adam_core.observers.observers import Observers
 from adam_core.orbits.ephemeris import Ephemeris
 from adam_core.orbits.orbits import Orbits
@@ -155,13 +160,47 @@ def _ephemeris_from_result(result: dict[str, Any]) -> Ephemeris:
     return Ephemeris.from_kwargs(**kwargs)
 
 
-class ASSISTPropagator:
+def _collision_rows(
+    source: OrbitTable,
+    indices: npt.NDArray[np.int64],
+    states: npt.NDArray[np.float64],
+    times: Timestamp,
+) -> OrbitTable:
+    """Source rows re-coordinated at collision-loop states/times.
+
+    Preserves orbit/variant identity, weights, and physical parameters from
+    the input table while replacing coordinates with barycentric-equatorial
+    states from the Rust collision loop (matching the legacy step-loop table
+    construction).
+    """
+    rows = source.take(pa.array(indices, type=pa.int64()))
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=states[:, 0],
+        y=states[:, 1],
+        z=states[:, 2],
+        vx=states[:, 3],
+        vy=states[:, 4],
+        vz=states[:, 5],
+        time=times,
+        origin=Origin.from_kwargs(
+            code=pa.repeat("SOLAR_SYSTEM_BARYCENTER", len(states))
+        ),
+        frame="equatorial",
+    )
+    return rows.set_column("coordinates", coordinates)
+
+
+class ASSISTPropagator(ImpactMixin):
     """Rust-backed propagation subset of ``adam_assist.ASSISTPropagator``.
 
     The public method mirrors the Python propagator's ``propagate_orbits``
     signature for state propagation. ``max_processes`` controls the Rust Rayon
     thread limit rather than launching Ray workers; this keeps the benchmark
     Python-callable while measuring the Rust adapter boundary directly.
+
+    ``ImpactMixin`` support: ``_detect_collisions`` mirrors the Python
+    ``adam_assist`` step loop through a single Rust crossing, so
+    ``detect_collisions``/``calculate_impacts`` work with this propagator.
     """
 
     def __init__(
@@ -384,6 +423,133 @@ class ASSISTPropagator:
             coordinates=output_coordinates,
             physical_parameters=physical_parameters,
         )
+
+    def _detect_collisions(
+        self,
+        orbits: OrbitTable,
+        num_days: int,
+        conditions: CollisionConditions,
+    ) -> tuple[OrbitTable, CollisionEvent]:
+        """Rust-native mirror of ``adam_assist.ASSISTPropagator._detect_collisions``.
+
+        The input transform (SSB/equatorial/TDB), the TDB Julian-date horizon
+        arithmetic, and the returned table shapes match the legacy Python
+        loop; the per-step integration and distance checks run in one Rust
+        crossing. Survivors are reported at the final executed (overshooting)
+        integrator step exactly like legacy.
+        """
+        assert len(pc.unique(orbits.coordinates.time.mjd())) == 1
+
+        coords = transform_coordinates(
+            orbits.coordinates,
+            origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+            frame_out="equatorial",
+        )
+        coords = coords.set_column("time", coords.time.rescale("tdb"))
+        orbits = orbits.set_column("coordinates", coords)
+
+        epoch_jd = float(coords.time.jd().to_numpy(zero_copy_only=False)[0])
+        final_jd = float(
+            coords.time.add_days(num_days).jd().to_numpy(zero_copy_only=False)[0]
+        )
+
+        native = self._native.detect_collisions(
+            np.ascontiguousarray(coords.values, dtype=np.float64),
+            epoch_jd,
+            final_jd,
+            _string_column_to_list(conditions.collision_object.code),
+            [float(value) for value in conditions.collision_distance.to_pylist()],
+            [bool(value) for value in conditions.stopping_condition.to_pylist()],
+        )
+
+        impact_indices = np.asarray(native["impact_indices"], dtype=np.int64)
+        impact_states = np.asarray(native["impact_states"], dtype=np.float64).reshape(
+            -1, 6
+        )
+        impact_condition_indices = np.asarray(
+            native["impact_condition_indices"], dtype=np.int64
+        )
+        impact_times = np.asarray(native["impact_times_jd_tdb"], dtype=np.float64)
+
+        events: list[CollisionEvent] = []
+        for condition_index in range(len(conditions)):
+            mask = impact_condition_indices == condition_index
+            if not mask.any():
+                continue
+            condition = conditions[condition_index : condition_index + 1]
+            rows = _collision_rows(
+                orbits,
+                impact_indices[mask],
+                impact_states[mask],
+                Timestamp.from_jd(pa.array(impact_times[mask]), scale="tdb"),
+            )
+            kwargs: dict[str, Any] = dict(
+                orbit_id=rows.orbit_id,
+                coordinates=rows.coordinates,
+                condition_id=pa.repeat(condition.condition_id[0].as_py(), len(rows)),
+                collision_coordinates=transform_coordinates(
+                    rows.coordinates,
+                    representation_out=SphericalCoordinates,
+                    origin_out=condition.collision_object.as_OriginCodes(),
+                    frame_out="ecliptic",
+                ),
+                collision_object=condition.collision_object.take(
+                    [0 for _ in range(len(rows))]
+                ),
+                stopping_condition=pa.repeat(
+                    bool(condition.stopping_condition[0].as_py()), len(rows)
+                ),
+            )
+            if isinstance(orbits, VariantOrbits):
+                kwargs["variant_id"] = rows.variant_id
+            events.append(CollisionEvent.from_kwargs(**kwargs))
+        collision_events = qv.concatenate(events) if events else CollisionEvent.empty()
+
+        # Results: rows removed by stopping conditions (at their impact-step
+        # states/times, in removal order) followed by the survivors at the
+        # final executed step, matching the legacy accumulation order.
+        stopping_by_condition = np.asarray(
+            [bool(value) for value in conditions.stopping_condition.to_pylist()],
+            dtype=bool,
+        )
+        removed_mask = stopping_by_condition[impact_condition_indices]
+        results_parts: list[OrbitTable] = []
+        if removed_mask.any():
+            results_parts.append(
+                _collision_rows(
+                    orbits,
+                    impact_indices[removed_mask],
+                    impact_states[removed_mask],
+                    Timestamp.from_jd(
+                        pa.array(impact_times[removed_mask]), scale="tdb"
+                    ),
+                )
+            )
+        final_indices = np.asarray(native["final_indices"], dtype=np.int64)
+        final_states = np.asarray(native["final_states"], dtype=np.float64).reshape(
+            -1, 6
+        )
+        if len(final_indices) > 0:
+            final_jds = np.full(len(final_indices), native["final_time_jd_tdb"])
+            results_parts.append(
+                _collision_rows(
+                    orbits,
+                    final_indices,
+                    final_states,
+                    Timestamp.from_jd(pa.array(final_jds), scale="tdb"),
+                )
+            )
+        if results_parts:
+            results = (
+                qv.concatenate(results_parts)
+                if len(results_parts) > 1
+                else results_parts[0]
+            )
+        else:
+            results = (
+                Orbits.empty() if isinstance(orbits, Orbits) else VariantOrbits.empty()
+            )
+        return results, collision_events
 
 
 __all__ = ["ASSISTPropagator", "NativeAssistPropagator"]

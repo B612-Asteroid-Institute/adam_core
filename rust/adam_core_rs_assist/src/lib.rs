@@ -15,7 +15,7 @@ use adam_core_rs_coords::{
     generate_ephemeris_barycentric, rotate_ecliptic_to_equatorial6, rotate_equatorial_to_ecliptic6,
     CoordinateBatch, CovarianceBatch, CovarianceUnits, EphemerisOptions, EphemerisResult, Epoch,
     ObserverBatch, OrbitBatch, OrbitVariantBatch, OriginArray, OriginId, OriginTranslationProvider,
-    TimeArray, TimeScale, TimeScaleProvider, Validity, NANOS_PER_DAY,
+    TimeArray, TimeScale, TimeScaleProvider, Validity, KM_PER_AU, NANOS_PER_DAY,
 };
 use assist_rs::ffi;
 use assist_rs::{
@@ -460,6 +460,203 @@ fn particle_state(particle: ffi::reb_particle) -> [f64; 6] {
         particle.vy,
         particle.vz,
     ]
+}
+
+/// One collision condition mirrored from the adam-core `CollisionConditions`
+/// row: an ASSIST ephemeris body, a collision distance in km, and whether a
+/// detection removes the particle from the simulation.
+#[derive(Debug, Clone, Copy)]
+pub struct CollisionConditionSpec {
+    pub body: i32,
+    pub distance_km: f64,
+    pub stopping: bool,
+}
+
+/// Output of [`AssistPropagator::detect_collisions_same_epoch`].
+///
+/// States are barycentric equatorial (ASSIST's native frame), exactly as the
+/// Python `adam_assist.ASSISTPropagator._detect_collisions` step loop records
+/// them; times are TDB Julian dates (`sim.t + jd_ref`) so the Python boundary
+/// can mirror the legacy `Timestamp.from_jd(..., scale="tdb")` construction.
+/// Survivors are reported at the final executed step time, which overshoots
+/// the requested horizon exactly as the legacy step loop does.
+#[derive(Debug, Clone, Default)]
+pub struct CollisionDetectionOutput {
+    pub final_indices: Vec<usize>,
+    pub final_states: Vec<[f64; 6]>,
+    pub final_time_jd_tdb: f64,
+    pub impact_indices: Vec<usize>,
+    pub impact_condition_indices: Vec<usize>,
+    pub impact_states: Vec<[f64; 6]>,
+    pub impact_times_jd_tdb: Vec<f64>,
+}
+
+/// Map an adam-core collision-object origin code to the ASSIST ephemeris
+/// body constant used for per-step distance checks. Mirrors the body set the
+/// Python `assist.Ephem.get_particle` name lookup accepts for the planets
+/// plus SUN/MOON.
+pub fn map_origin_code_to_assist_body(code: &str) -> Option<i32> {
+    match code.to_ascii_uppercase().as_str() {
+        "SUN" => Some(ffi::ASSIST_BODY_SUN),
+        "MERCURY" => Some(ffi::ASSIST_BODY_MERCURY),
+        "VENUS" => Some(ffi::ASSIST_BODY_VENUS),
+        "EARTH" => Some(ffi::ASSIST_BODY_EARTH),
+        "MOON" => Some(ffi::ASSIST_BODY_MOON),
+        "MARS" => Some(ffi::ASSIST_BODY_MARS),
+        "JUPITER" => Some(ffi::ASSIST_BODY_JUPITER),
+        "SATURN" => Some(ffi::ASSIST_BODY_SATURN),
+        "URANUS" => Some(ffi::ASSIST_BODY_URANUS),
+        "NEPTUNE" => Some(ffi::ASSIST_BODY_NEPTUNE),
+        "PLUTO" => Some(ffi::ASSIST_BODY_PLUTO),
+        _ => None,
+    }
+}
+
+fn build_collision_sim(
+    data: &AssistData,
+    integrator: IntegratorConfig,
+    states_bary_eq: &[[f64; 6]],
+    t: f64,
+    backward: bool,
+    dt_override: Option<f64>,
+) -> Result<AssistSim, AssistError> {
+    let mut sim = Simulation::new()?;
+    sim.set_t(t);
+    apply_integrator_config(&mut sim, integrator);
+    if backward {
+        let dt = sim.dt();
+        sim.set_dt(-dt);
+    }
+    if let Some(dt) = dt_override {
+        sim.set_dt(dt);
+    }
+    let mut asim = AssistSim::new(sim, &data.ephem)?;
+    asim.set_forces(ffi::ASSIST_FORCES_DEFAULT);
+    for state in states_bary_eq {
+        asim.sim_mut()
+            .add_test_particle(state[0], state[1], state[2], state[3], state[4], state[5]);
+    }
+    Ok(asim)
+}
+
+impl AssistPropagator {
+    /// Same-epoch collision detection mirroring the Python
+    /// `adam_assist.ASSISTPropagator._detect_collisions` loop: one REBOUND +
+    /// ASSIST simulation carrying every particle, advanced one IAS15 step at
+    /// a time; at each step every condition body's barycentric state is read
+    /// from the ephemeris and any particle within the condition distance is
+    /// recorded as an impact (non-stopping conditions record an event on
+    /// every step spent inside the radius, matching legacy). Particles
+    /// hitting a stopping condition are dropped: legacy removes them from
+    /// the simulation, and because the REBOUND bindings do not expose
+    /// removal the simulation is rebuilt from the surviving particles at
+    /// the current time and step size, matching the legacy IAS15
+    /// reset-on-N-change behavior.
+    ///
+    /// `states_bary_eq` must already be barycentric equatorial with a shared
+    /// TDB epoch; `epoch_jd_tdb` / `final_jd_tdb` are TDB Julian dates
+    /// computed by the caller exactly as legacy does (`time.jd()`,
+    /// `time.add_days(num_days).jd()`), and `final_jd_tdb < epoch_jd_tdb`
+    /// selects backward integration.
+    pub fn detect_collisions_same_epoch(
+        &self,
+        states_bary_eq: &[[f64; 6]],
+        epoch_jd_tdb: f64,
+        final_jd_tdb: f64,
+        conditions: &[CollisionConditionSpec],
+    ) -> Result<CollisionDetectionOutput, AssistError> {
+        let ephem = &self.data.ephem;
+        let jd_ref = ephem.jd_ref();
+        let t0 = epoch_jd_tdb - jd_ref;
+        let t_final = final_jd_tdb - jd_ref;
+        let backward = t_final < t0;
+
+        let mut output = CollisionDetectionOutput {
+            final_time_jd_tdb: epoch_jd_tdb,
+            ..CollisionDetectionOutput::default()
+        };
+        if states_bary_eq.is_empty() {
+            return Ok(output);
+        }
+
+        let mut asim = build_collision_sim(
+            self.data.as_ref(),
+            self.integrator,
+            states_bary_eq,
+            t0,
+            backward,
+            None,
+        )?;
+        let mut active: Vec<usize> = (0..states_bary_eq.len()).collect();
+        let mut snapshot: Vec<[f64; 6]> = Vec::with_capacity(active.len());
+
+        loop {
+            unsafe {
+                librebound_sys::ffi::reb_simulation_step(asim.sim_mut().as_mut_ptr());
+            }
+            let t = asim.sim().t();
+            let past_final = if backward { t <= t_final } else { t >= t_final };
+
+            snapshot.clear();
+            snapshot.extend(
+                asim.sim()
+                    .particles()
+                    .iter()
+                    .map(|particle| particle_state(*particle)),
+            );
+            if snapshot.len() < active.len() {
+                return Err(AssistError::Other(
+                    "collision simulation lost particles".to_string(),
+                ));
+            }
+
+            let mut remove = vec![false; active.len()];
+            for (condition_index, condition) in conditions.iter().enumerate() {
+                let body = particle_state(ephem.get_body_state(condition.body, t)?);
+                for (slot, &row) in active.iter().enumerate() {
+                    let state = snapshot[slot];
+                    let dx = state[0] - body[0];
+                    let dy = state[1] - body[1];
+                    let dz = state[2] - body[2];
+                    let distance_km = (dx * dx + dy * dy + dz * dz).sqrt() * KM_PER_AU;
+                    if distance_km < condition.distance_km {
+                        output.impact_indices.push(row);
+                        output.impact_condition_indices.push(condition_index);
+                        output.impact_states.push(state);
+                        output.impact_times_jd_tdb.push(t + jd_ref);
+                        if condition.stopping {
+                            remove[slot] = true;
+                        }
+                    }
+                }
+            }
+
+            let survivor_slots: Vec<usize> =
+                (0..active.len()).filter(|&slot| !remove[slot]).collect();
+            if past_final || survivor_slots.is_empty() {
+                output.final_time_jd_tdb = t + jd_ref;
+                for &slot in &survivor_slots {
+                    output.final_indices.push(active[slot]);
+                    output.final_states.push(snapshot[slot]);
+                }
+                return Ok(output);
+            }
+            if survivor_slots.len() < active.len() {
+                let dt = asim.sim().dt();
+                let survivor_states: Vec<[f64; 6]> =
+                    survivor_slots.iter().map(|&slot| snapshot[slot]).collect();
+                active = survivor_slots.iter().map(|&slot| active[slot]).collect();
+                asim = build_collision_sim(
+                    self.data.as_ref(),
+                    self.integrator,
+                    &survivor_states,
+                    t,
+                    backward,
+                    Some(dt),
+                )?;
+            }
+        }
+    }
 }
 
 fn apply_integrator_config(sim: &mut Simulation, integrator: IntegratorConfig) {

@@ -7,6 +7,7 @@ name = "adam_core_rs_assist"
 version = "0.1.0"
 dependencies = [
  "adam_core_rs_coords",
+ "adam_core_rs_spice",
  "assist-rs",
  "ndarray",
  "numpy",
@@ -25,10 +26,21 @@ version = "0.1.0"
 dependencies = [
  "adam_core_rs_autodiff",
  "arrow-array",
+ "arrow-buffer",
  "arrow-schema",
  "erfars",
  "faer",
  "rayon",
+]
+
+[[package]]
+name = "adam_core_rs_spice"
+version = "0.1.0"
+dependencies = [
+ "adam_core_rs_coords",
+ "serde_json",
+ "spicekit",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -862,6 +874,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "memmap2"
+version = "0.9.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "memoffset"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1073,7 +1094,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "pyo3",
- "rustc-hash",
+ "rustc-hash 1.1.0",
 ]
 
 [[package]]
@@ -1408,6 +1429,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "rustc-hash"
+version = "2.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
+
+[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1514,6 +1541,19 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "spicekit"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17c159ac803c5c3a0193eab3603690d9651ae3071dfa07705ba6e5ce1d376406"
+dependencies = [
+ "bytemuck",
+ "memmap2",
+ "rayon",
+ "rustc-hash 2.1.2",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "spindle"
