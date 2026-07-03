@@ -271,10 +271,14 @@ fn propagate_assist_chunk_one_by_one(
             .map(|&time_index| context.target_times_tdb.epochs[time_index])
             .collect::<Vec<_>>();
         let sorted_output = shard.propagate_one(row, &sorted_times)?;
+        // Restore CALLER epoch order (typed CrossProduct contract): the
+        // shard integrates in sorted time order, but downstream consumers
+        // (the backend-generic ephemeris workflow pairs propagated rows with
+        // observer rows positionally) require caller order per orbit.
         let mut block = reorder_output(
-            orbit_index,
-            sorted_time_indices.clone(),
+            time_indices,
             sorted_time_indices,
+            orbit_index,
             sorted_output,
         )?;
         restore_output_block(
@@ -359,10 +363,12 @@ fn propagate_same_epoch_state_group(
             let mut blocks = Vec::with_capacity(group.orbit_indices.len());
             for (group_row, orbit_index) in group.orbit_indices.iter().copied().enumerate() {
                 let sorted_output = state_only_output_from_states(group_states[group_row].clone());
+                // Restore CALLER epoch order (typed CrossProduct contract);
+                // see the per-row path above.
                 let mut block = reorder_output(
+                    group.time_indices.clone(),
+                    group.sorted_time_indices.clone(),
                     orbit_index,
-                    group.sorted_time_indices.clone(),
-                    group.sorted_time_indices.clone(),
                     sorted_output,
                 )?;
                 restore_output_block(
@@ -1168,10 +1174,14 @@ fn sorted_time_indices(time_indices: &[usize], target_times: &TimeArray) -> Vec<
     sorted
 }
 
+/// Map shard output rows (in `sorted_time_indices` order) back to the
+/// caller's epoch order (`time_indices`). The emitted block rows follow
+/// `time_indices` exactly, which is what the typed `CrossProduct` contract
+/// and the backend-generic ephemeris pairing require.
 fn reorder_output(
-    orbit_index: usize,
     time_indices: Vec<usize>,
     sorted_time_indices: Vec<usize>,
+    orbit_index: usize,
     sorted_output: RowOutput,
 ) -> PropagationResultValue<AssistOrbitBlock> {
     validate_row_output_lengths(sorted_time_indices.len(), &sorted_output)?;

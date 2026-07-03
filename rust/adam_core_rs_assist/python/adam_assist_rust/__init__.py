@@ -309,7 +309,7 @@ class ASSISTPropagator(ImpactMixin):
         h_v: list[float | None] | None = None
         g: list[float | None] | None = None
         if predict_magnitudes:
-            h_v = _optional_float_column_to_list(orbits.physical_parameters.H)
+            h_v = _optional_float_column_to_list(orbits.physical_parameters.H_v)
             g = _optional_float_column_to_list(orbits.physical_parameters.G)
 
         native = self._native.generate_ephemeris(

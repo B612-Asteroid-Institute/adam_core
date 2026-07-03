@@ -366,6 +366,43 @@ fn generate_ephemeris_impl<P: Propagator>(
         }
     }
 
+    // H-G photometry must use HELIOCENTRIC positions (Python parity:
+    // `attach_magnitude_or_phase` transforms the aberrated emission-time
+    // coordinates and the observers to origin=SUN before the kernels). In the
+    // barycentric workflow the aberrated states are SSB and observers keep
+    // their input origin, so translate both to SUN here; the SUN-origin-only
+    // non-barycentric path is already heliocentric.
+    if barycentric.is_some() && options.photometry.any_requested() {
+        let translation_provider = barycentric.expect("barycentric provider checked above");
+        let sun = OriginId::Naif(10);
+        let emission_times = TimeArray::new(propagated_times.scale, aberrated_epochs.clone())
+            .map_err(|err| {
+                PropagationError::InvalidRequest(format!(
+                    "invalid emission epochs for photometry: {err}"
+                ))
+            })?;
+        let ssb_origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, output_rows);
+        let object_to_sun = translation_provider.origin_translation_vectors(
+            &ssb_origins,
+            &sun,
+            Frame::Ecliptic,
+            &emission_times,
+        )?;
+        let observer_to_sun = translation_provider.origin_translation_vectors(
+            &observers.coordinates.origins,
+            &sun,
+            Frame::Ecliptic,
+            observer_times,
+        )?;
+        for row in 0..output_rows {
+            let observer_index = row % observer_rows;
+            for axis in 0..3 {
+                object_pos_flat[row * 3 + axis] += object_to_sun[row][axis];
+                observer_pos_flat[row * 3 + axis] += observer_to_sun[observer_index][axis];
+            }
+        }
+    }
+
     let (predicted_magnitude_v, alpha_deg) = compute_photometry(
         &options.photometry,
         &h_v_rows,
