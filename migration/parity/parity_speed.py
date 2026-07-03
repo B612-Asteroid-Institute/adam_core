@@ -3,8 +3,9 @@
 For each measured API, time both the current Rust path (in-process) and the
 baseline-main path (in the legacy-venv subprocess) on identical workloads, and
 assert that each enforced lane meets its configured p50/p95 threshold. The
-historical small-n lane keeps the standard 1.2x promotion threshold; tiny-n and
-large-n are enforced at the same 1.2x threshold.
+historical small-n lane keeps the standard promotion threshold; tiny-n and
+large-n are enforced at the same bar. The enforced floor was raised from 1.2x
+to 1.3x on 2026-07-02 (user decision).
 
 Each timing loop runs ``reps`` repetitions inside its respective process so
 subprocess invocation overhead is excluded from the legacy measurements. The
@@ -55,17 +56,18 @@ DEFAULT_LARGE_LANE_NAME = "large-n"
 DEFAULT_TINY_LANE_NAME = "tiny-n"
 DEFAULT_TINY_N = 10
 DEFAULT_SMALL_N = 2000
-# Per `decisions.md` (2026-05-04 18:36 UTC) every lane must meet at least 1.2x
-# p50/p95 versus the legacy baseline. The tiny lane was raised to the same bar,
-# but per `decisions.md` (2026-05-07T17:00 UTC) p95 is no longer enforced for
-# the tiny-n lane: at n=10 the per-call work is microseconds and any system
+# Per `decisions.md` (2026-05-04 18:36 UTC) every lane must meet a shared
+# p50/p95 floor versus the legacy baseline; the floor was raised from 1.2x to
+# 1.3x on 2026-07-02 (user decision). The tiny lane shares the same bar, but
+# per `decisions.md` (2026-05-07T17:00 UTC) p95 is not enforced for the
+# tiny-n lane: at n=10 the per-call work is microseconds and any system
 # scheduler jitter on either side dominates the p95 of the rep distribution,
 # producing run-to-run noise that is not a real performance signal. tiny-n p50
-# remains enforced at 1.2x because the median is robust to those outliers.
-DEFAULT_TINY_SPEEDUP = 1.2
+# remains enforced because the median is robust to those outliers.
+DEFAULT_TINY_SPEEDUP = 1.3
 DEFAULT_TINY_P95_SPEEDUP = 0.0
-DEFAULT_SMALL_SPEEDUP = 1.2
-DEFAULT_LARGE_SPEEDUP = 1.2
+DEFAULT_SMALL_SPEEDUP = 1.3
+DEFAULT_LARGE_SPEEDUP = 1.3
 DEFAULT_LEGACY_CACHE_PATH = Path(
     "migration/artifacts/parity_legacy_speed_baseline.json"
 )
@@ -1665,9 +1667,9 @@ def to_json(
         ),
         "lane_policy": (
             "The tiny-n lane records quick one-off/small-call behavior; p50 "
-            "is enforced at 1.2x, p95 is reported but not enforced because "
-            "microsecond-scale per-call work is dominated by system scheduler "
-            "jitter under multi-thread mode. "
+            f"is enforced at {DEFAULT_TINY_SPEEDUP:.1f}x, p95 is reported but "
+            "not enforced because microsecond-scale per-call work is dominated "
+            "by system scheduler jitter under multi-thread mode. "
             "The small-n lane preserves the historical n=2000 promotion gate. "
             "The large-n lane is API-shaped, records structured workload axes, "
             "and is enforced by default with explicit per-lane waivers required "

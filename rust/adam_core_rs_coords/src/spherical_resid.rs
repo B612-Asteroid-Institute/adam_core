@@ -21,10 +21,12 @@ const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 /// kernels serial up to 4096 rows to avoid the per-call Rayon spawn tax.
 const RAYON_SERIAL_THRESHOLD_ROWS: usize = 4096;
 
+/// Wrap a single longitude residual (degrees) to [-180, 180] and flip
+/// sign on the 0°/360° boundary crossing per the convention:
+/// 355 − 5 = +10, 5 − 355 = −10. `lon_obs` is the observed longitude.
 #[inline]
-fn bound_longitude_one_row(row: &mut [f64], obs: &[f64]) {
-    let lon_obs = obs[1];
-    let mut lr = row[1];
+pub fn bound_longitude_value(lon_obs: f64, lon_resid: f64) -> f64 {
+    let mut lr = lon_resid;
     let lr_g180 = lr > 180.0;
     let lr_l180 = lr < -180.0;
     if lr_g180 {
@@ -35,7 +37,12 @@ fn bound_longitude_one_row(row: &mut [f64], obs: &[f64]) {
     if (lr_g180 && lon_obs > 180.0) || (lr_l180 && lon_obs < 180.0) {
         lr = -lr;
     }
-    row[1] = lr;
+    lr
+}
+
+#[inline]
+fn bound_longitude_one_row(row: &mut [f64], obs: &[f64]) {
+    row[1] = bound_longitude_value(obs[1], row[1]);
 }
 
 /// Wrap `residuals[:, 1]` (longitude residuals, degrees) to [-180, 180]

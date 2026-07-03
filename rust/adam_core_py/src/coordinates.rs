@@ -1,10 +1,10 @@
 use adam_core_rs_coords::{
-    apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, calculate_chi2_flat,
-    cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
-    cartesian_to_spherical_flat6, cartesian_to_spherical_row, classify_orbits_flat,
-    cometary_to_cartesian_flat6, create_sampled_orbit_variants, fit_orbit_2body_least_squares,
-    generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6, origin_mu_au3_day2,
-    rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6,
+    apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, bound_longitude_value,
+    calculate_chi2_flat, cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6,
+    cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
+    classify_orbits_flat, cometary_to_cartesian_flat6, create_sampled_orbit_variants,
+    fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6,
+    origin_mu_au3_day2, rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6,
     spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
     transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
     ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
@@ -760,6 +760,36 @@ fn bound_longitude_residuals_numpy<'py>(
     Ok(arr.into_pyarray(py))
 }
 
+/// Column-only longitude wrap: reads column 1 of `observed` and `residuals`
+/// (strided access allowed) and returns the wrapped longitude-residual
+/// column. Avoids the 3x full-(N, D) buffer traffic of
+/// `bound_longitude_residuals_numpy` when only the longitude column is
+/// needed; the public Python wrapper assigns it back in place.
+#[pyfunction]
+fn bound_longitude_residual_column_numpy<'py>(
+    py: Python<'py>,
+    observed: PyReadonlyArray2<'py, f64>,
+    residuals: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let obs = observed.as_array();
+    let res = residuals.as_array();
+    if res.shape() != obs.shape() {
+        return Err(PyValueError::new_err("residuals must match observed shape"));
+    }
+    if obs.ncols() < 2 {
+        return Err(PyValueError::new_err(
+            "spherical residuals require at least 2 dimensions",
+        ));
+    }
+    let out: Vec<f64> = obs
+        .column(1)
+        .iter()
+        .zip(res.column(1).iter())
+        .map(|(&lon_obs, &lon_resid)| bound_longitude_value(lon_obs, lon_resid))
+        .collect();
+    Ok(out.into_pyarray(py))
+}
+
 #[pyfunction]
 fn apply_cosine_latitude_correction_numpy<'py>(
     py: Python<'py>,
@@ -1484,6 +1514,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(rotate_cartesian_time_varying_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(bound_longitude_residuals_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(bound_longitude_residual_column_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(apply_cosine_latitude_correction_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_chi2_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(compute_residuals_chi2_numpy, m)?)?;

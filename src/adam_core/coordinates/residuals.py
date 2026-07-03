@@ -136,16 +136,16 @@ def bound_longitude_residuals(
     residuals : `~numpy.ndarray` (N, D)
         Residuals wrapped to the range [-180, 180] degrees.
     """
-    from .._rust import bound_longitude_residuals_numpy as _rust_bound_lon
+    from .._rust import bound_longitude_residual_column_numpy as _rust_bound_lon_col
 
-    out = _rust_bound_lon(
-        np.ascontiguousarray(observed, dtype=np.float64),
-        np.ascontiguousarray(residuals, dtype=np.float64),
-    )
+    # Only the longitude column (index 1) changes, so only it crosses the
+    # boundary: the full-(N, D) round-trip previously allocated and copied
+    # ~3x the buffer per call, which dominated the p95 tail at 100k rows.
+    wrapped_lon = _rust_bound_lon_col(observed, residuals)
     # Mutate the caller's array IN PLACE to preserve the legacy semantic
-    # (legacy passed `residuals[:, 1] = longitude_residual` and returned
+    # (legacy assigned `residuals[:, 1] = longitude_residual` and returned
     # the same array; some callsites rely on that aliasing).
-    residuals[:] = np.asarray(out, dtype=np.float64)
+    residuals[:, 1] = wrapped_lon
     return residuals
 
 

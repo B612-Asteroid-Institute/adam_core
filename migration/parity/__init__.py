@@ -7,8 +7,9 @@ parity harness:
    baseline-main implementation, sampled across a randomized input space.
 2. **Fixed-fixture parity** for APIs where random fuzz is intentionally
    misleading but deterministic baseline-main fixtures are valid.
-3. **Speedup floor**: each measured API must be >= 1.2x p50 and p95 latency
-   vs the baseline-main implementation unless an explicit waiver is attached.
+3. **Speedup floor**: each measured API must be >= 1.3x p50 and p95 latency
+   vs the baseline-main implementation unless an explicit waiver is attached
+   (raised from 1.2x on 2026-07-02; tiny-n p95 stays report-only).
 
 The legacy oracle is the upstream-pinned ``adam_core`` install in the
 sibling ``.legacy-venv`` (see migration/parity/_oracle.py). We invoke

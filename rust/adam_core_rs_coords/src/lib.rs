@@ -65,7 +65,9 @@ pub mod abs_mag;
 pub use abs_mag::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, AbsMagFit};
 
 pub mod spherical_resid;
-pub use spherical_resid::{apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat};
+pub use spherical_resid::{
+    apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, bound_longitude_value,
+};
 
 pub use propagate::{
     apply_lagrange_coefficients, calc_chi, calc_chi_with_init, calc_lagrange_coefficients,
