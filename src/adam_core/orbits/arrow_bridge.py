@@ -28,6 +28,7 @@ from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
 
 _NESTED_SCHEMA = "OrbitBatch.cartesian.nested.quivr.v1"
+_VARIANT_NESTED_SCHEMA = "OrbitVariantBatch.cartesian.nested.quivr.v1"
 _OBSERVER_SCHEMA = "ObserverBatch.cartesian.nested.quivr.v1"
 
 
@@ -79,6 +80,22 @@ def _to_quivr_metadata(table: pa.Table) -> pa.Table:
 def orbits_to_ipc(orbits: Orbits) -> bytes:
     """Serialize ``Orbits`` to Arrow IPC bytes with the metadata Rust needs."""
     table = _with_adam_core_metadata(orbits)
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    return sink.getvalue().to_pybytes()
+
+
+def variants_to_ipc(variants: VariantOrbits) -> bytes:
+    """Serialize ``VariantOrbits`` to Arrow IPC bytes with the metadata Rust needs."""
+    coordinates = variants.coordinates
+    table = _stamp_adam_core_metadata(
+        variants.table.combine_chunks(),
+        "cartesian",
+        coordinates.frame,
+        coordinates.time.scale,
+        _VARIANT_NESTED_SCHEMA,
+    )
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
         writer.write_table(table)
@@ -344,6 +361,44 @@ def _sample_orbit_variants_ipc_candidate(
     return variants.set_column(
         "physical_parameters", orbits.physical_parameters.take(take_index)
     )
+
+
+def _propagate_orbits_typed_ipc_candidate(
+    orbits,
+    times,
+    covariance: bool = False,
+    max_iter: int = 1000,
+    tol: float = 1e-14,
+    chunk_size: int | None = None,
+    thread_limit: int | None = None,
+):
+    """W12 typed-propagation adapter candidate (bead personal-cmy.15).
+
+    Runs a quivr ``Orbits`` or ``VariantOrbits`` table through the
+    Rust-canonical typed ``TwoBodyPropagator`` ``PropagationRequest`` pipeline
+    in one crossing: cross-product epoch policy over ``times``, optional
+    linearized covariance transport, variant metadata preservation, and
+    provider-owned ERFA rescaling for non-TDB epochs (UT1/GPS fail loudly).
+    Private: the canonical public API remains ``dynamics.propagate_2body`` /
+    ``Propagator.propagate_orbits``; this is the typed-contract adapter
+    boundary. Returns ``(table, per_row_valid)``.
+    """
+    is_variants = isinstance(orbits, VariantOrbits)
+    raw_in = variants_to_ipc(orbits) if is_variants else orbits_to_ipc(orbits)
+    raw, valid = _rn.orbits_propagate_typed_ipc(
+        raw_in,
+        is_variants,
+        times.scale,
+        times.days.to_pylist(),
+        times.nanos.to_pylist(),
+        covariance,
+        max_iter,
+        tol,
+        chunk_size,
+        thread_limit,
+    )
+    table = variants_from_ipc(raw) if is_variants else orbits_from_ipc(raw)
+    return table, valid
 
 
 def propagate_orbits_2body(

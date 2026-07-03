@@ -1,3 +1,7 @@
+use adam_core_rs_coords::propagation::{
+    CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest, Propagator,
+    TwoBodyPropagator, TwoBodyPropagatorConfig,
+};
 use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, bound_longitude_value,
     calculate_chi2_flat, cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6,
@@ -9,8 +13,9 @@ use adam_core_rs_coords::{
     transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
     ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
     IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
-    OrbitBatch as DataOrbitBatch, OrbitVariantSamplingMethod,
-    Representation as CoordsRepresentation, TimeScale, TryFromNestedRecordBatch,
+    OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
+    OrbitVariantSamplingMethod, Representation as CoordsRepresentation, TimeArray, TimeScale,
+    TimeScaleProvider, TryFromNestedRecordBatch,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::RecordBatch;
@@ -1241,6 +1246,115 @@ fn orbits_propagate_2body_ipc<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
+/// Provider-owned time rescaling for the typed propagation adapter: delegates
+/// to the ERFA-backed `TimeArray::rescale` service (UTC/TAI/TT/TDB supported;
+/// UT1/GPS fail loudly pending provider contracts).
+struct ErfaTimeProvider;
+
+impl TimeScaleProvider for ErfaTimeProvider {
+    fn rescale(
+        &self,
+        times: &TimeArray,
+        new_scale: TimeScale,
+    ) -> adam_core_rs_coords::types::SchemaResult<TimeArray> {
+        times.rescale(new_scale)
+    }
+}
+
+/// W12 typed propagation adapter (bead personal-cmy.15): decode a quivr
+/// `Orbits` or `VariantOrbits` table (nested Arrow IPC) to the Rust-canonical
+/// `OrbitBatch`/`OrbitVariantBatch`, run the typed `TwoBodyPropagator`
+/// `PropagationRequest` pipeline (cross-product epoch policy, optional
+/// linearized covariance transport), and re-encode as quivr IPC. Non-TDB
+/// orbit epochs and target times rescale through the provider-owned ERFA
+/// time service. Returns `(ipc_bytes, per_output_row_valid)`.
+#[allow(clippy::too_many_arguments)]
+#[pyfunction]
+#[pyo3(signature = (
+    ipc_bytes,
+    is_variants,
+    target_scale,
+    target_days,
+    target_nanos,
+    covariance=false,
+    max_iter=1000,
+    tol=1e-14,
+    chunk_size=None,
+    thread_limit=None
+))]
+fn orbits_propagate_typed_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+    is_variants: bool,
+    target_scale: &str,
+    target_days: Vec<i64>,
+    target_nanos: Vec<i64>,
+    covariance: bool,
+    max_iter: usize,
+    tol: f64,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> PyResult<(Bound<'py, PyBytes>, Vec<bool>)> {
+    let scale =
+        TimeScale::parse(target_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let times = TimeArray::from_parts(scale, target_days, target_nanos)
+        .map_err(|err| PyValueError::new_err(format!("invalid target times: {err}")))?;
+    let options = PropagationOptions {
+        chunk_size,
+        thread_limit,
+        epoch_policy: EpochPolicy::CrossProduct,
+        covariance: if covariance {
+            CovariancePropagation::Linearized
+        } else {
+            CovariancePropagation::None
+        },
+    };
+    let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig { max_iter, tol })
+        .map_err(|err| PyValueError::new_err(format!("invalid propagator config: {err}")))?;
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let provider = ErfaTimeProvider;
+
+    let (out, validity) = if is_variants {
+        let variants =
+            DataOrbitVariantBatch::try_from_nested_record_batch(&batch).map_err(|err| {
+                PyValueError::new_err(format!("failed to decode OrbitVariantBatch: {err}"))
+            })?;
+        let request = PropagationRequest::new_variants(&variants, &times, options)
+            .map_err(|err| PyValueError::new_err(format!("invalid propagation request: {err}")))?;
+        let result = py
+            .allow_threads(|| propagator.propagate(&request, &provider))
+            .map_err(|err| PyValueError::new_err(format!("typed propagation failed: {err}")))?;
+        let validity: Vec<bool> = (0..result.validity.len())
+            .map(|index| result.validity.is_valid(index))
+            .collect();
+        let variants_out = result.variants.ok_or_else(|| {
+            PyValueError::new_err("typed variant propagation returned no variants".to_string())
+        })?;
+        let out = variants_out
+            .into_nested_record_batch()
+            .map_err(|err| PyValueError::new_err(format!("failed to encode variants: {err}")))?;
+        (out, validity)
+    } else {
+        let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
+            .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
+        let request = PropagationRequest::new(&orbits, &times, options)
+            .map_err(|err| PyValueError::new_err(format!("invalid propagation request: {err}")))?;
+        let result = py
+            .allow_threads(|| propagator.propagate(&request, &provider))
+            .map_err(|err| PyValueError::new_err(format!("typed propagation failed: {err}")))?;
+        let validity: Vec<bool> = (0..result.validity.len())
+            .map(|index| result.validity.is_valid(index))
+            .collect();
+        let out = result
+            .orbits
+            .into_nested_record_batch()
+            .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
+        (out, validity)
+    };
+    let bytes = write_orbit_ipc(&out)?;
+    Ok((PyBytes::new(py, &bytes), validity))
+}
+
 /// W1 data-model bridge (bead personal-cmy.13, mechanism A): zero-copy round-trip
 /// of a quivr `Orbits` table through the Rust-canonical `OrbitBatch` using the
 /// Arrow C Data Interface (no IPC serialize/deserialize copy). Accepts a pyarrow
@@ -1535,6 +1649,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_rotate_frame_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_sample_variants_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(orbits_propagate_typed_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_propagate_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;

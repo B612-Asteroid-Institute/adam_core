@@ -144,6 +144,12 @@ impl IntoNestedRecordBatch for OrbitVariantBatch {
     }
 }
 
+impl TryFromNestedRecordBatch for OrbitVariantBatch {
+    fn try_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Self> {
+        orbit_variant_from_nested_record_batch(batch)
+    }
+}
+
 impl IntoNestedRecordBatch for ObserverBatch {
     fn into_nested_record_batch(self) -> SchemaResult<RecordBatch> {
         observer_to_nested_record_batch(&self)
@@ -578,6 +584,45 @@ fn coordinate_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Coor
         |name| batch.column_by_name(name),
         batch.num_rows(),
         schema.metadata(),
+    )
+}
+
+/// Decode a nested quivr `VariantOrbits` record batch into the Rust-canonical
+/// `OrbitVariantBatch`. The quivr table's `physical_parameters` child is
+/// intentionally ignored: the Rust variant batch does not carry physical
+/// parameters, and Python boundaries reattach them from source-row indices.
+fn orbit_variant_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitVariantBatch> {
+    let rows = batch.num_rows();
+    let (orbit_id, object_id) = parse_orbit_metadata(batch)?;
+    let variant_id = large_string_column(batch, "variant_id")?;
+    let variant_id = (0..rows)
+        .map(|row| {
+            if variant_id.is_null(row) {
+                None
+            } else {
+                Some(VariantId(variant_id.value(row).to_string()))
+            }
+        })
+        .collect::<Vec<_>>();
+    let weights = optional_float64_values(float64_column(batch, "weights")?);
+    let weights_cov = optional_float64_values(float64_column(batch, "weights_cov")?);
+    let schema = batch.schema();
+    let coordinates = batch
+        .column_by_name("coordinates")
+        .ok_or_else(|| SchemaError::MissingRequiredField("coordinates".to_string()))?;
+    let coordinates = array_as_struct(coordinates, "coordinates")?;
+    let coordinates = coordinate_from_nested_columns(
+        |name| coordinates.column_by_name(name),
+        rows,
+        schema.metadata(),
+    )?;
+    OrbitVariantBatch::new(
+        orbit_id,
+        object_id,
+        variant_id,
+        weights,
+        weights_cov,
+        coordinates,
     )
 }
 
