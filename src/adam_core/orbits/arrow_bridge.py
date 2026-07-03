@@ -326,17 +326,24 @@ def _sample_orbit_variants_ipc_candidate(
     beta: float = 0.0,
     kappa: float = 0.0,
 ) -> VariantOrbits:
-    """Diagnostic Arrow-IPC candidate for ``VariantOrbits.create``.
+    """Private Rust Arrow-IPC backend for ``VariantOrbits.create``.
 
-    This remains private because only deterministic ``sigma-point`` sampling is
-    currently promoted behind the canonical public API. ``auto`` and
-    ``monte-carlo`` stay on the legacy Python path until the Rust RNG/fallback
-    behavior is intentionally aligned.
+    All three methods (``sigma-point``, ``auto``, ``monte-carlo``) run
+    Rust-side in one crossing. Monte Carlo draws (including the auto-mode
+    fallback) use the Rust-native RNG: statistically equivalent to, but not
+    bit-identical with, the legacy scipy path (decision 2026-07-03: exact
+    scipy RNG parity is not required). Per-orbit physical parameters are
+    reattached from the Rust-reported source-row indices, which is what makes
+    variable-count auto-mode outputs safe.
     """
-    raw = _rn.orbits_sample_variants_ipc(
+    raw, source_indices = _rn.orbits_sample_variants_ipc(
         orbits_to_ipc(orbits), method, num_samples, seed, alpha, beta, kappa
     )
-    return variants_from_ipc(raw)
+    variants = variants_from_ipc(raw)
+    take_index = pa.array(source_indices, type=pa.int64())
+    return variants.set_column(
+        "physical_parameters", orbits.physical_parameters.take(take_index)
+    )
 
 
 def propagate_orbits_2body(

@@ -13,7 +13,6 @@ from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from ..coordinates.variants import VariantCoordinatesTable, create_coordinate_variants
 from ..observers.observers import Observers
 from ..time import Timestamp
 from .ephemeris import Ephemeris
@@ -70,57 +69,50 @@ class VariantOrbits(qv.Table):
             Prior knowledge of the distribution when generating sigma points usually set to 2 for a Gaussian.
         kappa : float, optional
             Secondary scaling parameter when generating sigma points usually set to 0.
+        seed : int, optional
+            Seed for monte-carlo sampling (including the auto-mode fallback).
+            Given a seed the samples are reproducible; without one a fresh
+            random seed is drawn per call.
 
         Returns
         -------
         variants_orbits : '~adam_core.orbits.variants.VariantOrbits'
             The variant orbits.
+
+        Notes
+        -----
+        Sampling runs in the Rust backend. Sigma-point output is deterministic
+        and matches the legacy Python implementation. Monte Carlo draws use a
+        Rust-native RNG that is statistically equivalent to, but not
+        bit-identical with, the legacy scipy sampler (decision 2026-07-03).
+        Unlike legacy, ``seed`` also applies to the auto-mode Monte Carlo
+        fallback so auto-mode is reproducible given a seed.
         """
-        if method == "sigma-point":
-            # Promote the deterministic Rust sampler behind the canonical API.
-            # Keep auto/Monte Carlo on the legacy Python path until the Rust
-            # fallback/RNG behavior is intentionally made SciPy-compatible.
-            from .arrow_bridge import _sample_orbit_variants_ipc_candidate
+        if method not in ("auto", "sigma-point", "monte-carlo"):
+            raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
 
-            variants = _sample_orbit_variants_ipc_candidate(
-                orbits,
-                method=method,
-                num_samples=num_samples,
-                alpha=alpha,
-                beta=beta,
-                kappa=kappa,
-                seed=seed,
-            )
-            source_index = pa.array(
-                np.repeat(np.arange(len(orbits), dtype=np.int64), 13),
-                type=pa.int64(),
-            )
-            return variants.set_column(
-                "physical_parameters", orbits.physical_parameters.take(source_index)
-            )
+        # All three methods run through the Rust sampler (decision 2026-07-03:
+        # exact scipy RNG parity is not required). Monte Carlo draws are
+        # statistically equivalent to, but not bit-identical with, the legacy
+        # scipy path; sigma-point output is deterministic and matches legacy.
+        # One intentional improvement over legacy: ``seed`` now also applies
+        # to the auto-mode Monte Carlo fallback (legacy ignored it there).
+        from .arrow_bridge import _sample_orbit_variants_ipc_candidate
 
-        variant_coordinates: VariantCoordinatesTable = create_coordinate_variants(
-            orbits.coordinates,
+        if seed is None and method in ("auto", "monte-carlo"):
+            # The Rust sampler is deterministic given a seed; draw a fresh one
+            # so unseeded Monte Carlo sampling stays nondeterministic, matching
+            # the legacy contract.
+            seed = int(np.random.default_rng().integers(0, 2**63, dtype=np.int64))
+
+        return _sample_orbit_variants_ipc_candidate(
+            orbits,
             method=method,
             num_samples=num_samples,
             alpha=alpha,
             beta=beta,
             kappa=kappa,
             seed=seed,
-        )
-
-        return cls.from_kwargs(
-            orbit_id=pc.take(orbits.orbit_id, variant_coordinates.index),
-            object_id=pc.take(orbits.object_id, variant_coordinates.index),
-            variant_id=np.array(
-                np.arange(len(variant_coordinates)).astype(str), dtype="object"
-            ),
-            weights=variant_coordinates.weight,
-            weights_cov=variant_coordinates.weight_cov,
-            coordinates=variant_coordinates.sample,
-            physical_parameters=orbits.physical_parameters.take(
-                variant_coordinates.index
-            ),
         )
 
     def link_to_orbits(

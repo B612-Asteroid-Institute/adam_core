@@ -62,7 +62,16 @@ pub fn create_sampled_orbit_variants(
                 orbits,
                 num_samples.max(SIGMA_POINT_COUNT),
                 |row_index, mean, covariance| {
-                    auto_samples(row_index, mean, covariance, num_samples, alpha, beta, kappa)
+                    auto_samples(
+                        row_index,
+                        mean,
+                        covariance,
+                        num_samples,
+                        seed,
+                        alpha,
+                        beta,
+                        kappa,
+                    )
                 },
             )
         }
@@ -265,11 +274,13 @@ fn monte_carlo_samples(
     Ok(samples)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn auto_samples(
     row_index: usize,
     mean: &[f64; DIM],
     covariance: &[f64],
     num_samples: usize,
+    seed: Option<u64>,
     alpha: f64,
     beta: f64,
     kappa: f64,
@@ -278,9 +289,11 @@ fn auto_samples(
     if sigma_points_reconstruct_input(mean, covariance, &samples) {
         return Ok(samples);
     }
-    // Preserve Python public behavior: auto-mode does not thread the
-    // user-supplied seed into the Monte Carlo fallback.
-    monte_carlo_samples(mean, covariance, num_samples, seed_for_row(None, row_index))
+    // Intentional deviation from legacy Python (decision 2026-07-03): the
+    // user-supplied seed now threads into the Monte Carlo fallback so
+    // auto-mode is reproducible given a seed. Legacy auto-mode always drew
+    // an unseeded scipy sample here; exact scipy RNG parity is not required.
+    monte_carlo_samples(mean, covariance, num_samples, seed_for_row(seed, row_index))
 }
 
 fn sigma_points_reconstruct_input(

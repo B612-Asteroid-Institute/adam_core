@@ -1169,6 +1169,11 @@ fn parse_variant_method(method: &str) -> PyResult<OrbitVariantSamplingMethod> {
 /// a quivr `Orbits` table (Arrow IPC) entirely Rust-side in a single crossing --
 /// decode to `OrbitBatch`, run `VariantOrbits.create` sampling semantics, and
 /// encode the resulting `OrbitVariantBatch` as quivr-`VariantOrbits` IPC.
+///
+/// Returns `(ipc_bytes, source_orbit_indices)` where
+/// `source_orbit_indices[variant_row]` is the original orbit row index, so the
+/// Python boundary can reattach per-orbit columns (physical parameters) even
+/// when auto-mode produces a variable number of variants per orbit.
 #[pyfunction]
 #[pyo3(signature = (ipc_bytes, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
 fn orbits_sample_variants_ipc<'py>(
@@ -1180,7 +1185,7 @@ fn orbits_sample_variants_ipc<'py>(
     alpha: f64,
     beta: f64,
     kappa: f64,
-) -> PyResult<Bound<'py, PyBytes>> {
+) -> PyResult<(Bound<'py, PyBytes>, Bound<'py, PyArray1<i64>>)> {
     let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
     let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
         .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
@@ -1194,12 +1199,17 @@ fn orbits_sample_variants_ipc<'py>(
         kappa,
     )
     .map_err(|err| PyValueError::new_err(format!("failed to sample variants: {err}")))?;
+    let source_indices: Vec<i64> = samples
+        .source_orbit_indices
+        .iter()
+        .map(|&index| index as i64)
+        .collect();
     let out = samples
         .variants
         .into_nested_record_batch()
         .map_err(|err| PyValueError::new_err(format!("failed to encode variants: {err}")))?;
     let bytes = write_orbit_ipc(&out)?;
-    Ok(PyBytes::new(py, &bytes))
+    Ok((PyBytes::new(py, &bytes), source_indices.into_pyarray(py)))
 }
 
 /// W1 data-model workflow (bead personal-cmy.13): propagate a quivr `Orbits`

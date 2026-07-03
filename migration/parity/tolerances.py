@@ -1062,7 +1062,10 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         ),
         verdict=(
             "backend-candidate parity; the deterministic sigma-point set and "
-            "weights match legacy VariantOrbits.create."
+            "weights match legacy VariantOrbits.create. Monte Carlo / "
+            "auto-fallback draws are intentionally not elementwise-gated "
+            "(Rust-native RNG, decision 2026-07-03); they are gated by "
+            "statistical reconstruction unit tests instead."
         ),
     ),
     "bridge.evaluate_residuals_2body": ToleranceSpec(

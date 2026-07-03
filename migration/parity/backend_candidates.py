@@ -77,9 +77,11 @@ BACKEND_CANDIDATES: Final[tuple[BackendCandidate, ...]] = (
         rust_module="adam_core.orbits.arrow_bridge._sample_orbit_variants_ipc_candidate",
         legacy_comparator="adam_core.orbits.variants.VariantOrbits.create",
         note=(
-            "Diagnostic candidate for the private Rust backend used by "
-            "VariantOrbits.create(method='sigma-point'); auto/Monte Carlo remain "
-            "on the legacy Python path until RNG/fallback semantics align."
+            "Diagnostic candidate for the private Rust backend behind "
+            "VariantOrbits.create (all methods). Sigma-point is gated "
+            "elementwise here; Monte Carlo / auto-fallback draws use the "
+            "Rust-native RNG (statistically equivalent, not bit-identical; "
+            "decision 2026-07-03) and are covered by statistical unit tests."
         ),
     ),
     BackendCandidate(
