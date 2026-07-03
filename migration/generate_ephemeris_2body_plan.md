@@ -1,6 +1,8 @@
 # Scope — `dynamics.generate_ephemeris_2body` Rust port
 
-Status: scoped, not started. Driven by the 2026-04-22 decision that
+Status: completed 2026-04-22 (historical planning document; the port,
+parity tests, and benchmark promotion all landed — see `migration/TODO.md`).
+Originally driven by the 2026-04-22 decision that
 surface-level (public-API) performance is the priority and that JAX
 sub-kernel shape parity is explicitly **not** a constraint.
 
@@ -284,14 +286,14 @@ committing time:
 ## TODO.md delta
 
 ```markdown
-- [ ] Port `dynamics.generate_ephemeris_2body` fused kernel (LT Newton
+- [x] Port `dynamics.generate_ephemeris_2body` fused kernel (LT Newton
       + optional stellar aberration + ec→eq + cart→sph) as a single
       `T: Scalar`-generic row kernel, reusing the existing
       `propagate_2body_row`. Ship as `status="dual"` / `default="legacy"`
       with waiver `waiver-20260422-generate-ephemeris-2body-perf-pending`.
-- [ ] Add parity tests (states + light-time + aberrated + covariance)
+- [x] Add parity tests (states + light-time + aberrated + covariance)
       vs `_generate_ephemeris_2body_vmap` + `transform_covariances_jacobian`.
-- [ ] Add benchmark-gate entry `generate_ephemeris_2body` +
+- [x] Add benchmark-gate entry `generate_ephemeris_2body` +
       `generate_ephemeris_2body_with_covariance`; promote to `rust-default`
       and resolve the waiver once the +20% p50/p95 gate clears.
 ```
