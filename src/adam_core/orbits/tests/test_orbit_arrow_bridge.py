@@ -408,6 +408,211 @@ def test_fit_orbit_least_squares_recovers_truth():
     )
 
 
+def _two_body_od_problem(noise_arcsec: float = 0.0, seed: int = 0):
+    """Shared 2-body OD setup: a truth orbit, noise-free (or seeded-noise)
+    astrometry generated via the function-based 2-body ephemeris, an isotropic
+    arcsec-scale lon/lat covariance, and a perturbed initial guess.
+
+    Returns (observers, observed, initial, truth_state, obs_times, sigma_deg).
+    """
+    n = 8
+    mjds = [60000.0 + i * 5.0 for i in range(n)]
+    obs_times = Timestamp.from_mjd(mjds, scale="tdb")
+    mu = 0.000_295_912_208_285_591_1
+    v = mu**0.5
+    thetas = np.array([v * (m - 60000.0) for m in mjds])
+    observers = Observers.from_kwargs(
+        code=["X05"] * n,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=np.cos(thetas),
+            y=np.sin(thetas),
+            z=np.zeros(n),
+            vx=-v * np.sin(thetas),
+            vy=v * np.cos(thetas),
+            vz=np.zeros(n),
+            time=obs_times,
+            origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"] * n),
+            frame="ecliptic",
+        ),
+    )
+    truth_state = np.array([1.2, 0.1, 0.05, -0.002, 0.016, 0.001])
+    truth = Orbits.from_kwargs(
+        orbit_id=["truth"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[truth_state[0]],
+            y=[truth_state[1]],
+            z=[truth_state[2]],
+            vx=[truth_state[3]],
+            vy=[truth_state[4]],
+            vz=[truth_state[5]],
+            time=Timestamp.from_mjd([60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]),
+            frame="ecliptic",
+        ),
+    )
+    predicted = generate_ephemeris_2body(
+        propagate_2body(truth, obs_times), observers
+    ).coordinates
+    lon = predicted.lon.to_numpy(zero_copy_only=False)
+    lat = predicted.lat.to_numpy(zero_copy_only=False)
+    sigma_deg = 1.0 / 3600.0
+    if noise_arcsec > 0.0:
+        rng = np.random.default_rng(seed)
+        lon = lon + rng.normal(scale=noise_arcsec / 3600.0, size=n)
+        lat = lat + rng.normal(scale=noise_arcsec / 3600.0, size=n)
+    cov = np.tile(np.diag([1.0, sigma_deg**2, sigma_deg**2, 1.0, 1.0, 1.0]), (n, 1, 1))
+    observed = SphericalCoordinates.from_kwargs(
+        rho=predicted.rho.to_numpy(zero_copy_only=False),
+        lon=lon,
+        lat=lat,
+        vrho=predicted.vrho.to_numpy(zero_copy_only=False),
+        vlon=predicted.vlon.to_numpy(zero_copy_only=False),
+        vlat=predicted.vlat.to_numpy(zero_copy_only=False),
+        time=predicted.time,
+        origin=predicted.origin,
+        frame=predicted.frame,
+        covariance=CoordinateCovariances.from_matrix(cov),
+    )
+    initial = Orbits.from_kwargs(
+        orbit_id=["fit"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[truth_state[0] + 1e-3],
+            y=[truth_state[1] - 1e-3],
+            z=[truth_state[2] + 5e-4],
+            vx=[truth_state[3] + 1e-5],
+            vy=[truth_state[4] - 1e-5],
+            vz=[truth_state[5] + 1e-5],
+            time=Timestamp.from_mjd([60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]),
+            frame="ecliptic",
+        ),
+    )
+    return observers, observed, initial, truth_state, obs_times, sigma_deg
+
+
+def _scipy_2body_od_reference(initial, observed, observers, obs_times, sigma_deg):
+    """Legacy-style 2-body OD: scipy.least_squares over the function-based
+    ``generate_ephemeris_2body`` (no Propagator ABC; adam_core's 2-body path is
+    function-based). This is the honest apples-to-apples comparator for the
+    Rust-native Gauss-Newton kernel -- same 2-body physics, same weighted
+    lon/lat objective, different optimizer -> same converged minimum.
+    """
+    from scipy.optimize import least_squares as scipy_least_squares
+
+    lon_o = observed.lon.to_numpy(zero_copy_only=False)
+    lat_o = observed.lat.to_numpy(zero_copy_only=False)
+    cos_lat = np.cos(np.radians(lat_o))
+    epoch = Timestamp.from_mjd([60000.0], scale="tdb")
+
+    def residual(state: np.ndarray) -> np.ndarray:
+        orbit = Orbits.from_kwargs(
+            orbit_id=["fit"],
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=[state[0]],
+                y=[state[1]],
+                z=[state[2]],
+                vx=[state[3]],
+                vy=[state[4]],
+                vz=[state[5]],
+                time=epoch,
+                origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]),
+                frame="ecliptic",
+            ),
+        )
+        eph = generate_ephemeris_2body(
+            propagate_2body(orbit, obs_times), observers
+        ).coordinates
+        lon_p = eph.lon.to_numpy(zero_copy_only=False)
+        lat_p = eph.lat.to_numpy(zero_copy_only=False)
+        dlon = ((lon_p - lon_o + 180.0) % 360.0 - 180.0) * cos_lat / sigma_deg
+        dlat = (lat_p - lat_o) / sigma_deg
+        return np.concatenate([dlon, dlat])
+
+    solution = scipy_least_squares(
+        residual,
+        initial.coordinates.values[0],
+        xtol=1e-12,
+        ftol=1e-12,
+        gtol=1e-12,
+    )
+    return solution.x
+
+
+def test_fit_orbit_least_squares_matches_scipy_2body_reference_noiseless():
+    observers, observed, initial, truth_state, obs_times, sigma_deg = (
+        _two_body_od_problem()
+    )
+    fitted, _chi2, _iters, converged = fit_orbit_least_squares(
+        initial, observed, observers
+    )
+    assert converged
+    reference_state = _scipy_2body_od_reference(
+        initial, observed, observers, obs_times, sigma_deg
+    )
+    rust_state = fitted.coordinates.values[0]
+    # Both 2-body OD implementations converge to the same minimum (here, truth).
+    # The Rust Gauss-Newton stops at its finite-difference-Jacobian precision
+    # floor (~1.5e-7 AU, ~0.05 arcsec on-sky) via chi2-plateau convergence,
+    # while scipy TRF drives to ~1e-14; they agree on the minimum to that floor.
+    np.testing.assert_allclose(rust_state, reference_state, rtol=0, atol=1e-6)
+    np.testing.assert_allclose(rust_state, truth_state, rtol=0, atol=1e-6)
+
+
+def test_fit_orbit_least_squares_matches_scipy_2body_reference_with_noise():
+    # With seeded astrometric noise the least-squares minimum is data-determined.
+    # For angles-only (RA/Dec) astrometry the range direction is weakly
+    # observable, so the full 6-state minimum is ill-conditioned: the Rust
+    # kernel and the scipy reference land on positions that differ at the
+    # ~2.5e-5 AU (few-km) level while both fit the sky. The well-posed parity
+    # claim is therefore on the OBSERVABLE (predicted RA/Dec) plus the
+    # well-constrained velocity, not the raw position state.
+    observers, observed, initial, _truth, obs_times, sigma_deg = _two_body_od_problem(
+        noise_arcsec=0.1, seed=20260704
+    )
+    fitted, _chi2, _iters, converged = fit_orbit_least_squares(
+        initial, observed, observers
+    )
+    assert converged
+    reference_state = _scipy_2body_od_reference(
+        initial, observed, observers, obs_times, sigma_deg
+    )
+    rust_state = fitted.coordinates.values[0]
+
+    def _predict_lonlat(state: np.ndarray) -> np.ndarray:
+        orbit = Orbits.from_kwargs(
+            orbit_id=["p"],
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=[state[0]],
+                y=[state[1]],
+                z=[state[2]],
+                vx=[state[3]],
+                vy=[state[4]],
+                vz=[state[5]],
+                time=Timestamp.from_mjd([60000.0], scale="tdb"),
+                origin=Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]),
+                frame="ecliptic",
+            ),
+        )
+        eph = generate_ephemeris_2body(
+            propagate_2body(orbit, obs_times), observers
+        ).coordinates
+        return np.stack(
+            [
+                eph.lon.to_numpy(zero_copy_only=False),
+                eph.lat.to_numpy(zero_copy_only=False),
+            ],
+            axis=1,
+        )
+
+    # Both fits reproduce the same on-sky geometry to well under an arcsecond.
+    on_sky_diff_deg = np.abs(
+        _predict_lonlat(rust_state) - _predict_lonlat(reference_state)
+    )
+    assert on_sky_diff_deg.max() < 1.0 / 3600.0
+    # The well-constrained velocity agrees tightly.
+    np.testing.assert_allclose(rust_state[3:], reference_state[3:], rtol=0, atol=1e-6)
+
+
 def test_round_trip_observers_reconstructs_observers():
     coordinates = CartesianCoordinates.from_kwargs(
         x=[1.0, 2.0],
