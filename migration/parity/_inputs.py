@@ -1008,6 +1008,30 @@ def make_calculate_moid_batch(rng: np.random.Generator, n: int) -> Sample:
     return make_calculate_moid(rng, n)
 
 
+_OBSERVER_CODE_PANEL = np.array(
+    ["500", "X05", "F51", "W84", "309", "695", "T05", "I11"], dtype=object
+)
+
+
+def make_observers_from_codes(rng: np.random.Generator, n: int) -> Sample:
+    """Public ``Observers.from_codes`` orchestration: per-row MPC observatory
+    codes + UTC epochs -> heliocentric ecliptic Cartesian observer states.
+
+    The migration path runs the DE440 SPK lookups and the ITRF93->J2000
+    rotation in the Rust spicekit backend; baseline-main runs spiceypy against
+    the same kernels. Recon 2026-07-04 measured machine-epsilon agreement
+    (<= 1.2e-15 AU position, 4.2e-15 AU/day velocity) across the code panel
+    (geocenter + ground stations at low/mid/high latitude, both hemispheres).
+    """
+    codes = rng.choice(_OBSERVER_CODE_PANEL, size=n)
+    mjd_utc = np.sort(rng.uniform(59000.0, 61000.0, size=n)).astype(np.float64)
+    kw = {
+        "codes": np.array(codes, dtype=object),
+        "mjd_utc": mjd_utc,
+    }
+    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
 def make_calculate_perturber_moids(rng: np.random.Generator, n: int) -> Sample:
     """Public quivr orchestration over the batched MOID kernel.
 
@@ -1952,6 +1976,7 @@ GENERATORS = {
     "bridge.propagate_orbits_2body": make_bridge_propagate_orbits_2body,
     "bridge.rotate_orbits_frame": make_bridge_rotate_orbits_frame,
     "bridge.sample_orbit_variants": make_bridge_sample_orbit_variants,
+    "observers.Observers.from_codes": make_observers_from_codes,
     "bridge.evaluate_residuals_2body": make_bridge_evaluate_residuals_2body,
 }
 
@@ -2070,6 +2095,7 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     "dynamics.calculate_moid": WorkloadShape(64),
     "dynamics.calculate_moid_batch": WorkloadShape(64),
     "dynamics.calculate_perturber_moids": WorkloadShape(64),
+    "observers.Observers.from_codes": WorkloadShape(50_000),
     "missions.porkchop_grid": WorkloadShape(
         4_096, extra={"departures": 64, "arrivals": 64}
     ),

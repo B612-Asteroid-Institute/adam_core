@@ -13,7 +13,7 @@ from typing_extensions import Self
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.origin import OriginCodes
+from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
 
 R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
@@ -111,6 +111,19 @@ OBSERVATORY_CODES = {
     x for x in OBSERVATORY_PARALLAX_COEFFICIENTS.code.to_numpy(zero_copy_only=False)
 }
 
+_OBSCODES_LOADED_BACKENDS: set = set()
+
+
+def _ensure_obscodes_loaded(backend) -> None:
+    """Load the MPC observatory parallax table into the Rust SPICE backend
+    once per backend instance (the backend caches the parsed sites)."""
+    key = id(backend)
+    if key in _OBSCODES_LOADED_BACKENDS:
+        return
+    with open(mpc_obscodes) as obscodes_file:
+        backend.load_mpc_obscodes(obscodes_file.read())
+    _OBSCODES_LOADED_BACKENDS.add(key)
+
 
 class Observers(qv.Table):
     code = qv.LargeStringColumn(nullable=False)
@@ -142,7 +155,58 @@ class Observers(qv.Table):
             raise ValueError("codes and times must have the same length.")
 
         if not isinstance(codes, pa.Array):
-            codes = pa.array(codes, type=pa.large_string())
+            codes = pa.array([str(code) for code in codes], type=pa.large_string())
+
+        # Single Rust crossing: obscodes lookup, DE440 Earth state, and the
+        # ITRF93 ground-offset rotation all run in the spicekit backend
+        # (bead personal-cmy.6). Requests containing codes the Rust ground
+        # table cannot serve (special space observatories such as JWST, or
+        # unknown codes) fall back to the legacy per-code assembly, which
+        # either computes them through their dedicated paths or raises the
+        # exact legacy error.
+        from ..utils.spice import get_backend, setup_SPICE
+
+        setup_SPICE()
+        backend = get_backend()
+        _ensure_obscodes_loaded(backend)
+        encoded = pc.dictionary_encode(codes)
+        unique_codes = [str(code) for code in encoded.dictionary.to_pylist()]
+        code_indices = encoded.indices.to_numpy(zero_copy_only=False)
+        try:
+            values = np.asarray(
+                backend.observer_states_from_codes(
+                    unique_codes,
+                    code_indices,
+                    times.scale,
+                    times.days.to_numpy(zero_copy_only=False),
+                    times.nanos.to_numpy(zero_copy_only=False),
+                    "ecliptic",
+                    "SUN",
+                ),
+                dtype=np.float64,
+            )
+        except Exception:
+            return cls._from_codes_legacy(codes, times)
+
+        coordinates = CartesianCoordinates.from_kwargs(
+            x=values[:, 0],
+            y=values[:, 1],
+            z=values[:, 2],
+            vx=values[:, 3],
+            vy=values[:, 4],
+            vz=values[:, 5],
+            time=times,
+            origin=Origin.from_kwargs(code=np.full(len(codes), "SUN", dtype="object")),
+            frame="ecliptic",
+        )
+        return cls.from_kwargs(code=codes, coordinates=coordinates)
+
+    @classmethod
+    def _from_codes_legacy(cls, codes: pa.Array, times: Timestamp) -> Self:
+        """Legacy per-code assembly: used when a request includes codes the
+        Rust ground-site table cannot serve (special space observatories,
+        unknown codes). Preserves exact legacy semantics and errors."""
+        from .state import get_observer_state
 
         class IndexedObservers(qv.Table):
             index = qv.UInt64Column()
@@ -150,24 +214,17 @@ class Observers(qv.Table):
 
         indexed_observers = IndexedObservers.empty()
 
-        # Loop through each unique code and calculate the observer's
-        # state for each time (these can be non-unique as cls.from_code
-        # will handle this)
         for code in pc.unique(codes):
-
             indices = pc.indices_nonzero(pc.equal(codes, code))
             times_code = times.take(indices)
-
-            observers_i = cls.from_code(
-                code.as_py(),
-                times_code,
+            observers_i = cls.from_kwargs(
+                code=[code.as_py()] * len(times_code),
+                coordinates=get_observer_state(code.as_py(), times_code),
             )
-
             indexed_observers_i = IndexedObservers.from_kwargs(
                 index=indices,
                 observers=observers_i,
             )
-
             indexed_observers = qv.concatenate([indexed_observers, indexed_observers_i])
             if indexed_observers.fragmented():
                 indexed_observers = qv.defragment(indexed_observers)
@@ -216,6 +273,12 @@ class Observers(qv.Table):
         else:
             err = "Code should be a str or an `~adam_core.coordinates.origin.OriginCodes`."
             raise ValueError(err)
+
+        if isinstance(code, str):
+            # Route MPC observatory codes through the single-crossing Rust
+            # path used by from_codes; NAIF OriginCodes keep the perturber
+            # state path below.
+            return cls.from_codes([code_str] * len(times), times)
 
         return cls.from_kwargs(
             code=[code_str] * len(times),

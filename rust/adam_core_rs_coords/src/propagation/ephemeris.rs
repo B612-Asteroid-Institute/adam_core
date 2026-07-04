@@ -372,8 +372,7 @@ fn generate_ephemeris_impl<P: Propagator>(
     // barycentric workflow the aberrated states are SSB and observers keep
     // their input origin, so translate both to SUN here; the SUN-origin-only
     // non-barycentric path is already heliocentric.
-    if barycentric.is_some() && options.photometry.any_requested() {
-        let translation_provider = barycentric.expect("barycentric provider checked above");
+    if let (Some(translation_provider), true) = (barycentric, options.photometry.any_requested()) {
         let sun = OriginId::Naif(10);
         let emission_times = TimeArray::new(propagated_times.scale, aberrated_epochs.clone())
             .map_err(|err| {

@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 
+use adam_core_rs_coords::{DataFrame, Epoch, OriginId, TimeArray, TimeScale};
 use adam_core_rs_spice::{
-    builtin_bodc2n, builtin_bodn2c, parse_text_kernel_bindings, pck_sxform_matrix,
-    AdamCoreSpiceBackend, NaifFrame, PckError, PckFile, SpiceBackendError, SpkError, SpkFile,
-    SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment,
+    builtin_bodc2n, builtin_bodn2c, parse_mpc_obscodes, parse_text_kernel_bindings,
+    pck_sxform_matrix, AdamCoreSpiceBackend, GroundObserverSite, NaifFrame, PckError, PckFile,
+    SpiceBackendError, SpkError, SpkFile, SpkWriter, SpkWriterError, Type3Record, Type3Segment,
+    Type9Segment,
 };
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -20,11 +23,16 @@ fn lock_err_to_py() -> PyErr {
 #[pyclass(name = "AdamCoreSpiceBackend")]
 pub struct PyAdamCoreSpiceBackend {
     inner: Mutex<AdamCoreSpiceBackend>,
+    obscodes: Mutex<HashMap<String, GroundObserverSite>>,
 }
 
 impl PyAdamCoreSpiceBackend {
     fn lock(&self) -> PyResult<MutexGuard<'_, AdamCoreSpiceBackend>> {
         self.inner.lock().map_err(|_| lock_err_to_py())
+    }
+
+    fn lock_obscodes(&self) -> PyResult<MutexGuard<'_, HashMap<String, GroundObserverSite>>> {
+        self.obscodes.lock().map_err(|_| lock_err_to_py())
     }
 }
 
@@ -34,7 +42,119 @@ impl PyAdamCoreSpiceBackend {
     fn new() -> Self {
         Self {
             inner: Mutex::new(AdamCoreSpiceBackend::new()),
+            obscodes: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Parse and cache MPC observatory parallax coefficients (the JSON
+    /// shipped by the Python `mpc_obscodes` package). Space-based codes with
+    /// non-finite geodetics are skipped. Returns the number of ground sites.
+    fn load_mpc_obscodes(&self, json: &str) -> PyResult<usize> {
+        let sites = parse_mpc_obscodes(json).map_err(spice_err_to_py)?;
+        let mut cache = self.lock_obscodes()?;
+        *cache = sites;
+        Ok(cache.len())
+    }
+
+    fn mpc_obscodes_loaded(&self) -> PyResult<usize> {
+        Ok(self.lock_obscodes()?.len())
+    }
+
+    /// Single-crossing ``Observers.from_codes`` state generation:
+    /// dictionary-encoded per-row MPC observatory codes (``unique_codes`` +
+    /// per-row ``code_indices``) and numpy epoch buffers -> ground-observer
+    /// states in ``frame`` relative to ``origin_code`` (heliocentric
+    /// ecliptic on the public path). Epochs rescale to TDB through the ERFA
+    /// time service. Unknown or space-based codes error (the Python boundary
+    /// falls back to the legacy per-code assembly). The dictionary-encoded
+    /// boundary keeps large-row crossings at numpy-buffer cost instead of
+    /// per-row Python string/int conversion cost.
+    #[allow(clippy::too_many_arguments)]
+    fn observer_states_from_codes<'py>(
+        &self,
+        py: Python<'py>,
+        unique_codes: Vec<String>,
+        code_indices: PyReadonlyArray1<'py, i64>,
+        time_scale: &str,
+        time_days: PyReadonlyArray1<'py, i64>,
+        time_nanos: PyReadonlyArray1<'py, i64>,
+        frame: &str,
+        origin_code: &str,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let code_indices = code_indices.as_slice()?;
+        let time_days = time_days.as_slice()?;
+        let time_nanos = time_nanos.as_slice()?;
+        if code_indices.len() != time_days.len() || code_indices.len() != time_nanos.len() {
+            return Err(PyValueError::new_err(
+                "codes and times must share one length",
+            ));
+        }
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let times = TimeArray::from_parts(scale, time_days.to_vec(), time_nanos.to_vec())
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?
+            .rescale(TimeScale::Tdb)
+            .map_err(|err| {
+                PyValueError::new_err(format!("cannot rescale observer times to TDB: {err}"))
+            })?;
+        let frame = match frame {
+            "ecliptic" => DataFrame::Ecliptic,
+            "equatorial" => DataFrame::Equatorial,
+            "itrf93" => DataFrame::Itrf93,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unsupported observer frame: {other}"
+                )))
+            }
+        };
+        let origin = OriginId::from_code(origin_code);
+        let sites = self.lock_obscodes()?;
+        if sites.is_empty() {
+            return Err(PyValueError::new_err(
+                "MPC observatory codes are not loaded; call load_mpc_obscodes first",
+            ));
+        }
+        let mut groups: Vec<Vec<usize>> = vec![Vec::new(); unique_codes.len()];
+        for (row, &slot) in code_indices.iter().enumerate() {
+            let slot = usize::try_from(slot).map_err(|_| {
+                PyValueError::new_err("code_indices must be non-negative dictionary slots")
+            })?;
+            groups
+                .get_mut(slot)
+                .ok_or_else(|| {
+                    PyValueError::new_err("code_indices reference a missing dictionary slot")
+                })?
+                .push(row);
+        }
+        let backend = self.lock()?;
+        let mut out = vec![f64::NAN; code_indices.len() * 6];
+        for (slot, rows) in groups.iter().enumerate() {
+            if rows.is_empty() {
+                continue;
+            }
+            let code = &unique_codes[slot];
+            let site = sites.get(code.as_str()).ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "Observatory code '{code}' is not a supported ground site \
+                     (unknown or space-based)"
+                ))
+            })?;
+            let epochs: Vec<Epoch> = rows.iter().map(|&row| times.epochs[row]).collect();
+            let group_times = TimeArray::new(TimeScale::Tdb, epochs)
+                .map_err(|err| PyValueError::new_err(format!("invalid group times: {err}")))?;
+            let coordinates = backend
+                .ground_observer_state(site, &group_times, frame, &origin)
+                .map_err(spice_err_to_py)?;
+            let values = coordinates.values.cartesian().ok_or_else(|| {
+                PyRuntimeError::new_err("ground observer states were not Cartesian")
+            })?;
+            for (group_row, &row) in rows.iter().enumerate() {
+                out[row * 6..row * 6 + 6].copy_from_slice(&values[group_row]);
+            }
+        }
+        let arr = ndarray::Array2::from_shape_vec((code_indices.len(), 6), out)
+            .map_err(|err| PyValueError::new_err(format!("failed to shape states: {err}")))?;
+        Ok(arr.into_pyarray(py))
     }
 
     fn furnsh(&self, path: &str) -> PyResult<()> {

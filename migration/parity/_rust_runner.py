@@ -347,6 +347,21 @@ def _missions_porkchop_grid(
     }
 
 
+def _observers_from_codes(codes: Any, mjd_utc: Any) -> dict[str, np.ndarray]:
+    """Migration ``Observers.from_codes`` heliocentric observer states."""
+    from adam_core.observers import Observers
+    from adam_core.time import Timestamp
+
+    times = Timestamp.from_mjd(np.asarray(mjd_utc, dtype=np.float64), scale="utc")
+    observers = Observers.from_codes(list(codes), times)
+    return {
+        "coordinates": _ensure(
+            np.asarray(observers.coordinates.values, dtype=np.float64),
+            "observers.Observers.from_codes",
+        ),
+    }
+
+
 def _pack_perturber_moids(moids: Any) -> dict[str, np.ndarray]:
     from adam_core.coordinates.origin import OriginCodes
 
@@ -1139,6 +1154,7 @@ DISPATCH = {
     "dynamics.calculate_moid": _dynamics_calculate_moid,
     "dynamics.calculate_moid_batch": _dynamics_calculate_moid_batch,
     "dynamics.calculate_perturber_moids": _dynamics_calculate_perturber_moids,
+    "observers.Observers.from_codes": _observers_from_codes,
     "missions.porkchop_grid": _missions_porkchop_grid,
     "dynamics.generate_porkchop_data": _dynamics_generate_porkchop_data,
     "dynamics.propagate_2body": _dynamics_propagate_2body,

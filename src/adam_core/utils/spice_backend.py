@@ -112,6 +112,37 @@ class RustBackend:
                     f"rust PCK readers do not cover sxform({frame_from},{frame_to})"
                 ) from exc
 
+    def load_mpc_obscodes(self, json_text: str) -> int:
+        """Parse + cache MPC observatory parallax coefficients Rust-side."""
+        with self._lock:
+            return int(self._inner.load_mpc_obscodes(json_text))
+
+    def observer_states_from_codes(
+        self,
+        unique_codes: list,
+        code_indices: np.ndarray,
+        time_scale: str,
+        time_days: np.ndarray,
+        time_nanos: np.ndarray,
+        frame: str,
+        origin_code: str,
+    ) -> np.ndarray:
+        """Single-crossing per-row MPC-code ground-observer states
+        (dictionary-encoded codes + numpy epoch buffers)."""
+        with self._lock:
+            return np.asarray(
+                self._inner.observer_states_from_codes(
+                    unique_codes,
+                    np.ascontiguousarray(code_indices, dtype=np.int64),
+                    time_scale,
+                    np.ascontiguousarray(time_days, dtype=np.int64),
+                    np.ascontiguousarray(time_nanos, dtype=np.int64),
+                    frame,
+                    origin_code,
+                ),
+                dtype=np.float64,
+            )
+
     def bodn2c(self, name: str) -> int:
         with self._lock:
             try:

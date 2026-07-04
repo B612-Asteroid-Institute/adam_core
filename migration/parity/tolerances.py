@@ -1039,6 +1039,36 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "frame rotation."
         ),
     ),
+    "observers.Observers.from_codes": ToleranceSpec(
+        outputs={"coordinates": OutputTol(atol=1e-11)},
+        rationale=(
+            "Public MPC observatory-code observer states (heliocentric ecliptic "
+            "Cartesian position + velocity) vs baseline-main. The migration path "
+            "runs DE440 SPK lookups and the ITRF93->J2000 rotation in the Rust "
+            "spicekit backend; legacy runs spiceypy over the same kernels."
+        ),
+        dominant_column="observer position/velocity",
+        physical_magnitude=(
+            "Typical agreement is f64 rounding-level (<=2.5e-14 AU); isolated "
+            "epochs reach 1.07e-13 AU on velocity components (1.6 cm-scale, "
+            "sub-0.1 mas)."
+        ),
+        root_cause=(
+            "Pinned 2026-07-04: at isolated epochs the spicekit and CSPICE "
+            "ITRF93 rotation matrices differ by ~4.5e-10 (~0.09 mas) from "
+            "earth-orientation PCK record-boundary evaluation; applied to the "
+            "Omega-cross-r topocentric velocity (~2.7e-4 AU/day) this yields "
+            "the observed ~1e-13 AU/day outliers. Earth SPK states and "
+            "UTC->TDB conversion were verified bit-identical at the same "
+            "epochs."
+        ),
+        verdict=(
+            "orchestration parity: typical rows at machine epsilon with "
+            "bounded PCK record-boundary outliers ~1e-13; atol 1e-11 is two "
+            "decades above the observed worst and five below any astrometric "
+            "significance."
+        ),
+    ),
     "bridge.sample_orbit_variants": ToleranceSpec(
         outputs={
             "coordinates": OutputTol(atol=1e-12),

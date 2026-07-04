@@ -29,7 +29,13 @@ pub use spicekit::spk_writer::{
 };
 pub use spicekit::{NaifFrame, PckError, PckFile, SpkError, SpkFile};
 
+use rayon::prelude::*;
+
 const ITRF93_FRAME_CODE: i32 = 3000;
+/// Below this epoch count the batch kernel evaluators stay serial: the
+/// per-call Rayon spawn tax exceeds the Chebyshev evaluation cost for small
+/// batches (mirrors the coords-crate kernel policy).
+const RAYON_SERIAL_THRESHOLD_EPOCHS: usize = 1024;
 pub const KM_PER_AU: f64 = 149_597_870.700;
 pub const SECONDS_PER_DAY: f64 = 86_400.0;
 pub const EARTH_NAIF_ID: i32 = 399;
@@ -568,29 +574,34 @@ impl AdamCoreSpiceBackend {
         }
 
         if matches!(frame, "J2000" | "ECLIPJ2000") {
+            let out_frame = if frame == "J2000" {
+                NaifFrame::J2000
+            } else {
+                NaifFrame::EclipJ2000
+            };
             for reader in readers {
-                let out_frame = if frame == "J2000" {
-                    NaifFrame::J2000
-                } else {
-                    NaifFrame::EclipJ2000
-                };
-                let mut out = Vec::with_capacity(ets.len() * 6);
-                let mut covered = true;
-                for &et in ets {
-                    let state = if frame == "J2000" {
-                        reader.state(target, center, et)
+                let evaluate = |&et: &f64| {
+                    if frame == "J2000" {
+                        reader.state(target, center, et).map_err(|_| ())
                     } else {
-                        reader.state_in_frame(target, center, et, out_frame)
-                    };
-                    match state {
-                        Ok(s) => out.extend_from_slice(&s),
-                        Err(_) => {
-                            covered = false;
-                            break;
-                        }
+                        reader
+                            .state_in_frame(target, center, et, out_frame)
+                            .map_err(|_| ())
                     }
-                }
-                if covered {
+                };
+                // Chebyshev evaluation is read-only per epoch; parallelize
+                // large batches (multi-thread gate policy) and stay serial
+                // below the spawn-tax threshold.
+                let states: Result<Vec<_>, ()> = if ets.len() >= RAYON_SERIAL_THRESHOLD_EPOCHS {
+                    ets.par_iter().map(evaluate).collect()
+                } else {
+                    ets.iter().map(evaluate).collect()
+                };
+                if let Ok(states) = states {
+                    let mut out = Vec::with_capacity(ets.len() * 6);
+                    for state in states {
+                        out.extend_from_slice(&state);
+                    }
                     return Some(out);
                 }
             }
@@ -649,18 +660,18 @@ impl AdamCoreSpiceBackend {
             Kernel::Pck { reader, .. } => Some(reader),
             _ => None,
         }) {
-            let mut out = Vec::with_capacity(ets.len() * 36);
-            let mut covered = true;
-            for &et in ets {
-                match pck_sxform_matrix(reader, frame_from, frame_to, et) {
-                    Ok(m) => out.extend(m.iter().flat_map(|row| row.iter()).copied()),
-                    Err(_) => {
-                        covered = false;
-                        break;
-                    }
+            let evaluate =
+                |&et: &f64| pck_sxform_matrix(reader, frame_from, frame_to, et).map_err(|_| ());
+            let matrices: Result<Vec<_>, ()> = if ets.len() >= RAYON_SERIAL_THRESHOLD_EPOCHS {
+                ets.par_iter().map(evaluate).collect()
+            } else {
+                ets.iter().map(evaluate).collect()
+            };
+            if let Ok(matrices) = matrices {
+                let mut out = Vec::with_capacity(ets.len() * 36);
+                for m in matrices {
+                    out.extend(m.iter().flat_map(|row| row.iter()).copied());
                 }
-            }
-            if covered {
                 return Some(out);
             }
         }

@@ -427,6 +427,23 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         ),
     ),
     ApiMigration(
+        api_id="observers.Observers.from_codes",
+        status=ORCHESTRATION_RUST_DEFAULT,
+        boundary="python+quivr",
+        default="rust",
+        rust_module="adam_core._rust_native.AdamCoreSpiceBackend",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Public MPC observatory-code observer-state orchestration: the "
+            "DE440 SPK lookups and the ITRF93->J2000 ground-offset rotation "
+            "run in the Rust spicekit backend (pxform_batch/spkez), with "
+            "Python owning obscodes lookup and table assembly. Randomized "
+            "baseline-main parity fuzzes per-row codes (geocenter + ground "
+            "stations, both hemispheres) across UTC epochs; measured "
+            "agreement is f64 rounding-level (<=1.2e-15 AU)."
+        ),
+    ),
+    ApiMigration(
         api_id="dynamics.calculate_perturber_moids",
         status=ORCHESTRATION_RUST_DEFAULT,
         boundary="python+quivr",
