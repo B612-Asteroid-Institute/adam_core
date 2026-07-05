@@ -45,7 +45,7 @@ BACKEND_CANDIDATES: Final[tuple[BackendCandidate, ...]] = (
         canonical_name="dynamics.propagate_2body",
         implementation_label="Arrow IPC OrbitBatch workflow",
         boundary="python+quivr+arrow-ipc",
-        rust_module="adam_core.orbits.arrow_bridge.propagate_orbits_2body",
+        rust_module="adam_core.orbits.arrow_bridge._propagate_orbits_2body_ipc_candidate",
         legacy_comparator="adam_core.dynamics.propagate_2body",
         note=(
             "Diagnostic candidate for replacing/augmenting the canonical public "
@@ -87,17 +87,25 @@ BACKEND_CANDIDATES: Final[tuple[BackendCandidate, ...]] = (
     BackendCandidate(
         candidate_id="bridge.evaluate_residuals_2body",
         canonical_api_id=None,
-        canonical_name="OD residual workflow (canonical public API TBD)",
+        canonical_name=(
+            "coordinates.residuals.Residuals.calculate + "
+            "orbit_determination.evaluate_orbits"
+        ),
         implementation_label="Arrow IPC 2-body ephemeris+residual workflow",
         boundary="python+quivr+arrow-ipc",
-        rust_module="adam_core.orbits.arrow_bridge.evaluate_residuals_2body",
+        rust_module=(
+            "adam_core.orbits.arrow_bridge._evaluate_residuals_2body_ipc_candidate"
+        ),
         legacy_comparator=(
             "adam_core.dynamics.generate_ephemeris_2body + "
             "adam_core.coordinates.residuals.Residuals.calculate"
         ),
         note=(
-            "Diagnostic OD inner-loop candidate. Promotion must wait for the "
-            "canonical OD public API/signature decision under personal-cmy.7."
+            "Diagnostic OD inner-loop candidate. Canonical OD APIs resolved "
+            "under personal-cmy.7: residual evaluation stays behind "
+            "Residuals.calculate / evaluate_orbits, and least-squares fitting "
+            "is the backend-generic Rust Gauss-Newton driver dispatched from "
+            "orbit_determination.fit_least_squares."
         ),
     ),
 )

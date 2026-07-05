@@ -118,6 +118,35 @@ def fit_least_squares(
     else:
         observations_to_include = observations
 
+    # Rust-native fast path (bead personal-cmy.7 / 13.1.4): propagators that
+    # expose a native ``fit_least_squares`` (the Rust-backed adam-assist
+    # equivalent) run the backend-generic Gauss-Newton driver, batching each
+    # iteration's base + six perturbed candidates into one same-epoch
+    # multi-particle ephemeris crossing. Dispatched only when the caller has
+    # not requested scipy-specific optimizer tuning, so custom kwargs keep
+    # the legacy scipy path unchanged.
+    native_fit = getattr(propagator, "fit_least_squares", None)
+    if native_fit is not None and set(kwargs) <= {"xtol", "ftol", "max_iterations"}:
+        fitted, _chi2, iterations, converged = native_fit(
+            orbit, observations_to_include, **kwargs
+        )
+        fitted_orbit, fitted_orbit_members = evaluate_orbits(
+            fitted,
+            observations,
+            propagator,
+            parameters=6,
+            ignore=ignore,
+        )
+        fitted_orbit = (
+            fitted_orbit.set_column("iterations", [iterations])
+            .set_column("success", [converged])
+            .set_column("status_code", [1 if converged else 0])
+        )
+        fitted_orbit_members = fitted_orbit_members.set_column(
+            "solution", pc.invert(fitted_orbit_members.outlier)
+        )
+        return fitted_orbit, fitted_orbit_members
+
     parameters = 6
     # Extract epoch and state vector from orbit
     epoch = orbit.coordinates.time.mjd().to_numpy()

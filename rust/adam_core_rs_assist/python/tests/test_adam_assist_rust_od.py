@@ -121,3 +121,29 @@ def test_rust_od_recovers_truth_and_matches_legacy(od_problem):
     rust_cov = fitted_rust.coordinates.covariance.to_matrix()[0]
     assert np.isfinite(rust_cov).all()
     assert (np.diag(rust_cov) > 0).all()
+
+
+def test_public_fit_least_squares_dispatches_to_native(od_problem):
+    """The canonical public entry point
+    ``adam_core.orbit_determination.fit_least_squares`` dispatches to the
+    Rust-native driver when given the Rust-backed propagator (bead
+    personal-cmy.13.1.4), preserving the legacy (FittedOrbits,
+    FittedOrbitMembers) contract."""
+    _python_propagator, observations, initial = od_problem
+    rust_propagator = RustASSISTPropagator()
+
+    fitted_orbit, fitted_members = fit_least_squares(
+        initial, observations, rust_propagator
+    )
+    assert fitted_orbit.success[0].as_py()
+    assert len(fitted_members) == len(observations)
+    assert fitted_members.solution.to_pylist().count(True) == len(observations)
+
+    # Bit-identical to the direct native fit: proves the native path ran
+    # (the scipy path would only agree to its optimizer floor, not exactly).
+    direct, _chi2, _iters, _conv = rust_propagator.fit_least_squares(
+        initial, observations
+    )
+    np.testing.assert_array_equal(
+        fitted_orbit.coordinates.values[0], direct.coordinates.values[0]
+    )

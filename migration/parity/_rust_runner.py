@@ -928,7 +928,7 @@ def _bridge_propagate_orbits_2body(
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.origin import Origin
     from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import propagate_orbits_2body
+    from adam_core.orbits.arrow_bridge import _propagate_orbits_2body_ipc_candidate
     from adam_core.time import Timestamp
 
     coords = np.asarray(coords, dtype=np.float64)
@@ -951,7 +951,7 @@ def _bridge_propagate_orbits_2body(
     target = Timestamp.from_mjd(
         np.asarray([float(target_mjd)], dtype=np.float64), scale="tdb"
     )
-    out = propagate_orbits_2body(orbits, target)
+    out = _propagate_orbits_2body_ipc_candidate(orbits, target)
     return {"out": _ensure(out.coordinates.values, "bridge.propagate_orbits_2body")}
 
 
@@ -1068,7 +1068,9 @@ def _bridge_evaluate_residuals_2body(
     from adam_core.coordinates.spherical import SphericalCoordinates
     from adam_core.observers import Observers
     from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import evaluate_residuals_2body
+    from adam_core.orbits.arrow_bridge import (
+        _evaluate_residuals_2body_ipc_candidate,
+    )
     from adam_core.time import Timestamp
 
     orbit_coords = np.asarray(orbit_coords, dtype=np.float64)
@@ -1121,7 +1123,9 @@ def _bridge_evaluate_residuals_2body(
             np.asarray(observed_cov, dtype=np.float64)
         ),
     )
-    chi2, _residuals = evaluate_residuals_2body(orbits, observed, observers)
+    chi2, _residuals = _evaluate_residuals_2body_ipc_candidate(
+        orbits, observed, observers
+    )
     return {"chi2": _ensure(chi2, "bridge.evaluate_residuals_2body")}
 
 

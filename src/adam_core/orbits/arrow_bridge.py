@@ -184,7 +184,7 @@ def round_trip_observers(observers: Observers) -> Observers:
     )
 
 
-def evaluate_residuals_2body(
+def _evaluate_residuals_2body_ipc_candidate(
     orbits: Orbits,
     observed_coordinates,
     observers: Observers,
@@ -194,7 +194,12 @@ def evaluate_residuals_2body(
     stellar_aberration: bool = False,
     max_lt_iter: int = 10,
 ):
-    """Rust-native OD residual evaluation (the OD inner loop) over the bridge.
+    """Diagnostic Arrow-IPC candidate for the OD residual inner loop.
+
+    Private per the bridge-naming policy (bead personal-cmy.13.1.4): the
+    canonical public surfaces are ``coordinates.residuals.Residuals.calculate``
+    and ``orbit_determination.evaluate_orbits``; this workflow is their fused
+    2-body transport experiment, kept for the parity/speed harness.
 
     ``orbits`` must already be at the observation times (1:1 with the observed
     astrometry and observers). Composes the same 2-body ephemeris + residual
@@ -236,7 +241,7 @@ def evaluate_residuals_2body(
     )
 
 
-def fit_orbit_least_squares(
+def _fit_orbit_least_squares_2body_candidate(
     orbit: Orbits,
     observed_coordinates,
     observers: Observers,
@@ -401,12 +406,17 @@ def _propagate_orbits_typed_ipc_candidate(
     return table, valid
 
 
-def propagate_orbits_2body(
+def _propagate_orbits_2body_ipc_candidate(
     orbits: Orbits, time, max_iter: int = 100, tol: float = 1e-14
 ) -> Orbits:
-    """Propagate ``orbits`` to a single shared ``time`` (length-1 Timestamp) with
-    2-body dynamics Rust-side in one crossing (state only). Orbit epochs and
-    ``time`` must share the dynamics time scale (typically TDB).
+    """Diagnostic Arrow-IPC candidate for ``dynamics.propagate_2body``.
+
+    Private per the bridge-naming policy (bead personal-cmy.13.1.4): the
+    canonical public API is ``dynamics.propagate_2body``; this Orbits-level
+    single-shared-time transport experiment is kept for the harness.
+    Propagates ``orbits`` to a single shared ``time`` (length-1 Timestamp)
+    with 2-body dynamics Rust-side in one crossing (state only); orbit epochs
+    and ``time`` must share the dynamics time scale (typically TDB).
     """
     days = int(time.days.to_numpy(zero_copy_only=False)[0])
     nanos = int(time.nanos.to_numpy(zero_copy_only=False)[0])

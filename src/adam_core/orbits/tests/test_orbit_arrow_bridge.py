@@ -27,12 +27,12 @@ from adam_core.dynamics import propagate_2body
 from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.observers import Observers
 from adam_core.orbits.arrow_bridge import (
+    _evaluate_residuals_2body_ipc_candidate,
+    _fit_orbit_least_squares_2body_candidate,
+    _propagate_orbits_2body_ipc_candidate,
     _rotate_orbits_frame_ipc_candidate,
     _sample_orbit_variants_ipc_candidate,
-    evaluate_residuals_2body,
-    fit_orbit_least_squares,
     orbits_to_ipc,
-    propagate_orbits_2body,
     round_trip_observers,
     round_trip_orbits,
     round_trip_orbits_zero_copy,
@@ -266,7 +266,7 @@ def test_propagate_orbits_2body_matches_propagate_2body():
         coordinates=coordinates,
     )
     target = Timestamp.from_mjd([60010.0], scale="tdb")
-    bridge = propagate_orbits_2body(orbits, target)
+    bridge = _propagate_orbits_2body_ipc_candidate(orbits, target)
     reference = propagate_2body(orbits, target)
     assert bridge.coordinates.time.scale == "tdb"
     assert bridge.orbit_id.to_pylist() == reference.orbit_id.to_pylist()
@@ -327,7 +327,9 @@ def test_evaluate_residuals_2body_matches_generate_ephemeris_2body():
     reference = Residuals.calculate(observed, predicted)
     chi2_reference = reference.chi2.to_numpy(zero_copy_only=False)
 
-    chi2_rust, _residuals_rust = evaluate_residuals_2body(orbits, observed, observers)
+    chi2_rust, _residuals_rust = _evaluate_residuals_2body_ipc_candidate(
+        orbits, observed, observers
+    )
     np.testing.assert_allclose(chi2_rust, chi2_reference, rtol=1e-9, atol=1e-12)
 
 
@@ -398,7 +400,7 @@ def test_fit_orbit_least_squares_recovers_truth():
             frame="ecliptic",
         ),
     )
-    fitted, chi2, iterations, converged = fit_orbit_least_squares(
+    fitted, chi2, iterations, converged = _fit_orbit_least_squares_2body_candidate(
         initial, observed, observers
     )
     assert converged
@@ -542,7 +544,7 @@ def test_fit_orbit_least_squares_matches_scipy_2body_reference_noiseless():
     observers, observed, initial, truth_state, obs_times, sigma_deg = (
         _two_body_od_problem()
     )
-    fitted, _chi2, _iters, converged = fit_orbit_least_squares(
+    fitted, _chi2, _iters, converged = _fit_orbit_least_squares_2body_candidate(
         initial, observed, observers
     )
     assert converged
@@ -569,7 +571,7 @@ def test_fit_orbit_least_squares_matches_scipy_2body_reference_with_noise():
     observers, observed, initial, _truth, obs_times, sigma_deg = _two_body_od_problem(
         noise_arcsec=0.1, seed=20260704
     )
-    fitted, _chi2, _iters, converged = fit_orbit_least_squares(
+    fitted, _chi2, _iters, converged = _fit_orbit_least_squares_2body_candidate(
         initial, observed, observers
     )
     assert converged
@@ -658,7 +660,7 @@ def test_propagate_orbits_2body_transports_covariance():
         coordinates=coordinates,
     )
     target = Timestamp.from_mjd([60010.0], scale="tdb")
-    bridge = propagate_orbits_2body(orbits, target)
+    bridge = _propagate_orbits_2body_ipc_candidate(orbits, target)
     reference = propagate_2body(orbits, target)
     np.testing.assert_allclose(
         bridge.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-11
