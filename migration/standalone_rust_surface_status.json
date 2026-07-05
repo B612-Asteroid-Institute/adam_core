@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-15",
-  "purpose": "Standalone Rust surface status registry for planning a Python-independent adam-core-rs capability set.",
+  "generated_at": "2026-07-05",
+  "purpose": "Standalone Rust surface status registry for planning a Python-independent adam-core-rs capability set. Refreshed 2026-07-05 (bead personal-cmy.18): statuses updated for the landed W1 data model + Arrow bridge + typed adapter, promoted variants/observers workflows, ASSIST impacts/ephemeris parity, and the Rust OD driver stack.",
   "source_inventory": "migration/artifacts/adam_core_public_surface_inventory_2026-05-15.json",
   "source_inventory_count": 507,
   "source_inventory_entry_count_verified": 507,
@@ -91,7 +91,10 @@
     "first_scope_product_edge_new_plotting_approach": "In first standalone scope as product/visualization edge; likely data/spec or optional integration rather than core plotting dependency.",
     "first_scope_optional_net_edge": "In first standalone scope as optional network/client edge with fixture-testable parsers.",
     "rust_helper_gap": "Small helpers should become typed Rust parsers/utilities when needed by workflow ports.",
-    "adapter_only_to_retire": "Python shim/compat glue counted in inventory but not a Rust port target."
+    "adapter_only_to_retire": "Python shim/compat glue counted in inventory but not a Rust port target.",
+    "rust_data_model_landed_adapters_active": "Rust-canonical batches, nested Arrow codecs, the W1 quivr bridge, and the typed propagation adapter are landed; remaining work is surface breadth, not the data model.",
+    "typed_propagator_landed": "Typed Propagator trait, TwoBodyPropagator, the backend-generic ephemeris workflow, and the GPL ASSIST adapter (propagation, covariance, impacts, ephemeris) are landed and parity-gated.",
+    "rust_od_driver_landed": "IOD kernels rust-default; 2-body LSQ kernel gated vs scipy; the backend-generic Gauss-Newton OD driver is landed in the permissive core and dispatched from the public fit_least_squares."
   },
   "summary": {
     "workstream_count": 11,
@@ -132,7 +135,7 @@
         "adam_core.observers.observers",
         "adam_core.observers.state"
       ],
-      "status": "blocked_by_rust_data_model",
+      "status": "rust_data_model_landed_adapters_active",
       "first_scope": true,
       "implementation_direction": "Define Rust-canonical schemas and typed batches; Python/quivr adapts through Arrow/PyO3 adapters.",
       "dependencies": [
@@ -236,7 +239,7 @@
         "adam_core.utils.chunking",
         "adam_core.utils.bounded_lru"
       ],
-      "status": "blocked_by_pluggable_rust_propagator",
+      "status": "typed_propagator_landed",
       "first_scope": true,
       "implementation_direction": "Define pluggable Rust Propagator trait; start with TwoBodyPropagator and add an ASSIST-compatible backend by adapting GPL-licensed assist-rs while retaining backend pluggability.",
       "dependencies": [
@@ -267,7 +270,7 @@
         "adam_core.orbit_determination.orbit_fitter",
         "adam_core.orbit_determination.fitted_orbits"
       ],
-      "status": "blocked_by_rust_data_model_and_propagator",
+      "status": "rust_od_driver_landed",
       "first_scope": true,
       "implementation_direction": "Port OD/IOD/LSQ over typed observations, residuals, fit diagnostics, and the pluggable Propagator trait; reuse adam_core_rs_autodiff::Dual where appropriate.",
       "dependencies": [
@@ -409,17 +412,17 @@
     "adam_core.coordinates.cartesian": {
       "workstream": "W1",
       "entry_count": 34,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.coordinates.cometary": {
       "workstream": "W1",
       "entry_count": 29,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.coordinates.covariances": {
       "workstream": "W1",
       "entry_count": 15,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.coordinates.geodetics": {
       "workstream": "W1",
@@ -429,7 +432,7 @@
     "adam_core.coordinates.keplerian": {
       "workstream": "W1",
       "entry_count": 29,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.coordinates.origin": {
       "workstream": "W1",
@@ -444,7 +447,7 @@
     "adam_core.coordinates.spherical": {
       "workstream": "W1",
       "entry_count": 16,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.coordinates.transform": {
       "workstream": "W2",
@@ -494,7 +497,7 @@
     "adam_core.dynamics.impacts": {
       "workstream": "W4",
       "entry_count": 11,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "rust_native_service_api"
     },
     "adam_core.dynamics.kepler": {
       "workstream": "W4",
@@ -574,7 +577,7 @@
     "adam_core.observers.observers": {
       "workstream": "W1",
       "entry_count": 7,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_native_service_api"
     },
     "adam_core.observers.state": {
       "workstream": "W1",
@@ -719,7 +722,7 @@
     "adam_core.orbits.variants": {
       "workstream": "W1",
       "entry_count": 10,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.parallel": {
       "workstream": "W5",
@@ -779,7 +782,7 @@
     "adam_core.time.time": {
       "workstream": "W1",
       "entry_count": 37,
-      "status": "blocked_by_time_model"
+      "status": "rust_service_available_extend"
     },
     "adam_core.utils.bounded_lru": {
       "workstream": "W5",
