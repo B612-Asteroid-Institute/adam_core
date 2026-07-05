@@ -1365,11 +1365,14 @@ fn assemble_result(
         && request.input.coordinates().covariance.is_some();
     let mut covariance_values = output_has_covariance.then(|| Vec::with_capacity(output_rows * 36));
     let mut covariance_validity = output_has_covariance.then(|| Vec::with_capacity(output_rows));
+    let input_physical_parameters = request.input.physical_parameters();
+    let mut source_orbit_indices = Vec::with_capacity(output_rows);
 
     for block in blocks {
         for row_offset in 0..block.states.len() {
             let output_row = states.len();
             let input_time_index = block.time_indices[row_offset];
+            source_orbit_indices.push(block.orbit_index);
             orbit_ids.push(request.input.orbit_id()[block.orbit_index].clone());
             object_ids.push(request.input.object_id()[block.orbit_index].clone());
             if let Some(values) = &mut variant_ids {
@@ -1447,14 +1450,21 @@ fn assemble_result(
         covariance,
     )?;
     let variants = match (variant_ids, weights, weights_cov) {
-        (Some(variant_ids), Some(weights), Some(weights_cov)) => Some(OrbitVariantBatch::new(
-            orbit_ids.clone(),
-            object_ids.clone(),
-            variant_ids,
-            weights,
-            weights_cov,
-            coordinates.clone(),
-        )?),
+        (Some(variant_ids), Some(weights), Some(weights_cov)) => {
+            let variants = OrbitVariantBatch::new(
+                orbit_ids.clone(),
+                object_ids.clone(),
+                variant_ids,
+                weights,
+                weights_cov,
+                coordinates.clone(),
+            )?;
+            Some(match input_physical_parameters {
+                Some(physical_parameters) => variants
+                    .with_physical_parameters(physical_parameters.take(&source_orbit_indices))?,
+                None => variants,
+            })
+        }
         (None, None, None) => None,
         _ => {
             return Err(PropagationError::InvalidRequest(

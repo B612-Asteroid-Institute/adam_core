@@ -651,6 +651,23 @@ impl PhysicalParametersBatch {
         .all(|column| column.iter().all(Option::is_none))
     }
 
+    /// Gather rows by index (clones per-row optional values). Used to carry
+    /// per-source-orbit physical parameters onto derived rows such as sampled
+    /// variants or propagated variant outputs.
+    pub fn take(&self, indices: &[usize]) -> Self {
+        let gather = |column: &Vec<Option<f64>>| -> Vec<Option<f64>> {
+            indices.iter().map(|&index| column[index]).collect()
+        };
+        Self {
+            h_v: gather(&self.h_v),
+            h_v_sigma: gather(&self.h_v_sigma),
+            g: gather(&self.g),
+            g_sigma: gather(&self.g_sigma),
+            sigma_eff: gather(&self.sigma_eff),
+            chi2_red: gather(&self.chi2_red),
+        }
+    }
+
     pub fn validate(&self, rows: usize) -> SchemaResult<()> {
         for (field, len) in [
             ("H_v", self.h_v.len()),
@@ -731,6 +748,11 @@ pub struct OrbitVariantBatch {
     pub weights: Vec<Option<f64>>,
     pub weights_cov: Vec<Option<f64>>,
     pub coordinates: CoordinateBatch,
+    /// Optional per-variant physical parameters, matching quivr
+    /// `VariantOrbits.physical_parameters` (bead personal-cmy.13.2). Carried
+    /// through sampling and propagation so Python boundaries no longer
+    /// reattach them from source-row indices.
+    pub physical_parameters: Option<PhysicalParametersBatch>,
 }
 
 impl OrbitVariantBatch {
@@ -749,9 +771,20 @@ impl OrbitVariantBatch {
             weights,
             weights_cov,
             coordinates,
+            physical_parameters: None,
         };
         out.validate()?;
         Ok(out)
+    }
+
+    /// Attach quivr-compatible physical parameters; validated against the variant row count.
+    pub fn with_physical_parameters(
+        mut self,
+        physical_parameters: PhysicalParametersBatch,
+    ) -> SchemaResult<Self> {
+        physical_parameters.validate(self.coordinates.len())?;
+        self.physical_parameters = Some(physical_parameters);
+        Ok(self)
     }
 
     pub fn len(&self) -> usize {
@@ -763,11 +796,15 @@ impl OrbitVariantBatch {
     }
 
     pub fn to_orbit_batch(&self) -> SchemaResult<OrbitBatch> {
-        OrbitBatch::new(
+        let orbits = OrbitBatch::new(
             self.orbit_id.clone(),
             self.object_id.clone(),
             self.coordinates.clone(),
-        )
+        )?;
+        match self.physical_parameters.clone() {
+            Some(physical_parameters) => orbits.with_physical_parameters(physical_parameters),
+            None => Ok(orbits),
+        }
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
@@ -778,6 +815,9 @@ impl OrbitVariantBatch {
         validate_len("weights_cov", rows, self.weights_cov.len())?;
         validate_optional_finite("weights", &self.weights)?;
         validate_optional_finite("weights_cov", &self.weights_cov)?;
+        if let Some(physical_parameters) = &self.physical_parameters {
+            physical_parameters.validate(rows)?;
+        }
         Ok(())
     }
 }

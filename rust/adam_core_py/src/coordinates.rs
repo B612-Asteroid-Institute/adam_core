@@ -1176,9 +1176,10 @@ fn parse_variant_method(method: &str) -> PyResult<OrbitVariantSamplingMethod> {
 /// encode the resulting `OrbitVariantBatch` as quivr-`VariantOrbits` IPC.
 ///
 /// Returns `(ipc_bytes, source_orbit_indices)` where
-/// `source_orbit_indices[variant_row]` is the original orbit row index, so the
-/// Python boundary can reattach per-orbit columns (physical parameters) even
-/// when auto-mode produces a variable number of variants per orbit.
+/// `source_orbit_indices[variant_row]` is the original orbit row index.
+/// Physical parameters travel inside the IPC payload itself (the canonical
+/// `OrbitVariantBatch` carries them since bead personal-cmy.13.2); the source
+/// indices remain available for diagnostics and other per-orbit columns.
 #[pyfunction]
 #[pyo3(signature = (ipc_bytes, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
 fn orbits_sample_variants_ipc<'py>(

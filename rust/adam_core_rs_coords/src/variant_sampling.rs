@@ -193,6 +193,14 @@ where
         weights_cov,
         coordinates,
     )?;
+    // Carry per-source-orbit physical parameters onto the sampled variants
+    // (bead personal-cmy.13.2) so boundaries no longer reattach them.
+    let variants = match orbits.physical_parameters.as_ref() {
+        Some(physical_parameters) => {
+            variants.with_physical_parameters(physical_parameters.take(&source_orbit_indices))?
+        }
+        None => variants,
+    };
     Ok(OrbitVariantSamples {
         variants,
         source_orbit_indices,

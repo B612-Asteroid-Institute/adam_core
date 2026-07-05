@@ -131,6 +131,8 @@ pub(super) fn assemble_result(
     let input_variant_ids = request.input.variant_id();
     let input_weights = request.input.weights();
     let input_weights_cov = request.input.weights_cov();
+    let input_physical_parameters = request.input.physical_parameters();
+    let mut source_orbit_indices = Vec::with_capacity(output_rows);
 
     let output_has_covariance = request.options.covariance == CovariancePropagation::Linearized
         && input_coordinates.covariance.is_some();
@@ -169,6 +171,7 @@ pub(super) fn assemble_result(
             states.push(block.states[row_offset]);
             origins.push(input_coordinates.origins.origins[block.orbit_index].clone());
             epochs.push(target_times.epochs[time_index]);
+            source_orbit_indices.push(block.orbit_index);
             validity.push(row_valid);
             diagnostics.push(PropagationConvergence {
                 output_row,
@@ -218,14 +221,21 @@ pub(super) fn assemble_result(
         covariance,
     )?;
     let variants = match (variant_ids, weights, weights_cov) {
-        (Some(variant_ids), Some(weights), Some(weights_cov)) => Some(OrbitVariantBatch::new(
-            orbit_ids.clone(),
-            object_ids.clone(),
-            variant_ids,
-            weights,
-            weights_cov,
-            coordinates.clone(),
-        )?),
+        (Some(variant_ids), Some(weights), Some(weights_cov)) => {
+            let variants = OrbitVariantBatch::new(
+                orbit_ids.clone(),
+                object_ids.clone(),
+                variant_ids,
+                weights,
+                weights_cov,
+                coordinates.clone(),
+            )?;
+            Some(match input_physical_parameters {
+                Some(physical_parameters) => variants
+                    .with_physical_parameters(physical_parameters.take(&source_orbit_indices))?,
+                None => variants,
+            })
+        }
         (None, None, None) => None,
         _ => {
             return Err(PropagationError::InvalidRequest(

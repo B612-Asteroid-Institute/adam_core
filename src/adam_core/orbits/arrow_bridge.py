@@ -355,17 +355,15 @@ def _sample_orbit_variants_ipc_candidate(
     fallback) use the Rust-native RNG: statistically equivalent to, but not
     bit-identical with, the legacy scipy path (decision 2026-07-03: exact
     scipy RNG parity is not required). Per-orbit physical parameters are
-    reattached from the Rust-reported source-row indices, which is what makes
-    variable-count auto-mode outputs safe.
+    carried by the canonical Rust variant schema itself (bead
+    personal-cmy.13.2): the sampler gathers them per source orbit Rust-side
+    and they arrive in the IPC payload, so no Python reattachment is needed
+    even for variable-count auto-mode outputs.
     """
-    raw, source_indices = _rn.orbits_sample_variants_ipc(
+    raw, _source_indices = _rn.orbits_sample_variants_ipc(
         orbits_to_ipc(orbits), method, num_samples, seed, alpha, beta, kappa
     )
-    variants = variants_from_ipc(raw)
-    take_index = pa.array(source_indices, type=pa.int64())
-    return variants.set_column(
-        "physical_parameters", orbits.physical_parameters.take(take_index)
-    )
+    return variants_from_ipc(raw)
 
 
 def _propagate_orbits_typed_ipc_candidate(

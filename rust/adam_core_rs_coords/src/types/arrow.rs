@@ -387,8 +387,8 @@ fn orbit_variant_to_nested_record_batch(variants: &OrbitVariantBatch) -> SchemaR
         .collect::<Vec<_>>();
     let coordinates = StructArray::try_new(coord_fields, coord_arrays, None)
         .map_err(|err| SchemaError::Arrow(err.to_string()))?;
-    // Variants carry no physical parameters; emit the quivr column as all-null.
-    let physical_parameters = nested_physical_parameters_struct(None, rows)?;
+    let physical_parameters =
+        nested_physical_parameters_struct(variants.physical_parameters.as_ref(), rows)?;
 
     let fields = vec![
         Field::new("orbit_id", DataType::LargeUtf8, false),
@@ -588,9 +588,8 @@ fn coordinate_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Coor
 }
 
 /// Decode a nested quivr `VariantOrbits` record batch into the Rust-canonical
-/// `OrbitVariantBatch`. The quivr table's `physical_parameters` child is
-/// intentionally ignored: the Rust variant batch does not carry physical
-/// parameters, and Python boundaries reattach them from source-row indices.
+/// `OrbitVariantBatch`, including the optional `physical_parameters` child
+/// (bead personal-cmy.13.2); an all-null child decodes to `None`.
 fn orbit_variant_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitVariantBatch> {
     let rows = batch.num_rows();
     let (orbit_id, object_id) = parse_orbit_metadata(batch)?;
@@ -616,14 +615,25 @@ fn orbit_variant_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<O
         rows,
         schema.metadata(),
     )?;
-    OrbitVariantBatch::new(
+    let physical_parameters = batch
+        .column_by_name("physical_parameters")
+        .map(|column| array_as_struct(column, "physical_parameters"))
+        .transpose()?
+        .map(|physical_parameters| parse_nested_physical_parameters(physical_parameters, rows))
+        .transpose()?
+        .flatten();
+    let variants = OrbitVariantBatch::new(
         orbit_id,
         object_id,
         variant_id,
         weights,
         weights_cov,
         coordinates,
-    )
+    )?;
+    match physical_parameters {
+        Some(physical_parameters) => variants.with_physical_parameters(physical_parameters),
+        None => Ok(variants),
+    }
 }
 
 fn orbit_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatch> {
@@ -1599,6 +1609,57 @@ mod tests {
         assert_eq!(batch.num_columns(), 4);
         let round_tripped = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
         assert_eq!(round_tripped.physical_parameters, Some(physical_parameters));
+    }
+
+    #[test]
+    fn orbit_variant_nested_round_trip_preserves_physical_parameters() {
+        let physical_parameters = PhysicalParametersBatch {
+            h_v: vec![Some(15.5), None],
+            h_v_sigma: vec![Some(0.1), None],
+            g: vec![Some(0.15), None],
+            g_sigma: vec![None, None],
+            sigma_eff: vec![Some(0.05), None],
+            chi2_red: vec![Some(1.2), None],
+        };
+        let variants = OrbitVariantBatch::new(
+            vec![
+                OrbitId("orbit-1".to_string()),
+                OrbitId("orbit-2".to_string()),
+            ],
+            vec![Some(ObjectId("object-1".to_string())), None],
+            vec![Some(VariantId("variant-1".to_string())), None],
+            vec![Some(0.75), Some(0.25)],
+            vec![Some(0.5625), None],
+            coordinate_batch_with_covariance(),
+        )
+        .unwrap()
+        .with_physical_parameters(physical_parameters.clone())
+        .unwrap();
+        let batch = variants.into_nested_record_batch().unwrap();
+        assert_eq!(batch.num_columns(), 7);
+        let round_tripped = OrbitVariantBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(round_tripped.physical_parameters, Some(physical_parameters));
+        assert_eq!(round_tripped.weights, vec![Some(0.75), Some(0.25)]);
+
+        // Without attached parameters the emitted child is all-null and decodes to None.
+        let bare = OrbitVariantBatch::try_from_nested_record_batch(
+            &OrbitVariantBatch::new(
+                vec![
+                    OrbitId("orbit-1".to_string()),
+                    OrbitId("orbit-2".to_string()),
+                ],
+                vec![None, None],
+                vec![None, None],
+                vec![None, None],
+                vec![None, None],
+                coordinate_batch_with_covariance(),
+            )
+            .unwrap()
+            .into_nested_record_batch()
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(bare.physical_parameters.is_none());
     }
 
     #[test]
