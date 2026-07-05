@@ -38,6 +38,7 @@ name = "adam_core_rs_spice"
 version = "0.1.0"
 dependencies = [
  "adam_core_rs_coords",
+ "rayon",
  "serde_json",
  "spicekit",
  "thiserror 2.0.18",
