@@ -797,6 +797,75 @@ def test_time_scale_fixture_matches_current_timestamp_contract():
     )
 
 
+def test_timestamp_arithmetic_fixture_matches_legacy_contract():
+    """Bit-exact reproduction of the legacy-baseline Timestamp arithmetic
+    contract (bead personal-cmy.19): add_days/add_nanos/add_fractional_days,
+    difference/difference_scalar, mjd/jd projection, and the from_mjd/from_jd
+    quantization round-trip, over an epoch matrix including leap-second
+    adjacent days and day-boundary nanos. The fixture is generated with the
+    legacy interpreter via
+    migration/scripts/generate_timestamp_arithmetic_fixture.py."""
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "timestamp_arithmetic_fixture_2026-07-05.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+
+    add_days_arg = pa.array(fixture["add_days_arg"], pa.int64())
+    add_nanos_arg = pa.array(fixture["add_nanos_arg"], pa.int64())
+    add_fractional_days_arg = pa.array(fixture["add_fractional_days_arg"], pa.float64())
+    scalar_arg = fixture["difference_scalar_arg"]
+
+    def assert_payload(timestamp, expected, label):
+        assert timestamp.days.to_pylist() == expected["days"], label
+        assert timestamp.nanos.to_pylist() == expected["nanos"], label
+
+    for case in fixture["cases"]:
+        scale = case["scale"]
+        ops = case["ops"]
+        epochs = Timestamp.from_kwargs(
+            days=case["input"]["days"],
+            nanos=case["input"]["nanos"],
+            scale=scale,
+        )
+
+        assert_payload(epochs.add_days(add_days_arg), ops["add_days"], scale)
+        assert_payload(epochs.add_nanos(add_nanos_arg), ops["add_nanos"], scale)
+        assert_payload(
+            epochs.add_fractional_days(add_fractional_days_arg),
+            ops["add_fractional_days"],
+            scale,
+        )
+
+        other = Timestamp.from_kwargs(
+            days=ops["difference_other"]["days"],
+            nanos=ops["difference_other"]["nanos"],
+            scale=scale,
+        )
+        diff_days, diff_nanos = epochs.difference(other)
+        assert diff_days.to_pylist() == ops["difference"]["days"], scale
+        assert diff_nanos.to_pylist() == ops["difference"]["nanos"], scale
+
+        scalar_days, scalar_nanos = epochs.difference_scalar(
+            scalar_arg["days"], scalar_arg["nanos"]
+        )
+        assert scalar_days.to_pylist() == ops["difference_scalar"]["days"], scale
+        assert scalar_nanos.to_pylist() == ops["difference_scalar"]["nanos"], scale
+
+        mjd = epochs.mjd()
+        jd = epochs.jd()
+        assert mjd.to_pylist() == ops["mjd"], scale
+        assert jd.to_pylist() == ops["jd"], scale
+        assert_payload(
+            Timestamp.from_mjd(mjd, scale=scale), ops["from_mjd_roundtrip"], scale
+        )
+        assert_payload(
+            Timestamp.from_jd(jd, scale=scale), ops["from_jd_roundtrip"], scale
+        )
+
+
 # Data for testing and benchmarking rescale functions
 RESCALE_DAYS = [
     -57032,
