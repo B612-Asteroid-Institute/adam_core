@@ -424,6 +424,95 @@ class ASSISTPropagator(ImpactMixin):
             physical_parameters=physical_parameters,
         )
 
+    def fit_least_squares(
+        self,
+        orbit: Orbits,
+        observations: Any,
+        *,
+        xtol: float = 1e-12,
+        ftol: float = 1e-12,
+        max_iterations: int = 100,
+        lt_tol: float = 1.0e-12,
+        eph_max_iter: int = 1000,
+        eph_tol: float = 1.0e-15,
+        stellar_aberration: bool = False,
+        max_lt_iter: int = 10,
+    ) -> tuple[Orbits, float, int, bool]:
+        """Backend-generic Gauss-Newton OD with the ASSIST propagator.
+
+        Mirrors the semantics of
+        ``adam_core.orbit_determination.fit_least_squares(orbit, observations,
+        propagator)`` for a single orbit: differentially corrects the orbit
+        state at its epoch against ``observations``
+        (``OrbitDeterminationObservations``: spherical astrometry with
+        covariance + observers). The Gauss-Newton driver lives in the
+        permissive core; this GPL package only supplies the ASSIST propagator
+        (each iteration batches the base + six perturbed candidates into one
+        same-epoch multi-particle ephemeris crossing). Returns
+        ``(fitted_orbit, chi2, iterations, converged)`` where the fitted orbit
+        carries the ``inv(J^T J)`` covariance in the input frame/origin.
+        """
+        assert len(orbit) == 1, "Only one orbit can be differentially corrected"
+        coordinates = orbit.coordinates
+        orbit_scale, orbit_days, orbit_nanos = _time_parts(coordinates.time)
+        observed = observations.coordinates
+        observers = observations.observers
+        observer_coordinates = observers.coordinates
+        observer_scale, observer_days, observer_nanos = _time_parts(
+            observer_coordinates.time
+        )
+        state, covariance, chi2, iterations, converged = (
+            self._native.fit_orbit_least_squares(
+                _string_column_to_list(orbit.orbit_id),
+                _optional_string_column_to_list(orbit.object_id),
+                np.ascontiguousarray(coordinates.values, dtype=np.float64),
+                _string_column_to_list(coordinates.origin.code),
+                coordinates.frame,
+                orbit_scale,
+                orbit_days,
+                orbit_nanos,
+                np.ascontiguousarray(observed.values, dtype=np.float64),
+                np.ascontiguousarray(
+                    observed.covariance.to_matrix().reshape(len(observed), 36),
+                    dtype=np.float64,
+                ),
+                _string_column_to_list(observers.code),
+                np.ascontiguousarray(observer_coordinates.values, dtype=np.float64),
+                _string_column_to_list(observer_coordinates.origin.code),
+                observer_coordinates.frame,
+                observer_scale,
+                observer_days,
+                observer_nanos,
+                xtol=xtol,
+                ftol=ftol,
+                max_iterations=max_iterations,
+                lt_tol=lt_tol,
+                eph_max_iter=eph_max_iter,
+                eph_tol=eph_tol,
+                stellar_aberration=stellar_aberration,
+                max_lt_iter=max_lt_iter,
+            )
+        )
+        state = np.asarray(state, dtype=np.float64)
+        covariance = np.asarray(covariance, dtype=np.float64).reshape(1, 6, 6)
+        fitted = Orbits.from_kwargs(
+            orbit_id=orbit.orbit_id,
+            object_id=orbit.object_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=[state[0]],
+                y=[state[1]],
+                z=[state[2]],
+                vx=[state[3]],
+                vy=[state[4]],
+                vz=[state[5]],
+                time=coordinates.time,
+                covariance=CoordinateCovariances.from_matrix(covariance),
+                origin=coordinates.origin,
+                frame=coordinates.frame,
+            ),
+        )
+        return fitted, float(chi2), int(iterations), bool(converged)
+
     def _detect_collisions(
         self,
         orbits: OrbitTable,

@@ -64,7 +64,33 @@ fn epoch_diff_days(target: Epoch, origin: Epoch) -> f64 {
 }
 
 /// Per-observation chi residuals (`sqrt(chi2)`, matching adam_core's residual
-/// function) and the total chi² for a candidate state.
+/// function) and the total chi² for already-predicted spherical coordinates.
+/// Shared by the 2-body kernel below and the backend-generic
+/// [`fit_orbit_least_squares_with_predictor`] driver.
+pub(crate) fn chi_residuals_from_predicted(
+    predicted: &[f64],
+    observed: &[f64],
+    observed_cov: &[f64],
+    n: usize,
+) -> (Vec<f64>, f64) {
+    let predicted_cov = vec![0.0_f64; n * 36];
+    let output = compute_residuals_chi2_flat(
+        observed,
+        predicted,
+        observed_cov,
+        &predicted_cov,
+        n,
+        6,
+        true,
+    )
+    .expect("residual shapes are constructed consistently");
+    let residuals: Vec<f64> = output.chi2.iter().map(|c| c.max(0.0).sqrt()).collect();
+    let total: f64 = output.chi2.iter().sum();
+    (residuals, total)
+}
+
+/// Per-observation chi residuals and the total chi² for a candidate state
+/// through the internal 2-body ephemeris.
 fn chi_residuals(
     state: &[f64; 6],
     mu: f64,
@@ -97,20 +123,155 @@ fn chi_residuals(
         config.stellar_aberration,
         config.max_lt_iter,
     );
-    let predicted_cov = vec![0.0_f64; n * 36];
-    let output = compute_residuals_chi2_flat(
-        observed,
-        &predicted,
-        observed_cov,
-        &predicted_cov,
-        n,
-        6,
-        true,
-    )
-    .expect("residual shapes are constructed consistently");
-    let residuals: Vec<f64> = output.chi2.iter().map(|c| c.max(0.0).sqrt()).collect();
-    let total: f64 = output.chi2.iter().sum();
-    (residuals, total)
+    chi_residuals_from_predicted(&predicted, observed, observed_cov, n)
+}
+
+/// Backend-generic Gauss-Newton least-squares core (bead personal-cmy.7).
+///
+/// `predict` maps `M` candidate Cartesian states (all at the fit epoch) to
+/// predicted spherical coordinates, `(M * N, 6)` row-major in candidate-major
+/// order — typically one `generate_ephemeris::<P>` crossing per call, which is
+/// what makes propagator-backed fits cheap: each Gauss-Newton iteration costs
+/// one base prediction plus ONE batched 6-state Jacobian prediction (the
+/// ASSIST same-epoch multi-particle fast path integrates all seven candidates
+/// in a single simulation) instead of legacy scipy's seven sequential Python
+/// propagator round-trips.
+///
+/// The algorithm mirrors [`fit_orbit_2body_least_squares`]: 2-point
+/// finite-difference Jacobian, normal equations, backtracking line search,
+/// chi²-plateau convergence, `inv(JᵀJ)` covariance.
+pub fn fit_orbit_least_squares_with_predictor<F>(
+    initial_state: [f64; 6],
+    observed: &[f64],
+    observed_cov: &[f64],
+    n: usize,
+    config: &LeastSquaresConfig,
+    mut predict: F,
+) -> Result<LeastSquaresFit, String>
+where
+    F: FnMut(&[[f64; 6]]) -> Result<Vec<f64>, String>,
+{
+    if observed.len() != n * 6 || observed_cov.len() != n * 36 {
+        return Err("observed/observed_cov shapes must be (N, 6)/(N, 36)".to_string());
+    }
+
+    fn perturbations(state: &[f64; 6]) -> ([[f64; 6]; 6], [f64; 6]) {
+        let mut steps = [0.0_f64; 6];
+        let mut perturbed_states = [[0.0_f64; 6]; 6];
+        for k in 0..6 {
+            let h = 1.490_116_119_384_765_6e-8 * state[k].abs().max(1.0);
+            let mut perturbed = *state;
+            perturbed[k] += h;
+            steps[k] = perturbed[k] - state[k];
+            perturbed_states[k] = perturbed;
+        }
+        (perturbed_states, steps)
+    }
+
+    fn jacobian_from_batch(
+        predicted_all: &[f64],
+        base: &[f64],
+        steps: &[f64; 6],
+        observed: &[f64],
+        observed_cov: &[f64],
+        n: usize,
+    ) -> Vec<f64> {
+        let mut jac = vec![0.0_f64; n * 6];
+        for k in 0..6 {
+            let (rk, _) = chi_residuals_from_predicted(
+                &predicted_all[k * n * 6..(k + 1) * n * 6],
+                observed,
+                observed_cov,
+                n,
+            );
+            for i in 0..n {
+                jac[i * 6 + k] = (rk[i] - base[i]) / steps[k];
+            }
+        }
+        jac
+    }
+
+    let expect_rows = |predicted: &Vec<f64>, states: usize| -> Result<(), String> {
+        if predicted.len() != states * n * 6 {
+            return Err(format!(
+                "predictor returned {} values for {} states x {} observations",
+                predicted.len(),
+                states,
+                n
+            ));
+        }
+        Ok(())
+    };
+
+    let mut state = initial_state;
+    let mut converged = false;
+    let mut iterations = 0;
+    let mut previous_chi2 = f64::INFINITY;
+    for iteration in 0..config.max_iterations {
+        iterations = iteration + 1;
+        let predicted = predict(&[state])?;
+        expect_rows(&predicted, 1)?;
+        let (base, chi2) = chi_residuals_from_predicted(&predicted, observed, observed_cov, n);
+        if iteration > 0 && (previous_chi2 - chi2).abs() <= config.ftol * previous_chi2.max(1.0) {
+            converged = true;
+            break;
+        }
+        previous_chi2 = chi2;
+        let (perturbed_states, steps) = perturbations(&state);
+        let predicted_all = predict(&perturbed_states)?;
+        expect_rows(&predicted_all, 6)?;
+        let jac = jacobian_from_batch(&predicted_all, &base, &steps, observed, observed_cov, n);
+        let a = normal_matrix(&jac, n);
+        let mut rhs = [0.0_f64; 6];
+        for i in 0..n {
+            for k in 0..6 {
+                rhs[k] -= jac[i * 6 + k] * base[i];
+            }
+        }
+        let delta = match solve_6x6(&a, &rhs) {
+            Some(delta) => delta,
+            None => break,
+        };
+        let mut alpha = 1.0_f64;
+        let mut accepted = false;
+        for _ in 0..12 {
+            let mut trial = state;
+            for k in 0..6 {
+                trial[k] += alpha * delta[k];
+            }
+            let predicted_trial = predict(&[trial])?;
+            expect_rows(&predicted_trial, 1)?;
+            let (_, trial_chi2) =
+                chi_residuals_from_predicted(&predicted_trial, observed, observed_cov, n);
+            if trial_chi2 < chi2 {
+                state = trial;
+                accepted = true;
+                break;
+            }
+            alpha *= 0.5;
+        }
+        if !accepted {
+            converged = true;
+            break;
+        }
+    }
+
+    let predicted = predict(&[state])?;
+    expect_rows(&predicted, 1)?;
+    let (base, chi2) = chi_residuals_from_predicted(&predicted, observed, observed_cov, n);
+    let (perturbed_states, steps) = perturbations(&state);
+    let predicted_all = predict(&perturbed_states)?;
+    expect_rows(&predicted_all, 6)?;
+    let jac = jacobian_from_batch(&predicted_all, &base, &steps, observed, observed_cov, n);
+    let covariance = inverse_6x6(&normal_matrix(&jac, n)).unwrap_or([f64::NAN; 36]);
+
+    Ok(LeastSquaresFit {
+        state,
+        covariance,
+        chi2,
+        iterations,
+        converged,
+    })
 }
 
 /// 2-point forward-difference Jacobian of the chi residuals w.r.t. the state

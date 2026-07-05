@@ -2,6 +2,7 @@
 
 use crate::AssistPropagator as RustAssistPropagator;
 use crate::{map_origin_code_to_assist_body, CollisionConditionSpec};
+use adam_core_rs_coords::propagation::fit_orbit_least_squares_barycentric;
 use adam_core_rs_coords::propagation::{
     CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest, PropagationResult,
     Propagator,
@@ -15,6 +16,7 @@ use adam_core_rs_coords::{
     OrbitBatch, OrbitId, OrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
     SchemaError, TimeArray, TimeScale, VariantId,
 };
+use adam_core_rs_coords::{CoordinateValues, LeastSquaresConfig};
 use adam_core_rs_spice::AdamCoreSpiceBackend;
 use assist_rs::{AssistData, Ephemeris, Ias15AdaptiveMode, IntegratorConfig};
 use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
@@ -231,6 +233,195 @@ impl NativeAssistPropagator {
             })
             .map_err(py_runtime_error)?;
         ephemeris_result_to_dict(py, &result)
+    }
+
+    /// Backend-generic least-squares orbit determination instantiated with
+    /// the ASSIST propagator (bead personal-cmy.7). The Gauss-Newton driver
+    /// lives in the permissive core (`fit_orbit_least_squares_barycentric`);
+    /// this GPL boundary only supplies the propagator, mirroring the
+    /// adam-assist packaging decision. Returns
+    /// `(state (6,), covariance (36,), chi2, iterations, converged)` in the
+    /// input orbit's frame/origin.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    #[pyo3(signature = (
+        orbit_ids,
+        object_ids,
+        orbit_states,
+        orbit_origin_codes,
+        orbit_frame,
+        orbit_time_scale,
+        orbit_time_days,
+        orbit_time_nanos,
+        observed_values,
+        observed_covariances,
+        observer_codes,
+        observer_states,
+        observer_origin_codes,
+        observer_frame,
+        observer_time_scale,
+        observer_time_days,
+        observer_time_nanos,
+        xtol=1e-12,
+        ftol=1e-12,
+        max_iterations=100,
+        lt_tol=1.0e-12,
+        eph_max_iter=1000,
+        eph_tol=1.0e-15,
+        stellar_aberration=false,
+        max_lt_iter=10
+    ))]
+    fn fit_orbit_least_squares<'py>(
+        &self,
+        py: Python<'py>,
+        orbit_ids: Vec<String>,
+        object_ids: Vec<Option<String>>,
+        orbit_states: PyReadonlyArray2<'py, f64>,
+        orbit_origin_codes: Vec<String>,
+        orbit_frame: &str,
+        orbit_time_scale: &str,
+        orbit_time_days: Vec<i64>,
+        orbit_time_nanos: Vec<i64>,
+        observed_values: PyReadonlyArray2<'py, f64>,
+        observed_covariances: PyReadonlyArray2<'py, f64>,
+        observer_codes: Vec<String>,
+        observer_states: PyReadonlyArray2<'py, f64>,
+        observer_origin_codes: Vec<String>,
+        observer_frame: &str,
+        observer_time_scale: &str,
+        observer_time_days: Vec<i64>,
+        observer_time_nanos: Vec<i64>,
+        xtol: f64,
+        ftol: f64,
+        max_iterations: usize,
+        lt_tol: f64,
+        eph_max_iter: usize,
+        eph_tol: f64,
+        stellar_aberration: bool,
+        max_lt_iter: usize,
+    ) -> PyResult<(Vec<f64>, Vec<f64>, f64, usize, bool)> {
+        let orbit_coordinates = CoordinateBatch::cartesian(
+            states_from_pyarray(orbit_states)?,
+            Frame::parse(orbit_frame).map_err(py_value_error)?,
+            OriginArray::new(
+                orbit_origin_codes
+                    .into_iter()
+                    .map(OriginId::from_code)
+                    .collect(),
+            ),
+            Some(time_array(
+                orbit_time_scale,
+                orbit_time_days,
+                orbit_time_nanos,
+            )?),
+            None,
+        )
+        .map_err(py_value_error)?;
+        let orbit = OrbitBatch::new(
+            orbit_ids.into_iter().map(OrbitId).collect(),
+            object_ids
+                .into_iter()
+                .map(|value| value.map(ObjectId))
+                .collect(),
+            orbit_coordinates,
+        )
+        .map_err(py_value_error)?;
+
+        let observer_times =
+            time_array(observer_time_scale, observer_time_days, observer_time_nanos)?;
+        let observer_origins = OriginArray::new(
+            observer_origin_codes
+                .into_iter()
+                .map(OriginId::from_code)
+                .collect(),
+        );
+        let observed_rows = states_from_pyarray(observed_values)?;
+        let n = observed_rows.len();
+        let observed_cov = observed_covariances.as_array();
+        if observed_cov.nrows() != n || observed_cov.ncols() != 36 {
+            return Err(PyValueError::new_err(
+                "observed_covariances must have shape (N, 36)",
+            ));
+        }
+        let observed_cov_flat: Vec<f64> = observed_cov.iter().copied().collect();
+        let covariance = CovarianceBatch::new(
+            n,
+            6,
+            observed_cov_flat,
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Spherical),
+        )
+        .map_err(py_value_error)?;
+        let observed = CoordinateBatch::new(
+            CoordinateValues::Spherical(observed_rows),
+            Frame::parse(observer_frame).map_err(py_value_error)?,
+            observer_origins.clone(),
+            Some(observer_times.clone()),
+            Some(covariance),
+        )
+        .map_err(py_value_error)?;
+
+        let observer_coordinates = CoordinateBatch::cartesian(
+            states_from_pyarray(observer_states)?,
+            Frame::parse(observer_frame).map_err(py_value_error)?,
+            observer_origins,
+            Some(observer_times),
+            None,
+        )
+        .map_err(py_value_error)?;
+        let observers = ObserverBatch::new(
+            observer_codes.into_iter().map(ObservatoryCode).collect(),
+            observer_coordinates,
+        )
+        .map_err(py_value_error)?;
+
+        let options = EphemerisOptions {
+            propagation: PropagationOptions {
+                chunk_size: None,
+                thread_limit: None,
+                epoch_policy: EpochPolicy::CrossProduct,
+                covariance: CovariancePropagation::None,
+            },
+            lt_tol,
+            max_iter: eph_max_iter,
+            tol: eph_tol,
+            stellar_aberration,
+            max_lt_iter,
+            output_time_scale: TimeScale::parse(observer_time_scale).map_err(py_value_error)?,
+            include_aberrated_coordinates: false,
+            photometry: EphemerisPhotometryOptions::default(),
+        };
+        let config = LeastSquaresConfig {
+            xtol,
+            ftol,
+            max_iterations,
+            lt_tol,
+            ephemeris_max_iter: eph_max_iter,
+            ephemeris_tol: eph_tol,
+            stellar_aberration,
+            max_lt_iter,
+        };
+        let fit = py
+            .allow_threads(|| {
+                fit_orbit_least_squares_barycentric(
+                    &self.inner,
+                    &orbit,
+                    &observed,
+                    &observers,
+                    &options,
+                    &config,
+                    &PythonTimeProvider,
+                    &self.spice,
+                )
+            })
+            .map_err(|err| {
+                PyRuntimeError::new_err(format!("assist least-squares fit failed: {err}"))
+            })?;
+        Ok((
+            fit.state.to_vec(),
+            fit.covariance.to_vec(),
+            fit.chi2,
+            fit.iterations,
+            fit.converged,
+        ))
     }
 
     /// Same-epoch collision detection mirroring

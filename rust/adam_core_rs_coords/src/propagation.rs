@@ -8,6 +8,7 @@
 
 mod diagnostics;
 mod ephemeris;
+mod od;
 mod pipeline;
 mod request;
 #[cfg(test)]
@@ -23,6 +24,7 @@ pub use ephemeris::{
     EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions, EphemerisPhotometryOptions,
     EphemerisResult, EphemerisRowDiagnostic,
 };
+pub use od::fit_orbit_least_squares_barycentric;
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{
     CovariancePropagation, EpochOrder, EpochPolicy, PropagationInput, PropagationOptions,
