@@ -1394,6 +1394,25 @@ fn observers_nested_ipc_round_trip<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
+/// Observation data-model bridge (bead personal-cmy.20): round-trip a quivr
+/// observation table (`ADESObservations`, `PointSourceDetections`, `Exposures`,
+/// `Associations`, `Photometry`, or `SourceCatalog`; Arrow IPC, nested quivr
+/// layout) through its Rust-canonical batch and back, dispatching on the
+/// `adam_core_schema` metadata key. Proves the observation transport is
+/// lossless, including nullable Timestamp columns.
+#[pyfunction]
+fn observations_nested_ipc_round_trip<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let out = adam_core_rs_coords::observations::round_trip_nested(&batch).map_err(|err| {
+        PyValueError::new_err(format!("observation table round trip failed: {err}"))
+    })?;
+    let bytes = write_orbit_ipc(&out)?;
+    Ok(PyBytes::new(py, &bytes))
+}
+
 /// W1 / OD slice 3: Rust-native OD residual evaluation over the bridge. Given
 /// orbits (already at the observation times, 1:1 with observations), the observed
 /// astrometry (`SphericalCoordinates`), and the observers, this composes the exact
@@ -1654,6 +1673,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_propagate_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
+    m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())

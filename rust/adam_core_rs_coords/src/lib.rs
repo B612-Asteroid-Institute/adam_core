@@ -15,6 +15,12 @@ pub use types::{
     NANOS_PER_DAY, SECONDS_PER_DAY, TAI_TT_NANOS,
 };
 
+pub mod observations;
+pub use observations::{
+    AdesObservationBatch, AssociationBatch, ExposureBatch, PhotometryBatch,
+    PointSourceDetectionBatch, SourceCatalogBatch, TimeColumn,
+};
+
 pub mod generic;
 pub use generic::{
     cartesian_to_cometary6, cartesian_to_geodetic6, cartesian_to_keplerian6,
