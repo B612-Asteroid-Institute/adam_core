@@ -301,7 +301,7 @@
         "adam_core.photometry.bandpasses.constants",
         "adam_core.observations.photometry"
       ],
-      "status": "rust_data_model_landed_adapters_active",
+      "status": "rust_native_service_api",
       "first_scope": true,
       "implementation_direction": "Keep governed Rust magnitude kernels; add Rust bandpass registry and observation/exposure joins after the observation model exists.",
       "dependencies": [
@@ -741,22 +741,22 @@
     "adam_core.photometry.bandpasses.api": {
       "workstream": "W7",
       "entry_count": 11,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "rust_native_service_api"
     },
     "adam_core.photometry.bandpasses.constants": {
       "workstream": "W7",
       "entry_count": 1,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "python_surface_exempt"
     },
     "adam_core.photometry.bandpasses.tables": {
       "workstream": "W7",
       "entry_count": 4,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.photometry.bandpasses.vendor": {
       "workstream": "W7",
       "entry_count": 5,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "python_surface_exempt"
     },
     "adam_core.photometry.magnitude": {
       "workstream": "W7",
@@ -766,7 +766,7 @@
     "adam_core.photometry.magnitude_common": {
       "workstream": "W7",
       "entry_count": 5,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.propagator.propagator": {
       "workstream": "W5",

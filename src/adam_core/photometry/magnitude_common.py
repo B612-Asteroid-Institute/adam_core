@@ -7,10 +7,10 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 
+from .bandpasses.api import _composition_args, _data_dir_str
 from .bandpasses.api import assert_filter_ids_have_curves  # noqa: F401
 from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integrals
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
-from .bandpasses.api import load_bandpass_curves as _load_bandpass_curves
 
 BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 
@@ -26,10 +26,11 @@ def bandpass_filter_id_table() -> tuple[
     Return (filter_ids, filter_ids_arrow, filter_to_id, v_id) for bandpass conversions.
 
     We intentionally build this lazily (rather than at import time) since it requires
-    reading packaged Parquet data.
+    reading packaged Parquet data (Rust-side since bead personal-cmy.24).
     """
-    curves = _load_bandpass_curves()
-    filter_ids = tuple(curves.filter_id.to_pylist())
+    from adam_core import _rust_native as _rn
+
+    filter_ids = tuple(_rn.bandpasses_filter_ids(_data_dir_str()))
     if "V" not in filter_ids:
         raise ValueError("Bandpass curves must include a canonical 'V' filter_id.")
 
@@ -86,17 +87,15 @@ def bandpass_delta_table_for_composition_cached(
     Compute per-filter delta magnitudes relative to V for the given composition:
 
         delta[filter] = m_filter - m_V
+
+    Computed in the Rust backend (bead personal-cmy.24).
     """
-    filter_ids, _, _, v_id = bandpass_filter_id_table()
-    ids = np.asarray(filter_ids, dtype=object)
-    integrals = bandpass_integrals_for_composition(composition_key, ids)
+    from adam_core import _rust_native as _rn
 
-    i_v = float(integrals[v_id])
-    if not np.isfinite(i_v) or i_v <= 0.0:
-        raise ValueError("Invalid V-band integral for bandpass conversion.")
-
-    with np.errstate(divide="raise", invalid="raise"):
-        delta = -2.5 * np.log10(np.asarray(integrals, dtype=np.float64) / i_v)
+    template_id, mix = _composition_args(composition_key)
+    delta = _rn.bandpasses_delta_table(
+        _data_dir_str(), template_id=template_id, mix=mix
+    )
     return np.asarray(delta, dtype=np.float64)
 
 

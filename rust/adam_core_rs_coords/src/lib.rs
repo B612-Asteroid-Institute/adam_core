@@ -18,6 +18,11 @@ pub use types::{
 pub mod ades_io;
 pub use ades_io::{ades_string_to_observations, ades_to_string};
 
+pub mod bandpasses;
+pub use bandpasses::{
+    bandpass_data, clear_custom_templates, register_custom_template, BandpassData,
+};
+
 pub mod mpc_designations;
 pub use mpc_designations::MpcDesignationError;
 

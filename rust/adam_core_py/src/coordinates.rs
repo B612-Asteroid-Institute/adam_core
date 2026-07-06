@@ -1473,6 +1473,135 @@ fn ades_string_to_observations_ipc<'py>(
     Ok((PyBytes::new(py, &bytes), unknown_columns))
 }
 
+fn bandpass_value_error(err: adam_core_rs_coords::SchemaError) -> PyErr {
+    match err {
+        adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
+            PyValueError::new_err(message)
+        }
+        other => PyValueError::new_err(other.to_string()),
+    }
+}
+
+fn bandpass_data_for(
+    data_dir: &str,
+) -> PyResult<std::sync::Arc<adam_core_rs_coords::BandpassData>> {
+    adam_core_rs_coords::bandpass_data(std::path::Path::new(data_dir)).map_err(bandpass_value_error)
+}
+
+/// Bandpass photometry runtime (bead personal-cmy.24): thin bindings over the
+/// Rust-native vendored-data load + compute in adam_core_rs_coords::bandpasses.
+#[pyfunction]
+fn bandpasses_filter_ids(data_dir: &str) -> PyResult<Vec<String>> {
+    Ok(bandpass_data_for(data_dir)?.filter_ids.clone())
+}
+
+#[pyfunction]
+fn bandpasses_get_integrals(
+    data_dir: &str,
+    template_id: &str,
+    filter_ids: Vec<String>,
+) -> PyResult<Vec<f64>> {
+    bandpass_data_for(data_dir)?
+        .get_integrals(template_id, &filter_ids)
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+fn bandpasses_compute_mix_integrals(
+    data_dir: &str,
+    weight_c: f64,
+    weight_s: f64,
+    filter_ids: Vec<String>,
+) -> PyResult<Vec<f64>> {
+    bandpass_data_for(data_dir)?
+        .compute_mix_integrals(weight_c, weight_s, &filter_ids)
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+#[pyo3(signature = (data_dir, template_id=None, mix=None))]
+fn bandpasses_delta_table(
+    data_dir: &str,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<Vec<f64>> {
+    bandpass_data_for(data_dir)?
+        .delta_table(template_id.as_deref(), mix)
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+#[pyo3(signature = (data_dir, source_filter_id, target_filter_id, template_id=None, mix=None))]
+fn bandpasses_delta_mag(
+    data_dir: &str,
+    source_filter_id: &str,
+    target_filter_id: &str,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<f64> {
+    bandpass_data_for(data_dir)?
+        .delta_mag(
+            template_id.as_deref(),
+            mix,
+            source_filter_id,
+            target_filter_id,
+        )
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+#[pyo3(signature = (data_dir, source_filter_id, template_id=None, mix=None, target_filter_ids=None))]
+fn bandpasses_color_terms(
+    data_dir: &str,
+    source_filter_id: &str,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+    target_filter_ids: Option<Vec<String>>,
+) -> PyResult<Vec<(String, f64)>> {
+    bandpass_data_for(data_dir)?
+        .color_terms(
+            template_id.as_deref(),
+            mix,
+            source_filter_id,
+            target_filter_ids.as_deref(),
+        )
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+fn bandpasses_map_to_canonical(
+    data_dir: &str,
+    observatory_codes: Vec<String>,
+    bands: Vec<String>,
+    allow_fallback_filters: bool,
+) -> PyResult<Vec<String>> {
+    bandpass_data_for(data_dir)?
+        .map_to_canonical_filter_bands(&observatory_codes, &bands, allow_fallback_filters)
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+fn bandpasses_assert_filter_ids(data_dir: &str, filter_ids: Vec<String>) -> PyResult<()> {
+    bandpass_data_for(data_dir)?
+        .assert_filter_ids_have_curves(&filter_ids)
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+fn bandpasses_register_custom_template(
+    template_id: &str,
+    wavelength_nm: Vec<f64>,
+    reflectance: Vec<f64>,
+) -> PyResult<()> {
+    adam_core_rs_coords::register_custom_template(template_id, &wavelength_nm, &reflectance)
+        .map_err(bandpass_value_error)
+}
+
+#[pyfunction]
+fn bandpasses_clear_custom_templates() {
+    adam_core_rs_coords::clear_custom_templates();
+}
+
 fn mpc_designation_error(err: adam_core_rs_coords::MpcDesignationError) -> PyErr {
     use adam_core_rs_coords::MpcDesignationError;
     match err {
@@ -1775,6 +1904,16 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(unpack_provisional_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_survey_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_filter_ids, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_get_integrals, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_compute_mix_integrals, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_delta_table, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_delta_mag, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_color_terms, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_map_to_canonical, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_assert_filter_ids, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_register_custom_template, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_clear_custom_templates, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())
