@@ -7,7 +7,6 @@ from typing import Literal, Union
 
 import numpy as np
 import pyarrow as pa
-import pyarrow.compute as pc
 import spiceypy as sp
 
 from ..constants import Constants as c
@@ -185,33 +184,35 @@ def get_mpc_observer_state(
     # If not then we need to add a topocentric correction
     # Warning! Converting times to ET will incur a loss of precision.
     epochs_et = times.et()
-    unique_epochs_et_tdb = epochs_et.unique()
+    epochs_et_np = epochs_et.to_numpy(zero_copy_only=False).astype(np.float64)
 
-    N = len(epochs_et)
-    r_obs = np.empty((N, 3), dtype=np.float64)
-    v_obs = np.empty((N, 3), dtype=np.float64)
-    r_geo = state.r
-    v_geo = state.v
-    for epoch in unique_epochs_et_tdb:
-        # Grab rotation matrices from ITRF93 to ecliptic J2000
-        # The ITRF93 high accuracy Earth rotation model takes into account:
-        # Precession:  1976 IAU model from Lieske.
-        # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
-        # True sidereal time using accurate values of TAI-UT1
-        # Polar motion
-        rotation_matrix = sp.pxform("ITRF93", frame_spice, epoch.as_py())
+    # Compute one rotation matrix per unique epoch, then scatter the rotated
+    # offsets back to rows via inverse indices. A previous implementation
+    # re-scanned the full epoch array for every unique epoch (O(N * U)),
+    # which turned quadratic for the mostly-unique time arrays that large
+    # ephemeris workloads pass in.
+    unique_epochs_et, inverse_indices = np.unique(epochs_et_np, return_inverse=True)
 
-        # Find indices of epochs that match the current unique epoch
-        mask = pc.equal(epochs_et, epoch).to_numpy(False)
-
-        # Add o_vec + r_geo to get r_obs (thank you numpy broadcasting)
-        r_obs[mask] = r_geo[mask] + rotation_matrix @ o_vec_ITRF93
-
-        # Calculate the velocity (thank you numpy broadcasting)
-        rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
-        v_obs[mask] = v_geo[mask] + rotation_matrix @ (
-            -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
+    # Grab rotation matrices from ITRF93 to the requested frame.
+    # The ITRF93 high accuracy Earth rotation model takes into account:
+    # Precession:  1976 IAU model from Lieske.
+    # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
+    # True sidereal time using accurate values of TAI-UT1
+    # Polar motion
+    rotation_matrices = np.empty((unique_epochs_et.shape[0], 3, 3), dtype=np.float64)
+    for i in range(unique_epochs_et.shape[0]):
+        rotation_matrices[i] = sp.pxform(
+            "ITRF93", frame_spice, float(unique_epochs_et[i])
         )
+
+    # Velocity of the observatory due to Earth's rotation, in ITRF93.
+    rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
+    v_vec_ITRF93 = -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
+
+    # Add the rotated offsets to the Earth state vectors (thank you numpy
+    # broadcasting).
+    r_obs = state.r + (rotation_matrices @ o_vec_ITRF93)[inverse_indices]
+    v_obs = state.v + (rotation_matrices @ v_vec_ITRF93)[inverse_indices]
 
     observer_states = CartesianCoordinates.from_kwargs(
         time=times,

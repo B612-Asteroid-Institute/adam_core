@@ -66,6 +66,29 @@ def test_Observers_from_codes_raises(codes_times) -> None:
         Observers.from_codes(codes, times[:3])
 
 
+def test_get_mpc_observer_state_unique_epoch_scatter_matches_per_row() -> None:
+    # Mixed duplicate/unique times: the vectorized unique-epoch path must
+    # produce the same states as computing each row independently, with
+    # results scattered back to the correct rows. Guards the O(N * U) ->
+    # O(N log N) rewrite of the topocentric correction loop.
+    mjds = [59002.75, 59000.0, 59000.5, 59001.25, 59000.0, 59001.25]
+    times = Timestamp.from_mjd(np.array(mjds), scale="tdb")
+    combined = get_mpc_observer_state("X05", times)
+
+    for i, mjd in enumerate(mjds):
+        single = get_mpc_observer_state(
+            "X05", Timestamp.from_mjd(np.array([mjd]), scale="tdb")
+        )
+        np.testing.assert_allclose(combined.r[i], single.r[0], rtol=1e-13, atol=1e-16)
+        np.testing.assert_allclose(combined.v[i], single.v[0], rtol=1e-13, atol=1e-16)
+
+    # Duplicate-time rows must be exactly identical to each other.
+    np.testing.assert_array_equal(combined.r[1], combined.r[4])
+    np.testing.assert_array_equal(combined.v[1], combined.v[4])
+    np.testing.assert_array_equal(combined.r[3], combined.r[5])
+    np.testing.assert_array_equal(combined.v[3], combined.v[5])
+
+
 def test_ObservatoryParallaxCoefficients_lon_lat() -> None:
     # Data taken from: https://en.wikipedia.org/wiki/List_of_observatory_codes
     # From: https://geohack.toolforge.org/geohack.php?pagename=Zwicky_Transient_Facility&params=33.35731_N_116.85981_W_
