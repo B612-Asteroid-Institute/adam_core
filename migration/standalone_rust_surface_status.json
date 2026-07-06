@@ -591,7 +591,7 @@
     "adam_core.observers.utils": {
       "workstream": "W3",
       "entry_count": 1,
-      "status": "rust_service_available_extend"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.differential_correction": {
       "workstream": "W6",
@@ -821,12 +821,12 @@
     "adam_core.utils.spice": {
       "workstream": "W3",
       "entry_count": 7,
-      "status": "rust_service_available_extend"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.utils.spice_backend": {
       "workstream": "W3",
       "entry_count": 10,
-      "status": "rust_service_available_extend"
+      "status": "rust_backed_thin_python_orchestration"
     }
   },
   "adapter_surface": {
