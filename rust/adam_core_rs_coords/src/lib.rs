@@ -32,6 +32,13 @@ pub use oem_io::{oem_parse_kvn, oem_to_kvn, oem_write_kvn, OemCovarianceRecord};
 pub mod openspace;
 pub use openspace::{openspace_create_initialization, openspace_lua_to_string};
 
+pub mod query;
+pub use query::{
+    horizons_elements_normalize_json, horizons_ephemeris_normalize_json,
+    horizons_vectors_normalize_json, neocc_parse_oef_json, sbdb_normalize_payloads_json,
+    scout_normalize_orbits_json,
+};
+
 pub mod observations;
 pub use observations::{
     AdesObservationBatch, AssociationBatch, ExposureBatch, PhotometryBatch,

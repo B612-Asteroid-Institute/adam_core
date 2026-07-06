@@ -1546,6 +1546,44 @@ fn openspace_create_initialization(assets: Vec<String>) -> String {
     adam_core_rs_coords::openspace_create_initialization(&assets)
 }
 
+/// W10 query parser: NEOCC OEF text -> JSON payload.
+#[pyfunction]
+fn query_neocc_parse_oef(data: &str) -> PyResult<String> {
+    adam_core_rs_coords::neocc_parse_oef_json(data).map_err(time_value_error)
+}
+
+/// W10 query parser: SBDB JSON payload list -> normalized arrays JSON.
+#[pyfunction]
+fn query_sbdb_normalize_payloads(ids_json: &str, payloads_json: &str) -> PyResult<String> {
+    adam_core_rs_coords::sbdb_normalize_payloads_json(ids_json, payloads_json)
+        .map_err(time_value_error)
+}
+
+/// W10 query parser: Scout orbit rows -> normalized arrays JSON.
+#[pyfunction]
+fn query_scout_normalize_orbits(object_id: &str, rows_json: &str) -> PyResult<String> {
+    adam_core_rs_coords::scout_normalize_orbits_json(object_id, rows_json).map_err(time_value_error)
+}
+
+/// W10 query parser: Horizons vector rows -> normalized arrays JSON.
+#[pyfunction]
+fn query_horizons_vectors_normalize(rows_json: &str) -> PyResult<String> {
+    adam_core_rs_coords::horizons_vectors_normalize_json(rows_json).map_err(time_value_error)
+}
+
+/// W10 query parser: Horizons element rows -> normalized arrays JSON.
+#[pyfunction]
+fn query_horizons_elements_normalize(rows_json: &str, coordinate_type: &str) -> PyResult<String> {
+    adam_core_rs_coords::horizons_elements_normalize_json(rows_json, coordinate_type)
+        .map_err(time_value_error)
+}
+
+/// W10 query parser: Horizons ephemeris rows -> normalized arrays JSON.
+#[pyfunction]
+fn query_horizons_ephemeris_normalize(rows_json: &str) -> PyResult<String> {
+    adam_core_rs_coords::horizons_ephemeris_normalize_json(rows_json).map_err(time_value_error)
+}
+
 /// MPC packed-date conversion (bead personal-cmy.26): packed epoch -> ISOT
 /// string (TT scale), legacy `_unpack_mpc_date` semantics.
 #[pyfunction]
@@ -2160,6 +2198,12 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(oem_parse_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_lua_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_create_initialization, m)?)?;
+    m.add_function(wrap_pyfunction!(query_neocc_parse_oef, m)?)?;
+    m.add_function(wrap_pyfunction!(query_sbdb_normalize_payloads, m)?)?;
+    m.add_function(wrap_pyfunction!(query_scout_normalize_orbits, m)?)?;
+    m.add_function(wrap_pyfunction!(query_horizons_vectors_normalize, m)?)?;
+    m.add_function(wrap_pyfunction!(query_horizons_elements_normalize, m)?)?;
+    m.add_function(wrap_pyfunction!(query_horizons_ephemeris_normalize, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())

@@ -702,22 +702,22 @@
     "adam_core.orbits.query.horizons": {
       "workstream": "W10",
       "entry_count": 2,
-      "status": "first_scope_optional_net_edge"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.query.neocc": {
       "workstream": "W10",
       "entry_count": 1,
-      "status": "first_scope_optional_net_edge"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.query.sbdb": {
       "workstream": "W10",
       "entry_count": 3,
-      "status": "first_scope_optional_net_edge"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.query.scout": {
       "workstream": "W10",
       "entry_count": 5,
-      "status": "first_scope_optional_net_edge"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.spice_kernel": {
       "workstream": "W9",

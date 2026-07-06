@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -489,105 +490,29 @@ def _orbits_from_sbdb_payloads(
     """
     Convert raw SBDB JSON payloads into an `Orbits` table.
 
-    This mirrors the behavior of the legacy `query_sbdb` implementation:
-    - Prefer covariance-provided elements/epoch when present.
-    - Use covariance matrix when available; otherwise build a diagonal covariance from sigmas.
+    The deterministic payload normalization (element selection, covariance
+    matrix/label handling, SBDB->ADAM covariance ordering, and physical
+    parameter extraction) is Rust-backed behind this canonical helper; Python
+    remains the thin table-construction facade.
     """
+    from adam_core import _rust_native as _rn
+
     if len(ids) != len(payloads):
         raise ValueError("ids and payloads must have the same length.")
-
-    expected_labels = ["e", "q", "tp", "node", "peri", "i"]
-
-    orbit_ids: list[str] = []
-    object_ids: list[str] = []
-    phys_rows: list[tuple[float | None, float | None, float | None, float | None]] = []
-
-    coords_cometary = np.zeros((len(payloads), 6), dtype=np.float64)
-    covariances_sbdb = np.zeros((len(payloads), 6, 6), dtype=np.float64)
-    times_jd = np.zeros((len(payloads)), dtype=np.float64)
-
-    for i, (obj_id, payload) in enumerate(zip(ids, payloads)):
+    for obj_id, payload in zip(ids, payloads):
         if "object" not in payload:
             raise NotFoundError("object {} was not found", obj_id)
-        if "orbit" not in payload:
-            raise ValueError(f"SBDB payload for {obj_id!r} missing 'orbit'.")
 
-        obj = payload["object"] or {}
-        orbit_ids.append(f"{i:05d}")
-        object_ids.append(str(obj.get("fullname")))
-
-        orbit = payload["orbit"] or {}
-        elements_list = orbit.get("elements")
-        epoch_jd = _sbdb_float(orbit.get("epoch"))
-
-        cov = orbit.get("covariance")
-        cov_matrix: np.ndarray | None = None
-        if isinstance(cov, dict) and cov.get("data") is not None:
-            labels = cov.get("labels")
-            if isinstance(labels, list):
-                labels6 = [str(x) for x in labels[:6]]
-                if labels6 != expected_labels:
-                    raise ValueError(
-                        f"Expected covariance matrix labels to be {expected_labels} "
-                        f"in the first 6 entries, got {labels6}."
-                    )
-
-            data = np.asarray(cov["data"], dtype=np.float64)
-            if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
-                raise ValueError("Expected SBDB covariance matrix to be at least 6x6.")
-            cov_matrix = data[:6, :6]
-
-            # If covariance provides elements, prefer them (and the covariance epoch).
-            if "elements" in cov and cov["elements"] is not None:
-                elements_list = cov["elements"]
-                if cov.get("epoch") is not None:
-                    epoch_jd = _sbdb_float(cov.get("epoch"))
-
-        if elements_list is None:
-            raise ValueError(f"SBDB payload for {obj_id!r} missing orbit elements.")
-
-        elements_by_name = _sbdb_elements_map(elements_list)
-
-        if cov_matrix is None:
-            # Fallback: build a diagonal covariance from per-element sigmas.
-            sigmas = np.array(
-                [
-                    [
-                        _sbdb_element_sigma(elements_by_name, "e"),
-                        _sbdb_element_sigma(elements_by_name, "q"),
-                        _sbdb_element_sigma(elements_by_name, "tp"),
-                        _sbdb_element_sigma(elements_by_name, "om"),
-                        _sbdb_element_sigma(elements_by_name, "w"),
-                        _sbdb_element_sigma(elements_by_name, "i"),
-                    ]
-                ],
-                dtype=np.float64,
-            )
-            cov_matrix = sigmas_to_covariances(sigmas)[0]
-
-        covariances_sbdb[i, :, :] = cov_matrix
-
-        times_jd[i] = epoch_jd
-
-        q = _sbdb_element_value(elements_by_name, "q")
-        e = _sbdb_element_value(elements_by_name, "e")
-        inc = _sbdb_element_value(elements_by_name, "i")
-        om = _sbdb_element_value(elements_by_name, "om")
-        w = _sbdb_element_value(elements_by_name, "w")
-        tp_jd = _sbdb_element_value(elements_by_name, "tp")
-        tp_mjd = Timestamp.from_jd([tp_jd], scale="tdb").mjd()[0].as_py()
-
-        coords_cometary[i, 0] = q
-        coords_cometary[i, 1] = e
-        coords_cometary[i, 2] = inc
-        coords_cometary[i, 3] = om
-        coords_cometary[i, 4] = w
-        coords_cometary[i, 5] = tp_mjd
-
-        phys_rows.append(_sbdb_phys_par_from_payload(payload))
-
-    covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
-    times = Timestamp.from_jd(times_jd, scale="tdb")
+    normalized = json.loads(
+        _rn.query_sbdb_normalize_payloads(json.dumps(ids), json.dumps(payloads))
+    )
+    coords_cometary = np.asarray(normalized["coords_cometary"], dtype=np.float64)
+    covariances_cometary = np.asarray(
+        normalized["covariances_cometary"], dtype=np.float64
+    ).reshape(len(payloads), 6, 6)
+    times = Timestamp.from_jd(
+        pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
+    )
     origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
 
     coordinates = CometaryCoordinates.from_kwargs(
@@ -603,10 +528,16 @@ def _orbits_from_sbdb_payloads(
         frame="ecliptic",
     )
 
-    physical_parameters = _physical_parameters_from_sbdb(phys_rows)
+    phys = normalized["physical_parameters"]
+    physical_parameters = PhysicalParameters.from_kwargs(
+        H_v=np.asarray(phys["H_v"], dtype=np.float64),
+        H_v_sigma=np.asarray(phys["H_v_sigma"], dtype=np.float64),
+        G=np.asarray(phys["G"], dtype=np.float64),
+        G_sigma=np.asarray(phys["G_sigma"], dtype=np.float64),
+    )
     return Orbits.from_kwargs(
-        orbit_id=np.array(orbit_ids, dtype="object"),
-        object_id=np.array(object_ids, dtype="object"),
+        orbit_id=np.array(normalized["orbit_id"], dtype="object"),
+        object_id=np.array(normalized["object_id"], dtype="object"),
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
     )

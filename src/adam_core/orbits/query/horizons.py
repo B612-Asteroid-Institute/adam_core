@@ -1,5 +1,7 @@
+import json
 from typing import List, Optional, Union
 
+import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
@@ -228,17 +230,23 @@ def query_horizons_ephemeris(
         ignore_index=True,
     )
 
+    from adam_core import _rust_native as _rn
+
+    normalized = json.loads(
+        _rn.query_horizons_ephemeris_normalize(dfs.to_json(orient="records"))
+    )
     ephemeris = Ephemeris.from_kwargs(
-        orbit_id=dfs["orbit_id"],
-        object_id=dfs["targetname"],
-        # Convert from minutes to days
-        light_time=dfs["lighttime"] / 1440,
-        alpha=dfs["alpha"],
+        orbit_id=normalized["orbit_id"],
+        object_id=normalized["object_id"],
+        light_time=normalized["light_time"],
+        alpha=normalized["alpha"],
         coordinates=SphericalCoordinates.from_kwargs(
-            time=Timestamp.from_jd(pa.array(dfs["datetime_jd"]), scale="utc"),
-            lon=dfs["RA"],
-            lat=dfs["DEC"],
-            origin=Origin.from_kwargs(code=dfs["observatory_code"]),
+            time=Timestamp.from_jd(
+                pa.array(normalized["times_jd"], type=pa.float64()), scale="utc"
+            ),
+            lon=normalized["lon"],
+            lat=normalized["lat"],
+            origin=Origin.from_kwargs(code=normalized["observatory_code"]),
             frame="ecliptic",
         ),
     )
@@ -300,25 +308,33 @@ def query_horizons(
                 aberrations=aberrations,
             )
 
-            times = Timestamp.from_jd(vectors["datetime_jd"].values, scale="tdb")
-            origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
+            from adam_core import _rust_native as _rn
+
+            normalized = json.loads(
+                _rn.query_horizons_vectors_normalize(vectors.to_json(orient="records"))
+            )
+            coords = np.asarray(normalized["coords_cartesian"], dtype=np.float64)
+            times = Timestamp.from_jd(
+                pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
+            )
+            origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
             frame = "ecliptic"
             coordinates = CartesianCoordinates.from_kwargs(
                 time=times,
-                x=vectors["x"].values,
-                y=vectors["y"].values,
-                z=vectors["z"].values,
-                vx=vectors["vx"].values,
-                vy=vectors["vy"].values,
-                vz=vectors["vz"].values,
+                x=coords[:, 0],
+                y=coords[:, 1],
+                z=coords[:, 2],
+                vx=coords[:, 3],
+                vy=coords[:, 4],
+                vz=coords[:, 5],
                 origin=origin,
                 frame=frame,
             )
-            orbit_id = vectors["orbit_id"].values
-            object_id = vectors["targetname"].values
 
             orbits = Orbits.from_kwargs(
-                orbit_id=orbit_id, object_id=object_id, coordinates=coordinates
+                orbit_id=normalized["orbit_id"],
+                object_id=normalized["object_id"],
+                coordinates=coordinates,
             )
 
             total_orbits_list.append(orbits)
@@ -331,29 +347,34 @@ def query_horizons(
                 id_type=id_type,
             )
 
-            times = Timestamp.from_jd(
-                elements["datetime_jd"].values,
-                scale="tdb",
+            from adam_core import _rust_native as _rn
+
+            normalized = json.loads(
+                _rn.query_horizons_elements_normalize(
+                    elements.to_json(orient="records"), "keplerian"
+                )
             )
-            origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
+            coords = np.asarray(normalized["coords"], dtype=np.float64)
+            times = Timestamp.from_jd(
+                pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
+            )
+            origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
             frame = "ecliptic"
             coordinates = KeplerianCoordinates.from_kwargs(
                 time=times,
-                a=elements["a"].values,
-                e=elements["e"].values,
-                i=elements["incl"].values,
-                raan=elements["Omega"].values,
-                ap=elements["w"].values,
-                M=elements["M"].values,
+                a=coords[:, 0],
+                e=coords[:, 1],
+                i=coords[:, 2],
+                raan=coords[:, 3],
+                ap=coords[:, 4],
+                M=coords[:, 5],
                 origin=origin,
                 frame=frame,
             )
-            orbit_id = elements["orbit_id"].values
-            object_id = elements["targetname"].values
 
             orbits = Orbits.from_kwargs(
-                orbit_id=orbit_id,
-                object_id=object_id,
+                orbit_id=normalized["orbit_id"],
+                object_id=normalized["object_id"],
                 coordinates=coordinates.to_cartesian(),
             )
 
@@ -367,27 +388,34 @@ def query_horizons(
                 id_type=id_type,
             )
 
-            tp = Timestamp.from_jd(elements["Tp_jd"].values, scale="tdb")
-            times = Timestamp.from_jd(elements["datetime_jd"].values, scale="tdb")
-            origin = Origin.from_kwargs(code=["SUN" for i in range(len(times))])
+            from adam_core import _rust_native as _rn
+
+            normalized = json.loads(
+                _rn.query_horizons_elements_normalize(
+                    elements.to_json(orient="records"), "cometary"
+                )
+            )
+            coords = np.asarray(normalized["coords"], dtype=np.float64)
+            times = Timestamp.from_jd(
+                pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
+            )
+            origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
             frame = "ecliptic"
             coordinates = CometaryCoordinates.from_kwargs(
                 time=times,
-                q=elements["q"].values,
-                e=elements["e"].values,
-                i=elements["incl"].values,
-                raan=elements["Omega"].values,
-                ap=elements["w"].values,
-                tp=tp.mjd(),
+                q=coords[:, 0],
+                e=coords[:, 1],
+                i=coords[:, 2],
+                raan=coords[:, 3],
+                ap=coords[:, 4],
+                tp=coords[:, 5],
                 origin=origin,
                 frame=frame,
             )
-            orbit_id = elements["orbit_id"].values
-            object_id = elements["targetname"].values
 
             orbits = Orbits.from_kwargs(
-                orbit_id=orbit_id,
-                object_id=object_id,
+                orbit_id=normalized["orbit_id"],
+                object_id=normalized["object_id"],
                 coordinates=coordinates.to_cartesian(),
             )
 

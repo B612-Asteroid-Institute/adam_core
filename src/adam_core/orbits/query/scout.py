@@ -1,8 +1,9 @@
+import json
 import logging
 
+import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 import requests
 
@@ -150,27 +151,33 @@ def scout_orbits_to_variant_orbits(
     variant_orbits : `~adam_core.orbits.VariantOrbits`
         Table containing the variant orbits
     """
+    from adam_core import _rust_native as _rn
+
+    normalized = json.loads(
+        _rn.query_scout_normalize_orbits(
+            object_id, json.dumps(scout_orbits.table.to_pylist())
+        )
+    )
+    coords = np.asarray(normalized["coords_cometary"], dtype=np.float64)
     cometary_coords = CometaryCoordinates.from_kwargs(
-        q=pc.cast(scout_orbits.qr, pa.float64()),
-        e=pc.cast(scout_orbits.ec, pa.float64()),
-        i=pc.cast(scout_orbits.inc, pa.float64()),
-        raan=pc.cast(scout_orbits.om, pa.float64()),
-        ap=pc.cast(scout_orbits.w, pa.float64()),
-        tp=pc.subtract(pc.cast(scout_orbits.tp, pa.float64()), 2400000.5),
-        time=Timestamp.from_jd(pc.cast(scout_orbits.epoch, pa.float64())),
+        q=coords[:, 0],
+        e=coords[:, 1],
+        i=coords[:, 2],
+        raan=coords[:, 3],
+        ap=coords[:, 4],
+        tp=coords[:, 5],
+        time=Timestamp.from_jd(pa.array(normalized["times_jd"], type=pa.float64())),
         origin=Origin.from_kwargs(code=pa.repeat("SUN", len(scout_orbits))),
         frame="ecliptic",
     )
 
     cartesian_coords = cometary_coords.to_cartesian()
 
-    unique_orbit_ids = pc.cast(scout_orbits.idx, pa.large_string())
-
     variants = VariantOrbits.from_kwargs(
         coordinates=cartesian_coords,
-        orbit_id=unique_orbit_ids,
-        variant_id=unique_orbit_ids,
-        object_id=pa.repeat(object_id, len(scout_orbits)),
+        orbit_id=pa.array(normalized["orbit_id"], type=pa.large_string()),
+        variant_id=pa.array(normalized["variant_id"], type=pa.large_string()),
+        object_id=pa.array(normalized["object_id"], type=pa.large_string()),
     )
 
     return variants
