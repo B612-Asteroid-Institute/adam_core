@@ -703,6 +703,169 @@ fn concatenate(parts: Vec<AdesObservationBatch>) -> AdesObservationBatch {
     merged
 }
 
+// --- ObsContext rendering + metadata-section parsing (bead personal-cmy.26) ----
+
+/// Legacy `ObsContext.to_string`: renders the `dataclasses.asdict` JSON
+/// payload of an ObsContext (field order preserved) into the `# section` /
+/// `! key value` header block. Floats render with shortest round-trip
+/// formatting, matching Python `str()`.
+pub fn obs_context_to_string(context_json: &str) -> SchemaResult<String> {
+    let context: serde_json::Map<String, serde_json::Value> = serde_json::from_str(context_json)
+        .map_err(|err| invalid(format!("invalid ObsContext payload: {err}")))?;
+    let mut lines: Vec<String> = Vec::new();
+    for (key, value) in &context {
+        match value {
+            serde_json::Value::Object(section) => {
+                lines.push(format!("# {key}"));
+                for (field, field_value) in section {
+                    if !field_value.is_null() {
+                        lines.push(format!("! {field} {}", json_scalar_str(field_value)));
+                    }
+                }
+            }
+            serde_json::Value::Null => {}
+            _ => {
+                if ["observers", "measurers", "coinvestigators", "collaborators"]
+                    .contains(&key.as_str())
+                {
+                    lines.push(format!("# {key}"));
+                    if let serde_json::Value::Array(names) = value {
+                        for name in names {
+                            lines.push(format!("! name {}", json_scalar_str(name)));
+                        }
+                    }
+                } else if key == "fundingSource" {
+                    lines.push(format!("# fundingSource {}", json_scalar_str(value)));
+                } else if key == "comments" {
+                    if let serde_json::Value::Array(comments) = value {
+                        if !comments.is_empty() {
+                            lines.push("# comment".to_string());
+                            for comment in comments {
+                                lines.push(format!("! line {}", json_scalar_str(comment)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(format!("{}\n", lines.join("\n")))
+}
+
+fn json_scalar_str(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Number(number) => {
+            // Match Python str(): floats keep a trailing .0, ints do not.
+            if let Some(int) = number.as_i64() {
+                if number.is_f64() {
+                    format!("{:?}", int as f64)
+                } else {
+                    int.to_string()
+                }
+            } else if let Some(float) = number.as_f64() {
+                let rendered = format!("{float}");
+                if rendered.contains('.') || rendered.contains('e') || rendered.contains("inf") {
+                    rendered
+                } else {
+                    format!("{rendered}.0")
+                }
+            } else {
+                number.to_string()
+            }
+        }
+        serde_json::Value::Bool(flag) => if *flag { "True" } else { "False" }.to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// Legacy `_parse_obs_contexts` metadata loop: returns a JSON array of
+/// `[mpc_code_or_null, context_dict]` pairs, where `context_dict` mirrors the
+/// legacy nested structure ({section: {key: value}}, list-valued sections for
+/// observers/measurers/comment, top-level strings for e.g. fundingSource).
+/// The caller builds the ObsContext dataclasses from the pairs.
+pub fn ades_parse_obs_contexts(ades_string: &str) -> SchemaResult<String> {
+    use serde_json::{Map, Value};
+
+    let lines: Vec<&str> = ades_string
+        .split('\n')
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .collect();
+
+    let mut contexts: Vec<(Option<String>, Map<String, Value>)> = Vec::new();
+    let mut current: Map<String, Value> = Map::new();
+    let mut current_code: Option<String> = None;
+    let mut current_section_key: Option<String> = None;
+
+    for line in lines {
+        if let Some(rest) = line.strip_prefix('#') {
+            let rest = rest.trim();
+            if rest.starts_with("version") {
+                continue;
+            }
+            // Legacy splits on single spaces and strips each piece.
+            let mut parts = rest.split(' ').map(str::trim);
+            let section_key = parts.next().unwrap_or("").to_string();
+            let value_parts: Vec<&str> = parts.collect();
+            if section_key == "observatory" {
+                if !current.is_empty() {
+                    contexts.push((current_code.take(), std::mem::take(&mut current)));
+                }
+                current_code = None;
+            }
+            if !value_parts.is_empty() {
+                current.insert(section_key.clone(), Value::String(value_parts.join(" ")));
+            }
+            current_section_key = Some(section_key);
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix('!') {
+            let rest = rest.trim();
+            let mut parts = rest.split(' ').map(str::trim);
+            let key = parts.next().unwrap_or("").to_string();
+            let value = parts.collect::<Vec<&str>>().join(" ");
+            if key == "mpcCode" {
+                current_code = Some(value.clone());
+            }
+            let section_key = current_section_key.clone().unwrap_or_default();
+            let section = current
+                .entry(section_key.clone())
+                .or_insert_with(|| Value::Object(Map::new()));
+            // Legacy setdefault(current_section_key, {}) assumes a dict; a
+            // scalar already stored here would raise in Python -- mirror by
+            // replacing only when absent (well-formed files never hit this).
+            if let Value::Object(section) = section {
+                if ["observers", "measurers", "comment"].contains(&section_key.as_str()) {
+                    let entry = section
+                        .entry(key)
+                        .or_insert_with(|| Value::Array(Vec::new()));
+                    if let Value::Array(values) = entry {
+                        values.push(Value::String(value));
+                    }
+                } else {
+                    section.insert(key, Value::String(value));
+                }
+            }
+        }
+    }
+    if !current.is_empty() {
+        contexts.push((current_code.take(), current));
+    }
+
+    let payload: Vec<Value> = contexts
+        .into_iter()
+        .map(|(code, context)| {
+            Value::Array(vec![
+                code.map(Value::String).unwrap_or(Value::Null),
+                Value::Object(context),
+            ])
+        })
+        .collect();
+    serde_json::to_string(&Value::Array(payload))
+        .map_err(|err| invalid(format!("failed to encode ObsContexts: {err}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

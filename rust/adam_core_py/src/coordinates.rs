@@ -1450,6 +1450,40 @@ fn ades_to_string_ipc<'py>(
     })
 }
 
+/// ObsContext renderer (bead personal-cmy.26): renders the
+/// `dataclasses.asdict` JSON payload of an ObsContext into the legacy
+/// `# section` / `! key value` header block.
+#[pyfunction]
+fn ades_obs_context_to_string(context_json: &str) -> PyResult<String> {
+    adam_core_rs_coords::ades_io::obs_context_to_string(context_json).map_err(|err| match err {
+        adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
+            PyValueError::new_err(message)
+        }
+        other => PyValueError::new_err(other.to_string()),
+    })
+}
+
+/// ObsContext metadata-section parser (bead personal-cmy.26): returns a JSON
+/// array of `[mpc_code_or_null, context_dict]` pairs mirroring the legacy
+/// `_parse_obs_contexts` structure.
+#[pyfunction]
+fn ades_parse_obs_contexts(ades_string: &str) -> PyResult<String> {
+    adam_core_rs_coords::ades_io::ades_parse_obs_contexts(ades_string).map_err(|err| match err {
+        adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
+            PyValueError::new_err(message)
+        }
+        other => PyValueError::new_err(other.to_string()),
+    })
+}
+
+/// MPC packed-date conversion (bead personal-cmy.26): packed epoch -> ISOT
+/// string (TT scale), legacy `_unpack_mpc_date` semantics.
+#[pyfunction]
+fn unpack_mpc_date_isot(epoch_pf: &str) -> PyResult<String> {
+    adam_core_rs_coords::mpc_designations::unpack_mpc_date_isot(epoch_pf)
+        .map_err(mpc_designation_error)
+}
+
 /// ADES parser (bead personal-cmy.20 slice C): parse the observation blocks
 /// of an ADES string into a quivr-compatible `ADESObservations` IPC payload
 /// plus the list of unknown column names (for the caller to log). Context
@@ -2049,6 +2083,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(timestamp_mjd, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_from_mjd, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_rescale, m)?)?;
+    m.add_function(wrap_pyfunction!(ades_obs_context_to_string, m)?)?;
+    m.add_function(wrap_pyfunction!(ades_parse_obs_contexts, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_mpc_date_isot, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())

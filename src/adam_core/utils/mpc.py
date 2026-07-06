@@ -6,26 +6,16 @@ BASE62_MAP = {BASE62[i]: i for i in range(len(BASE62))}
 
 
 def _unpack_mpc_date(epoch_pf: str) -> Time:
-    # Taken from Lynne Jones' SSO TOOLS.
     # See https://minorplanetcenter.net/iau/info/PackedDates.html
     # for MPC documentation on packed dates.
     # Examples:
     #    1998 Jan. 18.73     = J981I73
     #    2001 Oct. 22.138303 = K01AM138303
-    epoch_pf = str(epoch_pf)
-    year = int(epoch_pf[0], base=32) * 100 + int(epoch_pf[1:3])
-    month = int(epoch_pf[3], base=32)
-    day = int(epoch_pf[4], base=32)
-    isot_string = "{:d}-{:02d}-{:02d}".format(year, month, day)
+    # The packed-date computation runs in the Rust backend (bead
+    # personal-cmy.26); astropy wraps the resulting ISOT string.
+    from adam_core import _rust_native as _rn
 
-    if len(epoch_pf) > 5:
-        fractional_day = float("." + epoch_pf[5:])
-        hours = int((24 * fractional_day))
-        minutes = int(60 * ((24 * fractional_day) - hours))
-        seconds = 3600 * (24 * fractional_day - hours - minutes / 60)
-        isot_string += "T{:02d}:{:02d}:{:09.6f}".format(hours, minutes, seconds)
-
-    return Time(isot_string, format="isot", scale="tt")
+    return Time(_rn.unpack_mpc_date_isot(str(epoch_pf)), format="isot", scale="tt")
 
 
 def convert_mpc_packed_dates(pf_tt: npt.ArrayLike) -> Time:

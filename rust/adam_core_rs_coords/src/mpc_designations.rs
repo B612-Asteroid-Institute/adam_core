@@ -327,6 +327,57 @@ pub fn unpack_mpc_designation(designation_pf: &str) -> MpcResult<String> {
     )))
 }
 
+/// Legacy `_unpack_mpc_date` (packed MPC epoch -> ISOT string, TT scale).
+/// See https://minorplanetcenter.net/iau/info/PackedDates.html.
+pub fn unpack_mpc_date_isot(epoch_pf: &str) -> MpcResult<String> {
+    let chars: Vec<char> = epoch_pf.chars().collect();
+    if chars.len() < 5 {
+        return Err(MpcDesignationError::Index);
+    }
+    let year = python_int_base32(&chars[0..1].iter().collect::<String>())? * 100
+        + python_int(&chars[1..3].iter().collect::<String>())?;
+    let month = python_int_base32(&chars[3..4].iter().collect::<String>())?;
+    let day = python_int_base32(&chars[4..5].iter().collect::<String>())?;
+    let mut isot = format!("{year}-{month:02}-{day:02}");
+
+    if chars.len() > 5 {
+        let tail: String = chars[5..].iter().collect();
+        let fraction: f64 = format!("0.{tail}").parse().map_err(|_| {
+            MpcDesignationError::Value(format!(
+                "could not convert string to float: {}",
+                py_repr(&format!(".{tail}"))
+            ))
+        })?;
+        let hours = (24.0 * fraction) as i64;
+        let minutes = (60.0 * (24.0 * fraction - hours as f64)) as i64;
+        let seconds = 3600.0 * (24.0 * fraction - hours as f64 - minutes as f64 / 60.0);
+        isot.push_str(&format!("T{hours:02}:{minutes:02}:{seconds:09.6}"));
+    }
+    Ok(isot)
+}
+
+/// Python `int(s, base=32)` for single characters (digits + a-v, case
+/// insensitive), with the CPython error message.
+fn python_int_base32(value: &str) -> MpcResult<i64> {
+    let trimmed = value.trim();
+    let ok = !trimmed.is_empty()
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c.to_ascii_lowercase(), 'a'..='v'));
+    if !ok {
+        return Err(MpcDesignationError::Value(format!(
+            "invalid literal for int() with base 32: {}",
+            py_repr(value)
+        )));
+    }
+    i64::from_str_radix(&trimmed.to_ascii_lowercase(), 32).map_err(|_| {
+        MpcDesignationError::Value(format!(
+            "invalid literal for int() with base 32: {}",
+            py_repr(value)
+        ))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

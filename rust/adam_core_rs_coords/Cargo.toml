@@ -15,9 +15,9 @@ adam_core_rs_autodiff = { path = "../adam_core_rs_autodiff" }
 # weighted_mean / weighted_covariance GEMV/GEMM and unblocks future
 # Cholesky/LU/QR/eigen kernels (sigma-point sampling, ATWA solve, etc.).
 faer = "0.22"
-
-[dev-dependencies]
-serde_json = "1"
+# JSON marshalling for the ObsContext render/parse boundary (bead
+# personal-cmy.26); preserve_order keeps Python dict insertion order.
+serde_json = { version = "1", features = ["preserve_order"] }
 
 [lib]
 path = "src/lib.rs"

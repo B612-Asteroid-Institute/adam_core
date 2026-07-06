@@ -1,3 +1,4 @@
+import json
 import logging
 from dataclasses import asdict, dataclass
 from typing import Optional, Tuple
@@ -114,32 +115,11 @@ class ObsContext:
                 assert len(comment) <= STRING100
 
     def to_string(self) -> str:
-        lines = []
-        for k, v in asdict(self).items():
-            if isinstance(v, dict):
-                lines.append(f"# {k}")
-                for k2, v2 in v.items():
-                    if v2 is not None:
-                        lines.append(f"! {k2} {v2}")
-            else:
-                if v is not None:
-                    if k in [
-                        "observers",
-                        "measurers",
-                        "coinvestigators",
-                        "collaborators",
-                    ]:
-                        lines.append(f"# {k}")
-                        for name in v:
-                            lines.append(f"! name {name}")
-                    elif k == "fundingSource":
-                        lines.append(f"# fundingSource {v}")
-                    elif k == "comments":
-                        if len(v) > 0:
-                            lines.append("# comment")
-                            for comment in v:
-                                lines.append(f"! line {comment}")
-        return "\n".join(lines) + "\n"
+        # Rendered in the Rust backend (bead personal-cmy.26) from the
+        # dataclass dict payload; field order is preserved.
+        from adam_core import _rust_native as _rn
+
+        return _rn.ades_obs_context_to_string(json.dumps(asdict(self)))
 
 
 class ADESObservations(qv.Table):
@@ -281,58 +261,11 @@ def ADES_string_to_tables(
         )
     observations = observations_from_ipc(raw, ADESObservations)
 
-    # Split the string into lines and remove empty lines
-    lines = [line.strip() for line in ades_string.split("\n") if line.strip()]
-    obs_contexts = _parse_obs_contexts(lines)
+    # The metadata sections are parsed in the Rust backend (bead
+    # personal-cmy.26); the ObsContext dataclasses are built here.
+    pairs = json.loads(_rn.ades_parse_obs_contexts(ades_string))
+    obs_contexts = {code: _build_obs_context(context) for code, context in pairs}
     return obs_contexts, observations
-
-
-def _parse_obs_contexts(lines: list[str]) -> dict[str, ObsContext]:
-    """Parse the ObsContext metadata sections of an ADES file. This is the
-    unchanged legacy metadata loop; only the observation-block parsing moved
-    to Rust."""
-    obs_contexts = {}
-    current_obs_context = {}
-    current_section_key = None
-    current_context_code = None
-
-    for line in lines:
-        if line.startswith("#"):
-            line = line[1:].strip()
-            if line.startswith("version"):
-                continue
-            current_section_key, *value = [x.strip() for x in line.split(" ")]
-            if current_section_key == "observatory":
-                # Only build obs context if current_obs_context is not empty
-                if current_obs_context:
-                    obs_contexts[current_context_code] = _build_obs_context(
-                        current_obs_context
-                    )
-                current_obs_context = {}
-                current_context_code = None
-
-            # Some sections specify the value in the same line as the section key
-            if len(value) > 0:
-                current_obs_context[current_section_key] = " ".join(value)
-            continue
-
-        if line.startswith("!"):
-            line = line[1:].strip()
-            key, *value = [x.strip() for x in line.split(" ")]
-            value = " ".join(value)
-            if key == "mpcCode":
-                current_context_code = value
-            current_section = current_obs_context.setdefault(current_section_key, {})
-            if current_section_key in ["observers", "measurers", "comment"]:
-                current_key_values = current_section.setdefault(key, [])
-                current_key_values.append(value)
-            else:
-                current_section[key] = value
-
-    if current_obs_context:
-        obs_contexts[current_context_code] = _build_obs_context(current_obs_context)
-
-    return obs_contexts
 
 
 def _build_obs_context(context_dict: dict) -> ObsContext:
