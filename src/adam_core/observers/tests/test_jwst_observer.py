@@ -23,6 +23,12 @@ JWST_KERNEL_DIR = (
     Path(__file__).parent.parent.parent / "utils" / "tests" / "data" / "spice"
 )
 JWST_KERNEL_PATH = JWST_KERNEL_DIR / "jwst_horizons_20200101_20240101_v01.bsp"
+JWST_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "migration"
+    / "artifacts"
+    / "jwst_observer_fixture_2026-07-06.json"
+)
 
 
 @pytest.fixture
@@ -83,3 +89,35 @@ def test_jwst_as_observer_from_code(jwst_kernel):
     assert observers.coordinates.values.shape == (1, 6)
     assert observers.coordinates.frame == "ecliptic"
     assert observers.coordinates.origin.code[0].as_py() == "SUN"
+
+
+def test_jwst_states_match_legacy_cspice_fixture(jwst_kernel):
+    """Numeric parity for the custom-kernel space-observatory path
+    (correction to the personal-cmy.27 audit): the spicekit-served JWST
+    states must match the frozen legacy CSPICE fixture generated in the
+    untouched legacy checkout on the same vendored kernel. Tolerance matches
+    the spicekit-vs-CSPICE bound accepted for ground observers (cmy.6)."""
+    import json
+
+    import numpy as np
+
+    assert JWST_FIXTURE_PATH.exists(), (
+        "JWST observer fixture missing; generate with the legacy interpreter: "
+        ".legacy-venv/bin/python migration/scripts/generate_jwst_observer_fixture.py"
+    )
+    fixture = json.loads(JWST_FIXTURE_PATH.read_text())
+
+    times = Timestamp.from_mjd(
+        np.asarray(fixture["epoch_mjds_tdb"], dtype=np.float64), scale="tdb"
+    )
+    for frame, expected in fixture["states"].items():
+        coordinates = get_observer_state(
+            "JWST", times, frame=frame, origin=OriginCodes.SUN
+        )
+        np.testing.assert_allclose(
+            np.asarray(coordinates.values, dtype=np.float64),
+            np.asarray(expected, dtype=np.float64),
+            rtol=0.0,
+            atol=1e-11,
+            err_msg=f"JWST {frame} states diverge from legacy CSPICE",
+        )
