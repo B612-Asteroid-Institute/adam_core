@@ -279,6 +279,119 @@ fn add_corrections(left: &[i64], right: &[i64]) -> Vec<i64> {
     left.iter().zip(right.iter()).map(|(a, b)| a + b).collect()
 }
 
+// --- Timestamp op surface (bead personal-cmy.25) --------------------------------
+//
+// Array-level ports of the legacy Python `Timestamp` arithmetic, matching the
+// pyarrow semantics bit-for-bit (gated by the frozen legacy fixture from bead
+// personal-cmy.19). Carry/normalization is consolidated on `Epoch::new`
+// (euclidean day carry), which subsumes the legacy one-day overflow branches.
+
+impl TimeArray {
+    /// Legacy `Timestamp.add_nanos`: element-wise add with day-boundary
+    /// carry. When `check_range` is set, deltas must lie in
+    /// `[-86400e9, 86400e9)` and violations raise the legacy
+    /// "Nanoseconds out of range" error.
+    pub fn add_nanos_checked(&self, delta: &[i64], check_range: bool) -> SchemaResult<Self> {
+        if delta.len() != self.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "time.add_nanos".to_string(),
+                expected: self.len(),
+                actual: delta.len(),
+            });
+        }
+        if check_range
+            && delta
+                .iter()
+                .any(|&value| !(-NANOS_PER_DAY..NANOS_PER_DAY).contains(&value))
+        {
+            return Err(SchemaError::InvalidRecordBatch(
+                "Nanoseconds out of range".to_string(),
+            ));
+        }
+        self.add_nanos_with_scale(self.scale, delta)
+    }
+
+    /// Legacy `Timestamp.add_days`: day-only add, nanos untouched.
+    pub fn add_days(&self, delta: &[i64]) -> SchemaResult<Self> {
+        if delta.len() != self.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "time.add_days".to_string(),
+                expected: self.len(),
+                actual: delta.len(),
+            });
+        }
+        Self::new(
+            self.scale,
+            self.epochs
+                .iter()
+                .zip(delta.iter().copied())
+                .map(|(epoch, delta)| Epoch::new(epoch.days + delta, epoch.nanos))
+                .collect(),
+        )
+    }
+
+    /// Legacy `Timestamp.add_fractional_days`: `floor` day part, truncating
+    /// float->int cast for the nano part (pyarrow `allow_float_truncate`),
+    /// then day/nano adds.
+    pub fn add_fractional_days(&self, fractional_days: &[f64]) -> SchemaResult<Self> {
+        if fractional_days.len() != self.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "time.add_fractional_days".to_string(),
+                expected: self.len(),
+                actual: fractional_days.len(),
+            });
+        }
+        let mut delta_days = Vec::with_capacity(fractional_days.len());
+        let mut delta_nanos = Vec::with_capacity(fractional_days.len());
+        for &value in fractional_days {
+            let day_part = value.floor();
+            let nano_part = value - day_part;
+            delta_days.push(day_part as i64);
+            delta_nanos.push((nano_part * NANOS_PER_DAY_F64).trunc() as i64);
+        }
+        self.add_days(&delta_days)?
+            .add_nanos_checked(&delta_nanos, true)
+    }
+
+    /// Legacy `Timestamp.difference` / `difference_scalar`: element-wise
+    /// `self - other`, normalized so nanos land in `[0, 86400e9)` (the
+    /// euclidean normalization in `Epoch::new`).
+    pub fn difference(&self, other: &Self) -> SchemaResult<(Vec<i64>, Vec<i64>)> {
+        if other.len() != self.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "time.difference".to_string(),
+                expected: self.len(),
+                actual: other.len(),
+            });
+        }
+        let mut days = Vec::with_capacity(self.len());
+        let mut nanos = Vec::with_capacity(self.len());
+        for (a, b) in self.epochs.iter().zip(&other.epochs) {
+            let normalized = Epoch::new(a.days - b.days, a.nanos - b.nanos);
+            days.push(normalized.days);
+            nanos.push(normalized.nanos);
+        }
+        Ok((days, nanos))
+    }
+
+    /// Legacy `Timestamp.from_mjd`: `floor` day split and half-even rounding
+    /// of the fractional part to nanoseconds (pyarrow `round` default).
+    pub fn from_mjd(scale: TimeScale, mjd: &[f64]) -> SchemaResult<Self> {
+        let epochs = mjd
+            .iter()
+            .map(|&value| {
+                let day = value.floor();
+                let fraction = value - day;
+                Epoch::new(
+                    day as i64,
+                    (fraction * NANOS_PER_DAY_F64).round_ties_even() as i64,
+                )
+            })
+            .collect();
+        Self::new(scale, epochs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

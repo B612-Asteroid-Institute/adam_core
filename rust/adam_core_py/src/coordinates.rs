@@ -1473,6 +1473,134 @@ fn ades_string_to_observations_ipc<'py>(
     Ok((PyBytes::new(py, &bytes), unknown_columns))
 }
 
+fn time_value_error(err: adam_core_rs_coords::SchemaError) -> PyErr {
+    match err {
+        adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
+            PyValueError::new_err(message)
+        }
+        other => PyValueError::new_err(other.to_string()),
+    }
+}
+
+fn time_array_from(
+    scale: adam_core_rs_coords::TimeScale,
+    days: numpy::PyReadonlyArray1<'_, i64>,
+    nanos: numpy::PyReadonlyArray1<'_, i64>,
+) -> PyResult<adam_core_rs_coords::TimeArray> {
+    adam_core_rs_coords::TimeArray::from_parts(
+        scale,
+        days.as_slice()?.to_vec(),
+        nanos.as_slice()?.to_vec(),
+    )
+    .map_err(time_value_error)
+}
+
+fn time_array_out<'py>(
+    py: Python<'py>,
+    times: adam_core_rs_coords::TimeArray,
+) -> (Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>) {
+    let days: Vec<i64> = times.epochs.iter().map(|epoch| epoch.days).collect();
+    let nanos: Vec<i64> = times.epochs.iter().map(|epoch| epoch.nanos).collect();
+    (PyArray1::from_vec(py, days), PyArray1::from_vec(py, nanos))
+}
+
+/// Timestamp op surface (bead personal-cmy.25): thin bindings over the
+/// TimeArray arithmetic in adam_core_rs_coords (legacy-fixture gated).
+#[pyfunction]
+fn timestamp_add_nanos<'py>(
+    py: Python<'py>,
+    days: numpy::PyReadonlyArray1<'py, i64>,
+    nanos: numpy::PyReadonlyArray1<'py, i64>,
+    delta: numpy::PyReadonlyArray1<'py, i64>,
+    check_range: bool,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    let times = time_array_from(adam_core_rs_coords::TimeScale::Tdb, days, nanos)?;
+    let out = times
+        .add_nanos_checked(delta.as_slice()?, check_range)
+        .map_err(time_value_error)?;
+    Ok(time_array_out(py, out))
+}
+
+#[pyfunction]
+fn timestamp_add_days<'py>(
+    py: Python<'py>,
+    days: numpy::PyReadonlyArray1<'py, i64>,
+    nanos: numpy::PyReadonlyArray1<'py, i64>,
+    delta: numpy::PyReadonlyArray1<'py, i64>,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    let times = time_array_from(adam_core_rs_coords::TimeScale::Tdb, days, nanos)?;
+    let out = times
+        .add_days(delta.as_slice()?)
+        .map_err(time_value_error)?;
+    Ok(time_array_out(py, out))
+}
+
+#[pyfunction]
+fn timestamp_add_fractional_days<'py>(
+    py: Python<'py>,
+    days: numpy::PyReadonlyArray1<'py, i64>,
+    nanos: numpy::PyReadonlyArray1<'py, i64>,
+    fractional_days: numpy::PyReadonlyArray1<'py, f64>,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    let times = time_array_from(adam_core_rs_coords::TimeScale::Tdb, days, nanos)?;
+    let out = times
+        .add_fractional_days(fractional_days.as_slice()?)
+        .map_err(time_value_error)?;
+    Ok(time_array_out(py, out))
+}
+
+#[pyfunction]
+fn timestamp_difference<'py>(
+    py: Python<'py>,
+    days_a: numpy::PyReadonlyArray1<'py, i64>,
+    nanos_a: numpy::PyReadonlyArray1<'py, i64>,
+    days_b: numpy::PyReadonlyArray1<'py, i64>,
+    nanos_b: numpy::PyReadonlyArray1<'py, i64>,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    let a = time_array_from(adam_core_rs_coords::TimeScale::Tdb, days_a, nanos_a)?;
+    let b = time_array_from(adam_core_rs_coords::TimeScale::Tdb, days_b, nanos_b)?;
+    let (days, nanos) = a.difference(&b).map_err(time_value_error)?;
+    Ok((PyArray1::from_vec(py, days), PyArray1::from_vec(py, nanos)))
+}
+
+#[pyfunction]
+fn timestamp_mjd<'py>(
+    py: Python<'py>,
+    days: numpy::PyReadonlyArray1<'py, i64>,
+    nanos: numpy::PyReadonlyArray1<'py, i64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let times = time_array_from(adam_core_rs_coords::TimeScale::Tdb, days, nanos)?;
+    Ok(PyArray1::from_vec(py, times.mjd_values()))
+}
+
+#[pyfunction]
+fn timestamp_from_mjd<'py>(
+    py: Python<'py>,
+    mjd: numpy::PyReadonlyArray1<'py, f64>,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    let out = adam_core_rs_coords::TimeArray::from_mjd(
+        adam_core_rs_coords::TimeScale::Tdb,
+        mjd.as_slice()?,
+    )
+    .map_err(time_value_error)?;
+    Ok(time_array_out(py, out))
+}
+
+#[pyfunction]
+fn timestamp_rescale<'py>(
+    py: Python<'py>,
+    days: numpy::PyReadonlyArray1<'py, i64>,
+    nanos: numpy::PyReadonlyArray1<'py, i64>,
+    from_scale: &str,
+    to_scale: &str,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    let from_scale = adam_core_rs_coords::TimeScale::parse(from_scale).map_err(time_value_error)?;
+    let to_scale = adam_core_rs_coords::TimeScale::parse(to_scale).map_err(time_value_error)?;
+    let times = time_array_from(from_scale, days, nanos)?;
+    let out = times.rescale(to_scale).map_err(time_value_error)?;
+    Ok(time_array_out(py, out))
+}
+
 fn bandpass_value_error(err: adam_core_rs_coords::SchemaError) -> PyErr {
     match err {
         adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
@@ -1914,6 +2042,13 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bandpasses_assert_filter_ids, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_register_custom_template, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_clear_custom_templates, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_add_nanos, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_add_days, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_add_fractional_days, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_difference, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_mjd, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_from_mjd, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_rescale, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())

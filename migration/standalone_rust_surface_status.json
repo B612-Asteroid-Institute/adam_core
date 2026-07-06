@@ -786,7 +786,7 @@
     "adam_core.time.time": {
       "workstream": "W1",
       "entry_count": 37,
-      "status": "rust_service_available_extend"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.utils.bounded_lru": {
       "workstream": "W5",
