@@ -657,7 +657,7 @@
     "adam_core.orbits.ephemeris": {
       "workstream": "W9",
       "entry_count": 2,
-      "status": "first_scope_product_edge_new_plotting_approach"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.orbits.oem_io": {
       "workstream": "W9",
@@ -722,7 +722,7 @@
     "adam_core.orbits.spice_kernel": {
       "workstream": "W9",
       "entry_count": 4,
-      "status": "first_scope_product_edge_new_plotting_approach"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.variants": {
       "workstream": "W1",
