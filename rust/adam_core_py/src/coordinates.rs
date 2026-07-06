@@ -1473,6 +1473,37 @@ fn ades_string_to_observations_ipc<'py>(
     Ok((PyBytes::new(py, &bytes), unknown_columns))
 }
 
+fn mpc_designation_error(err: adam_core_rs_coords::MpcDesignationError) -> PyErr {
+    use adam_core_rs_coords::MpcDesignationError;
+    match err {
+        MpcDesignationError::Value(message) => PyValueError::new_err(message),
+        MpcDesignationError::Key(key) => pyo3::exceptions::PyKeyError::new_err(key),
+        MpcDesignationError::Index => {
+            pyo3::exceptions::PyIndexError::new_err("string index out of range")
+        }
+    }
+}
+
+macro_rules! mpc_designation_fn {
+    ($name:ident) => {
+        /// MPC packed-designation helper (W11): legacy-exact Rust port of
+        /// `adam_core.utils.mpc`, including exception types and messages.
+        #[pyfunction]
+        fn $name(designation: &str) -> PyResult<String> {
+            adam_core_rs_coords::mpc_designations::$name(designation).map_err(mpc_designation_error)
+        }
+    };
+}
+
+mpc_designation_fn!(pack_numbered_designation);
+mpc_designation_fn!(pack_provisional_designation);
+mpc_designation_fn!(pack_survey_designation);
+mpc_designation_fn!(pack_mpc_designation);
+mpc_designation_fn!(unpack_numbered_designation);
+mpc_designation_fn!(unpack_provisional_designation);
+mpc_designation_fn!(unpack_survey_designation);
+mpc_designation_fn!(unpack_mpc_designation);
+
 /// W1 / OD slice 3: Rust-native OD residual evaluation over the bridge. Given
 /// orbits (already at the observation times, 1:1 with observations), the observed
 /// astrometry (`SphericalCoordinates`), and the observers, this composes the exact
@@ -1736,6 +1767,14 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(ades_to_string_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(ades_string_to_observations_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_numbered_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_provisional_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_survey_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_mpc_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_numbered_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_provisional_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_survey_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_mpc_designation, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())

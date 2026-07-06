@@ -18,6 +18,9 @@ pub use types::{
 pub mod ades_io;
 pub use ades_io::{ades_string_to_observations, ades_to_string};
 
+pub mod mpc_designations;
+pub use mpc_designations::MpcDesignationError;
+
 pub mod observations;
 pub use observations::{
     AdesObservationBatch, AssociationBatch, ExposureBatch, PhotometryBatch,
