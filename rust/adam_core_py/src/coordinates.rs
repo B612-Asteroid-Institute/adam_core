@@ -1476,6 +1476,76 @@ fn ades_parse_obs_contexts(ades_string: &str) -> PyResult<String> {
     })
 }
 
+/// OEM KVN writer (bead personal-cmy.28): writes a single-segment CCSDS OEM
+/// file byte-identically to the Python `oem` package for adam-core's
+/// structures. `covariances` is a list of (days, nanos, frame, 21
+/// lower-triangle km values).
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn oem_write_kvn<'py>(
+    _py: Python<'py>,
+    path: &str,
+    header_json: &str,
+    metadata_json: &str,
+    time_scale: &str,
+    days: numpy::PyReadonlyArray1<'py, i64>,
+    nanos: numpy::PyReadonlyArray1<'py, i64>,
+    states_km: numpy::PyReadonlyArray1<'py, f64>,
+    covariances: Vec<(i64, i64, String, Vec<f64>)>,
+) -> PyResult<()> {
+    let scale = adam_core_rs_coords::TimeScale::parse(time_scale).map_err(time_value_error)?;
+    let covariances: Vec<adam_core_rs_coords::OemCovarianceRecord> = covariances
+        .into_iter()
+        .map(|(days, nanos, frame, lower)| {
+            let mut lower_triangle = [0.0f64; 21];
+            if lower.len() != 21 {
+                return Err(PyValueError::new_err(
+                    "covariance lower triangle must have 21 values",
+                ));
+            }
+            lower_triangle.copy_from_slice(&lower);
+            Ok(adam_core_rs_coords::OemCovarianceRecord {
+                days,
+                nanos,
+                frame,
+                lower_triangle,
+            })
+        })
+        .collect::<PyResult<_>>()?;
+    adam_core_rs_coords::oem_write_kvn(
+        std::path::Path::new(path),
+        header_json,
+        metadata_json,
+        scale,
+        days.as_slice()?,
+        nanos.as_slice()?,
+        states_km.as_slice()?,
+        &covariances,
+    )
+    .map_err(time_value_error)
+}
+
+/// OEM KVN parser (bead personal-cmy.28): parse a KVN OEM file into a JSON
+/// payload of header/segments with legacy-exact epoch integer splits.
+#[pyfunction]
+fn oem_parse_kvn(path: &str) -> PyResult<String> {
+    adam_core_rs_coords::oem_parse_kvn(std::path::Path::new(path)).map_err(time_value_error)
+}
+
+/// OpenSpace Lua/dataclass renderer (bead personal-cmy.28): render a JSON
+/// payload built by the thin Python dataclass wrappers byte-identically to the
+/// legacy LuaDict implementation.
+#[pyfunction]
+fn openspace_lua_to_string(payload_json: &str, indent: usize) -> PyResult<String> {
+    adam_core_rs_coords::openspace_lua_to_string(payload_json, indent).map_err(time_value_error)
+}
+
+/// OpenSpace asset initialization/deinitialization snippet renderer.
+#[pyfunction]
+fn openspace_create_initialization(assets: Vec<String>) -> String {
+    adam_core_rs_coords::openspace_create_initialization(&assets)
+}
+
 /// MPC packed-date conversion (bead personal-cmy.26): packed epoch -> ISOT
 /// string (TT scale), legacy `_unpack_mpc_date` semantics.
 #[pyfunction]
@@ -2086,6 +2156,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ades_obs_context_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(ades_parse_obs_contexts, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_date_isot, m)?)?;
+    m.add_function(wrap_pyfunction!(oem_write_kvn, m)?)?;
+    m.add_function(wrap_pyfunction!(oem_parse_kvn, m)?)?;
+    m.add_function(wrap_pyfunction!(openspace_lua_to_string, m)?)?;
+    m.add_function(wrap_pyfunction!(openspace_create_initialization, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())

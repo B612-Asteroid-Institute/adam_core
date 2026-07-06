@@ -1,0 +1,144 @@
+{
+ "schema": "adam_core.openspace_text_parity_fixture",
+ "version": 1,
+ "generated_by": "migration/scripts/generate_openspace_parity_fixture.py",
+ "source_contract": "Legacy adam-core OpenSpace LuaDict/Resource/create_initialization Python renderer.",
+ "cases": [
+  {
+   "name": "gui",
+   "indent": 0,
+   "text": "{\nName = \"Fixture Object\",\nPath = \"/ADAM/Fixtures\",\n}"
+  },
+  {
+   "name": "gui",
+   "indent": 4,
+   "text": "{\n    Name = \"Fixture Object\",\n    Path = \"/ADAM/Fixtures\",\n}"
+  },
+  {
+   "name": "gui",
+   "indent": 8,
+   "text": "{\n        Name = \"Fixture Object\",\n        Path = \"/ADAM/Fixtures\",\n    }"
+  },
+  {
+   "name": "resource",
+   "indent": 0,
+   "text": "asset.resource(\"fixture orbit.csv\")"
+  },
+  {
+   "name": "resource",
+   "indent": 4,
+   "text": "asset.resource(\"fixture orbit.csv\")"
+  },
+  {
+   "name": "resource",
+   "indent": 8,
+   "text": "asset.resource(\"fixture orbit.csv\")"
+  },
+  {
+   "name": "kepler_translation",
+   "indent": 0,
+   "text": "{\nType = \"KeplerTranslation\",\nArgumentOfPeriapsis = 45.25,\nAscendingNode = 180.0,\nEccentricity = 0.123456789,\nEpoch = \"2026-07-06 12:34:56.789\",\nInclination = 12.5,\nMeanAnomaly = 270.75,\nPeriod = 31557600.0,\nSemiMajorAxis = 149597870.7,\n}"
+  },
+  {
+   "name": "kepler_translation",
+   "indent": 4,
+   "text": "{\n    Type = \"KeplerTranslation\",\n    ArgumentOfPeriapsis = 45.25,\n    AscendingNode = 180.0,\n    Eccentricity = 0.123456789,\n    Epoch = \"2026-07-06 12:34:56.789\",\n    Inclination = 12.5,\n    MeanAnomaly = 270.75,\n    Period = 31557600.0,\n    SemiMajorAxis = 149597870.7,\n}"
+  },
+  {
+   "name": "kepler_translation",
+   "indent": 8,
+   "text": "{\n        Type = \"KeplerTranslation\",\n        ArgumentOfPeriapsis = 45.25,\n        AscendingNode = 180.0,\n        Eccentricity = 0.123456789,\n        Epoch = \"2026-07-06 12:34:56.789\",\n        Inclination = 12.5,\n        MeanAnomaly = 270.75,\n        Period = 31557600.0,\n        SemiMajorAxis = 149597870.7,\n    }"
+  },
+  {
+   "name": "spice_translation",
+   "indent": 0,
+   "text": "{\nType = \"SpiceTranslation\",\nObserver = \"SOLAR SYSTEM BARYCENTER\",\nTarget = -12345,\nFixedDate = \"2026 JUL 06 00:00:00\",\nFrame = \"ECLIPJ2000\",\n}"
+  },
+  {
+   "name": "spice_translation",
+   "indent": 4,
+   "text": "{\n    Type = \"SpiceTranslation\",\n    Observer = \"SOLAR SYSTEM BARYCENTER\",\n    Target = -12345,\n    FixedDate = \"2026 JUL 06 00:00:00\",\n    Frame = \"ECLIPJ2000\",\n}"
+  },
+  {
+   "name": "spice_translation",
+   "indent": 8,
+   "text": "{\n        Type = \"SpiceTranslation\",\n        Observer = \"SOLAR SYSTEM BARYCENTER\",\n        Target = -12345,\n        FixedDate = \"2026 JUL 06 00:00:00\",\n        Frame = \"ECLIPJ2000\",\n    }"
+  },
+  {
+   "name": "orbital_kepler",
+   "indent": 0,
+   "text": "{\nType = \"RenderableOrbitalKepler\",\nDimInAtmosphere = false,\nEnabled = true,\nOpacity = 0.8,\nRenderBinMode = \"Opaque\",\nTag = {\"science, migration\"},\nColor = {1.0, 0.5, 0.25},\nFormat = \"SBDB\",\nPath = asset.resource(\"fixture orbit.csv\"),\nSegmentQuality = 42,\nContiguousMode = true,\nEnableMaxSize = false,\nEnableOutline = true,\nMaxSize = 12.5,\nOutlineColor = {0.1, 0.2, 0.3},\nOutlineWidth = 2.5,\nPointSizeExponent = 1.25,\nRendering = \"PointsTrails\",\nRenderSize = 8,\nStartRenderIdx = 1,\nTrailFade = 0.75,\nTrailWidth = 0.33,\n}"
+  },
+  {
+   "name": "orbital_kepler",
+   "indent": 4,
+   "text": "{\n    Type = \"RenderableOrbitalKepler\",\n    DimInAtmosphere = false,\n    Enabled = true,\n    Opacity = 0.8,\n    RenderBinMode = \"Opaque\",\n    Tag = {\"science, migration\"},\n    Color = {1.0, 0.5, 0.25},\n    Format = \"SBDB\",\n    Path = asset.resource(\"fixture orbit.csv\"),\n    SegmentQuality = 42,\n    ContiguousMode = true,\n    EnableMaxSize = false,\n    EnableOutline = true,\n    MaxSize = 12.5,\n    OutlineColor = {0.1, 0.2, 0.3},\n    OutlineWidth = 2.5,\n    PointSizeExponent = 1.25,\n    Rendering = \"PointsTrails\",\n    RenderSize = 8,\n    StartRenderIdx = 1,\n    TrailFade = 0.75,\n    TrailWidth = 0.33,\n}"
+  },
+  {
+   "name": "orbital_kepler",
+   "indent": 8,
+   "text": "{\n        Type = \"RenderableOrbitalKepler\",\n        DimInAtmosphere = false,\n        Enabled = true,\n        Opacity = 0.8,\n        RenderBinMode = \"Opaque\",\n        Tag = {\"science, migration\"},\n        Color = {1.0, 0.5, 0.25},\n        Format = \"SBDB\",\n        Path = asset.resource(\"fixture orbit.csv\"),\n        SegmentQuality = 42,\n        ContiguousMode = true,\n        EnableMaxSize = false,\n        EnableOutline = true,\n        MaxSize = 12.5,\n        OutlineColor = {0.1, 0.2, 0.3},\n        OutlineWidth = 2.5,\n        PointSizeExponent = 1.25,\n        Rendering = \"PointsTrails\",\n        RenderSize = 8,\n        StartRenderIdx = 1,\n        TrailFade = 0.75,\n        TrailWidth = 0.33,\n    }"
+  },
+  {
+   "name": "trail_orbit",
+   "indent": 0,
+   "text": "{\nType = \"RenderableTrailOrbit\",\nDimInAtmosphere = true,\nEnabled = false,\nOpacity = 0.55,\nRenderBinMode = \"PreDeferredTransparent\",\nTag = \"single-tag\",\nColor = {0.2, 0.4, 0.6},\nPeriod = 365.25,\nResolution = 86400,\nTranslation = {\n    Type = \"KeplerTranslation\",\n    ArgumentOfPeriapsis = 45.25,\n    AscendingNode = 180.0,\n    Eccentricity = 0.123456789,\n    Epoch = \"2026-07-06 12:34:56.789\",\n    Inclination = 12.5,\n    MeanAnomaly = 270.75,\n    Period = 31557600.0,\n    SemiMajorAxis = 149597870.7,\n},\nEnableFade = true,\nLineFadeAmount = 0.4,\nLineLength = 25.0,\nLineWidth = 1.5,\nPointSize = 3,\nRendering = \"Lines+Points\",\n}"
+  },
+  {
+   "name": "trail_orbit",
+   "indent": 4,
+   "text": "{\n    Type = \"RenderableTrailOrbit\",\n    DimInAtmosphere = true,\n    Enabled = false,\n    Opacity = 0.55,\n    RenderBinMode = \"PreDeferredTransparent\",\n    Tag = \"single-tag\",\n    Color = {0.2, 0.4, 0.6},\n    Period = 365.25,\n    Resolution = 86400,\n    Translation = {\n        Type = \"KeplerTranslation\",\n        ArgumentOfPeriapsis = 45.25,\n        AscendingNode = 180.0,\n        Eccentricity = 0.123456789,\n        Epoch = \"2026-07-06 12:34:56.789\",\n        Inclination = 12.5,\n        MeanAnomaly = 270.75,\n        Period = 31557600.0,\n        SemiMajorAxis = 149597870.7,\n    },\n    EnableFade = true,\n    LineFadeAmount = 0.4,\n    LineLength = 25.0,\n    LineWidth = 1.5,\n    PointSize = 3,\n    Rendering = \"Lines+Points\",\n}"
+  },
+  {
+   "name": "trail_orbit",
+   "indent": 8,
+   "text": "{\n        Type = \"RenderableTrailOrbit\",\n        DimInAtmosphere = true,\n        Enabled = false,\n        Opacity = 0.55,\n        RenderBinMode = \"PreDeferredTransparent\",\n        Tag = \"single-tag\",\n        Color = {0.2, 0.4, 0.6},\n        Period = 365.25,\n        Resolution = 86400,\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 45.25,\n            AscendingNode = 180.0,\n            Eccentricity = 0.123456789,\n            Epoch = \"2026-07-06 12:34:56.789\",\n            Inclination = 12.5,\n            MeanAnomaly = 270.75,\n            Period = 31557600.0,\n            SemiMajorAxis = 149597870.7,\n        },\n        EnableFade = true,\n        LineFadeAmount = 0.4,\n        LineLength = 25.0,\n        LineWidth = 1.5,\n        PointSize = 3,\n        Rendering = \"Lines+Points\",\n    }"
+  },
+  {
+   "name": "trail_trajectory",
+   "indent": 0,
+   "text": "{\nType = \"RenderableTrailTrajectory\",\nDimInAtmosphere = false,\nEnabled = true,\nOpacity = 0.95,\nRenderBinMode = \"Overlay\",\nTag = {\"trajectory, fixture\"},\nColor = {0.9, 0.8, 0.7},\nEndTime = \"2026-07-16T00:00:00.000\",\nStartTime = \"2026-07-06T00:00:00.000\",\nTranslation = {\n    Type = \"SpiceTranslation\",\n    Observer = \"SOLAR SYSTEM BARYCENTER\",\n    Target = -12345,\n    FixedDate = \"2026 JUL 06 00:00:00\",\n    Frame = \"ECLIPJ2000\",\n},\nAccurateTrailPositions = 1,\nEnableFade = false,\nEnableSweepChunking = 2,\nLineFadeAmount = 0.2,\nLineLength = 10.0,\nLineWidth = 0.5,\nPointSize = 4,\nRendering = \"Points\",\nSampleInterval = 600.0,\nShowFullTrail = true,\nSweepChunkSize = 64,\nTimeStampSubsampleFactor = 3,\n}"
+  },
+  {
+   "name": "trail_trajectory",
+   "indent": 4,
+   "text": "{\n    Type = \"RenderableTrailTrajectory\",\n    DimInAtmosphere = false,\n    Enabled = true,\n    Opacity = 0.95,\n    RenderBinMode = \"Overlay\",\n    Tag = {\"trajectory, fixture\"},\n    Color = {0.9, 0.8, 0.7},\n    EndTime = \"2026-07-16T00:00:00.000\",\n    StartTime = \"2026-07-06T00:00:00.000\",\n    Translation = {\n        Type = \"SpiceTranslation\",\n        Observer = \"SOLAR SYSTEM BARYCENTER\",\n        Target = -12345,\n        FixedDate = \"2026 JUL 06 00:00:00\",\n        Frame = \"ECLIPJ2000\",\n    },\n    AccurateTrailPositions = 1,\n    EnableFade = false,\n    EnableSweepChunking = 2,\n    LineFadeAmount = 0.2,\n    LineLength = 10.0,\n    LineWidth = 0.5,\n    PointSize = 4,\n    Rendering = \"Points\",\n    SampleInterval = 600.0,\n    ShowFullTrail = true,\n    SweepChunkSize = 64,\n    TimeStampSubsampleFactor = 3,\n}"
+  },
+  {
+   "name": "trail_trajectory",
+   "indent": 8,
+   "text": "{\n        Type = \"RenderableTrailTrajectory\",\n        DimInAtmosphere = false,\n        Enabled = true,\n        Opacity = 0.95,\n        RenderBinMode = \"Overlay\",\n        Tag = {\"trajectory, fixture\"},\n        Color = {0.9, 0.8, 0.7},\n        EndTime = \"2026-07-16T00:00:00.000\",\n        StartTime = \"2026-07-06T00:00:00.000\",\n        Translation = {\n            Type = \"SpiceTranslation\",\n            Observer = \"SOLAR SYSTEM BARYCENTER\",\n            Target = -12345,\n            FixedDate = \"2026 JUL 06 00:00:00\",\n            Frame = \"ECLIPJ2000\",\n        },\n        AccurateTrailPositions = 1,\n        EnableFade = false,\n        EnableSweepChunking = 2,\n        LineFadeAmount = 0.2,\n        LineLength = 10.0,\n        LineWidth = 0.5,\n        PointSize = 4,\n        Rendering = \"Points\",\n        SampleInterval = 600.0,\n        ShowFullTrail = true,\n        SweepChunkSize = 64,\n        TimeStampSubsampleFactor = 3,\n    }"
+  },
+  {
+   "name": "asset",
+   "indent": 0,
+   "text": "{\nIdentifier = \"Fixture_Object\",\nParent = \"SunEclipJ2000\",\nGUI = {\n    Name = \"Fixture Object\",\n    Path = \"/ADAM/Fixtures\",\n},\nRenderable = {\n    Type = \"RenderableOrbitalKepler\",\n    DimInAtmosphere = false,\n    Enabled = true,\n    Opacity = 0.8,\n    RenderBinMode = \"Opaque\",\n    Tag = {\"science, migration\"},\n    Color = {1.0, 0.5, 0.25},\n    Format = \"SBDB\",\n    Path = asset.resource(\"fixture orbit.csv\"),\n    SegmentQuality = 42,\n    ContiguousMode = true,\n    EnableMaxSize = false,\n    EnableOutline = true,\n    MaxSize = 12.5,\n    OutlineColor = {0.1, 0.2, 0.3},\n    OutlineWidth = 2.5,\n    PointSizeExponent = 1.25,\n    Rendering = \"PointsTrails\",\n    RenderSize = 8,\n    StartRenderIdx = 1,\n    TrailFade = 0.75,\n    TrailWidth = 0.33,\n},\nTransform = {\n    Translation = {\n        Type = \"SpiceTranslation\",\n        Observer = \"SOLAR SYSTEM BARYCENTER\",\n        Target = -12345,\n        FixedDate = \"2026 JUL 06 00:00:00\",\n        Frame = \"ECLIPJ2000\",\n    },\n},\n}"
+  },
+  {
+   "name": "asset",
+   "indent": 4,
+   "text": "{\n    Identifier = \"Fixture_Object\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Fixture Object\",\n        Path = \"/ADAM/Fixtures\",\n    },\n    Renderable = {\n        Type = \"RenderableOrbitalKepler\",\n        DimInAtmosphere = false,\n        Enabled = true,\n        Opacity = 0.8,\n        RenderBinMode = \"Opaque\",\n        Tag = {\"science, migration\"},\n        Color = {1.0, 0.5, 0.25},\n        Format = \"SBDB\",\n        Path = asset.resource(\"fixture orbit.csv\"),\n        SegmentQuality = 42,\n        ContiguousMode = true,\n        EnableMaxSize = false,\n        EnableOutline = true,\n        MaxSize = 12.5,\n        OutlineColor = {0.1, 0.2, 0.3},\n        OutlineWidth = 2.5,\n        PointSizeExponent = 1.25,\n        Rendering = \"PointsTrails\",\n        RenderSize = 8,\n        StartRenderIdx = 1,\n        TrailFade = 0.75,\n        TrailWidth = 0.33,\n    },\n    Transform = {\n        Translation = {\n            Type = \"SpiceTranslation\",\n            Observer = \"SOLAR SYSTEM BARYCENTER\",\n            Target = -12345,\n            FixedDate = \"2026 JUL 06 00:00:00\",\n            Frame = \"ECLIPJ2000\",\n        },\n    },\n}"
+  },
+  {
+   "name": "asset",
+   "indent": 8,
+   "text": "{\n        Identifier = \"Fixture_Object\",\n        Parent = \"SunEclipJ2000\",\n        GUI = {\n            Name = \"Fixture Object\",\n            Path = \"/ADAM/Fixtures\",\n        },\n        Renderable = {\n            Type = \"RenderableOrbitalKepler\",\n            DimInAtmosphere = false,\n            Enabled = true,\n            Opacity = 0.8,\n            RenderBinMode = \"Opaque\",\n            Tag = {\"science, migration\"},\n            Color = {1.0, 0.5, 0.25},\n            Format = \"SBDB\",\n            Path = asset.resource(\"fixture orbit.csv\"),\n            SegmentQuality = 42,\n            ContiguousMode = true,\n            EnableMaxSize = false,\n            EnableOutline = true,\n            MaxSize = 12.5,\n            OutlineColor = {0.1, 0.2, 0.3},\n            OutlineWidth = 2.5,\n            PointSizeExponent = 1.25,\n            Rendering = \"PointsTrails\",\n            RenderSize = 8,\n            StartRenderIdx = 1,\n            TrailFade = 0.75,\n            TrailWidth = 0.33,\n        },\n        Transform = {\n            Translation = {\n                Type = \"SpiceTranslation\",\n                Observer = \"SOLAR SYSTEM BARYCENTER\",\n                Target = -12345,\n                FixedDate = \"2026 JUL 06 00:00:00\",\n                Frame = \"ECLIPJ2000\",\n            },\n        },\n    }"
+  },
+  {
+   "name": "transform",
+   "indent": 0,
+   "text": "{\nTranslation = {\n    Type = \"KeplerTranslation\",\n    ArgumentOfPeriapsis = 45.25,\n    AscendingNode = 180.0,\n    Eccentricity = 0.123456789,\n    Epoch = \"2026-07-06 12:34:56.789\",\n    Inclination = 12.5,\n    MeanAnomaly = 270.75,\n    Period = 31557600.0,\n    SemiMajorAxis = 149597870.7,\n},\n}"
+  },
+  {
+   "name": "transform",
+   "indent": 4,
+   "text": "{\n    Translation = {\n        Type = \"KeplerTranslation\",\n        ArgumentOfPeriapsis = 45.25,\n        AscendingNode = 180.0,\n        Eccentricity = 0.123456789,\n        Epoch = \"2026-07-06 12:34:56.789\",\n        Inclination = 12.5,\n        MeanAnomaly = 270.75,\n        Period = 31557600.0,\n        SemiMajorAxis = 149597870.7,\n    },\n}"
+  },
+  {
+   "name": "transform",
+   "indent": 8,
+   "text": "{\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 45.25,\n            AscendingNode = 180.0,\n            Eccentricity = 0.123456789,\n            Epoch = \"2026-07-06 12:34:56.789\",\n            Inclination = 12.5,\n            MeanAnomaly = 270.75,\n            Period = 31557600.0,\n            SemiMajorAxis = 149597870.7,\n        },\n    }"
+  }
+ ],
+ "initialization": "asset.onInitialize(function ()\n  openspace.addSceneGraphNode(Object00000000);\n  openspace.addSceneGraphNode(Object00000001);\nend)\nasset.onDeinitialize(function ()\n  openspace.removeSceneGraphNode(Object00000000);\n  openspace.removeSceneGraphNode(Object00000001);\nend)"
+}

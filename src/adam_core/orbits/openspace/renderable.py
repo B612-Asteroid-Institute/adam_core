@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple, Union
 
-from .lua import LuaDict
+from .lua import LuaDict, _render_lua_payload
 from .translation import Translation
 
 
@@ -39,8 +39,11 @@ class Resource(LuaDict):
 
     path: str
 
+    def _to_rust_payload(self):
+        return {"kind": "resource", "path": self.path}
+
     def to_string(self, indent: int = 0):
-        return f'asset.resource("{self.path}")'
+        return _render_lua_payload(self._to_rust_payload(), indent)
 
 
 @dataclass(kw_only=True)

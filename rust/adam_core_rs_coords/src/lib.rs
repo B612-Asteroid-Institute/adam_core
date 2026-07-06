@@ -26,6 +26,12 @@ pub use bandpasses::{
 pub mod mpc_designations;
 pub use mpc_designations::MpcDesignationError;
 
+pub mod oem_io;
+pub use oem_io::{oem_parse_kvn, oem_to_kvn, oem_write_kvn, OemCovarianceRecord};
+
+pub mod openspace;
+pub use openspace::{openspace_create_initialization, openspace_lua_to_string};
+
 pub mod observations;
 pub use observations::{
     AdesObservationBatch, AssociationBatch, ExposureBatch, PhotometryBatch,

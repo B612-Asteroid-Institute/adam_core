@@ -662,27 +662,27 @@
     "adam_core.orbits.oem_io": {
       "workstream": "W9",
       "entry_count": 3,
-      "status": "first_scope_product_edge_new_plotting_approach"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.openspace.assets": {
       "workstream": "W9",
       "entry_count": 6,
-      "status": "first_scope_product_edge_new_plotting_approach"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.openspace.lua": {
       "workstream": "W9",
       "entry_count": 3,
-      "status": "first_scope_product_edge_new_plotting_approach"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.openspace.renderable": {
       "workstream": "W9",
       "entry_count": 10,
-      "status": "first_scope_product_edge_new_plotting_approach"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.openspace.translation": {
       "workstream": "W9",
       "entry_count": 4,
-      "status": "first_scope_product_edge_new_plotting_approach"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.orbits": {
       "workstream": "W1",

@@ -91,17 +91,9 @@ def orbits_to_sbdb_file(orbits: Orbits, path: str) -> str:
 
 
 def create_initialization(assets: List[str]) -> str:
+    from adam_core import _rust_native as _rn
 
-    initialization = ["asset.onInitialize(function ()"]
-    deinitialization = ["asset.onDeinitialize(function ()"]
-    for asset in assets:
-        initialization.append(f"  openspace.addSceneGraphNode({asset});")
-        deinitialization.append(f"  openspace.removeSceneGraphNode({asset});")
-
-    initialization.append("end)")
-    deinitialization.append("end)")
-    combined = "\n".join(initialization) + "\n" + "\n".join(deinitialization)
-    return combined
+    return _rn.openspace_create_initialization(assets)
 
 
 def create_renderable_orbital_kepler(
