@@ -15,6 +15,9 @@ pub use types::{
     NANOS_PER_DAY, SECONDS_PER_DAY, TAI_TT_NANOS,
 };
 
+pub mod ades_io;
+pub use ades_io::{ades_string_to_observations, ades_to_string};
+
 pub mod observations;
 pub use observations::{
     AdesObservationBatch, AssociationBatch, ExposureBatch, PhotometryBatch,

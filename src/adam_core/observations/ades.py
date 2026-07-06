@@ -2,10 +2,7 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Optional, Tuple
 
-import numpy as np
-import pyarrow.compute as pc
 import quivr as qv
-from astropy.time import Time
 
 from ..time import Timestamp
 
@@ -199,6 +196,12 @@ def ADES_to_string(
     """
     Write ADES observations to a string.
 
+    The observation blocks are rendered in the Rust backend (bead
+    personal-cmy.20), byte-identically to the legacy Python/pandas writer
+    (gated by the frozen legacy fixture in
+    ``migration/artifacts/ades_parity_fixture_2026-07-05.json``); the
+    ObsContext headers stay Python-rendered.
+
     Parameters
     ----------
     observations : ADESObservations
@@ -226,155 +229,23 @@ def ADES_to_string(
     ades_string : str
         The ADES observations as a string.
     """
-    ades_string = "# version=2022\n"
+    from adam_core import _rust_native as _rn
 
-    unique_observatories = observations.stn.unique().to_numpy(zero_copy_only=False)
-    unique_observatories.sort()
+    from .arrow_bridge import observations_to_ipc
 
-    for obs in unique_observatories:
-        if obs not in obs_contexts:
-            raise ValueError(f"Observatory {obs} not found in obs_contexts")
-
-        observations_obscode = observations.select("stn", obs)
-        observations_obscode = observations_obscode.sort_by(
-            [
-                ("provID", "ascending"),
-                ("permID", "ascending"),
-                ("trkSub", "ascending"),
-                ("obsTime.days", "ascending"),
-                ("obsTime.nanos", "ascending"),
-            ]
+    if len(observations) > 0 and observations.obsTime.scale != "utc":
+        observations = observations.set_column(
+            "obsTime", observations.obsTime.rescale("utc")
         )
-
-        id_present = False
-        if not pc.all(pc.is_null(observations_obscode.permID)).as_py():
-            id_present = True
-        if not pc.all(pc.is_null(observations_obscode.provID)).as_py():
-            id_present = True
-        if not pc.all(pc.is_null(observations_obscode.trkSub)).as_py():
-            id_present = True
-
-        if not id_present:
-            err = (
-                "At least one of permID, provID, or trkSub should\n"
-                "be present in observations."
-            )
-            raise ValueError(err)
-
-        # Write the observatory context block
-        obs_context = obs_contexts[obs]
-        ades_string += obs_context.to_string()
-
-        # Write the observations block (we first convert
-        # to a pandas dataframe)
-        ades = observations_obscode.to_dataframe()
-
-        # Convert the timestamp to ISOT with the desired precision
-        observation_times = Time(
-            observations_obscode.obsTime.rescale("utc")
-            .mjd()
-            .to_numpy(zero_copy_only=False),
-            format="mjd",
-            precision=seconds_precision,
-        )
-        ades.insert(
-            4,
-            "obsTime",
-            np.array([i + "Z" for i in observation_times.utc.isot]),
-        )
-        ades.drop(columns=["obsTime.days", "obsTime.nanos"], inplace=True)
-
-        ades.dropna(how="all", axis=1, inplace=True)
-
-        # Change the precision of some of the columns to conform
-        # to MPC standards
-        for col, prec_col in columns_precision.items():
-            if col in ades.columns:
-                ades[col] = [
-                    f"{i:.{prec_col}f}" if i is not None or not np.isnan(i) else ""
-                    for i in ades[col]
-                ]
-
-        # Rename the columns to match the ADES format
-        ades.rename(columns={"rmsRACosDec": "rmsRA"}, inplace=True)
-
-        ades_string += ades.to_csv(
-            sep="|", header=True, index=False, float_format="%.16f"
-        )
-
-    return ades_string
-
-
-def _data_dict_to_table(data_dict: dict[str, list[str]]) -> ADESObservations:
-    if not data_dict:
-        return ADESObservations.empty()
-
-    # Get the set of known columns from ADESObservations
-    known_columns = set(ADESObservations.empty().table.column_names)
-    # Check for unknown columns
-    unknown_columns = set(data_dict.keys()) - known_columns
-    if unknown_columns:
-        logger.warning(
-            f"Found unknown ADES columns that will be ignored: {unknown_columns}"
-        )
-
-    # Convert every value that is empty string or whitespace to None
-    for col in data_dict:
-        data_dict[col] = [None if x == "" or x.isspace() else x for x in data_dict[col]]
-
-    numeric_cols = [
-        "ra",
-        "dec",
-        "rmsRA",
-        "rmsDec",
-        "mag",
-        "rmsMag",
-        "rmsCorr",
-        "rmsTime",
-        "logSNR",
-        "seeing",
-        "exp",
-    ]
-    # Do all the data conversions and then initialize the new table and concatenate
-    for col in numeric_cols:
-        if col in data_dict:
-            data_dict[col] = [
-                float(x) if x is not None else None for x in data_dict[col]
-            ]
-
-    # Some users are accustomed to having fixed-width columns, so we strip whitespace
-    # from all the string columns with the exception of the 'remarks' column
-    string_cols = [
-        "provID",
-        "permID",
-        "trkSub",
-        "obsSubID",
-        "stn",
-        "mode",
-        "astCat",
-        "photCat",
-        "band",
-    ]
-    for col in string_cols:
-        if col in data_dict:
-            data_dict[col] = [
-                x.strip() if x is not None else None for x in data_dict[col]
-            ]
-
-    if "obsTime" in data_dict:
-        # Remove 'Z' from timestamps and convert to MJD
-        times = [t[:-1] if t is not None else None for t in data_dict["obsTime"]]
-        data_dict["obsTime"] = Timestamp.from_iso8601(times, scale="utc")
-
-    # Update the rmsRACosDec column name to be simply rmsRA
-    if "rmsRA" in data_dict:
-        data_dict["rmsRACosDec"] = data_dict["rmsRA"]
-        data_dict.pop("rmsRA")
-
-    # Only keep keys that are in ADESObservations
-    data_dict = {k: v for k, v in data_dict.items() if k in known_columns}
-
-    return ADESObservations.from_kwargs(**data_dict)
+    contexts_rendered = {
+        code: context.to_string() for code, context in obs_contexts.items()
+    }
+    return _rn.ades_to_string_ipc(
+        observations_to_ipc(observations),
+        contexts_rendered,
+        seconds_precision,
+        {column: int(value) for column, value in columns_precision.items()},
+    )
 
 
 def ADES_string_to_tables(
@@ -382,6 +253,10 @@ def ADES_string_to_tables(
 ) -> Tuple[dict[str, ObsContext], ADESObservations]:
     """
     Parse an ADES format string into ObsContext and ADESObservations objects.
+
+    The observation blocks are parsed in the Rust backend (bead
+    personal-cmy.20); the ObsContext metadata sections are parsed by the same
+    Python code the legacy parser used.
 
     Parameters
     ----------
@@ -395,36 +270,27 @@ def ADES_string_to_tables(
         - A dictionary mapping observatory codes to their ObsContext objects
         - An ADESObservations table containing the observations
     """
+    from adam_core import _rust_native as _rn
+
+    from .arrow_bridge import observations_from_ipc
+
+    raw, unknown_columns = _rn.ades_string_to_observations_ipc(ades_string)
+    if unknown_columns:
+        logger.warning(
+            f"Found unknown ADES columns that will be ignored: {set(unknown_columns)}"
+        )
+    observations = observations_from_ipc(raw, ADESObservations)
+
     # Split the string into lines and remove empty lines
     lines = [line.strip() for line in ades_string.split("\n") if line.strip()]
+    obs_contexts = _parse_obs_contexts(lines)
+    return obs_contexts, observations
 
-    # Start by parsing the data lines
-    current_data = {}
-    observations = ADESObservations.empty()
-    for line in lines:
-        # Skip over metadata lines
-        if line.startswith("#") or line.startswith("!"):
-            continue
 
-        # Detect if it's a header line by looking for permID, provID, or trkSub
-        if "permID" in line or "provID" in line or "trkSub" in line:
-            observations = qv.concatenate(
-                [observations, _data_dict_to_table(current_data)]
-            )
-            new_headers = [header.strip() for header in line.split("|")]
-            current_data = {header: [] for header in new_headers}
-            continue
-
-        # Add the data line to the current data dictionary
-        data_line = line.split("|")
-        for header, value in zip(current_data.keys(), data_line):
-            current_data[header].append(value)
-
-    # Add the last data dictionary to the observations table
-    observations = qv.concatenate([observations, _data_dict_to_table(current_data)])
-
-    # Now we parse the metadata sections
-    # Initialize variables
+def _parse_obs_contexts(lines: list[str]) -> dict[str, ObsContext]:
+    """Parse the ObsContext metadata sections of an ADES file. This is the
+    unchanged legacy metadata loop; only the observation-block parsing moved
+    to Rust."""
     obs_contexts = {}
     current_obs_context = {}
     current_section_key = None
@@ -466,7 +332,7 @@ def ADES_string_to_tables(
     if current_obs_context:
         obs_contexts[current_context_code] = _build_obs_context(current_obs_context)
 
-    return obs_contexts, observations
+    return obs_contexts
 
 
 def _build_obs_context(context_dict: dict) -> ObsContext:

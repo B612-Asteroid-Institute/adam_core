@@ -1413,6 +1413,66 @@ fn observations_nested_ipc_round_trip<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
+/// ADES writer (bead personal-cmy.20 slice B): render a quivr
+/// `ADESObservations` table (Arrow IPC, nested layout, obsTime already in utc)
+/// to the ADES submission format byte-identically to the legacy Python
+/// writer. `contexts` maps observatory codes to pre-rendered
+/// `ObsContext.to_string()` blocks.
+#[pyfunction]
+fn ades_to_string_ipc<'py>(
+    _py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+    contexts: std::collections::HashMap<String, String>,
+    seconds_precision: i32,
+    columns_precision: std::collections::HashMap<String, i32>,
+) -> PyResult<String> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    let observations =
+        adam_core_rs_coords::observations::AdesObservationBatch::try_from_nested_record_batch(
+            &batch,
+        )
+        .map_err(|err| {
+            PyValueError::new_err(format!("failed to decode AdesObservationBatch: {err}"))
+        })?;
+    adam_core_rs_coords::ades_to_string(
+        &observations,
+        &contexts,
+        seconds_precision,
+        &columns_precision,
+    )
+    .map_err(|err| match err {
+        // Preserve the exact legacy ValueError messages (missing context /
+        // missing IDs) for drop-in dispatch from the public Python API.
+        adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
+            PyValueError::new_err(message)
+        }
+        other => PyValueError::new_err(other.to_string()),
+    })
+}
+
+/// ADES parser (bead personal-cmy.20 slice C): parse the observation blocks
+/// of an ADES string into a quivr-compatible `ADESObservations` IPC payload
+/// plus the list of unknown column names (for the caller to log). Context
+/// metadata parsing stays Python-side.
+#[pyfunction]
+fn ades_string_to_observations_ipc<'py>(
+    py: Python<'py>,
+    ades_string: &str,
+) -> PyResult<(Bound<'py, PyBytes>, Vec<String>)> {
+    let (observations, unknown_columns) =
+        adam_core_rs_coords::ades_string_to_observations(ades_string).map_err(|err| match err {
+            adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
+                PyValueError::new_err(message)
+            }
+            other => PyValueError::new_err(other.to_string()),
+        })?;
+    let batch = observations.into_nested_record_batch().map_err(|err| {
+        PyValueError::new_err(format!("failed to encode AdesObservationBatch: {err}"))
+    })?;
+    let bytes = write_orbit_ipc(&batch)?;
+    Ok((PyBytes::new(py, &bytes), unknown_columns))
+}
+
 /// W1 / OD slice 3: Rust-native OD residual evaluation over the bridge. Given
 /// orbits (already at the observation times, 1:1 with observations), the observed
 /// astrometry (`SphericalCoordinates`), and the observers, this composes the exact
@@ -1674,6 +1734,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;
+    m.add_function(wrap_pyfunction!(ades_to_string_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(ades_string_to_observations_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_residuals_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_2body_least_squares_ipc, m)?)?;
     Ok(())

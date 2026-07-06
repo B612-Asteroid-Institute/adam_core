@@ -297,7 +297,7 @@
         "adam_core.photometry.bandpasses.constants",
         "adam_core.observations.photometry"
       ],
-      "status": "kernel_governed_no_observation_workflow",
+      "status": "rust_data_model_landed_adapters_active",
       "first_scope": true,
       "implementation_direction": "Keep governed Rust magnitude kernels; add Rust bandpass registry and observation/exposure joins after the observation model exists.",
       "dependencies": [
@@ -320,7 +320,7 @@
         "adam_core.observations.associations",
         "adam_core.observations.source_catalog"
       ],
-      "status": "blocked_by_observation_data_model",
+      "status": "rust_data_model_landed_adapters_active",
       "first_scope": true,
       "implementation_direction": "Create Rust-native observation/exposure/association/source catalog batches plus ADES/MPC parse/serialize contracts.",
       "dependencies": [
@@ -547,32 +547,32 @@
     "adam_core.observations.ades": {
       "workstream": "W8",
       "entry_count": 9,
-      "status": "blocked_by_observation_data_model"
+      "status": "rust_native_service_api"
     },
     "adam_core.observations.associations": {
       "workstream": "W8",
       "entry_count": 3,
-      "status": "blocked_by_observation_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.observations.detections": {
       "workstream": "W8",
       "entry_count": 5,
-      "status": "blocked_by_observation_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.observations.exposures": {
       "workstream": "W8",
       "entry_count": 4,
-      "status": "blocked_by_observation_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.observations.photometry": {
       "workstream": "W7",
       "entry_count": 1,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.observations.source_catalog": {
       "workstream": "W8",
       "entry_count": 8,
-      "status": "blocked_by_observation_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.observers.observers": {
       "workstream": "W1",
