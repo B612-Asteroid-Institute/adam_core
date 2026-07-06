@@ -98,7 +98,8 @@
     "kernel_governed_typed_via_batches": "The module's numeric kernels are Rust-native and parity/speed-gated; typed access flows through the canonical batch workflows (TwoBodyPropagator/generate_ephemeris, VariantOrbits.create, transform/rotate, Residuals.calculate, fit_least_squares). A dedicated per-module typed wrapper would duplicate the kernel surface, so this is a terminal state.",
     "python_orchestration_over_rust_kernels": "Python-owned orchestration (grids, plotting, I/O glue) over Rust-native kernels; the numeric core is migrated, the orchestration intentionally stays Python.",
     "python_surface_exempt": "Intentionally Python-only surface: trivial constant-scaling helpers, exception classes, or test-data fixture loaders where a Rust crossing adds cost without value. Terminal state (decision 2026-07-06).",
-    "rust_backed_thin_python_orchestration": "The numeric core is Rust-native and parity-gated behind the canonical public name; the module retains only thin Python orchestration (argument marshalling, quivr table assembly, outlier loops). Terminal for the current facade model; the rust-only flip replaces the orchestration with bindings."
+    "rust_backed_thin_python_orchestration": "The numeric core is Rust-native and parity-gated behind the canonical public name; the module retains only thin Python orchestration (argument marshalling, quivr table assembly, outlier loops). Terminal for the current facade model; the rust-only flip replaces the orchestration with bindings.",
+    "distribution_orchestration_python_terminal": "Ray-based multi-node distribution and its Python helpers (chunking, bounded caches, worker plumbing). Obsolete-by-design in the rust-only model: Rayon parallelizes in-process on the Rust side, and multi-node distribution is out of scope for the Rust port (program decision 2026-07-06). Terminal state; these modules retire with the Python facade rather than being ported."
   },
   "summary": {
     "workstream_count": 11,
@@ -471,7 +472,7 @@
     "adam_core.dynamics._rust_compat": {
       "workstream": "W4",
       "entry_count": 6,
-      "status": "adapter_only_to_retire"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.dynamics.aberrations": {
       "workstream": "W4",
@@ -731,7 +732,7 @@
     "adam_core.parallel": {
       "workstream": "W5",
       "entry_count": 20,
-      "status": "blocked_by_pluggable_rust_propagator"
+      "status": "distribution_orchestration_python_terminal"
     },
     "adam_core.photometry.absolute_magnitude": {
       "workstream": "W7",
@@ -771,17 +772,17 @@
     "adam_core.propagator.propagator": {
       "workstream": "W5",
       "entry_count": 6,
-      "status": "blocked_by_pluggable_rust_propagator"
+      "status": "distribution_orchestration_python_terminal"
     },
     "adam_core.propagator.utils": {
       "workstream": "W5",
       "entry_count": 2,
-      "status": "blocked_by_pluggable_rust_propagator"
+      "status": "distribution_orchestration_python_terminal"
     },
     "adam_core.ray_cluster": {
       "workstream": "W5",
       "entry_count": 1,
-      "status": "blocked_by_pluggable_rust_propagator"
+      "status": "distribution_orchestration_python_terminal"
     },
     "adam_core.time.time": {
       "workstream": "W1",
@@ -791,12 +792,12 @@
     "adam_core.utils.bounded_lru": {
       "workstream": "W5",
       "entry_count": 2,
-      "status": "blocked_by_pluggable_rust_propagator"
+      "status": "distribution_orchestration_python_terminal"
     },
     "adam_core.utils.chunking": {
       "workstream": "W5",
       "entry_count": 2,
-      "status": "blocked_by_pluggable_rust_propagator"
+      "status": "distribution_orchestration_python_terminal"
     },
     "adam_core.utils.helpers.observations": {
       "workstream": "W11",
