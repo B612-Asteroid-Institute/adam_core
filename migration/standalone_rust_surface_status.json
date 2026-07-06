@@ -97,7 +97,8 @@
     "rust_od_driver_landed": "IOD kernels rust-default; 2-body LSQ kernel gated vs scipy; the backend-generic Gauss-Newton OD driver is landed in the permissive core and dispatched from the public fit_least_squares.",
     "kernel_governed_typed_via_batches": "The module's numeric kernels are Rust-native and parity/speed-gated; typed access flows through the canonical batch workflows (TwoBodyPropagator/generate_ephemeris, VariantOrbits.create, transform/rotate, Residuals.calculate, fit_least_squares). A dedicated per-module typed wrapper would duplicate the kernel surface, so this is a terminal state.",
     "python_orchestration_over_rust_kernels": "Python-owned orchestration (grids, plotting, I/O glue) over Rust-native kernels; the numeric core is migrated, the orchestration intentionally stays Python.",
-    "python_surface_exempt": "Intentionally Python-only surface: trivial constant-scaling helpers, exception classes, or test-data fixture loaders where a Rust crossing adds cost without value. Terminal state (decision 2026-07-06)."
+    "python_surface_exempt": "Intentionally Python-only surface: trivial constant-scaling helpers, exception classes, or test-data fixture loaders where a Rust crossing adds cost without value. Terminal state (decision 2026-07-06).",
+    "rust_backed_thin_python_orchestration": "The numeric core is Rust-native and parity-gated behind the canonical public name; the module retains only thin Python orchestration (argument marshalling, quivr table assembly, outlier loops). Terminal for the current facade model; the rust-only flip replaces the orchestration with bindings."
   },
   "summary": {
     "workstream_count": 11,
@@ -430,7 +431,7 @@
     "adam_core.coordinates.geodetics": {
       "workstream": "W1",
       "entry_count": 11,
-      "status": "blocked_by_rust_data_model"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.coordinates.keplerian": {
       "workstream": "W1",
@@ -440,7 +441,7 @@
     "adam_core.coordinates.origin": {
       "workstream": "W1",
       "entry_count": 7,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.coordinates.residuals": {
       "workstream": "W2",
@@ -585,7 +586,7 @@
     "adam_core.observers.state": {
       "workstream": "W1",
       "entry_count": 3,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.observers.utils": {
       "workstream": "W3",
@@ -595,62 +596,62 @@
     "adam_core.orbit_determination.differential_correction": {
       "workstream": "W6",
       "entry_count": 2,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.evaluate": {
       "workstream": "W6",
       "entry_count": 3,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.fitted_orbits": {
       "workstream": "W6",
       "entry_count": 5,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.orbit_determination.gauss": {
       "workstream": "W6",
       "entry_count": 2,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.gibbs": {
       "workstream": "W6",
       "entry_count": 1,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.herrick_gibbs": {
       "workstream": "W6",
       "entry_count": 1,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.iod": {
       "workstream": "W6",
       "entry_count": 5,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.least_squares": {
       "workstream": "W6",
       "entry_count": 2,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.od": {
       "workstream": "W6",
       "entry_count": 3,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.orbit_fitter": {
       "workstream": "W6",
       "entry_count": 2,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbit_determination.outliers": {
       "workstream": "W6",
       "entry_count": 2,
-      "status": "blocked_by_rust_data_model_and_propagator"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.orbits.classification": {
       "workstream": "W1",
       "entry_count": 1,
-      "status": "blocked_by_rust_data_model"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.orbits.ephemeris": {
       "workstream": "W9",
@@ -685,12 +686,12 @@
     "adam_core.orbits.orbits": {
       "workstream": "W1",
       "entry_count": 4,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.orbits.physical_parameters": {
       "workstream": "W1",
       "entry_count": 1,
-      "status": "blocked_by_rust_data_model"
+      "status": "rust_data_model_landed_adapters_active"
     },
     "adam_core.orbits.plots": {
       "workstream": "W9",
@@ -735,7 +736,7 @@
     "adam_core.photometry.absolute_magnitude": {
       "workstream": "W7",
       "entry_count": 3,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.photometry.bandpasses.api": {
       "workstream": "W7",
@@ -760,7 +761,7 @@
     "adam_core.photometry.magnitude": {
       "workstream": "W7",
       "entry_count": 5,
-      "status": "kernel_governed_no_observation_workflow"
+      "status": "rust_backed_thin_python_orchestration"
     },
     "adam_core.photometry.magnitude_common": {
       "workstream": "W7",
