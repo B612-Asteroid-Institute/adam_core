@@ -19,8 +19,8 @@ use adam_core_rs_coords::{
 };
 use assist_rs::ffi;
 use assist_rs::{
-    assist_propagate, libassist_sys, librebound_sys, AssistData, AssistSim, Error as AssistError,
-    Ias15AdaptiveMode, IntegratorConfig, Orbit as AssistOrbit, Simulation,
+    assist_propagate, assist_propagate_states_same_epoch, AssistData, AssistSim,
+    Error as AssistError, Ias15AdaptiveMode, IntegratorConfig, Orbit as AssistOrbit, Simulation,
 };
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -400,6 +400,13 @@ fn propagate_same_epoch_state_group(
     }
 }
 
+/// Joint single-simulation propagation of same-epoch gravity-only states.
+///
+/// Delegates to the upstream `assist_rs::assist_propagate_states_same_epoch`
+/// primitive (upstreamed from this adapter via assist-rs PR #11). The
+/// upstream obliquity constants are bit-identical to adam-core's
+/// (`np.cos/np.sin(Constants.OBLIQUITY)`), so the heliocentric-ecliptic
+/// round-trip matches the previous adapter-local implementation bit-for-bit.
 fn propagate_same_epoch_states(
     data: &AssistData,
     integrator: IntegratorConfig,
@@ -407,54 +414,11 @@ fn propagate_same_epoch_states(
     epoch: Epoch,
     target_times: &[Epoch],
 ) -> Result<Vec<Vec<[f64; 6]>>, AssistError> {
-    if states.is_empty() {
-        return Ok(Vec::new());
-    }
-    let ephem = &data.ephem;
-    let t0 = mjd_tdb_to_assist_time(epoch.mjd(), ephem.jd_ref());
-    let sun0 = particle_state(ephem.get_body_state(ffi::ASSIST_BODY_SUN, t0)?);
-
-    let mut sim = Simulation::new()?;
-    sim.set_t(t0);
-    apply_integrator_config(&mut sim, integrator);
-    let mut asim = AssistSim::new(sim, ephem)?;
-    asim.set_forces(ffi::ASSIST_FORCES_DEFAULT);
-
-    for state in states {
-        let helio_eq = rotate_ecliptic_to_equatorial6(state);
-        let bary_eq = add_state(helio_eq, sun0);
-        asim.sim_mut().add_test_particle(
-            bary_eq[0], bary_eq[1], bary_eq[2], bary_eq[3], bary_eq[4], bary_eq[5],
-        );
-    }
-
-    let mut states_by_orbit = vec![Vec::with_capacity(target_times.len()); states.len()];
-    for target_time in target_times {
-        let t_target = mjd_tdb_to_assist_time(target_time.mjd(), ephem.jd_ref());
-        asim.integrate(t_target)?;
-        let particles = asim.sim().particles();
-        if particles.len() < states.len() {
-            return Err(AssistError::Other(
-                "No particles after integration".to_string(),
-            ));
-        }
-        let sun_t = particle_state(ephem.get_body_state(ffi::ASSIST_BODY_SUN, t_target)?);
-        for (row, particle) in particles.iter().take(states.len()).enumerate() {
-            let bary_eq = [
-                particle.x,
-                particle.y,
-                particle.z,
-                particle.vx,
-                particle.vy,
-                particle.vz,
-            ];
-            states_by_orbit[row].push(rotate_equatorial_to_ecliptic6(&subtract_state(
-                bary_eq, sun_t,
-            )));
-        }
-    }
-
-    Ok(states_by_orbit)
+    let target_mjds = target_times
+        .iter()
+        .map(|time| time.mjd())
+        .collect::<Vec<_>>();
+    assist_propagate_states_same_epoch(data, states, epoch.mjd(), &target_mjds, &integrator)
 }
 
 fn particle_state(particle: ffi::reb_particle) -> [f64; 6] {
@@ -598,7 +562,7 @@ impl AssistPropagator {
 
         loop {
             unsafe {
-                librebound_sys::ffi::reb_simulation_step(asim.sim_mut().as_mut_ptr());
+                ffi::reb_simulation_step(asim.sim_mut().raw_ptr_mut());
             }
             let t = asim.sim().t();
             let past_final = if backward { t <= t_final } else { t >= t_final };
@@ -1155,6 +1119,12 @@ fn time_indices_for_policy(
     times_len: usize,
 ) -> PropagationResultValue<Vec<usize>> {
     match policy {
+        // Preserve the caller's target-epoch order. The public adam_core
+        // `Propagator.propagate_orbits` sorts target times ascending *above*
+        // this backend (propagator.py: `times = times.sort_by([...])`), and the
+        // backend-generic ephemeris pairing relies on this method emitting rows
+        // in caller order so propagated states line up row-for-row with the
+        // (caller-ordered) observers. Sorting here would break that pairing.
         EpochPolicy::CrossProduct => Ok((0..times_len).collect()),
         EpochPolicy::Pairwise => Ok(vec![orbit_index]),
         EpochPolicy::PerOrbit { .. } => Err(PropagationError::InvalidRequest(
@@ -1547,22 +1517,17 @@ fn classify_assist_error(
 ) -> PropagationResultValue<(PropagationFailureCode, String)> {
     let message = format!("assist-rs propagation failed: {err}");
     match err {
-        AssistError::Sys(libassist_sys::Error::Reb(
-            librebound_sys::Error::NoParticles
-            | librebound_sys::Error::CloseEncounter
-            | librebound_sys::Error::Escape
-            | librebound_sys::Error::Collision
-            | librebound_sys::Error::IntegrationFailed(_),
-        ))
+        AssistError::NoParticles
+        | AssistError::CloseEncounter
+        | AssistError::Escape
+        | AssistError::Collision
+        | AssistError::IntegrationFailed(_)
         | AssistError::LightTimeConvergence(_) => {
             Ok((PropagationFailureCode::IntegratorFailure, message))
         }
-        AssistError::Sys(libassist_sys::Error::EphemerisError(_))
-        | AssistError::Sys(libassist_sys::Error::Other(_))
-        | AssistError::Sys(libassist_sys::Error::Reb(librebound_sys::Error::Other(_)))
+        AssistError::EphemerisError(_)
         | AssistError::InvalidBody(_)
         | AssistError::InvalidObservatory(_)
-        | AssistError::MissingEarthOrientation(_)
         | AssistError::Io(_)
         | AssistError::Other(_) => Err(PropagationError::Backend(message)),
     }
@@ -2035,10 +2000,7 @@ mod tests {
 
     #[test]
     fn assist_integration_errors_are_row_failures() {
-        let (code, message) = classify_assist_error(AssistError::Sys(libassist_sys::Error::Reb(
-            librebound_sys::Error::Collision,
-        )))
-        .unwrap();
+        let (code, message) = classify_assist_error(AssistError::Collision).unwrap();
         assert_eq!(code, PropagationFailureCode::IntegratorFailure);
         assert!(message.contains("collision"));
     }
@@ -2453,7 +2415,18 @@ mod tests {
                 .and_then(Value::as_str)
                 .expect("case must have id");
             let input = case.get("input_orbits").unwrap();
+            // The public adam_core `Propagator.propagate_orbits` sorts target
+            // times ascending before dispatching to the backend
+            // (propagator.py: `times = times.sort_by(["days", "nanos"])`) and
+            // returns an (orbit_id, time)-sorted result. This backend method is
+            // the equivalent of `_propagate_orbits` and preserves caller order,
+            // so replicate the wrapper's sort here to compare against the
+            // public-semantics fixture, whose cases deliberately pass unsorted
+            // target epochs.
             let targets = json_time_array(case.get("target_times").unwrap());
+            let mut sorted_epochs = targets.epochs.clone();
+            sorted_epochs.sort_by_key(|epoch| (epoch.days, epoch.nanos));
+            let targets = TimeArray::new(targets.scale, sorted_epochs).unwrap();
             let options = PropagationOptions {
                 covariance: CovariancePropagation::None,
                 thread_limit: Some(1),
