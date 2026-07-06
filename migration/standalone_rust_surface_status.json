@@ -94,7 +94,10 @@
     "adapter_only_to_retire": "Python shim/compat glue counted in inventory but not a Rust port target.",
     "rust_data_model_landed_adapters_active": "Rust-canonical batches, nested Arrow codecs, the W1 quivr bridge, and the typed propagation adapter are landed; remaining work is surface breadth, not the data model.",
     "typed_propagator_landed": "Typed Propagator trait, TwoBodyPropagator, the backend-generic ephemeris workflow, and the GPL ASSIST adapter (propagation, covariance, impacts, ephemeris) are landed and parity-gated.",
-    "rust_od_driver_landed": "IOD kernels rust-default; 2-body LSQ kernel gated vs scipy; the backend-generic Gauss-Newton OD driver is landed in the permissive core and dispatched from the public fit_least_squares."
+    "rust_od_driver_landed": "IOD kernels rust-default; 2-body LSQ kernel gated vs scipy; the backend-generic Gauss-Newton OD driver is landed in the permissive core and dispatched from the public fit_least_squares.",
+    "kernel_governed_typed_via_batches": "The module's numeric kernels are Rust-native and parity/speed-gated; typed access flows through the canonical batch workflows (TwoBodyPropagator/generate_ephemeris, VariantOrbits.create, transform/rotate, Residuals.calculate, fit_least_squares). A dedicated per-module typed wrapper would duplicate the kernel surface, so this is a terminal state.",
+    "python_orchestration_over_rust_kernels": "Python-owned orchestration (grids, plotting, I/O glue) over Rust-native kernels; the numeric core is migrated, the orchestration intentionally stays Python.",
+    "python_surface_exempt": "Intentionally Python-only surface: trivial constant-scaling helpers, exception classes, or test-data fixture loaders where a Rust crossing adds cost without value. Terminal state (decision 2026-07-06)."
   },
   "summary": {
     "workstream_count": 11,
@@ -159,7 +162,7 @@
         "adam_core.coordinates.residuals",
         "adam_core.coordinates.variants"
       ],
-      "status": "kernel_governed_no_typed_workflow",
+      "status": "kernel_governed_typed_via_batches",
       "first_scope": true,
       "implementation_direction": "Lift existing Rust kernels onto CoordinateBatch/CovarianceBatch APIs; add Rust-native units, residuals, and variant generation after linalg policy is settled.",
       "dependencies": [
@@ -213,7 +216,7 @@
         "adam_core.dynamics._rust_compat",
         "adam_core.missions.porkchop"
       ],
-      "status": "kernel_governed_no_typed_workflow",
+      "status": "kernel_governed_typed_via_batches",
       "first_scope": true,
       "implementation_direction": "Expose governed Rust dynamics kernels through typed Rust APIs; keep _rust_compat adapter-only and retire it as workflows move down.",
       "dependencies": [
@@ -393,7 +396,7 @@
         "adam_core.utils.helpers.orbits",
         "adam_core.utils.helpers.observations"
       ],
-      "status": "rust_helper_gap",
+      "status": "rust_native_service_api",
       "first_scope": true,
       "implementation_direction": "Port helpers as typed parsers/IDs where required by Rust observation/catalog/product workflows.",
       "dependencies": [
@@ -442,7 +445,7 @@
     "adam_core.coordinates.residuals": {
       "workstream": "W2",
       "entry_count": 8,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.coordinates.spherical": {
       "workstream": "W1",
@@ -452,17 +455,17 @@
     "adam_core.coordinates.transform": {
       "workstream": "W2",
       "entry_count": 12,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.coordinates.units": {
       "workstream": "W2",
       "entry_count": 8,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "python_surface_exempt"
     },
     "adam_core.coordinates.variants": {
       "workstream": "W2",
       "entry_count": 6,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics._rust_compat": {
       "workstream": "W4",
@@ -472,27 +475,27 @@
     "adam_core.dynamics.aberrations": {
       "workstream": "W4",
       "entry_count": 2,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.barker": {
       "workstream": "W4",
       "entry_count": 1,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.chi": {
       "workstream": "W4",
       "entry_count": 3,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.ephemeris": {
       "workstream": "W4",
       "entry_count": 1,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.exceptions": {
       "workstream": "W4",
       "entry_count": 1,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "python_surface_exempt"
     },
     "adam_core.dynamics.impacts": {
       "workstream": "W4",
@@ -502,22 +505,22 @@
     "adam_core.dynamics.kepler": {
       "workstream": "W4",
       "entry_count": 8,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.lagrange": {
       "workstream": "W4",
       "entry_count": 2,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.lambert": {
       "workstream": "W4",
       "entry_count": 2,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.moid": {
       "workstream": "W4",
       "entry_count": 3,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.plots": {
       "workstream": "W9",
@@ -527,22 +530,22 @@
     "adam_core.dynamics.propagation": {
       "workstream": "W4",
       "entry_count": 2,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.stumpff": {
       "workstream": "W4",
       "entry_count": 1,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.dynamics.tisserand": {
       "workstream": "W4",
       "entry_count": 1,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "kernel_governed_typed_via_batches"
     },
     "adam_core.missions.porkchop": {
       "workstream": "W4",
       "entry_count": 16,
-      "status": "kernel_governed_no_typed_workflow"
+      "status": "python_orchestration_over_rust_kernels"
     },
     "adam_core.observations.ades": {
       "workstream": "W8",
@@ -797,17 +800,17 @@
     "adam_core.utils.helpers.observations": {
       "workstream": "W11",
       "entry_count": 1,
-      "status": "rust_helper_gap"
+      "status": "python_surface_exempt"
     },
     "adam_core.utils.helpers.orbits": {
       "workstream": "W11",
       "entry_count": 2,
-      "status": "rust_helper_gap"
+      "status": "python_surface_exempt"
     },
     "adam_core.utils.mpc": {
       "workstream": "W11",
       "entry_count": 9,
-      "status": "rust_helper_gap"
+      "status": "rust_native_service_api"
     },
     "adam_core.utils.plots.logos": {
       "workstream": "W9",
