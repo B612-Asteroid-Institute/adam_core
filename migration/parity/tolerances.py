@@ -267,8 +267,9 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "difference to ~1e-8 deg/day in vlon/vlat."
         ),
         verdict=(
-            "public-dispatch parity across the covered subcase matrix; remaining "
-            "exclusions are explicit in the migration registry."
+            "public-dispatch parity across the randomized subcase matrix; "
+            "exhaustive branch parity is pinned separately by "
+            "transform_coordinates_branch_fixture_2026-07-06.json."
         ),
     ),
     "coordinates.transform_coordinates_with_covariance": ToleranceSpec(

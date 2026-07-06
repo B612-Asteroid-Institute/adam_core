@@ -270,17 +270,18 @@ Supplemental fixed-fixture parity:
   triplets as a stable supplement; unconstrained ill-conditioned/multi-root
   triplets remain excluded because solver root-subset policy can differ.
 
-`coordinates.transform_coordinates` is marked partial in the registry, but
-direct randomized fuzz now covers a public quivr-object dispatcher subcase
-matrix: Cartesian constant-frame inverse directions, Spherical/Keplerian/
-Cometary non-Cartesian inputs, representative covariance-bearing
-Cartesian/Keplerian dispatcher paths, SUN↔EARTH origin translations, and
-Earth-centered ITRF93 time-varying rotations at vetted PCK epochs. The
-intentionally excluded subcases remain explicit: Cartesian-to-Cartesian
-frame-only fallthrough,
-covariance-bearing ITRF93 public dispatcher cases, mixed-origin arrays,
-observatory origins, and user-furnished SPICE body coverage beyond the
-SUN/EARTH matrix.
+`coordinates.transform_coordinates` has two complementary gates. Direct
+randomized fuzz covers a public quivr-object dispatcher matrix: Cartesian
+constant-frame inverse directions, Spherical/Keplerian/Cometary non-Cartesian
+inputs, representative covariance-bearing Cartesian/Keplerian dispatcher paths,
+SUN↔EARTH origin translations, and Earth-centered ITRF93 time-varying rotations
+at vetted PCK epochs. The fixed legacy-frozen branch fixture
+`migration/artifacts/transform_coordinates_branch_fixture_2026-07-06.json`
+then pins every public dispatcher branch that is too specific for random fuzz:
+identity/no-op returns, validation errors, geodetic output, Cartesian
+frame-only and Cartesian-origin fallback paths, non-Cartesian ITRF93 fallback,
+finite-covariance ITRF93, mixed-origin arrays, and MPC observatory-origin
+translation.
 
 The ITRF93 rows intentionally compare asymmetric implementations: the
 baseline-main oracle uses the legacy CSPICE/spiceypy PCK path, while the
@@ -293,9 +294,9 @@ feeds r×ω and the spherical velocity-angle Jacobian, amplifying it into
 origin-translation rows do not use that budget and are held to `1e-11` in the
 transform matrix.
 
-These remaining excluded/indirect cases need a different harness style, fixed
-fixtures, or quivr round-trips rather than numpy-boundary random subprocess
-hand-off.
+Arbitrary user-furnished SPICE body coverage beyond the SUN/EARTH/MPC-observatory
+fixture matrix remains a fixture-extension task when new kernels/bodies are
+added; it is no longer a transform dispatcher branch-coverage gap.
 
 ## Files
 

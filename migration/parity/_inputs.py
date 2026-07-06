@@ -156,7 +156,7 @@ def _split_transform_rows(n: int) -> list[int]:
     if n < case_count:
         raise ValueError(
             f"coordinates.transform_coordinates needs at least {case_count} rows "
-            "to exercise every public-dispatch subcase"
+            "to exercise every randomized public-dispatch matrix subcase"
         )
     rows_per_case, remainder = divmod(n, case_count)
     return [rows_per_case + (1 if i < remainder else 0) for i in range(case_count)]
