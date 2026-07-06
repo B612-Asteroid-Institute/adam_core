@@ -18,6 +18,7 @@ from migration.parity import (
     parity_speed,
     tolerances,
 )
+from migration.parity.backend_candidates import BACKEND_CANDIDATES_BY_ID
 from migration.scripts import parity_table
 from migration.scripts.rust_backend_benchmark_gate import (
     BENCHMARK_TO_API_ID,
@@ -42,13 +43,21 @@ def test_random_fuzz_registry_matches_generators() -> None:
         for migration in API_MIGRATIONS
         if migration.parity_coverage == "random-fuzz"
     }
+    # bridge.* rows are diagnostic backend candidates (bead personal-cmy.13.1),
+    # tracked in migration/parity/backend_candidates.py rather than in the
+    # public per-API migration registry; the fuzz generators cover both.
+    candidate_ids = set(BACKEND_CANDIDATES_BY_ID)
 
-    assert random_fuzz_ids == set(_inputs.all_api_ids())
+    assert not (random_fuzz_ids & candidate_ids)
+    assert random_fuzz_ids | candidate_ids == set(_inputs.all_api_ids())
 
 
 def test_tolerance_manifest_entries_are_registered() -> None:
     tolerance_ids = set(tolerances.all_api_ids())
-    assert tolerance_ids <= set(API_MIGRATIONS_BY_ID)
+    candidate_ids = set(BACKEND_CANDIDATES_BY_ID)
+    # Every tolerance row must belong to either the public migration registry
+    # or the diagnostic backend-candidate registry (bead personal-cmy.13.1).
+    assert tolerance_ids <= set(API_MIGRATIONS_BY_ID) | candidate_ids
 
     expected_coverage = {
         "random-fuzz",
@@ -57,7 +66,8 @@ def test_tolerance_manifest_entries_are_registered() -> None:
         "orchestration-implied",
     }
     assert {
-        API_MIGRATIONS_BY_ID[api_id].parity_coverage for api_id in tolerance_ids
+        API_MIGRATIONS_BY_ID[api_id].parity_coverage
+        for api_id in tolerance_ids - candidate_ids
     } <= expected_coverage
 
 
