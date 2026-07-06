@@ -44,8 +44,13 @@ DEFAULT_SPEED_ARTIFACT = Path("migration/artifacts/parity_speed_cold_warm.json")
 # (adam_assist_rust over assist-rs + adam_core_rs_assist) against the current
 # Python adam_assist.ASSISTPropagator public semantics. The legacy checkout has
 # no ASSIST surface, so this lane is current-Python vs current-Rust rather than
-# legacy-vs-current, and it stays artifact-driven because it needs the GPL
-# crates plus ~765 MB of ephemeris kernels.
+# legacy-vs-current. Both sides load the same DE440/SB441 kernels from the
+# PyPI data packages installed with the package dependencies (naif-de440,
+# jpl-small-bodies-de441-n16); the Rust side receives the resolved
+# site-packages paths via ADAM_CORE_RS_ASSIST_{PLANETS,ASTEROIDS}_PATH. The
+# lane stays artifact-driven for the same reason as the frozen legacy speed
+# baselines: the benchmarks are multi-minute Ray/Rayon suites behind the GPL
+# crate build, refreshed intentionally rather than on every report render.
 DEFAULT_ASSIST_RESIDUALS_ARTIFACT = Path(
     "migration/artifacts/assist_public_semantics_residuals_2026-05-20.json"
 )
@@ -972,8 +977,12 @@ def _format_assist_section(
         "are current implementations; the frozen legacy checkout has no ASSIST "
         "surface, so this lane is governed by public-semantics fixtures and "
         "benchmark artifacts rather than the legacy-vs-current fuzz harness. "
-        "Rows stay artifact-driven because they need the GPL crates plus "
-        "~765 MB of DE440/SB441 kernels.",
+        "Both sides load the same DE440/SB441 kernels from the PyPI data "
+        "packages installed with the package dependencies (`naif-de440`, "
+        "`jpl-small-bodies-de441-n16`); kernel SHA-256 identity is recorded in "
+        "each artifact. Rows stay artifact-driven for the same reason as the "
+        "frozen legacy speed baselines: multi-minute benchmark suites behind "
+        "the GPL crate build, refreshed intentionally rather than per render.",
         "",
         f"Packages: {package_text}.",
     ]
