@@ -1580,10 +1580,11 @@ def _lane_status(results: list[SpeedResult]) -> dict[str, dict[str, object]]:
 
 
 def _speed_result_to_json(result: SpeedResult) -> dict[str, object]:
-    from . import backend_candidates
+    from . import comparison_metadata
 
     row: dict[str, object] = {
         "api_id": result.api_id,
+        **comparison_metadata.for_api(result.api_id),
         "lane": result.lane,
         "lane_description": result.lane_description,
         "lane_enforced": result.lane_enforced,
@@ -1625,9 +1626,6 @@ def _speed_result_to_json(result: SpeedResult) -> dict[str, object]:
         "legacy_cold_trials_s": result.legacy_cold_trials_s,
         "speedup_cold": result.speedup_cold,
     }
-    candidate = backend_candidates.get(result.api_id)
-    if candidate is not None:
-        row["backend_candidate"] = candidate.to_json()
     return row
 
 

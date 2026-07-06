@@ -219,10 +219,13 @@ def format_summary(results: list[ApiResult]) -> str:
 
 
 def to_json(results: list[ApiResult]) -> dict:
+    from . import comparison_metadata
+
     return {
         "apis": [
             {
                 "api_id": r.api_id,
+                **comparison_metadata.for_api(r.api_id),
                 "passed": r.passed,
                 "investigate": r.investigate,
                 "investigate_task": r.investigate_task,

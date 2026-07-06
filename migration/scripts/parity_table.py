@@ -31,6 +31,7 @@ from adam_core._rust.status import API_MIGRATIONS_BY_ID, validate_api_migrations
 from migration.parity import (
     _inputs,
     backend_candidates,
+    comparison_metadata,
     parity_fixed,
     parity_fuzz,
     tolerances,
@@ -38,6 +39,27 @@ from migration.parity import (
 
 DEFAULT_PARITY_ARTIFACT = Path("migration/artifacts/parity_gate.json")
 DEFAULT_SPEED_ARTIFACT = Path("migration/artifacts/parity_speed_cold_warm.json")
+
+# GPL ASSIST lane artifacts. These compare the Rust GPL backend
+# (adam_assist_rust over assist-rs + adam_core_rs_assist) against the current
+# Python adam_assist.ASSISTPropagator public semantics. The legacy checkout has
+# no ASSIST surface, so this lane is current-Python vs current-Rust rather than
+# legacy-vs-current, and it stays artifact-driven because it needs the GPL
+# crates plus ~765 MB of ephemeris kernels.
+DEFAULT_ASSIST_RESIDUALS_ARTIFACT = Path(
+    "migration/artifacts/assist_public_semantics_residuals_2026-05-20.json"
+)
+DEFAULT_ASSIST_PROPAGATION_BENCHMARK = Path(
+    "migration/artifacts/assist_public_semantics_benchmark_2026-05-26.json"
+)
+DEFAULT_ASSIST_COVARIANCE_BENCHMARK = Path(
+    "migration/artifacts/assist_public_semantics_covariance_benchmark_2026-06-20.json"
+)
+DEFAULT_ASSIST_IMPACTS_BENCHMARK = Path(
+    "migration/artifacts/assist_impacts_benchmark_2026-07-03.json"
+)
+ASSIST_COMPARISON_MODE = "gpl_rust_assist_backend_vs_current_python_adam_assist"
+_DASH = "\u2014"
 
 
 def _truncate(text: str, n: int | None) -> str:
@@ -70,6 +92,7 @@ def _governance_fields(api_id: str) -> dict[str, Any]:
             "rust_module": candidate.rust_module,
             "legacy_comparator": candidate.legacy_comparator,
             "candidate_note": candidate.note,
+            **comparison_metadata.for_api(api_id),
             "registry_status": "backend-candidate",
             "parity_coverage": "backend-candidate",
             "coverage_note": candidate.note,
@@ -81,6 +104,7 @@ def _governance_fields(api_id: str) -> dict[str, Any]:
     migration = API_MIGRATIONS_BY_ID[api_id]
     return {
         "backend_candidate": False,
+        **comparison_metadata.for_api(api_id),
         "registry_status": migration.status,
         "parity_coverage": migration.parity_coverage,
         "coverage_note": migration.coverage_note,
@@ -326,9 +350,9 @@ def _build_rows(
 def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
     lines = []
     lines.append(
-        "| API | output | atol | rtol | worst_abs | worst_rel | rel_above_floor | nan_mismatch | result | rationale | physical | root cause | verdict |"
+        "| API | mode | output | atol | rtol | worst_abs | worst_rel | rel_above_floor | nan_mismatch | result | rationale | physical | root cause | verdict |"
     )
-    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|")
+    lines.append("|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|")
     for r in rows:
         observed = r["state"] in {
             "measured",
@@ -401,6 +425,7 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
         api_label = _api_markdown_label(r["api_id"], r)
         lines.append(
             f"| {api_label}{flag} "
+            f"| {_comparison_mode_label(r)} "
             f"| {r['output']} "
             f"| {r['atol']:.0e} | {rtol_s} "
             f"| {wa} | {wr} | {wr_floor} | {nan_mismatch} | {result} "
@@ -508,6 +533,19 @@ def _format_speed_metadata(metadata: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _comparison_mode_label(row: dict[str, Any]) -> str:
+    label = row.get("comparison_mode_short")
+    if label:
+        return str(label)
+    api_id = row.get("api_id")
+    if api_id:
+        meta = comparison_metadata.for_api(str(api_id))
+        if meta.get("comparison_mode") != comparison_metadata.UNKNOWN:
+            return str(meta.get("comparison_mode_short", "unknown"))
+    label = row.get("comparison_mode_label") or row.get("comparison_mode")
+    return str(label) if label else "unknown"
+
+
 def _speed_gate_label(row: dict[str, Any]) -> str:
     raw_passed = bool(row.get("raw_passed", row.get("passed", False)))
     waived = bool(row.get("waived", False))
@@ -555,8 +593,8 @@ def _format_lane_cell(row: dict[str, Any] | None) -> str:
 
 def _format_speed_long_markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
-        "| Lane | API / implementation | Size/shape | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
-        "|---|---|---|---:|---:|---:|---|---|",
+        "| Lane | API / implementation | Mode | Size/shape | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
+        "|---|---|---|---|---:|---:|---:|---|---|",
     ]
     for r in rows:
         gate = _speed_gate_label(r)
@@ -565,6 +603,7 @@ def _format_speed_long_markdown(rows: list[dict[str, Any]]) -> str:
         lines.append(
             f"| `{lane}` "
             f"| {_api_markdown_label(r['api_id'], r)} "
+            f"| {_comparison_mode_label(r)} "
             f"| {_workload_label(r)} "
             f"| {_format_speed(r.get('speedup_p50'))} "
             f"| {_format_speed(r.get('speedup_p95'))} "
@@ -584,16 +623,18 @@ def _format_speed_markdown(rows: list[dict[str, Any]], *, long: bool = False) ->
         by_api.setdefault(row["api_id"], {})[row.get("lane", "small-n")] = row
 
     lines = [
-        "| API / implementation | "
+        "| API / implementation | Mode | "
         + " | ".join(f"{lane} speed" for lane in lane_order)
         + " |",
-        "|---" + "|---" * len(lane_order) + "|",
+        "|---|---" + "|---" * len(lane_order) + "|",
     ]
     for api_id in sorted(by_api):
         cells = [_format_lane_cell(by_api[api_id].get(lane)) for lane in lane_order]
         first_row = next(iter(by_api[api_id].values()))
         lines.append(
-            f"| {_api_markdown_label(api_id, first_row)} | " + " | ".join(cells) + " |"
+            f"| {_api_markdown_label(api_id, first_row)} | {_comparison_mode_label(first_row)} | "
+            + " | ".join(cells)
+            + " |"
         )
     return "\n".join(lines)
 
@@ -644,6 +685,14 @@ def _coverage_summary(rows: list[dict]) -> str:
             and r["investigate"]
         }
     )
+    mode_counts: dict[str, int] = {}
+    rust_native_apis: list[str] = []
+    for api_id in declared_apis:
+        meta = comparison_metadata.for_api(api_id)
+        short = str(meta.get("comparison_mode_short", "unknown"))
+        mode_counts[short] = mode_counts.get(short, 0) + 1
+        if meta.get("rust_native_top_level"):
+            rust_native_apis.append(api_id)
     direct = len(measured_apis) + len(wired_not_measured)
     indirect = len(orchestration)
     fixed_only_word = "API" if len(fixed_only) == 1 else "APIs"
@@ -663,6 +712,25 @@ def _coverage_summary(rows: list[dict]) -> str:
         f"{len(random_excluded)} {random_excluded_word} intentionally excluded "
         f"from randomized fuzz with no fixed fixture in this artifact. "
         f"{len(measured_apis)} random-fuzz {measured_word} measured this run."
+    )
+    mode_parts = [f"{count} {mode}" for mode, count in sorted(mode_counts.items())]
+    lines.append("")
+    lines.append(
+        "**Comparison modes** (what each row actually measures): "
+        + "; ".join(mode_parts)
+        + f"; plus {len(backend_candidate_ids)} impl candidates (diagnostic). "
+        "`public facade` and `thin wrapper` rows enter through the canonical "
+        "Python API on both sides, so measured speedups include Python/PyO3 "
+        "marshalling. `raw kernel` rows are diagnostic PyO3 bindings compared "
+        "against a legacy Python oracle."
+    )
+    lines.append("")
+    lines.append(
+        f"**Rust-native top-level**: {len(rust_native_apis)} of "
+        f"{len(declared_apis)} declared public APIs run end-to-end in Rust "
+        "(`rust_native_top_level=true`). Every other row still enters through "
+        "a Python facade or PyO3 wrapper; the full-port goal is only met for "
+        "a surface once its top-level workflow itself runs in Rust."
     )
     if backend_candidate_ids:
         lines.append("")
@@ -741,6 +809,186 @@ def _coverage_summary(rows: list[dict]) -> str:
         lines.append("**Flagged (`investigate=True`)**:")
         for a in flagged:
             lines.append(f"- `{a}`")
+    return "\n".join(lines)
+
+
+def _load_json_artifact(path: Path | None) -> dict[str, Any] | None:
+    if path is None or not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
+def _format_assist_residuals(data: dict[str, Any]) -> list[str]:
+    thresholds = data.get("thresholds", {})
+    pos_thr = thresholds.get("position_abs_m")
+    vel_thr = thresholds.get("velocity_abs_m_per_s")
+    lines = [
+        "### Public-semantics parity (live Rust vs frozen Python fixture)",
+        "",
+        f"Fixture `{data.get('fixture_id', 'unknown')}`; "
+        f"thresholds: |\u0394pos| \u2264 {pos_thr:.3e} m, |\u0394vel| \u2264 {vel_thr:.3e} m/s.",
+        "",
+        "| Case | rows | max \\|\u0394pos\\| (m) | max \\|\u0394vel\\| (m/s) | max \\|\u0394t\\| (ns) | result |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for case in data.get("cases", []):
+        pos = case.get("max_position_abs_m", float("inf"))
+        vel = case.get("max_velocity_abs_m_per_s", float("inf"))
+        t_ns = case.get("max_time_abs_ns", 0)
+        passed = pos <= pos_thr and vel <= vel_thr and t_ns == 0
+        lines.append(
+            f"| `{case.get('case_id', 'unknown')}` "
+            f"| {case.get('rows', _DASH)} "
+            f"| {pos:.3e} | {vel:.3e} | {t_ns} "
+            f"| {'PASS' if passed else 'FAIL'} |"
+        )
+    return lines
+
+
+def _format_assist_propagation(data: dict[str, Any]) -> list[str]:
+    env = data.get("environment", {})
+    lines = [
+        "### N-body propagation performance (Python adam-assist vs Rust backend)",
+        "",
+        f"Benchmark `{data.get('benchmark_id', 'unknown')}`; "
+        f"thread mode: {env.get('thread_mode', 'unknown')}.",
+        "",
+        "| Lane | Workload | Shape (orbits\u00d7epochs\u2192rows) | Py p50 (s) | Rust p50 (s) "
+        "| \u00d7p50 | \u00d7p95 | max \\|\u0394pos\\| (m) |",
+        "|---|---|---|---:|---:|---:|---:|---:|",
+    ]
+    for workload in data.get("workloads", []):
+        shape = workload.get("workload_shape", {})
+        timing = workload.get("timing_seconds", {})
+        python = timing.get("python", {})
+        rust = timing.get("rust", {})
+        speedup = timing.get("speedup", {})
+        residuals = workload.get("residuals", {})
+        shape_label = (
+            f"{shape.get('n_orbits', _DASH)}\u00d7{shape.get('n_target_times', _DASH)}"
+            f"\u2192{shape.get('output_rows', _DASH)}"
+        )
+        lines.append(
+            f"| `{workload.get('lane', _DASH)}` "
+            f"| `{workload.get('name', 'unknown')}` "
+            f"| {shape_label} "
+            f"| {python.get('p50', float('nan')):.4f} "
+            f"| {rust.get('p50', float('nan')):.4f} "
+            f"| {_format_speed(speedup.get('p50_python_over_rust'))} "
+            f"| {_format_speed(speedup.get('p95_python_over_rust'))} "
+            f"| {residuals.get('position_abs_m', float('nan')):.3e} |"
+        )
+    return lines
+
+
+def _format_assist_covariance(data: dict[str, Any]) -> list[str]:
+    lines = [
+        "### Covariance propagation performance (sampled covariance, both sides)",
+        "",
+        f"Benchmark `{data.get('benchmark_id', 'unknown')}`. "
+        "sigma-point/auto are deterministic (element-wise parity expected); "
+        "monte-carlo uses different RNGs and is compared statistically.",
+        "",
+        "| Lane | Workload | Method | Parity expected | \u00d7p50 | \u00d7p95 "
+        "| max \u03c3 rel | max \\|\u0394pos\\| (m) |",
+        "|---|---|---|---|---:|---:|---:|---:|",
+    ]
+    for workload in data.get("workloads", []):
+        covariance = workload.get("covariance", {})
+        timing = workload.get("timing_seconds", {})
+        speedup = timing.get("speedup", {})
+        cov_res = workload.get("covariance_residuals", {})
+        state_res = workload.get("state_residuals", {})
+        sigma_rel = cov_res.get("max_sigma_rel")
+        sigma_cell = f"{sigma_rel:.3e}" if sigma_rel is not None else "\u2014"
+        lines.append(
+            f"| `{workload.get('lane', _DASH)}` "
+            f"| `{workload.get('name', 'unknown')}` "
+            f"| {covariance.get('method', _DASH)} "
+            f"| {'yes' if covariance.get('parity_expected') else 'statistical'} "
+            f"| {_format_speed(speedup.get('p50_python_over_rust'))} "
+            f"| {_format_speed(speedup.get('p95_python_over_rust'))} "
+            f"| {sigma_cell} "
+            f"| {state_res.get('position_abs_m', float('nan')):.3e} |"
+        )
+    return lines
+
+
+def _format_assist_impacts(data: dict[str, Any]) -> list[str]:
+    lines = [
+        "### Impact detection performance (`_detect_collisions`)",
+        "",
+        f"{data.get('description', '')}",
+        "",
+        "| Orbits | Days | Impacts | Py p50 (s) | Rust p50 (s) | \u00d7p50 | \u00d7p95 "
+        "| max impact-time \u0394 (days) |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for lane in data.get("lanes", []):
+        lines.append(
+            f"| {lane.get('n_orbits', _DASH)} "
+            f"| {lane.get('num_days', _DASH)} "
+            f"| {lane.get('n_impacts', _DASH)} "
+            f"| {lane.get('python_p50_s', float('nan')):.4f} "
+            f"| {lane.get('rust_p50_s', float('nan')):.4f} "
+            f"| {_format_speed(lane.get('speedup_p50'))} "
+            f"| {_format_speed(lane.get('speedup_p95'))} "
+            f"| {lane.get('max_impact_time_diff_days', float('nan')):.3e} |"
+        )
+    return lines
+
+
+def _format_assist_section(
+    residuals_path: Path | None = DEFAULT_ASSIST_RESIDUALS_ARTIFACT,
+    propagation_path: Path | None = DEFAULT_ASSIST_PROPAGATION_BENCHMARK,
+    covariance_path: Path | None = DEFAULT_ASSIST_COVARIANCE_BENCHMARK,
+    impacts_path: Path | None = DEFAULT_ASSIST_IMPACTS_BENCHMARK,
+) -> str:
+    residuals = _load_json_artifact(residuals_path)
+    propagation = _load_json_artifact(propagation_path)
+    covariance = _load_json_artifact(covariance_path)
+    impacts = _load_json_artifact(impacts_path)
+    if not any([residuals, propagation, covariance, impacts]):
+        return ""
+
+    packages: dict[str, Any] = {}
+    for source in (propagation, covariance, residuals, impacts):
+        if source:
+            packages = source.get("packages", {}) or packages
+            if packages:
+                break
+    package_text = (
+        "; ".join(f"`{name}=={ver}`" for name, ver in sorted(packages.items()))
+        if packages
+        else "unknown"
+    )
+
+    lines = [
+        "## ASSIST (GPL) N-Body Propagation",
+        "",
+        f"**Mode**: `{ASSIST_COMPARISON_MODE}` \u2014 Rust GPL backend "
+        "(`adam_assist_rust` over `assist-rs` + `adam_core_rs_assist`) vs the "
+        "current Python `adam_assist.ASSISTPropagator` public path. Both sides "
+        "are current implementations; the frozen legacy checkout has no ASSIST "
+        "surface, so this lane is governed by public-semantics fixtures and "
+        "benchmark artifacts rather than the legacy-vs-current fuzz harness. "
+        "Rows stay artifact-driven because they need the GPL crates plus "
+        "~765 MB of DE440/SB441 kernels.",
+        "",
+        f"Packages: {package_text}.",
+    ]
+    if residuals:
+        lines.append("")
+        lines.extend(_format_assist_residuals(residuals))
+    if propagation:
+        lines.append("")
+        lines.extend(_format_assist_propagation(propagation))
+    if covariance:
+        lines.append("")
+        lines.extend(_format_assist_covariance(covariance))
+    if impacts:
+        lines.append("")
+        lines.extend(_format_assist_impacts(impacts))
     return "\n".join(lines)
 
 
@@ -863,6 +1111,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Only print parity tolerance/RCA table.",
     )
     p.add_argument(
+        "--no-assist",
+        action="store_true",
+        help="Skip the GPL ASSIST parity/performance section.",
+    )
+    p.add_argument(
         "--speed-long",
         action="store_true",
         help="Render speed rows in long lane-per-row form instead of pivoting by API.",
@@ -962,6 +1215,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         if speed_metadata_md:
             sections.extend([speed_metadata_md, ""])
         sections.append(_format_speed_markdown(speed_rows, long=args.speed_long))
+    if not args.no_assist and requested_api_ids is None:
+        assist_md = _format_assist_section()
+        if assist_md:
+            sections.extend(["", assist_md])
     report = "\n".join(sections)
 
     print(report)

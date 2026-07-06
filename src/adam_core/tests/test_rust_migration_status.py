@@ -12,6 +12,7 @@ from migration.parity import (
     _inputs,
     _oracle,
     _threading,
+    comparison_metadata,
     parity_fixed,
     parity_fuzz,
     parity_main,
@@ -194,6 +195,36 @@ def test_parity_output_reports_headroom_and_nan_policy() -> None:
     assert not nan_mismatch.passed
     assert nan_mismatch.nan_disagreement == 1
     assert np.isinf(nan_mismatch.max_tolerance_ratio)
+
+
+def test_comparison_mode_metadata_labels() -> None:
+    facade = comparison_metadata.for_api("coordinates.transform_coordinates")
+    assert facade["comparison_mode"] == comparison_metadata.PUBLIC_PYTHON_FACADE
+    assert facade["comparison_mode_short"] == "public facade"
+    assert facade["rust_native_top_level"] is False
+
+    kernel = comparison_metadata.for_api("statistics.weighted_mean")
+    assert kernel["comparison_mode"] == comparison_metadata.RAW_RUST_PYO3_KERNEL
+    assert kernel["speed_gate_scope"] == "diagnostic_raw_kernel"
+
+    candidate = comparison_metadata.for_api("bridge.rotate_orbits_frame")
+    assert candidate["comparison_mode"] == comparison_metadata.BACKEND_CANDIDATE
+    assert candidate["speed_gate_scope"] == "diagnostic_backend_candidate"
+    assert candidate["rust_native_top_level"] is False
+
+    unknown = comparison_metadata.for_api("nonexistent.api")
+    assert unknown["comparison_mode"] == comparison_metadata.UNKNOWN
+
+
+def test_comparison_mode_metadata_covers_registry_and_candidates() -> None:
+    for migration in API_MIGRATIONS:
+        meta = comparison_metadata.for_api(migration.api_id)
+        assert meta["comparison_mode"] != comparison_metadata.UNKNOWN, migration.api_id
+        assert meta["comparison_mode_short"], migration.api_id
+        assert meta["rust_native_top_level"] == (migration.status == "rust-only")
+    for candidate_id in BACKEND_CANDIDATES_BY_ID:
+        meta = comparison_metadata.for_api(candidate_id)
+        assert meta["comparison_mode"] == comparison_metadata.BACKEND_CANDIDATE
 
 
 def test_photometry_h_fit_random_fuzz_is_visible() -> None:
