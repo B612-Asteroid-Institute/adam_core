@@ -38,6 +38,17 @@ from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
 
 EPOCH_MJD = 60000.0
 NUM_DAYS = 30
+# Impact-epoch agreement is step-resolution-limited, not physics-limited
+# (personal-tse): the Rust backend and Python adam_assist link different
+# libassist C builds whose IAS15 step sequences differ, and each records an
+# impact at the first step inside the body radius rather than the exact
+# distance crossing. The science-critical results are gated exactly elsewhere
+# in these tests -- identical impact sets, identical survivor sets, and each
+# impact state verified within the Earth radius -- so these tolerances only
+# bound the step-resolution slack: ~1e-3 day (~86 s) on the impact epoch and
+# ~5e-4 AU on the recorded impact state. Do not tighten these to imply a
+# physics-limited epoch; a consumer needing sub-second impact times must
+# root-polish the crossing on both sides.
 IMPACT_TIME_ATOL_DAYS = 1.0e-3
 IMPACT_STATE_ATOL_AU = 5.0e-4
 SURVIVOR_OVERSHOOT_ATOL_DAYS = 1.0

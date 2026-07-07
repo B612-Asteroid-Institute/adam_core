@@ -450,6 +450,23 @@ pub struct CollisionConditionSpec {
 /// can mirror the legacy `Timestamp.from_jd(..., scale="tdb")` construction.
 /// Survivors are reported at the final executed step time, which overshoots
 /// the requested horizon exactly as the legacy step loop does.
+///
+/// IMPACT-TIME RESOLUTION (personal-tse): `impact_times_jd_tdb` is the IAS15
+/// step time at which a particle was *first observed* inside a collision
+/// body's radius, not the exact distance-crossing instant. It is therefore
+/// step-resolution-limited, not physics-limited: the reported epoch can lag
+/// the true crossing by up to one adaptive step. Because this backend and
+/// Python `adam_assist` link different libassist C builds, their step
+/// sequences differ, so their impact epochs differ at that scale (observed
+/// ~5e-4 day / ~45 s over 30-day arcs, ~0.2 deg of Earth rotation / ~20 km
+/// of ground corridor). The science-critical results are exact on both
+/// sides: the impact/survivor sets match and each impact state is
+/// independently verified to lie within the body radius. Consumers that need
+/// a physics-limited impact epoch (e.g. corridor prediction) must root-polish
+/// the Earth-distance crossing (bisect on distance == radius between the last
+/// two step states) rather than trust the raw step epoch. Root-polishing only
+/// this backend would not improve parity against step-limited Python, so the
+/// gates stay at step resolution by design.
 #[derive(Debug, Clone, Default)]
 pub struct CollisionDetectionOutput {
     pub final_indices: Vec<usize>,
@@ -593,6 +610,10 @@ impl AssistPropagator {
                         output.impact_indices.push(row);
                         output.impact_condition_indices.push(condition_index);
                         output.impact_states.push(state);
+                        // Step-resolution-limited impact epoch: `t` is the
+                        // first IAS15 step at which the particle is inside the
+                        // body radius, not the exact crossing time. See the
+                        // CollisionDetectionOutput docs (personal-tse).
                         output.impact_times_jd_tdb.push(t + jd_ref);
                         if condition.stopping {
                             remove[slot] = true;
