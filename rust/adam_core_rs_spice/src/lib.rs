@@ -16,8 +16,8 @@ use adam_core_rs_coords::types::{
     TimeScale,
 };
 use adam_core_rs_coords::{
-    transform_values_flat6, transform_with_covariance_flat6, Frame as KernelFrame,
-    OriginTranslationProvider, Representation,
+    rotate_cartesian_time_varying_flat6, transform_values_flat6, transform_with_covariance_flat6,
+    Frame as KernelFrame, OriginTranslationProvider, Representation,
 };
 use spicekit::frame::{
     apply_sxform, invert_sxform, j2000_to_eclipj2000, pck_euler_rotation_and_derivative,
@@ -388,15 +388,15 @@ impl AdamCoreSpiceBackend {
         // support constant ecliptic<->equatorial rotation. Time-varying ITRF93
         // and unspecified frames are not handled by this native path yet and
         // fall back to the legacy composition (`Ok(None)`).
-        let to_kernel_frame = |frame: Frame| match frame {
-            Frame::Ecliptic => Some(KernelFrame::Ecliptic),
-            Frame::Equatorial => Some(KernelFrame::Equatorial),
-            Frame::Itrf93 | Frame::Unspecified => None,
-        };
-        let (Some(kframe_in), Some(kframe_out)) =
-            (to_kernel_frame(frame_in), to_kernel_frame(frame_out))
-        else {
+        // Unspecified frames are not transformable natively.
+        if frame_in == Frame::Unspecified || frame_out == Frame::Unspecified {
             return Ok(None);
+        }
+        let to_kernel_frame = |frame: Frame| match frame {
+            Frame::Ecliptic => KernelFrame::Ecliptic,
+            Frame::Equatorial => KernelFrame::Equatorial,
+            Frame::Itrf93 => KernelFrame::Itrf93,
+            Frame::Unspecified => unreachable!("unspecified frames handled above"),
         };
 
         // Origin-translation vectors (resolved in the INPUT frame), applied as
@@ -410,6 +410,90 @@ impl AdamCoreSpiceBackend {
             _ => None,
         };
 
+        // An ITRF93 frame CHANGE needs a time-varying (per-epoch) rotation that
+        // the constant-frame kernel does not provide; same-frame ITRF93 (no
+        // change) and ecliptic<->equatorial go through the constant path below.
+        let itrf93_frame_change =
+            frame_in != frame_out && (frame_in == Frame::Itrf93 || frame_out == Frame::Itrf93);
+        if itrf93_frame_change {
+            // Only Cartesian input is supported for the time-varying rotation
+            // (matches the legacy _rust_transform_supports contract).
+            if rep_in != Representation::Cartesian {
+                return Ok(None);
+            }
+            // Origin shift in the input frame first (covariance-invariant),
+            // then the time-varying rotation of state + covariance.
+            let mut cart = coords_flat.to_vec();
+            if let Some(shift) = translation_flat.as_deref() {
+                for (value, delta) in cart.iter_mut().zip(shift.iter()) {
+                    *value += delta;
+                }
+            }
+            let (rotated, rotated_cov) =
+                self.rotate_time_varying(&cart, covariance_flat, frame_in, frame_out, times)?;
+            if rep_out == Representation::Cartesian {
+                return Ok(Some(TransformOutput {
+                    values: rotated,
+                    ncols: 6,
+                    covariance: rotated_cov,
+                }));
+            }
+            // Representation conversion in the (now target) frame: identity
+            // frame rotation with covariance forward-AD.
+            let ktarget = to_kernel_frame(frame_out);
+            return Ok(Some(match rotated_cov.as_deref() {
+                Some(cov) => {
+                    let (values, cov_out) = transform_with_covariance_flat6(
+                        &rotated,
+                        cov,
+                        Representation::Cartesian,
+                        rep_out,
+                        ktarget,
+                        ktarget,
+                        t0,
+                        mu,
+                        a,
+                        f,
+                        max_iter,
+                        tol,
+                        None,
+                    );
+                    TransformOutput {
+                        values,
+                        ncols: 6,
+                        covariance: Some(cov_out),
+                    }
+                }
+                None => {
+                    let (values, ncols) = transform_values_flat6(
+                        &rotated,
+                        Representation::Cartesian,
+                        rep_out,
+                        ktarget,
+                        ktarget,
+                        t0,
+                        mu,
+                        a,
+                        f,
+                        max_iter,
+                        tol,
+                        None,
+                    )
+                    .map_err(SpiceBackendError::NotCovered)?;
+                    TransformOutput {
+                        values,
+                        ncols,
+                        covariance: None,
+                    }
+                }
+            }));
+        }
+
+        // Constant-frame path: same-frame (any frame, no rotation) or
+        // ecliptic<->equatorial constant rotation, plus representation change
+        // and covariance forward-AD, in one kernel call.
+        let kframe_in = to_kernel_frame(frame_in);
+        let kframe_out = to_kernel_frame(frame_out);
         if let Some(cov) = covariance_flat {
             let (values, cov_out) = transform_with_covariance_flat6(
                 coords_flat,
@@ -632,6 +716,57 @@ impl AdamCoreSpiceBackend {
             &ets,
         )?;
         Ok(unflatten6(&flat))
+    }
+
+    /// Time-varying (per-epoch) rotation of Cartesian states and optional
+    /// covariance between `frame_in` and `frame_out`. Mirrors the Python
+    /// `apply_time_varying_rotation`: fetch the per-epoch 6x6 sxform matrices
+    /// (km, km/s), unit-convert each to AU, AU/day, then apply per-row
+    /// `M @ state` and `M @ Sigma @ M^T`. Used for ITRF93<->inertial frame
+    /// changes (ecliptic<->equatorial reduces to the shared static rotation).
+    pub fn rotate_time_varying(
+        &self,
+        states_flat: &[f64],
+        covariance_flat: Option<&[f64]>,
+        frame_in: Frame,
+        frame_out: Frame,
+        times: &TimeArray,
+    ) -> Result<(Vec<f64>, Option<Vec<f64>>), SpiceBackendError> {
+        if !states_flat.len().is_multiple_of(6) {
+            return Err(SpiceBackendError::NotCovered(
+                "states length must be a multiple of 6".to_string(),
+            ));
+        }
+        let n = states_flat.len() / 6;
+        let matrices = self.frame_sxform_matrices(frame_in, frame_out, times)?;
+        if matrices.len() != n {
+            return Err(SpiceBackendError::NotCovered(
+                "sxform matrix count must match state rows".to_string(),
+            ));
+        }
+        // sxform is km / km-s; states are AU / AU-day. With the diagonal unit
+        // matrix U = diag(KM_PER_AU x3, KM_PER_AU/SECONDS_PER_DAY x3), the
+        // AU-frame rotation is inv(U) @ M @ U, i.e. per element
+        // M_aud[i][j] = M_km[i][j] * u[j] / u[i].
+        let c_pos = KM_PER_AU;
+        let c_vel = KM_PER_AU / SECONDS_PER_DAY;
+        let u = [c_pos, c_pos, c_pos, c_vel, c_vel, c_vel];
+        let mut matrices_flat = Vec::with_capacity(n * 36);
+        for m in &matrices {
+            for i in 0..6 {
+                for j in 0..6 {
+                    matrices_flat.push(m[i][j] * u[j] / u[i]);
+                }
+            }
+        }
+        // One matrix per row, so the per-row index is the identity mapping.
+        let time_index: Vec<usize> = (0..n).collect();
+        let cov = covariance_flat.unwrap_or(&[]);
+        let (rotated, rotated_cov) =
+            rotate_cartesian_time_varying_flat6(states_flat, cov, &time_index, &matrices_flat)
+                .map_err(|err| SpiceBackendError::NotCovered(err.to_string()))?;
+        let rotated_cov = covariance_flat.map(|_| rotated_cov);
+        Ok((rotated, rotated_cov))
     }
 
     pub fn state_vectors(
