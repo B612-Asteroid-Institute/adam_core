@@ -15,7 +15,10 @@ use adam_core_rs_coords::types::{
     CoordinateBatch, Epoch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
     TimeScale,
 };
-use adam_core_rs_coords::OriginTranslationProvider;
+use adam_core_rs_coords::{
+    transform_values_flat6, transform_with_covariance_flat6, Frame as KernelFrame,
+    OriginTranslationProvider, Representation,
+};
 use spicekit::frame::{
     apply_sxform, invert_sxform, j2000_to_eclipj2000, pck_euler_rotation_and_derivative,
     sxform_from_rotation,
@@ -221,6 +224,17 @@ impl Default for AdamCoreSpiceBackend {
     }
 }
 
+/// Result of the native [`AdamCoreSpiceBackend::transform_coordinates`]
+/// orchestrator: transformed state values (`n * ncols`, `ncols` = 13 for
+/// Keplerian output else 6) and, when the input carried covariance, the
+/// propagated covariance (`n * 36`, row-major 6x6 per row).
+#[derive(Debug, Clone)]
+pub struct TransformOutput {
+    pub values: Vec<f64>,
+    pub ncols: usize,
+    pub covariance: Option<Vec<f64>>,
+}
+
 impl AdamCoreSpiceBackend {
     pub fn new() -> Self {
         Self {
@@ -336,6 +350,109 @@ impl AdamCoreSpiceBackend {
         self.kernels.clear();
         self.custom_names.clear();
         self.obscodes.clear();
+    }
+
+    /// Native `transform_coordinates`: the full composition -- representation
+    /// change, origin translation via SPICE (perturber or observatory), and
+    /// constant-frame rotation, with covariance forward-AD when covariance is
+    /// supplied -- in one call, using this backend for the origin shift. This
+    /// is the Rust-native equivalent of the legacy public `transform_coordinates`
+    /// (same name per the surface-parity requirement).
+    ///
+    /// `target_origin = None` preserves each row's input origin (no shift).
+    /// Origin-translation vectors are resolved in the INPUT frame and applied
+    /// before frame rotation. Returns `Ok(None)` for combinations this native
+    /// path does not yet cover (time-varying ITRF93 frames), signalling the
+    /// caller to fall back to the legacy composition.
+    #[allow(clippy::too_many_arguments)]
+    pub fn transform_coordinates(
+        &self,
+        coords_flat: &[f64],
+        covariance_flat: Option<&[f64]>,
+        rep_in: Representation,
+        rep_out: Representation,
+        frame_in: Frame,
+        frame_out: Frame,
+        origins: &OriginArray,
+        target_origin: Option<&OriginId>,
+        times: &TimeArray,
+        t0: &[f64],
+        mu: &[f64],
+        a: f64,
+        f: f64,
+        max_iter: usize,
+        tol: f64,
+    ) -> Result<Option<TransformOutput>, SpiceBackendError> {
+        // The transform kernels use the crate-level coords `Frame` (the SPICE
+        // backend and this method use the schema `types::Frame`) and only
+        // support constant ecliptic<->equatorial rotation. Time-varying ITRF93
+        // and unspecified frames are not handled by this native path yet and
+        // fall back to the legacy composition (`Ok(None)`).
+        let to_kernel_frame = |frame: Frame| match frame {
+            Frame::Ecliptic => Some(KernelFrame::Ecliptic),
+            Frame::Equatorial => Some(KernelFrame::Equatorial),
+            Frame::Itrf93 | Frame::Unspecified => None,
+        };
+        let (Some(kframe_in), Some(kframe_out)) =
+            (to_kernel_frame(frame_in), to_kernel_frame(frame_out))
+        else {
+            return Ok(None);
+        };
+
+        // Origin-translation vectors (resolved in the INPUT frame), applied as
+        // a constant offset before frame rotation. Skip when there is no origin
+        // change.
+        let translation_flat: Option<Vec<f64>> = match target_origin {
+            Some(target) if origins.origins.iter().any(|origin| origin != target) => {
+                let vectors = self.origin_translation_vectors(origins, target, frame_in, times)?;
+                Some(vectors.into_iter().flatten().collect())
+            }
+            _ => None,
+        };
+
+        if let Some(cov) = covariance_flat {
+            let (values, cov_out) = transform_with_covariance_flat6(
+                coords_flat,
+                cov,
+                rep_in,
+                rep_out,
+                kframe_in,
+                kframe_out,
+                t0,
+                mu,
+                a,
+                f,
+                max_iter,
+                tol,
+                translation_flat.as_deref(),
+            );
+            Ok(Some(TransformOutput {
+                values,
+                ncols: 6,
+                covariance: Some(cov_out),
+            }))
+        } else {
+            let (values, ncols) = transform_values_flat6(
+                coords_flat,
+                rep_in,
+                rep_out,
+                kframe_in,
+                kframe_out,
+                t0,
+                mu,
+                a,
+                f,
+                max_iter,
+                tol,
+                translation_flat.as_deref(),
+            )
+            .map_err(SpiceBackendError::NotCovered)?;
+            Ok(Some(TransformOutput {
+                values,
+                ncols,
+                covariance: None,
+            }))
+        }
     }
 
     pub fn furnsh<P: AsRef<Path>>(&mut self, path: P) -> Result<(), SpiceBackendError> {
@@ -573,16 +690,48 @@ impl AdamCoreSpiceBackend {
         let all_ets = et_seconds(times)?;
         let mut out = vec![[0.0; 6]; times.len()];
         for (source, indices) in unique_origin_indices(origins) {
-            let source_code = self.resolve_origin_id(&source)?;
-            if source_code == target_code {
-                continue;
-            }
-            let ets = indices.iter().map(|&i| all_ets[i]).collect::<Vec<_>>();
-            let flat =
-                self.spkez_batch(source_code, target_code, spice_frame_name(frame)?, &ets)?;
-            let states = km_kms_to_au_day(&flat);
-            for (state, &row) in states.iter().zip(indices.iter()) {
-                out[row] = *state;
+            // Perturber origins (NAIF bodies / OriginCodes) resolve to a NAIF
+            // id and translate via spkez; MPC observatory-code origins do not
+            // resolve as bodies and instead translate via the loaded obscodes
+            // ground-observer state. This mirrors the Python
+            // _resolve_origin_translation_vectors dispatch (perturber first,
+            // then observatory) so the transform orchestrator can shift either
+            // kind of origin natively.
+            match self.resolve_origin_id(&source) {
+                Ok(source_code) => {
+                    if source_code == target_code {
+                        continue;
+                    }
+                    let ets = indices.iter().map(|&i| all_ets[i]).collect::<Vec<_>>();
+                    let flat =
+                        self.spkez_batch(source_code, target_code, spice_frame_name(frame)?, &ets)?;
+                    let states = km_kms_to_au_day(&flat);
+                    for (state, &row) in states.iter().zip(indices.iter()) {
+                        out[row] = *state;
+                    }
+                }
+                Err(_) => {
+                    let code = source.code();
+                    let site = self.obscodes.get(&code).ok_or_else(|| {
+                        SpiceBackendError::InvalidObserverSite {
+                            code: code.clone(),
+                            message: "unknown origin: not a NAIF body or loaded observatory code"
+                                .to_string(),
+                        }
+                    })?;
+                    let epochs: Vec<Epoch> = indices.iter().map(|&i| times.epochs[i]).collect();
+                    let group_times = TimeArray::new(times.scale, epochs)?;
+                    let coords =
+                        self.ground_observer_state(site, &group_times, frame, target_origin)?;
+                    let values = coords.values.cartesian().ok_or_else(|| {
+                        SpiceBackendError::NotCovered(
+                            "observer states were not Cartesian".to_string(),
+                        )
+                    })?;
+                    for (state, &row) in values.iter().zip(indices.iter()) {
+                        out[row] = *state;
+                    }
+                }
             }
         }
         Ok(out)
@@ -1181,6 +1330,130 @@ mod tests {
         assert_eq!(backend.bodn2c("EARTH").unwrap(), 399);
         assert_eq!(backend.bodn2c("EARTH_MOON_BARYCENTER").unwrap(), 3);
         assert_eq!(backend.bodc2n(399).unwrap(), "EARTH");
+    }
+
+    #[test]
+    fn transform_coordinates_no_origin_change_matches_kernels() {
+        use adam_core_rs_coords::types::{Frame as SchemaFrame, OriginArray, OriginId, TimeArray};
+        use adam_core_rs_coords::{
+            transform_values_flat6, transform_with_covariance_flat6, Frame as KernelFrame,
+            Representation,
+        };
+
+        let backend = AdamCoreSpiceBackend::new();
+        let coords = vec![
+            1.0, 0.5, -0.3, 0.01, 0.005, -0.003, -2.1, 0.8, 0.02, -0.004, 0.012, 0.0008,
+        ];
+        let t0 = vec![60000.0, 60000.0];
+        let mu = vec![2.95912208284120e-04_f64; 2];
+        let times = TimeArray::new(
+            TimeScale::Tdb,
+            vec![Epoch::new(60000, 0), Epoch::new(60000, 0)],
+        )
+        .unwrap();
+        let origins = OriginArray::repeat(OriginId::from_code("SUN"), 2);
+
+        // No origin change (target None): values match transform_values_flat6.
+        let out = backend
+            .transform_coordinates(
+                &coords,
+                None,
+                Representation::Cartesian,
+                Representation::Spherical,
+                SchemaFrame::Ecliptic,
+                SchemaFrame::Equatorial,
+                &origins,
+                None,
+                &times,
+                &t0,
+                &mu,
+                0.0,
+                0.0,
+                100,
+                1e-15,
+            )
+            .unwrap()
+            .unwrap();
+        let (expected, ncols) = transform_values_flat6(
+            &coords,
+            Representation::Cartesian,
+            Representation::Spherical,
+            KernelFrame::Ecliptic,
+            KernelFrame::Equatorial,
+            &t0,
+            &mu,
+            0.0,
+            0.0,
+            100,
+            1e-15,
+            None,
+        )
+        .unwrap();
+        assert_eq!(out.ncols, ncols);
+        assert_eq!(out.values, expected);
+        assert!(out.covariance.is_none());
+
+        // With covariance: matches transform_with_covariance_flat6.
+        let cov = vec![1e-18_f64; 2 * 36];
+        let out_cov = backend
+            .transform_coordinates(
+                &coords,
+                Some(&cov),
+                Representation::Cartesian,
+                Representation::Cartesian,
+                SchemaFrame::Ecliptic,
+                SchemaFrame::Equatorial,
+                &origins,
+                None,
+                &times,
+                &t0,
+                &mu,
+                0.0,
+                0.0,
+                100,
+                1e-15,
+            )
+            .unwrap()
+            .unwrap();
+        let (exp_vals, exp_cov) = transform_with_covariance_flat6(
+            &coords,
+            &cov,
+            Representation::Cartesian,
+            Representation::Cartesian,
+            KernelFrame::Ecliptic,
+            KernelFrame::Equatorial,
+            &t0,
+            &mu,
+            0.0,
+            0.0,
+            100,
+            1e-15,
+            None,
+        );
+        assert_eq!(out_cov.values, exp_vals);
+        assert_eq!(out_cov.covariance.unwrap(), exp_cov);
+
+        // Time-varying ITRF93 falls back to the legacy path (Ok(None)).
+        let itrf = backend
+            .transform_coordinates(
+                &coords,
+                None,
+                Representation::Cartesian,
+                Representation::Cartesian,
+                SchemaFrame::Ecliptic,
+                SchemaFrame::Itrf93,
+                &origins,
+                None,
+                &times,
+                &t0,
+                &mu,
+                0.0,
+                0.0,
+                100,
+                1e-15,
+            )
+            .unwrap();
+        assert!(itrf.is_none());
     }
 
     #[test]
