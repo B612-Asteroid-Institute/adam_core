@@ -111,18 +111,22 @@ OBSERVATORY_CODES = {
     x for x in OBSERVATORY_PARALLAX_COEFFICIENTS.code.to_numpy(zero_copy_only=False)
 }
 
-_OBSCODES_LOADED_BACKENDS: set = set()
-
 
 def _ensure_obscodes_loaded(backend) -> None:
-    """Load the MPC observatory parallax table into the Rust SPICE backend
-    once per backend instance (the backend caches the parsed sites)."""
-    key = id(backend)
-    if key in _OBSCODES_LOADED_BACKENDS:
-        return
-    with open(mpc_obscodes) as obscodes_file:
-        backend.load_mpc_obscodes(obscodes_file.read())
-    _OBSCODES_LOADED_BACKENDS.add(key)
+    """Load the MPC observatory parallax table into the process-global Rust
+    SPICE backend.
+
+    Delegates to the canonical loader in ``utils.spice`` (a single obscodes
+    loading path shared with the Rust-native origin translation), which is
+    idempotent against the backend's actual loaded-site count -- robust to a
+    backend ``clear`` unlike the previous per-``id(backend)`` cache. The
+    ``backend`` argument is accepted for backward compatibility; the loader
+    always targets the process-global backend.
+    """
+    del backend
+    from ..utils.spice import setup_mpc_obscodes
+
+    setup_mpc_obscodes()
 
 
 class Observers(qv.Table):

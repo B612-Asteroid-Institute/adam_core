@@ -161,6 +161,25 @@ def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
     return
 
 
+def setup_mpc_obscodes(force: bool = False) -> None:
+    """Ensure the MPC observatory parallax table is loaded into the
+    process-global Rust backend (the canonical obscodes loader).
+
+    Idempotent and keyed on the backend's actual loaded-site count (not a
+    Python-side flag), so it reloads correctly after a backend ``clear``. The
+    obscodes ship as JSON in the ``mpc_obscodes`` data package. Both
+    ``Observers.from_codes`` and the Rust-native origin translation (for
+    observatory-code origins) rely on this.
+    """
+    backend = get_backend()
+    if not force and backend.mpc_obscodes_loaded() > 0:
+        return
+    from mpc_obscodes import mpc_obscodes
+
+    with open(mpc_obscodes) as obscodes_file:
+        backend.load_mpc_obscodes(obscodes_file.read())
+
+
 def get_perturber_state(
     perturber: OriginCodes,
     times: Timestamp,

@@ -136,6 +136,11 @@ class RustBackend:
         with self._lock:
             return int(self._inner.load_mpc_obscodes(json_text))
 
+    def mpc_obscodes_loaded(self) -> int:
+        """Number of MPC observatory ground sites loaded in the backend."""
+        with self._lock:
+            return int(self._inner.mpc_obscodes_loaded())
+
     def observer_states_from_codes(
         self,
         unique_codes: list,

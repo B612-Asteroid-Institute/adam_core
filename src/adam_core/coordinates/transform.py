@@ -302,19 +302,17 @@ def _transform_coordinates_native(
         origin_differs = False
 
     if origin_differs:
-        # Observatory-code source origins require the MPC obscodes table loaded
-        # into the global backend (a separate orchestration not yet nativized
-        # here); route them to the legacy path for now. Perturber origins
-        # (OriginCodes members / SSB) stay native.
-        if any(code not in OriginCodes.__members__ for code in origin_codes):
-            return None
-        # The native origin translation reads the process-global SPICE
-        # backend's kernels directly, so ensure the default kernels are
-        # furnsh-ed (the legacy path did this implicitly via
-        # get_perturber_state -> setup_SPICE).
-        from ..utils.spice import setup_SPICE
+        # The native origin translation reads the process-global SPICE backend
+        # directly, so ensure its kernels are furnsh-ed (the legacy path did
+        # this implicitly via get_perturber_state -> setup_SPICE).
+        from ..utils.spice import setup_mpc_obscodes, setup_SPICE
 
         setup_SPICE()
+        # Observatory-code source origins (not OriginCodes members / SSB) are
+        # resolved natively from the loaded MPC obscodes ground-observer
+        # states; ensure the obscodes table is loaded.
+        if any(code not in OriginCodes.__members__ for code in origin_codes):
+            setup_mpc_obscodes()
 
     times = coords.time
     time_days = times.days.to_numpy(zero_copy_only=False)
