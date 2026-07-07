@@ -30,6 +30,7 @@ except Exception as exc:  # pragma: no cover - depends on build/install state
 
 _REQUIRED_NATIVE_SYMBOLS = (
     "AdamCoreSpiceBackend",
+    "transform_coordinates_native",
     "add_light_time_numpy",
     "add_stellar_aberration_numpy",
     "apply_cosine_latitude_correction_numpy",
@@ -282,6 +283,52 @@ def transform_coordinates_with_covariance_numpy(
             if translation_vectors is None
             else _as_contiguous_f64(translation_vectors)
         ),
+    )
+
+
+def transform_coordinates_native(
+    coords: np.ndarray,
+    representation_in: str,
+    representation_out: str,
+    frame_in: str,
+    frame_out: str,
+    origin_codes: list[str],
+    target_origin: str | None,
+    time_scale: str,
+    time_days: np.ndarray,
+    time_nanos: np.ndarray,
+    covariances: np.ndarray | None = None,
+    t0: np.ndarray | list[float] | tuple[float, ...] | None = None,
+    mu: np.ndarray | list[float] | tuple[float, ...] | None = None,
+    a: float | None = None,
+    f: float | None = None,
+    max_iter: int = 100,
+    tol: float = 1e-15,
+) -> Optional[tuple[np.ndarray, Optional[np.ndarray]]]:
+    """Fully-Rust ``transform_coordinates`` (single Python->Rust crossing).
+
+    Returns ``None`` when the native path does not cover the requested
+    combination (time-varying ITRF93 / geodetic input), signalling the caller
+    to fall back to the legacy composition.
+    """
+    return _native.transform_coordinates_native(
+        _as_contiguous_f64(coords),
+        representation_in,
+        representation_out,
+        frame_in,
+        frame_out,
+        list(origin_codes),
+        target_origin,
+        time_scale,
+        np.ascontiguousarray(np.asarray(time_days, dtype=np.int64)),
+        np.ascontiguousarray(np.asarray(time_nanos, dtype=np.int64)),
+        covariances=None if covariances is None else _as_contiguous_f64(covariances),
+        t0=None if t0 is None else _as_contiguous_f64(t0),
+        mu=None if mu is None else _as_contiguous_f64(mu),
+        a=a,
+        f=f,
+        max_iter=max_iter,
+        tol=tol,
     )
 
 

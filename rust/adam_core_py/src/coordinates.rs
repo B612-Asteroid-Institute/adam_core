@@ -8,15 +8,16 @@ use adam_core_rs_coords::{
     cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
     classify_orbits_flat, cometary_to_cartesian_flat6, create_sampled_orbit_variants,
     fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6,
-    origin_mu_au3_day2, rotate_cartesian_time_varying_flat6,
-    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
-    transform_values_flat6, transform_with_covariance_flat6, weighted_covariance_flat,
-    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame,
-    Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
+    origin_mu_au3_day2, rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6,
+    spherical_to_cartesian_row, tisserand_parameter_flat, transform_values_flat6,
+    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
+    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
+    IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
     OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
-    OrbitVariantSamplingMethod, Representation as CoordsRepresentation, TimeArray, TimeScale,
-    TimeScaleProvider, TryFromNestedRecordBatch,
+    OrbitVariantSamplingMethod, OriginArray, OriginId, Representation as CoordsRepresentation,
+    TimeArray, TimeScale, TimeScaleProvider, TryFromNestedRecordBatch,
 };
+use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
@@ -24,7 +25,7 @@ use arrow_ipc::writer::StreamWriter;
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use std::collections::HashMap;
@@ -2091,8 +2092,192 @@ fn fit_orbit_2body_least_squares_ipc<'py>(
     ))
 }
 
+/// Native `transform_coordinates`: run the full composition (representation,
+/// origin translation via the global SPICE backend, constant-frame rotation,
+/// covariance forward-AD) in a single Python->Rust crossing. Returns `None`
+/// for combinations the native path does not yet cover (time-varying ITRF93),
+/// signalling the Python veneer to fall back to the legacy composition.
+#[pyfunction]
+#[pyo3(signature = (coords, representation_in, representation_out, frame_in, frame_out, origin_codes, target_origin, time_scale, time_days, time_nanos, covariances=None, t0=None, mu=None, a=None, f=None, max_iter=100, tol=1e-15))]
+#[allow(clippy::too_many_arguments)]
+fn transform_coordinates_native<'py>(
+    py: Python<'py>,
+    coords: PyReadonlyArray2<'py, f64>,
+    representation_in: &str,
+    representation_out: &str,
+    frame_in: &str,
+    frame_out: &str,
+    origin_codes: Vec<String>,
+    target_origin: Option<&str>,
+    time_scale: &str,
+    time_days: PyReadonlyArray1<'py, i64>,
+    time_nanos: PyReadonlyArray1<'py, i64>,
+    covariances: Option<PyReadonlyArray2<'py, f64>>,
+    t0: Option<PyReadonlyArray1<'py, f64>>,
+    mu: Option<PyReadonlyArray1<'py, f64>>,
+    a: Option<f64>,
+    f: Option<f64>,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Option<(Bound<'py, PyArray2<f64>>, Option<Bound<'py, PyArray2<f64>>>)>> {
+    let arr = coords.as_array();
+    if arr.ncols() != 6 {
+        return Err(PyValueError::new_err("coords must have shape (N, 6)"));
+    }
+    let n = arr.nrows();
+    let coords_flat = arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("coords must be contiguous"))?;
+
+    let rep_in_local = parse_representation(representation_in)?;
+    let rep_out_local = parse_representation(representation_out)?;
+    if rep_in_local == Representation::Geodetic {
+        // Geodetic input is not a supported native source; fall back.
+        return Ok(None);
+    }
+    let rep_in = to_coords_rep(rep_in_local);
+    let rep_out = to_coords_rep(rep_out_local);
+
+    let parse_data_frame = |value: &str| -> PyResult<DataFrame> {
+        match value {
+            "ecliptic" => Ok(DataFrame::Ecliptic),
+            "equatorial" => Ok(DataFrame::Equatorial),
+            "itrf93" => Ok(DataFrame::Itrf93),
+            other => Err(PyValueError::new_err(format!("unsupported frame: {other}"))),
+        }
+    };
+    let frame_in_value = parse_data_frame(frame_in)?;
+    let frame_out_value = parse_data_frame(frame_out)?;
+
+    if origin_codes.len() != n {
+        return Err(PyValueError::new_err(
+            "origin_codes must have length N for coords shape (N, 6)",
+        ));
+    }
+    let origins = OriginArray::new(
+        origin_codes
+            .iter()
+            .map(|code| OriginId::from_code(code.clone()))
+            .collect(),
+    );
+    let target = target_origin.map(OriginId::from_code);
+
+    let scale =
+        TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let days = time_days.as_slice()?;
+    let nanos = time_nanos.as_slice()?;
+    if days.len() != n || nanos.len() != n {
+        return Err(PyValueError::new_err("times must have length N"));
+    }
+    let times = TimeArray::from_parts(scale, days.to_vec(), nanos.to_vec())
+        .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+
+    let needs_mu = covariance_transform_requires_mu(rep_in_local, rep_out_local);
+    let needs_t0 = covariance_transform_requires_t0(rep_in_local, rep_out_local);
+
+    let mu_view = mu.as_ref().map(|arr| arr.as_array());
+    let mu_fallback: Vec<f64>;
+    let mu_slice: &[f64] = if let Some(view) = mu_view.as_ref() {
+        if view.len() != n {
+            return Err(PyValueError::new_err("mu must have length N"));
+        }
+        view.as_slice()
+            .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?
+    } else if needs_mu {
+        return Err(PyValueError::new_err("mu is required"));
+    } else {
+        mu_fallback = vec![0.0_f64; n];
+        &mu_fallback
+    };
+
+    let t0_view = t0.as_ref().map(|arr| arr.as_array());
+    let t0_fallback: Vec<f64>;
+    let t0_slice: &[f64] = if let Some(view) = t0_view.as_ref() {
+        if view.len() != n {
+            return Err(PyValueError::new_err("t0 must have length N"));
+        }
+        view.as_slice()
+            .ok_or_else(|| PyValueError::new_err("t0 must be contiguous"))?
+    } else if needs_t0 {
+        return Err(PyValueError::new_err("t0 is required"));
+    } else {
+        t0_fallback = vec![0.0_f64; n];
+        &t0_fallback
+    };
+
+    let a_value = if rep_out_local == Representation::Geodetic {
+        a.ok_or_else(|| PyValueError::new_err("a is required"))?
+    } else {
+        a.unwrap_or(0.0)
+    };
+    let f_value = if rep_out_local == Representation::Geodetic {
+        f.ok_or_else(|| PyValueError::new_err("f is required"))?
+    } else {
+        f.unwrap_or(0.0)
+    };
+
+    let cov_view = covariances.as_ref().map(|arr| arr.as_array());
+    let cov_slice: Option<&[f64]> = if let Some(view) = cov_view.as_ref() {
+        if view.nrows() != n || view.ncols() != 36 {
+            return Err(PyValueError::new_err(
+                "covariances must have shape (N, 36) with row-major 6x6 per row",
+            ));
+        }
+        Some(
+            view.as_slice()
+                .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?,
+        )
+    } else {
+        None
+    };
+
+    let backend = global_backend()
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+    let output = backend
+        .transform_coordinates(
+            coords_flat,
+            cov_slice,
+            rep_in,
+            rep_out,
+            frame_in_value,
+            frame_out_value,
+            &origins,
+            target.as_ref(),
+            &times,
+            t0_slice,
+            mu_slice,
+            a_value,
+            f_value,
+            max_iter,
+            tol,
+        )
+        .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
+
+    match output {
+        None => Ok(None),
+        Some(out) => {
+            let values = ndarray::Array2::from_shape_vec((n, out.ncols), out.values)
+                .map_err(|err| PyValueError::new_err(format!("failed to shape output: {err}")))?
+                .into_pyarray(py);
+            let covariance = match out.covariance {
+                Some(cov) => Some(
+                    ndarray::Array2::from_shape_vec((n, 36), cov)
+                        .map_err(|err| {
+                            PyValueError::new_err(format!("failed to shape covariance: {err}"))
+                        })?
+                        .into_pyarray(py),
+                ),
+                None => None,
+            };
+            Ok(Some((values, covariance)))
+        }
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
+    m.add_function(wrap_pyfunction!(transform_coordinates_native, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(cartesian_to_spherical_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(spherical_to_cartesian_numpy, m)?)?;
