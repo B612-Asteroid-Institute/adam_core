@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::MutexGuard;
 
-use adam_core_rs_coords::{DataFrame, Epoch, OriginId, TimeArray, TimeScale};
+use adam_core_rs_coords::{DataFrame, OriginId, TimeArray, TimeScale};
 use adam_core_rs_spice::{
-    builtin_bodc2n, builtin_bodn2c, global_backend, parse_mpc_obscodes, parse_text_kernel_bindings,
-    pck_sxform_matrix, AdamCoreSpiceBackend, GroundObserverSite, NaifFrame, PckError, PckFile,
-    SpiceBackendError, SpkError, SpkFile, SpkWriter, SpkWriterError, Type3Record, Type3Segment,
-    Type9Segment,
+    builtin_bodc2n, builtin_bodn2c, global_backend, parse_text_kernel_bindings, pck_sxform_matrix,
+    AdamCoreSpiceBackend, NaifFrame, PckError, PckFile, SpiceBackendError, SpkError, SpkFile,
+    SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment,
 };
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -24,21 +22,15 @@ fn lock_err_to_py() -> PyErr {
 /// (`adam_core_rs_spice::global_backend`). Kernel state is owned entirely in
 /// Rust and shared by every consumer, so multiple `AdamCoreSpiceBackend()`
 /// handles (e.g. after a Python `get_backend()` rebuild) all see the same
-/// loaded kernels; there is no per-instance kernel state to desync
-/// (personal-cmy.23). Only the MPC obscodes cache remains per-handle because
-/// its lookups must not share the kernel lock during observer assembly.
+/// loaded kernels and MPC obscodes; there is no per-instance state to desync
+/// (personal-cmy.23). Kernel state, custom name bindings, and the MPC
+/// observatory table all live in the one global backend.
 #[pyclass(name = "AdamCoreSpiceBackend")]
-pub struct PyAdamCoreSpiceBackend {
-    obscodes: Mutex<HashMap<String, GroundObserverSite>>,
-}
+pub struct PyAdamCoreSpiceBackend;
 
 impl PyAdamCoreSpiceBackend {
     fn lock(&self) -> PyResult<MutexGuard<'static, AdamCoreSpiceBackend>> {
         global_backend().lock().map_err(|_| lock_err_to_py())
-    }
-
-    fn lock_obscodes(&self) -> PyResult<MutexGuard<'_, HashMap<String, GroundObserverSite>>> {
-        self.obscodes.lock().map_err(|_| lock_err_to_py())
     }
 }
 
@@ -46,9 +38,7 @@ impl PyAdamCoreSpiceBackend {
 impl PyAdamCoreSpiceBackend {
     #[new]
     fn new() -> Self {
-        Self {
-            obscodes: Mutex::new(HashMap::new()),
-        }
+        Self
     }
 
     /// Paths of every kernel currently loaded in the process-global backend.
@@ -72,14 +62,13 @@ impl PyAdamCoreSpiceBackend {
     /// shipped by the Python `mpc_obscodes` package). Space-based codes with
     /// non-finite geodetics are skipped. Returns the number of ground sites.
     fn load_mpc_obscodes(&self, json: &str) -> PyResult<usize> {
-        let sites = parse_mpc_obscodes(json).map_err(spice_err_to_py)?;
-        let mut cache = self.lock_obscodes()?;
-        *cache = sites;
-        Ok(cache.len())
+        self.lock()?
+            .load_mpc_obscodes(json)
+            .map_err(spice_err_to_py)
     }
 
     fn mpc_obscodes_loaded(&self) -> PyResult<usize> {
-        Ok(self.lock_obscodes()?.len())
+        Ok(self.lock()?.mpc_obscodes_loaded())
     }
 
     /// Single-crossing ``Observers.from_codes`` state generation:
@@ -130,50 +119,18 @@ impl PyAdamCoreSpiceBackend {
             }
         };
         let origin = OriginId::from_code(origin_code);
-        let sites = self.lock_obscodes()?;
-        if sites.is_empty() {
-            return Err(PyValueError::new_err(
-                "MPC observatory codes are not loaded; call load_mpc_obscodes first",
-            ));
-        }
-        let mut groups: Vec<Vec<usize>> = vec![Vec::new(); unique_codes.len()];
-        for (row, &slot) in code_indices.iter().enumerate() {
-            let slot = usize::try_from(slot).map_err(|_| {
-                PyValueError::new_err("code_indices must be non-negative dictionary slots")
-            })?;
-            groups
-                .get_mut(slot)
-                .ok_or_else(|| {
-                    PyValueError::new_err("code_indices reference a missing dictionary slot")
-                })?
-                .push(row);
-        }
-        let backend = self.lock()?;
-        let mut out = vec![f64::NAN; code_indices.len() * 6];
-        for (slot, rows) in groups.iter().enumerate() {
-            if rows.is_empty() {
-                continue;
-            }
-            let code = &unique_codes[slot];
-            let site = sites.get(code.as_str()).ok_or_else(|| {
-                PyValueError::new_err(format!(
-                    "Observatory code '{code}' is not a supported ground site \
-                     (unknown or space-based)"
-                ))
-            })?;
-            let epochs: Vec<Epoch> = rows.iter().map(|&row| times.epochs[row]).collect();
-            let group_times = TimeArray::new(TimeScale::Tdb, epochs)
-                .map_err(|err| PyValueError::new_err(format!("invalid group times: {err}")))?;
-            let coordinates = backend
-                .ground_observer_state(site, &group_times, frame, &origin)
-                .map_err(spice_err_to_py)?;
-            let values = coordinates.values.cartesian().ok_or_else(|| {
-                PyRuntimeError::new_err("ground observer states were not Cartesian")
-            })?;
-            for (group_row, &row) in rows.iter().enumerate() {
-                out[row * 6..row * 6 + 6].copy_from_slice(&values[group_row]);
-            }
-        }
+        let slots = code_indices
+            .iter()
+            .map(|&slot| {
+                usize::try_from(slot).map_err(|_| {
+                    PyValueError::new_err("code_indices must be non-negative dictionary slots")
+                })
+            })
+            .collect::<PyResult<Vec<usize>>>()?;
+        let out = self
+            .lock()?
+            .observer_states_from_codes(&unique_codes, &slots, &times, frame, &origin)
+            .map_err(spice_err_to_py)?;
         let arr = ndarray::Array2::from_shape_vec((code_indices.len(), 6), out)
             .map_err(|err| PyValueError::new_err(format!("failed to shape states: {err}")))?;
         Ok(arr.into_pyarray(py))

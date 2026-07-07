@@ -12,7 +12,8 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use adam_core_rs_coords::types::{
-    CoordinateBatch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray, TimeScale,
+    CoordinateBatch, Epoch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
+    TimeScale,
 };
 use adam_core_rs_coords::OriginTranslationProvider;
 use spicekit::frame::{
@@ -123,6 +124,7 @@ impl Kernel {
 pub struct AdamCoreSpiceBackend {
     kernels: Vec<Kernel>,
     custom_names: HashMap<String, i32>,
+    obscodes: HashMap<String, GroundObserverSite>,
 }
 
 /// Process-global SPICE backend.
@@ -224,7 +226,94 @@ impl AdamCoreSpiceBackend {
         Self {
             kernels: Vec::new(),
             custom_names: HashMap::new(),
+            obscodes: HashMap::new(),
         }
+    }
+
+    /// Parse and cache MPC observatory parallax coefficients (the JSON shipped
+    /// by the Python `mpc_obscodes` package). Space-based codes with non-finite
+    /// geodetics are skipped. Returns the number of ground sites loaded. The
+    /// obscodes table lives in the process-global backend so both the
+    /// `Observers.from_codes` fast path and the coordinate-transform
+    /// orchestrator resolve observatory origins from one shared source.
+    pub fn load_mpc_obscodes(&mut self, json: &str) -> Result<usize, SpiceBackendError> {
+        self.obscodes = parse_mpc_obscodes(json)?;
+        Ok(self.obscodes.len())
+    }
+
+    /// Number of MPC observatory ground sites currently loaded.
+    pub fn mpc_obscodes_loaded(&self) -> usize {
+        self.obscodes.len()
+    }
+
+    /// Look up a loaded MPC observatory ground site by code (used by the
+    /// transform orchestrator to resolve observatory-code origins).
+    pub fn ground_observer_site(&self, code: &str) -> Option<&GroundObserverSite> {
+        self.obscodes.get(code)
+    }
+
+    /// Single-crossing `Observers.from_codes` state generation: per-row
+    /// dictionary-encoded observatory codes (`unique_codes` + `code_indices`
+    /// dictionary slots) and `times` -> ground-observer states (flat `N*6`) in
+    /// `frame` relative to `origin`. Rows are grouped by code so each distinct
+    /// site makes one batched `ground_observer_state` call.
+    pub fn observer_states_from_codes(
+        &self,
+        unique_codes: &[String],
+        code_indices: &[usize],
+        times: &TimeArray,
+        frame: Frame,
+        origin: &OriginId,
+    ) -> Result<Vec<f64>, SpiceBackendError> {
+        if code_indices.len() != times.len() {
+            return Err(SchemaError::LengthMismatch {
+                field: "observer_states.code_indices".to_string(),
+                expected: times.len(),
+                actual: code_indices.len(),
+            }
+            .into());
+        }
+        if self.obscodes.is_empty() {
+            return Err(SpiceBackendError::ObsCodes(
+                "MPC observatory codes are not loaded; call load_mpc_obscodes first".to_string(),
+            ));
+        }
+        let mut groups: Vec<Vec<usize>> = vec![Vec::new(); unique_codes.len()];
+        for (row, &slot) in code_indices.iter().enumerate() {
+            groups
+                .get_mut(slot)
+                .ok_or_else(|| {
+                    SpiceBackendError::ObsCodes(
+                        "code_indices reference a missing dictionary slot".to_string(),
+                    )
+                })?
+                .push(row);
+        }
+        let mut out = vec![f64::NAN; code_indices.len() * 6];
+        for (slot, rows) in groups.iter().enumerate() {
+            if rows.is_empty() {
+                continue;
+            }
+            let code = &unique_codes[slot];
+            let site = self.obscodes.get(code.as_str()).ok_or_else(|| {
+                SpiceBackendError::InvalidObserverSite {
+                    code: code.clone(),
+                    message: "unknown or space-based observatory code".to_string(),
+                }
+            })?;
+            let epochs: Vec<Epoch> = rows.iter().map(|&row| times.epochs[row]).collect();
+            let group_times = TimeArray::new(times.scale, epochs)?;
+            let coordinates = self.ground_observer_state(site, &group_times, frame, origin)?;
+            let values = coordinates.values.cartesian().ok_or_else(|| {
+                SpiceBackendError::NotCovered(
+                    "ground observer states were not Cartesian".to_string(),
+                )
+            })?;
+            for (group_row, &row) in rows.iter().enumerate() {
+                out[row * 6..row * 6 + 6].copy_from_slice(&values[group_row]);
+            }
+        }
+        Ok(out)
     }
 
     /// Paths of every kernel currently loaded, in load order. The `kernels`
@@ -246,6 +335,7 @@ impl AdamCoreSpiceBackend {
     pub fn clear(&mut self) {
         self.kernels.clear();
         self.custom_names.clear();
+        self.obscodes.clear();
     }
 
     pub fn furnsh<P: AsRef<Path>>(&mut self, path: P) -> Result<(), SpiceBackendError> {
