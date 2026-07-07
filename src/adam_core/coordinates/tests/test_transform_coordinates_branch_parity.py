@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from adam_core.coordinates.origin import OriginCodes
-from adam_core.coordinates.transform import _rust_transform_supports
+from adam_core.coordinates.transform import _transform_coordinates_native
 from migration.scripts.generate_transform_coordinates_branch_fixture import (
     CASES,
     REPRESENTATIONS,
@@ -133,6 +133,15 @@ def test_transform_coordinates_branch_matches_legacy_fixture(
     _assert_outputs_match(run_case(case), fixture_case["legacy"], case["name"])
 
 
+# Value branches that the native single-crossing path does not cover and so
+# fall through to the thin Python composition: non-Cartesian input into an
+# ITRF93 frame change (there is no meaningful non-Cartesian ITRF93
+# representation to rotate from). Everything else -- including plain Cartesian
+# frame/origin changes, observatory-code origins, and time-varying ITRF93 --
+# runs 100% in Rust in a single crossing.
+_NATIVELY_UNCOVERED_VALUE_CASES = {"fallback_noncart_itrf93_input"}
+
+
 @pytest.mark.parametrize(
     "case",
     [
@@ -142,9 +151,13 @@ def test_transform_coordinates_branch_matches_legacy_fixture(
     ],
     ids=lambda case: str(case["name"]),
 )
-def test_transform_coordinates_rust_support_predicate_matches_branch_contract(
+def test_transform_coordinates_value_cases_run_natively(
     case: dict[str, Any],
 ) -> None:
+    """Each value branch runs entirely in Rust via ``_transform_coordinates_native``
+    (a single Python->Rust crossing), except the deliberately-uncovered cases
+    which return ``None`` so the public ``transform_coordinates`` uses the thin
+    Python fallthrough composition."""
     coords = build_coordinates(case)
     representation_out = case.get("representation_out")
     representation_out_type = (
@@ -159,9 +172,13 @@ def test_transform_coordinates_rust_support_predicate_matches_branch_contract(
         if origin_out is not None
         else coords.origin.code.to_numpy(zero_copy_only=False)
     )
-    assert _rust_transform_supports(
+    native = _transform_coordinates_native(
         coords,
         representation_out_type,
         frame_out,
         origin_out_value,
-    ) is bool(case["expect_rust_support"])
+    )
+    if case["name"] in _NATIVELY_UNCOVERED_VALUE_CASES:
+        assert native is None
+    else:
+        assert native is not None

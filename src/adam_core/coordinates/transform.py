@@ -18,8 +18,6 @@ from .._rust import (
     keplerian_to_cartesian_numpy,
     rotate_cartesian_time_varying_numpy,
     spherical_to_cartesian_numpy,
-    transform_coordinates_numpy,
-    transform_coordinates_with_covariance_numpy,
 )
 from ..constants import Constants as c
 from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
@@ -192,84 +190,6 @@ def _coordinates_from_rust_values(
     raise ValueError(f"Unsupported representation_out: {representation_out}")
 
 
-_RUST_TRANSFORM_INPUT_TYPES = (
-    CartesianCoordinates,
-    SphericalCoordinates,
-    KeplerianCoordinates,
-    CometaryCoordinates,
-)
-
-
-def _rust_transform_supports(
-    coords: types.CoordinateType,
-    representation_out: type[types.CoordinateType],
-    frame_out: Literal["ecliptic", "equatorial", "itrf93"],
-    origin_out: OriginCodes | np.ndarray,
-) -> bool:
-    """
-    Return True if the Rust single-crossing path covers this exact input combination.
-
-    The supported set is explicit: input representation in
-    (Cartesian, Spherical, Keplerian, Cometary), output representation in
-    (Cartesian, Spherical, Keplerian, Cometary, Geodetic), same origin in/out
-    (EARTH only for Geodetic output), covariance allowed (propagated via
-    forward-mode autodiff in Rust; NaN covariance passes through), and frame
-    transitions limited to identity or equatorial<->ecliptic (plus itrf93 for
-    Geodetic output). Anything outside this set must fall back to legacy.
-    """
-    if type(coords) not in _RUST_TRANSFORM_INPUT_TYPES:
-        return False
-    if representation_out not in _RUST_TRANSFORM_REPRESENTATIONS:
-        return False
-    if frame_out != coords.frame:
-        if {coords.frame, frame_out} == {"ecliptic", "equatorial"}:
-            pass  # single-crossing Rust kernel rotates inline
-        elif "itrf93" in (coords.frame, frame_out):
-            # Time-varying ITRF93 rotation needs Cartesian states (no
-            # physically meaningful ITRF93 Keplerian/Cometary/Spherical
-            # representation to rotate from). Dispatcher routes through
-            # rotate_cartesian_time_varying + identity-frame conversion.
-            if type(coords) is not CartesianCoordinates:
-                return False
-        else:
-            return False
-    if representation_out is GeodeticCoordinates and frame_out != "itrf93":
-        return False
-    origin_differs = bool(np.any(coords.origin != origin_out))
-    if origin_differs:
-        # The dispatcher handles origin changes by routing through a
-        # SPICE-backed Cartesian translation (covariance-invariant).
-        # This needs a single target origin (`OriginCodes`); mixed-origin
-        # arrays aren't a supported target.
-        if not isinstance(origin_out, OriginCodes):
-            return False
-        # Geodetic output must be EARTH-centered ITRF93; if we're asking
-        # for a different origin-out, we can't satisfy it.
-        if representation_out is GeodeticCoordinates:
-            if origin_out is not OriginCodes.EARTH:
-                return False
-    if representation_out is GeodeticCoordinates:
-        origin_codes = coords.origin.code.to_numpy(zero_copy_only=False)
-        if np.any(origin_codes != "EARTH") and not origin_differs:
-            return False
-    # Pure Cartesian frame-only change is faster on the legacy path (a single
-    # 6x6 rotation) than through the Rust dispatcher's Python marshaling; keep
-    # it on legacy so the promotion gate holds for all covered workloads.
-    if (
-        type(coords) is CartesianCoordinates
-        and representation_out is CartesianCoordinates
-    ):
-        return False
-    # Cartesian output with origin change: the dispatcher would just do
-    # to_cartesian+translate+rotate, which is exactly what the legacy
-    # fallthrough does (all three hops are already Rust after lever 1).
-    # Going through the dispatcher adds Python marshaling overhead with no
-    # fusion win, so keep this on legacy.
-    if representation_out is CartesianCoordinates and origin_differs:
-        return False
-    return True
-
-
 def _transform_coordinates_native(
     coords: types.CoordinateType,
     representation_out: type[types.CoordinateType],
@@ -301,18 +221,28 @@ def _transform_coordinates_native(
         target_origin = None
         origin_differs = False
 
-    if origin_differs:
-        # The native origin translation reads the process-global SPICE backend
-        # directly, so ensure its kernels are furnsh-ed (the legacy path did
-        # this implicitly via get_perturber_state -> setup_SPICE).
-        from ..utils.spice import setup_mpc_obscodes, setup_SPICE
+    # The native origin translation (spkez / ground-observer) and the
+    # time-varying ITRF93 rotation (sxform) both read the process-global SPICE
+    # backend directly, so ensure its kernels are furnsh-ed whenever either is
+    # involved (the legacy path did this via get_perturber_state /
+    # apply_time_varying_rotation -> setup_SPICE).
+    itrf93_frame_change = frame_out != coords.frame and "itrf93" in (
+        coords.frame,
+        frame_out,
+    )
+    if origin_differs or itrf93_frame_change:
+        from ..utils.spice import setup_SPICE
 
         setup_SPICE()
-        # Observatory-code source origins (not OriginCodes members / SSB) are
-        # resolved natively from the loaded MPC obscodes ground-observer
-        # states; ensure the obscodes table is loaded.
-        if any(code not in OriginCodes.__members__ for code in origin_codes):
-            setup_mpc_obscodes()
+    # Observatory-code source origins (not OriginCodes members / SSB) are
+    # resolved natively from the loaded MPC obscodes ground-observer states;
+    # ensure the obscodes table is loaded.
+    if origin_differs and any(
+        code not in OriginCodes.__members__ for code in origin_codes
+    ):
+        from ..utils.spice import setup_mpc_obscodes
+
+        setup_mpc_obscodes()
 
     times = coords.time
     time_days = times.days.to_numpy(zero_copy_only=False)
@@ -382,182 +312,23 @@ def _try_transform_coordinates_rust(
     origin_out: OriginCodes | np.ndarray,
 ) -> types.CoordinateType | None:
     """
-    Attempt the Rust single-crossing transform path.
+    Run ``transform_coordinates`` on the fully-Rust single-crossing path.
 
-    Returns the transformed coordinates when the input combination is in the
-    supported set (see `_rust_transform_supports`), otherwise returns None so
-    the caller falls back to the legacy JAX path. Callers must treat a None
-    return as an explicit "not supported by Rust yet" signal, not an error.
+    Returns the transformed coordinates when the native path covers the case,
+    otherwise ``None`` so the caller uses the thin Python fallthrough
+    composition (``to_cartesian`` -> ``cartesian_to_origin`` ->
+    ``cartesian_to_frame`` -> ``from_cartesian``) for the residual cases the
+    native path does not yet cover (non-Cartesian input into an ITRF93 frame
+    change, geodetic input). A ``None`` return is an explicit "not covered
+    natively" signal, not an error.
     """
-    # Preferred fully-Rust single-crossing path (origin translation + frame +
-    # representation + covariance all resolved in Rust). The per-case logic
-    # below is the fallback for what it does not yet cover (time-varying
-    # ITRF93, geodetic input).
-    native = _transform_coordinates_native(
+    # The entire composition -- origin translation (perturber via spkez,
+    # observatory via ground-observer), representation change, constant AND
+    # time-varying ITRF93 frame rotation, and covariance forward-mode AD --
+    # runs in Rust in a single Python->Rust crossing.
+    return _transform_coordinates_native(
         coords, representation_out, frame_out, origin_out
     )
-    if native is not None:
-        return native
-
-    if not _rust_transform_supports(coords, representation_out, frame_out, origin_out):
-        return None
-
-    # Origin change: resolve the per-row SPICE translation vector in the
-    # input frame, then pass it to the Rust dispatcher so the add fuses
-    # with rep-in -> cart -> frame rotate -> rep-out -> covariance AD in a
-    # single Python/Rust crossing. Translation is a constant offset
-    # (identity Jacobian wrt state), so covariance propagation is
-    # unaffected mathematically; the kernel just skips adding anything to
-    # the Jacobian accumulation.
-    origin_differs = bool(np.any(coords.origin != origin_out))
-    translation_vectors: np.ndarray | None = None
-    if origin_differs:
-        assert isinstance(origin_out, OriginCodes)
-        if type(coords) is CartesianCoordinates:
-            translation_vectors = _resolve_origin_translation_vectors(
-                coords, origin_out
-            )
-        else:
-            # SPICE resolves translation vectors in Cartesian space, so we
-            # need the rep-in-as-Cartesian (same frame, same origin) to
-            # resolve them. That's a pure origin-query operation against
-            # the *input* origin metadata — it doesn't depend on the
-            # actual Cartesian values — so we build a synthetic Cartesian
-            # view carrying just the time/origin/frame.
-            synthetic = CartesianCoordinates.from_kwargs(
-                x=np.zeros(len(coords)),
-                y=np.zeros(len(coords)),
-                z=np.zeros(len(coords)),
-                vx=np.zeros(len(coords)),
-                vy=np.zeros(len(coords)),
-                vz=np.zeros(len(coords)),
-                time=coords.time,
-                origin=coords.origin,
-                frame=coords.frame,
-            )
-            translation_vectors = _resolve_origin_translation_vectors(
-                synthetic, origin_out
-            )
-
-    # ITRF93 frame changes: do the time-varying rotation in Rust first, then
-    # re-dispatch as an identity-frame representation conversion so the
-    # covariance transform runs through Rust forward-mode autodiff instead
-    # of the JAX `from_cartesian` Jacobian path.
-    if frame_out != coords.frame and "itrf93" in (coords.frame, frame_out):
-        # ITRF93 path cannot combine with origin_differs (gated out in
-        # _rust_transform_supports for non-EARTH targets, and ITRF93 with
-        # EARTH target would still require the time-varying rotate path
-        # first, then translate — handle via fallthrough here).
-        if origin_differs:
-            translated = cartesian_to_origin(coords, origin_out)
-            rotated = apply_time_varying_rotation(translated, frame_out)
-        else:
-            rotated = apply_time_varying_rotation(coords, frame_out)
-        if representation_out is CartesianCoordinates:
-            return rotated
-        return _try_transform_coordinates_rust(
-            rotated, representation_out, frame_out, origin_out
-        )
-
-    representation_in_name = _RUST_TRANSFORM_REPRESENTATIONS[type(coords)]
-    representation_out_name = _RUST_TRANSFORM_REPRESENTATIONS[representation_out]
-
-    t0 = None
-    mu = None
-    a = None
-    f = None
-    if type(coords) is KeplerianCoordinates:
-        mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
-    if type(coords) is CometaryCoordinates:
-        t0 = np.ascontiguousarray(coords.time.to_numpy(), dtype=np.float64)
-        mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
-    if representation_out is GeodeticCoordinates:
-        a = float(WGS84.a)
-        f = float(WGS84.f)
-    if representation_out is KeplerianCoordinates:
-        if t0 is None:
-            t0 = np.ascontiguousarray(coords.time.to_numpy(), dtype=np.float64)
-        if mu is None:
-            mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
-    if representation_out is CometaryCoordinates:
-        if t0 is None:
-            t0 = np.ascontiguousarray(coords.time.to_numpy(), dtype=np.float64)
-        if mu is None:
-            mu = np.ascontiguousarray(coords.origin.mu(), dtype=np.float64)
-
-    translation_kwarg = (
-        np.ascontiguousarray(translation_vectors, dtype=np.float64)
-        if translation_vectors is not None
-        else None
-    )
-
-    if coords.covariance.is_all_nan():
-        rust_coords = transform_coordinates_numpy(
-            coords.values,
-            representation_in_name,
-            representation_out_name,
-            t0=t0,
-            mu=mu,
-            a=a,
-            f=f,
-            max_iter=100,
-            tol=1e-15,
-            frame_in=coords.frame,
-            frame_out=frame_out,
-            translation_vectors=translation_kwarg,
-        )
-        if rust_coords is None:
-            return None
-        result = _coordinates_from_rust_values(
-            np.asarray(rust_coords, dtype=np.float64),
-            coords,
-            representation_out,
-            frame_out,
-        )
-        if origin_differs:
-            result = result.set_column(
-                "origin", Origin.from_kwargs(code=[origin_out.name] * len(result))
-            )
-        return result
-
-    covariance_matrices = coords.covariance.to_matrix()
-    n = covariance_matrices.shape[0]
-    covariance_flat = np.ascontiguousarray(
-        covariance_matrices.reshape(n, 36), dtype=np.float64
-    )
-    result = transform_coordinates_with_covariance_numpy(
-        coords.values,
-        covariance_flat,
-        representation_in_name,
-        representation_out_name,
-        t0=t0,
-        mu=mu,
-        a=a,
-        f=f,
-        max_iter=100,
-        tol=1e-15,
-        frame_in=coords.frame,
-        frame_out=frame_out,
-        translation_vectors=translation_kwarg,
-    )
-    if result is None:
-        return None
-    rust_coords, rust_cov_flat = result
-    cov_out = CoordinateCovariances.from_matrix(
-        np.asarray(rust_cov_flat, dtype=np.float64).reshape(n, 6, 6)
-    )
-    out = _coordinates_from_rust_values(
-        np.asarray(rust_coords, dtype=np.float64),
-        coords,
-        representation_out,
-        frame_out,
-        covariance=cov_out,
-    )
-    if origin_differs:
-        out = out.set_column(
-            "origin", Origin.from_kwargs(code=[origin_out.name] * len(out))
-        )
-    return out
 
 
 def cartesian_to_geodetic(

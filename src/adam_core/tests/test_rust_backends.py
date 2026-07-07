@@ -11,7 +11,6 @@ from adam_core.coordinates.keplerian import KeplerianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.coordinates.transform import (
-    _rust_transform_supports,
     _try_transform_coordinates_rust,
     cartesian_to_geodetic,
     cartesian_to_keplerian,
@@ -305,25 +304,30 @@ def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
         def __init__(self) -> None:
             self.calls: list[tuple[str, str]] = []
 
-        def transform_coordinates_numpy(
+        def transform_coordinates_native(
             self,
             coords: np.ndarray,
             representation_in: str,
             representation_out: str,
+            frame_in: str,
+            frame_out: str,
+            origin_codes: list[str],
+            target_origin: str | None,
+            time_scale: str,
+            time_days: np.ndarray,
+            time_nanos: np.ndarray,
+            covariances: np.ndarray | None = None,
             t0: np.ndarray | None = None,
             mu: np.ndarray | None = None,
             a: float | None = None,
             f: float | None = None,
             max_iter: int = 100,
             tol: float = 1e-15,
-            frame_in: str | None = None,
-            frame_out: str | None = None,
-            translation_vectors: np.ndarray | None = None,
-        ) -> np.ndarray:
+        ) -> tuple[np.ndarray, np.ndarray | None]:
             self.calls.append((representation_in, representation_out))
             out = np.zeros((coords.shape[0], 6), dtype=np.float64)
             out[:, 0] = 12.34
-            return out
+            return out, None
 
         def spherical_to_cartesian_numpy(self, coords: np.ndarray) -> np.ndarray:  # type: ignore[override]
             raise AssertionError(
@@ -372,27 +376,32 @@ def test_transform_coordinates_uses_single_rust_crossing_for_frame_change(monkey
         def __init__(self) -> None:
             self.calls: list[tuple[str, str, str | None, str | None]] = []
 
-        def transform_coordinates_numpy(
+        def transform_coordinates_native(
             self,
             coords: np.ndarray,
             representation_in: str,
             representation_out: str,
+            frame_in: str,
+            frame_out: str,
+            origin_codes: list[str],
+            target_origin: str | None,
+            time_scale: str,
+            time_days: np.ndarray,
+            time_nanos: np.ndarray,
+            covariances: np.ndarray | None = None,
             t0: np.ndarray | None = None,
             mu: np.ndarray | None = None,
             a: float | None = None,
             f: float | None = None,
             max_iter: int = 100,
             tol: float = 1e-15,
-            frame_in: str | None = None,
-            frame_out: str | None = None,
-            translation_vectors: np.ndarray | None = None,
-        ) -> np.ndarray:
+        ) -> tuple[np.ndarray, np.ndarray | None]:
             self.calls.append(
                 (representation_in, representation_out, frame_in, frame_out)
             )
             out = np.zeros((coords.shape[0], 6), dtype=np.float64)
             out[:, 0] = 99.0
-            return out
+            return out, None
 
         def spherical_to_cartesian_numpy(self, coords: np.ndarray) -> np.ndarray:  # type: ignore[override]
             raise AssertionError(
@@ -444,25 +453,30 @@ def test_transform_coordinates_uses_single_rust_crossing_for_keplerian_input(
         def __init__(self) -> None:
             self.calls: list[tuple[str, str, bool]] = []
 
-        def transform_coordinates_numpy(
+        def transform_coordinates_native(
             self,
             coords: np.ndarray,
             representation_in: str,
             representation_out: str,
+            frame_in: str,
+            frame_out: str,
+            origin_codes: list[str],
+            target_origin: str | None,
+            time_scale: str,
+            time_days: np.ndarray,
+            time_nanos: np.ndarray,
+            covariances: np.ndarray | None = None,
             t0: np.ndarray | None = None,
             mu: np.ndarray | None = None,
             a: float | None = None,
             f: float | None = None,
             max_iter: int = 100,
             tol: float = 1e-15,
-            frame_in: str | None = None,
-            frame_out: str | None = None,
-            translation_vectors: np.ndarray | None = None,
-        ) -> np.ndarray:
+        ) -> tuple[np.ndarray, np.ndarray | None]:
             self.calls.append((representation_in, representation_out, mu is not None))
             out = np.zeros((coords.shape[0], 6), dtype=np.float64)
             out[:, 0] = 7.0
-            return out
+            return out, None
 
         def keplerian_to_cartesian_numpy(  # type: ignore[override]
             self, coords: np.ndarray, mu: np.ndarray, max_iter: int, tol: float
@@ -547,17 +561,17 @@ def _make_cometary() -> CometaryCoordinates:
     "case_id,coords_factory,representation_out,frame_out,origin_out",
     [
         (
-            "geodetic-non-earth-origin",
-            lambda: _make_cartesian(frame="itrf93"),
-            GeodeticCoordinates,
+            "noncart-cometary-into-itrf93-cartesian",
+            _make_cometary,
+            CartesianCoordinates,
             "itrf93",
             OriginCodes.SUN,
         ),
         (
-            "cartesian-to-cartesian-frame-change",
-            _make_cartesian,
-            CartesianCoordinates,
-            "equatorial",
+            "noncart-cometary-into-itrf93-spherical",
+            _make_cometary,
+            SphericalCoordinates,
+            "itrf93",
             OriginCodes.SUN,
         ),
     ],
@@ -569,96 +583,42 @@ def test_rust_transform_unsupported_paths_return_none(
     frame_out,
     origin_out,
 ):
-    """Every unsupported path must fail the predicate AND return None from
-    the try-function, so the dispatcher always falls back to legacy."""
+    """Cases the native single-crossing path does not cover (non-Cartesian
+    input into an ITRF93 frame change) must return None from the try-function
+    so the public transform_coordinates uses the thin Python fallthrough."""
     coords = coords_factory()
-    assert not _rust_transform_supports(
-        coords, representation_out, frame_out, origin_out
-    ), f"{case_id}: predicate unexpectedly reported Rust supports this path"
     assert (
         _try_transform_coordinates_rust(
             coords, representation_out, frame_out, origin_out
         )
         is None
-    ), f"{case_id}: try-function returned a value for an unsupported path"
+    ), f"{case_id}: try-function returned a value for a natively-uncovered path"
 
 
-def test_rust_transform_supports_covers_known_good_path():
-    coords = _make_cartesian()
-    assert _rust_transform_supports(
-        coords, SphericalCoordinates, "ecliptic", OriginCodes.SUN
-    )
-
-
-def test_rust_transform_supports_covers_origin_change():
-    """Origin changes now route through the Rust dispatcher: translate via
-    SPICE, then dispatch frame+representation change so the covariance AD
-    stays on the Rust path."""
-    coords = _make_cartesian()
-    assert _rust_transform_supports(
-        coords, SphericalCoordinates, "ecliptic", OriginCodes.EARTH
-    )
-    # But mixed-origin arrays (no single target) are still unsupported.
-    mixed_origin_out = np.array(["EARTH", "SUN"])
-    coords_two = CartesianCoordinates.from_kwargs(
-        x=[1.0, 2.0],
-        y=[0.0, 0.0],
-        z=[0.0, 0.0],
-        vx=[0.0, 0.0],
-        vy=[0.0, 0.0],
-        vz=[0.0, 0.0],
-        time=Timestamp.from_mjd(np.array([60000.0, 60000.0]), scale="tdb"),
-        covariance=CoordinateCovariances.nulls(2),
-        origin=Origin.from_kwargs(code=["SUN", "SUN"]),
-        frame="ecliptic",
-    )
-    assert not _rust_transform_supports(
-        coords_two, SphericalCoordinates, "ecliptic", mixed_origin_out
-    )
-
-
-def test_rust_transform_supports_covers_itrf93_frame_change():
-    """Rust routes ITRF93 frame changes via time-varying rotation + identity-
-    frame representation conversion, avoiding the JAX from_cartesian path."""
-    assert _rust_transform_supports(
-        _make_cartesian(frame="itrf93"),
-        SphericalCoordinates,
-        "ecliptic",
-        OriginCodes.SUN,
-    )
-    assert _rust_transform_supports(
-        _make_cartesian(frame="ecliptic"),
-        KeplerianCoordinates,
-        "itrf93",
-        OriginCodes.SUN,
-    )
-    # Non-Cartesian input into an ITRF93 frame change stays unsupported.
-    assert not _rust_transform_supports(
-        _make_cometary(),
-        CartesianCoordinates,
-        "itrf93",
-        OriginCodes.SUN,
-    )
-
-
-def test_rust_transform_supports_covers_cometary_roundtrip():
-    """Rust now covers Cometary in either direction."""
-    assert _rust_transform_supports(
-        _make_cometary(), SphericalCoordinates, "ecliptic", OriginCodes.SUN
-    )
-    assert _rust_transform_supports(
-        _make_cartesian(), CometaryCoordinates, "ecliptic", OriginCodes.SUN
-    )
-
-
-def test_rust_transform_supports_covariance_present():
-    """Rust now propagates covariances via forward-mode AD."""
+def test_rust_transform_covariance_present_uses_native_single_crossing():
+    """The native path propagates covariance via forward-mode AD in Rust, so a
+    covariance-carrying transform returns a non-null covariance without leaving
+    Rust."""
     coords = _make_cartesian(with_covariance=True)
-    assert _rust_transform_supports(
-        coords, SphericalCoordinates, "ecliptic", OriginCodes.SUN
-    )
     result = _try_transform_coordinates_rust(
         coords, SphericalCoordinates, "ecliptic", OriginCodes.SUN
     )
     assert result is not None
     assert not result.covariance.is_all_nan()
+
+
+def test_rust_transform_covers_cometary_natively():
+    """Native coverage now includes Cometary in either direction (previously a
+    legacy-only branch)."""
+    assert (
+        _try_transform_coordinates_rust(
+            _make_cometary(), SphericalCoordinates, "ecliptic", OriginCodes.SUN
+        )
+        is not None
+    )
+    assert (
+        _try_transform_coordinates_rust(
+            _make_cartesian(), CometaryCoordinates, "ecliptic", OriginCodes.SUN
+        )
+        is not None
+    )
