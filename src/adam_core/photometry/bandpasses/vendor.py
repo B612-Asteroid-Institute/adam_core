@@ -257,10 +257,17 @@ def build_observatory_band_map(out_dir: Path) -> ObservatoryBandMap:
         mappings.append(("X05", band, f"LSST_{band}"))
     mappings.append(("X05", "Y", "LSST_y"))  # pragmatic alias
 
-    # ATLAS (multiple MPC codes share the same c/o passbands)
+    # ATLAS (multiple MPC codes share the same c/o passbands).
+    # MPC obs80 ingests ATLAS observations with a leading "A" filter prefix
+    # ("Ao"/"Ac"); the native ATLAS exposure index uses just "o"/"c". Adding
+    # explicit alias entries here means ``map_to_canonical_filter_bands``
+    # resolves both forms to the same canonical ``ATLAS_o``/``ATLAS_c`` id
+    # without per-station regex normalization.
     for code in ["T08", "T05", "M22", "W68"]:
         mappings.append((code, "c", "ATLAS_c"))
         mappings.append((code, "o", "ATLAS_o"))
+        mappings.append((code, "Ac", "ATLAS_c"))
+        mappings.append((code, "Ao", "ATLAS_o"))
 
     # Kitt Peak-Bok (V00): BASS / Bok-90Prime g/r.
     mappings.append(("V00", "g", "BASS_g"))
@@ -271,8 +278,17 @@ def build_observatory_band_map(out_dir: Path) -> ObservatoryBandMap:
     # (PAN-STARRS/PS1.w in SVO). Amateur / non-PS1 observatories that report
     # band "w" are intentionally NOT mapped here; their reported band is
     # observatory-specific clear-glass response and has no canonical mapping.
+    #
+    # Like ATLAS ("Ao"/"Ac") above, MPC obs80 / AIMS frames ingest PS1
+    # observations with a leading "P" filter prefix ("Pw"), while the native
+    # PS1 exposure index uses just "w". Register both forms so
+    # ``map_to_canonical_filter_bands`` resolves the MPC-prefixed band without
+    # per-station normalization. Without the "Pw" alias, F51/F52 recoveries
+    # whose reported filter is "Pw" get a null canonical filter and therefore
+    # a null predicted magnitude / mag residual downstream.
     for code in ["F51", "F52"]:
         mappings.append((code, "w", "PS1_w"))
+        mappings.append((code, "Pw", "PS1_w"))
 
     obs_codes, bands, filter_ids = zip(*mappings)
     keys = [f"{c}|{b}" for c, b in zip(obs_codes, bands)]
