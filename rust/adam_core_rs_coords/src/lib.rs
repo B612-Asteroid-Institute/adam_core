@@ -572,6 +572,92 @@ pub fn transform_with_covariance_flat6(
     (coords_out, cov_out)
 }
 
+/// Value-only sibling of [`transform_with_covariance_flat6`]: run the full
+/// representation -> Cartesian -> (origin translation) -> constant-frame
+/// rotation -> representation composition and return `(values_flat, ncols)`,
+/// where `ncols` is 13 for Keplerian output and 6 otherwise.
+///
+/// This is the single reusable Rust primitive for the value path so the
+/// branching lives in one place: the PyO3 `transform_coordinates_numpy`
+/// wrapper and the SPICE-native transform orchestrator both call it. Origin
+/// translation is applied as a constant offset in the input frame (pass the
+/// resolved per-row vectors via `translation_flat`); pass `None` for no shift.
+/// Only constant (identity or ecliptic<->equatorial) frame changes are handled
+/// here -- time-varying ITRF93 rotation is done separately by the caller.
+///
+/// Returns `Err` for unsupported inputs (Geodetic input, or a frame rotation
+/// the constant-frame kernel rejects such as ITRF93).
+#[allow(clippy::too_many_arguments)]
+pub fn transform_values_flat6(
+    coords_flat: &[f64],
+    rep_in: Representation,
+    rep_out: Representation,
+    frame_in: Frame,
+    frame_out: Frame,
+    t0: &[f64],
+    mu: &[f64],
+    a: f64,
+    f: f64,
+    max_iter: usize,
+    tol: f64,
+    translation_flat: Option<&[f64]>,
+) -> Result<(Vec<f64>, usize), String> {
+    assert_eq!(
+        coords_flat.len() % 6,
+        0,
+        "coords_flat length must be a multiple of 6"
+    );
+    let n = coords_flat.len() / 6;
+    assert_eq!(t0.len(), n, "t0 length must match coords rows");
+    assert_eq!(mu.len(), n, "mu length must match coords rows");
+    if let Some(t) = translation_flat {
+        assert_eq!(
+            t.len(),
+            n * 6,
+            "translation_flat length must be N * 6 for coords shape (N, 6)"
+        );
+    }
+
+    // Representation in -> Cartesian.
+    let mut cartesian = match rep_in {
+        Representation::Cartesian => coords_flat.to_vec(),
+        Representation::Spherical => spherical_to_cartesian_flat6(coords_flat),
+        Representation::Keplerian => keplerian_to_cartesian_flat6(coords_flat, mu, max_iter, tol),
+        Representation::Cometary => cometary_to_cartesian_flat6(coords_flat, t0, mu, max_iter, tol),
+        Representation::Geodetic => {
+            return Err("geodetic input is not a supported transform source".to_string());
+        }
+    };
+
+    // Origin translation: covariance-invariant constant offset in the input
+    // frame, applied before any frame rotation.
+    if let Some(t) = translation_flat {
+        for (c, tv) in cartesian.iter_mut().zip(t.iter()) {
+            *c += *tv;
+        }
+    }
+
+    // Constant frame rotation (identity or ecliptic<->equatorial).
+    let cartesian = if frame_in == frame_out {
+        cartesian
+    } else {
+        rotate_cartesian_frame_flat6(&cartesian, frame_in, frame_out)?
+    };
+
+    // Cartesian -> representation out.
+    let out = match rep_out {
+        Representation::Cartesian => (cartesian, 6),
+        Representation::Spherical => (cartesian_to_spherical_flat6(&cartesian), 6),
+        Representation::Geodetic => (
+            cartesian_to_geodetic_flat6(&cartesian, a, f, max_iter, tol),
+            6,
+        ),
+        Representation::Keplerian => (cartesian_to_keplerian_flat6(&cartesian, t0, mu), 13),
+        Representation::Cometary => (cartesian_to_cometary_flat6(&cartesian, t0, mu), 6),
+    };
+    Ok(out)
+}
+
 pub fn cartesian_to_spherical_batch(rows: &[[f64; 6]]) -> Vec<[f64; 6]> {
     rows.iter().map(cartesian_to_spherical_row).collect()
 }
@@ -1360,6 +1446,120 @@ mod orbital_public_tests {
             (a - b).abs() <= tol * (1.0 + b.abs()),
             "expected {a} ~= {b} (tol {tol})"
         );
+    }
+
+    #[test]
+    fn transform_values_flat6_matches_covariance_path_values() {
+        let coords = vec![
+            1.0, 0.5, -0.3, 0.01, 0.005, -0.003, -2.1, 0.8, 0.02, -0.004, 0.012, 0.0008,
+        ];
+        let t0 = vec![60000.0, 60000.0];
+        let mu = vec![2.95912208284120e-04_f64; 2];
+        let translation = vec![
+            0.1, -0.2, 0.05, 0.001, -0.002, 0.0003, 0.1, -0.2, 0.05, 0.001, -0.002, 0.0003,
+        ];
+        // Finite covariance so the covariance path takes the Jacobian branch
+        // and returns the same state values as the value-only path.
+        let cov = vec![1e-18_f64; 2 * 36];
+
+        // Identity: no rep/frame/origin change returns the input unchanged.
+        let (identity, ncols) = transform_values_flat6(
+            &coords,
+            Representation::Cartesian,
+            Representation::Cartesian,
+            Frame::Ecliptic,
+            Frame::Ecliptic,
+            &t0,
+            &mu,
+            0.0,
+            0.0,
+            100,
+            1e-15,
+            None,
+        )
+        .unwrap();
+        assert_eq!(ncols, 6);
+        assert_eq!(identity, coords);
+
+        // Value path must match the covariance path's state values for 6-wide
+        // outputs, with and without an origin translation.
+        for (rep_out, translate) in [
+            (Representation::Cartesian, Some(translation.as_slice())),
+            (Representation::Spherical, Some(translation.as_slice())),
+            (Representation::Spherical, None),
+        ] {
+            let (values, _) = transform_values_flat6(
+                &coords,
+                Representation::Cartesian,
+                rep_out,
+                Frame::Ecliptic,
+                Frame::Equatorial,
+                &t0,
+                &mu,
+                0.0,
+                0.0,
+                100,
+                1e-15,
+                translate,
+            )
+            .unwrap();
+            let (cov_values, _) = transform_with_covariance_flat6(
+                &coords,
+                &cov,
+                Representation::Cartesian,
+                rep_out,
+                Frame::Ecliptic,
+                Frame::Equatorial,
+                &t0,
+                &mu,
+                0.0,
+                0.0,
+                100,
+                1e-15,
+                translate,
+            );
+            for (a, b) in values.iter().zip(cov_values.iter()) {
+                assert!(
+                    (a - b).abs() <= 1e-12 * (1.0 + b.abs()),
+                    "value mismatch {a} vs {b}"
+                );
+            }
+        }
+
+        // Keplerian output is 13-wide.
+        let (_, ncols_kep) = transform_values_flat6(
+            &coords,
+            Representation::Cartesian,
+            Representation::Keplerian,
+            Frame::Ecliptic,
+            Frame::Ecliptic,
+            &t0,
+            &mu,
+            0.0,
+            0.0,
+            100,
+            1e-15,
+            None,
+        )
+        .unwrap();
+        assert_eq!(ncols_kep, 13);
+
+        // Constant-frame kernel rejects time-varying ITRF93 (caller handles it).
+        assert!(transform_values_flat6(
+            &coords,
+            Representation::Cartesian,
+            Representation::Cartesian,
+            Frame::Ecliptic,
+            Frame::Itrf93,
+            &t0,
+            &mu,
+            0.0,
+            0.0,
+            100,
+            1e-15,
+            None,
+        )
+        .is_err());
     }
 
     #[test]

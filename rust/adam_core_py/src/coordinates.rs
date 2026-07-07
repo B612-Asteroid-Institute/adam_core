@@ -8,11 +8,11 @@ use adam_core_rs_coords::{
     cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
     classify_orbits_flat, cometary_to_cartesian_flat6, create_sampled_orbit_variants,
     fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6,
-    origin_mu_au3_day2, rotate_cartesian_frame_flat6, rotate_cartesian_time_varying_flat6,
+    origin_mu_au3_day2, rotate_cartesian_time_varying_flat6,
     spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
-    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
-    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
-    IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
+    transform_values_flat6, transform_with_covariance_flat6, weighted_covariance_flat,
+    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame,
+    Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
     OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
     OrbitVariantSamplingMethod, Representation as CoordsRepresentation, TimeArray, TimeScale,
     TimeScaleProvider, TryFromNestedRecordBatch,
@@ -369,141 +369,101 @@ fn transform_coordinates_numpy<'py>(
     let frame_in_value = parse_frame(frame_in_name)?;
     let frame_out_value = parse_frame(frame_out_name)?;
 
-    let cartesian_flat = match rep_in {
-        Representation::Cartesian => flat.to_vec(),
-        Representation::Spherical => spherical_to_cartesian_flat6(flat),
-        Representation::Keplerian => {
-            let mu_arr = mu
-                .as_ref()
-                .ok_or_else(|| PyValueError::new_err("mu is required"))?;
-            let mu_view = mu_arr.as_array();
-            if mu_view.len() != n {
-                return Err(PyValueError::new_err(
-                    "mu must have length N for coords shape (N, 6)",
-                ));
-            }
-            let mu_slice = mu_view
-                .as_slice()
-                .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?;
-            keplerian_to_cartesian_flat6(flat, mu_slice, max_iter, tol)
+    // Value composition (rep-in -> cart -> translate -> constant-frame
+    // rotate -> rep-out) is the reusable coords primitive transform_values_flat6;
+    // this wrapper only marshals numpy buffers and enforces the required
+    // per-representation arguments.
+    if rep_in == Representation::Geodetic {
+        return Err(PyValueError::new_err(format!(
+            "unsupported transform path: {representation_in} -> {representation_out}"
+        )));
+    }
+    let needs_mu = matches!(rep_in, Representation::Keplerian | Representation::Cometary)
+        || matches!(
+            rep_out,
+            Representation::Keplerian | Representation::Cometary
+        );
+    let needs_t0 = matches!(rep_in, Representation::Cometary)
+        || matches!(
+            rep_out,
+            Representation::Keplerian | Representation::Cometary
+        );
+
+    let mu_view = mu.as_ref().map(|arr| arr.as_array());
+    let mu_fallback: Vec<f64>;
+    let mu_slice: &[f64] = if let Some(view) = mu_view.as_ref() {
+        if view.len() != n {
+            return Err(PyValueError::new_err(
+                "mu must have length N for coords shape (N, 6)",
+            ));
         }
-        Representation::Cometary => {
-            let t0_arr = t0
-                .as_ref()
-                .ok_or_else(|| PyValueError::new_err("t0 is required"))?;
-            let mu_arr = mu
-                .as_ref()
-                .ok_or_else(|| PyValueError::new_err("mu is required"))?;
-            let t0_view = t0_arr.as_array();
-            let mu_view = mu_arr.as_array();
-            if t0_view.len() != n || mu_view.len() != n {
-                return Err(PyValueError::new_err(
-                    "t0 and mu must each have length N for coords shape (N, 6)",
-                ));
-            }
-            let t0_slice = t0_view
-                .as_slice()
-                .ok_or_else(|| PyValueError::new_err("t0 must be contiguous"))?;
-            let mu_slice = mu_view
-                .as_slice()
-                .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?;
-            cometary_to_cartesian_flat6(flat, t0_slice, mu_slice, max_iter, tol)
-        }
-        _ => {
-            return Err(PyValueError::new_err(format!(
-                "unsupported transform path: {representation_in} -> {representation_out}"
-            )));
-        }
+        view.as_slice()
+            .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?
+    } else if needs_mu {
+        return Err(PyValueError::new_err("mu is required"));
+    } else {
+        mu_fallback = vec![0.0_f64; n];
+        &mu_fallback
     };
-    // Origin translation is a covariance-invariant constant offset applied
-    // in the input frame, before any frame rotation. SPICE-resolved
-    // translation vectors are passed in as an (N, 6) array by the caller.
-    let mut cartesian_translated = cartesian_flat;
-    if let Some(tv) = translation_vectors.as_ref() {
-        let tv_view = tv.as_array();
-        if tv_view.nrows() != n || tv_view.ncols() != 6 {
+
+    let t0_view = t0.as_ref().map(|arr| arr.as_array());
+    let t0_fallback: Vec<f64>;
+    let t0_slice: &[f64] = if let Some(view) = t0_view.as_ref() {
+        if view.len() != n {
+            return Err(PyValueError::new_err(
+                "t0 must have length N for coords shape (N, 6)",
+            ));
+        }
+        view.as_slice()
+            .ok_or_else(|| PyValueError::new_err("t0 must be contiguous"))?
+    } else if needs_t0 {
+        return Err(PyValueError::new_err("t0 is required"));
+    } else {
+        t0_fallback = vec![0.0_f64; n];
+        &t0_fallback
+    };
+
+    let a_value = if rep_out == Representation::Geodetic {
+        a.ok_or_else(|| PyValueError::new_err("a is required"))?
+    } else {
+        a.unwrap_or(0.0)
+    };
+    let f_value = if rep_out == Representation::Geodetic {
+        f.ok_or_else(|| PyValueError::new_err("f is required"))?
+    } else {
+        f.unwrap_or(0.0)
+    };
+
+    let translation_view = translation_vectors.as_ref().map(|arr| arr.as_array());
+    let translation_slice: Option<&[f64]> = if let Some(view) = translation_view.as_ref() {
+        if view.nrows() != n || view.ncols() != 6 {
             return Err(PyValueError::new_err(
                 "translation_vectors must have shape (N, 6)",
             ));
         }
-        let tv_slice = tv_view
-            .as_slice()
-            .ok_or_else(|| PyValueError::new_err("translation_vectors must be contiguous"))?;
-        for i in 0..(n * 6) {
-            cartesian_translated[i] += tv_slice[i];
-        }
-    }
-    let cartesian_in_out_frame = if frame_in_value == frame_out_value {
-        cartesian_translated
+        Some(
+            view.as_slice()
+                .ok_or_else(|| PyValueError::new_err("translation_vectors must be contiguous"))?,
+        )
     } else {
-        rotate_cartesian_frame_flat6(&cartesian_translated, frame_in_value, frame_out_value)
-            .map_err(PyValueError::new_err)?
+        None
     };
 
-    let (out_flat, ncols): (Vec<f64>, usize) = match rep_out {
-        Representation::Cartesian => (cartesian_in_out_frame, 6),
-        Representation::Spherical => (cartesian_to_spherical_flat6(&cartesian_in_out_frame), 6),
-        Representation::Geodetic => {
-            let a_value = a.ok_or_else(|| PyValueError::new_err("a is required"))?;
-            let f_value = f.ok_or_else(|| PyValueError::new_err("f is required"))?;
-            (
-                cartesian_to_geodetic_flat6(
-                    &cartesian_in_out_frame,
-                    a_value,
-                    f_value,
-                    max_iter,
-                    tol,
-                ),
-                6,
-            )
-        }
-        Representation::Keplerian => {
-            let t0_arr = t0.ok_or_else(|| PyValueError::new_err("t0 is required"))?;
-            let mu_arr = mu
-                .as_ref()
-                .ok_or_else(|| PyValueError::new_err("mu is required"))?;
-            let t0_view = t0_arr.as_array();
-            let mu_view = mu_arr.as_array();
-            if t0_view.len() != n || mu_view.len() != n {
-                return Err(PyValueError::new_err(
-                    "t0 and mu must each have length N for coords shape (N, 6)",
-                ));
-            }
-            let t0_slice = t0_view
-                .as_slice()
-                .ok_or_else(|| PyValueError::new_err("t0 must be contiguous"))?;
-            let mu_slice = mu_view
-                .as_slice()
-                .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?;
-            (
-                cartesian_to_keplerian_flat6(&cartesian_in_out_frame, t0_slice, mu_slice),
-                13,
-            )
-        }
-        Representation::Cometary => {
-            let t0_arr = t0.ok_or_else(|| PyValueError::new_err("t0 is required"))?;
-            let mu_arr = mu
-                .as_ref()
-                .ok_or_else(|| PyValueError::new_err("mu is required"))?;
-            let t0_view = t0_arr.as_array();
-            let mu_view = mu_arr.as_array();
-            if t0_view.len() != n || mu_view.len() != n {
-                return Err(PyValueError::new_err(
-                    "t0 and mu must each have length N for coords shape (N, 6)",
-                ));
-            }
-            let t0_slice = t0_view
-                .as_slice()
-                .ok_or_else(|| PyValueError::new_err("t0 must be contiguous"))?;
-            let mu_slice = mu_view
-                .as_slice()
-                .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?;
-            (
-                cartesian_to_cometary_flat6(&cartesian_in_out_frame, t0_slice, mu_slice),
-                6,
-            )
-        }
-    };
+    let (out_flat, ncols) = transform_values_flat6(
+        flat,
+        to_coords_rep(rep_in),
+        to_coords_rep(rep_out),
+        frame_in_value,
+        frame_out_value,
+        t0_slice,
+        mu_slice,
+        a_value,
+        f_value,
+        max_iter,
+        tol,
+        translation_slice,
+    )
+    .map_err(PyValueError::new_err)?;
 
     let shaped = ndarray::Array2::from_shape_vec((n, ncols), out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape output: {e}")))?;
