@@ -333,17 +333,14 @@ def test__physical_parameters_from_sbdb_two_rows() -> None:
 
 def test__sbdb_nongrav_row_extracts_supported_fields() -> None:
     payload = _load_sbdb_fixture_payload("99942_phys.json")
-    row = _sbdb_nongrav_row(payload)
+    row = _sbdb_nongrav_row("99942", payload)
     assert row["source"] == "SBDB"
-    assert row["solution_dimension"] == 8
-    assert row["parameter_count"] == 2
-    assert row["estimated_parameter_names"] == "A1,A2"
     assert row["A1"] == 5.0e-13
     assert row["A2"] == -2.901766637153165e-14
-    assert row["ALN"] == 1.0
-    assert row["NK"] == 0.0
-    assert row["NM"] == 2.0
-    assert row["R0"] == 1.0
+    assert row["A3"] is None
+    # Model parameters outside A1/A2/A3 (ALN, NK, NM, R0, ...) are not
+    # supported for storage and are dropped.
+    assert set(row) == {"source", "A1", "A2", "A3"}
 
 
 def test__non_gravitational_parameters_from_sbdb_empty() -> None:
@@ -421,20 +418,20 @@ def test_query_sbdb_new_populates_non_gravitational_parameters() -> None:
         orbits = query_sbdb_new(["67P"], timeout_s=1.0, max_attempts=1)
 
     assert len(orbits) == 1
-    assert orbits.non_gravitational_parameters.model[0].as_py() == "cometary"
-    assert orbits.non_gravitational_parameters.solution_dimension[0].as_py() == 10
+    assert orbits.non_gravitational_parameters.source[0].as_py() == "SBDB"
     assert orbits.non_gravitational_parameters.A1[0].as_py() == 1.042451026100725e-9
     assert orbits.non_gravitational_parameters.A2[0].as_py() == -6.739627582388806e-11
     assert orbits.non_gravitational_parameters.A3[0].as_py() == 2.960945433454094e-10
-    assert orbits.non_gravitational_parameters.DT[0].as_py() == 45.68888251286532
-    assert orbits.solved_state_covariance.dimension[0].as_py() == 10
-    assert (
-        orbits.solved_state_covariance.parameter_names[0].as_py()
-        == "x,y,z,vx,vy,vz,A1,A2,A3,DT"
-    )
+    # 67P's SBDB covariance is 10-dimensional (A1, A2, A3, DT): the DT
+    # dimension is not supported for storage and is marginalized out,
+    # leaving the fixed 9x9 extended covariance.
+    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+    full = orbits.coordinates.covariance.to_full_matrix()[0]
+    assert full.shape == (9, 9)
+    assert np.all(np.diag(full)[6:] > 0.0)
 
 
-def test_query_sbdb_new_solved_state_covariance_values() -> None:
+def test_query_sbdb_new_extended_covariance_values() -> None:
     payload = _load_sbdb_fixture_payload("99942_phys.json")
 
     def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
@@ -444,31 +441,25 @@ def test_query_sbdb_new_solved_state_covariance_values() -> None:
         mock_new.side_effect = new_side_effect
         orbits = query_sbdb_new(["99942"], timeout_s=1.0, max_attempts=1)
 
-    solved = orbits.solved_state_covariance.to_matrix()[0]
-    assert solved.shape == (8, 8)
-    assert (
-        orbits.solved_state_covariance.parameter_names[0].as_py()
-        == "x,y,z,vx,vy,vz,A1,A2"
-    )
-    # The leading 6x6 block must equal the coordinate covariance: both are
-    # transformed cometary -> Cartesian through the same Jacobian. A broken
-    # permutation or unit scaling would fail this.
+    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+    full = orbits.coordinates.covariance.to_full_matrix()[0]
+    assert full.shape == (9, 9)
+    # The leading 6x6 block is the coordinate covariance by construction:
+    # the full 9x9 is transformed cometary -> Cartesian in one pass.
     npt.assert_allclose(
-        solved[:6, :6],
+        full[:6, :6],
         orbits.coordinates.covariance.to_matrix()[0],
-        rtol=1e-10,
+        rtol=0,
+        atol=0,
     )
     # The A1/A2 diagonal entries are invariant under the orbital-block
     # Jacobian and must agree with the payload's own sigma fields, which SBDB
-    # reports in canonical au/d^2.
-    npt.assert_allclose(np.sqrt(solved[6, 6]), 4.892e-13, rtol=1e-3)
-    npt.assert_allclose(np.sqrt(solved[7, 7]), 1.859e-16, rtol=1e-3)
-    npt.assert_allclose(
-        orbits.non_gravitational_parameters.A1_sigma[0].as_py(), 4.892e-13, rtol=1e-3
-    )
-    npt.assert_allclose(
-        orbits.non_gravitational_parameters.A2_sigma[0].as_py(), 1.859e-16, rtol=1e-3
-    )
+    # reports in canonical au/d^2. 99942's solution estimates A1 and A2 only,
+    # so A3 is held fixed with a zero row.
+    npt.assert_allclose(np.sqrt(full[6, 6]), 4.892e-13, rtol=1e-3)
+    npt.assert_allclose(np.sqrt(full[7, 7]), 1.859e-16, rtol=1e-3)
+    assert np.all(full[8, :] == 0.0)
+    assert np.all(full[:, 8] == 0.0)
 
 
 def test_query_sbdb_new_include_nongrav_false_strips_nongrav() -> None:
@@ -484,7 +475,7 @@ def test_query_sbdb_new_include_nongrav_false_strips_nongrav() -> None:
         )
 
     assert orbits.non_gravitational_parameters.A1[0].as_py() is None
-    assert orbits.solved_state_covariance.dimension[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
 
 
 def test_real_sbdb_payloads_parse_without_error() -> None:
@@ -503,14 +494,11 @@ def test_real_sbdb_payloads_parse_without_error() -> None:
         assert len(orbits) == 1
         assert orbits.coordinates is not None
         assert orbits.physical_parameters is not None
-        if orbits.non_gravitational_parameters.solution_dimension[0].as_py() not in (
-            None,
-            6,
-        ):
-            assert (
-                orbits.solved_state_covariance.dimension[0].as_py()
-                == orbits.non_gravitational_parameters.solution_dimension[0].as_py()
-            )
+        # If the payload produced an extended covariance, its trailing block
+        # must be finite (zero rows for parameters held fixed are fine).
+        if orbits.coordinates.covariance.has_nongrav_block():
+            full = orbits.coordinates.covariance.to_full_matrix()[0]
+            assert np.isfinite(full).all()
 
 
 @contextmanager

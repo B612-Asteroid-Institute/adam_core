@@ -140,7 +140,7 @@ class SphericalCoordinates(qv.Table):
         coords_cartesian = np.array(coords_cartesian)
 
         if not self.covariance.is_all_nan():
-            covariances_spherical = self.covariance.to_matrix()
+            covariances_spherical = self.covariance.to_transform_matrix()
             covariances_cartesian = transform_covariances_jacobian(
                 self.values, covariances_spherical, _spherical_to_cartesian
             )
@@ -175,7 +175,7 @@ class SphericalCoordinates(qv.Table):
         coords_spherical = np.array(coords_spherical)
 
         if not cartesian.covariance.is_all_nan():
-            cartesian_covariances = cartesian.covariance.to_matrix()
+            cartesian_covariances = cartesian.covariance.to_transform_matrix()
             covariances_spherical = transform_covariances_jacobian(
                 cartesian.values, cartesian_covariances, _cartesian_to_spherical
             )

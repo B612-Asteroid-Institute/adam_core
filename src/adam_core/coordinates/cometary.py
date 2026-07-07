@@ -225,7 +225,7 @@ class CometaryCoordinates(qv.Table):
         coords_cartesian = np.array(coords_cartesian)
 
         if not self.covariance.is_all_nan():
-            cometary_covariances = self.covariance.to_matrix()
+            cometary_covariances = self.covariance.to_transform_matrix()
             covariances_cartesian = transform_covariances_jacobian(
                 self.values,
                 cometary_covariances,
@@ -284,7 +284,7 @@ class CometaryCoordinates(qv.Table):
         coords_cometary = np.array(coords_cometary)
 
         if not cartesian.covariance.is_all_nan():
-            cartesian_covariances = cartesian.covariance.to_matrix()
+            cartesian_covariances = cartesian.covariance.to_transform_matrix()
             covariances_cometary = transform_covariances_jacobian(
                 cartesian.values,
                 cartesian_covariances,

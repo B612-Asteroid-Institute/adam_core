@@ -289,16 +289,22 @@ def _uses_default_ephemeris_mixin(propagator: "Propagator") -> bool:
 
 def _warn_if_unsupported_nongrav(propagator, orbits) -> None:
     """
-    Warn when orbits carrying non-gravitational parameters are handed to a
+    Warn when orbits carrying a non-gravitational solution are handed to a
     propagator that does not declare support for non-gravitational forces:
     the backend would silently produce gravity-only trajectories while
-    preserving the parameter columns on its output.
+    preserving the parameter columns on its output. Triggers on non-zero
+    parameter values or on a non-gravitational covariance block, since a
+    zero-mean parameter can still carry uncertainty that covariance sampling
+    would otherwise silently drop.
     """
     if getattr(propagator, "supports_non_gravitational_forces", False):
         return
     if (
         hasattr(orbits, "has_non_gravitational_parameters")
         and orbits.has_non_gravitational_parameters()
+    ) or (
+        hasattr(orbits, "coordinates")
+        and orbits.coordinates.covariance.has_nongrav_block()
     ):
         logger.warning(
             f"{type(propagator).__name__} does not declare support for "
@@ -477,9 +483,6 @@ class EphemerisMixin:
             physical_parameters=propagated_orbits_barycentric.physical_parameters,
             non_gravitational_parameters=(
                 propagated_orbits_barycentric.non_gravitational_parameters
-            ),
-            solved_state_covariance=(
-                propagated_orbits_barycentric.solved_state_covariance
             ),
             coordinates=CartesianCoordinates.from_kwargs(
                 x=propagated_orbits_aberrated[:, 0],

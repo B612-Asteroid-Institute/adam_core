@@ -8,7 +8,11 @@ import quivr as qv
 
 from ..time import Timestamp
 from . import cometary, keplerian, spherical
-from .covariances import CoordinateCovariances
+from .covariances import (
+    COORD_DIM,
+    CoordinateCovariances,
+    apply_linear_covariance_transform,
+)
 from .origin import Origin
 from .units import (
     au_per_day_to_km_per_s,
@@ -297,34 +301,37 @@ class CartesianCoordinates(qv.Table):
         # Rotate coordinates
         coords_rotated = np.ma.dot(masked_coords, rotation_matrix.T, strict=False)
 
-        # Extract covariances
+        # Extract covariances. Rows carrying the non-gravitational (A1, A2,
+        # A3) block have their coordinate block and cross-covariances rotated
+        # while the non-gravitational block is preserved.
         masked_covariances = np.ma.masked_array(
-            self.covariance.to_matrix(), fill_value=0.0
+            self.covariance.to_transform_matrix(), fill_value=0.0
         )
         masked_covariances.mask = np.isnan(masked_covariances.data)
 
         # Rotate covariances
-        covariances_rotated = (
-            rotation_matrix @ masked_covariances.filled() @ rotation_matrix.T
+        covariances_rotated = apply_linear_covariance_transform(
+            rotation_matrix, masked_covariances.filled()
         )
         # Reset the mask to the original mask
         covariances_rotated[masked_covariances.mask] = np.nan
 
-        # Check if any covariance elements are near zero, if so set them to zero
+        # Check if any coordinate-block elements are near zero, if so set them
+        # to zero. The non-gravitational rows are excluded: their variances
+        # (~1e-26 and below) sit beneath this tolerance but are real.
+        coord_block = covariances_rotated[:, :COORD_DIM, :COORD_DIM]
         near_zero = len(
-            covariances_rotated[
-                np.abs(covariances_rotated) < COVARIANCE_ROTATION_TOLERANCE
-            ]
+            coord_block[np.abs(coord_block) < COVARIANCE_ROTATION_TOLERANCE]
         )
         if near_zero > 0:
             logger.debug(
                 f"{near_zero} covariance elements are within {COVARIANCE_ROTATION_TOLERANCE:.0e}"
                 " of zero after rotation, setting these elements to 0."
             )
-            covariances_rotated = np.where(
-                np.abs(covariances_rotated) < COVARIANCE_ROTATION_TOLERANCE,
+            covariances_rotated[:, :COORD_DIM, :COORD_DIM] = np.where(
+                np.abs(coord_block) < COVARIANCE_ROTATION_TOLERANCE,
                 0,
-                covariances_rotated,
+                coord_block,
             )
 
         coords = self.from_kwargs(

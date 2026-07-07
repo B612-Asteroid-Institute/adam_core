@@ -72,32 +72,9 @@ def test_extract_assist_particle_params_flattens_A1_A2_A3():
     orbits = make_orbits_with_nongrav(
         NonGravitationalParameters.from_kwargs(
             source=["SBDB", "NEOCC"],
-            model=["nongrav", "yarkovsky"],
-            solution_dimension=[7, 7],
-            parameter_count=[2, 1],
-            estimated_parameter_names=["A1,A2", "A2"],
             A1=[1.1e-13, None],
-            A1_sigma=[None, None],
             A2=[-8.72e-14, -2.90e-14],
-            A2_sigma=[None, None],
             A3=[None, 4.2e-15],
-            A3_sigma=[None, None],
-            DT=[None, None],
-            DT_sigma=[None, None],
-            R0=[None, None],
-            R0_sigma=[None, None],
-            ALN=[None, None],
-            ALN_sigma=[None, None],
-            NK=[None, None],
-            NK_sigma=[None, None],
-            NM=[None, None],
-            NM_sigma=[None, None],
-            NN=[None, None],
-            NN_sigma=[None, None],
-            AMRAT=[None, None],
-            AMRAT_sigma=[None, None],
-            RHO=[None, None],
-            RHO_sigma=[None, None],
         )
     )
 
@@ -109,75 +86,13 @@ def test_extract_assist_particle_params_flattens_A1_A2_A3():
     )
 
 
-def test_extract_assist_particle_params_rejects_unsupported_fields():
-    orbits = make_orbits_with_nongrav(
-        NonGravitationalParameters.from_kwargs(
-            source=["SBDB", "SBDB"],
-            model=["nongrav", "nongrav"],
-            solution_dimension=[10, 7],
-            parameter_count=[1, 1],
-            estimated_parameter_names=["DT", "A2"],
-            A1=[None, None],
-            A1_sigma=[None, None],
-            A2=[-8.72e-14, -2.90e-14],
-            A2_sigma=[None, None],
-            A3=[None, None],
-            A3_sigma=[None, None],
-            DT=[10.0, None],
-            DT_sigma=[None, None],
-            R0=[None, None],
-            R0_sigma=[None, None],
-            ALN=[None, None],
-            ALN_sigma=[None, None],
-            NK=[None, None],
-            NK_sigma=[None, None],
-            NM=[None, None],
-            NM_sigma=[None, None],
-            NN=[None, None],
-            NN_sigma=[None, None],
-            AMRAT=[None, None],
-            AMRAT_sigma=[None, None],
-            RHO=[None, None],
-            RHO_sigma=[None, None],
-        )
-    )
-
-    with pytest.raises(
-        ValueError, match="Unsupported estimated parameters are present: DT"
-    ):
-        _extract_assist_particle_params(orbits)
-
-
-def test_extract_assist_particle_params_allows_supported_values_with_fixed_metadata():
+def test_extract_assist_particle_params_treats_null_values_as_zero():
     orbits = make_orbits_with_nongrav(
         NonGravitationalParameters.from_kwargs(
             source=["SBDB", "NEOCC"],
-            model=["nongrav", "yarkovsky"],
-            solution_dimension=[8, 7],
-            parameter_count=[2, 1],
-            estimated_parameter_names=["A1,A2", "A2"],
             A1=[5.0e-13, None],
-            A1_sigma=[None, None],
             A2=[-2.9e-14, -4.6e-14],
-            A2_sigma=[None, None],
             A3=[None, None],
-            A3_sigma=[None, None],
-            DT=[None, None],
-            DT_sigma=[None, None],
-            R0=[1.0, None],
-            R0_sigma=[None, None],
-            ALN=[1.0, None],
-            ALN_sigma=[None, None],
-            NK=[0.0, None],
-            NK_sigma=[None, None],
-            NM=[2.0, None],
-            NM_sigma=[None, None],
-            NN=[None, None],
-            NN_sigma=[None, None],
-            AMRAT=[None, 0.0],
-            AMRAT_sigma=[None, None],
-            RHO=[None, None],
-            RHO_sigma=[None, None],
         )
     )
 
@@ -189,73 +104,13 @@ def test_extract_assist_particle_params_allows_supported_values_with_fixed_metad
     )
 
 
-def test_extract_assist_particle_params_rejects_metadata_without_A_values():
-    orbits = make_orbits_with_nongrav(
-        NonGravitationalParameters.from_kwargs(
-            source=["NEOCC", "NEOCC"],
-            model=["yarkovsky", "yarkovsky"],
-            solution_dimension=[7, 7],
-            parameter_count=[1, 1],
-            estimated_parameter_names=["A2", "A2"],
-            A1=[None, None],
-            A1_sigma=[None, None],
-            A2=[None, None],
-            A2_sigma=[None, None],
-            A3=[None, None],
-            A3_sigma=[None, None],
-            DT=[None, None],
-            DT_sigma=[None, None],
-            R0=[None, None],
-            R0_sigma=[None, None],
-            ALN=[None, None],
-            ALN_sigma=[None, None],
-            NK=[None, None],
-            NK_sigma=[None, None],
-            NM=[None, None],
-            NM_sigma=[None, None],
-            NN=[None, None],
-            NN_sigma=[None, None],
-            AMRAT=[None, None],
-            AMRAT_sigma=[None, None],
-            RHO=[None, None],
-            RHO_sigma=[None, None],
-        )
-    )
-
-    with pytest.raises(ValueError, match="metadata without usable A1/A2/A3"):
-        _extract_assist_particle_params(orbits)
-
-
 def test_configure_assist_non_gravitational_forces_appends_force_and_params():
     orbits = make_orbits_with_nongrav(
         NonGravitationalParameters.from_kwargs(
             source=["SBDB", "SBDB"],
-            model=["nongrav", "nongrav"],
-            solution_dimension=[7, 7],
-            parameter_count=[1, 1],
-            estimated_parameter_names=["A2", "A2"],
             A1=[None, None],
-            A1_sigma=[None, None],
             A2=[-8.72e-14, -2.90e-14],
-            A2_sigma=[None, None],
             A3=[None, None],
-            A3_sigma=[None, None],
-            DT=[None, None],
-            DT_sigma=[None, None],
-            R0=[None, None],
-            R0_sigma=[None, None],
-            ALN=[None, None],
-            ALN_sigma=[None, None],
-            NK=[None, None],
-            NK_sigma=[None, None],
-            NM=[None, None],
-            NM_sigma=[None, None],
-            NN=[None, None],
-            NN_sigma=[None, None],
-            AMRAT=[None, None],
-            AMRAT_sigma=[None, None],
-            RHO=[None, None],
-            RHO_sigma=[None, None],
         )
     )
     extras = FakeExtras(["SUN", "PLANETS"])
@@ -296,7 +151,7 @@ def test_assist_propagation_real_sbdb_99942_uses_nongrav_parameters():
     )
 
 
-def test_assist_propagation_real_neocc_99942_allows_non_estimated_amrat():
+def test_assist_particle_params_from_real_neocc_99942():
     data = _parse_oef((TESTDATA_DIR / "neocc" / "99942.ke1").read_text())
     nongrav = _non_gravitational_parameters_from_neocc(data)
 

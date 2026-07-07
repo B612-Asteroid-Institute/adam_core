@@ -423,12 +423,17 @@ def generate_impact_visualization_data(
     mjds = mjds - np.mod(mjds, effective_time_step / 60 / 24)
     propagation_times = Timestamp.from_mjd(mjds, scale=impacts.coordinates.time.scale)
 
-    # Propagate the variants to the propagation times
+    # Propagate the variants to the propagation times. Physical and
+    # non-gravitational parameters are carried through so that a
+    # non-grav-aware propagator integrates the variant cloud with the same
+    # dynamics as the nominal orbit.
     propagated_variants = propagator.propagate_orbits(
         Orbits.from_kwargs(
             orbit_id=variant_orbits.variant_id,
             object_id=variant_orbits.object_id,
             coordinates=variant_orbits.coordinates,
+            physical_parameters=variant_orbits.physical_parameters,
+            non_gravitational_parameters=variant_orbits.non_gravitational_parameters,
         ),
         propagation_times,
         max_processes=max_processes,

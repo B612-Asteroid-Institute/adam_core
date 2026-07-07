@@ -11,43 +11,30 @@ from ...coordinates import (
 )
 from ...orbits.non_gravitational_parameters import NonGravitationalParameters
 from ...orbits.physical_parameters import PhysicalParameters
-from ...orbits.solved_state_covariances import SolvedStateCovariances
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ..orbits import Orbits
 from ..variants import VariantEphemeris, VariantOrbits
 
 
-def _nongrav_a2_row(a2: float, a2_sigma: float) -> NonGravitationalParameters:
+def _nongrav_a2_row(a2: float) -> NonGravitationalParameters:
     return NonGravitationalParameters.from_kwargs(
         source=["SBDB"],
-        model=["nongrav"],
-        solution_dimension=[7],
-        parameter_count=[1],
-        estimated_parameter_names=["A2"],
         A1=[None],
-        A1_sigma=[None],
         A2=[a2],
-        A2_sigma=[a2_sigma],
         A3=[None],
-        A3_sigma=[None],
-        DT=[None],
-        DT_sigma=[None],
-        R0=[None],
-        R0_sigma=[None],
-        ALN=[None],
-        ALN_sigma=[None],
-        NK=[None],
-        NK_sigma=[None],
-        NM=[None],
-        NM_sigma=[None],
-        NN=[None],
-        NN_sigma=[None],
-        AMRAT=[None],
-        AMRAT_sigma=[None],
-        RHO=[None],
-        RHO_sigma=[None],
     )
+
+
+def _embed_a2_covariance(covariance_7x7: np.ndarray) -> np.ndarray:
+    """
+    Embed a (x, y, z, vx, vy, vz, A2) covariance into the fixed 9x9 layout
+    (A1 and A3 held fixed with zero rows/columns).
+    """
+    indices = [0, 1, 2, 3, 4, 5, 7]
+    full = np.zeros((9, 9), dtype=np.float64)
+    full[np.ix_(indices, indices)] = covariance_7x7
+    return full
 
 
 def _solved_a2_orbit(orbit_id: str, covariance_7x7: np.ndarray) -> Orbits:
@@ -55,11 +42,7 @@ def _solved_a2_orbit(orbit_id: str, covariance_7x7: np.ndarray) -> Orbits:
         orbit_id=[orbit_id],
         object_id=[orbit_id],
         physical_parameters=PhysicalParameters.from_kwargs(H_v=[20.0], G=[0.15]),
-        non_gravitational_parameters=_nongrav_a2_row(-2.0e-13, 2.0e-13),
-        solved_state_covariance=SolvedStateCovariances.from_matrix(
-            covariance_7x7.reshape(1, 7, 7),
-            [["x", "y", "z", "vx", "vy", "vz", "A2"]],
-        ),
+        non_gravitational_parameters=_nongrav_a2_row(-2.0e-13),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0],
             y=[2.0],
@@ -68,7 +51,7 @@ def _solved_a2_orbit(orbit_id: str, covariance_7x7: np.ndarray) -> Orbits:
             vy=[0.02],
             vz=[0.03],
             covariance=CoordinateCovariances.from_matrix(
-                covariance_7x7[:6, :6].reshape(1, 6, 6)
+                _embed_a2_covariance(covariance_7x7).reshape(1, 9, 9)
             ),
             time=Timestamp.from_mjd([60000.0]),
             origin=Origin.from_kwargs(code=["SUN"]),
@@ -109,7 +92,7 @@ def test_VariantOrbits():
     )
 
 
-def test_VariantOrbits_joint_sampling_uses_solved_state_covariance():
+def test_VariantOrbits_joint_sampling_uses_extended_covariance():
     covariance = np.diag(
         [
             1e-8,
@@ -134,36 +117,9 @@ def test_VariantOrbits_joint_sampling_uses_solved_state_covariance():
         physical_parameters=PhysicalParameters.from_kwargs(H_v=[20.0], G=[0.15]),
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB"],
-            model=["nongrav"],
-            solution_dimension=[9],
-            parameter_count=[3],
-            estimated_parameter_names=["A1,A2,A3"],
             A1=[1.0e-13],
-            A1_sigma=[3.0e-13],
             A2=[-2.0e-13],
-            A2_sigma=[2.0e-13],
             A3=[4.0e-13],
-            A3_sigma=[1.0e-13],
-            DT=[None],
-            DT_sigma=[None],
-            R0=[None],
-            R0_sigma=[None],
-            ALN=[None],
-            ALN_sigma=[None],
-            NK=[None],
-            NK_sigma=[None],
-            NM=[None],
-            NM_sigma=[None],
-            NN=[None],
-            NN_sigma=[None],
-            AMRAT=[None],
-            AMRAT_sigma=[None],
-            RHO=[None],
-            RHO_sigma=[None],
-        ),
-        solved_state_covariance=SolvedStateCovariances.from_matrix(
-            covariance,
-            [["x", "y", "z", "vx", "vy", "vz", "A1", "A2", "A3"]],
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0],
@@ -172,7 +128,7 @@ def test_VariantOrbits_joint_sampling_uses_solved_state_covariance():
             vx=[0.01],
             vy=[0.02],
             vz=[0.03],
-            covariance=CoordinateCovariances.from_matrix(covariance[:, :6, :6]),
+            covariance=CoordinateCovariances.from_matrix(covariance),
             time=Timestamp.from_mjd([60000.0]),
             origin=Origin.from_kwargs(code=["SUN"]),
             frame="ecliptic",
@@ -181,16 +137,15 @@ def test_VariantOrbits_joint_sampling_uses_solved_state_covariance():
     variants = VariantOrbits.create(orbits, method="sigma-point")
 
     assert len(variants) == 19
-    assert variants.solved_state_covariance.dimension[0].as_py() == 9
     assert len(np.unique(variants.non_gravitational_parameters.A1.to_pylist())) > 1
     assert len(np.unique(variants.non_gravitational_parameters.A2.to_pylist())) > 1
     assert len(np.unique(variants.non_gravitational_parameters.A3.to_pylist())) > 1
 
     collapsed = variants.collapse(orbits)
-    assert collapsed.solved_state_covariance.dimension[0].as_py() == 9
+    assert collapsed.coordinates.covariance.nongrav_block_mask().tolist() == [True]
     # Compare element-wise relative to each entry's own scale: an absolute
     # tolerance would be vacuously satisfied by the ~1e-26 non-grav entries.
-    recovered = collapsed.solved_state_covariance.to_matrix()[0]
+    recovered = collapsed.coordinates.covariance.to_full_matrix()[0]
     np.testing.assert_allclose(np.diag(recovered), np.diag(covariance[0]), rtol=1e-9)
     np.testing.assert_allclose(recovered[0, 6], covariance[0, 0, 6], rtol=1e-9)
     np.testing.assert_allclose(recovered[4, 7], covariance[0, 4, 7], rtol=1e-9)
@@ -198,70 +153,20 @@ def test_VariantOrbits_joint_sampling_uses_solved_state_covariance():
 
 
 def test_VariantOrbits_create_include_nongrav_false_uses_orbital_covariance_only():
-    covariance = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26]).reshape(
-        1, 7, 7
-    )
-    orbits = Orbits.from_kwargs(
-        orbit_id=["joint"],
-        object_id=["joint"],
-        physical_parameters=PhysicalParameters.from_kwargs(H_v=[20.0], G=[0.15]),
-        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-            source=["SBDB"],
-            model=["nongrav"],
-            solution_dimension=[7],
-            parameter_count=[1],
-            estimated_parameter_names=["A2"],
-            A1=[None],
-            A1_sigma=[None],
-            A2=[-2.0e-13],
-            A2_sigma=[2.0e-13],
-            A3=[None],
-            A3_sigma=[None],
-            DT=[None],
-            DT_sigma=[None],
-            R0=[None],
-            R0_sigma=[None],
-            ALN=[None],
-            ALN_sigma=[None],
-            NK=[None],
-            NK_sigma=[None],
-            NM=[None],
-            NM_sigma=[None],
-            NN=[None],
-            NN_sigma=[None],
-            AMRAT=[None],
-            AMRAT_sigma=[None],
-            RHO=[None],
-            RHO_sigma=[None],
-        ),
-        solved_state_covariance=SolvedStateCovariances.from_matrix(
-            covariance,
-            [["x", "y", "z", "vx", "vy", "vz", "A2"]],
-        ),
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[1.0],
-            y=[2.0],
-            z=[3.0],
-            vx=[0.01],
-            vy=[0.02],
-            vz=[0.03],
-            covariance=CoordinateCovariances.from_matrix(covariance[:, :6, :6]),
-            time=Timestamp.from_mjd([60000.0]),
-            origin=Origin.from_kwargs(code=["SUN"]),
-            frame="ecliptic",
-        ),
-    )
+    covariance_7x7 = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
+    orbits = _solved_a2_orbit("joint", covariance_7x7)
 
     variants = VariantOrbits.create(orbits, method="sigma-point", include_nongrav=False)
 
     assert len(variants) == 13
     assert variants.non_gravitational_parameters.A2[0].as_py() is None
-    assert variants.solved_state_covariance.dimension[0].as_py() is None
+    assert not variants.coordinates.covariance.has_nongrav_block()
 
 
-def test_VariantOrbits_create_mixed_solved_state_coverage():
-    # One orbit with a 7x7 solved-state covariance and one with only a 6x6
-    # coordinate covariance must both be sampled in a single create() call.
+def test_VariantOrbits_create_mixed_nongrav_coverage():
+    # One orbit with the non-gravitational covariance block and one with only
+    # a 6x6 coordinate covariance must both be sampled in a single create()
+    # call.
     covariance_7x7 = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
     orbit_with = _solved_a2_orbit("with_nongrav", covariance_7x7)
     orbit_without = Orbits.from_kwargs(
@@ -288,13 +193,12 @@ def test_VariantOrbits_create_mixed_solved_state_coverage():
 
     joint = variants.select("orbit_id", "with_nongrav")
     plain = variants.select("orbit_id", "plain")
-    assert len(joint) == 15  # 2 * 7 + 1 sigma points
+    assert len(joint) == 19  # 2 * 9 + 1 sigma points (fixed 9-dim layout)
     assert len(plain) == 13  # 2 * 6 + 1 sigma points
     assert len(np.unique(joint.non_gravitational_parameters.A2.to_pylist())) > 1
     assert all(
         value is None for value in plain.non_gravitational_parameters.A2.to_pylist()
     )
-    assert plain.solved_state_covariance.dimension[0].as_py() is None
     assert len(set(variants.variant_id.to_pylist())) == len(variants)
 
 
@@ -366,39 +270,9 @@ def test_VariantOrbits_collapse_by_object_id():
         ),
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB", "SBDB", "SBDB", "NEOCC", "NEOCC", "NEOCC"],
-            model=[
-                "nongrav",
-                "nongrav",
-                "nongrav",
-                "yarkovsky",
-                "yarkovsky",
-                "yarkovsky",
-            ],
-            solution_dimension=[7, 7, 7, 7, 7, 7],
-            parameter_count=[1, 1, 1, 1, 1, 1],
-            estimated_parameter_names=["A2", "A2", "A2", "A2", "A2", "A2"],
             A1=[None] * 6,
-            A1_sigma=[None] * 6,
             A2=[1e-13, 1e-13, 1e-13, -2e-14, -2e-14, -2e-14],
-            A2_sigma=[None] * 6,
             A3=[None] * 6,
-            A3_sigma=[None] * 6,
-            DT=[None] * 6,
-            DT_sigma=[None] * 6,
-            R0=[None] * 6,
-            R0_sigma=[None] * 6,
-            ALN=[None] * 6,
-            ALN_sigma=[None] * 6,
-            NK=[None] * 6,
-            NK_sigma=[None] * 6,
-            NM=[None] * 6,
-            NM_sigma=[None] * 6,
-            NN=[None] * 6,
-            NN_sigma=[None] * 6,
-            AMRAT=[None] * 6,
-            AMRAT_sigma=[None] * 6,
-            RHO=[None] * 6,
-            RHO_sigma=[None] * 6,
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
@@ -527,8 +401,7 @@ def test_VariantOrbits_collapse_by_object_id():
         variant_orbits_diff_origins.collapse_by_object_id()
 
 
-def test_VariantOrbits_collapse_by_object_id_rebuilds_solved_state_covariance():
-    covariance = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
+def test_VariantOrbits_collapse_by_object_id_rebuilds_extended_covariance():
     variant_orbits = VariantOrbits.from_kwargs(
         orbit_id=["obj1", "obj1", "obj1"],
         object_id=["obj1", "obj1", "obj1"],
@@ -541,36 +414,9 @@ def test_VariantOrbits_collapse_by_object_id_rebuilds_solved_state_covariance():
         ),
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB"] * 3,
-            model=["nongrav"] * 3,
-            solution_dimension=[7] * 3,
-            parameter_count=[1] * 3,
-            estimated_parameter_names=["A2"] * 3,
             A1=[None] * 3,
-            A1_sigma=[None] * 3,
             A2=[1e-13, 1.2e-13, 0.8e-13],
-            A2_sigma=[None] * 3,
             A3=[None] * 3,
-            A3_sigma=[None] * 3,
-            DT=[None] * 3,
-            DT_sigma=[None] * 3,
-            R0=[None] * 3,
-            R0_sigma=[None] * 3,
-            ALN=[None] * 3,
-            ALN_sigma=[None] * 3,
-            NK=[None] * 3,
-            NK_sigma=[None] * 3,
-            NM=[None] * 3,
-            NM_sigma=[None] * 3,
-            NN=[None] * 3,
-            NN_sigma=[None] * 3,
-            AMRAT=[None] * 3,
-            AMRAT_sigma=[None] * 3,
-            RHO=[None] * 3,
-            RHO_sigma=[None] * 3,
-        ),
-        solved_state_covariance=SolvedStateCovariances.from_matrix(
-            [covariance, covariance, covariance],
-            [["x", "y", "z", "vx", "vy", "vz", "A2"]] * 3,
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1, 0.9],
@@ -587,13 +433,28 @@ def test_VariantOrbits_collapse_by_object_id_rebuilds_solved_state_covariance():
 
     collapsed = variant_orbits.collapse_by_object_id()
 
-    assert collapsed.solved_state_covariance.dimension[0].as_py() == 7
+    # Varying A2 samples mark a jointly sampled non-grav solution: the
+    # collapsed orbit carries the full 9x9 covariance and the mean A2.
+    assert collapsed.coordinates.covariance.nongrav_block_mask().tolist() == [True]
     assert collapsed.non_gravitational_parameters.A2[0].as_py() == pytest.approx(1e-13)
+
+    full = collapsed.coordinates.covariance.to_full_matrix()[0]
+    a2_samples = np.array([1e-13, 1.2e-13, 0.8e-13])
+    x_samples = np.array([1.0, 1.1, 0.9])
+    np.testing.assert_allclose(full[7, 7], np.var(a2_samples), rtol=1e-9)
     np.testing.assert_allclose(
-        collapsed.solved_state_covariance.to_orbital_covariances().to_matrix(),
-        collapsed.coordinates.covariance.to_matrix(),
+        full[0, 7],
+        np.mean((x_samples - x_samples.mean()) * (a2_samples - a2_samples.mean())),
+        rtol=1e-9,
+    )
+    # A1 and A3 were never sampled: their rows collapse to zero variance.
+    assert full[6, 6] == 0.0
+    assert full[8, 8] == 0.0
+    np.testing.assert_allclose(
+        full[:6, :6],
+        collapsed.coordinates.covariance.to_matrix()[0],
         rtol=0,
-        atol=1e-12,
+        atol=0,
     )
 
 

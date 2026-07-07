@@ -15,7 +15,6 @@ from ..coordinates.covariances import (
 )
 from ..coordinates.origin import Origin
 from ..orbits.orbits import Orbits
-from ..orbits.solved_state_covariances import SolvedStateCovariances
 from ..ray_cluster import initialize_use_ray
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
@@ -223,7 +222,7 @@ def _propagate_2body_serial(
         )
 
     if not orbits.coordinates.covariance.is_all_nan():
-        cartesian_covariances = orbits.coordinates.covariance.to_matrix()
+        cartesian_covariances = orbits.coordinates.covariance.to_transform_matrix()
         covariances_array_ = np.repeat(cartesian_covariances, n_times, axis=0)
 
         cartesian_covariances = transform_covariances_jacobian(
@@ -251,11 +250,6 @@ def _propagate_2body_serial(
         object_id=object_ids_,
         physical_parameters=physical_parameters_,
         non_gravitational_parameters=non_gravitational_parameters_,
-        # The non-grav parameter values are time-invariant and carried over,
-        # but a solved-state covariance is epoch-specific: copying it to the
-        # propagated epochs would be wrong, and propagating the full (6+k)
-        # matrix is not yet implemented, so it is nulled here.
-        solved_state_covariance=SolvedStateCovariances.nulls(num_entries),
         coordinates=CartesianCoordinates.from_kwargs(
             x=orbits_propagated[:, 0],
             y=orbits_propagated[:, 1],
@@ -319,15 +313,17 @@ def propagate_2body(
     include_nongrav : bool, optional
         If True (default), raise a ValueError when any orbit carries non-zero
         non-gravitational parameters, since 2-body dynamics cannot apply them.
-        If False, strip the non-gravitational parameter and solved-state
-        covariance columns and propagate gravity-only.
+        If False, strip the non-gravitational parameters (and the
+        non-gravitational covariance block) and propagate gravity-only.
 
     Returns
     -------
     orbits : `~adam_core.orbits.orbits.Orbits` (N*M)
-        Orbits propagated to each MJD. The solved-state covariance column is
-        nulled on the output: it is epoch-specific and propagating the full
-        (6+k) matrix is not yet implemented.
+        Orbits propagated to each MJD. Covariances are propagated with the
+        2-body state-transition Jacobian; for orbits carrying the
+        non-gravitational (A1, A2, A3) covariance block, the block is carried
+        through as dynamically inert, consistent with the 2-body force model
+        (which admits no non-gravitational accelerations).
     """
     if not include_nongrav:
         orbits = orbits.without_non_gravitational_parameters()

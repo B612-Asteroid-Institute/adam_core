@@ -134,7 +134,7 @@ class GeodeticCoordinates(qv.Table):
         coords_geodetic = np.array(coords_geodetic)
 
         if not cartesian.covariance.is_all_nan():
-            cartesian_covariances = cartesian.covariance.to_matrix()
+            cartesian_covariances = cartesian.covariance.to_transform_matrix()
             covariances_geodetic = transform_covariances_jacobian(
                 cartesian.values, cartesian_covariances, _cartesian_to_geodetic
             )

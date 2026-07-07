@@ -56,17 +56,6 @@ def test_mpcq_orbits_maps_nongrav_parameters_into_adam_core():
 
     assert len(orbits) == 2
     assert orbits.non_gravitational_parameters.source.to_pylist() == ["MPCQ", "MPCQ"]
-    assert orbits.non_gravitational_parameters.model.to_pylist() == [
-        "nongrav",
-        "nongrav",
-    ]
-    assert (
-        orbits.non_gravitational_parameters.estimated_parameter_names.to_pylist()
-        == [
-            "A2",
-            "A1,A3",
-        ]
-    )
     np.testing.assert_allclose(
         orbits.non_gravitational_parameters.A2.to_numpy(zero_copy_only=False)[0],
         -8.7e-14,

@@ -6,17 +6,15 @@ import numpy.typing as npt
 import quivr as qv
 import requests
 
-from adam_core.coordinates.covariances import (
-    transform_solved_state_covariances_jacobian,
-)
-
 from ...coordinates import CoordinateCovariances, KeplerianCoordinates, Origin
-from ...coordinates.transform import _keplerian_to_cartesian_a
+from ...coordinates.covariances import COORD_DIM, FULL_DIM
 from ...orbits import Orbits
 from ...time import Timestamp
-from ..non_gravitational_parameters import NonGravitationalParameters
+from ..non_gravitational_parameters import (
+    NON_GRAVITATIONAL_VALUE_FIELDS,
+    NonGravitationalParameters,
+)
 from ..physical_parameters import PhysicalParameters
-from ..solved_state_covariances import ORBITAL_PARAMETER_NAMES, SolvedStateCovariances
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +28,7 @@ _NEOCC_UNIT_FACTORS = {
 
 # The NGR vector decoding below assumes the Yarkovsky model layout
 # (AMRAT, A2). Solutions fit with other non-grav models (A1/A3/DT) carry a
-# different vector layout and are degraded to metadata-only rows.
+# different vector layout and are degraded to value-free rows.
 _NEOCC_SUPPORTED_SOLVE_FOR = frozenset(_NEOCC_UNIT_FACTORS)
 
 
@@ -64,17 +62,17 @@ def _full_covariance_dimension(n_elements: int) -> int:
     return dimension
 
 
-def _solved_state_covariance_from_upper_triangular(
+def _full_covariance_from_upper_triangular(
     upper_triangular: List[float],
     solved_dimension: int,
 ) -> npt.NDArray[np.float64]:
     """
-    Build the solved-state covariance from an OEF upper-triangular matrix.
+    Build the full solved covariance from an OEF upper-triangular matrix.
 
     The OEF covariance may append parameters beyond the solved orbital and
     non-gravitational state (most commonly absolute magnitude, see "2018 CW2").
     ``solved_dimension`` is the LSP-reported dimension (6 orbital + k non-grav),
-    so the leading ``solved_dimension`` block is the solved-state covariance and
+    so the leading ``solved_dimension`` block is the solved covariance and
     any trailing rows/columns (e.g. magnitude) are dropped. This keeps a fitted
     non-grav parameter such as A2 (dimension 7, full 7x7) while still discarding
     a magnitude column appended to a 6D solution (dimension 6, full 7x7).
@@ -228,7 +226,7 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         if line.strip().startswith("COV"):
             cov_matrix.extend([float(x) for x in line.split()[1:]])
     if cov_matrix:
-        result["covariance_full"] = _solved_state_covariance_from_upper_triangular(
+        result["covariance_full"] = _full_covariance_from_upper_triangular(
             cov_matrix, result.get("nongrav", {}).get("dimension", 6)
         )
         result["covariance"] = result["covariance_full"][:6, :6]
@@ -239,7 +237,7 @@ def _parse_oef(data: str) -> Dict[str, Any]:
         if line.strip().startswith("COR"):
             cor_matrix.extend([float(x) for x in line.split()[1:]])
     if cor_matrix:
-        result["correlation_full"] = _solved_state_covariance_from_upper_triangular(
+        result["correlation_full"] = _full_covariance_from_upper_triangular(
             cor_matrix, result.get("nongrav", {}).get("dimension", 6)
         )
         result["correlation"] = result["correlation_full"][:6, :6]
@@ -283,7 +281,7 @@ def _solve_for_codes_to_names(codes: list[int]) -> list[str]:
     return [mapping[code] for code in codes if code in mapping]
 
 
-def _neocc_solved_state_is_supported(data: Dict[str, Any]) -> bool:
+def _neocc_nongrav_solution_is_decodable(data: Dict[str, Any]) -> bool:
     """
     Return True if the parsed OEF non-grav solution can be decoded with the
     Yarkovsky-model assumptions used below: every solve-for code is known and
@@ -304,41 +302,6 @@ def _neocc_solved_state_is_supported(data: Dict[str, Any]) -> bool:
     return all(name in _NEOCC_SUPPORTED_SOLVE_FOR for name in solve_for)
 
 
-def _neocc_solved_sigmas(
-    data: Dict[str, Any], solve_for: list[str]
-) -> Dict[str, float]:
-    """
-    Extract per-parameter sigmas (in canonical units) from the diagonal of the
-    raw OEF solved-state covariance.
-    """
-    covariance = data.get("covariance_full")
-    if covariance is None:
-        return {}
-    sigmas = {}
-    for offset, name in enumerate(solve_for):
-        variance = float(covariance[6 + offset, 6 + offset])
-        if variance >= 0.0:
-            sigmas[name] = np.sqrt(variance) * _NEOCC_UNIT_FACTORS[name]
-    return sigmas
-
-
-def _scale_neocc_solved_covariance(
-    covariance: npt.NDArray[np.float64], solve_for: list[str]
-) -> npt.NDArray[np.float64]:
-    """
-    Convert the non-grav rows/columns of a raw OEF solved-state covariance to
-    the canonical units declared by NonGravitationalParameters. Scaling both
-    the row and the column squares the factor on the diagonal.
-    """
-    scaled = np.array(covariance, dtype=np.float64)
-    for offset, name in enumerate(solve_for):
-        factor = _NEOCC_UNIT_FACTORS[name]
-        index = 6 + offset
-        scaled[index, :] *= factor
-        scaled[:, index] *= factor
-    return scaled
-
-
 def _non_gravitational_parameters_from_neocc(
     data: Dict[str, Any],
 ) -> NonGravitationalParameters:
@@ -347,63 +310,76 @@ def _non_gravitational_parameters_from_neocc(
         return NonGravitationalParameters.nulls(1)
 
     solve_for = _solve_for_codes_to_names(info.get("solve_for_parameter_codes") or [])
-    model_used = info.get("model_used")
-    model = None
-    if model_used == 1:
-        model = "yarkovsky"
-    elif model_used not in (None, 0):
-        model = f"neocc-model-{model_used}"
-
     vector = info.get("vector") or []
-    amrat = None
     a2 = None
-    sigmas: Dict[str, float] = {}
-    if _neocc_solved_state_is_supported(data):
+    if _neocc_nongrav_solution_is_decodable(data):
         # The Yarkovsky-model NGR vector is (AMRAT, A2) in OEF native units;
         # convert to the canonical units declared by NonGravitationalParameters.
-        amrat = (
-            float(vector[0]) * _NEOCC_UNIT_FACTORS["AMRAT"] if len(vector) > 0 else None
-        )
-        a2 = float(vector[1]) * _NEOCC_UNIT_FACTORS["A2"] if len(vector) > 1 else None
-        sigmas = _neocc_solved_sigmas(data, solve_for)
+        # AMRAT is not supported for storage (only A1, A2, A3), so its value
+        # is dropped and its covariance dimension marginalized out.
+        if len(vector) > 1:
+            a2 = float(vector[1]) * _NEOCC_UNIT_FACTORS["A2"]
+        if "AMRAT" in solve_for or (len(vector) > 0 and float(vector[0]) != 0.0):
+            logger.warning(
+                "NEOCC solution for object %s includes an area-to-mass ratio "
+                "(AMRAT), which is not supported for storage (only A1, A2, "
+                "A3); dropping its value and marginalizing it out of the "
+                "covariance.",
+                data.get("object_id"),
+            )
     elif vector:
         logger.warning(
             "NEOCC non-grav solution for object %s uses an unsupported model or "
-            "solve-for parameters (%s); the nominal values and solved-state "
-            "covariance are left null.",
+            "solve-for parameters (%s); the nominal values and the "
+            "non-gravitational covariance block are left null.",
             data.get("object_id"),
             ",".join(solve_for) if solve_for else "unknown",
         )
 
     return NonGravitationalParameters.from_kwargs(
         source=["NEOCC"],
-        model=[model],
-        solution_dimension=[info.get("dimension")],
-        parameter_count=[len(solve_for) if solve_for else None],
-        estimated_parameter_names=[",".join(solve_for) if solve_for else None],
         A1=[None],
-        A1_sigma=[None],
         A2=[a2],
-        A2_sigma=[sigmas.get("A2")],
         A3=[None],
-        A3_sigma=[None],
-        DT=[None],
-        DT_sigma=[None],
-        R0=[None],
-        R0_sigma=[None],
-        ALN=[None],
-        ALN_sigma=[None],
-        NK=[None],
-        NK_sigma=[None],
-        NM=[None],
-        NM_sigma=[None],
-        NN=[None],
-        NN_sigma=[None],
-        AMRAT=[amrat],
-        AMRAT_sigma=[sigmas.get("AMRAT")],
-        RHO=[None],
-        RHO_sigma=[None],
     )
+
+
+def _neocc_extended_covariance(data: Dict[str, Any]) -> npt.NDArray[np.float64] | None:
+    """
+    Build the 9x9 keplerian-basis covariance (orbital block plus A1, A2, A3)
+    from a decodable OEF non-grav solution, in canonical units. Dimensions
+    that are not supported for storage (e.g. AMRAT) are marginalized out.
+    Returns None when the solution carries no supported non-gravitational
+    dimension.
+    """
+    covariance_native = data.get("covariance_full")
+    if covariance_native is None or covariance_native.shape[0] <= COORD_DIM:
+        return None
+    if not _neocc_nongrav_solution_is_decodable(data):
+        return None
+
+    info = data.get("nongrav") or {}
+    solve_for = _solve_for_codes_to_names(info.get("solve_for_parameter_codes") or [])
+
+    source_indices = list(range(COORD_DIM))
+    target_indices = list(range(COORD_DIM))
+    factors = np.ones(FULL_DIM, dtype=np.float64)
+    for offset, name in enumerate(NON_GRAVITATIONAL_VALUE_FIELDS):
+        if name in solve_for:
+            source_indices.append(COORD_DIM + solve_for.index(name))
+            target_indices.append(COORD_DIM + offset)
+            factors[COORD_DIM + offset] = _NEOCC_UNIT_FACTORS[name]
+    if len(target_indices) == COORD_DIM:
+        return None
+
+    full = np.zeros((FULL_DIM, FULL_DIM), dtype=np.float64)
+    full[np.ix_(target_indices, target_indices)] = covariance_native[
+        np.ix_(source_indices, source_indices)
+    ]
+    # Scale the non-grav rows and columns to canonical units; the outer
+    # product squares the factor on the diagonal.
+    full *= np.outer(factors, factors)
+    return full
 
 
 def query_neocc(
@@ -425,10 +401,12 @@ def query_neocc(
     orbit_epoch : ["middle", "present-day"]
         Epoch of the orbital elements to query.
     include_nongrav : bool, optional
-        If True (default), populate the non-gravitational parameter and
-        solved-state covariance columns from the NEOCC solution (converted to
-        the canonical units declared by NonGravitationalParameters). If False,
-        those columns are returned null.
+        If True (default), populate the non-gravitational parameters (A1, A2,
+        A3, converted to the canonical units declared by
+        NonGravitationalParameters) and extend the coordinate covariance with
+        their rows when the NEOCC solution includes them. If False, the
+        parameters are returned null and the covariance is reduced to its 6x6
+        coordinate block.
 
     Returns
     -------
@@ -475,20 +453,15 @@ def query_neocc(
 
             phys = _physical_parameters_from_neocc(data)
             nongrav = _non_gravitational_parameters_from_neocc(data)
-            solve_for = _solve_for_codes_to_names(
-                (data.get("nongrav") or {}).get("solve_for_parameter_codes") or []
-            )
-            solved_covariance_native = data.get("covariance_full")
-            if solved_covariance_native is not None:
-                if _neocc_solved_state_is_supported(data):
-                    # Convert the non-grav rows/columns to canonical units so
-                    # the covariance is consistent with the nominal values.
-                    solved_covariance_native = _scale_neocc_solved_covariance(
-                        solved_covariance_native, solve_for
-                    )
-                elif len(solve_for) > 0 or solved_covariance_native.shape[0] > 6:
-                    # _non_gravitational_parameters_from_neocc warned already.
-                    solved_covariance_native = None
+
+            # Prefer the 9x9 extended covariance (orbital block plus A1, A2,
+            # A3) when the solution includes a decodable non-grav dimension;
+            # KeplerianCoordinates.to_cartesian() transforms it as a whole.
+            covariance = _neocc_extended_covariance(data)
+            if covariance is None:
+                covariance = data["covariance"].reshape(1, COORD_DIM, COORD_DIM)
+            else:
+                covariance = covariance.reshape(1, FULL_DIM, FULL_DIM)
 
             keplerian_coordinates = KeplerianCoordinates.from_kwargs(
                 a=[data["elements"]["a"]],
@@ -498,25 +471,9 @@ def query_neocc(
                 ap=[data["elements"]["peri"]],
                 M=[data["elements"]["M"]],
                 time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
-                covariance=CoordinateCovariances.from_matrix(
-                    data["covariance"].reshape(
-                        1,
-                        6,
-                        6,
-                    )
-                ),
+                covariance=CoordinateCovariances.from_matrix(covariance),
                 frame="ecliptic",
                 origin=Origin.from_kwargs(code=["SUN"]),
-            )
-            solved_covariance_cartesian = transform_solved_state_covariances_jacobian(
-                keplerian_coordinates.values,
-                [solved_covariance_native],
-                _keplerian_to_cartesian_a,
-                in_axes=(0, 0, None, None),
-                out_axes=0,
-                mu=keplerian_coordinates.origin.mu(),
-                max_iter=1000,
-                tol=1e-15,
             )
 
             orbit = Orbits.from_kwargs(
@@ -525,14 +482,6 @@ def query_neocc(
                 coordinates=keplerian_coordinates.to_cartesian(),
                 physical_parameters=phys,
                 non_gravitational_parameters=nongrav,
-                solved_state_covariance=SolvedStateCovariances.from_matrix(
-                    solved_covariance_cartesian,
-                    (
-                        [list(ORBITAL_PARAMETER_NAMES) + solve_for]
-                        if solved_covariance_native is not None
-                        else [None]
-                    ),
-                ),
             )
             orbits = qv.concatenate([orbits, orbit])
 

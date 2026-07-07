@@ -634,32 +634,9 @@ def _make_nongrav_orbits() -> Orbits:
         object_id=["o1"],
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB"],
-            model=["nongrav"],
-            solution_dimension=[7],
-            parameter_count=[1],
-            estimated_parameter_names=["A2"],
             A1=[None],
-            A1_sigma=[None],
             A2=[-2.9e-14],
-            A2_sigma=[1e-15],
             A3=[None],
-            A3_sigma=[None],
-            DT=[None],
-            DT_sigma=[None],
-            R0=[None],
-            R0_sigma=[None],
-            ALN=[None],
-            ALN_sigma=[None],
-            NK=[None],
-            NK_sigma=[None],
-            NM=[None],
-            NM_sigma=[None],
-            NN=[None],
-            NN_sigma=[None],
-            AMRAT=[None],
-            AMRAT_sigma=[None],
-            RHO=[None],
-            RHO_sigma=[None],
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[2.0],
@@ -686,7 +663,7 @@ def test_propagate_orbits_include_nongrav_false_strips_nongrav():
     )
 
     assert propagated.non_gravitational_parameters.A2[0].as_py() is None
-    assert propagated.solved_state_covariance.dimension[0].as_py() is None
+    assert not propagated.coordinates.covariance.has_nongrav_block()
 
 
 def test_propagate_orbits_include_nongrav_true_preserves_columns():
@@ -701,10 +678,7 @@ def test_propagate_orbits_include_nongrav_true_preserves_columns():
     np.testing.assert_allclose(
         propagated.non_gravitational_parameters.A2[0].as_py(), -2.9e-14
     )
-    assert (
-        propagated.non_gravitational_parameters.estimated_parameter_names[0].as_py()
-        == "A2"
-    )
+    assert propagated.non_gravitational_parameters.source[0].as_py() == "SBDB"
 
 
 def test_propagate_orbits_warns_when_propagator_lacks_nongrav_support(caplog):

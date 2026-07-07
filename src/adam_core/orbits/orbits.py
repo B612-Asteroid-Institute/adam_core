@@ -8,6 +8,7 @@ import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.cometary import CometaryCoordinates
+from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.keplerian import KeplerianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
@@ -15,7 +16,6 @@ from ..coordinates.transform import transform_coordinates
 from .classification import calc_orbit_class
 from .non_gravitational_parameters import NonGravitationalParameters
 from .physical_parameters import PhysicalParameters
-from .solved_state_covariances import SolvedStateCovariances
 
 if TYPE_CHECKING:
     from ..propagator import Propagator
@@ -30,7 +30,6 @@ class Orbits(qv.Table):
     coordinates = CartesianCoordinates.as_column()
     physical_parameters = PhysicalParameters.as_column(nullable=True)
     non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
-    solved_state_covariance = SolvedStateCovariances.as_column(nullable=True)
 
     def group_by_orbit_id(self) -> Iterable[Tuple[str, "Orbits"]]:
         """
@@ -70,23 +69,34 @@ class Orbits(qv.Table):
         """
         return self.non_gravitational_parameters.has_values()
 
-    def without_non_gravitational_parameters(self) -> "Orbits":
-        return self.set_column(
-            "non_gravitational_parameters",
-            NonGravitationalParameters.nulls(len(self)),
-        ).set_column(
-            "solved_state_covariance",
-            SolvedStateCovariances.nulls(len(self)),
+    def has_non_gravitational_solution(self) -> bool:
+        """
+        Return True if any orbit carries a non-gravitational solution: either a
+        non-zero parameter value or a non-gravitational block in the coordinate
+        covariance (a zero-mean parameter can still carry uncertainty).
+        """
+        return (
+            self.non_gravitational_parameters.has_values()
+            or self.coordinates.covariance.has_nongrav_block()
         )
 
-    def with_non_gravitational_parameters(self, enabled: bool = True) -> "Orbits":
+    def without_non_gravitational_parameters(self) -> "Orbits":
         """
-        Return self unchanged if `enabled` is True, otherwise a copy with the
-        non-gravitational parameter and solved-state covariance columns nulled.
+        Return a copy with the non-gravitational parameters nulled and the
+        coordinate covariance reduced to its 6x6 coordinate block.
         """
-        if enabled:
-            return self
-        return self.without_non_gravitational_parameters()
+        orbits = self.set_column(
+            "non_gravitational_parameters",
+            NonGravitationalParameters.nulls(len(self)),
+        )
+        if orbits.coordinates.covariance.has_nongrav_block():
+            orbits = orbits.set_column(
+                "coordinates.covariance",
+                CoordinateCovariances.from_matrix(
+                    orbits.coordinates.covariance.to_matrix()
+                ),
+            )
+        return orbits
 
     def coordinates_to(
         self,
@@ -102,8 +112,9 @@ class Orbits(qv.Table):
     ):
         """
         Transform this orbit's coordinates to another representation, frame,
-        and/or origin. The solved-state covariances are not transformed; use
-        `solved_state_covariance_to` for that.
+        and/or origin. Covariances -- including the non-gravitational block
+        for orbits with a non-gravitational solution -- are transformed
+        alongside the coordinates.
         """
         return transform_coordinates(
             self.coordinates,
@@ -111,34 +122,6 @@ class Orbits(qv.Table):
             frame_out=frame_out,
             origin_out=origin_out,
         )
-
-    def solved_state_covariance_to(
-        self,
-        representation_out: type[
-            CartesianCoordinates
-            | KeplerianCoordinates
-            | CometaryCoordinates
-            | SphericalCoordinates
-        ],
-        *,
-        frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,
-        origin_out: Optional[OriginCodes] = None,
-    ) -> SolvedStateCovariances:
-        """
-        Transform the solved-state covariances to another coordinate
-        representation, frame, and/or origin. The leading 6x6 orbital block is
-        transformed alongside the coordinates; extra solved parameters and
-        their cross-covariances are preserved. Rows without a solved-state
-        covariance remain null.
-        """
-        _, solved = transform_coordinates(
-            self.coordinates,
-            representation_out=representation_out,
-            frame_out=frame_out,
-            origin_out=origin_out,
-            solved_state_covariances=self.solved_state_covariance,
-        )
-        return solved
 
     def to_keplerian(self) -> KeplerianCoordinates:
         return self.coordinates_to(KeplerianCoordinates)

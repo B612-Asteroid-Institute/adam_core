@@ -7,7 +7,6 @@ from ...coordinates import (
 )
 from ...coordinates.origin import Origin
 from ...orbits.non_gravitational_parameters import NonGravitationalParameters
-from ...orbits.solved_state_covariances import SolvedStateCovariances
 from ...time import Timestamp
 from ...utils.helpers import orbits as orbits_helpers
 from ..orbits import Orbits
@@ -50,40 +49,17 @@ def test_orbit_iteration():
 
 
 def test_orbits_without_non_gravitational_parameters():
+    covariance = np.full((1, 9, 9), np.nan)
+    covariance[0] = np.zeros((9, 9))
+    covariance[0, :7, :7] = np.eye(7)
     orbits = Orbits.from_kwargs(
         orbit_id=["1"],
         object_id=["Test Orbit"],
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB"],
-            model=["nongrav"],
-            solution_dimension=[7],
-            parameter_count=[1],
-            estimated_parameter_names=["A2"],
             A1=[None],
-            A1_sigma=[None],
             A2=[-2.9e-14],
-            A2_sigma=[1e-15],
             A3=[None],
-            A3_sigma=[None],
-            DT=[None],
-            DT_sigma=[None],
-            R0=[None],
-            R0_sigma=[None],
-            ALN=[None],
-            ALN_sigma=[None],
-            NK=[None],
-            NK_sigma=[None],
-            NM=[None],
-            NM_sigma=[None],
-            NN=[None],
-            NN_sigma=[None],
-            AMRAT=[None],
-            AMRAT_sigma=[None],
-            RHO=[None],
-            RHO_sigma=[None],
-        ),
-        solved_state_covariance=SolvedStateCovariances.from_matrix(
-            [np.eye(7)], [["x", "y", "z", "vx", "vy", "vz", "A2"]]
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[0.5],
@@ -95,52 +71,35 @@ def test_orbits_without_non_gravitational_parameters():
             time=Timestamp.from_mjd([59000.0], scale="tdb"),
             origin=Origin.from_kwargs(code=["SUN"]),
             frame="ecliptic",
+            covariance=CoordinateCovariances.from_matrix(covariance),
         ),
     )
 
     stripped = orbits.without_non_gravitational_parameters()
 
     assert orbits.has_non_gravitational_parameters()
+    assert orbits.has_non_gravitational_solution()
+    assert orbits.coordinates.covariance.has_nongrav_block()
     assert not stripped.has_non_gravitational_parameters()
+    assert not stripped.has_non_gravitational_solution()
     assert stripped.non_gravitational_parameters.A2[0].as_py() is None
-    assert stripped.solved_state_covariance.dimension[0].as_py() is None
+    assert not stripped.coordinates.covariance.has_nongrav_block()
+    np.testing.assert_allclose(
+        stripped.coordinates.covariance.to_matrix()[0], np.eye(6)
+    )
 
 
-def test_orbits_solved_state_covariance_to_keplerian():
+def test_orbits_extended_covariance_to_keplerian():
+    covariance = np.zeros((1, 9, 9))
+    covariance[0, :7, :7] = np.eye(7)
     orbits = Orbits.from_kwargs(
         orbit_id=["1"],
         object_id=["Test Orbit"],
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB"],
-            model=["nongrav"],
-            solution_dimension=[7],
-            parameter_count=[1],
-            estimated_parameter_names=["A2"],
-            A1=[None],
-            A1_sigma=[None],
-            A2=[-2.9e-14],
-            A2_sigma=[1e-15],
+            A1=[-2.9e-14],
+            A2=[None],
             A3=[None],
-            A3_sigma=[None],
-            DT=[None],
-            DT_sigma=[None],
-            R0=[None],
-            R0_sigma=[None],
-            ALN=[None],
-            ALN_sigma=[None],
-            NK=[None],
-            NK_sigma=[None],
-            NM=[None],
-            NM_sigma=[None],
-            NN=[None],
-            NN_sigma=[None],
-            AMRAT=[None],
-            AMRAT_sigma=[None],
-            RHO=[None],
-            RHO_sigma=[None],
-        ),
-        solved_state_covariance=SolvedStateCovariances.from_matrix(
-            [np.eye(7)], [["x", "y", "z", "vx", "vy", "vz", "A2"]]
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[0.5],
@@ -152,23 +111,24 @@ def test_orbits_solved_state_covariance_to_keplerian():
             time=Timestamp.from_mjd([59000.0], scale="tdb"),
             origin=Origin.from_kwargs(code=["SUN"]),
             frame="ecliptic",
-            covariance=CoordinateCovariances.from_matrix(np.eye(6).reshape(1, 6, 6)),
+            covariance=CoordinateCovariances.from_matrix(covariance),
         ),
     )
 
     coords = orbits.to_keplerian()
-    solved = orbits.solved_state_covariance_to(KeplerianCoordinates)
 
     assert isinstance(coords, KeplerianCoordinates)
     assert coords.frame == "ecliptic"
-    assert solved.dimension[0].as_py() == 7
-    assert solved.parameter_names[0].as_py() == "a,e,i,raan,ap,M,A2"
-    # The solved-state covariance fixture's orbital block is the identity, the
-    # same as the coordinate covariance, so the transformed orbital block must
-    # match the independently transformed 6x6 coordinate covariance.
+    assert coords.covariance.nongrav_block_mask().tolist() == [True]
+    full = coords.covariance.to_full_matrix()[0]
+    # The A1 dimension carries through the transform unchanged (identity
+    # block), and the orbital block matches the transformed 6x6 covariance
+    # since the input orbital block is the identity.
+    np.testing.assert_allclose(full[6, 6], 1.0, rtol=1e-12)
+    np.testing.assert_allclose(full[7:, 7:], np.zeros((2, 2)), atol=0)
     np.testing.assert_allclose(
-        solved.to_orbital_covariances().to_matrix(),
-        coords.covariance.to_matrix(),
-        rtol=1e-12,
+        full[:6, :6],
+        coords.covariance.to_matrix()[0],
+        rtol=0,
         atol=0,
     )

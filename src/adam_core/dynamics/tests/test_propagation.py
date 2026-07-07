@@ -513,32 +513,9 @@ def test_propagate_2body_rejects_non_gravitational_parameters():
         object_id=["o1", "o2"],
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB", "NEOCC"],
-            model=["nongrav", "yarkovsky"],
-            solution_dimension=[7, 7],
-            parameter_count=[1, 1],
-            estimated_parameter_names=["A2", "A2"],
             A1=[None, None],
-            A1_sigma=[None, None],
             A2=[-8.72e-14, -2.90e-14],
-            A2_sigma=[3.07e-14, None],
             A3=[None, None],
-            A3_sigma=[None, None],
-            DT=[None, None],
-            DT_sigma=[None, None],
-            R0=[1.0, None],
-            R0_sigma=[None, None],
-            ALN=[1.0, None],
-            ALN_sigma=[None, None],
-            NK=[0.0, None],
-            NK_sigma=[None, None],
-            NM=[2.0, None],
-            NM_sigma=[None, None],
-            NN=[None, None],
-            NN_sigma=[None, None],
-            AMRAT=[None, 0.0],
-            AMRAT_sigma=[None, None],
-            RHO=[None, None],
-            RHO_sigma=[None, None],
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.2],
@@ -567,32 +544,9 @@ def test_propagate_2body_allows_zero_valued_non_gravitational_parameters():
         object_id=["o1"],
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["NEOCC"],
-            model=["yarkovsky"],
-            solution_dimension=[6],
-            parameter_count=[0],
-            estimated_parameter_names=[None],
             A1=[None],
-            A1_sigma=[None],
             A2=[0.0],
-            A2_sigma=[None],
             A3=[None],
-            A3_sigma=[None],
-            DT=[None],
-            DT_sigma=[None],
-            R0=[None],
-            R0_sigma=[None],
-            ALN=[None],
-            ALN_sigma=[None],
-            NK=[None],
-            NK_sigma=[None],
-            NM=[None],
-            NM_sigma=[None],
-            NN=[None],
-            NN_sigma=[None],
-            AMRAT=[0.0],
-            AMRAT_sigma=[None],
-            RHO=[None],
-            RHO_sigma=[None],
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0],
@@ -612,7 +566,7 @@ def test_propagate_2body_allows_zero_valued_non_gravitational_parameters():
     )
 
     assert len(propagated) == 2
-    assert propagated.non_gravitational_parameters.AMRAT[0].as_py() == 0.0
+    assert propagated.non_gravitational_parameters.A2[0].as_py() == 0.0
 
 
 def test_propagate_2body_include_nongrav_false_strips_nongrav():
@@ -622,32 +576,9 @@ def test_propagate_2body_include_nongrav_false_strips_nongrav():
         object_id=["o1"],
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
             source=["SBDB"],
-            model=["nongrav"],
-            solution_dimension=[7],
-            parameter_count=[1],
-            estimated_parameter_names=["A2"],
             A1=[None],
-            A1_sigma=[None],
             A2=[-8.72e-14],
-            A2_sigma=[3.07e-14],
             A3=[None],
-            A3_sigma=[None],
-            DT=[None],
-            DT_sigma=[None],
-            R0=[None],
-            R0_sigma=[None],
-            ALN=[None],
-            ALN_sigma=[None],
-            NK=[None],
-            NK_sigma=[None],
-            NM=[None],
-            NM_sigma=[None],
-            NN=[None],
-            NN_sigma=[None],
-            AMRAT=[None],
-            AMRAT_sigma=[None],
-            RHO=[None],
-            RHO_sigma=[None],
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0],
@@ -669,7 +600,7 @@ def test_propagate_2body_include_nongrav_false_strips_nongrav():
     )
 
     assert propagated.non_gravitational_parameters.A2[0].as_py() is None
-    assert propagated.solved_state_covariance.dimension[0].as_py() is None
+    assert not propagated.coordinates.covariance.has_nongrav_block()
 
 
 def test_propagate_2body_does_not_include_padded_rows() -> None:

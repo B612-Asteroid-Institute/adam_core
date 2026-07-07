@@ -24,15 +24,33 @@ from ..observers.observers import Observers
 from ..time import Timestamp
 from ..utils.chunking import process_in_chunks
 from .ephemeris import Ephemeris
-from .non_gravitational_parameters import NonGravitationalParameters
+from .non_gravitational_parameters import (
+    NON_GRAVITATIONAL_VALUE_FIELDS,
+    NonGravitationalParameters,
+)
 from .orbits import Orbits
 from .physical_parameters import PhysicalParameters
-from .solved_state_covariances import (
-    NON_GRAVITATIONAL_PARAMETER_NAMES,
-    ORBITAL_PARAMETER_NAMES,
-    SolvedStateCovariances,
-    build_solved_state,
-)
+
+
+def _nongrav_samples_if_varying(
+    variants: "VariantOrbits",
+) -> Optional[np.ndarray]:
+    """
+    Return the (N, 3) non-gravitational parameter samples for a group of
+    variants if the parameters were jointly sampled -- any value present and
+    varying across the group -- otherwise None. Variants carrying constant
+    copied values (or no values at all) collapse to a plain 6x6 covariance.
+    """
+    parameters = variants.non_gravitational_parameters
+    if all(
+        len(pc.drop_null(getattr(parameters, field))) == 0
+        for field in NON_GRAVITATIONAL_VALUE_FIELDS
+    ):
+        return None
+    samples = parameters.to_array()
+    if len(samples) == 0 or np.ptp(samples, axis=0).max() == 0.0:
+        return None
+    return samples
 
 
 def _sample_covariance(
@@ -45,7 +63,7 @@ def _sample_covariance(
     kappa: float,
     seed,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    # Sample in a whitened basis: solved-state covariances mix orbital
+    # Sample in a whitened basis: extended covariances mix orbital
     # variances (~1e-8) with non-grav variances (~1e-26). At that conditioning
     # both scipy's PSD factorization and sqrtm truncate the small eigenvalues,
     # silently producing zero spread in the non-grav dimensions.
@@ -84,51 +102,6 @@ def _sample_covariance(
     return mean + samples * scales, weights, weights_cov
 
 
-def _nongrav_columns_dict() -> dict[str, list[object]]:
-    columns = {}
-    for name in NonGravitationalParameters.schema.names:
-        columns[name] = []
-    return columns
-
-
-def _append_nongrav_variant_rows(
-    columns: dict[str, list[object]],
-    base: NonGravitationalParameters,
-    row_index: int,
-    parameter_names: list[str],
-    samples: np.ndarray,
-) -> None:
-    base_row = {
-        name: getattr(base, name)[row_index].as_py()
-        for name in NonGravitationalParameters.schema.names
-    }
-    for sample in samples:
-        row = dict(base_row)
-        for offset, name in enumerate(parameter_names):
-            if name in NON_GRAVITATIONAL_PARAMETER_NAMES:
-                row[name] = float(sample[offset])
-        for name in columns:
-            columns[name].append(row.get(name))
-
-
-def _apply_solved_state_mean_to_nongrav_row(
-    base: NonGravitationalParameters,
-    row_index: int,
-    parameter_names: list[str],
-    mean_state: np.ndarray,
-) -> NonGravitationalParameters:
-    row = {
-        name: getattr(base, name)[row_index].as_py()
-        for name in NonGravitationalParameters.schema.names
-    }
-    for name, value in zip(parameter_names[6:], mean_state[6:]):
-        if name in NON_GRAVITATIONAL_PARAMETER_NAMES:
-            row[name] = float(value)
-    return NonGravitationalParameters.from_kwargs(
-        **{name: [row.get(name)] for name in NonGravitationalParameters.schema.names}
-    )
-
-
 def _joint_sample_variants(
     orbits: Orbits,
     method: Literal["auto", "sigma-point", "monte-carlo"],
@@ -138,8 +111,13 @@ def _joint_sample_variants(
     kappa: float,
     seed: Optional[int],
 ) -> "VariantOrbits":
-    solved_covariances = orbits.solved_state_covariance.to_matrix()
-    solved_names = orbits.solved_state_covariance.parameter_names_list()
+    """
+    Jointly sample orbits whose coordinate covariance carries the
+    non-gravitational (A1, A2, A3) block, drawing coordinate and
+    non-gravitational parameter variants from the full 9x9 covariance.
+    """
+    covariances = orbits.coordinates.covariance.to_full_matrix()
+    nongrav_values = orbits.non_gravitational_parameters.to_array()
 
     # Spawn an independent child seed per orbit: reusing the same seed for
     # every orbit would draw identical underlying normals, perfectly
@@ -155,42 +133,25 @@ def _joint_sample_variants(
     variant_id_rows: list[str] = []
     weight_rows: list[float] = []
     weight_cov_rows: list[float] = []
-    coordinate_rows: list[np.ndarray] = []
-    solved_covariance_rows: list[np.ndarray | None] = []
-    solved_parameter_name_rows: list[list[str] | None] = []
-    physical_index: list[int] = []
-    nongrav_columns = _nongrav_columns_dict()
+    sample_rows: list[np.ndarray] = []
+    parent_index: list[int] = []
 
     for orbit_index, orbit in enumerate(orbits):
-        solved_covariance = solved_covariances[orbit_index]
-        parameter_names = solved_names[orbit_index]
-
-        if solved_covariance is None or not parameter_names:
-            raise ValueError(
-                "Solved-state covariance sampling requires a covariance matrix and parameter names for every orbit."
-            )
-        if tuple(parameter_names[:6]) != ORBITAL_PARAMETER_NAMES:
-            raise ValueError(
-                "Solved-state covariance parameter ordering must begin with x,y,z,vx,vy,vz."
-            )
-
+        covariance = covariances[orbit_index]
         orbit_id = orbit.orbit_id[0].as_py()
         object_id = orbit.object_id[0].as_py()
 
-        mean = build_solved_state(
-            orbit.coordinates.values[0],
-            orbit.non_gravitational_parameters,
-            0,
-            parameter_names,
+        mean = np.concatenate(
+            [orbit.coordinates.values[0], nongrav_values[orbit_index]]
         )
-        if not (np.all(np.isfinite(mean)) and np.all(np.isfinite(solved_covariance))):
+        if not (np.all(np.isfinite(mean)) and np.all(np.isfinite(covariance))):
             raise ValueError(
-                f"Solved-state covariance sampling requires finite mean and "
+                f"Joint non-gravitational sampling requires finite mean and "
                 f"covariance values for orbit {orbit_id}."
             )
         samples, weights, weights_cov = _sample_covariance(
             mean,
-            solved_covariance,
+            covariance,
             method=method,
             num_samples=num_samples,
             alpha=alpha,
@@ -204,21 +165,11 @@ def _joint_sample_variants(
             variant_id_rows.append(str(len(variant_id_rows)))
             weight_rows.append(float(weights[sample_index]))
             weight_cov_rows.append(float(weights_cov[sample_index]))
-            coordinate_rows.append(samples[sample_index, :6])
-            solved_covariance_rows.append(solved_covariance)
-            solved_parameter_name_rows.append(parameter_names)
-            physical_index.append(orbit_index)
+            sample_rows.append(samples[sample_index])
+            parent_index.append(orbit_index)
 
-        _append_nongrav_variant_rows(
-            nongrav_columns,
-            orbits.non_gravitational_parameters,
-            orbit_index,
-            parameter_names,
-            samples,
-        )
-
-    coordinate_array = np.asarray(coordinate_rows, dtype=np.float64)
-    repeated_indices = np.asarray(physical_index, dtype=np.int64)
+    sample_array = np.asarray(sample_rows, dtype=np.float64)
+    repeated_indices = np.asarray(parent_index, dtype=np.int64)
     repeated_time = orbits.coordinates.time.take(repeated_indices)
     repeated_origin = orbits.coordinates.origin.take(repeated_indices)
 
@@ -229,22 +180,22 @@ def _joint_sample_variants(
         weights=np.asarray(weight_rows, dtype=np.float64),
         weights_cov=np.asarray(weight_cov_rows, dtype=np.float64),
         coordinates=CartesianCoordinates.from_kwargs(
-            x=coordinate_array[:, 0],
-            y=coordinate_array[:, 1],
-            z=coordinate_array[:, 2],
-            vx=coordinate_array[:, 3],
-            vy=coordinate_array[:, 4],
-            vz=coordinate_array[:, 5],
+            x=sample_array[:, 0],
+            y=sample_array[:, 1],
+            z=sample_array[:, 2],
+            vx=sample_array[:, 3],
+            vy=sample_array[:, 4],
+            vz=sample_array[:, 5],
             time=repeated_time,
             origin=repeated_origin,
             frame=orbits.coordinates.frame,
         ),
         physical_parameters=orbits.physical_parameters.take(repeated_indices),
         non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-            **nongrav_columns
-        ),
-        solved_state_covariance=SolvedStateCovariances.from_matrix(
-            solved_covariance_rows, solved_parameter_name_rows
+            source=orbits.non_gravitational_parameters.source.take(repeated_indices),
+            A1=sample_array[:, 6],
+            A2=sample_array[:, 7],
+            A3=sample_array[:, 8],
         ),
     )
 
@@ -258,7 +209,6 @@ class VariantOrbits(qv.Table):
     coordinates = CartesianCoordinates.as_column()
     physical_parameters = PhysicalParameters.as_column(nullable=True)
     non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
-    solved_state_covariance = SolvedStateCovariances.as_column(nullable=True)
 
     def has_non_gravitational_parameters(self) -> bool:
         """
@@ -268,20 +218,22 @@ class VariantOrbits(qv.Table):
         return self.non_gravitational_parameters.has_values()
 
     def without_non_gravitational_parameters(self) -> "VariantOrbits":
-        return self.set_column(
+        """
+        Return a copy with the non-gravitational parameters nulled and the
+        coordinate covariance reduced to its 6x6 coordinate block.
+        """
+        variants = self.set_column(
             "non_gravitational_parameters",
             NonGravitationalParameters.nulls(len(self)),
-        ).set_column(
-            "solved_state_covariance",
-            SolvedStateCovariances.nulls(len(self)),
         )
-
-    def with_non_gravitational_parameters(
-        self, enabled: bool = True
-    ) -> "VariantOrbits":
-        if enabled:
-            return self
-        return self.without_non_gravitational_parameters()
+        if variants.coordinates.covariance.has_nongrav_block():
+            variants = variants.set_column(
+                "coordinates.covariance",
+                CoordinateCovariances.from_matrix(
+                    variants.coordinates.covariance.to_matrix()
+                ),
+            )
+        return variants
 
     @classmethod
     def create(
@@ -307,9 +259,9 @@ class VariantOrbits(qv.Table):
         If the covariance matrix is not well behaved then monte-carlo sampling will be used.
 
         When sampling with monte-carlo, 10k samples are drawn. Sigma-point sampling draws 13 samples
-        for 6-dimensional coordinates. Orbits that carry a solved-state covariance are jointly
-        sampled in the full 6+k dimensional solved state (orbital state plus non-gravitational
-        parameters), in which case sigma-point sampling draws 2*(6+k)+1 samples per orbit.
+        for 6-dimensional coordinates. Orbits whose coordinate covariance carries the
+        non-gravitational (A1, A2, A3) block are jointly sampled in the full 9-dimensional
+        state, in which case sigma-point sampling draws 19 samples per orbit.
 
         Parameters
         ----------
@@ -330,24 +282,25 @@ class VariantOrbits(qv.Table):
             Seed for reproducible monte-carlo sampling. Each orbit receives an
             independent child seed spawned from this value.
         include_nongrav : bool, optional
-            If True (default), orbits with a solved-state covariance are jointly sampled
-            in the full 6+k dimensional state. If False, the non-gravitational parameter
-            and solved-state covariance columns are stripped and only the 6x6 coordinate
-            covariance is sampled.
+            If True (default), orbits whose coordinate covariance carries the
+            non-gravitational (A1, A2, A3) block are jointly sampled in the full
+            9-dimensional state. If False, the non-gravitational parameters are
+            stripped and only the 6x6 coordinate covariance block is sampled.
 
         Returns
         -------
         variants_orbits : '~adam_core.orbits.variants.VariantOrbits'
-            The variant orbits. When the input mixes orbits with and without solved-state
-            covariances, variants for the solved-state orbits are returned first, so row
-            order does not necessarily follow the input orbit order.
+            The variant orbits. When the input mixes orbits with and without the
+            non-gravitational covariance block, variants for the orbits with the
+            block are returned first, so row order does not necessarily follow
+            the input orbit order.
         """
         if not include_nongrav:
             orbits = orbits.without_non_gravitational_parameters()
 
-        if not orbits.solved_state_covariance.is_all_null():
-            solved_mask = pc.is_valid(orbits.solved_state_covariance.dimension)
-            if pc.all(solved_mask).as_py():
+        nongrav_mask = orbits.coordinates.covariance.nongrav_block_mask()
+        if nongrav_mask.any():
+            if nongrav_mask.all():
                 return _joint_sample_variants(
                     orbits,
                     method=method,
@@ -357,10 +310,11 @@ class VariantOrbits(qv.Table):
                     kappa=kappa,
                     seed=seed,
                 )
-            # Mixed coverage: jointly sample the orbits that have a solved-state
-            # covariance and route the rest through the 6D coordinate path.
+            # Mixed coverage: jointly sample the orbits that carry the
+            # non-gravitational covariance block and route the rest through
+            # the 6D coordinate path.
             joint_variants = _joint_sample_variants(
-                orbits.apply_mask(solved_mask),
+                orbits.apply_mask(nongrav_mask),
                 method=method,
                 num_samples=num_samples,
                 alpha=alpha,
@@ -369,7 +323,7 @@ class VariantOrbits(qv.Table):
                 seed=seed,
             )
             coordinate_only_variants = cls.create(
-                orbits.apply_mask(pc.invert(solved_mask)),
+                orbits.apply_mask(~nongrav_mask),
                 method=method,
                 num_samples=num_samples,
                 alpha=alpha,
@@ -407,9 +361,6 @@ class VariantOrbits(qv.Table):
                 variant_coordinates.index
             ),
             non_gravitational_parameters=orbits.non_gravitational_parameters.take(
-                variant_coordinates.index
-            ),
-            solved_state_covariance=orbits.solved_state_covariance.take(
                 variant_coordinates.index
             ),
         )
@@ -482,45 +433,26 @@ class VariantOrbits(qv.Table):
 
             samples = variants.coordinates.values
             mean = orbit.coordinates.values[0]
+
+            # If the variants carry jointly sampled non-gravitational
+            # parameters, rebuild the full 9x9 covariance including them;
+            # otherwise rebuild the 6x6 coordinate covariance. This is keyed
+            # off the variants rather than the nominal orbit, which typically
+            # has no covariance after propagation.
+            nongrav_samples = _nongrav_samples_if_varying(variants)
+            if nongrav_samples is not None:
+                samples = np.concatenate([samples, nongrav_samples], axis=1)
+                mean = np.concatenate(
+                    [mean, orbit.non_gravitational_parameters.to_array()[0]]
+                )
+            dimension = samples.shape[1]
             covariance = weighted_covariance(
                 mean, samples, variants.weights_cov.to_numpy(zero_copy_only=False)
-            ).reshape(1, 6, 6)
+            ).reshape(1, dimension, dimension)
 
             orbit_collapsed = orbit.set_column(
                 "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)
             )
-            solved_covariances = orbit.solved_state_covariance.to_matrix()
-            solved_parameter_names = (
-                orbit.solved_state_covariance.parameter_names_list()
-            )
-            if solved_covariances[0] is not None and solved_parameter_names[0]:
-                parameter_names = solved_parameter_names[0]
-                samples_full = []
-                for i in range(len(variants)):
-                    samples_full.append(
-                        build_solved_state(
-                            variants.coordinates.values[i],
-                            variants.non_gravitational_parameters,
-                            i,
-                            parameter_names,
-                        )
-                    )
-                covariance_full = weighted_covariance(
-                    build_solved_state(
-                        mean,
-                        orbit.non_gravitational_parameters,
-                        0,
-                        parameter_names,
-                    ),
-                    np.asarray(samples_full, dtype=np.float64),
-                    variants.weights_cov.to_numpy(zero_copy_only=False),
-                )
-                orbit_collapsed = orbit_collapsed.set_column(
-                    "solved_state_covariance",
-                    SolvedStateCovariances.from_matrix(
-                        [covariance_full], [parameter_names]
-                    ),
-                )
 
             orbits_list.append(orbit_collapsed)
 
@@ -546,18 +478,24 @@ class VariantOrbits(qv.Table):
             assert len(object_variants.coordinates.time.unique()) == 1
             assert len(pc.unique(object_variants.coordinates.origin.code)) == 1
 
+            # If the variants carry jointly sampled non-gravitational
+            # parameters, collapse to the full 9-dimensional mean and
+            # covariance; otherwise collapse the 6 coordinate dimensions.
+            values = object_variants.coordinates.values
+            nongrav_samples = _nongrav_samples_if_varying(object_variants)
+            if nongrav_samples is not None:
+                values = np.concatenate([values, nongrav_samples], axis=1)
+
             # Calculate the mean
-            mean = np.average(
-                object_variants.coordinates.values,
-                axis=0,
-            )
+            mean = np.average(values, axis=0)
 
             # Calculate the covariance matrix
+            dimension = values.shape[1]
             covariance = weighted_covariance(
                 mean,
-                object_variants.coordinates.values,
+                values,
                 np.ones(len(object_variants), dtype=np.float64) / len(object_variants),
-            ).reshape(1, 6, 6)
+            ).reshape(1, dimension, dimension)
 
             # Create the collapsed orbit
             orbit = Orbits.from_kwargs(
@@ -577,55 +515,22 @@ class VariantOrbits(qv.Table):
                     frame=object_variants.coordinates.frame,
                 ),
             )
-            if not object_variants.solved_state_covariance.is_all_null():
-                # All variants of an object must share the same solved-state
-                # parameter set; take the names from the first non-null row.
-                names_list = (
-                    object_variants.solved_state_covariance.parameter_names_list()
-                )
-                non_null_names = [names for names in names_list if names]
-                parameter_names = non_null_names[0]
-                assert all(names == parameter_names for names in non_null_names)
-                full_samples = np.asarray(
-                    [
-                        build_solved_state(
-                            object_variants.coordinates.values[i],
-                            object_variants.non_gravitational_parameters,
-                            i,
-                            parameter_names,
-                        )
-                        for i in range(len(object_variants))
-                    ],
-                    dtype=np.float64,
-                )
-                mean_full = np.average(full_samples, axis=0)
-                covariance_full = weighted_covariance(
-                    mean_full,
-                    full_samples,
-                    np.ones(len(object_variants), dtype=np.float64)
-                    / len(object_variants),
-                )
+            if nongrav_samples is not None:
                 orbit = orbit.set_column(
                     "non_gravitational_parameters",
-                    _apply_solved_state_mean_to_nongrav_row(
-                        object_variants.non_gravitational_parameters,
-                        0,
-                        parameter_names,
-                        mean_full,
-                    ),
-                ).set_column(
-                    "solved_state_covariance",
-                    SolvedStateCovariances.from_matrix(
-                        [covariance_full], [parameter_names]
+                    NonGravitationalParameters.from_kwargs(
+                        source=object_variants.non_gravitational_parameters.source.take(
+                            [0]
+                        ),
+                        A1=[mean[6]],
+                        A2=[mean[7]],
+                        A3=[mean[8]],
                     ),
                 )
             else:
                 orbit = orbit.set_column(
                     "non_gravitational_parameters",
                     object_variants.non_gravitational_parameters.take([0]),
-                ).set_column(
-                    "solved_state_covariance",
-                    object_variants.solved_state_covariance.take([0]),
                 )
             orbits = qv.concatenate([orbits, orbit])
 
