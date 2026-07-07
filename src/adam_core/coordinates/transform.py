@@ -270,6 +270,113 @@ def _rust_transform_supports(
     return True
 
 
+def _transform_coordinates_native(
+    coords: types.CoordinateType,
+    representation_out: type[types.CoordinateType],
+    frame_out: Literal["ecliptic", "equatorial", "itrf93"],
+    origin_out: OriginCodes | np.ndarray,
+) -> types.CoordinateType | None:
+    """Fully-Rust single-crossing transform: representation change, origin
+    translation (perturber or observatory) via the global SPICE backend,
+    constant-frame rotation, and covariance forward-AD all resolved in Rust.
+
+    Returns ``None`` when the native path does not cover the case (time-varying
+    ITRF93 frames, geodetic input, or an unsupported representation), so
+    ``_try_transform_coordinates_rust`` continues with its per-case fallback.
+    """
+    from .._rust import transform_coordinates_native as _native_transform
+
+    representation_in_name = _RUST_TRANSFORM_REPRESENTATIONS.get(type(coords))
+    representation_out_name = _RUST_TRANSFORM_REPRESENTATIONS.get(representation_out)
+    if representation_in_name is None or representation_out_name is None:
+        return None
+
+    # A single OriginCodes target is a real origin shift; a per-row string
+    # array means "preserve each row's origin" (no shift).
+    origin_codes = list(coords.origin.code.to_numpy(zero_copy_only=False))
+    if isinstance(origin_out, OriginCodes):
+        target_origin: str | None = origin_out.name
+        origin_differs = bool(np.any(np.asarray(origin_codes) != origin_out.name))
+    else:
+        target_origin = None
+        origin_differs = False
+
+    if origin_differs:
+        # Observatory-code source origins require the MPC obscodes table loaded
+        # into the global backend (a separate orchestration not yet nativized
+        # here); route them to the legacy path for now. Perturber origins
+        # (OriginCodes members / SSB) stay native.
+        if any(code not in OriginCodes.__members__ for code in origin_codes):
+            return None
+        # The native origin translation reads the process-global SPICE
+        # backend's kernels directly, so ensure the default kernels are
+        # furnsh-ed (the legacy path did this implicitly via
+        # get_perturber_state -> setup_SPICE).
+        from ..utils.spice import setup_SPICE
+
+        setup_SPICE()
+
+    times = coords.time
+    time_days = times.days.to_numpy(zero_copy_only=False)
+    time_nanos = times.nanos.to_numpy(zero_copy_only=False)
+    # t0/mu are consumed only by the Keplerian/Cometary kernels; a/f only by
+    # geodetic output. Compute them only when needed: `origin.mu()` raises for
+    # non-body origins (e.g. observatory codes), so it must not run for a
+    # Cartesian observatory-origin transform.
+    kep_com = (KeplerianCoordinates, CometaryCoordinates)
+    needs_mu = type(coords) in kep_com or representation_out in kep_com
+    needs_t0 = type(coords) is CometaryCoordinates or representation_out in kep_com
+    t0 = times.to_numpy() if needs_t0 else None
+    mu = coords.origin.mu() if needs_mu else None
+    a = float(WGS84.a) if representation_out is GeodeticCoordinates else None
+    f = float(WGS84.f) if representation_out is GeodeticCoordinates else None
+
+    covariance_matrices = None
+    if not coords.covariance.is_all_nan():
+        matrices = coords.covariance.to_matrix()
+        n = matrices.shape[0]
+        covariance_matrices = np.ascontiguousarray(
+            matrices.reshape(n, 36), dtype=np.float64
+        )
+
+    result = _native_transform(
+        coords.values,
+        representation_in_name,
+        representation_out_name,
+        coords.frame,
+        frame_out,
+        origin_codes,
+        target_origin,
+        times.scale,
+        time_days,
+        time_nanos,
+        covariances=covariance_matrices,
+        t0=t0,
+        mu=mu,
+        a=a,
+        f=f,
+    )
+    if result is None:
+        return None
+
+    values, cov_flat = result
+    values = np.asarray(values, dtype=np.float64)
+    cov_out = None
+    if cov_flat is not None:
+        n = values.shape[0]
+        cov_out = CoordinateCovariances.from_matrix(
+            np.asarray(cov_flat, dtype=np.float64).reshape(n, 6, 6)
+        )
+    out = _coordinates_from_rust_values(
+        values, coords, representation_out, frame_out, covariance=cov_out
+    )
+    if origin_differs and isinstance(origin_out, OriginCodes):
+        out = out.set_column(
+            "origin", Origin.from_kwargs(code=[origin_out.name] * len(out))
+        )
+    return out
+
+
 def _try_transform_coordinates_rust(
     coords: types.CoordinateType,
     representation_out: type[types.CoordinateType],
@@ -284,6 +391,16 @@ def _try_transform_coordinates_rust(
     the caller falls back to the legacy JAX path. Callers must treat a None
     return as an explicit "not supported by Rust yet" signal, not an error.
     """
+    # Preferred fully-Rust single-crossing path (origin translation + frame +
+    # representation + covariance all resolved in Rust). The per-case logic
+    # below is the fallback for what it does not yet cover (time-varying
+    # ITRF93, geodetic input).
+    native = _transform_coordinates_native(
+        coords, representation_out, frame_out, origin_out
+    )
+    if native is not None:
+        return native
+
     if not _rust_transform_supports(coords, representation_out, frame_out, origin_out):
         return None
 

@@ -5,7 +5,7 @@ from ...time import Timestamp
 from ...utils import spice as spice_mod
 from ..cartesian import CartesianCoordinates
 from ..origin import Origin, OriginCodes
-from ..transform import clear_translation_cache, transform_coordinates
+from ..transform import cartesian_to_origin, clear_translation_cache
 
 
 def test_cartesian_to_origin_translation_cache_avoids_recompute(monkeypatch):
@@ -27,6 +27,9 @@ def test_cartesian_to_origin_translation_cache_avoids_recompute(monkeypatch):
 
     monkeypatch.setattr(spice_mod, "get_perturber_state", _counted)
 
+    # transform_coordinates now resolves origin translation in Rust (native
+    # single-crossing path); the Python translation cache under test lives on
+    # cartesian_to_origin, so exercise it directly.
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0, 60001.5]), scale="tdb")
     coords = CartesianCoordinates.from_kwargs(
         x=np.array([1.0, 2.0, 3.0, 4.0]),
@@ -40,11 +43,11 @@ def test_cartesian_to_origin_translation_cache_avoids_recompute(monkeypatch):
         origin=Origin.from_kwargs(code=["SUN"] * 4),
     )
 
-    a = transform_coordinates(coords, origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER)
+    a = cartesian_to_origin(coords, OriginCodes.SOLAR_SYSTEM_BARYCENTER)
     n1 = int(calls["n"])
     assert n1 == 1
 
-    b = transform_coordinates(coords, origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER)
+    b = cartesian_to_origin(coords, OriginCodes.SOLAR_SYSTEM_BARYCENTER)
     assert int(calls["n"]) == n1
     np.testing.assert_allclose(a.values, b.values, rtol=0.0, atol=0.0)
 
@@ -143,10 +146,8 @@ def test_cartesian_to_origin_translation_cache_key_is_order_sensitive(monkeypatc
         origin=Origin.from_kwargs(code=["SUN"] * 4),
     )
 
-    _ = transform_coordinates(coords_a, origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER)
-    out_b = transform_coordinates(
-        coords_b, origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER
-    )
+    _ = cartesian_to_origin(coords_a, OriginCodes.SOLAR_SYSTEM_BARYCENTER)
+    out_b = cartesian_to_origin(coords_b, OriginCodes.SOLAR_SYSTEM_BARYCENTER)
 
     # A distinct order must miss the cache and recompute translations.
     assert int(calls["n"]) == 2

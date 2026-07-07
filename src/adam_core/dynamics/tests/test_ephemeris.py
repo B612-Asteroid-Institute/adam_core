@@ -354,14 +354,20 @@ def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(
         orbits_ssb, observers_ssb, predict_magnitudes=False
     )
 
+    # eph_fast reuses the fast-path SUN-wrt-SSB translation from
+    # get_perturber_state; eph_ref pre-transforms via transform_coordinates,
+    # which now resolves the origin shift through the native Rust path. Both
+    # are the same SPICE spkez state but reach it via slightly different ET
+    # arithmetic, so they agree to ~2e-22 AU rather than bit-for-bit. Gate at a
+    # still-negligible tolerance (~1.5e-6 mm) that catches any real regression.
     np.testing.assert_allclose(
-        eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=0.0
+        eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=1e-15
     )
     np.testing.assert_allclose(
         eph_fast.light_time.to_numpy(),
         eph_ref.light_time.to_numpy(),
         rtol=0.0,
-        atol=0.0,
+        atol=1e-15,
     )
 
 
