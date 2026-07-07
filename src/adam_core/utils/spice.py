@@ -147,18 +147,17 @@ def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
     if kernels is None:
         kernels = DEFAULT_KERNELS
 
-    # The active backend instance is the single source of truth for what is
-    # loaded. register_spice_kernel is idempotent against
-    # ``backend.registered_kernels``, so calling this per default kernel is a
-    # cheap set membership check when already loaded and a real furnsh into a
-    # freshly (re)built backend otherwise. This self-heals after any backend
-    # rebuild (PID change / Ray fork / a test resetting the module backend),
-    # which the previous per-PID env-var guard could not.
+    # The process-global Rust backend is the single source of truth for what
+    # is loaded, and ``furnsh`` is idempotent by path (Rust dedups), so simply
+    # furnsh-ing each kernel is a cheap no-op when already loaded and a real
+    # load into a freshly cleared/rebuilt backend otherwise. This self-heals
+    # after any backend reset (a test calling ``clear``) with no separate
+    # Python-side bookkeeping to desync (personal-cmy.23). ``force`` is
+    # retained for API compatibility; furnsh idempotency makes it a no-op.
+    del force
     backend = get_backend()
     for kernel in kernels:
-        if force or kernel not in backend.registered_kernels:
-            backend.furnsh(kernel)
-            backend.registered_kernels.add(kernel)
+        backend.furnsh(kernel)
     return
 
 
@@ -321,7 +320,7 @@ def list_registered_kernels() -> Set[str]:
     kernels : set[str]
         Set of kernel file paths that are currently registered
     """
-    return get_backend().registered_kernels.copy()
+    return set(get_backend().registered_kernels())
 
 
 def register_spice_kernel(kernel_path: str) -> None:
@@ -333,10 +332,9 @@ def register_spice_kernel(kernel_path: str) -> None:
     kernel_path : str
         Path to the SPICE kernel file
     """
-    backend = get_backend()
-    if kernel_path not in backend.registered_kernels:
-        backend.furnsh(kernel_path)
-        backend.registered_kernels.add(kernel_path)
+    # furnsh is idempotent by path in the Rust backend, so no Python-side
+    # dedup is needed; the global backend's kernel list is the registry.
+    get_backend().furnsh(kernel_path)
 
 
 def unregister_spice_kernel(kernel_path: str) -> None:
@@ -348,10 +346,9 @@ def unregister_spice_kernel(kernel_path: str) -> None:
     kernel_path : str
         Path to the SPICE kernel file
     """
-    backend = get_backend()
-    if kernel_path in backend.registered_kernels:
-        backend.unload(kernel_path)
-        backend.registered_kernels.remove(kernel_path)
+    # unload is a no-op in the Rust backend when the path is not loaded, so
+    # no Python-side membership check is needed.
+    get_backend().unload(kernel_path)
 
 
 def get_spice_body_state(

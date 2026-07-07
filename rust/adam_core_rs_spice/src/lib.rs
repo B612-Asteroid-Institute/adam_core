@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
 use adam_core_rs_coords::types::{
     CoordinateBatch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray, TimeScale,
@@ -124,6 +125,23 @@ pub struct AdamCoreSpiceBackend {
     custom_names: HashMap<String, i32>,
 }
 
+/// Process-global SPICE backend.
+///
+/// Kernel state (loaded SPK/PCK/text readers, custom name bindings) is a
+/// single Rust-owned source of truth for the whole process. Python's
+/// `spice_backend.py` / `PyAdamCoreSpiceBackend` and every Rust-native
+/// consumer (coordinate transforms, ephemeris, observers, OD) share this one
+/// backend, so kernel-load bookkeeping can never desync from what is actually
+/// loaded (the root cause behind personal-cmy.23). The backend holds only
+/// memory-mapped/parsed readers, which are inherited read-only across a Ray
+/// fork, so no per-PID rebuild is required.
+static GLOBAL_BACKEND: OnceLock<Mutex<AdamCoreSpiceBackend>> = OnceLock::new();
+
+/// Return the process-global SPICE backend, initializing it empty on first use.
+pub fn global_backend() -> &'static Mutex<AdamCoreSpiceBackend> {
+    GLOBAL_BACKEND.get_or_init(|| Mutex::new(AdamCoreSpiceBackend::new()))
+}
+
 /// Earth-fixed observer described by MPC observatory parallax coefficients.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroundObserverSite {
@@ -207,6 +225,27 @@ impl AdamCoreSpiceBackend {
             kernels: Vec::new(),
             custom_names: HashMap::new(),
         }
+    }
+
+    /// Paths of every kernel currently loaded, in load order. The `kernels`
+    /// Vec is the registry: `furnsh` is idempotent by path and `unload`
+    /// removes by path, so this is the single source of truth for "what is
+    /// loaded" (superseding the former Python-side registered-kernels set).
+    pub fn registered_kernels(&self) -> Vec<String> {
+        self.kernels.iter().map(|k| k.path().to_string()).collect()
+    }
+
+    /// Whether `path` is currently loaded.
+    pub fn is_registered(&self, path: &str) -> bool {
+        self.kernels.iter().any(|k| k.path() == path)
+    }
+
+    /// Unload every kernel and clear all custom name bindings. Used for test
+    /// isolation (a Rust-level reset of the process-global backend) and any
+    /// caller that needs a clean kernel pool.
+    pub fn clear(&mut self) {
+        self.kernels.clear();
+        self.custom_names.clear();
     }
 
     pub fn furnsh<P: AsRef<Path>>(&mut self, path: P) -> Result<(), SpiceBackendError> {

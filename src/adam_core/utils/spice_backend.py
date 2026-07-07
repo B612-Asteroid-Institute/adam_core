@@ -35,14 +35,13 @@ class RustBackend:
     """
 
     def __init__(self) -> None:
+        # Every handle delegates to the process-global Rust backend, which is
+        # the single source of truth for loaded kernels. Kernel-registration
+        # bookkeeping lives in Rust (the backend's kernel list), so it can
+        # never desync from what is actually loaded, and multiple handles
+        # (e.g. after a ``get_backend`` rebuild) all see the same kernels.
         self._inner = adam_core_spice_backend()
         self._lock = threading.Lock()
-        # Kernel-registration bookkeeping lives on the backend instance so it
-        # can never desync from the kernels actually loaded in Rust. Whenever
-        # ``get_backend`` rebuilds the backend (first use, a PID change from a
-        # Ray fork, or a test resetting ``_BACKEND``), this set starts empty
-        # and ``setup_SPICE`` reloads the defaults into the fresh backend.
-        self.registered_kernels: set[str] = set()
 
     def furnsh(self, path: str) -> None:
         with self._lock:
@@ -51,6 +50,20 @@ class RustBackend:
     def unload(self, path: str) -> None:
         with self._lock:
             self._inner.unload(path)
+
+    def registered_kernels(self) -> list[str]:
+        """Paths of every kernel loaded in the process-global backend."""
+        with self._lock:
+            return list(self._inner.registered_kernels())
+
+    def is_registered(self, path: str) -> bool:
+        with self._lock:
+            return bool(self._inner.is_registered(path))
+
+    def clear(self) -> None:
+        """Unload every kernel and clear custom names (test isolation)."""
+        with self._lock:
+            self._inner.clear()
 
     def spkez(
         self,

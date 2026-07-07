@@ -3,7 +3,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use adam_core_rs_coords::{DataFrame, Epoch, OriginId, TimeArray, TimeScale};
 use adam_core_rs_spice::{
-    builtin_bodc2n, builtin_bodn2c, parse_mpc_obscodes, parse_text_kernel_bindings,
+    builtin_bodc2n, builtin_bodn2c, global_backend, parse_mpc_obscodes, parse_text_kernel_bindings,
     pck_sxform_matrix, AdamCoreSpiceBackend, GroundObserverSite, NaifFrame, PckError, PckFile,
     SpiceBackendError, SpkError, SpkFile, SpkWriter, SpkWriterError, Type3Record, Type3Segment,
     Type9Segment,
@@ -20,15 +20,21 @@ fn lock_err_to_py() -> PyErr {
     PyRuntimeError::new_err("adam-core SPICE backend lock is poisoned")
 }
 
+/// Thin Python veneer over the process-global Rust SPICE backend
+/// (`adam_core_rs_spice::global_backend`). Kernel state is owned entirely in
+/// Rust and shared by every consumer, so multiple `AdamCoreSpiceBackend()`
+/// handles (e.g. after a Python `get_backend()` rebuild) all see the same
+/// loaded kernels; there is no per-instance kernel state to desync
+/// (personal-cmy.23). Only the MPC obscodes cache remains per-handle because
+/// its lookups must not share the kernel lock during observer assembly.
 #[pyclass(name = "AdamCoreSpiceBackend")]
 pub struct PyAdamCoreSpiceBackend {
-    inner: Mutex<AdamCoreSpiceBackend>,
     obscodes: Mutex<HashMap<String, GroundObserverSite>>,
 }
 
 impl PyAdamCoreSpiceBackend {
-    fn lock(&self) -> PyResult<MutexGuard<'_, AdamCoreSpiceBackend>> {
-        self.inner.lock().map_err(|_| lock_err_to_py())
+    fn lock(&self) -> PyResult<MutexGuard<'static, AdamCoreSpiceBackend>> {
+        global_backend().lock().map_err(|_| lock_err_to_py())
     }
 
     fn lock_obscodes(&self) -> PyResult<MutexGuard<'_, HashMap<String, GroundObserverSite>>> {
@@ -41,9 +47,25 @@ impl PyAdamCoreSpiceBackend {
     #[new]
     fn new() -> Self {
         Self {
-            inner: Mutex::new(AdamCoreSpiceBackend::new()),
             obscodes: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Paths of every kernel currently loaded in the process-global backend.
+    fn registered_kernels(&self) -> PyResult<Vec<String>> {
+        Ok(self.lock()?.registered_kernels())
+    }
+
+    /// Whether `path` is currently loaded in the process-global backend.
+    fn is_registered(&self, path: &str) -> PyResult<bool> {
+        Ok(self.lock()?.is_registered(path))
+    }
+
+    /// Unload every kernel and clear custom name bindings from the
+    /// process-global backend. Primarily for test isolation.
+    fn clear(&self) -> PyResult<()> {
+        self.lock()?.clear();
+        Ok(())
     }
 
     /// Parse and cache MPC observatory parallax coefficients (the JSON

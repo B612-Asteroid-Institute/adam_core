@@ -21,17 +21,24 @@ from adam_core.utils.spice_backend import (
 
 @pytest.fixture(autouse=True)
 def _isolate_backend():
-    """Reset the module-level backend between tests so state doesn't
-    leak and PID-change detection stays consistent."""
+    """Reset backend state between tests so kernels don't leak and
+    PID-change detection stays consistent.
+
+    Kernel state is now a process-global in Rust, so resetting the Python
+    wrapper handle no longer clears it; explicitly clear the global backend
+    (the Rust-level test-isolation reset) in addition to the wrapper handle.
+    """
     from adam_core.utils import spice_backend as sb
 
     sb._BACKEND = None
     sb._BACKEND_PID = None
+    sb.get_backend().clear()
     try:
         yield
     finally:
         sb._BACKEND = None
         sb._BACKEND_PID = None
+        sb.get_backend().clear()
 
 
 # ----------------------------------------------------------------------
