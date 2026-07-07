@@ -28,8 +28,6 @@ DEFAULT_KERNELS = [
     earth_itrf93,
 ]
 
-# Global state for tracking custom kernels
-_REGISTERED_KERNELS: Set[str] = set()
 
 J2000_TDB_JD = 2451545.0
 
@@ -149,14 +147,18 @@ def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
     if kernels is None:
         kernels = DEFAULT_KERNELS
 
-    process_id = os.getpid()
-    env_var = f"ADAM_CORE_SPICE_INITIALIZED_{process_id}"
-    if env_var in os.environ and not force:
-        return
-
+    # The active backend instance is the single source of truth for what is
+    # loaded. register_spice_kernel is idempotent against
+    # ``backend.registered_kernels``, so calling this per default kernel is a
+    # cheap set membership check when already loaded and a real furnsh into a
+    # freshly (re)built backend otherwise. This self-heals after any backend
+    # rebuild (PID change / Ray fork / a test resetting the module backend),
+    # which the previous per-PID env-var guard could not.
+    backend = get_backend()
     for kernel in kernels:
-        register_spice_kernel(kernel)
-    os.environ[env_var] = "True"
+        if force or kernel not in backend.registered_kernels:
+            backend.furnsh(kernel)
+            backend.registered_kernels.add(kernel)
     return
 
 
@@ -319,7 +321,7 @@ def list_registered_kernels() -> Set[str]:
     kernels : set[str]
         Set of kernel file paths that are currently registered
     """
-    return _REGISTERED_KERNELS.copy()
+    return get_backend().registered_kernels.copy()
 
 
 def register_spice_kernel(kernel_path: str) -> None:
@@ -331,9 +333,10 @@ def register_spice_kernel(kernel_path: str) -> None:
     kernel_path : str
         Path to the SPICE kernel file
     """
-    if kernel_path not in _REGISTERED_KERNELS:
-        get_backend().furnsh(kernel_path)
-        _REGISTERED_KERNELS.add(kernel_path)
+    backend = get_backend()
+    if kernel_path not in backend.registered_kernels:
+        backend.furnsh(kernel_path)
+        backend.registered_kernels.add(kernel_path)
 
 
 def unregister_spice_kernel(kernel_path: str) -> None:
@@ -345,9 +348,10 @@ def unregister_spice_kernel(kernel_path: str) -> None:
     kernel_path : str
         Path to the SPICE kernel file
     """
-    if kernel_path in _REGISTERED_KERNELS:
-        get_backend().unload(kernel_path)
-        _REGISTERED_KERNELS.remove(kernel_path)
+    backend = get_backend()
+    if kernel_path in backend.registered_kernels:
+        backend.unload(kernel_path)
+        backend.registered_kernels.remove(kernel_path)
 
 
 def get_spice_body_state(

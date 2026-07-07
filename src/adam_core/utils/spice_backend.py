@@ -37,6 +37,12 @@ class RustBackend:
     def __init__(self) -> None:
         self._inner = adam_core_spice_backend()
         self._lock = threading.Lock()
+        # Kernel-registration bookkeeping lives on the backend instance so it
+        # can never desync from the kernels actually loaded in Rust. Whenever
+        # ``get_backend`` rebuilds the backend (first use, a PID change from a
+        # Ray fork, or a test resetting ``_BACKEND``), this set starts empty
+        # and ``setup_SPICE`` reloads the defaults into the fresh backend.
+        self.registered_kernels: set[str] = set()
 
     def furnsh(self, path: str) -> None:
         with self._lock:
