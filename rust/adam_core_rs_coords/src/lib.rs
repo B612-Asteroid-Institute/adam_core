@@ -151,6 +151,20 @@ pub mod orbit_propagation;
 pub use moid::{calculate_moid, calculate_moid_batch};
 pub use orbit_least_squares::{fit_orbit_2body_least_squares, LeastSquaresConfig, LeastSquaresFit};
 
+// Canonical legacy-named surface aliases. These bare names match the legacy
+// public API 1:1 and are the canonical Rust surface; the `_flat6` suffix on the
+// underlying helpers documents the flattened-6 row layout (6 f64 per row,
+// row-major). New code should prefer the bare names.
+pub use self::{
+    cartesian_to_cometary_flat6 as cartesian_to_cometary,
+    cartesian_to_geodetic_flat6 as cartesian_to_geodetic,
+    cartesian_to_keplerian_flat6 as cartesian_to_keplerian,
+    cartesian_to_spherical_flat6 as cartesian_to_spherical,
+    cometary_to_cartesian_flat6 as cometary_to_cartesian,
+    keplerian_to_cartesian_flat6 as keplerian_to_cartesian,
+    spherical_to_cartesian_flat6 as spherical_to_cartesian,
+};
+
 pub fn cartesian_to_cometary_flat6(flat_coords: &[f64], t0: &[f64], mu: &[f64]) -> Vec<f64> {
     assert_eq!(
         flat_coords.len() % 6,
