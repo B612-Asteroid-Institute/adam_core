@@ -1,11 +1,12 @@
-"""Apples-to-apples collision/impact-detection benchmark (bead personal-cmy.9).
+"""Two-runtime collision/impact-detection benchmark (bead personal-cmy.9).
 
-Times Python ``adam_assist.ASSISTPropagator._detect_collisions`` against the
-Rust-backed ``adam_assist_rust.ASSISTPropagator._detect_collisions`` on
-identical same-epoch workloads mixing deep Earth impactors (which exercise the
-stopping-condition removal path) with safe heliocentric orbits (which exercise
-the long stepping tail). Writes a JSON artifact next to the other assist
-public-semantics benchmarks.
+Times legacy Python ``adam_assist.ASSISTPropagator.detect_collisions`` inside
+``.legacy-assist-venv`` against local Rust-backed
+``adam_assist_rust.ASSISTPropagator.detect_collisions`` on identical same-epoch
+workloads mixing deep Earth impactors (which exercise the stopping-condition
+removal path) with safe heliocentric orbits (which exercise the long stepping
+tail). Writes a JSON artifact next to the other assist public-semantics
+benchmarks.
 
 Parity is asserted per lane before timings are recorded: identical impact
 sets and identical survivor sets. Impact-time agreement is reported (max
@@ -18,16 +19,17 @@ Run with: pdm run assist-impacts-benchmark
 
 from __future__ import annotations
 
+import argparse
 import json
 import platform
-import statistics
 import subprocess
+import sys
 import time
 from importlib.metadata import version as package_version
 from pathlib import Path
 
 import numpy as np
-from adam_assist import ASSISTPropagator as PythonASSISTPropagator
+from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates import CartesianCoordinates, Origin
 from adam_core.coordinates.origin import OriginCodes
 from adam_core.dynamics.impacts import EARTH_RADIUS_KM, CollisionConditions
@@ -35,7 +37,19 @@ from adam_core.orbits import Orbits
 from adam_core.time import Timestamp
 from adam_core.utils.spice import get_perturber_state
 
-from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from migration.parity._assist_bench import (  # noqa: E402
+    TWO_RUNTIME_COMPARISON_MODE,
+    percentiles,
+    time_rust,
+)
+from migration.parity._assist_oracle import (  # noqa: E402
+    LEGACY_ASSIST_VENV_PYTHON,
+    LegacyAssistPropagator,
+)
 
 EPOCH_MJD = 60000.0
 NUM_DAYS = 30
@@ -63,16 +77,18 @@ def _machine() -> dict[str, str]:
     }
 
 
-def _lane_orbits(n: int, rng: np.random.Generator) -> Orbits:
-    """``n`` same-epoch orbits: IMPACTOR_FRACTION deep radial-infall Earth
-    impactors (offsets 30,000-90,000 km, Earth-matched velocity) and the rest
-    safe orbits displaced 0.05-0.30 AU with perturbed velocities."""
+def _lane_orbits(
+    n: int, rng: np.random.Generator, *, impactor_fraction: float
+) -> Orbits:
+    """``n`` same-epoch orbits: a configurable fraction of deep radial-infall
+    Earth impactors (offsets 30,000-90,000 km, Earth-matched velocity) and the
+    rest safe orbits displaced 0.05-0.30 AU with perturbed velocities."""
     epoch = Timestamp.from_mjd([EPOCH_MJD], scale="tdb")
     earth = get_perturber_state(
         OriginCodes.EARTH, epoch, frame="ecliptic", origin=OriginCodes.SUN
     ).values[0]
 
-    n_impactors = max(1, int(round(n * IMPACTOR_FRACTION)))
+    n_impactors = max(1, int(round(n * impactor_fraction)))
     values = np.tile(earth, (n, 1))
     unit = rng.normal(size=(n, 3))
     unit /= np.linalg.norm(unit, axis=1, keepdims=True)
@@ -112,40 +128,59 @@ def _conditions() -> CollisionConditions:
     )
 
 
-def _time_detect(propagator, orbits, conditions) -> tuple[list[float], object, object]:
-    samples: list[float] = []
-    results = events = None
-    for _ in range(WARMUPS):
-        propagator._detect_collisions(orbits, NUM_DAYS, conditions)
-    for _ in range(REPEATS):
-        start = time.perf_counter()
-        results, events = propagator._detect_collisions(orbits, NUM_DAYS, conditions)
-        samples.append(time.perf_counter() - start)
-    return samples, results, events
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=ARTIFACT)
+    parser.add_argument("--repeats", type=int, default=REPEATS)
+    parser.add_argument("--warmups", type=int, default=WARMUPS)
+    parser.add_argument("--lanes", type=int, nargs="+", default=list(LANES))
+    parser.add_argument("--num-days", type=int, default=NUM_DAYS)
+    parser.add_argument("--impactor-fraction", type=float, default=IMPACTOR_FRACTION)
+    return parser
 
 
-def _p50_p95(samples: list[float]) -> tuple[float, float]:
-    ordered = sorted(samples)
-    return (
-        statistics.median(ordered),
-        float(np.percentile(np.asarray(ordered), 95)),
-    )
-
-
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
+    args = _build_arg_parser().parse_args(argv)
+    if args.repeats < 3:
+        raise ValueError("--repeats must be at least 3 to report p50/p95")
+    if args.warmups < 0:
+        raise ValueError("--warmups must be non-negative")
+    if any(n < 1 for n in args.lanes):
+        raise ValueError("--lanes entries must be positive")
+    if not 0.0 < args.impactor_fraction <= 1.0:
+        raise ValueError("--impactor-fraction must be in (0, 1]")
+    if not LEGACY_ASSIST_VENV_PYTHON.exists():
+        print(
+            "legacy adam_assist runtime (.legacy-assist-venv) not built; "
+            "see migration/parity/README"
+        )
+        return 1
     rng = np.random.default_rng(20260703)
-    python_propagator = PythonASSISTPropagator()
+    legacy_propagator = LegacyAssistPropagator()
     rust_propagator = RustASSISTPropagator()
     conditions = _conditions()
 
     lanes = []
-    for n in LANES:
-        orbits = _lane_orbits(n, rng)
-        py_samples, py_results, py_events = _time_detect(
-            python_propagator, orbits, conditions
+    for n in args.lanes:
+        orbits = _lane_orbits(n, rng, impactor_fraction=args.impactor_fraction)
+        # Legacy timing runs inside the isolated .legacy-assist-venv runtime;
+        # the parity output comes from a separate (cached) legacy call.
+        py_samples = legacy_propagator.time_detect_collisions(
+            orbits,
+            args.num_days,
+            conditions,
+            repeats=args.repeats,
+            warmups=args.warmups,
         )
-        rust_samples, rust_results, rust_events = _time_detect(
-            rust_propagator, orbits, conditions
+        py_results, py_events = legacy_propagator.detect_collisions(
+            orbits, args.num_days, conditions
+        )
+        rust_samples, (rust_results, rust_events) = time_rust(
+            lambda o=orbits: rust_propagator.detect_collisions(
+                o, args.num_days, conditions
+            ),
+            repeats=args.repeats,
+            warmups=args.warmups,
         )
 
         py_impacted = sorted(py_events.orbit_id.to_pylist())
@@ -167,11 +202,11 @@ def main() -> None:
             float(np.abs(py_times - rust_times).max()) if len(py_times) else 0.0
         )
 
-        py_p50, py_p95 = _p50_p95(py_samples)
-        rust_p50, rust_p95 = _p50_p95(rust_samples)
+        py_p50, py_p95 = percentiles(py_samples)
+        rust_p50, rust_p95 = percentiles(rust_samples)
         lane = {
             "n_orbits": n,
-            "num_days": NUM_DAYS,
+            "num_days": args.num_days,
             "n_impacts": len(py_impacted),
             "python_samples_s": py_samples,
             "rust_samples_s": rust_samples,
@@ -192,12 +227,14 @@ def main() -> None:
         )
 
     artifact = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "comparison_mode": TWO_RUNTIME_COMPARISON_MODE,
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "description": (
-            "Python adam_assist vs Rust adam_assist_rust _detect_collisions on "
-            "identical same-epoch impactor/safe workloads; parity of impact and "
-            "survivor sets asserted per lane before timing."
+            "Two-runtime: legacy adam_assist.detect_collisions timed inside the "
+            "isolated .legacy-assist-venv vs Rust adam_assist_rust.detect_collisions "
+            "timed locally, on identical same-epoch impactor/safe workloads; parity "
+            "of impact and survivor sets asserted per lane before timing."
         ),
         "machine": _machine(),
         "packages": {
@@ -205,14 +242,16 @@ def main() -> None:
             "adam_assist_rust": package_version("adam-assist-rust"),
             "adam_core": package_version("adam-core"),
         },
-        "repeats": REPEATS,
-        "warmups": WARMUPS,
-        "impactor_fraction": IMPACTOR_FRACTION,
+        "repeats": args.repeats,
+        "warmups": args.warmups,
+        "impactor_fraction": args.impactor_fraction,
         "lanes": lanes,
     }
-    ARTIFACT.write_text(json.dumps(artifact, indent=2))
-    print(f"wrote {ARTIFACT}")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(artifact, indent=2))
+    print(f"wrote {args.output}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

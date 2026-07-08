@@ -127,24 +127,17 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     return response
 
 
-def time_legacy(
-    method: str, *, reps: int = 5, warmup: int = 1, **request_fields: Any
+def _time_request(
+    request: dict[str, Any], *, repeats: int, warmups: int
 ) -> list[float]:
-    """Time the legacy adam_assist call in the isolated runtime.
+    """Time a legacy request inside the isolated runtime (uncached).
 
-    Timing loops run INSIDE the legacy subprocess (``mode="time"``), so the
+    The timing loop runs INSIDE the legacy subprocess (``mode="time"``), so the
     reported per-rep seconds exclude subprocess spawn + Arrow-IPC transfer --
-    exactly like the adam_core speed oracle's ``time_legacy``. Not cached
-    (timings are measured fresh each call).
+    exactly like the adam_core speed oracle. Timings are always measured fresh.
     """
     response = _invoke_subprocess(
-        {
-            "method": method,
-            "mode": "time",
-            "reps": reps,
-            "warmup": warmup,
-            **request_fields,
-        }
+        {**request, "mode": "time", "reps": repeats, "warmup": warmups}
     )
     return response["elapsed"]
 
@@ -178,57 +171,104 @@ def _detect_result(response: dict[str, Any]) -> tuple[Any, Any]:
 
 class LegacyAssistPropagator:
     """Drop-in proxy for downstream ``adam_assist.ASSISTPropagator`` executed in
-    the isolated ``.legacy-assist-venv`` legacy runtime."""
+    the isolated ``.legacy-assist-venv`` legacy runtime.
 
+    Each parity-output method (on-disk cached) has a ``time_*`` counterpart that
+    measures the legacy call's latency *inside* the legacy runtime, for
+    two-runtime performance comparisons that exclude subprocess/IPC overhead.
+    """
+
+    # -- request builders (shared by the output + timing methods) ----------
+    @staticmethod
+    def _propagate_request(orbits: Any, times: Any, kwargs: dict[str, Any]) -> dict:
+        return {
+            "method": "propagate_orbits",
+            "orbits": table_to_ipc(orbits),
+            "orbits_cls": type(orbits).__name__,
+            "times": table_to_ipc(times),
+            "kwargs": kwargs,
+        }
+
+    @staticmethod
+    def _ephemeris_request(orbits: Any, observers: Any, kwargs: dict[str, Any]) -> dict:
+        return {
+            "method": "generate_ephemeris",
+            "orbits": table_to_ipc(orbits),
+            "orbits_cls": type(orbits).__name__,
+            "observers": table_to_ipc(observers),
+            "kwargs": kwargs,
+        }
+
+    @staticmethod
+    def _detect_request(
+        orbits: Any,
+        num_days: Any,
+        conditions: Any,
+        kwargs: dict[str, Any],
+        *,
+        private: bool,
+    ) -> dict:
+        return {
+            "method": "_detect_collisions" if private else "detect_collisions",
+            "orbits": table_to_ipc(orbits),
+            "orbits_cls": type(orbits).__name__,
+            "num_days": num_days,
+            "conditions": None if conditions is None else table_to_ipc(conditions),
+            "kwargs": kwargs,
+        }
+
+    # -- parity outputs (cached) -------------------------------------------
     def propagate_orbits(self, orbits: Any, times: Any, **kwargs: Any) -> Any:
-        response = _run(
-            {
-                "method": "propagate_orbits",
-                "orbits": table_to_ipc(orbits),
-                "orbits_cls": type(orbits).__name__,
-                "times": table_to_ipc(times),
-                "kwargs": kwargs,
-            }
-        )
-        return _result_table(response)
+        return _result_table(_run(self._propagate_request(orbits, times, kwargs)))
 
     def generate_ephemeris(self, orbits: Any, observers: Any, **kwargs: Any) -> Any:
-        response = _run(
-            {
-                "method": "generate_ephemeris",
-                "orbits": table_to_ipc(orbits),
-                "orbits_cls": type(orbits).__name__,
-                "observers": table_to_ipc(observers),
-                "kwargs": kwargs,
-            }
-        )
-        return _result_table(response)
+        return _result_table(_run(self._ephemeris_request(orbits, observers, kwargs)))
 
     def detect_collisions(
         self, orbits: Any, num_days: Any, conditions: Any = None, **kwargs: Any
     ) -> tuple[Any, Any]:
-        response = _run(
-            {
-                "method": "detect_collisions",
-                "orbits": table_to_ipc(orbits),
-                "orbits_cls": type(orbits).__name__,
-                "num_days": num_days,
-                "conditions": None if conditions is None else table_to_ipc(conditions),
-                "kwargs": kwargs,
-            }
+        request = self._detect_request(
+            orbits, num_days, conditions, kwargs, private=False
         )
-        return _detect_result(response)
+        return _detect_result(_run(request))
 
     def _detect_collisions(
         self, orbits: Any, num_days: Any, conditions: Any
     ) -> tuple[Any, Any]:
-        response = _run(
-            {
-                "method": "_detect_collisions",
-                "orbits": table_to_ipc(orbits),
-                "orbits_cls": type(orbits).__name__,
-                "num_days": num_days,
-                "conditions": table_to_ipc(conditions),
-            }
+        request = self._detect_request(orbits, num_days, conditions, {}, private=True)
+        return _detect_result(_run(request))
+
+    # -- timing (uncached; the loop runs inside the legacy runtime) ---------
+    def time_propagate_orbits(
+        self, orbits: Any, times: Any, *, repeats: int, warmups: int, **kwargs: Any
+    ) -> list[float]:
+        return _time_request(
+            self._propagate_request(orbits, times, kwargs),
+            repeats=repeats,
+            warmups=warmups,
         )
-        return _detect_result(response)
+
+    def time_generate_ephemeris(
+        self, orbits: Any, observers: Any, *, repeats: int, warmups: int, **kwargs: Any
+    ) -> list[float]:
+        return _time_request(
+            self._ephemeris_request(orbits, observers, kwargs),
+            repeats=repeats,
+            warmups=warmups,
+        )
+
+    def time_detect_collisions(
+        self,
+        orbits: Any,
+        num_days: Any,
+        conditions: Any = None,
+        *,
+        repeats: int,
+        warmups: int,
+        **kwargs: Any,
+    ) -> list[float]:
+        return _time_request(
+            self._detect_request(orbits, num_days, conditions, kwargs, private=False),
+            repeats=repeats,
+            warmups=warmups,
+        )

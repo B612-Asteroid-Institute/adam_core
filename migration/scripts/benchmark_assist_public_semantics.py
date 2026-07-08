@@ -1,31 +1,30 @@
-"""Benchmark Python adam-assist against the Rust-backed ASSIST PyO3 shim.
+"""Two-runtime benchmark: legacy Python adam-assist vs Rust PyO3 ASSIST.
 
 This is the RM-STANDALONE-007B apples-to-apples benchmark hook for
-``adam_assist.ASSISTPropagator.propagate_orbits`` public semantics. It times
-Python-callable public propagation for the Python package and the experimental
-GPL ``adam_assist_rust`` package over identical quivr orbit/time workloads and
-records timing plus residual metadata.
+``ASSISTPropagator.propagate_orbits`` public semantics. Legacy
+``adam_assist`` is exercised in the isolated ``.legacy-assist-venv`` via the
+migration oracle (timing loop inside the subprocess, output cached separately),
+while ``adam_assist_rust`` is timed locally over identical quivr orbit/time
+workloads. The artifact records timing plus residual metadata.
 """
 
 from __future__ import annotations
 
 import argparse
-import gc
 import hashlib
 import json
 import multiprocessing as mp
 import platform
-import statistics
+import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pyarrow as pa
-from adam_assist import ASSISTPropagator as PythonASSISTPropagator
 from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
@@ -37,6 +36,19 @@ from jpl_small_bodies_de441_n16 import de441_n16
 from naif_de440 import de440
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from migration.parity._assist_bench import (  # noqa: E402
+    TWO_RUNTIME_COMPARISON_MODE,
+    percentiles,
+    time_rust,
+)
+from migration.parity._assist_oracle import (  # noqa: E402
+    LEGACY_ASSIST_VENV_PYTHON,
+    LegacyAssistPropagator,
+)
+
 DEFAULT_OUTPUT = (
     REPO_ROOT
     / "migration"
@@ -409,25 +421,6 @@ def _workloads() -> list[Workload]:
     ]
 
 
-def _timed_call(
-    function: Callable[[], OrbitTable], *, repeats: int, warmups: int
-) -> tuple[list[float], OrbitTable]:
-    result = function()
-    for _ in range(warmups):
-        result = function()
-    timings: list[float] = []
-    for _ in range(repeats):
-        gc.collect()
-        started = time.perf_counter()
-        result = function()
-        timings.append(time.perf_counter() - started)
-    return timings, result
-
-
-def _p95(values: list[float]) -> float:
-    return float(np.percentile(np.asarray(values, dtype=np.float64), 95))
-
-
 def _effective_chunk_size(workload: Workload, max_processes: int) -> int:
     rows = max(len(workload.orbits), 1)
     if max_processes <= 1:
@@ -487,40 +480,37 @@ def _state_residuals(actual: OrbitTable, expected: OrbitTable) -> dict[str, Any]
 def _benchmark_workload(
     workload: Workload,
     *,
-    python_propagator: PythonASSISTPropagator,
+    legacy_propagator: LegacyAssistPropagator,
     rust_propagator: RustASSISTPropagator,
     repeats: int,
     warmups: int,
     max_processes: int,
 ) -> dict[str, Any]:
     chunk_size = _effective_chunk_size(workload, max_processes)
-
-    def run_python() -> OrbitTable:
-        return python_propagator.propagate_orbits(
-            workload.orbits,
-            workload.times,
-            covariance=False,
-            max_processes=max_processes,
-            chunk_size=chunk_size,
-        )
+    kwargs = {
+        "covariance": False,
+        "max_processes": max_processes,
+        "chunk_size": chunk_size,
+    }
 
     def run_rust() -> OrbitTable:
         return rust_propagator.propagate_orbits(
-            workload.orbits,
-            workload.times,
-            covariance=False,
-            max_processes=max_processes,
-            chunk_size=chunk_size,
+            workload.orbits, workload.times, **kwargs
         )
 
-    python_timings, python_output = _timed_call(
-        run_python, repeats=repeats, warmups=warmups
+    python_timings = legacy_propagator.time_propagate_orbits(
+        workload.orbits,
+        workload.times,
+        repeats=repeats,
+        warmups=warmups,
+        **kwargs,
     )
-    rust_timings, rust_output = _timed_call(run_rust, repeats=repeats, warmups=warmups)
-    python_p50 = statistics.median(python_timings)
-    python_p95 = _p95(python_timings)
-    rust_p50 = statistics.median(rust_timings)
-    rust_p95 = _p95(rust_timings)
+    python_output = legacy_propagator.propagate_orbits(
+        workload.orbits, workload.times, **kwargs
+    )
+    rust_timings, rust_output = time_rust(run_rust, repeats=repeats, warmups=warmups)
+    python_p50, python_p95 = percentiles(python_timings)
+    rust_p50, rust_p95 = percentiles(rust_timings)
     input_rows = len(workload.orbits)
     target_rows = len(workload.times)
     target_mjd = workload.times.mjd().to_numpy(zero_copy_only=False)
@@ -619,9 +609,16 @@ def main(argv: list[str] | None = None) -> int:
     if not workloads:
         raise ValueError(f"No workloads selected for lanes: {sorted(selected_lanes)}")
 
-    python_started = time.perf_counter()
-    python_propagator = PythonASSISTPropagator()
-    python_constructor_seconds = time.perf_counter() - python_started
+    if not LEGACY_ASSIST_VENV_PYTHON.exists():
+        print(
+            "legacy adam_assist runtime (.legacy-assist-venv) not built; "
+            "see migration/parity/README"
+        )
+        return 1
+
+    legacy_started = time.perf_counter()
+    legacy_propagator = LegacyAssistPropagator()
+    legacy_proxy_constructor_seconds = time.perf_counter() - legacy_started
     rust_started = time.perf_counter()
     rust_propagator = RustASSISTPropagator()
     rust_constructor_seconds = time.perf_counter() - rust_started
@@ -629,7 +626,7 @@ def main(argv: list[str] | None = None) -> int:
     results = [
         _benchmark_workload(
             workload,
-            python_propagator=python_propagator,
+            legacy_propagator=legacy_propagator,
             rust_propagator=rust_propagator,
             repeats=args.repeats,
             warmups=args.warmups,
@@ -638,8 +635,9 @@ def main(argv: list[str] | None = None) -> int:
         for workload in workloads
     ]
     artifact = {
-        "schema_version": 5,
+        "schema_version": 6,
         "benchmark_id": "assist_public_semantics_benchmark_2026-05-26",
+        "comparison_mode": TWO_RUNTIME_COMPARISON_MODE,
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "packages": {name: _package_version(name) for name in PACKAGE_NAMES},
         "kernels": [
@@ -663,11 +661,16 @@ def main(argv: list[str] | None = None) -> int:
             "thread_mode": (
                 (
                     f"parallel public calls: max_processes={args.max_processes}; "
-                    "Python adam-assist uses Ray worker processes and adam_assist_rust "
-                    "uses the same value as its Rust Rayon thread_limit"
+                    "legacy Python adam-assist is timed inside .legacy-assist-venv "
+                    "(Ray worker processes) and adam_assist_rust uses the same public "
+                    "value as its Rust Rayon thread_limit"
                 )
                 if args.max_processes > 1
-                else "single-process/single-thread public calls: max_processes=1; Rust thread_limit=1"
+                else (
+                    "two-runtime single-process/single-thread public calls: "
+                    "legacy Python adam-assist is timed inside .legacy-assist-venv "
+                    "with max_processes=1; Rust thread_limit=1"
+                )
             ),
             "size_lanes": {
                 "tiny": "small public-semantics smoke and fixture-shaped workloads",
@@ -681,11 +684,15 @@ def main(argv: list[str] | None = None) -> int:
                 "enough orbit rows."
             ),
             "object_lifecycle": (
-                "Propagator objects are constructed once before timed calls. Rust construction loads "
-                "assist-rs kernels into AssistData; Python adam-assist loads assist.Ephem inside each propagation call."
+                "Two-runtime benchmark: legacy adam-assist timing loops run inside "
+                ".legacy-assist-venv and include the legacy public call lifecycle "
+                "(ASSISTPropagator/Ephem construction per call, matching downstream "
+                "composition behavior). Rust adam_assist_rust is constructed once in "
+                "the current runtime; timed calls reuse its AssistData. Legacy parity "
+                "outputs are cached separately from timing samples."
             ),
             "constructor_seconds": {
-                "python_adam_assist": python_constructor_seconds,
+                "legacy_oracle_proxy": legacy_proxy_constructor_seconds,
                 "rust_adam_assist_rust": rust_constructor_seconds,
             },
         },

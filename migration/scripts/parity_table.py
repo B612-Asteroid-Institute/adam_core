@@ -67,6 +67,22 @@ ASSIST_COMPARISON_MODE = "gpl_rust_assist_backend_vs_current_python_adam_assist"
 _DASH = "\u2014"
 
 
+def _assist_comparison_mode(*sources: dict[str, Any] | None) -> str:
+    """Comparison mode recorded by regenerated assist artifacts.
+
+    Historical tracked artifacts predate the two-runtime legacy-adam_assist
+    benchmark harness and do not carry this field, so they retain the previous
+    current-python comparison label until intentionally refreshed.
+    """
+    for source in sources:
+        if not source:
+            continue
+        mode = source.get("comparison_mode")
+        if mode:
+            return str(mode)
+    return ASSIST_COMPARISON_MODE
+
+
 def _truncate(text: str, n: int | None) -> str:
     text = " ".join(text.split())
     if n is None or n <= 0:
@@ -894,8 +910,8 @@ def _format_assist_covariance(data: dict[str, Any]) -> list[str]:
         "sigma-point/auto are deterministic (element-wise parity expected); "
         "monte-carlo uses different RNGs and is compared statistically.",
         "",
-        "| Lane | Workload | Method | Parity expected | \u00d7p50 | \u00d7p95 "
-        "| max \u03c3 rel | max \\|\u0394pos\\| (m) |",
+        "| Lane | Workload | Method | Parity expected | ×p50 | ×p95 "
+        "| max σ rel | max \\|Δpos\\| (m) |",
         "|---|---|---|---|---:|---:|---:|---:|",
     ]
     for workload in data.get("workloads", []):
@@ -921,11 +937,11 @@ def _format_assist_covariance(data: dict[str, Any]) -> list[str]:
 
 def _format_assist_impacts(data: dict[str, Any]) -> list[str]:
     lines = [
-        "### Impact detection performance (`_detect_collisions`)",
+        "### Impact detection performance (`detect_collisions`)",
         "",
         f"{data.get('description', '')}",
         "",
-        "| Orbits | Days | Impacts | Py p50 (s) | Rust p50 (s) | \u00d7p50 | \u00d7p95 "
+        "| Orbits | Days | Impacts | Legacy p50 (s) | Rust p50 (s) | \u00d7p50 | \u00d7p95 "
         "| max impact-time \u0394 (days) |",
         "|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
@@ -968,17 +984,30 @@ def _format_assist_section(
         else "unknown"
     )
 
+    comparison_mode = _assist_comparison_mode(propagation, covariance, impacts)
+    if "legacy_python_adam_assist" in comparison_mode:
+        comparison_text = (
+            "Rust GPL backend (`adam_assist_rust` over `assist-rs` + "
+            "`adam_core_rs_assist`) vs legacy Python "
+            "`adam_assist.ASSISTPropagator` executed in the isolated "
+            "`.legacy-assist-venv` runtime. The current adam_core tree no "
+            "longer ships the Python Propagator composition, so refreshed "
+            "benchmark artifacts use the two-runtime oracle."
+        )
+    else:
+        comparison_text = (
+            "Rust GPL backend (`adam_assist_rust` over `assist-rs` + "
+            "`adam_core_rs_assist`) vs the current Python "
+            "`adam_assist.ASSISTPropagator` public path. Both sides are current "
+            "implementations; this describes historical artifacts that predate "
+            "the two-runtime oracle refresh."
+        )
     lines = [
         "## ASSIST (GPL) N-Body Propagation",
         "",
-        f"**Mode**: `{ASSIST_COMPARISON_MODE}` \u2014 Rust GPL backend "
-        "(`adam_assist_rust` over `assist-rs` + `adam_core_rs_assist`) vs the "
-        "current Python `adam_assist.ASSISTPropagator` public path. Both sides "
-        "are current implementations; the frozen legacy checkout has no ASSIST "
-        "surface, so this lane is governed by public-semantics fixtures and "
-        "benchmark artifacts rather than the legacy-vs-current fuzz harness. "
-        "Both sides load the same DE440/SB441 kernels from the PyPI data "
-        "packages installed with the package dependencies (`naif-de440`, "
+        f"**Mode**: `{comparison_mode}` — {comparison_text} Both sides load "
+        "the same DE440/SB441 kernels from the PyPI data packages installed "
+        "with the package dependencies (`naif-de440`, "
         "`jpl-small-bodies-de441-n16`); kernel SHA-256 identity is recorded in "
         "each artifact. Rows stay artifact-driven for the same reason as the "
         "frozen legacy speed baselines: multi-minute benchmark suites behind "

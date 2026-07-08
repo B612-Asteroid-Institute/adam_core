@@ -1,12 +1,12 @@
-"""Benchmark Python adam-assist against the Rust ASSIST shim for covariance.
+"""Two-runtime benchmark for legacy Python vs Rust ASSIST covariance.
 
 This is the RM-STANDALONE-007B apples-to-apples covariance benchmark hook for
 ``ASSISTPropagator.propagate_orbits(..., covariance=True)`` public semantics. It
 times the public sampled-covariance path (variant creation, variant
-propagation, and collapse-to-nominal covariance) for the Python ``adam_assist``
-package and the experimental GPL ``adam_assist_rust`` package over identical
-quivr orbit/time workloads, and records timing plus state and covariance
-residual metadata.
+propagation, and collapse-to-nominal covariance) for legacy Python
+``adam_assist`` in the isolated ``.legacy-assist-venv`` and local Rust
+``adam_assist_rust`` over identical quivr orbit/time workloads, and records
+timing plus state and covariance residual metadata.
 
 This is intentionally kept separate from the propagation-only state benchmark
 (``benchmark_assist_public_semantics.py``) so the covariance numbers never get
@@ -28,10 +28,8 @@ nominal orbit is propagated deterministically (not sampled) before collapse.
 from __future__ import annotations
 
 import argparse
-import gc
 import json
 import multiprocessing as mp
-import statistics
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -39,7 +37,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-from adam_assist import ASSISTPropagator as PythonASSISTPropagator
 from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.orbits.orbits import Orbits
@@ -51,6 +48,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from migration.parity._assist_bench import (  # noqa: E402
+    TWO_RUNTIME_COMPARISON_MODE,
+    percentiles,
+    time_rust,
+)
+from migration.parity._assist_oracle import (  # noqa: E402
+    LEGACY_ASSIST_VENV_PYTHON,
+    LegacyAssistPropagator,
+)
 from migration.scripts import benchmark_assist_public_semantics as base  # noqa: E402
 
 DEFAULT_OUTPUT = (
@@ -253,48 +259,40 @@ def _covariance_residuals(actual: Orbits, expected: Orbits) -> dict[str, Any]:
 def _benchmark_workload(
     workload: CovarianceWorkload,
     *,
-    python_propagator: PythonASSISTPropagator,
+    legacy_propagator: LegacyAssistPropagator,
     rust_propagator: RustASSISTPropagator,
     repeats: int,
     warmups: int,
     max_processes: int,
 ) -> dict[str, Any]:
     chunk_size = base._effective_chunk_size(workload, max_processes)
-
-    def run_python() -> Orbits:
-        return python_propagator.propagate_orbits(
-            workload.orbits,
-            workload.times,
-            covariance=True,
-            covariance_method=workload.covariance_method,
-            num_samples=workload.num_samples,
-            seed=workload.seed,
-            max_processes=max_processes,
-            chunk_size=chunk_size,
-        )
+    kwargs = {
+        "covariance": True,
+        "covariance_method": workload.covariance_method,
+        "num_samples": workload.num_samples,
+        "seed": workload.seed,
+        "max_processes": max_processes,
+        "chunk_size": chunk_size,
+    }
 
     def run_rust() -> Orbits:
         return rust_propagator.propagate_orbits(
-            workload.orbits,
-            workload.times,
-            covariance=True,
-            covariance_method=workload.covariance_method,
-            num_samples=workload.num_samples,
-            seed=workload.seed,
-            max_processes=max_processes,
-            chunk_size=chunk_size,
+            workload.orbits, workload.times, **kwargs
         )
 
-    python_timings, python_output = base._timed_call(
-        run_python, repeats=repeats, warmups=warmups
+    python_timings = legacy_propagator.time_propagate_orbits(
+        workload.orbits,
+        workload.times,
+        repeats=repeats,
+        warmups=warmups,
+        **kwargs,
     )
-    rust_timings, rust_output = base._timed_call(
-        run_rust, repeats=repeats, warmups=warmups
+    python_output = legacy_propagator.propagate_orbits(
+        workload.orbits, workload.times, **kwargs
     )
-    python_p50 = statistics.median(python_timings)
-    python_p95 = base._p95(python_timings)
-    rust_p50 = statistics.median(rust_timings)
-    rust_p95 = base._p95(rust_timings)
+    rust_timings, rust_output = time_rust(run_rust, repeats=repeats, warmups=warmups)
+    python_p50, python_p95 = percentiles(python_timings)
+    rust_p50, rust_p95 = percentiles(rust_timings)
     input_rows = len(workload.orbits)
     target_rows = len(workload.times)
     return {
@@ -388,16 +386,21 @@ def main(argv: list[str] | None = None) -> int:
         workload for workload in _workloads() if workload.lane in selected_lanes
     ]
 
-    python_propagator = PythonASSISTPropagator()
+    if not LEGACY_ASSIST_VENV_PYTHON.exists():
+        print(
+            "legacy adam_assist runtime (.legacy-assist-venv) not built; "
+            "see migration/parity/README"
+        )
+        return 1
+    legacy_propagator = LegacyAssistPropagator()
     rust_propagator = RustASSISTPropagator()
 
     results: list[dict[str, Any]] = []
     for workload in workloads:
-        gc.collect()
         results.append(
             _benchmark_workload(
                 workload,
-                python_propagator=python_propagator,
+                legacy_propagator=legacy_propagator,
                 rust_propagator=rust_propagator,
                 repeats=args.repeats,
                 warmups=args.warmups,
@@ -407,8 +410,9 @@ def main(argv: list[str] | None = None) -> int:
 
     include_sha256 = not args.skip_kernel_sha256
     artifact = {
-        "schema_version": 1,
+        "schema_version": 2,
         "benchmark_id": "assist_public_semantics_covariance_benchmark_2026-06-20",
+        "comparison_mode": TWO_RUNTIME_COMPARISON_MODE,
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "packages": {name: base._package_version(name) for name in base.PACKAGE_NAMES},
         "kernels": [
@@ -429,14 +433,16 @@ def main(argv: list[str] | None = None) -> int:
             "cpu_count": mp.cpu_count(),
             "max_processes": args.max_processes,
             "thread_mode": (
-                "parallel public calls: Python adam-assist uses Ray worker "
-                "processes and adam_assist_rust uses the same value as its Rust "
-                "Rayon thread_limit"
+                "two-runtime public calls: legacy Python adam-assist is timed "
+                "inside .legacy-assist-venv (Ray worker processes) and local "
+                "adam_assist_rust uses the same public max_processes value as "
+                "its Rust Rayon thread_limit"
             ),
             "covariance_methods": (
                 "Public sampled covariance: VariantOrbits.create -> variant "
-                "propagation -> collapse-to-nominal covariance, mirrored by the "
-                "Rust adam_core_rs_coords::variant_sampling path."
+                "propagation -> collapse-to-nominal covariance. Legacy parity "
+                "outputs are cached separately from timing samples; legacy timing "
+                "loops run inside .legacy-assist-venv and Rust timing runs locally."
             ),
             "stochastic_policy": (
                 "sigma-point and auto are deterministic and compared element-wise "

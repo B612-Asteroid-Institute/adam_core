@@ -1,11 +1,11 @@
-"""Two-runtime performance comparison for adam_assist (legacy Python vs Rust).
+"""Two-runtime performance smoke comparison for adam_assist (legacy vs Rust).
 
-Mirrors the adam_core speed gate's two-runtime model. The legacy,
-composition-based ``adam_assist.ASSISTPropagator`` is timed *inside* the
-isolated ``.legacy-assist-venv`` (the timing loop runs in that subprocess, so
-per-rep seconds exclude subprocess spawn + Arrow-IPC transfer), and the Rust
-``adam_assist_rust.ASSISTPropagator`` is timed locally in this runtime. Prints a
-p50 / p95 / speedup table per lane.
+A quick, dependency-light check that the two-runtime perf plumbing works and
+that the Rust backend beats legacy Python ASSIST on representative lanes. The
+full, artifact-writing benchmarks live in
+``migration/scripts/benchmark_assist_{public_semantics,covariance,impacts}.py``
+(also two-runtime). The legacy ``adam_assist.ASSISTPropagator`` is timed inside
+the isolated ``.legacy-assist-venv``; the Rust propagator is timed locally.
 
 Run:  .venv/bin/python -m migration.scripts.perf_assist_two_runtime
 Requires the dedicated legacy runtime (.legacy-assist-venv); see
@@ -15,7 +15,6 @@ migration/parity/README.
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 import numpy as np
@@ -26,30 +25,15 @@ from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator  # noqa: E
 from adam_core.observers import Observers  # noqa: E402
 from adam_core.time import Timestamp  # noqa: E402
 from adam_core.utils.helpers.orbits import make_real_orbits  # noqa: E402
+from migration.parity._assist_bench import percentiles, time_rust  # noqa: E402
 from migration.parity._assist_oracle import (  # noqa: E402
     LEGACY_ASSIST_VENV_PYTHON,
-    time_legacy,
+    LegacyAssistPropagator,
 )
-from migration.parity._assist_serde import table_to_ipc  # noqa: E402
 
-REPS = 5
-WARMUP = 1
+REPEATS = 5
+WARMUPS = 1
 EPOCH_MJD = 60000.0
-
-
-def _pctl(xs: list[float], q: float) -> float:
-    return float(np.percentile(np.asarray(xs, dtype=np.float64), q))
-
-
-def _time_local(fn, reps: int = REPS, warmup: int = WARMUP) -> list[float]:
-    for _ in range(warmup):
-        fn()
-    out: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter()
-        fn()
-        out.append(time.perf_counter() - t0)
-    return out
 
 
 def _common_epoch_orbits(n: int):
@@ -64,25 +48,22 @@ def main() -> int:
         print("legacy .legacy-assist-venv not built; skipping perf comparison")
         return 0
 
+    legacy = LegacyAssistPropagator()
     rust = RustASSISTPropagator()
     rows: list[tuple[str, list[float], list[float]]] = []
 
     targets = Timestamp.from_mjd([EPOCH_MJD + 0.5, EPOCH_MJD + 1.0], scale="tdb")
     for label, n in [("propagate 1x2", 1), ("propagate 20x2", 20)]:
         orbits = _common_epoch_orbits(n)
-        legacy = time_legacy(
-            "propagate_orbits",
-            orbits=table_to_ipc(orbits),
-            orbits_cls="Orbits",
-            times=table_to_ipc(targets),
-            kwargs={"max_processes": 1},
-            reps=REPS,
-            warmup=WARMUP,
+        legacy_s = legacy.time_propagate_orbits(
+            orbits, targets, repeats=REPEATS, warmups=WARMUPS, max_processes=1
         )
-        local = _time_local(
-            lambda o=orbits: rust.propagate_orbits(o, targets, max_processes=1)
+        rust_s, _ = time_rust(
+            lambda o=orbits: rust.propagate_orbits(o, targets, max_processes=1),
+            repeats=REPEATS,
+            warmups=WARMUPS,
         )
-        rows.append((label, legacy, local))
+        rows.append((label, legacy_s, rust_s))
 
     orbits = _common_epoch_orbits(5)
     eph_times = Timestamp.from_mjd([EPOCH_MJD + 0.5, EPOCH_MJD + 1.0], scale="utc")
@@ -90,30 +71,28 @@ def main() -> int:
     eph_kwargs = dict(
         max_processes=1, predict_magnitudes=False, predict_phase_angle=False
     )
-    legacy = time_legacy(
-        "generate_ephemeris",
-        orbits=table_to_ipc(orbits),
-        orbits_cls="Orbits",
-        observers=table_to_ipc(observers),
-        kwargs=eph_kwargs,
-        reps=REPS,
-        warmup=WARMUP,
+    legacy_s = legacy.time_generate_ephemeris(
+        orbits, observers, repeats=REPEATS, warmups=WARMUPS, **eph_kwargs
     )
-    local = _time_local(
-        lambda: rust.generate_ephemeris(orbits, observers, **eph_kwargs)
+    rust_s, _ = time_rust(
+        lambda: rust.generate_ephemeris(orbits, observers, **eph_kwargs),
+        repeats=REPEATS,
+        warmups=WARMUPS,
     )
-    rows.append(("ephemeris 5x2obs", legacy, local))
+    rows.append(("ephemeris 5x2obs", legacy_s, rust_s))
 
     header = (
         f"{'lane':18} {'legacy p50':>12} {'rust p50':>11} {'x p50':>7} "
         f"{'legacy p95':>12} {'rust p95':>11} {'x p95':>7}"
     )
-    print(f"\nadam_assist two-runtime perf (legacy Python ASSIST vs Rust), reps={REPS}")
+    print(
+        f"\nadam_assist two-runtime perf (legacy Python ASSIST vs Rust), reps={REPEATS}"
+    )
     print(header)
     print("-" * len(header))
-    for label, legacy_t, local_t in rows:
-        lp50, rp50 = _pctl(legacy_t, 50), _pctl(local_t, 50)
-        lp95, rp95 = _pctl(legacy_t, 95), _pctl(local_t, 95)
+    for label, legacy_s, rust_s in rows:
+        lp50, lp95 = percentiles(legacy_s)
+        rp50, rp95 = percentiles(rust_s)
         print(
             f"{label:18} {lp50 * 1e3:>10.2f}ms {rp50 * 1e3:>9.2f}ms {lp50 / rp50:>6.2f}x "
             f"{lp95 * 1e3:>10.2f}ms {rp95 * 1e3:>9.2f}ms {lp95 / rp95:>6.2f}x"

@@ -106,6 +106,9 @@ def _handle(req: dict[str, Any]) -> dict[str, Any]:
     if mode == "time":
         warmup = int(req.get("warmup", 1))
         reps = int(req.get("reps", 5))
+        # Match the local Rust timing helper: one unmeasured priming call, then
+        # explicit warmups, then measured reps.
+        _run_one(req)
         for _ in range(warmup):
             _run_one(req)
         elapsed: list[float] = []
