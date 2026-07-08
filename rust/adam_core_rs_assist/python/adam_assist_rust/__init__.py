@@ -2,9 +2,12 @@
 
 This package is the GPL Python boundary for benchmarking the private
 ``assist-rs`` adapter against the public ``adam_assist.ASSISTPropagator``
-semantics. It currently covers public orbit propagation plus sampled covariance
-expansion/collapse; ephemeris and collision parity remain separate
-RM-STANDALONE-007B work items.
+semantics. It covers public orbit propagation, covariance ephemeris, and
+collision detection -- each a single Python->Rust crossing (sampled covariance
+expansion/collapse and rayon parallelism live in Rust). The propagator is
+standalone: it implements the public ``propagate_orbits`` /
+``generate_ephemeris`` / ``detect_collisions`` contract directly and does not
+rely on any adam_core base composition.
 """
 
 from __future__ import annotations
@@ -23,7 +26,13 @@ from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.coordinates.transform import transform_coordinates
-from adam_core.dynamics.impacts import CollisionConditions, CollisionEvent, ImpactMixin
+from adam_core.dynamics.impacts import (
+    EARTH_RADIUS_KM,
+    CollisionConditions,
+    CollisionEvent,
+    ImpactMixin,
+)
+from adam_core.propagator.utils import ensure_input_origin_and_frame
 from adam_core.observers.observers import Observers
 from adam_core.orbits.ephemeris import Ephemeris
 from adam_core.orbits.orbits import Orbits
@@ -301,7 +310,9 @@ class ASSISTPropagator(ImpactMixin):
         chunk_size: int | None = 100,
         max_processes: int | None = 1,
         covariance: bool = False,
-        covariance_method: Literal["auto", "sigma-point", "monte-carlo"] = "monte-carlo",
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
         num_samples: int = 1000,
         seed: int | None = None,
     ) -> Ephemeris:
@@ -547,6 +558,35 @@ class ASSISTPropagator(ImpactMixin):
             ),
         )
         return fitted, float(chi2), int(iterations), bool(converged)
+
+    def detect_collisions(
+        self,
+        orbits: OrbitTable,
+        num_days: int,
+        conditions: CollisionConditions | None = None,
+        max_processes: int | None = 1,
+        chunk_size: int | None = 100,
+    ) -> tuple[OrbitTable, CollisionEvent]:
+        """Single-crossing Rust collision detection (bead personal-cmy.33.9).
+
+        Standalone public entry: the Rust backend owns the whole same-epoch
+        detection in one crossing, so no Ray chunking is required.
+        ``max_processes``/``chunk_size`` are accepted for signature
+        compatibility with the abstract ``ImpactMixin.detect_collisions``
+        contract and are ignored (rayon handles internal parallelism). This
+        replaces the deleted adam_core ``ImpactMixin.detect_collisions`` Ray
+        composition that this propagator previously inherited.
+        """
+        if conditions is None:
+            conditions = CollisionConditions.from_kwargs(
+                condition_id=["Earth"],
+                collision_object=Origin.from_kwargs(code=["EARTH"]),
+                collision_distance=[EARTH_RADIUS_KM],
+                stopping_condition=[True],
+            )
+        propagated, impacts = self._detect_collisions(orbits, num_days, conditions)
+        propagated = ensure_input_origin_and_frame(orbits, propagated)
+        return propagated, impacts
 
     def _detect_collisions(
         self,
