@@ -1,6 +1,6 @@
 import logging
-from abc import abstractmethod
-from typing import List, Optional, Tuple
+from abc import ABC, abstractmethod
+from typing import Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -10,7 +10,6 @@ import quivr as qv
 from adam_core.constants import KM_P_AU
 from adam_core.constants import Constants as c
 from adam_core.coordinates import CartesianCoordinates, Origin
-from adam_core.parallel import get_backend, resolve_max_processes
 
 from ..coordinates.residuals import Residuals
 from ..coordinates.spherical import SphericalCoordinates
@@ -18,9 +17,7 @@ from ..orbits import Orbits
 from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..propagator.propagator import OrbitType
-from ..propagator.utils import ensure_input_origin_and_frame
 from ..time import Timestamp
-from ..utils.iter import _iterate_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +26,6 @@ C = c.C
 # Use the Earth's equatorial radius as used in DE4XX ephemerides
 # adam_core defines it in au but we need it in km
 EARTH_RADIUS_KM = c.R_EARTH_EQUATORIAL * KM_P_AU
-
-
-def _impact_chunk_worker(idx_chunk, orbits, propagator_class, num_days, conditions):
-    prop = propagator_class()
-    orbits_chunk = orbits.take(idx_chunk)
-    variants, impacts = prop._detect_collisions(orbits_chunk, num_days, conditions)
-    return variants, impacts
 
 
 class ImpactProbabilities(qv.Table):
@@ -97,23 +87,16 @@ class CollisionEvent(qv.Table):
         fig.show()
 
 
-class ImpactMixin:
-    """
-    `~adam_core.propagator.Propagator` mixin with signature for detecting Earth impacts.
-    Subclasses should implement the _detect_collisions method.
+class ImpactMixin(ABC):
+    """Collision-detection contract for propagators.
+
+    Concrete (Rust-backed) propagators implement :meth:`detect_collisions` as a
+    single Python->Rust crossing (rayon parallelism lives in the backend).
+    adam_core provides only the abstract contract -- no Python/Ray composition.
+    Callers sample variants (via :func:`calculate_impacts`) before calling this.
     """
 
     @abstractmethod
-    def _detect_collisions(
-        self, orbits: Orbits, num_days: float, conditions: CollisionConditions
-    ) -> Tuple[OrbitType, CollisionEvent]:
-        """
-        Detect collisions for the given orbits.
-
-        THIS FUNCTION SHOULD NOT BE OVERRIDDEN BY THE USER.
-        """
-        pass
-
     def detect_collisions(
         self,
         orbits: OrbitType,
@@ -157,48 +140,7 @@ class ImpactMixin:
             - collision_distance: Distance from the object at which collisions were detected.
             - stopping_condition: Whether the propagation was stopped after a collision.
         """
-        if conditions is None:
-            conditions = CollisionConditions.from_kwargs(
-                condition_id=["Earth"],
-                collision_object=Origin.from_kwargs(code=["EARTH"]),
-                collision_distance=[EARTH_RADIUS_KM],
-                stopping_condition=[True],
-            )
-
-        if resolve_max_processes(max_processes) > 1:
-            impact_list: List[CollisionConditions] = []
-            propagated_list: List[OrbitType] = []
-
-            backend = get_backend(max_processes)
-
-            # Place orbits in shared store, dereferencing if the caller already
-            # passed a Ray ObjectRef so we can size chunks correctly.
-            if backend.is_ref(orbits):
-                orbits_ref = orbits
-                orbits = backend.get(orbits_ref)
-            else:
-                orbits_ref = backend.put(orbits)
-
-            idx = np.arange(0, len(orbits))
-            args_iter = (
-                (idx_chunk, orbits_ref, self.__class__, num_days, conditions)
-                for idx_chunk in _iterate_chunks(idx, chunk_size)
-            )
-            for propagated, impacts in backend.map_unordered(
-                _impact_chunk_worker, args_iter
-            ):
-                propagated_list.append(propagated)
-                impact_list.append(impacts)
-
-            propagated = qv.concatenate(propagated_list)
-            impacts = qv.concatenate(impact_list)
-
-        else:
-            propagated, impacts = self._detect_collisions(orbits, num_days, conditions)
-
-        propagated = ensure_input_origin_and_frame(orbits, propagated)
-
-        return propagated, impacts
+        ...
 
 
 def calculate_impacts(

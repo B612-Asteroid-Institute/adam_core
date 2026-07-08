@@ -4,7 +4,6 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-import pytest
 
 from adam_assist_rust import ASSISTPropagator
 from adam_assist_rust import _coordinates_from_result, _time_parts
@@ -116,12 +115,13 @@ def test_native_covariance_output_dictionary_has_flattened_covariance_rows() -> 
     assert np.isfinite(result["covariances"]).all()
 
 
-def test_sigma_point_covariance_matches_python_public_same_epoch() -> None:
-    python_assist = pytest.importorskip("adam_assist")
+def test_sigma_point_covariance_matches_python_public_same_epoch(
+    python_reference_propagator,
+) -> None:
     orbits = _covariance_orbits()
     times = orbits.coordinates.time
 
-    expected = python_assist.ASSISTPropagator().propagate_orbits(
+    expected = python_reference_propagator.propagate_orbits(
         orbits,
         times,
         covariance=True,
@@ -152,12 +152,13 @@ def test_sigma_point_covariance_matches_python_public_same_epoch() -> None:
     )
 
 
-def test_sigma_point_covariance_matches_python_public_multiple_target_epochs() -> None:
-    python_assist = pytest.importorskip("adam_assist")
+def test_sigma_point_covariance_matches_python_public_multiple_target_epochs(
+    python_reference_propagator,
+) -> None:
     orbits = _covariance_orbits()
     times = Timestamp.from_mjd([60000.25, 60001.0], scale="tdb")
 
-    expected = python_assist.ASSISTPropagator().propagate_orbits(
+    expected = python_reference_propagator.propagate_orbits(
         orbits,
         times,
         covariance=True,

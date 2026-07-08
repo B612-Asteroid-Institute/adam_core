@@ -72,6 +72,44 @@ Verify it's reachable:
 # → [oracle smoke] cart→sph OK, ...
 ```
 
+## Legacy adam_assist oracle
+
+The GPL `adam_assist_rust` parity suite
+(`rust/adam_core_rs_assist/python/tests/`) compares the Rust
+`adam_assist_rust.ASSISTPropagator` against the legacy, composition-based
+downstream `adam_assist.ASSISTPropagator` with the **same two-runtime
+pattern**. adam_core here has deleted the base `Propagator` composition, so
+the legacy propagator is no longer instantiable in the main runtime; it runs
+in a dedicated `.legacy-assist-venv` (gitignored) pinning legacy adam_core
+(composition) + downstream `adam_assist`:
+
+```bash
+python3.13 -m venv .legacy-assist-venv
+.legacy-assist-venv/bin/pip install 'assist==1.2.3' 'rebound>=4.4.10'
+.legacy-assist-venv/bin/pip install -e /Users/aleck/Code/adam-core-legacy-main
+.legacy-assist-venv/bin/pip install naif-de440 jpl-small-bodies-de441-n16
+.legacy-assist-venv/bin/pip install 'adam-assist==0.3.9' --no-deps
+```
+
+`migration/parity/_assist_oracle.py` exposes a `LegacyAssistPropagator`
+drop-in proxy: each `propagate_orbits` / `generate_ephemeris` /
+`detect_collisions` call serializes its quivr inputs to Arrow IPC, runs the
+legacy propagator in the isolated runtime
+(`migration/parity/_assist_legacy_runner.py`), and reconstructs the result
+under the main runtime's adam_core. Legacy outputs are cached under
+`migration/artifacts/assist_parity_cache/` (gitignored) keyed by a stable
+hash of the request, so the expensive ASSIST integrations run once per
+distinct input (tests with non-deterministic monte-carlo inputs re-run the
+legacy runtime live, like the adam_core fuzz gate). Set
+`ADAM_CORE_ASSIST_PARITY_REFRESH=1` to force re-running the legacy runtime;
+the venv Python is overridable via `ADAM_CORE_LEGACY_ASSIST_VENV_PYTHON`.
+
+The parity tests skip gracefully when `.legacy-assist-venv` is absent. The
+frozen public-semantics fixture
+(`migration/artifacts/assist_public_semantics_fixture_2026-05-20.json`, the
+Rust crate's compile-time oracle) is likewise regenerated in this legacy
+runtime by `test_assist_public_semantics_fixture_is_current`.
+
 ## Running the gates
 
 Full baseline-main gate (writes `migration/artifacts/parity_gate.json`):

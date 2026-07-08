@@ -10,7 +10,6 @@ and matches Python adam_assist public semantics.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -48,12 +47,13 @@ def _covariance_orbits() -> Orbits:
     )
 
 
-def test_variant_orbits_mapping_and_order_match_python_public() -> None:
-    python_assist = pytest.importorskip("adam_assist")
+def test_variant_orbits_mapping_and_order_match_python_public(
+    python_reference_propagator,
+) -> None:
     variants = VariantOrbits.create(_covariance_orbits(), method="sigma-point")
     times = Timestamp.from_mjd([60000.25, 60001.0], scale="tdb")
 
-    expected = python_assist.ASSISTPropagator().propagate_orbits(
+    expected = python_reference_propagator.propagate_orbits(
         variants, times, max_processes=1, chunk_size=100
     )
     actual = RustASSISTPropagator().propagate_orbits(
@@ -83,12 +83,13 @@ def test_variant_orbits_mapping_and_order_match_python_public() -> None:
     )
 
 
-def test_non_tdb_utc_target_rescaling_matches_python_public() -> None:
-    python_assist = pytest.importorskip("adam_assist")
+def test_non_tdb_utc_target_rescaling_matches_python_public(
+    python_reference_propagator,
+) -> None:
     orbits = _covariance_orbits()
     utc_times = Timestamp.from_mjd([60000.25, 60001.0], scale="utc")
 
-    expected = python_assist.ASSISTPropagator().propagate_orbits(
+    expected = python_reference_propagator.propagate_orbits(
         orbits, utc_times, max_processes=1, chunk_size=100
     )
     actual = RustASSISTPropagator().propagate_orbits(

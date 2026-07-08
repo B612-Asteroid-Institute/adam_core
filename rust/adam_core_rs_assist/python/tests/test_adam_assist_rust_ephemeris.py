@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -42,13 +41,14 @@ def _sorted_values(ephemeris) -> np.ndarray:
     return np.asarray(ordered.coordinates.values, dtype=np.float64)
 
 
-def test_generate_ephemeris_matches_python_adam_assist() -> None:
-    python_assist = pytest.importorskip("adam_assist")
+def test_generate_ephemeris_matches_python_adam_assist(
+    python_reference_propagator,
+) -> None:
     orbits = _orbits()
     times = Timestamp.from_mjd([60000.5, 60001.0], scale="utc")
     observers = Observers.from_code("X05", times)
 
-    expected = python_assist.ASSISTPropagator().generate_ephemeris(
+    expected = python_reference_propagator.generate_ephemeris(
         orbits,
         observers,
         covariance=False,
@@ -70,14 +70,15 @@ def test_generate_ephemeris_matches_python_adam_assist() -> None:
     np.testing.assert_allclose(actual_values, expected_values, atol=1.0e-9, rtol=0)
 
 
-def test_generate_ephemeris_mixed_observers_and_photometry_matches_python() -> None:
+def test_generate_ephemeris_mixed_observers_and_photometry_matches_python(
+    python_reference_propagator,
+) -> None:
     """Ownership decision (bead personal-cmy.17): the backend-generic
     ``generate_ephemeris<P>`` in the permissive core owns light-time /
     aberration / photometry semantics; the GPL adapter supplies ASSIST
     propagation. This gates the remaining public-semantics slices vs Python
     ``adam_assist``: mixed observer codes in one call and the photometry
     columns (predicted V magnitude + phase angle)."""
-    python_assist = pytest.importorskip("adam_assist")
     import quivr as qv
     from adam_core.orbits.orbits import PhysicalParameters
 
@@ -96,7 +97,7 @@ def test_generate_ephemeris_mixed_observers_and_photometry_matches_python() -> N
         [Observers.from_code("X05", times), Observers.from_code("500", times)]
     )
 
-    expected = python_assist.ASSISTPropagator().generate_ephemeris(
+    expected = python_reference_propagator.generate_ephemeris(
         orbits,
         observers,
         covariance=False,
@@ -159,7 +160,9 @@ def _sorted_covariance(ephemeris) -> np.ndarray:
     return ordered.coordinates.covariance.to_matrix()
 
 
-def test_generate_ephemeris_covariance_matches_python_adam_assist() -> None:
+def test_generate_ephemeris_covariance_matches_python_adam_assist(
+    python_reference_propagator,
+) -> None:
     """Rust-native covariance ephemeris (bead personal-cmy.33.2): sample orbit
     variants, generate per-variant ephemeris, and collapse the variant
     topocentric-spherical coordinates to per-row covariance -- all inside the
@@ -168,7 +171,6 @@ def test_generate_ephemeris_covariance_matches_python_adam_assist() -> None:
     adam_core base composition). Sigma-point sampling is deterministic and
     bit-identical across both, so this is a tight parity check modulo the
     Rust-vs-Python ASSIST propagation + light-time differences."""
-    python_assist = pytest.importorskip("adam_assist")
     from adam_core.coordinates.covariances import CoordinateCovariances
 
     base = _orbits()
@@ -186,7 +188,7 @@ def test_generate_ephemeris_covariance_matches_python_adam_assist() -> None:
     times = Timestamp.from_mjd([60000.5, 60001.0], scale="utc")
     observers = Observers.from_code("X05", times)
 
-    expected = python_assist.ASSISTPropagator().generate_ephemeris(
+    expected = python_reference_propagator.generate_ephemeris(
         orbits,
         observers,
         covariance=True,
@@ -212,7 +214,7 @@ def test_generate_ephemeris_covariance_matches_python_adam_assist() -> None:
     actual_cov = _sorted_covariance(actual)
     expected_cov = _sorted_covariance(expected)
     assert actual_cov.shape == expected_cov.shape
-    assert not np.all(np.isnan(actual_cov)), (
-        "rust covariance ephemeris produced an all-NaN covariance"
-    )
+    assert not np.all(
+        np.isnan(actual_cov)
+    ), "rust covariance ephemeris produced an all-NaN covariance"
     np.testing.assert_allclose(actual_cov, expected_cov, atol=1.0e-16, rtol=1.0e-4)

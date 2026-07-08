@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -54,12 +53,13 @@ def _bench_0079_unique_epoch_orbit() -> Orbits:
     )
 
 
-def test_same_epoch_multi_orbit_fast_path_matches_python_public() -> None:
-    python_assist = pytest.importorskip("adam_assist")
+def test_same_epoch_multi_orbit_fast_path_matches_python_public(
+    python_reference_propagator,
+) -> None:
     orbits = _same_epoch_orbits()
     times = Timestamp.from_mjd([60000.25, 60001.0], scale="tdb")
 
-    expected = python_assist.ASSISTPropagator().propagate_orbits(
+    expected = python_reference_propagator.propagate_orbits(
         orbits,
         times,
         max_processes=1,
@@ -85,12 +85,13 @@ def test_same_epoch_multi_orbit_fast_path_matches_python_public() -> None:
     )
 
 
-def test_unique_epoch_long_horizon_regression_matches_python_public() -> None:
-    python_assist = pytest.importorskip("adam_assist")
+def test_unique_epoch_long_horizon_regression_matches_python_public(
+    python_reference_propagator,
+) -> None:
     orbits = _bench_0079_unique_epoch_orbit()
     times = Timestamp.from_mjd([60365.25], scale="tdb")
 
-    expected = python_assist.ASSISTPropagator().propagate_orbits(
+    expected = python_reference_propagator.propagate_orbits(
         orbits,
         times,
         max_processes=1,

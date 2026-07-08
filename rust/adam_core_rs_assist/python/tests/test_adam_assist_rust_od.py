@@ -16,7 +16,6 @@ ephemeris crossing per iteration vs seven sequential Python ASSIST calls).
 
 import numpy as np
 import pytest
-from adam_assist import ASSISTPropagator as PythonASSISTPropagator
 from adam_core.coordinates import (
     CartesianCoordinates,
     CoordinateCovariances,
@@ -54,7 +53,7 @@ def _make_orbit(state: np.ndarray, orbit_id: str) -> Orbits:
 
 
 @pytest.fixture(scope="module")
-def od_problem():
+def od_problem(python_reference_propagator):
     """Noise-free ASSIST astrometry of a truth orbit + a perturbed start."""
     n = 8
     times = Timestamp.from_mjd(
@@ -62,7 +61,7 @@ def od_problem():
     )
     observers = Observers.from_code("X05", times)
     truth = _make_orbit(TRUTH_STATE, "truth")
-    python_propagator = PythonASSISTPropagator()
+    python_propagator = python_reference_propagator
     predicted = python_propagator.generate_ephemeris(
         truth,
         observers,

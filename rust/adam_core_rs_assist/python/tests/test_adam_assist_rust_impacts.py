@@ -19,7 +19,6 @@ diff 7.7e-5 AU, survivor overshoot diff 0.18 d at dt~4 d.
 
 import numpy as np
 import pytest
-from adam_assist import ASSISTPropagator as PythonASSISTPropagator
 from adam_core.coordinates import CartesianCoordinates, Origin
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import OriginCodes
@@ -99,8 +98,8 @@ def _earth_conditions() -> CollisionConditions:
 
 
 @pytest.fixture(scope="module")
-def python_propagator() -> PythonASSISTPropagator:
-    return PythonASSISTPropagator()
+def python_propagator(python_reference_propagator):
+    return python_reference_propagator
 
 
 @pytest.fixture(scope="module")

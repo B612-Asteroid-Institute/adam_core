@@ -131,3 +131,7 @@ migration/artifacts/rust_latency_current.json
 migration/artifacts/rust_benchmark_gate.json
 decisions.md
 journal.md
+
+# adam_assist parity two-runtime oracle (see migration/parity/README)
+.legacy-assist-venv/
+migration/artifacts/assist_parity_cache/

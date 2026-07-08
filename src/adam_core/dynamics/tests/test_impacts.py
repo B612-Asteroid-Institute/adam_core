@@ -11,8 +11,10 @@ from ...coordinates import (
 )
 from ...orbits import Orbits, VariantOrbits
 from ...propagator import Propagator
+from ...propagator.utils import ensure_input_origin_and_frame
 from ...time import Timestamp
 from ..impacts import (
+    EARTH_RADIUS_KM,
     CollisionConditions,
     CollisionEvent,
     ImpactMixin,
@@ -24,29 +26,49 @@ from ..impacts import (
 
 
 class MockImpactPropagator(Propagator, ImpactMixin):
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        return state
+    """Minimal concrete propagator implementing the public single-crossing
+    contract directly (the adam_core base composition has been deleted).
 
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    ``detect_collisions`` replicates the previous mock ``_detect_collisions``
+    hook plus the base ``ImpactMixin.detect_collisions`` behavior (default
+    conditions + ``ensure_input_origin_and_frame`` to restore the caller's
+    origin/frame), so the ``calculate_impacts`` orchestration tests are
+    unchanged.
+    """
 
-    def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
+    def propagate_orbits(self, orbits: Orbits, times: Timestamp, **kwargs) -> Orbits:
         return orbits
 
-    def _detect_collisions(
-        self, orbits: Orbits, num_days: float, conditions: CollisionConditions
+    def generate_ephemeris(self, orbits, observers, **kwargs):
+        raise NotImplementedError("MockImpactPropagator does not generate ephemeris")
+
+    def detect_collisions(
+        self,
+        orbits: Orbits,
+        num_days: float,
+        conditions: CollisionConditions | None = None,
+        max_processes: int | None = 1,
+        chunk_size: int | None = 100,
     ) -> Orbits:
+        if conditions is None:
+            conditions = CollisionConditions.from_kwargs(
+                condition_id=["Earth"],
+                collision_object=Origin.from_kwargs(code=["EARTH"]),
+                collision_distance=[EARTH_RADIUS_KM],
+                stopping_condition=[True],
+            )
+
         # Artificially set the orbits.coordinates.times to the end time
         # except for the orbits who impacted
-        new_times = orbits.coordinates.time.add_days(num_days)
-        orbits = orbits.set_column("coordinates.time", new_times)
+        moved = orbits.set_column(
+            "coordinates.time", orbits.coordinates.time.add_days(num_days)
+        )
 
         # Do a transform away from the input origin and frame
-        orbits_transformed = orbits.set_column(
+        moved_transformed = moved.set_column(
             "coordinates",
             transform_coordinates(
-                orbits.coordinates,
+                moved.coordinates,
                 representation_out=CartesianCoordinates,
                 origin_out=OriginCodes.EARTH,
                 frame_out="equatorial",
@@ -54,7 +76,7 @@ class MockImpactPropagator(Propagator, ImpactMixin):
         )
 
         # Pick random orbit to impact
-        variant = orbits_transformed[0]
+        variant = moved_transformed[0]
         impact = CollisionEvent.from_kwargs(
             orbit_id=variant.orbit_id,
             variant_id=variant.variant_id,
@@ -80,7 +102,10 @@ class MockImpactPropagator(Propagator, ImpactMixin):
             stopping_condition=[False],
         )
 
-        return variant, impact
+        # Restore the caller's origin/frame, mirroring the deleted base
+        # ImpactMixin.detect_collisions composition.
+        propagated = ensure_input_origin_and_frame(orbits, variant)
+        return propagated, impact
 
 
 def test_calculate_impacts():
