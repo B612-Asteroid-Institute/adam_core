@@ -75,14 +75,8 @@ def _cache_key(request: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _run(request: dict[str, Any]) -> dict[str, Any]:
-    refresh = os.environ.get("ADAM_CORE_ASSIST_PARITY_REFRESH") == "1"
-    key = _cache_key(request)
-    cache_path = CACHE_DIR / f"{key}.pkl"
-    if not refresh and cache_path.exists():
-        with cache_path.open("rb") as handle:
-            return pickle.load(handle)
-
+def _invoke_subprocess(request: dict[str, Any]) -> dict[str, Any]:
+    """Run one request in the isolated legacy runtime (no caching)."""
     _ensure_venv()
     payload = pickle.dumps(request, protocol=pickle.HIGHEST_PROTOCOL)
     env = dict(os.environ)
@@ -111,6 +105,19 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             f"Legacy adam_assist oracle raised: {response.get('error')}\n"
             f"{response.get('traceback', '')}"
         )
+    return response
+
+
+def _run(request: dict[str, Any]) -> dict[str, Any]:
+    """Parity-mode call with on-disk caching (keyed by a stable request hash)."""
+    refresh = os.environ.get("ADAM_CORE_ASSIST_PARITY_REFRESH") == "1"
+    key = _cache_key(request)
+    cache_path = CACHE_DIR / f"{key}.pkl"
+    if not refresh and cache_path.exists():
+        with cache_path.open("rb") as handle:
+            return pickle.load(handle)
+
+    response = _invoke_subprocess(request)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     tmp_path = cache_path.with_suffix(".pkl.tmp")
@@ -118,6 +125,28 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
         pickle.dump(response, handle, protocol=pickle.HIGHEST_PROTOCOL)
     tmp_path.replace(cache_path)
     return response
+
+
+def time_legacy(
+    method: str, *, reps: int = 5, warmup: int = 1, **request_fields: Any
+) -> list[float]:
+    """Time the legacy adam_assist call in the isolated runtime.
+
+    Timing loops run INSIDE the legacy subprocess (``mode="time"``), so the
+    reported per-rep seconds exclude subprocess spawn + Arrow-IPC transfer --
+    exactly like the adam_core speed oracle's ``time_legacy``. Not cached
+    (timings are measured fresh each call).
+    """
+    response = _invoke_subprocess(
+        {
+            "method": method,
+            "mode": "time",
+            "reps": reps,
+            "warmup": warmup,
+            **request_fields,
+        }
+    )
+    return response["elapsed"]
 
 
 def _result_table(response: dict[str, Any]) -> Any:
