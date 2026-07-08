@@ -85,6 +85,15 @@ LEGACY_REPO_ROOT = Path(
         "ADAM_CORE_LEGACY_REPO_ROOT", "/Users/aleck/Code/adam-core-legacy-main"
     )
 )
+# The committed speed baseline was captured against this upstream-main legacy
+# commit. Assert it before cache validation so a moved checkout fails with an
+# explicit, actionable drift error instead of an opaque identity mismatch. Set
+# ADAM_CORE_LEGACY_EXPECTED_GIT_COMMIT only when deliberately bumping and
+# recapturing the legacy speed baseline.
+EXPECTED_LEGACY_GIT_COMMIT = os.environ.get(
+    "ADAM_CORE_LEGACY_EXPECTED_GIT_COMMIT",
+    "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac",
+).strip()
 LEGACY_RELEVANT_UNTRACKED_PREFIXES = (
     "src/",
     "adam_core/",
@@ -370,9 +379,18 @@ def _legacy_identity() -> dict[str, object]:
     )
     relevant_untracked_status = _legacy_relevant_untracked_status()
     legacy_python = _oracle.LEGACY_VENV_PYTHON
+    legacy_commit = _git_output(["rev-parse", "HEAD"], cwd=LEGACY_REPO_ROOT)
+    if EXPECTED_LEGACY_GIT_COMMIT and legacy_commit != EXPECTED_LEGACY_GIT_COMMIT:
+        raise ValueError(
+            f"Legacy checkout {LEGACY_REPO_ROOT} is at {legacy_commit}, but the "
+            f"committed speed baseline expects {EXPECTED_LEGACY_GIT_COMMIT}. "
+            "Reset the dedicated legacy checkout to the pinned commit, or set "
+            "ADAM_CORE_LEGACY_EXPECTED_GIT_COMMIT when intentionally bumping "
+            "and recapturing the baseline."
+        )
     return {
         "repo_root": str(LEGACY_REPO_ROOT),
-        "git_commit": _git_output(["rev-parse", "HEAD"], cwd=LEGACY_REPO_ROOT),
+        "git_commit": legacy_commit,
         "git_dirty": bool(tracked_status),
         "git_tracked_status_hash": _hash_text(tracked_status),
         "git_relevant_untracked_dirty": bool(relevant_untracked_status),

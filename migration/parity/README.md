@@ -31,7 +31,9 @@ fingerprinted on the legacy checkout's git commit (plus its venv
 `pip freeze` and the harness source), so a checkout that drifts onto a
 feature branch silently invalidates `parity_legacy_speed_baseline.json`.
 The dedicated checkout should stay on the commit the baseline was captured
-against (currently upstream `main`); bump it deliberately and recapture.
+against (`4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac`, upstream `main` at
+capture time); the speed gate asserts this pin before cache validation so
+checkout drift fails with a clear error. Bump it deliberately and recapture.
 
 Because both repos export the package name `adam_core`, they cannot coexist
 in one Python venv. We invoke the legacy implementation through a
@@ -55,9 +57,12 @@ git -C /Users/aleck/Code/adam-core-legacy-main reset --hard origin/main
 pdm run rust-parity-legacy-cache-refresh   # recapture the baseline
 ```
 
-Both the legacy checkout path and the legacy venv Python are overridable via
-`ADAM_CORE_LEGACY_REPO_ROOT` and `ADAM_CORE_LEGACY_VENV_PYTHON` (defaults:
-`/Users/aleck/Code/adam-core-legacy-main` and `.legacy-venv/bin/python`).
+The legacy checkout path, legacy venv Python, and expected legacy commit are
+overridable via `ADAM_CORE_LEGACY_REPO_ROOT`, `ADAM_CORE_LEGACY_VENV_PYTHON`,
+and `ADAM_CORE_LEGACY_EXPECTED_GIT_COMMIT` (defaults:
+`/Users/aleck/Code/adam-core-legacy-main`, `.legacy-venv/bin/python`, and the
+pinned commit above). Only override the expected commit when intentionally
+bumping and recapturing the baseline.
 
 Each parity/speed row is labeled with a **comparison mode** (`raw kernel`,
 `thin wrapper`, `public facade`, `rust native`, or `impl candidate`) so the

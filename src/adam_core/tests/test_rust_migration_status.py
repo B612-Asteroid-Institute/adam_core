@@ -594,6 +594,30 @@ def test_legacy_relevant_untracked_status_filters_non_code(monkeypatch) -> None:
     assert "existing.py" not in status
 
 
+def test_legacy_identity_fails_loudly_when_checkout_commit_drifts(monkeypatch) -> None:
+    expected = "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac"
+    actual = "0000000000000000000000000000000000000000"
+
+    def fake_git_output(args: list[str], *, cwd: Path) -> str:
+        if args[:2] == ["rev-parse", "HEAD"]:
+            return actual
+        return ""
+
+    monkeypatch.setattr(parity_speed, "EXPECTED_LEGACY_GIT_COMMIT", expected)
+    monkeypatch.setattr(parity_speed, "_git_output", fake_git_output)
+    monkeypatch.setattr(parity_speed, "_legacy_relevant_untracked_status", lambda: "")
+
+    try:
+        parity_speed._legacy_identity()
+    except ValueError as exc:
+        message = str(exc)
+        assert "committed speed baseline expects" in message
+        assert expected in message
+        assert actual in message
+    else:
+        raise AssertionError("legacy checkout commit drift should fail explicitly")
+
+
 def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> None:
     identity = {
         "git_commit": "baseline",
