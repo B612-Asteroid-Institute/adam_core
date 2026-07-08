@@ -29,7 +29,6 @@ import quivr as qv
 from ..coordinates import Origin, OriginCodes
 from ..orbits import Orbits
 from ..time import Timestamp
-from ..utils.spice import get_perturber_state
 
 
 class PerturberMOIDs(qv.Table):
@@ -100,7 +99,8 @@ def calculate_perturber_moids(
         A table containing the MOID and time for each orbit with respect to
         the perturbing body or bodies.
     """
-    from .._rust.api import calculate_moid_batch_numpy
+    from .._rust.api import calculate_perturber_moids_native
+    from ..utils.spice import setup_SPICE
 
     del chunk_size  # API compat
     del max_processes  # API compat
@@ -117,6 +117,10 @@ def calculate_perturber_moids(
     if n == 0:
         return PerturberMOIDs.empty()
 
+    # The native orchestrator reads the process-global SPICE backend directly
+    # (perturber spkez), so ensure the default kernels are furnsh-ed.
+    setup_SPICE()
+
     primary_states = np.ascontiguousarray(orbits.coordinates.values, dtype=np.float64)
     primary_mus = np.ascontiguousarray(
         np.asarray(orbits.coordinates.origin.mu(), dtype=np.float64)
@@ -125,27 +129,31 @@ def calculate_perturber_moids(
     time_scale = orbits.coordinates.time.scale
     orbit_ids_np = orbits.orbit_id.to_numpy(zero_copy_only=False)
 
+    # Single Python->Rust crossing: the perturber loop + per-perturber spkez +
+    # batched MOID kernel all run in Rust. Results are perturber-major
+    # (p * n + i), so slice per perturber to assemble the quivr table.
+    moids, dt_mins = calculate_perturber_moids_native(
+        primary_states,
+        primary_mus,
+        time_scale,
+        orbits.coordinates.time.days.to_numpy(zero_copy_only=False),
+        orbits.coordinates.time.nanos.to_numpy(zero_copy_only=False),
+        [perturber_i.name for perturber_i in perturbers],
+        orbits.coordinates.frame,
+        orbits.coordinates.origin[0].as_OriginCodes().name,
+    )
+
     moids_list: List[PerturberMOIDs] = []
-    for perturber_i in perturbers:
-        states = get_perturber_state(
-            perturber_i,
-            orbits.coordinates.time,
-            frame=orbits.coordinates.frame,
-            origin=orbits.coordinates.origin[0].as_OriginCodes(),
-        )
-        secondary_states = np.ascontiguousarray(states.values, dtype=np.float64)
-        result = calculate_moid_batch_numpy(
-            primary_states, secondary_states, primary_mus
-        )
-        moids, dt_mins = result
-        moid_mjds = primary_mjds + dt_mins
+    for perturber_index, perturber_i in enumerate(perturbers):
+        rows = slice(perturber_index * n, (perturber_index + 1) * n)
+        moid_mjds = primary_mjds + dt_mins[rows]
         moids_list.append(
             PerturberMOIDs.from_kwargs(
                 orbit_id=orbit_ids_np,
                 perturber=Origin.from_kwargs(
                     code=np.full(n, perturber_i.name, dtype=object)
                 ),
-                moid=moids,
+                moid=moids[rows],
                 time=Timestamp.from_mjd(moid_mjds, scale=time_scale),
             )
         )

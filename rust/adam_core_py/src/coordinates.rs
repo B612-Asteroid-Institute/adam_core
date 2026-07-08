@@ -2275,9 +2275,86 @@ fn transform_coordinates_native<'py>(
     }
 }
 
+/// Single-crossing perturber-MOID orchestrator over the global SPICE backend:
+/// per perturber, spkez the perturber state relative to `origin_code` and run
+/// the batched Rust MOID kernel against the primary Cartesian orbits. Returns
+/// `(moids, dt_mins)` laid out perturber-major, orbit-minor (`p * n + i`).
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn calculate_perturber_moids_native<'py>(
+    py: Python<'py>,
+    primary: PyReadonlyArray2<'py, f64>,
+    mus: PyReadonlyArray1<'py, f64>,
+    time_scale: &str,
+    time_days: PyReadonlyArray1<'py, i64>,
+    time_nanos: PyReadonlyArray1<'py, i64>,
+    perturber_codes: Vec<String>,
+    frame: &str,
+    origin_code: &str,
+    max_iter: usize,
+    xtol: f64,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let arr = primary.as_array();
+    if arr.ncols() != 6 {
+        return Err(PyValueError::new_err("primary must have shape (N, 6)"));
+    }
+    let n = arr.nrows();
+    let primary_flat = arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("primary must be contiguous"))?;
+
+    let mus_view = mus.as_array();
+    if mus_view.len() != n {
+        return Err(PyValueError::new_err("mus must have length N"));
+    }
+    let mus_slice = mus_view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("mus must be contiguous"))?;
+
+    let frame_value = match frame {
+        "ecliptic" => DataFrame::Ecliptic,
+        "equatorial" => DataFrame::Equatorial,
+        "itrf93" => DataFrame::Itrf93,
+        other => return Err(PyValueError::new_err(format!("unsupported frame: {other}"))),
+    };
+    let origin = OriginId::from_code(origin_code);
+    let perturbers: Vec<OriginId> = perturber_codes
+        .iter()
+        .map(|code| OriginId::from_code(code.clone()))
+        .collect();
+
+    let scale =
+        TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let days = time_days.as_slice()?;
+    let nanos = time_nanos.as_slice()?;
+    if days.len() != n || nanos.len() != n {
+        return Err(PyValueError::new_err("times must have length N"));
+    }
+    let times = TimeArray::from_parts(scale, days.to_vec(), nanos.to_vec())
+        .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+
+    let backend = global_backend()
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+    let (moids, dt_mins) = backend
+        .calculate_perturber_moids(
+            primary_flat,
+            mus_slice,
+            &times,
+            &perturbers,
+            frame_value,
+            &origin,
+            max_iter,
+            xtol,
+        )
+        .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
+    Ok((moids.into_pyarray(py), dt_mins.into_pyarray(py)))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(transform_coordinates_native, m)?)?;
+    m.add_function(wrap_pyfunction!(calculate_perturber_moids_native, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(cartesian_to_spherical_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(spherical_to_cartesian_numpy, m)?)?;

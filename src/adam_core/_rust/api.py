@@ -31,6 +31,7 @@ except Exception as exc:  # pragma: no cover - depends on build/install state
 _REQUIRED_NATIVE_SYMBOLS = (
     "AdamCoreSpiceBackend",
     "transform_coordinates_native",
+    "calculate_perturber_moids_native",
     "add_light_time_numpy",
     "add_stellar_aberration_numpy",
     "apply_cosine_latitude_correction_numpy",
@@ -329,6 +330,39 @@ def transform_coordinates_native(
         f=f,
         max_iter=max_iter,
         tol=tol,
+    )
+
+
+def calculate_perturber_moids_native(
+    primary: np.ndarray,
+    mus: np.ndarray | list[float] | tuple[float, ...],
+    time_scale: str,
+    time_days: np.ndarray,
+    time_nanos: np.ndarray,
+    perturber_codes: list[str],
+    frame: str,
+    origin_code: str,
+    max_iter: int = 100,
+    xtol: float = 1e-10,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fully-Rust perturber-MOID orchestrator (single Python->Rust crossing).
+
+    Per perturber, spkez the perturber state vs ``origin_code`` and run the
+    batched Rust MOID kernel against the primary Cartesian orbits, all in Rust.
+    Returns ``(moids, dt_mins)`` each of length ``len(perturber_codes) * N``,
+    laid out perturber-major then orbit-minor (``p * N + i``).
+    """
+    return _native.calculate_perturber_moids_native(
+        _as_contiguous_f64(primary),
+        _as_contiguous_f64(mus),
+        time_scale,
+        np.ascontiguousarray(np.asarray(time_days, dtype=np.int64)),
+        np.ascontiguousarray(np.asarray(time_nanos, dtype=np.int64)),
+        list(perturber_codes),
+        frame,
+        origin_code,
+        max_iter,
+        xtol,
     )
 
 

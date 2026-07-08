@@ -16,8 +16,9 @@ use adam_core_rs_coords::types::{
     TimeScale,
 };
 use adam_core_rs_coords::{
-    rotate_cartesian_time_varying_flat6, transform_values_flat6, transform_with_covariance_flat6,
-    Frame as KernelFrame, OriginTranslationProvider, Representation,
+    calculate_moid_batch, rotate_cartesian_time_varying_flat6, transform_values_flat6,
+    transform_with_covariance_flat6, Frame as KernelFrame, OriginTranslationProvider,
+    Representation,
 };
 use spicekit::frame::{
     apply_sxform, invert_sxform, j2000_to_eclipj2000, pck_euler_rotation_and_derivative,
@@ -803,6 +804,51 @@ impl AdamCoreSpiceBackend {
             None,
         )
         .map_err(SpiceBackendError::from)
+    }
+
+    /// Single-crossing perturber-MOID orchestrator: for each perturber, fetch
+    /// its per-epoch state relative to `origin` (spkez) and run the batched
+    /// Rust MOID kernel against the `primary` Cartesian orbits, all in Rust.
+    /// Returns `(moids, dt_mins)`, each laid out perturber-major then
+    /// orbit-minor (`p * n + i`), matching the Python veneer's row assembly.
+    #[allow(clippy::too_many_arguments)]
+    pub fn calculate_perturber_moids(
+        &self,
+        primary_flat: &[f64],
+        mus: &[f64],
+        times: &TimeArray,
+        perturbers: &[OriginId],
+        frame: Frame,
+        origin: &OriginId,
+        max_iter: usize,
+        xtol: f64,
+    ) -> Result<(Vec<f64>, Vec<f64>), SpiceBackendError> {
+        if !primary_flat.len().is_multiple_of(6) {
+            return Err(SpiceBackendError::NotCovered(
+                "primary states must be a multiple of 6".to_string(),
+            ));
+        }
+        let n = primary_flat.len() / 6;
+        if mus.len() != n {
+            return Err(SpiceBackendError::NotCovered(
+                "mus length must match primary orbit rows".to_string(),
+            ));
+        }
+        if times.len() != n {
+            return Err(SpiceBackendError::NotCovered(
+                "times length must match primary orbit rows".to_string(),
+            ));
+        }
+        let mut moids = Vec::with_capacity(perturbers.len() * n);
+        let mut dt_mins = Vec::with_capacity(perturbers.len() * n);
+        for perturber in perturbers {
+            let secondary = self.state_vectors(perturber, origin, frame, times)?;
+            let secondary_flat: Vec<f64> = secondary.iter().flatten().copied().collect();
+            let (m, dt) = calculate_moid_batch(primary_flat, &secondary_flat, mus, max_iter, xtol);
+            moids.extend(m);
+            dt_mins.extend(dt);
+        }
+        Ok((moids, dt_mins))
     }
 
     pub fn origin_translation_vectors(
