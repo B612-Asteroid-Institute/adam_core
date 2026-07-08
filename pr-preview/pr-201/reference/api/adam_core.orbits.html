@@ -218,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -323,7 +324,6 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -336,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -361,7 +369,7 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -532,25 +540,15 @@ variable-length chunks.</p>
 <dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.</span></span><span class="sig-name descname"><span class="pre">NonGravitationalParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
-<p>Canonical non-gravitational parameters attached to an orbit solution.</p>
-<p class="rubric">Notes</p>
-<p>Values are stored in canonical units where known:
-- <cite>A1</cite>, <cite>A2</cite>, <cite>A3</cite>: au / d^2
-- <cite>DT</cite>: d
-- <cite>R0</cite>: au
-- <cite>AMRAT</cite>: m^2 / kg
-- <cite>RHO</cite>: kg / m^3</p>
-<p>Larger solved states and cross-covariances with these parameters are tracked via
-metadata fields, but coordinate covariance propagation remains 6D for now.</p>
+<p>Non-gravitational parameters attached to an orbit solution.</p>
+<p>Only the Marsden-style radial/transverse/normal accelerations (A1, A2, A3)
+are supported, stored in au / d^2. Their uncertainties and cross
+covariances with the orbital state live in the orbit’s coordinate
+covariance, which is extended to 9x9 for orbits with a non-gravitational
+solution (see <cite>~adam_core.coordinates.covariances.CoordinateCovariances</cite>).</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.A1">
 <span class="sig-name descname"><span class="pre">A1</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.A1" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.A1_sigma">
-<span class="sig-name descname"><span class="pre">A1_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.A1_sigma" title="Link to this definition">¶</a></dt>
 <dd><p>A column for storing 64-bit floating point numbers.</p>
 </dd></dl>
 
@@ -561,124 +559,9 @@ metadata fields, but coordinate covariance propagation remains 6D for now.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.A2_sigma">
-<span class="sig-name descname"><span class="pre">A2_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.A2_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.A3">
 <span class="sig-name descname"><span class="pre">A3</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.A3" title="Link to this definition">¶</a></dt>
 <dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.A3_sigma">
-<span class="sig-name descname"><span class="pre">A3_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.A3_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.ALN">
-<span class="sig-name descname"><span class="pre">ALN</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.ALN" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.ALN_sigma">
-<span class="sig-name descname"><span class="pre">ALN_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.ALN_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.AMRAT">
-<span class="sig-name descname"><span class="pre">AMRAT</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.AMRAT" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.AMRAT_sigma">
-<span class="sig-name descname"><span class="pre">AMRAT_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.AMRAT_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.DT">
-<span class="sig-name descname"><span class="pre">DT</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.DT" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.DT_sigma">
-<span class="sig-name descname"><span class="pre">DT_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.DT_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.NK">
-<span class="sig-name descname"><span class="pre">NK</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.NK" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.NK_sigma">
-<span class="sig-name descname"><span class="pre">NK_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.NK_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.NM">
-<span class="sig-name descname"><span class="pre">NM</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.NM" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.NM_sigma">
-<span class="sig-name descname"><span class="pre">NM_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.NM_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.NN">
-<span class="sig-name descname"><span class="pre">NN</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.NN" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.NN_sigma">
-<span class="sig-name descname"><span class="pre">NN_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.NN_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.R0">
-<span class="sig-name descname"><span class="pre">R0</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.R0" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.R0_sigma">
-<span class="sig-name descname"><span class="pre">R0_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.R0_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.RHO">
-<span class="sig-name descname"><span class="pre">RHO</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.RHO" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.RHO_sigma">
-<span class="sig-name descname"><span class="pre">RHO_sigma</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.RHO_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.estimated_parameter_names">
-<span class="sig-name descname"><span class="pre">estimated_parameter_names</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.estimated_parameter_names" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -688,13 +571,6 @@ variable-length chunks.</p>
 <p>Parameters that are explicitly solved to zero are treated as absent:
 they exert no force, so a gravity-only propagation of such an orbit is
 still exact.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.model">
-<span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.model" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -716,27 +592,22 @@ for all columns, while also setting the Table’s attributes.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.parameter_count">
-<span class="sig-name descname"><span class="pre">parameter_count</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.parameter_count" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit integers.</p>
-</dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.schema">
-<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">source:</span> <span class="pre">large_string</span> <span class="pre">model:</span> <span class="pre">large_string</span> <span class="pre">solution_dimension:</span> <span class="pre">int64</span> <span class="pre">parameter_count:</span> <span class="pre">int64</span> <span class="pre">estimated_parameter_names:</span> <span class="pre">large_string</span> <span class="pre">A1:</span> <span class="pre">double</span> <span class="pre">A1_sigma:</span> <span class="pre">double</span> <span class="pre">A2:</span> <span class="pre">double</span> <span class="pre">A2_sigma:</span> <span class="pre">double</span> <span class="pre">A3:</span> <span class="pre">double</span> <span class="pre">A3_sigma:</span> <span class="pre">double</span> <span class="pre">DT:</span> <span class="pre">double</span> <span class="pre">DT_sigma:</span> <span class="pre">double</span> <span class="pre">R0:</span> <span class="pre">double</span> <span class="pre">R0_sigma:</span> <span class="pre">double</span> <span class="pre">ALN:</span> <span class="pre">double</span> <span class="pre">ALN_sigma:</span> <span class="pre">double</span> <span class="pre">NK:</span> <span class="pre">double</span> <span class="pre">NK_sigma:</span> <span class="pre">double</span> <span class="pre">NM:</span> <span class="pre">double</span> <span class="pre">NM_sigma:</span> <span class="pre">double</span> <span class="pre">NN:</span> <span class="pre">double</span> <span class="pre">NN_sigma:</span> <span class="pre">double</span> <span class="pre">AMRAT:</span> <span class="pre">double</span> <span class="pre">AMRAT_sigma:</span> <span class="pre">double</span> <span class="pre">RHO:</span> <span class="pre">double</span> <span class="pre">RHO_sigma:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.schema" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">source:</span> <span class="pre">large_string</span> <span class="pre">A1:</span> <span class="pre">double</span> <span class="pre">A2:</span> <span class="pre">double</span> <span class="pre">A3:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.schema" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.solution_dimension">
-<span class="sig-name descname"><span class="pre">solution_dimension</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.solution_dimension" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit integers.</p>
-</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.source">
 <span class="sig-name descname"><span class="pre">source</span></span><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.source" title="Link to this definition">¶</a></dt>
 <dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
 variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.NonGravitationalParameters.to_array">
+<span class="sig-name descname"><span class="pre">to_array</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters.to_array"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.NonGravitationalParameters.to_array" title="Link to this definition">¶</a></dt>
+<dd><p>Return the parameter values as an (N, 3) array in (A1, A2, A3) order,
+with nulls replaced by 0.0 (no force).</p>
 </dd></dl>
 
 </dd></dl>
@@ -764,13 +635,14 @@ variable-length chunks.</p>
 <dt class="sig sig-object py" id="adam_core.orbits.Orbits.coordinates_to">
 <span class="sig-name descname"><span class="pre">coordinates_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">representation_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.14)"><span class="pre">type</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates" title="adam_core.coordinates.cartesian.CartesianCoordinates"><span class="pre">CartesianCoordinates</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="adam_core.coordinates.keplerian.html#adam_core.coordinates.keplerian.KeplerianCoordinates" title="adam_core.coordinates.keplerian.KeplerianCoordinates"><span class="pre">KeplerianCoordinates</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="adam_core.coordinates.cometary.html#adam_core.coordinates.cometary.CometaryCoordinates" title="adam_core.coordinates.cometary.CometaryCoordinates"><span class="pre">CometaryCoordinates</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="adam_core.coordinates.spherical.html#adam_core.coordinates.spherical.SphericalCoordinates" title="adam_core.coordinates.spherical.SphericalCoordinates"><span class="pre">SphericalCoordinates</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'ecliptic'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'equatorial'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'itrf93'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">origin_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginCodes" title="adam_core.coordinates.origin.OriginCodes"><span class="pre">OriginCodes</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/orbits.html#Orbits.coordinates_to"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Orbits.coordinates_to" title="Link to this definition">¶</a></dt>
 <dd><p>Transform this orbit’s coordinates to another representation, frame,
-and/or origin. The solved-state covariances are not transformed; use
-<cite>solved_state_covariance_to</cite> for that.</p>
+and/or origin. Covariances – including the non-gravitational block
+for orbits with a non-gravitational solution – are transformed
+alongside the coordinates.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="adam_core.orbits.Orbits.dynamical_class">
-<span class="sig-name descname"><span class="pre">dynamical_class</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.4)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/orbits.html#Orbits.dynamical_class"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Orbits.dynamical_class" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">dynamical_class</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/orbits.html#Orbits.dynamical_class"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Orbits.dynamical_class" title="Link to this definition">¶</a></dt>
 <dd><p>Compute dynamical classes of orbits. Currently
 limited to asteroid dynamical classes.</p>
 <dl class="field-list simple">
@@ -803,6 +675,14 @@ limited to asteroid dynamical classes.</p>
 <dd><p>Return True if any orbit carries a non-zero non-gravitational parameter value.</p>
 <p>Parameters that are explicitly solved to zero are treated as absent: they
 exert no force, so a gravity-only propagation of such an orbit is still exact.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.Orbits.has_non_gravitational_solution">
+<span class="sig-name descname"><span class="pre">has_non_gravitational_solution</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/orbits.html#Orbits.has_non_gravitational_solution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Orbits.has_non_gravitational_solution" title="Link to this definition">¶</a></dt>
+<dd><p>Return True if any orbit carries a non-gravitational solution: either a
+non-zero parameter value or a non-gravitational block in the coordinate
+covariance (a zero-mean parameter can still carry uncertainty).</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -857,33 +737,8 @@ variable-length chunks.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.Orbits.schema">
-<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">physical_parameters:</span> <span class="pre">struct&lt;H_v:</span> <span class="pre">double,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double,</span> <span class="pre">G:</span> <span class="pre">double,</span> <span class="pre">G_sigma:</span> <span class="pre">double,</span> <span class="pre">sigma_eff:</span> <span class="pre">double,</span> <span class="pre">chi2_red:</span> <span class="pre">doub</span> <span class="pre">(...</span> <span class="pre">3</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">H_v:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">G:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">G_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">sigma_eff:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">chi2_red:</span> <span class="pre">double</span> <span class="pre">non_gravitational_parameters:</span> <span class="pre">struct&lt;source:</span> <span class="pre">large_string,</span> <span class="pre">model:</span> <span class="pre">large_string,</span> <span class="pre">solution_dimension:</span> <span class="pre">int64,</span> <span class="pre">parameter_count:</span> <span class="pre">int64,</span> <span class="pre">(...</span> <span class="pre">381</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">source:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">model:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">solution_dimension:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">parameter_count:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">estimated_parameter_names:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">A1:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">A1_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">A2:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">A2_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">9,</span> <span class="pre">A3:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">10,</span> <span class="pre">A3_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">11,</span> <span class="pre">DT:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">12,</span> <span class="pre">DT_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">13,</span> <span class="pre">R0:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">14,</span> <span class="pre">R0_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">15,</span> <span class="pre">ALN:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">16,</span> <span class="pre">ALN_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">17,</span> <span class="pre">NK:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">18,</span> <span class="pre">NK_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">19,</span> <span class="pre">NM:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">20,</span> <span class="pre">NM_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">21,</span> <span class="pre">NN:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">22,</span> <span class="pre">NN_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">23,</span> <span class="pre">AMRAT:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">24,</span> <span class="pre">AMRAT_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">25,</span> <span class="pre">RHO:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">26,</span> <span class="pre">RHO_sigma:</span> <span class="pre">double</span> <span class="pre">solved_state_covariance:</span> <span class="pre">struct&lt;dimension:</span> <span class="pre">int64,</span> <span class="pre">parameter_names:</span> <span class="pre">large_string,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">dimension:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">parameter_names:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.Orbits.schema" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">physical_parameters:</span> <span class="pre">struct&lt;H_v:</span> <span class="pre">double,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double,</span> <span class="pre">G:</span> <span class="pre">double,</span> <span class="pre">G_sigma:</span> <span class="pre">double,</span> <span class="pre">sigma_eff:</span> <span class="pre">double,</span> <span class="pre">chi2_red:</span> <span class="pre">doub</span> <span class="pre">(...</span> <span class="pre">3</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">H_v:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">G:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">G_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">sigma_eff:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">chi2_red:</span> <span class="pre">double</span> <span class="pre">non_gravitational_parameters:</span> <span class="pre">struct&lt;source:</span> <span class="pre">large_string,</span> <span class="pre">A1:</span> <span class="pre">double,</span> <span class="pre">A2:</span> <span class="pre">double,</span> <span class="pre">A3:</span> <span class="pre">double&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">source:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">A1:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">A2:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">A3:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.Orbits.schema" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.Orbits.solved_state_covariance">
-<span class="sig-name descname"><span class="pre">solved_state_covariance</span></span><a class="headerlink" href="#adam_core.orbits.Orbits.solved_state_covariance" title="Link to this definition">¶</a></dt>
-<dd><p>A column which represents an embedded quivr table.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
-<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
-<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.Orbits.solved_state_covariance_to">
-<span class="sig-name descname"><span class="pre">solved_state_covariance_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">representation_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.14)"><span class="pre">type</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates" title="adam_core.coordinates.cartesian.CartesianCoordinates"><span class="pre">CartesianCoordinates</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="adam_core.coordinates.keplerian.html#adam_core.coordinates.keplerian.KeplerianCoordinates" title="adam_core.coordinates.keplerian.KeplerianCoordinates"><span class="pre">KeplerianCoordinates</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="adam_core.coordinates.cometary.html#adam_core.coordinates.cometary.CometaryCoordinates" title="adam_core.coordinates.cometary.CometaryCoordinates"><span class="pre">CometaryCoordinates</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="adam_core.coordinates.spherical.html#adam_core.coordinates.spherical.SphericalCoordinates" title="adam_core.coordinates.spherical.SphericalCoordinates"><span class="pre">SphericalCoordinates</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'ecliptic'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'equatorial'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'itrf93'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">origin_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginCodes" title="adam_core.coordinates.origin.OriginCodes"><span class="pre">OriginCodes</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances" title="adam_core.orbits.solved_state_covariances.SolvedStateCovariances"><span class="pre">SolvedStateCovariances</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/orbits.html#Orbits.solved_state_covariance_to"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Orbits.solved_state_covariance_to" title="Link to this definition">¶</a></dt>
-<dd><p>Transform the solved-state covariances to another coordinate
-representation, frame, and/or origin. The leading 6x6 orbital block is
-transformed alongside the coordinates; extra solved parameters and
-their cross-covariances are preserved. Rows without a solved-state
-covariance remain null.</p>
-</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="adam_core.orbits.Orbits.to_cometary">
@@ -901,120 +756,10 @@ covariance remain null.</p>
 <dd></dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.Orbits.with_non_gravitational_parameters">
-<span class="sig-name descname"><span class="pre">with_non_gravitational_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enabled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/orbits.html#Orbits.with_non_gravitational_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Orbits.with_non_gravitational_parameters" title="Link to this definition">¶</a></dt>
-<dd><p>Return self unchanged if <cite>enabled</cite> is True, otherwise a copy with the
-non-gravitational parameter and solved-state covariance columns nulled.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="adam_core.orbits.Orbits.without_non_gravitational_parameters">
 <span class="sig-name descname"><span class="pre">without_non_gravitational_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/orbits.html#Orbits.without_non_gravitational_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Orbits.without_non_gravitational_parameters" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.</span></span><span class="sig-name descname"><span class="pre">SolvedStateCovariances</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/solved_state_covariances.html#SolvedStateCovariances"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
-<p>Full solved-state covariance matrices for orbital plus extra fitted parameters.</p>
-<p class="rubric">Notes</p>
-<p>The first six parameters are expected to be orbital coordinates in the same basis
-as the attached <cite>coordinates</cite> column. Additional parameters are identified by
-<cite>parameter_names</cite>.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.dimension">
-<span class="sig-name descname"><span class="pre">dimension</span></span><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.dimension" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit integers.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.from_matrix">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">covariances</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><span class="pre">ndarray</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances" title="adam_core.orbits.solved_state_covariances.SolvedStateCovariances"><span class="pre">SolvedStateCovariances</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/solved_state_covariances.html#SolvedStateCovariances.from_matrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.from_matrix" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.is_all_null">
-<span class="sig-name descname"><span class="pre">is_all_null</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/solved_state_covariances.html#SolvedStateCovariances.is_all_null"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.is_all_null" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.nulls">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">nulls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances" title="adam_core.orbits.solved_state_covariances.SolvedStateCovariances"><span class="pre">SolvedStateCovariances</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/solved_state_covariances.html#SolvedStateCovariances.nulls"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.nulls" title="Link to this definition">¶</a></dt>
-<dd><p>Create a table with nulls.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>size</strong> – The number of rows to create.</p></li>
-<li><p><strong>**kwargs</strong> – Additional keyword arguments to set the Table’s attributes.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Even for tables which do not permit nulls in their columns, it is possible
-to create a table with nulls in the context of SubTableColumn. So for
-both of these cases, we need a method to populate tables with null values
-for all columns, while also setting the Table’s attributes.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.parameter_names">
-<span class="sig-name descname"><span class="pre">parameter_names</span></span><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.parameter_names" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.parameter_names_list">
-<span class="sig-name descname"><span class="pre">parameter_names_list</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/solved_state_covariances.html#SolvedStateCovariances.parameter_names_list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.parameter_names_list" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.schema">
-<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">dimension:</span> <span class="pre">int64</span> <span class="pre">parameter_names:</span> <span class="pre">large_string</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.schema" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.to_matrix">
-<span class="sig-name descname"><span class="pre">to_matrix</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><span class="pre">ndarray</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/solved_state_covariances.html#SolvedStateCovariances.to_matrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.to_matrix" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.to_orbital_covariances">
-<span class="sig-name descname"><span class="pre">to_orbital_covariances</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances" title="adam_core.coordinates.covariances.CoordinateCovariances"><span class="pre">CoordinateCovariances</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/solved_state_covariances.html#SolvedStateCovariances.to_orbital_covariances"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.to_orbital_covariances" title="Link to this definition">¶</a></dt>
-<dd><p>Recover the leading orbital 6x6 covariance block as <cite>CoordinateCovariances</cite>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The leading 6x6 orbital covariance block for each solved-state covariance row.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances" title="adam_core.coordinates.covariances.CoordinateCovariances">CoordinateCovariances</a></p>
-</dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If any solved-state covariance is defined but is smaller than 6x6.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.SolvedStateCovariances.values">
-<span class="sig-name descname"><span class="pre">values</span></span><a class="headerlink" href="#adam_core.orbits.SolvedStateCovariances.values" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large lists of values (over 2<sup>31</sup> objects).</p>
-<p>Unless you need to represent data with more than 2**31 elements,
-prefer ListColumn.</p>
-<p>The values in the list can be of any type.</p>
-<p>Note that all quivr Tables are storing lists of values, so this
-column type is only useful for storing lists of lists.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>value_type</strong> – The type of the values in the list.</p></li>
-<li><p><strong>nullable</strong> – Whether the list can contain null values.</p></li>
-<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
-<li><p><strong>validator</strong> – A validator to run against the column’s values.</p></li>
-</ul>
-</dd>
-</dl>
+<dd><p>Return a copy with the non-gravitational parameters nulled and the
+coordinate covariance reduced to its 6x6 coordinate block.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1084,9 +829,9 @@ This is the slowest method, but is the most accurate. 10k samples are drawn.
 If the covariance matrix is well behaved then sigma-point sampling will be used.
 If the covariance matrix is not well behaved then monte-carlo sampling will be used.</p>
 <p>When sampling with monte-carlo, 10k samples are drawn. Sigma-point sampling draws 13 samples
-for 6-dimensional coordinates. Orbits that carry a solved-state covariance are jointly
-sampled in the full 6+k dimensional solved state (orbital state plus non-gravitational
-parameters), in which case sigma-point sampling draws 2*(6+k)+1 samples per orbit.</p>
+for 6-dimensional coordinates. Orbits whose coordinate covariance carries the
+non-gravitational (A1, A2, A3) block are jointly sampled in the full 9-dimensional
+state, in which case sigma-point sampling draws 19 samples per orbit.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1099,16 +844,17 @@ will be automatically selected based on the covariance matrix. The default is �
 <li><p><strong>kappa</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – Secondary scaling parameter when generating sigma points usually set to 0.</p></li>
 <li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Seed for reproducible monte-carlo sampling. Each orbit receives an
 independent child seed spawned from this value.</p></li>
-<li><p><strong>include_nongrav</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If True (default), orbits with a solved-state covariance are jointly sampled
-in the full 6+k dimensional state. If False, the non-gravitational parameter
-and solved-state covariance columns are stripped and only the 6x6 coordinate
-covariance is sampled.</p></li>
+<li><p><strong>include_nongrav</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If True (default), orbits whose coordinate covariance carries the
+non-gravitational (A1, A2, A3) block are jointly sampled in the full
+9-dimensional state. If False, the non-gravitational parameters are
+stripped and only the 6x6 coordinate covariance block is sampled.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>variants_orbits</strong> – The variant orbits. When the input mixes orbits with and without solved-state
-covariances, variants for the solved-state orbits are returned first, so row
-order does not necessarily follow the input orbit order.</p>
+<dd class="field-even"><p><strong>variants_orbits</strong> – The variant orbits. When the input mixes orbits with and without the
+non-gravitational covariance block, variants for the orbits with the
+block are returned first, so row order does not necessarily follow
+the input orbit order.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>‘~adam_core.orbits.variants.VariantOrbits’</p>
@@ -1186,23 +932,8 @@ variable-length chunks.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.VariantOrbits.schema">
-<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">variant_id:</span> <span class="pre">large_string</span> <span class="pre">weights:</span> <span class="pre">double</span> <span class="pre">weights_cov:</span> <span class="pre">double</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">physical_parameters:</span> <span class="pre">struct&lt;H_v:</span> <span class="pre">double,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double,</span> <span class="pre">G:</span> <span class="pre">double,</span> <span class="pre">G_sigma:</span> <span class="pre">double,</span> <span class="pre">sigma_eff:</span> <span class="pre">double,</span> <span class="pre">chi2_red:</span> <span class="pre">doub</span> <span class="pre">(...</span> <span class="pre">3</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">H_v:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">G:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">G_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">sigma_eff:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">chi2_red:</span> <span class="pre">double</span> <span class="pre">non_gravitational_parameters:</span> <span class="pre">struct&lt;source:</span> <span class="pre">large_string,</span> <span class="pre">model:</span> <span class="pre">large_string,</span> <span class="pre">solution_dimension:</span> <span class="pre">int64,</span> <span class="pre">parameter_count:</span> <span class="pre">int64,</span> <span class="pre">(...</span> <span class="pre">381</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">source:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">model:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">solution_dimension:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">parameter_count:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">estimated_parameter_names:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">A1:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">A1_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">A2:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">A2_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">9,</span> <span class="pre">A3:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">10,</span> <span class="pre">A3_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">11,</span> <span class="pre">DT:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">12,</span> <span class="pre">DT_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">13,</span> <span class="pre">R0:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">14,</span> <span class="pre">R0_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">15,</span> <span class="pre">ALN:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">16,</span> <span class="pre">ALN_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">17,</span> <span class="pre">NK:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">18,</span> <span class="pre">NK_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">19,</span> <span class="pre">NM:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">20,</span> <span class="pre">NM_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">21,</span> <span class="pre">NN:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">22,</span> <span class="pre">NN_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">23,</span> <span class="pre">AMRAT:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">24,</span> <span class="pre">AMRAT_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">25,</span> <span class="pre">RHO:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">26,</span> <span class="pre">RHO_sigma:</span> <span class="pre">double</span> <span class="pre">solved_state_covariance:</span> <span class="pre">struct&lt;dimension:</span> <span class="pre">int64,</span> <span class="pre">parameter_names:</span> <span class="pre">large_string,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">dimension:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">parameter_names:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.VariantOrbits.schema" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">variant_id:</span> <span class="pre">large_string</span> <span class="pre">weights:</span> <span class="pre">double</span> <span class="pre">weights_cov:</span> <span class="pre">double</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">physical_parameters:</span> <span class="pre">struct&lt;H_v:</span> <span class="pre">double,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double,</span> <span class="pre">G:</span> <span class="pre">double,</span> <span class="pre">G_sigma:</span> <span class="pre">double,</span> <span class="pre">sigma_eff:</span> <span class="pre">double,</span> <span class="pre">chi2_red:</span> <span class="pre">doub</span> <span class="pre">(...</span> <span class="pre">3</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">H_v:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">G:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">G_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">sigma_eff:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">chi2_red:</span> <span class="pre">double</span> <span class="pre">non_gravitational_parameters:</span> <span class="pre">struct&lt;source:</span> <span class="pre">large_string,</span> <span class="pre">A1:</span> <span class="pre">double,</span> <span class="pre">A2:</span> <span class="pre">double,</span> <span class="pre">A3:</span> <span class="pre">double&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">source:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">A1:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">A2:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">A3:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.VariantOrbits.schema" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantOrbits.solved_state_covariance">
-<span class="sig-name descname"><span class="pre">solved_state_covariance</span></span><a class="headerlink" href="#adam_core.orbits.VariantOrbits.solved_state_covariance" title="Link to this definition">¶</a></dt>
-<dd><p>A column which represents an embedded quivr table.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
-<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
-<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.VariantOrbits.variant_id">
@@ -1224,14 +955,173 @@ variable-length chunks.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantOrbits.with_non_gravitational_parameters">
-<span class="sig-name descname"><span class="pre">with_non_gravitational_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enabled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits" title="adam_core.orbits.variants.VariantOrbits"><span class="pre">VariantOrbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantOrbits.with_non_gravitational_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantOrbits.with_non_gravitational_parameters" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="adam_core.orbits.VariantOrbits.without_non_gravitational_parameters">
 <span class="sig-name descname"><span class="pre">without_non_gravitational_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits" title="adam_core.orbits.variants.VariantOrbits"><span class="pre">VariantOrbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantOrbits.without_non_gravitational_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantOrbits.without_non_gravitational_parameters" title="Link to this definition">¶</a></dt>
+<dd><p>Return a copy with the non-gravitational parameters nulled and the
+coordinate covariance reduced to its 6x6 coordinate block.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.</span></span><span class="sig-name descname"><span class="pre">VariantEphemeris</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.aberrated_coordinates">
+<span class="sig-name descname"><span class="pre">aberrated_coordinates</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.aberrated_coordinates" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.alpha">
+<span class="sig-name descname"><span class="pre">alpha</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.alpha" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse">
+<span class="sig-name descname"><span class="pre">collapse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ephemeris</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse" title="Link to this definition">¶</a></dt>
+<dd><p>Collapse the variants and recalculate the covariance matrix for each
+each ephemeris at each epoch. The mean state is taken from the ephemeris class and
+is not calculate from the variants.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ephemeris</strong> (<cite>~adam_core.orbits.ephemeris.Ephemeris</cite>) – Ephemeris for which the variants were generated.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>collapsed_ephemeris</strong> – The collapsed ephemeris (with covariance matrices calculated based
+on the samples).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><cite>~adam_core.orbits.ephemeris.Ephemeris</cite></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse_by_object_id">
+<span class="sig-name descname"><span class="pre">collapse_by_object_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">aberration_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'recompute'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'collapse'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'none'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recompute'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse_by_object_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse_by_object_id" title="Link to this definition">¶</a></dt>
+<dd><p>Collapse the variant ephemerides into mean ephemerides and covariance matrices
+grouped by object_id, time, and observatory (origin code).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>collapsed_ephemeris</strong> – The collapsed ephemeris.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><cite>~adam_core.orbits.ephemeris.Ephemeris</cite></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major">
+<span class="sig-name descname"><span class="pre">collapse_sigma_points_orbit_major</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_times</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_variants</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">13</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse_sigma_points_orbit_major"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major" title="Link to this definition">¶</a></dt>
+<dd><p>Fast sigma-point collapse for the common layout produced by:
+<cite>VariantOrbits.create(method=”sigma-point”)</cite> + <cite>propagate_2body(variants, times)</cite>.</p>
+<section id="assumptions">
+<h2>Assumptions<a class="headerlink" href="#assumptions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>The variant ephemeris rows are ordered in <em>base-variant-major</em> blocks, where each
+base variant has a contiguous block of <cite>n_times</cite> rows in time order.</p></li>
+<li><p>Base variants are ordered in <em>orbit-major</em> order, with <cite>variant_id</cite> cycling
+as “0”..”n_variants-1” for each orbit.</p></li>
+</ul>
+<p>This method avoids the expensive <cite>sort_by</cite> in <cite>collapse_by_object_id()</cite> and computes
+UT mean + covariance directly via reshaping and vectorized numpy operations.</p>
+</section>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.coordinates">
+<span class="sig-name descname"><span class="pre">coordinates</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.coordinates" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.light_time">
+<span class="sig-name descname"><span class="pre">light_time</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.light_time" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.link_to_ephemeris">
+<span class="sig-name descname"><span class="pre">link_to_ephemeris</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ephemeris</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/linkages.html#quivr.MultiKeyLinkage" title="(in quivr v0.7.6.dev5+g5e130d9)"><span class="pre">MultiKeyLinkage</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris" title="adam_core.orbits.variants.VariantEphemeris"><span class="pre">VariantEphemeris</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.link_to_ephemeris"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.link_to_ephemeris" title="Link to this definition">¶</a></dt>
+<dd><p>Link variants to the ephemeris for which they were generated.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ephemeris</strong> (<cite>~adam_core.orbits.ephemeris.Ephemeris</cite>) – Ephemeris for which the variants were generated.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>linkage</strong> – Linkage between variants and ephemeris.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><cite>~quivr.MultiKeyLinkage[Ephemeris, EphemerisVariants]</cite></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.object_id">
+<span class="sig-name descname"><span class="pre">object_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.object_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.orbit_id">
+<span class="sig-name descname"><span class="pre">orbit_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.orbit_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.predicted_magnitude_v">
+<span class="sig-name descname"><span class="pre">predicted_magnitude_v</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.predicted_magnitude_v" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">variant_id:</span> <span class="pre">large_string</span> <span class="pre">weights:</span> <span class="pre">double</span> <span class="pre">weights_cov:</span> <span class="pre">double</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;rho:</span> <span class="pre">double,</span> <span class="pre">lon:</span> <span class="pre">double,</span> <span class="pre">lat:</span> <span class="pre">double,</span> <span class="pre">vrho:</span> <span class="pre">double,</span> <span class="pre">vlon:</span> <span class="pre">double,</span> <span class="pre">vlat:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct</span> <span class="pre">(...</span> <span class="pre">118</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">rho:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">lon:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">lat:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vrho:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vlon:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vlat:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">aberrated_coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">predicted_magnitude_v:</span> <span class="pre">double</span> <span class="pre">alpha:</span> <span class="pre">double</span> <span class="pre">light_time:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.schema" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.variant_id">
+<span class="sig-name descname"><span class="pre">variant_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.variant_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.weights">
+<span class="sig-name descname"><span class="pre">weights</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.weights" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.weights_cov">
+<span class="sig-name descname"><span class="pre">weights_cov</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.weights_cov" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
 
 </dd></dl>
 
@@ -1336,33 +1226,11 @@ variable-length chunks.</p>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html">adam_core.orbits.non_gravitational_parameters module</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.source"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.source</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.model"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.model</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.solution_dimension"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.solution_dimension</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.parameter_count"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.parameter_count</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.estimated_parameter_names"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.estimated_parameter_names</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A1"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A1</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A1_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A1_sigma</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A2</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A2_sigma</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A3</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A3_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.DT</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.DT_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.R0</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.R0_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.ALN</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.ALN_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NK</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NK_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NM</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NM_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NN</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NN_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.AMRAT</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.AMRAT_sigma</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.RHO</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.RHO_sigma</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.has_values"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.has_values()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.to_array"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.to_array()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.nulls"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.nulls()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.schema</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.table"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.table</span></code></a></li>
@@ -1383,14 +1251,12 @@ variable-length chunks.</p>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.coordinates"><code class="docutils literal notranslate"><span class="pre">Orbits.coordinates</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.physical_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.physical_parameters</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.non_gravitational_parameters</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.solved_state_covariance"><code class="docutils literal notranslate"><span class="pre">Orbits.solved_state_covariance</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.group_by_orbit_id"><code class="docutils literal notranslate"><span class="pre">Orbits.group_by_orbit_id()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.dynamical_class"><code class="docutils literal notranslate"><span class="pre">Orbits.dynamical_class()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.has_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.has_non_gravitational_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.has_non_gravitational_solution"><code class="docutils literal notranslate"><span class="pre">Orbits.has_non_gravitational_solution()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.without_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.without_non_gravitational_parameters()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.with_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.with_non_gravitational_parameters()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.coordinates_to"><code class="docutils literal notranslate"><span class="pre">Orbits.coordinates_to()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.solved_state_covariance_to"><code class="docutils literal notranslate"><span class="pre">Orbits.solved_state_covariance_to()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.to_keplerian"><code class="docutils literal notranslate"><span class="pre">Orbits.to_keplerian()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.to_cometary"><code class="docutils literal notranslate"><span class="pre">Orbits.to_cometary()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.to_spherical"><code class="docutils literal notranslate"><span class="pre">Orbits.to_spherical()</span></code></a></li>
@@ -1420,26 +1286,6 @@ variable-length chunks.</p>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.plots.html#adam_core.orbits.plots.add_observation_plot"><code class="docutils literal notranslate"><span class="pre">add_observation_plot()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.parse_parameter_names"><code class="docutils literal notranslate"><span class="pre">parse_parameter_names()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.dimension"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.dimension</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.parameter_names"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.parameter_names</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.values"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.values</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.from_matrix"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.from_matrix()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.to_matrix"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.to_matrix()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.parameter_names_list"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.parameter_names_list()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.to_orbital_covariances"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.to_orbital_covariances()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.nulls"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.nulls()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.is_all_null"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.is_all_null()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.schema"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.schema</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.SolvedStateCovariances.table"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.table</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.extract_nongrav_parameter_value"><code class="docutils literal notranslate"><span class="pre">extract_nongrav_parameter_value()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html#adam_core.orbits.solved_state_covariances.build_solved_state"><code class="docutils literal notranslate"><span class="pre">build_solved_state()</span></code></a></li>
-</ul>
-</li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.fit_chebyshev"><code class="docutils literal notranslate"><span class="pre">fit_chebyshev()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.orbits_to_spk"><code class="docutils literal notranslate"><span class="pre">orbits_to_spk()</span></code></a></li>
@@ -1457,10 +1303,8 @@ variable-length chunks.</p>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.coordinates"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.coordinates</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.physical_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.physical_parameters</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.non_gravitational_parameters</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.solved_state_covariance"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.solved_state_covariance</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.has_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.has_non_gravitational_parameters()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.without_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.without_non_gravitational_parameters()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.with_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.with_non_gravitational_parameters()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.create"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.create()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.link_to_orbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.link_to_orbits()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.collapse"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.collapse()</span></code></a></li>
@@ -1485,6 +1329,7 @@ variable-length chunks.</p>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.collapse_by_object_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse_by_object_id()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.collapse_sigma_points_orbit_major"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse_sigma_points_orbit_major()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.schema"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.table"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.table</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -1529,7 +1374,7 @@ variable-length chunks.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -1565,35 +1410,13 @@ variable-length chunks.</p>
 </li>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters</span></code></a><ul>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.A1"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A1</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.A1_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A1_sigma</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.A2"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A2</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.A2_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A2_sigma</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.A3"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A3</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.A3_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A3_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.ALN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.ALN</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.ALN_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.ALN_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.AMRAT"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.AMRAT</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.AMRAT_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.AMRAT_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.DT"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.DT</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.DT_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.DT_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.NK"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NK</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.NK_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NK_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.NM"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NM</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.NM_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NM_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.NN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NN</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.NN_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NN_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.R0"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.R0</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.R0_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.R0_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.RHO"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.RHO</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.RHO_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.RHO_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.estimated_parameter_names"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.estimated_parameter_names</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.has_values"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.has_values()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.model"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.model</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.nulls"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.nulls()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.parameter_count"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.parameter_count</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.schema"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.schema</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.solution_dimension"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.solution_dimension</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.source"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.source</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.NonGravitationalParameters.to_array"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.to_array()</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits"><code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a><ul>
@@ -1602,32 +1425,17 @@ variable-length chunks.</p>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.dynamical_class"><code class="docutils literal notranslate"><span class="pre">Orbits.dynamical_class()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.group_by_orbit_id"><code class="docutils literal notranslate"><span class="pre">Orbits.group_by_orbit_id()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.has_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.has_non_gravitational_parameters()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Orbits.has_non_gravitational_solution"><code class="docutils literal notranslate"><span class="pre">Orbits.has_non_gravitational_solution()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.non_gravitational_parameters</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.object_id"><code class="docutils literal notranslate"><span class="pre">Orbits.object_id</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.orbit_id"><code class="docutils literal notranslate"><span class="pre">Orbits.orbit_id</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.physical_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.physical_parameters</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.preview"><code class="docutils literal notranslate"><span class="pre">Orbits.preview()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.schema"><code class="docutils literal notranslate"><span class="pre">Orbits.schema</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.Orbits.solved_state_covariance"><code class="docutils literal notranslate"><span class="pre">Orbits.solved_state_covariance</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.Orbits.solved_state_covariance_to"><code class="docutils literal notranslate"><span class="pre">Orbits.solved_state_covariance_to()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.to_cometary"><code class="docutils literal notranslate"><span class="pre">Orbits.to_cometary()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.to_keplerian"><code class="docutils literal notranslate"><span class="pre">Orbits.to_keplerian()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.to_spherical"><code class="docutils literal notranslate"><span class="pre">Orbits.to_spherical()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.Orbits.with_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.with_non_gravitational_parameters()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.without_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.without_non_gravitational_parameters()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances</span></code></a><ul>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.dimension"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.dimension</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.from_matrix"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.from_matrix()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.is_all_null"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.is_all_null()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.nulls"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.nulls()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.parameter_names"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.parameter_names</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.parameter_names_list"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.parameter_names_list()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.schema"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.schema</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.to_matrix"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.to_matrix()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.to_orbital_covariances"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.to_orbital_covariances()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.SolvedStateCovariances.values"><code class="docutils literal notranslate"><span class="pre">SolvedStateCovariances.values</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code></a><ul>
@@ -1642,12 +1450,28 @@ variable-length chunks.</p>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.orbit_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.orbit_id</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.physical_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.physical_parameters</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.schema"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.schema</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.solved_state_covariance"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.solved_state_covariance</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.variant_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.variant_id</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.weights"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.weights</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.weights_cov"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.weights_cov</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.with_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.with_non_gravitational_parameters()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.without_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.without_non_gravitational_parameters()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris</span></code></a><ul>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.aberrated_coordinates"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.aberrated_coordinates</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.alpha"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.alpha</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.collapse"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.collapse_by_object_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse_by_object_id()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse_sigma_points_orbit_major()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.coordinates"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.coordinates</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.light_time"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.light_time</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.link_to_ephemeris"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.link_to_ephemeris()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.object_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.object_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.orbit_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.orbit_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.predicted_magnitude_v"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.predicted_magnitude_v</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.schema"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.schema</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.variant_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.variant_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.weights"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.weights</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.weights_cov"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.weights_cov</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#subpackages">Subpackages</a></li>
@@ -1663,7 +1487,7 @@ variable-length chunks.</p>
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

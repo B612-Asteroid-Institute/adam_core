@@ -217,6 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -322,7 +323,6 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -335,24 +335,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -360,7 +368,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -422,17 +430,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">,</span>
-<span class="p">)</span>
-
 <span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span><span class="p">,</span> <span class="n">KeplerianCoordinates</span><span class="p">,</span> <span class="n">Origin</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.transform</span><span class="w"> </span><span class="kn">import</span> <span class="n">_keplerian_to_cartesian_a</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">...orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">...time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..non_gravitational_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonGravitationalParameters</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..non_gravitational_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span><span class="p">,</span>
+    <span class="n">NonGravitationalParameters</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..physical_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="n">PhysicalParameters</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..solved_state_covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">ORBITAL_PARAMETER_NAMES</span><span class="p">,</span> <span class="n">SolvedStateCovariances</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -446,7 +452,7 @@
 
 <span class="c1"># The NGR vector decoding below assumes the Yarkovsky model layout</span>
 <span class="c1"># (AMRAT, A2). Solutions fit with other non-grav models (A1/A3/DT) carry a</span>
-<span class="c1"># different vector layout and are degraded to metadata-only rows.</span>
+<span class="c1"># different vector layout and are degraded to value-free rows.</span>
 <span class="n">_NEOCC_SUPPORTED_SOLVE_FOR</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">_NEOCC_UNIT_FACTORS</span><span class="p">)</span>
 
 
@@ -480,17 +486,17 @@
     <span class="k">return</span> <span class="n">dimension</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_solved_state_covariance_from_upper_triangular</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_full_covariance_from_upper_triangular</span><span class="p">(</span>
     <span class="n">upper_triangular</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
     <span class="n">solved_dimension</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Build the solved-state covariance from an OEF upper-triangular matrix.</span>
+<span class="sd">    Build the full solved covariance from an OEF upper-triangular matrix.</span>
 
 <span class="sd">    The OEF covariance may append parameters beyond the solved orbital and</span>
 <span class="sd">    non-gravitational state (most commonly absolute magnitude, see &quot;2018 CW2&quot;).</span>
 <span class="sd">    ``solved_dimension`` is the LSP-reported dimension (6 orbital + k non-grav),</span>
-<span class="sd">    so the leading ``solved_dimension`` block is the solved-state covariance and</span>
+<span class="sd">    so the leading ``solved_dimension`` block is the solved covariance and</span>
 <span class="sd">    any trailing rows/columns (e.g. magnitude) are dropped. This keeps a fitted</span>
 <span class="sd">    non-grav parameter such as A2 (dimension 7, full 7x7) while still discarding</span>
 <span class="sd">    a magnitude column appended to a 6D solution (dimension 6, full 7x7).</span>
@@ -644,7 +650,7 @@
         <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;COV&quot;</span><span class="p">):</span>
             <span class="n">cov_matrix</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">:]])</span>
     <span class="k">if</span> <span class="n">cov_matrix</span><span class="p">:</span>
-        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;covariance_full&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_solved_state_covariance_from_upper_triangular</span><span class="p">(</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;covariance_full&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_full_covariance_from_upper_triangular</span><span class="p">(</span>
             <span class="n">cov_matrix</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;nongrav&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dimension&quot;</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;covariance&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;covariance_full&quot;</span><span class="p">][:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">]</span>
@@ -655,7 +661,7 @@
         <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;COR&quot;</span><span class="p">):</span>
             <span class="n">cor_matrix</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">:]])</span>
     <span class="k">if</span> <span class="n">cor_matrix</span><span class="p">:</span>
-        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;correlation_full&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_solved_state_covariance_from_upper_triangular</span><span class="p">(</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;correlation_full&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_full_covariance_from_upper_triangular</span><span class="p">(</span>
             <span class="n">cor_matrix</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;nongrav&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dimension&quot;</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;correlation&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;correlation_full&quot;</span><span class="p">][:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">]</span>
@@ -699,7 +705,7 @@
     <span class="k">return</span> <span class="p">[</span><span class="n">mapping</span><span class="p">[</span><span class="n">code</span><span class="p">]</span> <span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">codes</span> <span class="k">if</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">mapping</span><span class="p">]</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_neocc_solved_state_is_supported</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_neocc_nongrav_solution_is_decodable</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Return True if the parsed OEF non-grav solution can be decoded with the</span>
 <span class="sd">    Yarkovsky-model assumptions used below: every solve-for code is known and</span>
@@ -720,41 +726,6 @@
     <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">name</span> <span class="ow">in</span> <span class="n">_NEOCC_SUPPORTED_SOLVE_FOR</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">solve_for</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_neocc_solved_sigmas</span><span class="p">(</span>
-    <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">solve_for</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Extract per-parameter sigmas (in canonical units) from the diagonal of the</span>
-<span class="sd">    raw OEF solved-state covariance.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">covariance</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;covariance_full&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{}</span>
-    <span class="n">sigmas</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">offset</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">solve_for</span><span class="p">):</span>
-        <span class="n">variance</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">covariance</span><span class="p">[</span><span class="mi">6</span> <span class="o">+</span> <span class="n">offset</span><span class="p">,</span> <span class="mi">6</span> <span class="o">+</span> <span class="n">offset</span><span class="p">])</span>
-        <span class="k">if</span> <span class="n">variance</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-            <span class="n">sigmas</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">variance</span><span class="p">)</span> <span class="o">*</span> <span class="n">_NEOCC_UNIT_FACTORS</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-    <span class="k">return</span> <span class="n">sigmas</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_scale_neocc_solved_covariance</span><span class="p">(</span>
-    <span class="n">covariance</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">solve_for</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Convert the non-grav rows/columns of a raw OEF solved-state covariance to</span>
-<span class="sd">    the canonical units declared by NonGravitationalParameters. Scaling both</span>
-<span class="sd">    the row and the column squares the factor on the diagonal.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">scaled</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">covariance</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">offset</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">solve_for</span><span class="p">):</span>
-        <span class="n">factor</span> <span class="o">=</span> <span class="n">_NEOCC_UNIT_FACTORS</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-        <span class="n">index</span> <span class="o">=</span> <span class="mi">6</span> <span class="o">+</span> <span class="n">offset</span>
-        <span class="n">scaled</span><span class="p">[</span><span class="n">index</span><span class="p">,</span> <span class="p">:]</span> <span class="o">*=</span> <span class="n">factor</span>
-        <span class="n">scaled</span><span class="p">[:,</span> <span class="n">index</span><span class="p">]</span> <span class="o">*=</span> <span class="n">factor</span>
-    <span class="k">return</span> <span class="n">scaled</span>
-
-
 <span class="k">def</span><span class="w"> </span><span class="nf">_non_gravitational_parameters_from_neocc</span><span class="p">(</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NonGravitationalParameters</span><span class="p">:</span>
@@ -763,63 +734,76 @@
         <span class="k">return</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
     <span class="n">solve_for</span> <span class="o">=</span> <span class="n">_solve_for_codes_to_names</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;solve_for_parameter_codes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[])</span>
-    <span class="n">model_used</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_used&quot;</span><span class="p">)</span>
-    <span class="n">model</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">model_used</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="s2">&quot;yarkovsky&quot;</span>
-    <span class="k">elif</span> <span class="n">model_used</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">):</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;neocc-model-</span><span class="si">{</span><span class="n">model_used</span><span class="si">}</span><span class="s2">&quot;</span>
-
     <span class="n">vector</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vector&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
-    <span class="n">amrat</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">a2</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">sigmas</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">if</span> <span class="n">_neocc_solved_state_is_supported</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">_neocc_nongrav_solution_is_decodable</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
         <span class="c1"># The Yarkovsky-model NGR vector is (AMRAT, A2) in OEF native units;</span>
         <span class="c1"># convert to the canonical units declared by NonGravitationalParameters.</span>
-        <span class="n">amrat</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="nb">float</span><span class="p">(</span><span class="n">vector</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="n">_NEOCC_UNIT_FACTORS</span><span class="p">[</span><span class="s2">&quot;AMRAT&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vector</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="p">)</span>
-        <span class="n">a2</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">vector</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="n">_NEOCC_UNIT_FACTORS</span><span class="p">[</span><span class="s2">&quot;A2&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vector</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="n">sigmas</span> <span class="o">=</span> <span class="n">_neocc_solved_sigmas</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">solve_for</span><span class="p">)</span>
+        <span class="c1"># AMRAT is not supported for storage (only A1, A2, A3), so its value</span>
+        <span class="c1"># is dropped and its covariance dimension marginalized out.</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vector</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">a2</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">vector</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="n">_NEOCC_UNIT_FACTORS</span><span class="p">[</span><span class="s2">&quot;A2&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;AMRAT&quot;</span> <span class="ow">in</span> <span class="n">solve_for</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">vector</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">float</span><span class="p">(</span><span class="n">vector</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;NEOCC solution for object </span><span class="si">%s</span><span class="s2"> includes an area-to-mass ratio &quot;</span>
+                <span class="s2">&quot;(AMRAT), which is not supported for storage (only A1, A2, &quot;</span>
+                <span class="s2">&quot;A3); dropping its value and marginalizing it out of the &quot;</span>
+                <span class="s2">&quot;covariance.&quot;</span><span class="p">,</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;object_id&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
     <span class="k">elif</span> <span class="n">vector</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;NEOCC non-grav solution for object </span><span class="si">%s</span><span class="s2"> uses an unsupported model or &quot;</span>
-            <span class="s2">&quot;solve-for parameters (</span><span class="si">%s</span><span class="s2">); the nominal values and solved-state &quot;</span>
-            <span class="s2">&quot;covariance are left null.&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;solve-for parameters (</span><span class="si">%s</span><span class="s2">); the nominal values and the &quot;</span>
+            <span class="s2">&quot;non-gravitational covariance block are left null.&quot;</span><span class="p">,</span>
             <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;object_id&quot;</span><span class="p">),</span>
             <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">solve_for</span><span class="p">)</span> <span class="k">if</span> <span class="n">solve_for</span> <span class="k">else</span> <span class="s2">&quot;unknown&quot;</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
         <span class="n">source</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;NEOCC&quot;</span><span class="p">],</span>
-        <span class="n">model</span><span class="o">=</span><span class="p">[</span><span class="n">model</span><span class="p">],</span>
-        <span class="n">solution_dimension</span><span class="o">=</span><span class="p">[</span><span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dimension&quot;</span><span class="p">)],</span>
-        <span class="n">parameter_count</span><span class="o">=</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">solve_for</span><span class="p">)</span> <span class="k">if</span> <span class="n">solve_for</span> <span class="k">else</span> <span class="kc">None</span><span class="p">],</span>
-        <span class="n">estimated_parameter_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">solve_for</span><span class="p">)</span> <span class="k">if</span> <span class="n">solve_for</span> <span class="k">else</span> <span class="kc">None</span><span class="p">],</span>
         <span class="n">A1</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">A1_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
         <span class="n">A2</span><span class="o">=</span><span class="p">[</span><span class="n">a2</span><span class="p">],</span>
-        <span class="n">A2_sigma</span><span class="o">=</span><span class="p">[</span><span class="n">sigmas</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;A2&quot;</span><span class="p">)],</span>
         <span class="n">A3</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">A3_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">DT</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">DT_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">R0</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">R0_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">ALN</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">ALN_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">NK</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">NK_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">NM</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">NM_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">NN</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">NN_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">AMRAT</span><span class="o">=</span><span class="p">[</span><span class="n">amrat</span><span class="p">],</span>
-        <span class="n">AMRAT_sigma</span><span class="o">=</span><span class="p">[</span><span class="n">sigmas</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;AMRAT&quot;</span><span class="p">)],</span>
-        <span class="n">RHO</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
-        <span class="n">RHO_sigma</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
     <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_neocc_extended_covariance</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build the 9x9 keplerian-basis covariance (orbital block plus A1, A2, A3)</span>
+<span class="sd">    from a decodable OEF non-grav solution, in canonical units. Dimensions</span>
+<span class="sd">    that are not supported for storage (e.g. AMRAT) are marginalized out.</span>
+<span class="sd">    Returns None when the solution carries no supported non-gravitational</span>
+<span class="sd">    dimension.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">covariance_native</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;covariance_full&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">covariance_native</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">covariance_native</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">COORD_DIM</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_neocc_nongrav_solution_is_decodable</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">info</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;nongrav&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">solve_for</span> <span class="o">=</span> <span class="n">_solve_for_codes_to_names</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;solve_for_parameter_codes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[])</span>
+
+    <span class="n">source_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">COORD_DIM</span><span class="p">))</span>
+    <span class="n">target_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">COORD_DIM</span><span class="p">))</span>
+    <span class="n">factors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">offset</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">solve_for</span><span class="p">:</span>
+            <span class="n">source_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">COORD_DIM</span> <span class="o">+</span> <span class="n">solve_for</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+            <span class="n">target_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">COORD_DIM</span> <span class="o">+</span> <span class="n">offset</span><span class="p">)</span>
+            <span class="n">factors</span><span class="p">[</span><span class="n">COORD_DIM</span> <span class="o">+</span> <span class="n">offset</span><span class="p">]</span> <span class="o">=</span> <span class="n">_NEOCC_UNIT_FACTORS</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">target_indices</span><span class="p">)</span> <span class="o">==</span> <span class="n">COORD_DIM</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">full</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ix_</span><span class="p">(</span><span class="n">target_indices</span><span class="p">,</span> <span class="n">target_indices</span><span class="p">)]</span> <span class="o">=</span> <span class="n">covariance_native</span><span class="p">[</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ix_</span><span class="p">(</span><span class="n">source_indices</span><span class="p">,</span> <span class="n">source_indices</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="c1"># Scale the non-grav rows and columns to canonical units; the outer</span>
+    <span class="c1"># product squares the factor on the diagonal.</span>
+    <span class="n">full</span> <span class="o">*=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">factors</span><span class="p">,</span> <span class="n">factors</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">full</span>
 
 
 <div class="viewcode-block" id="query_neocc">
@@ -843,10 +827,12 @@
 <span class="sd">    orbit_epoch : [&quot;middle&quot;, &quot;present-day&quot;]</span>
 <span class="sd">        Epoch of the orbital elements to query.</span>
 <span class="sd">    include_nongrav : bool, optional</span>
-<span class="sd">        If True (default), populate the non-gravitational parameter and</span>
-<span class="sd">        solved-state covariance columns from the NEOCC solution (converted to</span>
-<span class="sd">        the canonical units declared by NonGravitationalParameters). If False,</span>
-<span class="sd">        those columns are returned null.</span>
+<span class="sd">        If True (default), populate the non-gravitational parameters (A1, A2,</span>
+<span class="sd">        A3, converted to the canonical units declared by</span>
+<span class="sd">        NonGravitationalParameters) and extend the coordinate covariance with</span>
+<span class="sd">        their rows when the NEOCC solution includes them. If False, the</span>
+<span class="sd">        parameters are returned null and the covariance is reduced to its 6x6</span>
+<span class="sd">        coordinate block.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -893,20 +879,15 @@
 
             <span class="n">phys</span> <span class="o">=</span> <span class="n">_physical_parameters_from_neocc</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="n">nongrav</span> <span class="o">=</span> <span class="n">_non_gravitational_parameters_from_neocc</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-            <span class="n">solve_for</span> <span class="o">=</span> <span class="n">_solve_for_codes_to_names</span><span class="p">(</span>
-                <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;nongrav&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;solve_for_parameter_codes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
-            <span class="p">)</span>
-            <span class="n">solved_covariance_native</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;covariance_full&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">solved_covariance_native</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">_neocc_solved_state_is_supported</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
-                    <span class="c1"># Convert the non-grav rows/columns to canonical units so</span>
-                    <span class="c1"># the covariance is consistent with the nominal values.</span>
-                    <span class="n">solved_covariance_native</span> <span class="o">=</span> <span class="n">_scale_neocc_solved_covariance</span><span class="p">(</span>
-                        <span class="n">solved_covariance_native</span><span class="p">,</span> <span class="n">solve_for</span>
-                    <span class="p">)</span>
-                <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">solve_for</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">solved_covariance_native</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">6</span><span class="p">:</span>
-                    <span class="c1"># _non_gravitational_parameters_from_neocc warned already.</span>
-                    <span class="n">solved_covariance_native</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="c1"># Prefer the 9x9 extended covariance (orbital block plus A1, A2,</span>
+            <span class="c1"># A3) when the solution includes a decodable non-grav dimension;</span>
+            <span class="c1"># KeplerianCoordinates.to_cartesian() transforms it as a whole.</span>
+            <span class="n">covariance</span> <span class="o">=</span> <span class="n">_neocc_extended_covariance</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">covariance</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;covariance&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">covariance</span> <span class="o">=</span> <span class="n">covariance</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">)</span>
 
             <span class="n">keplerian_coordinates</span> <span class="o">=</span> <span class="n">KeplerianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
                 <span class="n">a</span><span class="o">=</span><span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">][</span><span class="s2">&quot;a&quot;</span><span class="p">]],</span>
@@ -916,25 +897,9 @@
                 <span class="n">ap</span><span class="o">=</span><span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">][</span><span class="s2">&quot;peri&quot;</span><span class="p">]],</span>
                 <span class="n">M</span><span class="o">=</span><span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">][</span><span class="s2">&quot;M&quot;</span><span class="p">]],</span>
                 <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;epoch&quot;</span><span class="p">]],</span> <span class="n">scale</span><span class="o">=</span><span class="n">time_scale</span><span class="p">),</span>
-                <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-                    <span class="n">data</span><span class="p">[</span><span class="s2">&quot;covariance&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
-                        <span class="mi">1</span><span class="p">,</span>
-                        <span class="mi">6</span><span class="p">,</span>
-                        <span class="mi">6</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">),</span>
+                <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">covariance</span><span class="p">),</span>
                 <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
                 <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SUN&quot;</span><span class="p">]),</span>
-            <span class="p">)</span>
-            <span class="n">solved_covariance_cartesian</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-                <span class="n">keplerian_coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="p">[</span><span class="n">solved_covariance_native</span><span class="p">],</span>
-                <span class="n">_keplerian_to_cartesian_a</span><span class="p">,</span>
-                <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-                <span class="n">out_axes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-                <span class="n">mu</span><span class="o">=</span><span class="n">keplerian_coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span>
-                <span class="n">max_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
-                <span class="n">tol</span><span class="o">=</span><span class="mf">1e-15</span><span class="p">,</span>
             <span class="p">)</span>
 
             <span class="n">orbit</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
@@ -943,14 +908,6 @@
                 <span class="n">coordinates</span><span class="o">=</span><span class="n">keplerian_coordinates</span><span class="o">.</span><span class="n">to_cartesian</span><span class="p">(),</span>
                 <span class="n">physical_parameters</span><span class="o">=</span><span class="n">phys</span><span class="p">,</span>
                 <span class="n">non_gravitational_parameters</span><span class="o">=</span><span class="n">nongrav</span><span class="p">,</span>
-                <span class="n">solved_state_covariance</span><span class="o">=</span><span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-                    <span class="n">solved_covariance_cartesian</span><span class="p">,</span>
-                    <span class="p">(</span>
-                        <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">ORBITAL_PARAMETER_NAMES</span><span class="p">)</span> <span class="o">+</span> <span class="n">solve_for</span><span class="p">]</span>
-                        <span class="k">if</span> <span class="n">solved_covariance_native</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                        <span class="k">else</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
-                    <span class="p">),</span>
-                <span class="p">),</span>
             <span class="p">)</span>
             <span class="n">orbits</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">orbits</span><span class="p">,</span> <span class="n">orbit</span><span class="p">])</span>
 
@@ -974,7 +931,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -989,7 +946,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -218,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -323,7 +324,6 @@
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -336,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -361,7 +369,7 @@
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -426,7 +434,7 @@
         <article role="main" id="furo-main-content">
           <section id="non-gravitational-support">
 <h1>Non-Gravitational Support<a class="headerlink" href="#non-gravitational-support" title="Link to this heading">¶</a></h1>
-<p>This note captures the current source-format audit and the MVP design used for
+<p>This note captures the current source-format audit and the design used for
 non-gravitational parameter support in <code class="docutils literal notranslate"><span class="pre">adam_core</span></code>.</p>
 <section id="source-matrix">
 <h2>Source Matrix<a class="headerlink" href="#source-matrix" title="Link to this heading">¶</a></h2>
@@ -468,70 +476,66 @@ carry the columns.</p></li>
 </ul>
 </section>
 </section>
-<section id="canonical-mvp-schema">
-<h2>Canonical MVP Schema<a class="headerlink" href="#canonical-mvp-schema" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">adam_core.orbits.NonGravitationalParameters</span></code> stores:</p>
+<section id="canonical-schema">
+<h2>Canonical Schema<a class="headerlink" href="#canonical-schema" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">adam_core.orbits.NonGravitationalParameters</span></code> stores only the Marsden-style
+radial/transverse/normal accelerations supported for ingestion and storage:</p>
 <ul class="simple">
-<li><p>Source and coarse model metadata.</p></li>
-<li><p>Larger-state metadata such as <code class="docutils literal notranslate"><span class="pre">solution_dimension</span></code> and
-<code class="docutils literal notranslate"><span class="pre">estimated_parameter_names</span></code>.</p></li>
-<li><p>Canonical scalar parameters and their sigmas when available:
-<code class="docutils literal notranslate"><span class="pre">A1</span></code>, <code class="docutils literal notranslate"><span class="pre">A2</span></code>, <code class="docutils literal notranslate"><span class="pre">A3</span></code>, <code class="docutils literal notranslate"><span class="pre">DT</span></code>, <code class="docutils literal notranslate"><span class="pre">R0</span></code>, <code class="docutils literal notranslate"><span class="pre">ALN</span></code>, <code class="docutils literal notranslate"><span class="pre">NK</span></code>, <code class="docutils literal notranslate"><span class="pre">NM</span></code>, <code class="docutils literal notranslate"><span class="pre">NN</span></code>,
-<code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>, <code class="docutils literal notranslate"><span class="pre">RHO</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">source</span></code>: provenance of the solution (for example <code class="docutils literal notranslate"><span class="pre">&quot;SBDB&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;NEOCC&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;MPCQ&quot;</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">A1</span></code>, <code class="docutils literal notranslate"><span class="pre">A2</span></code>, <code class="docutils literal notranslate"><span class="pre">A3</span></code> in au / d^2.</p></li>
 </ul>
+<p>Source parameters outside this set (<code class="docutils literal notranslate"><span class="pre">DT</span></code>, <code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>, <code class="docutils literal notranslate"><span class="pre">RHO</span></code>, Marsden
+<code class="docutils literal notranslate"><span class="pre">g(r)</span></code> constants, …) are not stored: importers drop their values and
+marginalize their covariance dimensions out, logging a warning.</p>
 </section>
-<section id="canonical-units">
-<h2>Canonical units<a class="headerlink" href="#canonical-units" title="Link to this heading">¶</a></h2>
+<section id="extended-coordinate-covariance">
+<h2>Extended Coordinate Covariance<a class="headerlink" href="#extended-coordinate-covariance" title="Link to this heading">¶</a></h2>
+<p>Uncertainties for the non-gravitational parameters live in the coordinate
+covariance itself, which is the single source of truth for solution
+uncertainty. <code class="docutils literal notranslate"><span class="pre">CoordinateCovariances</span></code> rows hold either the familiar 6x6
+coordinate covariance or a 9x9 matrix over the fixed basis
+<code class="docutils literal notranslate"><span class="pre">(coordinates,</span> <span class="pre">A1,</span> <span class="pre">A2,</span> <span class="pre">A3)</span></code> — the orbital state plus the non-gravitational
+parameters, including their cross-covariances. Parameters that were not
+estimated carry zero rows/columns (held fixed); rows without a
+non-gravitational solution store only the 6x6 block.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">A1</span></code>, <code class="docutils literal notranslate"><span class="pre">A2</span></code>, <code class="docutils literal notranslate"><span class="pre">A3</span></code>: au / d^2</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">DT</span></code>: d</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">R0</span></code>: au</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>: m^2 / kg</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">RHO</span></code>: kg / m^3</p></li>
-</ul>
-</section>
-<section id="solved-state-covariances">
-<h2>Solved-State Covariances<a class="headerlink" href="#solved-state-covariances" title="Link to this heading">¶</a></h2>
-<p>In addition to the 6x6 coordinate covariance, orbits can carry the full
-<code class="docutils literal notranslate"><span class="pre">(6</span> <span class="pre">+</span> <span class="pre">k)</span> <span class="pre">x</span> <span class="pre">(6</span> <span class="pre">+</span> <span class="pre">k)</span></code> solved-state covariance — the orbital state plus the
-fitted non-gravitational parameters, including their cross-covariances:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">adam_core.orbits.SolvedStateCovariances</span></code> stores the full matrices along
-with the per-row parameter names (the first six entries are always the
-orbital basis).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">transform_coordinates(...,</span> <span class="pre">solved_state_covariances=...)</span></code> transforms the
-full matrix alongside representation and frame changes: the orbital block is
-transformed with the coordinate Jacobian while the extra parameter
-dimensions (and their cross-covariances) are preserved through an identity
-block. <code class="docutils literal notranslate"><span class="pre">Orbits.solved_state_covariance_to</span></code> is the orbit-level convenience
-wrapper.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">VariantOrbits.create</span></code> jointly samples the full <code class="docutils literal notranslate"><span class="pre">6</span> <span class="pre">+</span> <span class="pre">k</span></code> state for orbits
-that carry a solved-state covariance (sampling is done in a whitened basis
-so the ~1e-26-scale non-grav variances are not lost to numerical
-truncation), and <code class="docutils literal notranslate"><span class="pre">collapse</span></code>/<code class="docutils literal notranslate"><span class="pre">collapse_by_object_id</span></code> rebuild the full
-matrix from the variants.</p></li>
-<li><p>The SBDB and NEOCC importers populate the column from the full fitted
-covariance, converted to canonical units.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CoordinateCovariances.to_matrix()</span></code> returns the (leading) 6x6 coordinate
+block, so existing consumers are unaffected. <code class="docutils literal notranslate"><span class="pre">to_full_matrix()</span></code> returns
+the <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">9,</span> <span class="pre">9)</span></code> matrices with NaN trailing dimensions where no
+non-gravitational block is present, and <code class="docutils literal notranslate"><span class="pre">nongrav_block_mask()</span></code> reports
+which rows carry the block.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">transform_coordinates</span></code> (and the coordinate classes’ <code class="docutils literal notranslate"><span class="pre">to_cartesian</span></code> /
+<code class="docutils literal notranslate"><span class="pre">from_cartesian</span></code>) transform the full matrix alongside representation and
+frame changes: the coordinate block is transformed with the coordinate
+Jacobian while the non-gravitational dimensions (and their
+cross-covariances) are carried through an identity block. No separate
+covariance transform entry point is needed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">VariantOrbits.create</span></code> jointly samples the full 9-dimensional state for
+orbits whose covariance carries the non-gravitational block (sampling is
+done in a whitened basis so the ~1e-26-scale non-grav variances are not
+lost to numerical truncation), and <code class="docutils literal notranslate"><span class="pre">collapse</span></code>/<code class="docutils literal notranslate"><span class="pre">collapse_by_object_id</span></code>
+rebuild the full matrix from the variants.</p></li>
+<li><p>The SBDB and NEOCC importers build the 9x9 covariance in their native
+element basis (cometary and Keplerian respectively), converted to canonical
+units, and the ordinary coordinate transform carries it to Cartesian.</p></li>
 </ul>
 <p>Current limits:</p>
 <ul class="simple">
-<li><p>Propagated outputs do not carry an epoch-updated solved-state covariance:
-the matrix is epoch-specific and propagating the full <code class="docutils literal notranslate"><span class="pre">6</span> <span class="pre">+</span> <span class="pre">k</span></code> covariance
-is not yet implemented, so <code class="docutils literal notranslate"><span class="pre">propagate_2body</span></code> nulls the column on its
-output while preserving the (time-invariant) non-grav parameter values.</p></li>
-<li><p>The 6x6 <code class="docutils literal notranslate"><span class="pre">coordinates.covariance</span></code> and the leading block of the solved-state
-covariance are stored separately; importers keep them consistent at
-ingestion, but downstream code that modifies one is responsible for the
-other.</p></li>
-<li><p>NEOCC solved states are decoded only for the Yarkovsky model
-(<code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>/<code class="docutils literal notranslate"><span class="pre">A2</span></code>); other models are preserved as metadata with a warning.</p></li>
+<li><p>NEOCC non-grav solutions are decoded only for the Yarkovsky model
+(<code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>/<code class="docutils literal notranslate"><span class="pre">A2</span></code>); the <code class="docutils literal notranslate"><span class="pre">AMRAT</span></code> dimension is marginalized out with a
+warning and other models are degraded to value-free rows with a warning.</p></li>
 </ul>
 </section>
 <section id="two-body-note">
 <h2>Two-Body Note<a class="headerlink" href="#two-body-note" title="Link to this heading">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">propagate_2body</span></code> does not model non-gravitational accelerations.
-It now rejects orbits that carry non-gravitational parameter values instead of
-silently propagating them with a gravity-only model.</p>
+It rejects orbits that carry non-zero non-gravitational parameter values
+instead of silently propagating them with a gravity-only model. For orbits
+whose parameters are zero-valued but carry a non-gravitational covariance
+block, the covariance is propagated with the 2-body state-transition
+Jacobian and the non-gravitational block is carried through as dynamically
+inert — consistent with the 2-body force model.</p>
 </section>
 <section id="assist-boundary">
 <h2>ASSIST Boundary<a class="headerlink" href="#assist-boundary" title="Link to this heading">¶</a></h2>
@@ -540,16 +544,10 @@ usable estimated non-gravitational parameters are limited to Marsden-style
 <code class="docutils literal notranslate"><span class="pre">A1</span></code>, <code class="docutils literal notranslate"><span class="pre">A2</span></code>, and <code class="docutils literal notranslate"><span class="pre">A3</span></code>. This requires a companion <code class="docutils literal notranslate"><span class="pre">adam_assist</span></code>
 release; <code class="docutils literal notranslate"><span class="pre">adam_core</span></code> itself only carries the parameters through its
 <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> interface (propagators that do not declare
-<code class="docutils literal notranslate"><span class="pre">supports_non_gravitational_forces</span></code> log a warning when handed non-grav
-orbits).</p>
+<code class="docutils literal notranslate"><span class="pre">supports_non_gravitational_forces</span></code> log a warning when handed orbits with
+non-zero parameter values or a non-gravitational covariance block).</p>
 <ul class="simple">
-<li><p>Fixed metadata that accompanies those models, such as SBDB Marsden constants
-(for example <code class="docutils literal notranslate"><span class="pre">R0</span></code>, <code class="docutils literal notranslate"><span class="pre">ALN</span></code>, <code class="docutils literal notranslate"><span class="pre">NK</span></code>, <code class="docutils literal notranslate"><span class="pre">NM</span></code>) or a non-estimated
-<code class="docutils literal notranslate"><span class="pre">AMRAT</span> <span class="pre">=</span> <span class="pre">0</span></code> from NEOCC Yarkovsky records, is preserved and ignored by the
-ASSIST handoff.</p></li>
-<li><p>Solved models that require unsupported estimated parameters, such as <code class="docutils literal notranslate"><span class="pre">DT</span></code>,
-<code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>, or <code class="docutils literal notranslate"><span class="pre">RHO</span></code>, are rejected with a clear error.</p></li>
-<li><p>Real regression coverage now includes SBDB <code class="docutils literal notranslate"><span class="pre">99942</span></code> end-to-end propagation
+<li><p>Real regression coverage includes SBDB <code class="docutils literal notranslate"><span class="pre">99942</span></code> end-to-end propagation
 and a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</span></code> parsing-to-ASSIST handoff check.</p></li>
 </ul>
 </section>
@@ -582,7 +580,7 @@ and a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -610,9 +608,8 @@ and a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</
 <li><a class="reference internal" href="#mpcq">MPCQ</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#canonical-mvp-schema">Canonical MVP Schema</a></li>
-<li><a class="reference internal" href="#canonical-units">Canonical units</a></li>
-<li><a class="reference internal" href="#solved-state-covariances">Solved-State Covariances</a></li>
+<li><a class="reference internal" href="#canonical-schema">Canonical Schema</a></li>
+<li><a class="reference internal" href="#extended-coordinate-covariance">Extended Coordinate Covariance</a></li>
 <li><a class="reference internal" href="#two-body-note">Two-Body Note</a></li>
 <li><a class="reference internal" href="#assist-boundary">ASSIST Boundary</a></li>
 </ul>
@@ -626,7 +623,7 @@ and a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

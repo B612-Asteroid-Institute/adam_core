@@ -1,7 +1,0 @@
-adam\_core.orbits.solved\_state\_covariances module
-===================================================
-
-.. automodule:: adam_core.orbits.solved_state_covariances
-   :members:
-   :show-inheritance:
-   :undoc-members:

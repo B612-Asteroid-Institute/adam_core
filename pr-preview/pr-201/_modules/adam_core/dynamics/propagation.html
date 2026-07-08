@@ -217,6 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -322,7 +323,6 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -335,24 +335,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -360,7 +368,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -431,7 +439,6 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.solved_state_covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolvedStateCovariances</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..ray_cluster</span><span class="w"> </span><span class="kn">import</span> <span class="n">initialize_use_ray</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.chunking</span><span class="w"> </span><span class="kn">import</span> <span class="n">process_in_chunks</span>
@@ -639,7 +646,7 @@
         <span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
-        <span class="n">cartesian_covariances</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
+        <span class="n">cartesian_covariances</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_transform_matrix</span><span class="p">()</span>
         <span class="n">covariances_array_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">cartesian_covariances</span><span class="p">,</span> <span class="n">n_times</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
         <span class="n">cartesian_covariances</span> <span class="o">=</span> <span class="n">transform_covariances_jacobian</span><span class="p">(</span>
@@ -667,11 +674,6 @@
         <span class="n">object_id</span><span class="o">=</span><span class="n">object_ids_</span><span class="p">,</span>
         <span class="n">physical_parameters</span><span class="o">=</span><span class="n">physical_parameters_</span><span class="p">,</span>
         <span class="n">non_gravitational_parameters</span><span class="o">=</span><span class="n">non_gravitational_parameters_</span><span class="p">,</span>
-        <span class="c1"># The non-grav parameter values are time-invariant and carried over,</span>
-        <span class="c1"># but a solved-state covariance is epoch-specific: copying it to the</span>
-        <span class="c1"># propagated epochs would be wrong, and propagating the full (6+k)</span>
-        <span class="c1"># matrix is not yet implemented, so it is nulled here.</span>
-        <span class="n">solved_state_covariance</span><span class="o">=</span><span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span><span class="n">num_entries</span><span class="p">),</span>
         <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
             <span class="n">x</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
             <span class="n">y</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
@@ -737,15 +739,17 @@
 <span class="sd">    include_nongrav : bool, optional</span>
 <span class="sd">        If True (default), raise a ValueError when any orbit carries non-zero</span>
 <span class="sd">        non-gravitational parameters, since 2-body dynamics cannot apply them.</span>
-<span class="sd">        If False, strip the non-gravitational parameter and solved-state</span>
-<span class="sd">        covariance columns and propagate gravity-only.</span>
+<span class="sd">        If False, strip the non-gravitational parameters (and the</span>
+<span class="sd">        non-gravitational covariance block) and propagate gravity-only.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    orbits : `~adam_core.orbits.orbits.Orbits` (N*M)</span>
-<span class="sd">        Orbits propagated to each MJD. The solved-state covariance column is</span>
-<span class="sd">        nulled on the output: it is epoch-specific and propagating the full</span>
-<span class="sd">        (6+k) matrix is not yet implemented.</span>
+<span class="sd">        Orbits propagated to each MJD. Covariances are propagated with the</span>
+<span class="sd">        2-body state-transition Jacobian; for orbits carrying the</span>
+<span class="sd">        non-gravitational (A1, A2, A3) covariance block, the block is carried</span>
+<span class="sd">        through as dynamically inert, consistent with the 2-body force model</span>
+<span class="sd">        (which admits no non-gravitational accelerations).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">include_nongrav</span><span class="p">:</span>
         <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">without_non_gravitational_parameters</span><span class="p">()</span>
@@ -817,7 +821,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -832,7 +836,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

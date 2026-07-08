@@ -218,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -323,7 +324,6 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -336,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -361,7 +369,7 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -430,45 +438,15 @@
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.non_gravitational_parameters.</span></span><span class="sig-name descname"><span class="pre">NonGravitationalParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
-<p>Canonical non-gravitational parameters attached to an orbit solution.</p>
-<p class="rubric">Notes</p>
-<p>Values are stored in canonical units where known:
-- <cite>A1</cite>, <cite>A2</cite>, <cite>A3</cite>: au / d^2
-- <cite>DT</cite>: d
-- <cite>R0</cite>: au
-- <cite>AMRAT</cite>: m^2 / kg
-- <cite>RHO</cite>: kg / m^3</p>
-<p>Larger solved states and cross-covariances with these parameters are tracked via
-metadata fields, but coordinate covariance propagation remains 6D for now.</p>
+<p>Non-gravitational parameters attached to an orbit solution.</p>
+<p>Only the Marsden-style radial/transverse/normal accelerations (A1, A2, A3)
+are supported, stored in au / d^2. Their uncertainties and cross
+covariances with the orbital state live in the orbit’s coordinate
+covariance, which is extended to 9x9 for orbits with a non-gravitational
+solution (see <cite>~adam_core.coordinates.covariances.CoordinateCovariances</cite>).</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.source">
 <span class="sig-name descname"><span class="pre">source</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.source" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.model">
-<span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.model" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.solution_dimension">
-<span class="sig-name descname"><span class="pre">solution_dimension</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.solution_dimension" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit integers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.parameter_count">
-<span class="sig-name descname"><span class="pre">parameter_count</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.parameter_count" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit integers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.estimated_parameter_names">
-<span class="sig-name descname"><span class="pre">estimated_parameter_names</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.estimated_parameter_names" title="Link to this definition">¶</a></dt>
 <dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
 variable-length chunks.</p>
 </dd></dl>
@@ -480,128 +458,14 @@ variable-length chunks.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A1_sigma">
-<span class="sig-name descname"><span class="pre">A1_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A1_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2">
 <span class="sig-name descname"><span class="pre">A2</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2" title="Link to this definition">¶</a></dt>
 <dd><p>A column for storing 64-bit floating point numbers.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2_sigma">
-<span class="sig-name descname"><span class="pre">A2_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3">
 <span class="sig-name descname"><span class="pre">A3</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3_sigma">
-<span class="sig-name descname"><span class="pre">A3_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT">
-<span class="sig-name descname"><span class="pre">DT</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT_sigma">
-<span class="sig-name descname"><span class="pre">DT_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0">
-<span class="sig-name descname"><span class="pre">R0</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0_sigma">
-<span class="sig-name descname"><span class="pre">R0_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN">
-<span class="sig-name descname"><span class="pre">ALN</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN_sigma">
-<span class="sig-name descname"><span class="pre">ALN_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK">
-<span class="sig-name descname"><span class="pre">NK</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK_sigma">
-<span class="sig-name descname"><span class="pre">NK_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM">
-<span class="sig-name descname"><span class="pre">NM</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM_sigma">
-<span class="sig-name descname"><span class="pre">NM_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN">
-<span class="sig-name descname"><span class="pre">NN</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN_sigma">
-<span class="sig-name descname"><span class="pre">NN_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT">
-<span class="sig-name descname"><span class="pre">AMRAT</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT_sigma">
-<span class="sig-name descname"><span class="pre">AMRAT_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT_sigma" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO">
-<span class="sig-name descname"><span class="pre">RHO</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO_sigma">
-<span class="sig-name descname"><span class="pre">RHO_sigma</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO_sigma" title="Link to this definition">¶</a></dt>
 <dd><p>A column for storing 64-bit floating point numbers.</p>
 </dd></dl>
 
@@ -612,6 +476,13 @@ variable-length chunks.</p>
 <p>Parameters that are explicitly solved to zero are treated as absent:
 they exert no force, so a gravity-only propagation of such an orbit is
 still exact.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.to_array">
+<span class="sig-name descname"><span class="pre">to_array</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters.to_array"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.to_array" title="Link to this definition">¶</a></dt>
+<dd><p>Return the parameter values as an (N, 3) array in (A1, A2, A3) order,
+with nulls replaced by 0.0 (no force).</p>
 </dd></dl>
 
 <dl class="py method">
@@ -634,7 +505,7 @@ for all columns, while also setting the Table’s attributes.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema">
-<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">source:</span> <span class="pre">large_string</span> <span class="pre">model:</span> <span class="pre">large_string</span> <span class="pre">solution_dimension:</span> <span class="pre">int64</span> <span class="pre">parameter_count:</span> <span class="pre">int64</span> <span class="pre">estimated_parameter_names:</span> <span class="pre">large_string</span> <span class="pre">A1:</span> <span class="pre">double</span> <span class="pre">A1_sigma:</span> <span class="pre">double</span> <span class="pre">A2:</span> <span class="pre">double</span> <span class="pre">A2_sigma:</span> <span class="pre">double</span> <span class="pre">A3:</span> <span class="pre">double</span> <span class="pre">A3_sigma:</span> <span class="pre">double</span> <span class="pre">DT:</span> <span class="pre">double</span> <span class="pre">DT_sigma:</span> <span class="pre">double</span> <span class="pre">R0:</span> <span class="pre">double</span> <span class="pre">R0_sigma:</span> <span class="pre">double</span> <span class="pre">ALN:</span> <span class="pre">double</span> <span class="pre">ALN_sigma:</span> <span class="pre">double</span> <span class="pre">NK:</span> <span class="pre">double</span> <span class="pre">NK_sigma:</span> <span class="pre">double</span> <span class="pre">NM:</span> <span class="pre">double</span> <span class="pre">NM_sigma:</span> <span class="pre">double</span> <span class="pre">NN:</span> <span class="pre">double</span> <span class="pre">NN_sigma:</span> <span class="pre">double</span> <span class="pre">AMRAT:</span> <span class="pre">double</span> <span class="pre">AMRAT_sigma:</span> <span class="pre">double</span> <span class="pre">RHO:</span> <span class="pre">double</span> <span class="pre">RHO_sigma:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">source:</span> <span class="pre">large_string</span> <span class="pre">A1:</span> <span class="pre">double</span> <span class="pre">A2:</span> <span class="pre">double</span> <span class="pre">A3:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -681,7 +552,7 @@ for all columns, while also setting the Table’s attributes.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -705,33 +576,11 @@ for all columns, while also setting the Table’s attributes.</p>
 <li><a class="reference internal" href="#">adam_core.orbits.non_gravitational_parameters module</a><ul>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters</span></code></a><ul>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.source"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.source</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.model"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.model</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.solution_dimension"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.solution_dimension</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.parameter_count"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.parameter_count</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.estimated_parameter_names"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.estimated_parameter_names</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A1"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A1</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A1_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A1_sigma</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A2</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A2_sigma</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A3</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A3_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.DT</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.DT_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.DT_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.R0</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.R0_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.ALN</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.ALN_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NK</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NK_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NM</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NM_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NN</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NN_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.AMRAT</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.AMRAT_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.AMRAT_sigma</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.RHO</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.RHO_sigma"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.RHO_sigma</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.has_values"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.has_values()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.to_array"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.to_array()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.nulls"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.nulls()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.schema</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.table"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.table</span></code></a></li>
@@ -748,7 +597,7 @@ for all columns, while also setting the Table’s attributes.</p>
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

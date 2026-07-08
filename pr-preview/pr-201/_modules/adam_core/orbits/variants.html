@@ -217,6 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -322,7 +323,6 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -335,24 +335,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -360,7 +368,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -440,15 +448,33 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.chunking</span><span class="w"> </span><span class="kn">import</span> <span class="n">process_in_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.non_gravitational_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonGravitationalParameters</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.non_gravitational_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span><span class="p">,</span>
+    <span class="n">NonGravitationalParameters</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.physical_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="n">PhysicalParameters</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.solved_state_covariances</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">NON_GRAVITATIONAL_PARAMETER_NAMES</span><span class="p">,</span>
-    <span class="n">ORBITAL_PARAMETER_NAMES</span><span class="p">,</span>
-    <span class="n">SolvedStateCovariances</span><span class="p">,</span>
-    <span class="n">build_solved_state</span><span class="p">,</span>
-<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_nongrav_samples_if_varying</span><span class="p">(</span>
+    <span class="n">variants</span><span class="p">:</span> <span class="s2">&quot;VariantOrbits&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return the (N, 3) non-gravitational parameter samples for a group of</span>
+<span class="sd">    variants if the parameters were jointly sampled -- any value present and</span>
+<span class="sd">    varying across the group -- otherwise None. Variants carrying constant</span>
+<span class="sd">    copied values (or no values at all) collapse to a plain 6x6 covariance.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">parameters</span> <span class="o">=</span> <span class="n">variants</span><span class="o">.</span><span class="n">non_gravitational_parameters</span>
+    <span class="k">if</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">drop_null</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">field</span><span class="p">)))</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">samples</span> <span class="o">=</span> <span class="n">parameters</span><span class="o">.</span><span class="n">to_array</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">ptp</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">samples</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_sample_covariance</span><span class="p">(</span>
@@ -461,7 +487,7 @@
     <span class="n">kappa</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">seed</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
-    <span class="c1"># Sample in a whitened basis: solved-state covariances mix orbital</span>
+    <span class="c1"># Sample in a whitened basis: extended covariances mix orbital</span>
     <span class="c1"># variances (~1e-8) with non-grav variances (~1e-26). At that conditioning</span>
     <span class="c1"># both scipy&#39;s PSD factorization and sqrtm truncate the small eigenvalues,</span>
     <span class="c1"># silently producing zero spread in the non-grav dimensions.</span>
@@ -500,51 +526,6 @@
     <span class="k">return</span> <span class="n">mean</span> <span class="o">+</span> <span class="n">samples</span> <span class="o">*</span> <span class="n">scales</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">weights_cov</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_nongrav_columns_dict</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">object</span><span class="p">]]:</span>
-    <span class="n">columns</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">names</span><span class="p">:</span>
-        <span class="n">columns</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">return</span> <span class="n">columns</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_append_nongrav_variant_rows</span><span class="p">(</span>
-    <span class="n">columns</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">object</span><span class="p">]],</span>
-    <span class="n">base</span><span class="p">:</span> <span class="n">NonGravitationalParameters</span><span class="p">,</span>
-    <span class="n">row_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">parameter_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-    <span class="n">samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">base_row</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">name</span><span class="p">)[</span><span class="n">row_index</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">names</span>
-    <span class="p">}</span>
-    <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">:</span>
-        <span class="n">row</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">base_row</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">offset</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">parameter_names</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NON_GRAVITATIONAL_PARAMETER_NAMES</span><span class="p">:</span>
-                <span class="n">row</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="n">offset</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">columns</span><span class="p">:</span>
-            <span class="n">columns</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_apply_solved_state_mean_to_nongrav_row</span><span class="p">(</span>
-    <span class="n">base</span><span class="p">:</span> <span class="n">NonGravitationalParameters</span><span class="p">,</span>
-    <span class="n">row_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">parameter_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-    <span class="n">mean_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NonGravitationalParameters</span><span class="p">:</span>
-    <span class="n">row</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">name</span><span class="p">)[</span><span class="n">row_index</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">names</span>
-    <span class="p">}</span>
-    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">parameter_names</span><span class="p">[</span><span class="mi">6</span><span class="p">:],</span> <span class="n">mean_state</span><span class="p">[</span><span class="mi">6</span><span class="p">:]):</span>
-        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NON_GRAVITATIONAL_PARAMETER_NAMES</span><span class="p">:</span>
-            <span class="n">row</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="o">**</span><span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="p">[</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">names</span><span class="p">}</span>
-    <span class="p">)</span>
-
-
 <span class="k">def</span><span class="w"> </span><span class="nf">_joint_sample_variants</span><span class="p">(</span>
     <span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;sigma-point&quot;</span><span class="p">,</span> <span class="s2">&quot;monte-carlo&quot;</span><span class="p">],</span>
@@ -554,8 +535,13 @@
     <span class="n">kappa</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;VariantOrbits&quot;</span><span class="p">:</span>
-    <span class="n">solved_covariances</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-    <span class="n">solved_names</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">parameter_names_list</span><span class="p">()</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Jointly sample orbits whose coordinate covariance carries the</span>
+<span class="sd">    non-gravitational (A1, A2, A3) block, drawing coordinate and</span>
+<span class="sd">    non-gravitational parameter variants from the full 9x9 covariance.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">covariances</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_full_matrix</span><span class="p">()</span>
+    <span class="n">nongrav_values</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="o">.</span><span class="n">to_array</span><span class="p">()</span>
 
     <span class="c1"># Spawn an independent child seed per orbit: reusing the same seed for</span>
     <span class="c1"># every orbit would draw identical underlying normals, perfectly</span>
@@ -571,42 +557,25 @@
     <span class="n">variant_id_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">weight_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">weight_cov_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">coordinate_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">solved_covariance_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">solved_parameter_name_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">physical_index</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">nongrav_columns</span> <span class="o">=</span> <span class="n">_nongrav_columns_dict</span><span class="p">()</span>
+    <span class="n">sample_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">parent_index</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="k">for</span> <span class="n">orbit_index</span><span class="p">,</span> <span class="n">orbit</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">orbits</span><span class="p">):</span>
-        <span class="n">solved_covariance</span> <span class="o">=</span> <span class="n">solved_covariances</span><span class="p">[</span><span class="n">orbit_index</span><span class="p">]</span>
-        <span class="n">parameter_names</span> <span class="o">=</span> <span class="n">solved_names</span><span class="p">[</span><span class="n">orbit_index</span><span class="p">]</span>
-
-        <span class="k">if</span> <span class="n">solved_covariance</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">parameter_names</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Solved-state covariance sampling requires a covariance matrix and parameter names for every orbit.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">parameter_names</span><span class="p">[:</span><span class="mi">6</span><span class="p">])</span> <span class="o">!=</span> <span class="n">ORBITAL_PARAMETER_NAMES</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Solved-state covariance parameter ordering must begin with x,y,z,vx,vy,vz.&quot;</span>
-            <span class="p">)</span>
-
+        <span class="n">covariance</span> <span class="o">=</span> <span class="n">covariances</span><span class="p">[</span><span class="n">orbit_index</span><span class="p">]</span>
         <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
         <span class="n">object_id</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">object_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
 
-        <span class="n">mean</span> <span class="o">=</span> <span class="n">build_solved_state</span><span class="p">(</span>
-            <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="n">orbit</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span>
-            <span class="mi">0</span><span class="p">,</span>
-            <span class="n">parameter_names</span><span class="p">,</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">nongrav_values</span><span class="p">[</span><span class="n">orbit_index</span><span class="p">]]</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">mean</span><span class="p">))</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">solved_covariance</span><span class="p">))):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">mean</span><span class="p">))</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">covariance</span><span class="p">))):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Solved-state covariance sampling requires finite mean and &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Joint non-gravitational sampling requires finite mean and &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;covariance values for orbit </span><span class="si">{</span><span class="n">orbit_id</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
         <span class="n">samples</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">weights_cov</span> <span class="o">=</span> <span class="n">_sample_covariance</span><span class="p">(</span>
             <span class="n">mean</span><span class="p">,</span>
-            <span class="n">solved_covariance</span><span class="p">,</span>
+            <span class="n">covariance</span><span class="p">,</span>
             <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
             <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span>
             <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
@@ -620,21 +589,11 @@
             <span class="n">variant_id_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">variant_id_rows</span><span class="p">)))</span>
             <span class="n">weight_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">weights</span><span class="p">[</span><span class="n">sample_index</span><span class="p">]))</span>
             <span class="n">weight_cov_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">weights_cov</span><span class="p">[</span><span class="n">sample_index</span><span class="p">]))</span>
-            <span class="n">coordinate_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">samples</span><span class="p">[</span><span class="n">sample_index</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">])</span>
-            <span class="n">solved_covariance_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">solved_covariance</span><span class="p">)</span>
-            <span class="n">solved_parameter_name_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parameter_names</span><span class="p">)</span>
-            <span class="n">physical_index</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbit_index</span><span class="p">)</span>
+            <span class="n">sample_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">samples</span><span class="p">[</span><span class="n">sample_index</span><span class="p">])</span>
+            <span class="n">parent_index</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbit_index</span><span class="p">)</span>
 
-        <span class="n">_append_nongrav_variant_rows</span><span class="p">(</span>
-            <span class="n">nongrav_columns</span><span class="p">,</span>
-            <span class="n">orbits</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span>
-            <span class="n">orbit_index</span><span class="p">,</span>
-            <span class="n">parameter_names</span><span class="p">,</span>
-            <span class="n">samples</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="n">coordinate_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coordinate_rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">repeated_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">physical_index</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">sample_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sample_rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">repeated_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">parent_index</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
     <span class="n">repeated_time</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">repeated_indices</span><span class="p">)</span>
     <span class="n">repeated_origin</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">repeated_indices</span><span class="p">)</span>
 
@@ -645,22 +604,22 @@
         <span class="n">weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weight_rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
         <span class="n">weights_cov</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weight_cov_rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
         <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">x</span><span class="o">=</span><span class="n">coordinate_array</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-            <span class="n">y</span><span class="o">=</span><span class="n">coordinate_array</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-            <span class="n">z</span><span class="o">=</span><span class="n">coordinate_array</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-            <span class="n">vx</span><span class="o">=</span><span class="n">coordinate_array</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">vy</span><span class="o">=</span><span class="n">coordinate_array</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-            <span class="n">vz</span><span class="o">=</span><span class="n">coordinate_array</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
             <span class="n">time</span><span class="o">=</span><span class="n">repeated_time</span><span class="p">,</span>
             <span class="n">origin</span><span class="o">=</span><span class="n">repeated_origin</span><span class="p">,</span>
             <span class="n">frame</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
         <span class="p">),</span>
         <span class="n">physical_parameters</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">physical_parameters</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">repeated_indices</span><span class="p">),</span>
         <span class="n">non_gravitational_parameters</span><span class="o">=</span><span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="o">**</span><span class="n">nongrav_columns</span>
-        <span class="p">),</span>
-        <span class="n">solved_state_covariance</span><span class="o">=</span><span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-            <span class="n">solved_covariance_rows</span><span class="p">,</span> <span class="n">solved_parameter_name_rows</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">repeated_indices</span><span class="p">),</span>
+            <span class="n">A1</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">6</span><span class="p">],</span>
+            <span class="n">A2</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">7</span><span class="p">],</span>
+            <span class="n">A3</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">8</span><span class="p">],</span>
         <span class="p">),</span>
     <span class="p">)</span>
 
@@ -676,7 +635,6 @@
     <span class="n">coordinates</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
     <span class="n">physical_parameters</span> <span class="o">=</span> <span class="n">PhysicalParameters</span><span class="o">.</span><span class="n">as_column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">non_gravitational_parameters</span> <span class="o">=</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">as_column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">solved_state_covariance</span> <span class="o">=</span> <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">as_column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <div class="viewcode-block" id="VariantOrbits.has_non_gravitational_parameters">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.variants.html#adam_core.orbits.VariantOrbits.has_non_gravitational_parameters">[docs]</a>
@@ -691,23 +649,22 @@
 <div class="viewcode-block" id="VariantOrbits.without_non_gravitational_parameters">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.variants.html#adam_core.orbits.VariantOrbits.without_non_gravitational_parameters">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">without_non_gravitational_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;VariantOrbits&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a copy with the non-gravitational parameters nulled and the</span>
+<span class="sd">        coordinate covariance reduced to its 6x6 coordinate block.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">variants</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
             <span class="s2">&quot;non_gravitational_parameters&quot;</span><span class="p">,</span>
             <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)),</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;solved_state_covariance&quot;</span><span class="p">,</span>
-            <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)),</span>
-        <span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="VariantOrbits.with_non_gravitational_parameters">
-<a class="viewcode-back" href="../../../reference/api/adam_core.orbits.variants.html#adam_core.orbits.VariantOrbits.with_non_gravitational_parameters">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">with_non_gravitational_parameters</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;VariantOrbits&quot;</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">enabled</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">without_non_gravitational_parameters</span><span class="p">()</span></div>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">has_nongrav_block</span><span class="p">():</span>
+            <span class="n">variants</span> <span class="o">=</span> <span class="n">variants</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+                <span class="s2">&quot;coordinates.covariance&quot;</span><span class="p">,</span>
+                <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
+                    <span class="n">variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">variants</span></div>
 
 
 <div class="viewcode-block" id="VariantOrbits.create">
@@ -736,9 +693,9 @@
 <span class="sd">        If the covariance matrix is not well behaved then monte-carlo sampling will be used.</span>
 
 <span class="sd">        When sampling with monte-carlo, 10k samples are drawn. Sigma-point sampling draws 13 samples</span>
-<span class="sd">        for 6-dimensional coordinates. Orbits that carry a solved-state covariance are jointly</span>
-<span class="sd">        sampled in the full 6+k dimensional solved state (orbital state plus non-gravitational</span>
-<span class="sd">        parameters), in which case sigma-point sampling draws 2*(6+k)+1 samples per orbit.</span>
+<span class="sd">        for 6-dimensional coordinates. Orbits whose coordinate covariance carries the</span>
+<span class="sd">        non-gravitational (A1, A2, A3) block are jointly sampled in the full 9-dimensional</span>
+<span class="sd">        state, in which case sigma-point sampling draws 19 samples per orbit.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -759,24 +716,25 @@
 <span class="sd">            Seed for reproducible monte-carlo sampling. Each orbit receives an</span>
 <span class="sd">            independent child seed spawned from this value.</span>
 <span class="sd">        include_nongrav : bool, optional</span>
-<span class="sd">            If True (default), orbits with a solved-state covariance are jointly sampled</span>
-<span class="sd">            in the full 6+k dimensional state. If False, the non-gravitational parameter</span>
-<span class="sd">            and solved-state covariance columns are stripped and only the 6x6 coordinate</span>
-<span class="sd">            covariance is sampled.</span>
+<span class="sd">            If True (default), orbits whose coordinate covariance carries the</span>
+<span class="sd">            non-gravitational (A1, A2, A3) block are jointly sampled in the full</span>
+<span class="sd">            9-dimensional state. If False, the non-gravitational parameters are</span>
+<span class="sd">            stripped and only the 6x6 coordinate covariance block is sampled.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        variants_orbits : &#39;~adam_core.orbits.variants.VariantOrbits&#39;</span>
-<span class="sd">            The variant orbits. When the input mixes orbits with and without solved-state</span>
-<span class="sd">            covariances, variants for the solved-state orbits are returned first, so row</span>
-<span class="sd">            order does not necessarily follow the input orbit order.</span>
+<span class="sd">            The variant orbits. When the input mixes orbits with and without the</span>
+<span class="sd">            non-gravitational covariance block, variants for the orbits with the</span>
+<span class="sd">            block are returned first, so row order does not necessarily follow</span>
+<span class="sd">            the input orbit order.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">include_nongrav</span><span class="p">:</span>
             <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">without_non_gravitational_parameters</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">orbits</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">is_all_null</span><span class="p">():</span>
-            <span class="n">solved_mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">dimension</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">pc</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">solved_mask</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
+        <span class="n">nongrav_mask</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">nongrav_block_mask</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">nongrav_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">nongrav_mask</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
                 <span class="k">return</span> <span class="n">_joint_sample_variants</span><span class="p">(</span>
                     <span class="n">orbits</span><span class="p">,</span>
                     <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
@@ -786,10 +744,11 @@
                     <span class="n">kappa</span><span class="o">=</span><span class="n">kappa</span><span class="p">,</span>
                     <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
                 <span class="p">)</span>
-            <span class="c1"># Mixed coverage: jointly sample the orbits that have a solved-state</span>
-            <span class="c1"># covariance and route the rest through the 6D coordinate path.</span>
+            <span class="c1"># Mixed coverage: jointly sample the orbits that carry the</span>
+            <span class="c1"># non-gravitational covariance block and route the rest through</span>
+            <span class="c1"># the 6D coordinate path.</span>
             <span class="n">joint_variants</span> <span class="o">=</span> <span class="n">_joint_sample_variants</span><span class="p">(</span>
-                <span class="n">orbits</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">solved_mask</span><span class="p">),</span>
+                <span class="n">orbits</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">nongrav_mask</span><span class="p">),</span>
                 <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
                 <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span>
                 <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
@@ -798,7 +757,7 @@
                 <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">coordinate_only_variants</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-                <span class="n">orbits</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">solved_mask</span><span class="p">)),</span>
+                <span class="n">orbits</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="o">~</span><span class="n">nongrav_mask</span><span class="p">),</span>
                 <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
                 <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span>
                 <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
@@ -836,9 +795,6 @@
                 <span class="n">variant_coordinates</span><span class="o">.</span><span class="n">index</span>
             <span class="p">),</span>
             <span class="n">non_gravitational_parameters</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="o">.</span><span class="n">take</span><span class="p">(</span>
-                <span class="n">variant_coordinates</span><span class="o">.</span><span class="n">index</span>
-            <span class="p">),</span>
-            <span class="n">solved_state_covariance</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">take</span><span class="p">(</span>
                 <span class="n">variant_coordinates</span><span class="o">.</span><span class="n">index</span>
             <span class="p">),</span>
         <span class="p">)</span></div>
@@ -917,45 +873,26 @@
 
             <span class="n">samples</span> <span class="o">=</span> <span class="n">variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
             <span class="n">mean</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="c1"># If the variants carry jointly sampled non-gravitational</span>
+            <span class="c1"># parameters, rebuild the full 9x9 covariance including them;</span>
+            <span class="c1"># otherwise rebuild the 6x6 coordinate covariance. This is keyed</span>
+            <span class="c1"># off the variants rather than the nominal orbit, which typically</span>
+            <span class="c1"># has no covariance after propagation.</span>
+            <span class="n">nongrav_samples</span> <span class="o">=</span> <span class="n">_nongrav_samples_if_varying</span><span class="p">(</span><span class="n">variants</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">nongrav_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">samples</span><span class="p">,</span> <span class="n">nongrav_samples</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">mean</span><span class="p">,</span> <span class="n">orbit</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="o">.</span><span class="n">to_array</span><span class="p">()[</span><span class="mi">0</span><span class="p">]]</span>
+                <span class="p">)</span>
+            <span class="n">dimension</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
             <span class="n">covariance</span> <span class="o">=</span> <span class="n">weighted_covariance</span><span class="p">(</span>
                 <span class="n">mean</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">variants</span><span class="o">.</span><span class="n">weights_cov</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dimension</span><span class="p">,</span> <span class="n">dimension</span><span class="p">)</span>
 
             <span class="n">orbit_collapsed</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
                 <span class="s2">&quot;coordinates.covariance&quot;</span><span class="p">,</span> <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">covariance</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">solved_covariances</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-            <span class="n">solved_parameter_names</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">orbit</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">parameter_names_list</span><span class="p">()</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">solved_covariances</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">solved_parameter_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-                <span class="n">parameter_names</span> <span class="o">=</span> <span class="n">solved_parameter_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="n">samples_full</span> <span class="o">=</span> <span class="p">[]</span>
-                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">variants</span><span class="p">)):</span>
-                    <span class="n">samples_full</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="n">build_solved_state</span><span class="p">(</span>
-                            <span class="n">variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
-                            <span class="n">variants</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span>
-                            <span class="n">i</span><span class="p">,</span>
-                            <span class="n">parameter_names</span><span class="p">,</span>
-                        <span class="p">)</span>
-                    <span class="p">)</span>
-                <span class="n">covariance_full</span> <span class="o">=</span> <span class="n">weighted_covariance</span><span class="p">(</span>
-                    <span class="n">build_solved_state</span><span class="p">(</span>
-                        <span class="n">mean</span><span class="p">,</span>
-                        <span class="n">orbit</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span>
-                        <span class="mi">0</span><span class="p">,</span>
-                        <span class="n">parameter_names</span><span class="p">,</span>
-                    <span class="p">),</span>
-                    <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">samples_full</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-                    <span class="n">variants</span><span class="o">.</span><span class="n">weights_cov</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="n">orbit_collapsed</span> <span class="o">=</span> <span class="n">orbit_collapsed</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                    <span class="s2">&quot;solved_state_covariance&quot;</span><span class="p">,</span>
-                    <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-                        <span class="p">[</span><span class="n">covariance_full</span><span class="p">],</span> <span class="p">[</span><span class="n">parameter_names</span><span class="p">]</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
 
             <span class="n">orbits_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbit_collapsed</span><span class="p">)</span>
 
@@ -984,18 +921,24 @@
             <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">object_variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span> <span class="o">==</span> <span class="mi">1</span>
             <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">object_variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
 
+            <span class="c1"># If the variants carry jointly sampled non-gravitational</span>
+            <span class="c1"># parameters, collapse to the full 9-dimensional mean and</span>
+            <span class="c1"># covariance; otherwise collapse the 6 coordinate dimensions.</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">object_variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
+            <span class="n">nongrav_samples</span> <span class="o">=</span> <span class="n">_nongrav_samples_if_varying</span><span class="p">(</span><span class="n">object_variants</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">nongrav_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">values</span><span class="p">,</span> <span class="n">nongrav_samples</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
             <span class="c1"># Calculate the mean</span>
-            <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span>
-                <span class="n">object_variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
             <span class="c1"># Calculate the covariance matrix</span>
+            <span class="n">dimension</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
             <span class="n">covariance</span> <span class="o">=</span> <span class="n">weighted_covariance</span><span class="p">(</span>
                 <span class="n">mean</span><span class="p">,</span>
-                <span class="n">object_variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
+                <span class="n">values</span><span class="p">,</span>
                 <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">object_variants</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">object_variants</span><span class="p">),</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dimension</span><span class="p">,</span> <span class="n">dimension</span><span class="p">)</span>
 
             <span class="c1"># Create the collapsed orbit</span>
             <span class="n">orbit</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
@@ -1015,55 +958,22 @@
                     <span class="n">frame</span><span class="o">=</span><span class="n">object_variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
                 <span class="p">),</span>
             <span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">object_variants</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">is_all_null</span><span class="p">():</span>
-                <span class="c1"># All variants of an object must share the same solved-state</span>
-                <span class="c1"># parameter set; take the names from the first non-null row.</span>
-                <span class="n">names_list</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">object_variants</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">parameter_names_list</span><span class="p">()</span>
-                <span class="p">)</span>
-                <span class="n">non_null_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">names</span> <span class="k">for</span> <span class="n">names</span> <span class="ow">in</span> <span class="n">names_list</span> <span class="k">if</span> <span class="n">names</span><span class="p">]</span>
-                <span class="n">parameter_names</span> <span class="o">=</span> <span class="n">non_null_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">names</span> <span class="o">==</span> <span class="n">parameter_names</span> <span class="k">for</span> <span class="n">names</span> <span class="ow">in</span> <span class="n">non_null_names</span><span class="p">)</span>
-                <span class="n">full_samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="n">build_solved_state</span><span class="p">(</span>
-                            <span class="n">object_variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
-                            <span class="n">object_variants</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span>
-                            <span class="n">i</span><span class="p">,</span>
-                            <span class="n">parameter_names</span><span class="p">,</span>
-                        <span class="p">)</span>
-                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">object_variants</span><span class="p">))</span>
-                    <span class="p">],</span>
-                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">mean_full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">full_samples</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-                <span class="n">covariance_full</span> <span class="o">=</span> <span class="n">weighted_covariance</span><span class="p">(</span>
-                    <span class="n">mean_full</span><span class="p">,</span>
-                    <span class="n">full_samples</span><span class="p">,</span>
-                    <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">object_variants</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-                    <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">object_variants</span><span class="p">),</span>
-                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">nongrav_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">orbit</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
                     <span class="s2">&quot;non_gravitational_parameters&quot;</span><span class="p">,</span>
-                    <span class="n">_apply_solved_state_mean_to_nongrav_row</span><span class="p">(</span>
-                        <span class="n">object_variants</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span>
-                        <span class="mi">0</span><span class="p">,</span>
-                        <span class="n">parameter_names</span><span class="p">,</span>
-                        <span class="n">mean_full</span><span class="p">,</span>
-                    <span class="p">),</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                    <span class="s2">&quot;solved_state_covariance&quot;</span><span class="p">,</span>
-                    <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-                        <span class="p">[</span><span class="n">covariance_full</span><span class="p">],</span> <span class="p">[</span><span class="n">parameter_names</span><span class="p">]</span>
+                    <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+                        <span class="n">source</span><span class="o">=</span><span class="n">object_variants</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">take</span><span class="p">(</span>
+                            <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                        <span class="p">),</span>
+                        <span class="n">A1</span><span class="o">=</span><span class="p">[</span><span class="n">mean</span><span class="p">[</span><span class="mi">6</span><span class="p">]],</span>
+                        <span class="n">A2</span><span class="o">=</span><span class="p">[</span><span class="n">mean</span><span class="p">[</span><span class="mi">7</span><span class="p">]],</span>
+                        <span class="n">A3</span><span class="o">=</span><span class="p">[</span><span class="n">mean</span><span class="p">[</span><span class="mi">8</span><span class="p">]],</span>
                     <span class="p">),</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">orbit</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
                     <span class="s2">&quot;non_gravitational_parameters&quot;</span><span class="p">,</span>
                     <span class="n">object_variants</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                    <span class="s2">&quot;solved_state_covariance&quot;</span><span class="p">,</span>
-                    <span class="n">object_variants</span><span class="o">.</span><span class="n">solved_state_covariance</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span>
                 <span class="p">)</span>
             <span class="n">orbits</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">orbits</span><span class="p">,</span> <span class="n">orbit</span><span class="p">])</span>
 
@@ -1803,7 +1713,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -1818,7 +1728,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

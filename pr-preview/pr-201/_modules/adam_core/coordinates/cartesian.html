@@ -217,6 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -322,7 +323,6 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -335,24 +335,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -360,7 +368,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -424,7 +432,11 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">cometary</span><span class="p">,</span> <span class="n">keplerian</span><span class="p">,</span> <span class="n">spherical</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">COORD_DIM</span><span class="p">,</span>
+    <span class="n">CoordinateCovariances</span><span class="p">,</span>
+    <span class="n">apply_linear_covariance_transform</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.units</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">au_per_day_to_km_per_s</span><span class="p">,</span>
@@ -720,34 +732,37 @@
         <span class="c1"># Rotate coordinates</span>
         <span class="n">coords_rotated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ma</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">masked_coords</span><span class="p">,</span> <span class="n">rotation_matrix</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-        <span class="c1"># Extract covariances</span>
+        <span class="c1"># Extract covariances. Rows carrying the non-gravitational (A1, A2,</span>
+        <span class="c1"># A3) block have their coordinate block and cross-covariances rotated</span>
+        <span class="c1"># while the non-gravitational block is preserved.</span>
         <span class="n">masked_covariances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ma</span><span class="o">.</span><span class="n">masked_array</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">(),</span> <span class="n">fill_value</span><span class="o">=</span><span class="mf">0.0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_transform_matrix</span><span class="p">(),</span> <span class="n">fill_value</span><span class="o">=</span><span class="mf">0.0</span>
         <span class="p">)</span>
         <span class="n">masked_covariances</span><span class="o">.</span><span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">masked_covariances</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 
         <span class="c1"># Rotate covariances</span>
-        <span class="n">covariances_rotated</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">rotation_matrix</span> <span class="o">@</span> <span class="n">masked_covariances</span><span class="o">.</span><span class="n">filled</span><span class="p">()</span> <span class="o">@</span> <span class="n">rotation_matrix</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">covariances_rotated</span> <span class="o">=</span> <span class="n">apply_linear_covariance_transform</span><span class="p">(</span>
+            <span class="n">rotation_matrix</span><span class="p">,</span> <span class="n">masked_covariances</span><span class="o">.</span><span class="n">filled</span><span class="p">()</span>
         <span class="p">)</span>
         <span class="c1"># Reset the mask to the original mask</span>
         <span class="n">covariances_rotated</span><span class="p">[</span><span class="n">masked_covariances</span><span class="o">.</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
 
-        <span class="c1"># Check if any covariance elements are near zero, if so set them to zero</span>
+        <span class="c1"># Check if any coordinate-block elements are near zero, if so set them</span>
+        <span class="c1"># to zero. The non-gravitational rows are excluded: their variances</span>
+        <span class="c1"># (~1e-26 and below) sit beneath this tolerance but are real.</span>
+        <span class="n">coord_block</span> <span class="o">=</span> <span class="n">covariances_rotated</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span>
         <span class="n">near_zero</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span>
-            <span class="n">covariances_rotated</span><span class="p">[</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">covariances_rotated</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">COVARIANCE_ROTATION_TOLERANCE</span>
-            <span class="p">]</span>
+            <span class="n">coord_block</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">coord_block</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">COVARIANCE_ROTATION_TOLERANCE</span><span class="p">]</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">near_zero</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">near_zero</span><span class="si">}</span><span class="s2"> covariance elements are within </span><span class="si">{</span><span class="n">COVARIANCE_ROTATION_TOLERANCE</span><span class="si">:</span><span class="s2">.0e</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="s2">&quot; of zero after rotation, setting these elements to 0.&quot;</span>
             <span class="p">)</span>
-            <span class="n">covariances_rotated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">covariances_rotated</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">COVARIANCE_ROTATION_TOLERANCE</span><span class="p">,</span>
+            <span class="n">covariances_rotated</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">coord_block</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">COVARIANCE_ROTATION_TOLERANCE</span><span class="p">,</span>
                 <span class="mi">0</span><span class="p">,</span>
-                <span class="n">covariances_rotated</span><span class="p">,</span>
+                <span class="n">coord_block</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
@@ -897,7 +912,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -912,7 +927,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

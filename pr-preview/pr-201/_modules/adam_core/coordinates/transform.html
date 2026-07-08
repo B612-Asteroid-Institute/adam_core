@@ -217,6 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -322,7 +323,6 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -335,24 +335,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -360,7 +368,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -420,7 +428,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -435,11 +443,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">types</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.cometary</span><span class="w"> </span><span class="kn">import</span> <span class="n">CometaryCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">,</span>
-    <span class="n">transform_solved_state_covariances_linear</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.geodetics</span><span class="w"> </span><span class="kn">import</span> <span class="n">WGS84</span><span class="p">,</span> <span class="n">GeodeticCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.geodetics</span><span class="w"> </span><span class="kn">import</span> <span class="n">GeodeticCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.keplerian</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeplerianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">OriginCodes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
@@ -512,149 +516,8 @@
     <span class="n">GeodeticCoordinates</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">REPRESENTATION_PARAMETER_NAMES</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="n">CartesianCoordinates</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;vx&quot;</span><span class="p">,</span> <span class="s2">&quot;vy&quot;</span><span class="p">,</span> <span class="s2">&quot;vz&quot;</span><span class="p">),</span>
-    <span class="n">CometaryCoordinates</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;q&quot;</span><span class="p">,</span> <span class="s2">&quot;e&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;raan&quot;</span><span class="p">,</span> <span class="s2">&quot;ap&quot;</span><span class="p">,</span> <span class="s2">&quot;tp&quot;</span><span class="p">),</span>
-    <span class="n">KeplerianCoordinates</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;e&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;raan&quot;</span><span class="p">,</span> <span class="s2">&quot;ap&quot;</span><span class="p">,</span> <span class="s2">&quot;M&quot;</span><span class="p">),</span>
-    <span class="n">SphericalCoordinates</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;rho&quot;</span><span class="p">,</span> <span class="s2">&quot;lon&quot;</span><span class="p">,</span> <span class="s2">&quot;lat&quot;</span><span class="p">,</span> <span class="s2">&quot;vrho&quot;</span><span class="p">,</span> <span class="s2">&quot;vlon&quot;</span><span class="p">,</span> <span class="s2">&quot;vlat&quot;</span><span class="p">),</span>
-    <span class="n">GeodeticCoordinates</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;alt&quot;</span><span class="p">,</span> <span class="s2">&quot;lon&quot;</span><span class="p">,</span> <span class="s2">&quot;lat&quot;</span><span class="p">,</span> <span class="s2">&quot;vup&quot;</span><span class="p">,</span> <span class="s2">&quot;veast&quot;</span><span class="p">,</span> <span class="s2">&quot;vnorth&quot;</span><span class="p">),</span>
-<span class="p">}</span>
-
-
 <span class="n">Z_AXIS</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
 <span class="n">FLOAT_TOLERANCE</span> <span class="o">=</span> <span class="mf">1e-15</span>
-<span class="n">SOLVED_STATE_CARTESIAN_PARAMETER_NAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;vx&quot;</span><span class="p">,</span> <span class="s2">&quot;vy&quot;</span><span class="p">,</span> <span class="s2">&quot;vz&quot;</span><span class="p">)</span>
-
-<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.solved_state_covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolvedStateCovariances</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_rename_solved_state_parameter_names</span><span class="p">(</span>
-    <span class="n">solved_state_covariances</span><span class="p">:</span> <span class="s2">&quot;SolvedStateCovariances&quot;</span><span class="p">,</span>
-    <span class="n">orbital_parameter_names</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
-    <span class="n">renamed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">parameter_names</span> <span class="ow">in</span> <span class="n">solved_state_covariances</span><span class="o">.</span><span class="n">parameter_names_list</span><span class="p">():</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parameter_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">renamed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-            <span class="k">continue</span>
-        <span class="n">renamed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">orbital_parameter_names</span><span class="p">)</span> <span class="o">+</span> <span class="n">parameter_names</span><span class="p">[</span><span class="mi">6</span><span class="p">:])</span>
-    <span class="k">return</span> <span class="n">renamed</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_transform_solved_state_covariances_to_cartesian</span><span class="p">(</span>
-    <span class="n">coords</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">,</span>
-    <span class="n">solved_state_covariances</span><span class="p">:</span> <span class="s2">&quot;SolvedStateCovariances&quot;</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;SolvedStateCovariances&quot;</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.solved_state_covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolvedStateCovariances</span>
-
-    <span class="k">if</span> <span class="n">solved_state_covariances</span><span class="o">.</span><span class="n">is_all_null</span><span class="p">():</span>
-        <span class="k">return</span> <span class="n">solved_state_covariances</span>
-
-    <span class="n">covariances</span> <span class="o">=</span> <span class="n">solved_state_covariances</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">CartesianCoordinates</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_rename_solved_state_parameter_names</span><span class="p">(</span>
-                <span class="n">solved_state_covariances</span><span class="p">,</span> <span class="n">SOLVED_STATE_CARTESIAN_PARAMETER_NAMES</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">CometaryCoordinates</span><span class="p">):</span>
-        <span class="n">transformed</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-            <span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_cometary_to_cartesian</span><span class="p">,</span>
-            <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-            <span class="n">out_axes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">t0</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
-            <span class="n">mu</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="mf">1e-15</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">KeplerianCoordinates</span><span class="p">):</span>
-        <span class="n">transformed</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-            <span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_keplerian_to_cartesian_a</span><span class="p">,</span>
-            <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-            <span class="n">out_axes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">mu</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="mf">1e-15</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">SphericalCoordinates</span><span class="p">):</span>
-        <span class="n">transformed</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-            <span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_spherical_to_cartesian</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Solved-state covariance transforms to Cartesian are not supported for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-        <span class="n">transformed</span><span class="p">,</span>
-        <span class="n">_rename_solved_state_parameter_names</span><span class="p">(</span>
-            <span class="n">solved_state_covariances</span><span class="p">,</span> <span class="n">SOLVED_STATE_CARTESIAN_PARAMETER_NAMES</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_transform_solved_state_covariances_from_cartesian</span><span class="p">(</span>
-    <span class="n">cartesian</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span>
-    <span class="n">solved_state_covariances</span><span class="p">:</span> <span class="s2">&quot;SolvedStateCovariances&quot;</span><span class="p">,</span>
-    <span class="n">representation_out</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;SolvedStateCovariances&quot;</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.solved_state_covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolvedStateCovariances</span>
-
-    <span class="k">if</span> <span class="n">solved_state_covariances</span><span class="o">.</span><span class="n">is_all_null</span><span class="p">():</span>
-        <span class="k">return</span> <span class="n">solved_state_covariances</span>
-
-    <span class="n">covariances</span> <span class="o">=</span> <span class="n">solved_state_covariances</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-    <span class="n">parameter_names_out</span> <span class="o">=</span> <span class="n">_rename_solved_state_parameter_names</span><span class="p">(</span>
-        <span class="n">solved_state_covariances</span><span class="p">,</span> <span class="n">REPRESENTATION_PARAMETER_NAMES</span><span class="p">[</span><span class="n">representation_out</span><span class="p">]</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">covariances</span><span class="p">,</span> <span class="n">parameter_names_out</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CometaryCoordinates</span><span class="p">:</span>
-        <span class="n">transformed</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-            <span class="n">cartesian</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_cartesian_to_cometary</span><span class="p">,</span>
-            <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-            <span class="n">out_axes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">t0</span><span class="o">=</span><span class="n">cartesian</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
-            <span class="n">mu</span><span class="o">=</span><span class="n">cartesian</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">KeplerianCoordinates</span><span class="p">:</span>
-        <span class="n">transformed</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-            <span class="n">cartesian</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_cartesian_to_keplerian6</span><span class="p">,</span>
-            <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-            <span class="n">out_axes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">t0</span><span class="o">=</span><span class="n">cartesian</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
-            <span class="n">mu</span><span class="o">=</span><span class="n">cartesian</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">SphericalCoordinates</span><span class="p">:</span>
-        <span class="n">transformed</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-            <span class="n">cartesian</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_cartesian_to_spherical</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span><span class="p">:</span>
-        <span class="n">transformed</span> <span class="o">=</span> <span class="n">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-            <span class="n">cartesian</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">covariances</span><span class="p">,</span>
-            <span class="n">_cartesian_to_geodetic</span><span class="p">,</span>
-            <span class="n">a</span><span class="o">=</span><span class="n">WGS84</span><span class="o">.</span><span class="n">a</span><span class="p">,</span>
-            <span class="n">f</span><span class="o">=</span><span class="n">WGS84</span><span class="o">.</span><span class="n">f</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Solved-state covariance transforms from Cartesian are not supported for </span><span class="si">{</span><span class="n">representation_out</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">transformed</span><span class="p">,</span> <span class="n">parameter_names_out</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_spice_frame_name</span><span class="p">(</span><span class="n">frame</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -686,37 +549,6 @@
         <span class="o">@</span> <span class="n">rotation_matrix_6x6_kms</span>
         <span class="o">@</span> <span class="n">rotation_unit_conversion</span>
     <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_rotation_matrices_to_frame</span><span class="p">(</span>
-    <span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-    <span class="k">if</span> <span class="n">frame_out</span> <span class="o">==</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">frame_out</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span> <span class="ow">and</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">TRANSFORM_EQ2EC</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">frame_out</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span> <span class="ow">and</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">TRANSFORM_EC2EQ</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">frame_out</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">):</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_SPICE</span>
-
-        <span class="n">setup_SPICE</span><span class="p">()</span>
-        <span class="n">frame_spice_in</span> <span class="o">=</span> <span class="n">_spice_frame_name</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span>
-        <span class="n">frame_spice_out</span> <span class="o">=</span> <span class="n">_spice_frame_name</span><span class="p">(</span><span class="n">frame_out</span><span class="p">)</span>
-
-        <span class="n">matrices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">time</span> <span class="ow">in</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">unique</span><span class="p">():</span>
-            <span class="n">time_mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">and_</span><span class="p">(</span>
-                <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
-                <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="n">matrices</span><span class="p">[</span><span class="n">time_mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">_sxform_rotation_matrix_aud</span><span class="p">(</span>
-                <span class="n">frame_spice_in</span><span class="p">,</span>
-                <span class="n">frame_spice_out</span><span class="p">,</span>
-                <span class="n">time</span><span class="o">.</span><span class="n">et</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">matrices</span>
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unsupported frame transform.&quot;</span><span class="p">)</span>
 
 
 <span class="nd">@jit</span>
@@ -2383,14 +2215,19 @@
     <span class="n">representation_out</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">frame_out</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">origin_out</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">OriginCodes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">solved_state_covariances</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;SolvedStateCovariances&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">,</span> <span class="s2">&quot;SolvedStateCovariances&quot;</span><span class="p">]:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Transform coordinates between frames (&#39;ecliptic&#39;, &#39;equatorial&#39;, &#39;itrf93&#39;), origins,</span>
 <span class="sd">    and/or representations (&#39;cartesian&#39;, &#39;spherical&#39;, &#39;keplerian&#39;, &#39;cometary&#39;).</span>
 
 <span class="sd">    Input coordinates may be defined from multiple origins but if origin_out is</span>
 <span class="sd">    specified, all coordinates will be transformed to that origin.</span>
+
+<span class="sd">    Covariances are transformed alongside the coordinates. Rows carrying the</span>
+<span class="sd">    extended non-gravitational (A1, A2, A3) covariance block have their</span>
+<span class="sd">    coordinate block and cross-covariances transformed while the</span>
+<span class="sd">    non-gravitational block is preserved (see</span>
+<span class="sd">    `~adam_core.coordinates.covariances.CoordinateCovariances`).</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -2406,17 +2243,11 @@
 <span class="sd">        or a str of an observatory code, but the output origin (this kwarg) should always be an</span>
 <span class="sd">        `~adam_core.coordinates.origin.OriginCodes`. If you are looking to generate ephemerides</span>
 <span class="sd">        for an observatory, please use a `~adam_core.propagator.propagator.Propagator` instead.</span>
-<span class="sd">    solved_state_covariances : `~adam_core.orbits.solved_state_covariances.SolvedStateCovariances`, optional</span>
-<span class="sd">        Optional solved-state covariance matrices paired row-by-row with `coords`. When supplied,</span>
-<span class="sd">        the returned value is a `(coordinates, solved_state_covariances)` tuple with the full</span>
-<span class="sd">        `6+k` covariance transformed alongside the coordinate representation/frame changes.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    coords_out : `~adam_core.coordinates.Coordinates`</span>
 <span class="sd">        Coordinates in desired output representation and frame.</span>
-<span class="sd">    solved_state_covariances_out : optional</span>
-<span class="sd">        Returned only when `solved_state_covariances` is provided.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -2437,12 +2268,6 @@
 
     <span class="k">if</span> <span class="n">origin_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">origin_out</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Unsupported origin_out type: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">origin_out</span><span class="p">)))</span>
-    <span class="k">if</span> <span class="n">solved_state_covariances</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">solved_state_covariances</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span>
-        <span class="n">coords</span>
-    <span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;solved_state_covariances must have the same length as coords.&quot;</span>
-        <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">representation_out_</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="vm">__class__</span>
@@ -2474,18 +2299,9 @@
     <span class="c1"># also can be checked for equality.</span>
     <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">is</span> <span class="n">representation_out_</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">coord_frame</span> <span class="o">==</span> <span class="n">frame_out</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">coord_origin</span> <span class="o">==</span> <span class="n">origin_out</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">solved_state_covariances</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">coords</span>
-            <span class="k">return</span> <span class="n">coords</span><span class="p">,</span> <span class="n">solved_state_covariances</span>
+            <span class="k">return</span> <span class="n">coords</span>
 
-    <span class="n">solved_state_covariances_</span> <span class="o">=</span> <span class="n">solved_state_covariances</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">CartesianCoordinates</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">solved_state_covariances_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">solved_state_covariances_</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">_transform_solved_state_covariances_to_cartesian</span><span class="p">(</span>
-                    <span class="n">coords</span><span class="p">,</span> <span class="n">solved_state_covariances_</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
         <span class="n">cartesian</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">to_cartesian</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">cartesian</span> <span class="o">=</span> <span class="n">coords</span>
@@ -2496,34 +2312,14 @@
 
     <span class="c1"># Rotate coordinates to new frame (if different from current)</span>
     <span class="k">if</span> <span class="n">cartesian</span><span class="o">.</span><span class="n">frame</span> <span class="o">!=</span> <span class="n">frame_out</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">solved_state_covariances_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.solved_state_covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolvedStateCovariances</span>
-
-            <span class="n">solved_state_covariances_</span> <span class="o">=</span> <span class="n">SolvedStateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-                <span class="n">transform_solved_state_covariances_linear</span><span class="p">(</span>
-                    <span class="n">_rotation_matrices_to_frame</span><span class="p">(</span><span class="n">cartesian</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">),</span>
-                    <span class="n">solved_state_covariances_</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">(),</span>
-                <span class="p">),</span>
-                <span class="n">solved_state_covariances_</span><span class="o">.</span><span class="n">parameter_names_list</span><span class="p">(),</span>
-            <span class="p">)</span>
         <span class="n">cartesian</span> <span class="o">=</span> <span class="n">cartesian_to_frame</span><span class="p">(</span><span class="n">cartesian</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">)</span>
 
     <span class="c1"># You might think this should be &#39;isinstance&#39;, but no! We&#39;re</span>
     <span class="c1"># checking whether the input is a particular class variable, not</span>
     <span class="c1"># an instance of a class.</span>
     <span class="k">if</span> <span class="n">representation_out_</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">solved_state_covariances_</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">cartesian</span>
-        <span class="k">return</span> <span class="n">cartesian</span><span class="p">,</span> <span class="n">solved_state_covariances_</span>
-    <span class="n">coords_out</span> <span class="o">=</span> <span class="n">representation_out_</span><span class="o">.</span><span class="n">from_cartesian</span><span class="p">(</span><span class="n">cartesian</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">solved_state_covariances_</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">coords_out</span>
-    <span class="k">return</span> <span class="p">(</span>
-        <span class="n">coords_out</span><span class="p">,</span>
-        <span class="n">_transform_solved_state_covariances_from_cartesian</span><span class="p">(</span>
-            <span class="n">cartesian</span><span class="p">,</span> <span class="n">solved_state_covariances_</span><span class="p">,</span> <span class="n">representation_out_</span>
-        <span class="p">),</span>
-    <span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">cartesian</span>
+    <span class="k">return</span> <span class="n">representation_out_</span><span class="o">.</span><span class="n">from_cartesian</span><span class="p">(</span><span class="n">cartesian</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -2543,7 +2339,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -2558,7 +2354,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

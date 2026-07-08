@@ -217,6 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -322,7 +323,6 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.solved_state_covariances.html">adam_core.orbits.solved_state_covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
@@ -335,24 +335,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -360,7 +368,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
@@ -420,6 +428,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.linalg</span><span class="w"> </span><span class="kn">import</span> <span class="n">sqrtm</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">multivariate_normal</span>
@@ -429,6 +438,12 @@
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 <span class="n">COVARIANCE_FILL_VALUE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+<span class="c1"># Dimensionality of the coordinate (orbital) block of a covariance matrix.</span>
+<span class="n">COORD_DIM</span> <span class="o">=</span> <span class="mi">6</span>
+<span class="c1"># Orbits fitted with non-gravitational parameters extend the covariance with</span>
+<span class="c1"># the fixed trailing dimensions (A1, A2, A3), giving a 9x9 matrix.</span>
+<span class="n">FULL_DIM</span> <span class="o">=</span> <span class="mi">9</span>
 
 
 <div class="viewcode-block" id="sigmas_to_covariances">
@@ -458,14 +473,15 @@
 <div class="viewcode-block" id="CoordinateCovariances">
 <a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">CoordinateCovariances</span><span class="p">(</span><span class="n">qv</span><span class="o">.</span><span class="n">Table</span><span class="p">):</span>
-    <span class="c1"># TODO: Would be interesting if the dimensionality can be generalized</span>
-    <span class="c1">#      to D dimensions, so (N, D, D) instead of (N, 6, 6). We would be</span>
-    <span class="c1">#      able to use this class for the covariance matrices of different</span>
-    <span class="c1">#      measurments like projections (D = 4) and photometry (D = 1).</span>
+    <span class="c1"># Each row holds either a 6x6 coordinate covariance (36 values) or, for</span>
+    <span class="c1"># orbits fitted with non-gravitational parameters, a 9x9 covariance</span>
+    <span class="c1"># (81 values) over the fixed basis (x, y, z, vx, vy, vz, A1, A2, A3) --</span>
+    <span class="c1"># or the equivalent first-six elements of the current representation.</span>
+    <span class="c1"># Non-gravitational parameters that were not estimated carry zero</span>
+    <span class="c1"># rows/columns (held fixed); rows without a non-gravitational solution</span>
+    <span class="c1"># store only the 6x6 block.</span>
 
     <span class="n">values</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="c1"># When fixed, we should revert to:</span>
-    <span class="c1"># values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">sigmas</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -473,18 +489,47 @@
         <span class="n">sigmas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">cov_diag</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">sigmas</span>
 
+<div class="viewcode-block" id="CoordinateCovariances.nongrav_block_mask">
+<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.nongrav_block_mask">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nongrav_block_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a per-row boolean mask that is True where the covariance</span>
+<span class="sd">        carries the trailing non-gravitational (A1, A2, A3) block.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">lengths</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">list_value_length</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">pc</span><span class="o">.</span><span class="n">fill_null</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">lengths</span><span class="p">,</span> <span class="n">FULL_DIM</span> <span class="o">*</span> <span class="n">FULL_DIM</span><span class="p">),</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CoordinateCovariances.has_nongrav_block">
+<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.has_nongrav_block">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">has_nongrav_block</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return True if any row carries the non-gravitational (A1, A2, A3) block.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nongrav_block_mask</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">())</span></div>
+
+
 <div class="viewcode-block" id="CoordinateCovariances.to_matrix">
 <a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.to_matrix">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return the covariance matrices as a 3D array of shape (N, 6, 6).</span>
+<span class="sd">        Return the coordinate block of the covariance matrices as a 3D array</span>
+<span class="sd">        of shape (N, 6, 6). For rows carrying the non-gravitational block,</span>
+<span class="sd">        this is the leading 6x6 block; use `to_full_matrix` to retrieve the</span>
+<span class="sd">        full 9x9 matrices.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        covariances : `numpy.ndarray` (N, 6, 6)</span>
 <span class="sd">            Covariance matrices for N coordinates in 6 dimensions.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># return self.values.combine_chunks().to_numpy_ndarray()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_nongrav_block</span><span class="p">():</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_full_matrix</span><span class="p">()[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span>
+
         <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
         <span class="c1"># Try and see if all covariance matrices are None, if so return</span>
@@ -524,6 +569,57 @@
         <span class="k">return</span> <span class="n">cov</span></div>
 
 
+<div class="viewcode-block" id="CoordinateCovariances.to_full_matrix">
+<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.to_full_matrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_full_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the covariance matrices as a 3D array of shape (N, 9, 9) over</span>
+<span class="sd">        the basis (coordinates, A1, A2, A3). Rows without a non-gravitational</span>
+<span class="sd">        block have their trailing rows and columns filled with NaN.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        covariances : `numpy.ndarray` (N, 9, 9)</span>
+<span class="sd">            Covariance matrices for N coordinates plus the three</span>
+<span class="sd">            non-gravitational parameters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_nongrav_block</span><span class="p">():</span>
+            <span class="n">full</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">full</span>
+
+        <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="n">COORD_DIM</span> <span class="o">*</span> <span class="n">COORD_DIM</span><span class="p">:</span>
+                <span class="n">full</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">value</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="n">FULL_DIM</span> <span class="o">*</span> <span class="n">FULL_DIM</span><span class="p">:</span>
+                <span class="n">full</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Covariance row </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> values; expected &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">COORD_DIM</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">COORD_DIM</span><span class="si">}</span><span class="s2"> or </span><span class="si">{</span><span class="n">FULL_DIM</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">FULL_DIM</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">full</span></div>
+
+
+<div class="viewcode-block" id="CoordinateCovariances.to_transform_matrix">
+<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.to_transform_matrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_transform_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the covariance matrices in the widest layout present:</span>
+<span class="sd">        (N, 6, 6) when no row carries the non-gravitational block, otherwise</span>
+<span class="sd">        (N, 9, 9). Intended for feeding `transform_covariances_jacobian` or</span>
+<span class="sd">        `apply_linear_covariance_transform`, which carry the</span>
+<span class="sd">        non-gravitational block through the transform when it is present.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_nongrav_block</span><span class="p">():</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_full_matrix</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span></div>
+
+
 <div class="viewcode-block" id="CoordinateCovariances.from_matrix">
 <a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.from_matrix">[docs]</a>
     <span class="nd">@classmethod</span>
@@ -533,26 +629,50 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        covariances : `numpy.ndarray` (N, 6, 6)</span>
-<span class="sd">            Covariance matrices for N coordinates in 6 dimensions.</span>
+<span class="sd">        covariances : `numpy.ndarray` (N, 6, 6) or (N, 9, 9)</span>
+<span class="sd">            Covariance matrices for N coordinates in 6 dimensions, or in</span>
+<span class="sd">            6 dimensions plus the non-gravitational parameters (A1, A2, A3).</span>
+<span class="sd">            For (N, 9, 9) input, rows whose trailing non-gravitational rows</span>
+<span class="sd">            and columns are all NaN are stored as plain 6x6 covariances.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        covariances : `Covariances`</span>
-<span class="sd">            Covariance matrices for N coordinates in 6 dimensions.</span>
+<span class="sd">            Covariance matrices for N coordinates.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
-<span class="sd">        ValueError : If the covariance matrices are not (N, 6, 6)</span>
+<span class="sd">        ValueError : If the covariance matrices are not (N, 6, 6) or (N, 9, 9)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)</span>
-        <span class="k">if</span> <span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="p">(</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">):</span>
+            <span class="n">cov</span> <span class="o">=</span> <span class="n">covariances</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="n">offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">covariances</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">36</span><span class="p">,</span> <span class="mi">36</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">LargeListArray</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="n">cov</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Covariance matrices should have shape (N, 6, 6) but got </span><span class="si">{</span><span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="s2">&quot;Covariance matrices should have shape (N, 6, 6) or (N, 9, 9) &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;but got </span><span class="si">{</span><span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
-        <span class="n">cov</span> <span class="o">=</span> <span class="n">covariances</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
-        <span class="n">offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">covariances</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">36</span><span class="p">,</span> <span class="mi">36</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">LargeListArray</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="n">cov</span><span class="p">))</span></div>
+
+        <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">cov</span> <span class="ow">in</span> <span class="n">covariances</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">cov</span><span class="p">[</span><span class="n">COORD_DIM</span><span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+                <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">cov</span><span class="p">[:,</span> <span class="n">COORD_DIM</span><span class="p">:])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cov</span><span class="p">[:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cov</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">offsets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">rows</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+        <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="k">if</span> <span class="n">rows</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">values</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">LargeListArray</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+                <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()),</span>
+                <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">flat</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()),</span>
+            <span class="p">)</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="CoordinateCovariances.from_sigmas">
@@ -902,6 +1022,70 @@
 
 
 
+<div class="viewcode-block" id="apply_linear_covariance_transform">
+<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.apply_linear_covariance_transform">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_linear_covariance_transform</span><span class="p">(</span>
+    <span class="n">transform_matrices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">covariances</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Apply a linear 6x6 coordinate transform to covariance matrices.</span>
+
+<span class="sd">    For (N, 6, 6) covariances this is the usual similarity transform. For</span>
+<span class="sd">    (N, 9, 9) covariances the coordinate block is transformed, the</span>
+<span class="sd">    coordinate/non-gravitational cross-covariances are rotated with it, and</span>
+<span class="sd">    the non-gravitational (A1, A2, A3) block is preserved unchanged --</span>
+<span class="sd">    equivalent to a block-diagonal transform with an identity block on the</span>
+<span class="sd">    non-gravitational dimensions.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    transform_matrices : `~numpy.ndarray` (6, 6) or (N, 6, 6)</span>
+<span class="sd">        Linear transform(s) applied to the coordinate block.</span>
+<span class="sd">    covariances : `~numpy.ndarray` (N, 6, 6) or (N, 9, 9)</span>
+<span class="sd">        Covariance matrices to transform.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    covariances_out : `~numpy.ndarray`</span>
+<span class="sd">        Transformed covariance matrices with the same shape as the input.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">matrices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">transform_matrices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">):</span>
+        <span class="n">matrices</span> <span class="o">=</span> <span class="n">matrices</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">matrices</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;transform_matrices must have shape (6, 6) or (N, 6, 6), &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">matrices</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">covariances</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Number of transform matrices must be 1 or match the number of covariances.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">matrices_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">matrices</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="p">(</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">matrices</span> <span class="o">@</span> <span class="n">covariances</span> <span class="o">@</span> <span class="n">matrices_T</span>
+
+    <span class="k">if</span> <span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Covariance matrices should have shape (N, 6, 6) or (N, 9, 9), &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">covariances</span><span class="p">)</span>
+    <span class="n">out</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">matrices</span> <span class="o">@</span> <span class="n">covariances</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">@</span> <span class="n">matrices_T</span>
+    <span class="p">)</span>
+    <span class="n">out</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">:]</span> <span class="o">=</span> <span class="n">matrices</span> <span class="o">@</span> <span class="n">covariances</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">:]</span>
+    <span class="n">out</span><span class="p">[:,</span> <span class="n">COORD_DIM</span><span class="p">:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span>
+        <span class="n">out</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">:],</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">out</span><span class="p">[:,</span> <span class="n">COORD_DIM</span><span class="p">:,</span> <span class="n">COORD_DIM</span><span class="p">:]</span> <span class="o">=</span> <span class="n">covariances</span><span class="p">[:,</span> <span class="n">COORD_DIM</span><span class="p">:,</span> <span class="n">COORD_DIM</span><span class="p">:]</span>
+    <span class="k">return</span> <span class="n">out</span></div>
+
+
+
 <div class="viewcode-block" id="transform_covariances_jacobian">
 <a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.transform_covariances_jacobian">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">transform_covariances_jacobian</span><span class="p">(</span>
@@ -916,111 +1100,26 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    coords : `~numpy.ndarray` (N, D)</span>
+<span class="sd">    coords : `~numpy.ndarray` (N, 6)</span>
 <span class="sd">        Coordinates that correspond to the input covariance matrices.</span>
-<span class="sd">    covariances : `~numpy.ndarray` (N, D, D)</span>
+<span class="sd">    covariances : `~numpy.ndarray` (N, 6, 6) or (N, 9, 9)</span>
 <span class="sd">        Covariance matrices to transform via numerical differentiation.</span>
+<span class="sd">        For (N, 9, 9) input the trailing non-gravitational dimensions</span>
+<span class="sd">        (A1, A2, A3) are carried through an identity block: the cross</span>
+<span class="sd">        covariances rotate with the coordinate Jacobian and the</span>
+<span class="sd">        non-gravitational block is preserved.</span>
 <span class="sd">    _func : function</span>
-<span class="sd">        A function that takes a single coord (D) as input and return the transformed</span>
-<span class="sd">        coordinate (D). See for example: `thor.coordinates._cartesian_to_spherical`</span>
+<span class="sd">        A function that takes a single coord (6) as input and return the transformed</span>
+<span class="sd">        coordinate (6). See for example: `thor.coordinates._cartesian_to_spherical`</span>
 <span class="sd">        or `thor.coordinates._cartesian_to_keplerian`.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    covariances_out : `~numpy.ndarray` (N, D, D)</span>
-<span class="sd">        Transformed covariance matrices.</span>
+<span class="sd">    covariances_out : `~numpy.ndarray`</span>
+<span class="sd">        Transformed covariance matrices with the same shape as the input.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">jacobian</span> <span class="o">=</span> <span class="n">calc_jacobian</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">_func</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="n">covariances</span> <span class="o">=</span> <span class="n">jacobian</span> <span class="o">@</span> <span class="n">covariances</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">jacobian</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">covariances</span></div>
-
-
-
-<div class="viewcode-block" id="transform_solved_state_covariances_jacobian">
-<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.transform_solved_state_covariances_jacobian">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">transform_solved_state_covariances_jacobian</span><span class="p">(</span>
-    <span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">covariances</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span>
-    <span class="n">_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
-    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Transform full solved-state covariance matrices with a block Jacobian.</span>
-
-<span class="sd">    The first six parameters are assumed to be orbital coordinates transformed by</span>
-<span class="sd">    `_func`. Any additional solved parameters are treated as identity dimensions, so</span>
-<span class="sd">    orbital/non-gravitational cross-covariance terms are preserved.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">covariances</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;coords and covariances must have the same length.&quot;</span><span class="p">)</span>
-
-    <span class="n">jacobian</span> <span class="o">=</span> <span class="n">calc_jacobian</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">_func</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="n">transformed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">jacobian_i</span><span class="p">,</span> <span class="n">covariance_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">jacobian</span><span class="p">,</span> <span class="n">covariances</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">covariance_i</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">transformed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-            <span class="k">continue</span>
-
-        <span class="n">covariance_i</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">covariance_i</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">dimension</span> <span class="o">=</span> <span class="n">covariance_i</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">covariance_i</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">dimension</span> <span class="o">!=</span> <span class="n">covariance_i</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Solved-state covariance must be a square matrix.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">dimension</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Solved-state covariance must be at least 6x6.&quot;</span><span class="p">)</span>
-
-        <span class="n">jacobian_full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">dimension</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">jacobian_full</span><span class="p">[:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="n">jacobian_i</span>
-        <span class="n">transformed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">jacobian_full</span> <span class="o">@</span> <span class="n">covariance_i</span> <span class="o">@</span> <span class="n">jacobian_full</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">transformed</span></div>
-
-
-
-<div class="viewcode-block" id="transform_solved_state_covariances_linear">
-<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.transform_solved_state_covariances_linear">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">transform_solved_state_covariances_linear</span><span class="p">(</span>
-    <span class="n">transform_matrices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">covariances</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Transform full solved-state covariance matrices with a known linear 6x6 orbital transform.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    transform_matrices : `~numpy.ndarray`</span>
-<span class="sd">        Either a single `(6, 6)` matrix or an `(N, 6, 6)` array of matrices applied to</span>
-<span class="sd">        the orbital block of each solved-state covariance.</span>
-<span class="sd">    covariances : list of `~numpy.ndarray | None`</span>
-<span class="sd">        Solved-state covariance matrices. The first six dimensions are transformed and any</span>
-<span class="sd">        remaining solved parameters are preserved via an identity block.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">matrices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">transform_matrices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
-        <span class="n">matrices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">matrices</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">covariances</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">matrices</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;transform_matrices must have shape (6, 6) or (N, 6, 6) for solved-state covariance transforms.&quot;</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">matrices</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">covariances</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;Number of transform matrices must match number of covariances.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">transformed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">covariance</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">matrices</span><span class="p">,</span> <span class="n">covariances</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">transformed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-            <span class="k">continue</span>
-        <span class="n">covariance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">covariance</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">dimension</span> <span class="o">=</span> <span class="n">covariance</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">covariance</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">dimension</span> <span class="o">!=</span> <span class="n">covariance</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Solved-state covariance must be a square matrix.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">dimension</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Solved-state covariance must be at least 6x6.&quot;</span><span class="p">)</span>
-        <span class="n">matrix_full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">dimension</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">matrix_full</span><span class="p">[:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="n">matrix</span>
-        <span class="n">transformed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">matrix_full</span> <span class="o">@</span> <span class="n">covariance</span> <span class="o">@</span> <span class="n">matrix_full</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">transformed</span></div>
+    <span class="k">return</span> <span class="n">apply_linear_covariance_transform</span><span class="p">(</span><span class="n">jacobian</span><span class="p">,</span> <span class="n">covariances</span><span class="p">)</span></div>
 
 
 
@@ -1072,7 +1171,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-06-17</div>
+              Last updated on 2026-07-08</div>
           </div>
           <div class="right-details">
             
@@ -1087,7 +1186,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=5b603a8c"></script>
+</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

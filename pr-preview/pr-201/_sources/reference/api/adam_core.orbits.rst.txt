@@ -28,6 +28,5 @@ Submodules
    adam_core.orbits.orbits
    adam_core.orbits.physical_parameters
    adam_core.orbits.plots
-   adam_core.orbits.solved_state_covariances
    adam_core.orbits.spice_kernel
    adam_core.orbits.variants
