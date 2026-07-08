@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pyarrow.compute as pc
 import pytest
-from adam_assist import ASSISTPropagator
+from adam_assist_rust import ASSISTPropagator
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin

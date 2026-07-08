@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import pyarrow.compute as pc
 import pytest
-from adam_assist import ASSISTPropagator
+from adam_assist_rust import ASSISTPropagator
 
 from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates

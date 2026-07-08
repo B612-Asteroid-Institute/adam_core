@@ -1,5 +1,5 @@
 import numpy as np
-from adam_assist import ASSISTPropagator
+from adam_assist_rust import ASSISTPropagator
 
 from ...constants import KM_P_AU, S_P_DAY
 from ...coordinates.cartesian import CartesianCoordinates
