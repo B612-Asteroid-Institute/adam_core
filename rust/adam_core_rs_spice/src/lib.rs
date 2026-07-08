@@ -900,23 +900,41 @@ impl AdamCoreSpiceBackend {
         spice_frame_name(frame)?;
 
         let topocentric = site.itrf93_state();
+
+        // Deduplicate epochs so the expensive SPICE lookups (Earth ephemeris
+        // via spkez, ITRF93->frame rotation via pxform) run once per DISTINCT
+        // epoch and scatter back to rows. Mirrors the legacy
+        // get_mpc_observer_state vectorization (np.unique + inverse indices):
+        // many rows sharing exposure epochs (surveys / ephemeris grids) no
+        // longer repeat identical per-row SPICE calls, which is what dominates
+        // this SPICE-bound path.
+        let (unique_times, inverse) = dedup_epochs(times)?;
+
         let mut states = if frame == Frame::Itrf93 {
             vec![topocentric; times.len()]
         } else {
-            let mut states = self.state_vectors(&earth_origin(), origin, frame, times)?;
-            let rotations = self.frame_pxform_matrices(Frame::Itrf93, frame, times)?;
-            for (state, rotation) in states.iter_mut().zip(rotations.iter()) {
-                let position = rotate3(rotation, &[topocentric[0], topocentric[1], topocentric[2]]);
-                let velocity = rotate3(rotation, &[topocentric[3], topocentric[4], topocentric[5]]);
-                add_position_velocity(state, &position, &velocity);
-            }
-            states
+            let earth = self.state_vectors(&earth_origin(), origin, frame, &unique_times)?;
+            let rotations = self.frame_pxform_matrices(Frame::Itrf93, frame, &unique_times)?;
+            let unique_states: Vec<[f64; 6]> = earth
+                .iter()
+                .zip(rotations.iter())
+                .map(|(earth_state, rotation)| {
+                    let position =
+                        rotate3(rotation, &[topocentric[0], topocentric[1], topocentric[2]]);
+                    let velocity =
+                        rotate3(rotation, &[topocentric[3], topocentric[4], topocentric[5]]);
+                    let mut state = *earth_state;
+                    add_position_velocity(&mut state, &position, &velocity);
+                    state
+                })
+                .collect();
+            inverse.iter().map(|&slot| unique_states[slot]).collect()
         };
 
         if frame == Frame::Itrf93 && self.resolve_origin_id(origin)? != EARTH_NAIF_ID {
-            let earth_state = self.state_vectors(&earth_origin(), origin, frame, times)?;
-            for (state, earth) in states.iter_mut().zip(earth_state.iter()) {
-                add_state(state, earth);
+            let unique_earth = self.state_vectors(&earth_origin(), origin, frame, &unique_times)?;
+            for (state, &slot) in states.iter_mut().zip(inverse.iter()) {
+                add_state(state, &unique_earth[slot]);
             }
         }
 
@@ -1328,6 +1346,28 @@ pub fn et_seconds(times: &TimeArray) -> Result<Vec<f64>, SpiceBackendError> {
 
 fn earth_origin() -> OriginId {
     OriginId::Naif(EARTH_NAIF_ID)
+}
+
+/// Deduplicate a time array into its distinct epochs (first-appearance order)
+/// plus a per-row inverse index mapping each original row to its slot in the
+/// unique set. Lets SPICE-bound per-epoch work (spkez, pxform) run once per
+/// distinct epoch and scatter to rows -- the Rust analogue of the legacy
+/// `get_mpc_observer_state` `np.unique(..., return_inverse=True)` vectorization.
+fn dedup_epochs(times: &TimeArray) -> Result<(TimeArray, Vec<usize>), SpiceBackendError> {
+    let mut slot_by_key: std::collections::HashMap<(i64, i64), usize> =
+        std::collections::HashMap::with_capacity(times.epochs.len());
+    let mut unique: Vec<Epoch> = Vec::new();
+    let mut inverse: Vec<usize> = Vec::with_capacity(times.epochs.len());
+    for epoch in &times.epochs {
+        let key = (epoch.days, epoch.nanos);
+        let slot = *slot_by_key.entry(key).or_insert_with(|| {
+            unique.push(*epoch);
+            unique.len() - 1
+        });
+        inverse.push(slot);
+    }
+    let unique_times = TimeArray::new(times.scale, unique)?;
+    Ok((unique_times, inverse))
 }
 
 fn static_frame_rotation(frame_from: Frame, frame_to: Frame) -> Option<[[f64; 3]; 3]> {
