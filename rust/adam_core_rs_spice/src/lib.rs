@@ -909,6 +909,11 @@ impl AdamCoreSpiceBackend {
         // longer repeat identical per-row SPICE calls, which is what dominates
         // this SPICE-bound path.
         let (unique_times, inverse) = dedup_epochs(times)?;
+        // When every epoch is distinct the dedup collapses nothing and the
+        // scatter is the identity, so we can use the per-epoch states directly
+        // and avoid an extra O(n) copy pass -- keeping the common
+        // per-observation (all-unique) case regression-free.
+        let all_unique = unique_times.len() == times.len();
 
         let mut states = if frame == Frame::Itrf93 {
             vec![topocentric; times.len()]
@@ -928,7 +933,11 @@ impl AdamCoreSpiceBackend {
                     state
                 })
                 .collect();
-            inverse.iter().map(|&slot| unique_states[slot]).collect()
+            if all_unique {
+                unique_states
+            } else {
+                inverse.iter().map(|&slot| unique_states[slot]).collect()
+            }
         };
 
         if frame == Frame::Itrf93 && self.resolve_origin_id(origin)? != EARTH_NAIF_ID {
@@ -1354,17 +1363,32 @@ fn earth_origin() -> OriginId {
 /// distinct epoch and scatter to rows -- the Rust analogue of the legacy
 /// `get_mpc_observer_state` `np.unique(..., return_inverse=True)` vectorization.
 fn dedup_epochs(times: &TimeArray) -> Result<(TimeArray, Vec<usize>), SpiceBackendError> {
-    let mut slot_by_key: std::collections::HashMap<(i64, i64), usize> =
-        std::collections::HashMap::with_capacity(times.epochs.len());
+    let epochs = &times.epochs;
+    let n = epochs.len();
+    let key = |epoch: &Epoch| (epoch.days, epoch.nanos);
     let mut unique: Vec<Epoch> = Vec::new();
-    let mut inverse: Vec<usize> = Vec::with_capacity(times.epochs.len());
-    for epoch in &times.epochs {
-        let key = (epoch.days, epoch.nanos);
-        let slot = *slot_by_key.entry(key).or_insert_with(|| {
-            unique.push(*epoch);
-            unique.len() - 1
-        });
-        inverse.push(slot);
+    let mut inverse: Vec<usize> = Vec::with_capacity(n);
+    // Ephemeris epoch arrays are usually sorted, so a consecutive-run dedup
+    // needs no hash map -- and for the common all-distinct case it is a cheap
+    // linear pass rather than n hash insertions. Fall back to a hash map only
+    // for unsorted input (non-adjacent duplicates).
+    if epochs.windows(2).all(|w| key(&w[0]) <= key(&w[1])) {
+        for epoch in epochs {
+            if unique.last().map(&key) != Some(key(epoch)) {
+                unique.push(*epoch);
+            }
+            inverse.push(unique.len() - 1);
+        }
+    } else {
+        let mut slot_by_key: std::collections::HashMap<(i64, i64), usize> =
+            std::collections::HashMap::with_capacity(n);
+        for epoch in epochs {
+            let slot = *slot_by_key.entry(key(epoch)).or_insert_with(|| {
+                unique.push(*epoch);
+                unique.len() - 1
+            });
+            inverse.push(slot);
+        }
     }
     let unique_times = TimeArray::new(times.scale, unique)?;
     Ok((unique_times, inverse))
