@@ -10,11 +10,12 @@ use adam_core_rs_coords::propagation::{
 use adam_core_rs_coords::types::Frame;
 use adam_core_rs_coords::types::{SchemaResult, TimeScaleProvider};
 use adam_core_rs_coords::{
-    collapse_propagated_variants_to_orbits, create_sampled_orbit_variants, CoordinateBatch,
-    CoordinateRepresentation, CovarianceBatch, CovarianceUnits, EphemerisOptions,
-    EphemerisPhotometryOptions, EphemerisResult, ObjectId, ObservatoryCode, ObserverBatch,
-    OrbitBatch, OrbitId, OrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
-    SchemaError, TimeArray, TimeScale, VariantId,
+    collapse_propagated_variants_to_orbits, collapse_variant_ephemeris,
+    create_sampled_orbit_variants, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
+    CovarianceUnits, EphemerisOptions, EphemerisPhotometryOptions, EphemerisResult, ObjectId,
+    ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch,
+    OrbitVariantSamplingMethod, OriginArray, OriginId, SchemaError, TimeArray, TimeScale,
+    VariantId,
 };
 use adam_core_rs_coords::{CoordinateValues, LeastSquaresConfig};
 use adam_core_rs_spice::AdamCoreSpiceBackend;
@@ -119,7 +120,12 @@ impl NativeAssistPropagator {
         h_v=None,
         g=None,
         chunk_size=None,
-        thread_limit=None
+        thread_limit=None,
+        covariance=false,
+        covariances=None,
+        covariance_method="monte-carlo",
+        num_samples=1000,
+        seed=None
     ))]
     fn generate_ephemeris<'py>(
         &self,
@@ -151,9 +157,22 @@ impl NativeAssistPropagator {
         g: Option<Vec<Option<f64>>>,
         chunk_size: Option<usize>,
         thread_limit: Option<usize>,
+        covariance: bool,
+        covariances: Option<PyReadonlyArray2<'py, f64>>,
+        covariance_method: &str,
+        num_samples: usize,
+        seed: Option<u64>,
     ) -> PyResult<Bound<'py, PyDict>> {
+        let orbit_state_rows = states_from_pyarray(orbit_states)?;
+        let orbit_covariance_batch = match covariances {
+            Some(covariances) => Some(covariance_from_pyarray(
+                covariances,
+                orbit_state_rows.len(),
+            )?),
+            None => None,
+        };
         let orbit_coordinates = CoordinateBatch::cartesian(
-            states_from_pyarray(orbit_states)?,
+            orbit_state_rows,
             Frame::parse(orbit_frame).map_err(py_value_error)?,
             OriginArray::new(
                 orbit_origin_codes
@@ -166,7 +185,7 @@ impl NativeAssistPropagator {
                 orbit_time_days,
                 orbit_time_nanos,
             )?),
-            None,
+            orbit_covariance_batch,
         )
         .map_err(py_value_error)?;
         let orbits = OrbitBatch::new(
@@ -232,6 +251,49 @@ impl NativeAssistPropagator {
                 )
             })
             .map_err(py_runtime_error)?;
+        // Public covariance ephemeris mirrors Python adam_assist / adam_core:
+        // sample orbit variants, generate ephemeris for each, and collapse the
+        // variant topocentric-spherical (+ aberrated) coordinates to per-row
+        // covariance on the nominal ephemeris -- all inside this one crossing.
+        let result = if covariance {
+            let method = parse_covariance_method(covariance_method)?;
+            let variant_samples =
+                create_sampled_orbit_variants(&orbits, method, num_samples, seed, 1.0, 0.0, 0.0)
+                    .map_err(py_value_error)?;
+            let variant_orbits = OrbitBatch::new(
+                variant_samples.variants.orbit_id.clone(),
+                variant_samples.variants.object_id.clone(),
+                variant_samples.variants.coordinates.clone(),
+            )
+            .map_err(py_value_error)?;
+            let variant_result = py
+                .allow_threads(|| {
+                    self.inner.generate_ephemeris(
+                        &variant_orbits,
+                        &observers,
+                        &options,
+                        &PythonTimeProvider,
+                        &self.spice,
+                    )
+                })
+                .map_err(py_runtime_error)?;
+            let weights_cov: Vec<f64> = variant_samples
+                .variants
+                .weights_cov
+                .iter()
+                .map(|weight| weight.unwrap_or(0.0))
+                .collect();
+            collapse_variant_ephemeris(
+                &result,
+                &variant_result,
+                &variant_samples.source_orbit_indices,
+                &weights_cov,
+                observers.coordinates.len(),
+            )
+            .map_err(py_value_error)?
+        } else {
+            result
+        };
         ephemeris_result_to_dict(py, &result)
     }
 
@@ -952,6 +1014,21 @@ fn ephemeris_result_to_dict<'py>(
         PyRuntimeError::new_err(format!("failed to shape ephemeris states: {err}"))
     })?;
     dict.set_item("states", shaped.into_pyarray_bound(py))?;
+    match &coordinates.covariance {
+        Some(cov) => {
+            let cov_shaped = ndarray::Array2::from_shape_vec(
+                (coordinates.len(), 36),
+                cov.values_row_major.clone(),
+            )
+            .map_err(|err| {
+                PyRuntimeError::new_err(format!("failed to shape ephemeris covariance: {err}"))
+            })?;
+            dict.set_item("covariance", cov_shaped.into_pyarray_bound(py))?;
+        }
+        None => {
+            dict.set_item("covariance", py.None())?;
+        }
+    }
     dict.set_item(
         "origin_codes",
         coordinates
@@ -1037,6 +1114,23 @@ fn ephemeris_result_to_dict<'py>(
                     .map(|epoch| epoch.nanos)
                     .collect::<Vec<_>>(),
             )?;
+            match &aberrated.covariance {
+                Some(cov) => {
+                    let cov_shaped = ndarray::Array2::from_shape_vec(
+                        (aberrated.len(), 36),
+                        cov.values_row_major.clone(),
+                    )
+                    .map_err(|err| {
+                        PyRuntimeError::new_err(format!(
+                            "failed to shape aberrated covariance: {err}"
+                        ))
+                    })?;
+                    dict.set_item("aberrated_covariance", cov_shaped.into_pyarray_bound(py))?;
+                }
+                None => {
+                    dict.set_item("aberrated_covariance", py.None())?;
+                }
+            }
         }
         None => {
             dict.set_item("aberrated_states", py.None())?;
@@ -1044,6 +1138,7 @@ fn ephemeris_result_to_dict<'py>(
             dict.set_item("aberrated_time_scale", py.None())?;
             dict.set_item("aberrated_time_days", py.None())?;
             dict.set_item("aberrated_time_nanos", py.None())?;
+            dict.set_item("aberrated_covariance", py.None())?;
         }
     }
     let validity = (0..ephemeris.validity.len())

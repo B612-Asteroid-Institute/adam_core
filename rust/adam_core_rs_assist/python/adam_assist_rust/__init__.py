@@ -115,6 +115,7 @@ def _coordinates_from_result(result: dict[str, Any]) -> CartesianCoordinates:
 
 def _ephemeris_from_result(result: dict[str, Any]) -> Ephemeris:
     states = np.asarray(result["states"], dtype=np.float64)
+    spherical_covariance = result.get("covariance")
     coordinates = SphericalCoordinates.from_kwargs(
         rho=states[:, 0],
         lon=states[:, 1],
@@ -129,6 +130,13 @@ def _ephemeris_from_result(result: dict[str, Any]) -> Ephemeris:
         ),
         origin=Origin.from_kwargs(code=result["origin_codes"]),
         frame=result["frame"],
+        covariance=(
+            CoordinateCovariances.from_matrix(
+                np.asarray(spherical_covariance, dtype=np.float64).reshape(-1, 6, 6)
+            )
+            if spherical_covariance is not None
+            else None
+        ),
     )
     kwargs: dict[str, Any] = {
         "orbit_id": result["orbit_id"],
@@ -142,6 +150,7 @@ def _ephemeris_from_result(result: dict[str, Any]) -> Ephemeris:
         kwargs["predicted_magnitude_v"] = result["predicted_magnitude_v"]
     if result["aberrated_states"] is not None:
         aberrated_states = np.asarray(result["aberrated_states"], dtype=np.float64)
+        aberrated_covariance = result.get("aberrated_covariance")
         kwargs["aberrated_coordinates"] = CartesianCoordinates.from_kwargs(
             x=aberrated_states[:, 0],
             y=aberrated_states[:, 1],
@@ -156,6 +165,13 @@ def _ephemeris_from_result(result: dict[str, Any]) -> Ephemeris:
             ),
             origin=Origin.from_kwargs(code=result["aberrated_origin_codes"]),
             frame="ecliptic",
+            covariance=(
+                CoordinateCovariances.from_matrix(
+                    np.asarray(aberrated_covariance, dtype=np.float64).reshape(-1, 6, 6)
+                )
+                if aberrated_covariance is not None
+                else None
+            ),
         )
     return Ephemeris.from_kwargs(**kwargs)
 
@@ -284,6 +300,10 @@ class ASSISTPropagator(ImpactMixin):
         predict_phase_angle: bool = False,
         chunk_size: int | None = 100,
         max_processes: int | None = 1,
+        covariance: bool = False,
+        covariance_method: Literal["auto", "sigma-point", "monte-carlo"] = "monte-carlo",
+        num_samples: int = 1000,
+        seed: int | None = None,
     ) -> Ephemeris:
         """Rust-native ASSIST ephemeris matching adam_assist public semantics.
 
@@ -311,6 +331,16 @@ class ASSISTPropagator(ImpactMixin):
         if predict_magnitudes:
             h_v = _optional_float_column_to_list(orbits.physical_parameters.H_v)
             g = _optional_float_column_to_list(orbits.physical_parameters.G)
+
+        # Covariance ephemeris: pass the orbit covariance matrix so the Rust
+        # backend can sample variants + collapse the variant ephemeris to
+        # per-row covariance in one crossing (mirrors the propagate path).
+        native_covariances: npt.NDArray[np.float64] | None = None
+        if covariance and not orbit_coordinates.covariance.is_all_nan():
+            native_covariances = np.ascontiguousarray(
+                orbit_coordinates.covariance.to_matrix().reshape(len(orbits), 36),
+                dtype=np.float64,
+            )
 
         native = self._native.generate_ephemeris(
             _string_column_to_list(orbits.orbit_id),
@@ -340,6 +370,11 @@ class ASSISTPropagator(ImpactMixin):
             g,
             chunk_size,
             max_processes,
+            covariance=covariance and native_covariances is not None,
+            covariances=native_covariances,
+            covariance_method=covariance_method,
+            num_samples=num_samples,
+            seed=seed,
         )
         return _ephemeris_from_result(native)
 

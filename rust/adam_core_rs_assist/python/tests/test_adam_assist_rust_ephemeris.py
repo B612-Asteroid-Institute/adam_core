@@ -145,3 +145,74 @@ def test_generate_ephemeris_mixed_observers_and_photometry_matches_python() -> N
         atol=1.0e-9,
         rtol=0,
     )
+
+
+def _sorted_covariance(ephemeris) -> np.ndarray:
+    ordered = ephemeris.sort_by(
+        [
+            "orbit_id",
+            "coordinates.time.days",
+            "coordinates.time.nanos",
+            "coordinates.origin.code",
+        ]
+    )
+    return ordered.coordinates.covariance.to_matrix()
+
+
+def test_generate_ephemeris_covariance_matches_python_adam_assist() -> None:
+    """Rust-native covariance ephemeris (bead personal-cmy.33.2): sample orbit
+    variants, generate per-variant ephemeris, and collapse the variant
+    topocentric-spherical coordinates to per-row covariance -- all inside the
+    single Rust crossing -- must match the public ``adam_assist`` covariance
+    ephemeris (which does the same sample/propagate/collapse in Python via the
+    adam_core base composition). Sigma-point sampling is deterministic and
+    bit-identical across both, so this is a tight parity check modulo the
+    Rust-vs-Python ASSIST propagation + light-time differences."""
+    python_assist = pytest.importorskip("adam_assist")
+    from adam_core.coordinates.covariances import CoordinateCovariances
+
+    base = _orbits()
+    sigmas = np.tile(
+        np.array([1.0e-8, 1.0e-8, 1.0e-8, 1.0e-10, 1.0e-10, 1.0e-10]), (len(base), 1)
+    )
+    coordinates = base.coordinates.set_column(
+        "covariance", CoordinateCovariances.from_sigmas(sigmas)
+    )
+    orbits = Orbits.from_kwargs(
+        orbit_id=base.orbit_id,
+        object_id=base.object_id,
+        coordinates=coordinates,
+    )
+    times = Timestamp.from_mjd([60000.5, 60001.0], scale="utc")
+    observers = Observers.from_code("X05", times)
+
+    expected = python_assist.ASSISTPropagator().generate_ephemeris(
+        orbits,
+        observers,
+        covariance=True,
+        covariance_method="sigma-point",
+        max_processes=1,
+        predict_magnitudes=False,
+        predict_phase_angle=False,
+    )
+    actual = RustASSISTPropagator().generate_ephemeris(
+        orbits,
+        observers,
+        covariance=True,
+        covariance_method="sigma-point",
+        max_processes=1,
+        predict_magnitudes=False,
+        predict_phase_angle=False,
+    )
+
+    np.testing.assert_allclose(
+        _sorted_values(actual), _sorted_values(expected), atol=1.0e-9, rtol=0
+    )
+
+    actual_cov = _sorted_covariance(actual)
+    expected_cov = _sorted_covariance(expected)
+    assert actual_cov.shape == expected_cov.shape
+    assert not np.all(np.isnan(actual_cov)), (
+        "rust covariance ephemeris produced an all-NaN covariance"
+    )
+    np.testing.assert_allclose(actual_cov, expected_cov, atol=1.0e-16, rtol=1.0e-4)
